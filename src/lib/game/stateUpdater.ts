@@ -110,11 +110,12 @@ export async function applyWorldUpdates(
                 newTags = [...newTags, ...npcChange.changes.tags_add]
               }
 
-              if (npcChange.changes.tags_remove) {
-                newTags = newTags.filter(t => 
-                  !npcChange.changes.tags_remove?.includes(t)
-                )
-              }
+         if (npcChange.changes.tags_remove) {
+  newTags = newTags
+    .filter((t): t is string => typeof t === "string")
+    .filter(t => !npcChange.changes.tags_remove!.includes(t));
+}
+
 
               updateData.tags = Array.from(new Set(newTags)) // Remove duplicates
             }
@@ -167,12 +168,11 @@ export async function applyWorldUpdates(
                 newConditions = [...newConditions, ...pcChange.changes.conditions_add]
               }
 
-              if (pcChange.changes.conditions_remove) {
-                newConditions = newConditions.filter((c: string) =>
-                  !pcChange.changes.conditions_remove?.includes(c)
-                )
-              }
-
+             if (pcChange.changes.conditions_remove) {
+  newConditions = newConditions
+    .filter((c): c is string => typeof c === "string")
+    .filter(c => !pcChange.changes.conditions_remove!.includes(c));
+}
               updateData.conditions = newConditions
             }
 

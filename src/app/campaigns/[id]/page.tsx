@@ -1,0 +1,250 @@
+// src/app/campaigns/[id]/page.tsx
+// Campaign lobby - shows campaign info, players, characters
+
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
+import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+
+interface CampaignData {
+  campaign: any
+  userRole: 'ADMIN' | 'PLAYER'
+}
+
+export default function CampaignLobbyPage() {
+  const router = useRouter()
+  const params = useParams()
+  const campaignId = params.id as string
+
+  const [data, setData] = useState<CampaignData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.push('/login')
+      return
+    }
+
+    loadCampaign()
+  }, [campaignId])
+
+  const loadCampaign = async () => {
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}`)
+      if (!response.ok) throw new Error('Failed to load campaign')
+
+      const campaignData = await response.json()
+      setData(campaignData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load campaign')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+      </div>
+    )
+  }
+
+  if (error || !data) {
+    return (
+      <div className="card max-w-2xl mx-auto">
+        <p className="text-red-400">{error || 'Campaign not found'}</p>
+        <Link href="/campaigns" className="text-primary-400 hover:underline mt-4 inline-block">
+          ← Back to campaigns
+        </Link>
+      </div>
+    )
+  }
+
+  const { campaign, userRole } = data
+  const userCharacters = campaign.characters.filter(
+    (c: any) => c.userId === campaign.memberships.find((m: any) => m.role === userRole)?.userId
+  )
+
+  return (
+    <div className="max-w-6xl mx-auto">
+      {/* Header */}
+      <div className="mb-6">
+        <Link
+          href="/campaigns"
+          className="text-primary-400 hover:text-primary-300 text-sm mb-4 inline-block"
+        >
+          ← Back to campaigns
+        </Link>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">{campaign.title}</h1>
+            <p className="text-gray-400">{campaign.description}</p>
+            <div className="flex items-center space-x-4 mt-4 text-sm text-gray-500">
+              <span>Universe: {campaign.universe}</span>
+              <span>•</span>
+              <span>Turn {campaign.worldMeta?.currentTurnNumber || 0}</span>
+              <span>•</span>
+              <span>{campaign.worldMeta?.currentInGameDate || 'Day 1'}</span>
+            </div>
+          </div>
+          {userRole === 'ADMIN' && (
+            <Link
+              href={`/campaigns/${campaignId}/settings`}
+              className="btn-secondary"
+            >
+              ⚙️ Settings
+            </Link>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Column */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Enter Story Button */}
+          <div className="card">
+            <h2 className="card-header">Ready to Play?</h2>
+            <p className="text-gray-400 mb-4">
+              {userCharacters.length === 0
+                ? 'Create a character first to enter the story'
+                : 'Jump into the adventure!'}
+            </p>
+            <Link
+              href={`/campaigns/${campaignId}/story`}
+              className={`btn-primary inline-block ${
+                userCharacters.length === 0 ? 'opacity-50 pointer-events-none' : ''
+              }`}
+            >
+              🎭 Enter Story
+            </Link>
+          </div>
+
+          {/* Your Characters */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="card-header mb-0">Your Characters</h2>
+              <button className="text-primary-400 hover:text-primary-300 text-sm">
+                + Create Character
+              </button>
+            </div>
+
+            {userCharacters.length === 0 ? (
+              <p className="text-gray-500 text-sm">No characters yet. Create one to play!</p>
+            ) : (
+              <div className="space-y-3">
+                {userCharacters.map((character: any) => (
+                  <div key={character.id} className="bg-gray-900 rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-bold text-white">{character.name}</h3>
+                        <p className="text-sm text-gray-400">{character.concept}</p>
+                        {character.currentLocation && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            📍 {character.currentLocation}
+                          </p>
+                        )}
+                      </div>
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        character.isActive
+                          ? 'bg-green-500/20 text-green-400'
+                          : 'bg-gray-700 text-gray-400'
+                      }`}>
+                        {character.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    {Array.isArray(character.conditions) && character.conditions.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {character.conditions.map((condition: string, i: number) => (
+                          <span
+                            key={i}
+                            className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs"
+                          >
+                            {condition}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* All Characters in Campaign */}
+          <div className="card">
+            <h2 className="card-header">All Characters</h2>
+            <div className="space-y-2">
+              {campaign.characters.map((character: any) => (
+                <div key={character.id} className="flex items-center justify-between py-2">
+                  <div>
+                    <span className="font-medium text-white">{character.name}</span>
+                    <span className="text-gray-500 text-sm ml-2">
+                      ({character.user.email})
+                    </span>
+                  </div>
+                  <span className="text-xs text-gray-500">{character.concept}</span>
+                </div>
+              ))}
+              {campaign.characters.length === 0 && (
+                <p className="text-gray-500 text-sm">No characters in this campaign yet</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Players */}
+          <div className="card">
+            <h2 className="card-header">Players</h2>
+            <div className="space-y-2">
+              {campaign.memberships.map((member: any) => (
+                <div key={member.id} className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">{member.user.email}</span>
+                  <span className={`px-2 py-1 rounded text-xs ${
+                    member.role === 'ADMIN'
+                      ? 'bg-primary-500/20 text-primary-400'
+                      : 'bg-gray-700 text-gray-300'
+                  }`}>
+                    {member.role}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="card">
+            <h2 className="card-header">Campaign Stats</h2>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Scenes:</span>
+                <span className="text-white font-medium">{campaign.scenes.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Characters:</span>
+                <span className="text-white font-medium">{campaign.characters.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">NPCs:</span>
+                <span className="text-white font-medium">{campaign.npcs.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Factions:</span>
+                <span className="text-white font-medium">{campaign.factions.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Active Clocks:</span>
+                <span className="text-white font-medium">{campaign.clocks.length}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

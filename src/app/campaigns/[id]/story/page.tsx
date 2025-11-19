@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
+import { pusherClient } from '@/lib/pusher'
 
 export default function StoryPage() {
   const router = useRouter()
@@ -63,6 +64,44 @@ export default function StoryPage() {
       setLoading(false)
     }
   }
+
+  // Pusher realtime subscriptions
+  useEffect(() => {
+    // Subscribe to the campaign channel
+    const channel = pusherClient.subscribe(`campaign-${campaignId}`)
+
+    // Listen for new actions
+    channel.bind('action:created', (data: any) => {
+      console.log('New action created:', data)
+      // Refresh data so actions list stays up to date
+      loadData()
+    })
+
+    // Listen for scene resolutions
+    channel.bind('scene:resolved', (data: any) => {
+      console.log('Scene resolved:', data)
+      // Refresh data so scene resolution appears
+      loadData()
+    })
+
+    // Listen for clock updates
+    channel.bind('clock:updated', (data: any) => {
+      console.log('Clock updated:', data)
+      // Reload to get latest clock state
+      loadData()
+    })
+
+    channel.bind('clock:ticked', (data: any) => {
+      console.log('Clock ticked:', data)
+      // Reload to update clock progress
+      loadData()
+    })
+
+    // Cleanup on unmount
+    return () => {
+      pusherClient.unsubscribe(`campaign-${campaignId}`)
+    }
+  }, [campaignId])
 
   const handleSubmitAction = async (e: React.FormEvent) => {
     e.preventDefault()

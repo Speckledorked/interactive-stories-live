@@ -35,12 +35,13 @@ export async function POST(request: NextRequest) {
 
     // Hash password and create user
     const passwordHash = await hashPassword(password)
-   const user = await prisma.user.create({
-  data: {
-    email,
-    password: passwordHash,   // store the hash here
-  }
-})
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: passwordHash, // store hashed password in `password` column
+      },
+    })
 
     // Create JWT token
     const token = createToken({

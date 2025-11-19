@@ -1,44 +1,52 @@
 // src/app/api/campaigns/[id]/characters/route.ts
-// Character management for a campaign
-// POST - Create a new character
-
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireAuth } from '@/lib/auth'
-import { CreateCharacterRequest, ErrorResponse } from '@/types/api'
+import { getUser } from '@/lib/auth'
+
+interface CreateCharacterBody {
+  name: string
+  pronouns?: string
+  description?: string
+  stats?: any
+  backstory?: string
+  goals?: string
+  currentLocation?: string
+}
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await getUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const campaignId = params.id
-    const body: CreateCharacterRequest = await request.json()
+    const body: CreateCharacterBody = await request.json()
 
-    const { name, concept, stats, conditions, currentLocation } = body
-
-    // Validate input
-    if (!name || !concept) {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Name and concept are required' },
+    // Validate required fields
+    if (!body.name) {
+      return NextResponse.json(
+        { error: 'Character name is required' },
         { status: 400 }
       )
     }
 
-    // Check if user is a member of this campaign
+    // Check membership
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.userId,
-          campaignId
-        }
-      }
+          userId: user.id,
+          campaignId,
+        },
+      },
     })
 
     if (!membership) {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Not a member of this campaign' },
+      return NextResponse.json(
+        { error: 'You are not a member of this campaign' },
         { status: 403 }
       )
     }
@@ -47,27 +55,80 @@ export async function POST(
     const character = await prisma.character.create({
       data: {
         campaignId,
-        userId: user.userId,
-        name,
-        concept,
-        stats: stats || {},
-        conditions: conditions || [],
-        currentLocation: currentLocation || 'Unknown',
-        isActive: true
-      }
+        userId: user.id,
+        name: body.name,
+        pronouns: body.pronouns,
+        description: body.description,
+        stats: body.stats,
+        backstory: body.backstory,
+        goals: body.goals,
+        currentLocation: body.currentLocation,
+      },
     })
 
-    return NextResponse.json({ character }, { status: 201 })
+    return NextResponse.json({ character })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
+    console.error('Create character error:', error)
+    return NextResponse.json(
+      { error: 'Failed to create character' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await getUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const campaignId = params.id
+
+    // Check membership
+    const membership = await prisma.campaignMembership.findUnique({
+      where: {
+        userId_campaignId: {
+          userId: user.id,
+          campaignId,
+        },
+      },
+    })
+
+    if (!membership) {
+      return NextResponse.json(
+        { error: 'You are not a member of this campaign' },
+        { status: 403 }
       )
     }
-    console.error('Create character error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
+
+    // Get characters
+    const characters = await prisma.character.findMany({
+      where: {
+        campaignId,
+        isAlive: true,
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    return NextResponse.json({ characters })
+  } catch (error) {
+    console.error('Get characters error:', error)
+    return NextResponse.json(
+      { error: 'Failed to get characters' },
       { status: 500 }
     )
   }

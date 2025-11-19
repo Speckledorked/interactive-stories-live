@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
-import { CreateCharacterForm } from '@/components/CreateCharacterForm'
+import CreateCharacterForm from "@/components/forms/CreateCharacterForm";
 
 interface CampaignData {
   campaign: any

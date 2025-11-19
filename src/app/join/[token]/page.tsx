@@ -12,69 +12,86 @@ interface CampaignInfo {
   universe: string
 }
 
-export default function JoinPage({
-  params
-}: {
-  params: { token: string }
+export default function JoinPage({ 
+  params 
+}: { 
+  params: { token: string } 
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [joining, setJoining] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState('')
   const [campaign, setCampaign] = useState<CampaignInfo | null>(null)
+  const [canJoin, setCanJoin] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
-    const loadInvite = async () => {
-      try {
-        setLoading(true)
-        setError(null)
+    checkAuth()
+    fetchInviteDetails()
+  }, [])
 
-        const res = await fetch(`/api/campaigns/join/validate?token=${encodeURIComponent(params.token)}`)
-        if (!res.ok) {
-          const body = await res.json().catch(() => null)
-          throw new Error(body?.error || 'This invite link is invalid or has expired.')
-        }
-
-        const data = await res.json()
-        setCampaign(data.campaign)
-      } catch (err: any) {
-        console.error('Error loading invite:', err)
-        setError(err.message || 'Failed to load invite. Please try again later.')
-      } finally {
-        setLoading(false)
-      }
+  const checkAuth = async () => {
+    try {
+      const response = await fetch('/api/auth/me')
+      setIsAuthenticated(response.ok)
+    } catch (error) {
+      setIsAuthenticated(false)
     }
+  }
 
-    loadInvite()
-  }, [params.token])
+  const fetchInviteDetails = async () => {
+    try {
+      const response = await fetch(`/api/join/${params.token}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(data.error || 'Invalid invite link')
+        return
+      }
+
+      setCampaign(data.campaign)
+      setCanJoin(data.canJoin)
+
+      if (!data.canJoin) {
+        if (data.isExpired) {
+          setError('This invite link has expired')
+        } else if (data.isExhausted) {
+          setError('This invite link has reached its maximum uses')
+        }
+      }
+    } catch (err) {
+      setError('Failed to load invite details')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleJoin = async () => {
-    if (!campaign) return
+    if (!isAuthenticated) {
+      // Redirect to login, then back here
+      router.push(`/login?redirect=/join/${params.token}`)
+      return
+    }
+
+    setJoining(true)
+    setError('')
 
     try {
-      setJoining(true)
-      setError(null)
-
-      const res = await fetch('/api/campaigns/join', {
+      const response = await fetch(`/api/join/${params.token}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ token: params.token })
       })
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(body?.error || 'Failed to join campaign.')
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(data.error || 'Failed to join campaign')
+        return
       }
 
-      const data = await res.json()
-
-      // Redirect to the campaign page
+      // Redirect to the campaign
       router.push(`/campaigns/${data.campaignId}`)
-    } catch (err: any) {
-      console.error('Error joining campaign:', err)
-      setError(err.message || 'Failed to join campaign.')
+    } catch (err) {
+      setError('Something went wrong')
     } finally {
       setJoining(false)
     }
@@ -82,74 +99,88 @@ export default function JoinPage({
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100">
-        <div className="max-w-md w-full px-6">
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl">
-            <div className="animate-pulse space-y-4">
-              <div className="h-6 bg-slate-800 rounded w-1/3" />
-              <div className="h-4 bg-slate-800 rounded w-full" />
-              <div className="h-4 bg-slate-800 rounded w-2/3" />
-              <div className="h-10 bg-slate-800 rounded w-1/2 mt-4" />
-            </div>
-          </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading invite details...</p>
         </div>
-      </main>
+      </div>
     )
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100">
-      <div className="max-w-md w-full px-6">
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
-          <div className="space-y-2">
-            <p className="text-xs font-mono uppercase tracking-[0.2em] text-sky-400">
-              Campaign Invitation
-            </p>
-            <h1 className="text-2xl font-semibold text-slate-50">
-              Join {campaign?.title || 'this campaign'}
-            </h1>
-            {campaign?.universe && (
-              <p className="text-xs font-mono text-slate-400">
-                Universe: <span className="text-sky-300">{campaign.universe}</span>
-              </p>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Campaign Invitation
+          </h2>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-900 px-4 py-3 rounded-md">
+            {error}
+          </div>
+        )}
+
+        {campaign && (
+          <div className="bg-white shadow rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {campaign.title}
+            </h3>
+            
+            {campaign.universe && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 mb-3">
+                {campaign.universe}
+              </span>
+            )}
+
+            {campaign.description && (
+              <p className="text-gray-600 mb-4">{campaign.description}</p>
+            )}
+
+            {canJoin && (
+              <div className="space-y-4">
+                {!isAuthenticated ? (
+                  <>
+                    <p className="text-sm text-gray-500">
+                      You need to log in or create an account to join this campaign.
+                    </p>
+                    <div className="flex space-x-3">
+                      <Link
+                        href={`/login?redirect=/join/${params.token}`}
+                        className="flex-1 text-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      >
+                        Log In
+                      </Link>
+                      <Link
+                        href={`/register?redirect=/join/${params.token}`}
+                        className="flex-1 text-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      >
+                        Sign Up
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    onClick={handleJoin}
+                    disabled={joining}
+                    className="w-full px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                  >
+                    {joining ? 'Joining...' : 'Join Campaign'}
+                  </button>
+                )}
+              </div>
             )}
           </div>
+        )}
 
-          {error && (
-            <div className="rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-100">
-              {error}
-            </div>
-          )}
-
-          {campaign && (
-            <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-3 text-sm text-slate-200 space-y-1">
-              <p className="font-medium text-slate-50">{campaign.title}</p>
-              {campaign.description && (
-                <p className="text-slate-300 text-sm">
-                  {campaign.description}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-3">
-            <button
-              onClick={handleJoin}
-              disabled={joining || !!error || !campaign}
-              className="w-full inline-flex items-center justify-center rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-medium text-slate-950 shadow-sm hover:bg-sky-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
-            >
-              {joining ? 'Joining...' : 'Join Campaign'}
-            </button>
-
-            <Link
-              href="/"
-              className="block text-center text-xs text-slate-400 hover:text-slate-200 transition"
-            >
-              Back to dashboard
-            </Link>
+        {!campaign && !error && (
+          <div className="bg-white shadow rounded-lg p-6 text-center">
+            <p className="text-gray-500">Invalid invite link</p>
           </div>
-        </div>
+        )}
       </div>
-    </main>
+    </div>
   )
 }

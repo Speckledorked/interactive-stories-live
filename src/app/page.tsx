@@ -1,3 +1,4 @@
+// test deploy
 // src/app/page.tsx
 // Home page - redirects based on auth status
 

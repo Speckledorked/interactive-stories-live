@@ -1,4 +1,5 @@
-// prisma/schema.prisma
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
@@ -9,90 +10,48 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// ENUMS (Type-Safe Values)
-// ============================================
-
-enum CampaignRole {
-  ADMIN
-  PLAYER
-}
-
-enum SceneStatus {
-  AWAITING_ACTIONS
-  RESOLVING
-  RESOLVED
-}
-
-enum EventVisibility {
-  PUBLIC
-  GM_ONLY
-  MIXED
-}
-
-enum ThreatLevel {
-  LOW
-  MEDIUM
-  HIGH
-  EXTREME
-}
-
-// ============================================
-// USERS & AUTHENTICATION
-// ============================================
-
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Relationships
-  memberships      CampaignMembership[]
-  characters       Character[]
-  actions          PlayerAction[]
-  createdCampaigns Campaign[]           // Campaigns this user created
+  campaignMemberships CampaignMembership[]
+  characters          Character[]
+  playerActions       PlayerAction[]
+  createdInvites      CampaignInvite[]     @relation("InviteCreator")
 }
-
-// ============================================
-// CAMPAIGNS
-// ============================================
 
 model Campaign {
   id               String   @id @default(cuid())
   title            String
-  description      String   @db.Text
-  universe         String
+  description      String?
+  universe         String? // e.g., "MHA", "Cosmere", "Original"
   aiSystemPrompt   String   @db.Text
   initialWorldSeed String   @db.Text
-  createdByUserId  String
+  isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  // Relationships
-  createdBy      User                   @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
-  memberships    CampaignMembership[]
-  characters     Character[]
-  npcs           NPC[]
-  factions       Faction[]
-  clocks         Clock[]
-  timelineEvents TimelineEvent[]
-  scenes         Scene[]
-  worldMeta      WorldMeta?
-  playerActions  PlayerAction[]
+  memberships CampaignMembership[]
+  characters  Character[]
+  npcs        NPC[]
+  factions    Faction[]
+  clocks      Clock[]
+  scenes      Scene[]
+  timeline    TimelineEvent[]
+  worldMeta   WorldMeta?
+  invites     CampaignInvite[]
 }
 
-// ============================================
-// CAMPAIGN MEMBERSHIP
-// ============================================
-
 model CampaignMembership {
-  id         String       @id @default(cuid())
+  id         String   @id @default(cuid())
   userId     String
   campaignId String
-  role       CampaignRole // Enum: ADMIN or PLAYER
-  createdAt  DateTime     @default(now())
+  role       String   @default("player") // "admin", "player"
+  joinedAt   DateTime @default(now())
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
@@ -100,159 +59,173 @@ model CampaignMembership {
   @@unique([userId, campaignId])
 }
 
-// ============================================
-// CHARACTERS
-// ============================================
-
 model Character {
   id              String   @id @default(cuid())
   campaignId      String
   userId          String
   name            String
-  concept         String
-  stats           Json
-  conditions      Json
+  pronouns        String?
+  description     String?
+  stats           Json? // Flexible stats object
+  backstory       String?
+  goals           String?
+  isAlive         Boolean  @default(true)
   currentLocation String?
-  isActive        Boolean  @default(true)
+  gmNotes         String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  actions  PlayerAction[]
+  campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playerActions PlayerAction[]
+
+  @@index([campaignId])
+  @@index([userId])
 }
 
-// ============================================
-// NPCs
-// ============================================
-
 model NPC {
+  id              String   @id @default(cuid())
+  campaignId      String
+  name            String
+  pronouns        String?
+  description     String?
+  currentLocation String?
+  goals           String?
+  relationship    String? // relationship to PCs or world
+  isAlive         Boolean  @default(true)
+  importance      Int      @default(1) // 1-5 scale
+  gmNotes         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+}
+
+model Faction {
+  id            String   @id @default(cuid())
+  campaignId    String
+  name          String
+  description   String?
+  goals         String?
+  resources     Int      @default(50) // 0-100 scale
+  influence     Int      @default(50) // 0-100 scale
+  currentPlan   String?
+  threatLevel   Int      @default(1) // 1-5 scale
+  relationships Json? // Relations to other factions/PCs
+  gmNotes       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+}
+
+model Clock {
   id          String   @id @default(cuid())
   campaignId  String
   name        String
-  role        String
-  tags        Json
-  notes       String   @db.Text
-  isImportant Boolean  @default(false)
+  description String?
+  segments    Int      @default(4)
+  filled      Int      @default(0)
+  category    String? // "threat", "opportunity", "countdown", etc.
+  isHidden    Boolean  @default(false) // Hidden from players
+  triggersAt  Int? // Auto-trigger when this many segments filled
+  gmNotes     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
 }
-
-// ============================================
-// FACTIONS
-// ============================================
-
-model Faction {
-  id          String      @id @default(cuid())
-  campaignId  String
-  name        String
-  goal        String      @db.Text
-  resources   Json
-  currentPlan String      @db.Text
-  threatLevel ThreatLevel // Enum: LOW, MEDIUM, HIGH, EXTREME
-  isHidden    Boolean     @default(false)
-  gmNotes     String      @db.Text
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  clocks   Clock[]
-}
-
-// ============================================
-// CLOCKS
-// ============================================
-
-model Clock {
-  id               String   @id @default(cuid())
-  campaignId       String
-  name             String
-  maxTicks         Int
-  currentTicks     Int      @default(0)
-  relatedFactionId String?
-  description      String   @db.Text
-  consequence      String   @db.Text
-  isHidden         Boolean  @default(false)
-  gmNotes          String   @db.Text
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  relatedFaction Faction? @relation(fields: [relatedFactionId], references: [id], onDelete: SetNull)
-}
-
-// ============================================
-// TIMELINE EVENTS
-// ============================================
-
-model TimelineEvent {
-  id            String          @id @default(cuid())
-  campaignId    String
-  turnNumber    Int
-  title         String
-  summaryPublic String          @db.Text
-  summaryGM     String          @db.Text
-  isOffscreen   Boolean         @default(false)
-  visibility    EventVisibility // Enum: PUBLIC, GM_ONLY, MIXED
-  createdAt     DateTime        @default(now())
-
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-}
-
-// ============================================
-// WORLD META
-// ============================================
-
-model WorldMeta {
-  id                String   @id @default(cuid())
-  campaignId        String   @unique
-  currentTurnNumber Int      @default(0)
-  currentInGameDate String
-  gmStyleNotes      Json
-  otherMeta         Json
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-}
-
-// ============================================
-// SCENES
-// ============================================
 
 model Scene {
-  id                  String      @id @default(cuid())
-  campaignId          String
-  sceneNumber         Int
-  sceneIntroText      String      @db.Text
-  sceneResolutionText String?     @db.Text
-  status              SceneStatus // Enum: AWAITING_ACTIONS, RESOLVING, RESOLVED
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
-
-  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  actions  PlayerAction[]
-
-  @@unique([campaignId, sceneNumber])
-}
-
-// ============================================
-// PLAYER ACTIONS
-// ============================================
-
-model PlayerAction {
   id          String   @id @default(cuid())
   campaignId  String
-  sceneId     String
-  characterId String
-  userId      String
-  actionText  String   @db.Text
+  sceneNumber Int
+  title       String?
+  framing     String   @db.Text // AI's scene setup
+  location    String?
+  participants Json? // Array of character/NPC IDs present
+  status      String   @default("active") // "active", "resolved", "paused"
+  resolution  String?  @db.Text // How the scene concluded
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  playerActions PlayerAction[]
+
+  @@index([campaignId])
+  @@index([status])
+}
+
+model PlayerAction {
+  id            String   @id @default(cuid())
+  sceneId       String
+  characterId   String
+  userId        String
+  actionText    String   @db.Text
+  intentOutcome String? // What the player hopes to achieve
+  status        String   @default("pending") // "pending", "resolved"
+  resolution    String?  @db.Text // AI's resolution of this action
+  rollResult    Json? // If using dice mechanics
+  createdAt     DateTime @default(now())
+
   scene     Scene     @relation(fields: [sceneId], references: [id], onDelete: Cascade)
   character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sceneId])
+  @@index([characterId])
+}
+
+model TimelineEvent {
+  id          String   @id @default(cuid())
+  campaignId  String
+  sessionDate DateTime @default(now())
+  title       String
+  summary     String   @db.Text
+  eventType   String? // "scene", "downtime", "timeskip", "world_event"
+  visibility  String   @default("public") // "public", "hidden"
+  gmNotes     String?
+  createdAt   DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([sessionDate])
+}
+
+model WorldMeta {
+  id              String   @id @default(cuid())
+  campaignId      String   @unique
+  currentDate     String? // In-world date/time
+  currentLocation String? // Primary focus location
+  tension         Int      @default(50) // 0-100 overall tension
+  phase           String? // "introduction", "rising_action", "climax", etc.
+  customFlags     Json? // Flexible storage for campaign-specific data
+  gmNotes         String?
+  updatedAt       DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model CampaignInvite {
+  id        String   @id @default(cuid())
+  campaignId String
+  token     String   @unique @default(cuid())
+  createdBy String
+  expiresAt DateTime
+  maxUses   Int      @default(0) // 0 = unlimited
+  uses      Int      @default(0)
+  createdAt DateTime @default(now())
+
+  campaign  Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdByUser User @relation("InviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([campaignId])
 }

@@ -66,3 +66,12 @@ export function requireAuth(request: NextRequest): TokenPayload {
   
   return user
 }
+
+// -------------------------------------------
+// NEW ADDITION — Added at bottom of file
+// -------------------------------------------
+
+export async function getUser(): Promise<any> {
+  // TODO: Implement real auth lookup (e.g. from cookies/session)
+  return null;
+}

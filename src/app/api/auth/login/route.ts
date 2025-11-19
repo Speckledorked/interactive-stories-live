@@ -26,15 +26,16 @@ export async function POST(request: NextRequest) {
       where: { email }
     })
 
-    if (!user) {
+    // Updated null-check to reference: user.password
+    if (!user || !user.password) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Invalid email or password' },
         { status: 401 }
       )
     }
 
-    // Verify password
-    const isValid = await verifyPassword(password, user.passwordHash)
+    // Verify password (updated: use user.password)
+    const isValid = await verifyPassword(password, user.password)
 
     if (!isValid) {
       return NextResponse.json<ErrorResponse>(

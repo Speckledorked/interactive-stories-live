@@ -10,7 +10,7 @@ interface CreateCharacterFormProps {
   onCancel?: () => void
 }
 
-export function CreateCharacterForm({ 
+function CreateCharacterForm({ 
   campaignId, 
   onSuccess, 
   onCancel 
@@ -213,3 +213,5 @@ export function CreateCharacterForm({
     </form>
   )
 }
+
+export default CreateCharacterForm

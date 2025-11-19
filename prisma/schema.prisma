@@ -13,7 +13,7 @@ datasource db {
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
-  password  String?
+  password  String?          // <- use password, optional
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -21,7 +21,7 @@ model User {
   campaignMemberships CampaignMembership[]
   characters          Character[]
   playerActions       PlayerAction[]
-  createdInvites      CampaignInvite[]     @relation("InviteCreator")
+  createInvites       CampaignInvite[] @relation("InviteCreator")
 }
 
 model Campaign {

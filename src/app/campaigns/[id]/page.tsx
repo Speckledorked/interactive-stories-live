@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import { CreateCharacterForm } from '@/components/CreateCharacterForm'
 
 interface CampaignData {
   campaign: any
@@ -21,6 +22,7 @@ export default function CampaignLobbyPage() {
   const [data, setData] = useState<CampaignData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showCreateCharacter, setShowCreateCharacter] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -127,7 +129,11 @@ export default function CampaignLobbyPage() {
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="card-header mb-0">Your Characters</h2>
-              <button className="text-primary-400 hover:text-primary-300 text-sm">
+              <button
+                type="button"
+                onClick={() => setShowCreateCharacter(true)}
+                className="text-primary-400 hover:text-primary-300 text-sm"
+              >
                 + Create Character
               </button>
             </div>
@@ -245,6 +251,24 @@ export default function CampaignLobbyPage() {
           </div>
         </div>
       </div>
+
+      {/* Character Creation Modal */}
+      {showCreateCharacter && (
+        <div className="fixed inset-0 bg-gray-900/80 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-950 border border-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <h2 className="text-2xl font-bold mb-4 text-white">Create New Character</h2>
+            <CreateCharacterForm
+              campaignId={campaignId}
+              onSuccess={() => {
+                setShowCreateCharacter(false)
+                // Refresh characters list after creating a new one
+                loadCampaign()
+              }}
+              onCancel={() => setShowCreateCharacter(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

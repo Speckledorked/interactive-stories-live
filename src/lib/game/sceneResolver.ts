@@ -159,7 +159,7 @@ export async function createNewScene(campaignId: string) {
     data: {
       campaignId,
       sceneNumber: nextSceneNumber,
-      sceneIntroText: sceneIntro,
+      framing: sceneIntro,
       status: 'AWAITING_ACTIONS' as SceneStatus
     }
   })

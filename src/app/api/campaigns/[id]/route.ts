@@ -36,9 +36,6 @@ export async function GET(
     const campaign = await prisma.campaign.findUnique({
       where: { id: campaignId },
       include: {
-        createdBy: {
-          select: { id: true, email: true }
-        },
         worldMeta: true,
         characters: {
           include: {
@@ -51,7 +48,6 @@ export async function GET(
         factions: true,
         clocks: {
           where: {
-            // Only show public clocks unless user is admin
             OR: [
               { isHidden: false },
               membership.role === 'ADMIN' ? { isHidden: true } : {}
@@ -60,7 +56,6 @@ export async function GET(
         },
         timelineEvents: {
           where: {
-            // Only show public/mixed events unless user is admin
             OR: [
               { visibility: 'PUBLIC' },
               { visibility: 'MIXED' },
@@ -68,11 +63,11 @@ export async function GET(
             ]
           },
           orderBy: { turnNumber: 'desc' },
-          take: 20 // Last 20 events
+          take: 20
         },
         scenes: {
           orderBy: { sceneNumber: 'desc' },
-          take: 5, // Last 5 scenes
+          take: 5,
           include: {
             playerActions: {
               include: {

@@ -9,9 +9,9 @@ export async function PATCH(
   { params }: { params: { id: string; clockId: string } }
 ) {
   try {
-const user = await getUser(request)
+    const user = await getUser(request)
     if (!user) {
-      NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id: campaignId, clockId } = params
@@ -21,7 +21,7 @@ const user = await getUser(request)
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId,
         },
       },
@@ -81,7 +81,7 @@ export async function POST(
   { params }: { params: { id: string; clockId: string } }
 ) {
   try {
-    const user = await getUser()
+    const user = await getUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -93,7 +93,7 @@ export async function POST(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId,
         },
       },
@@ -152,7 +152,6 @@ export async function POST(
 
     // Check if clock triggers
     if (clock.triggersAt && clock.filled >= clock.triggersAt) {
-      // Could trigger an event here
       console.log(`Clock ${clock.name} triggered!`)
     }
 

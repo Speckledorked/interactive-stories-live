@@ -18,9 +18,8 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const user = await getUser(request)
+      return NextRespnse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const campaignId = params.id

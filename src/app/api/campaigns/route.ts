@@ -7,36 +7,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { CreateCampaignRequest, ErrorResponse } from '@/types/api'
-import { CampaignRole } from '@prisma/client'
 
 // GET /api/campaigns - List user's campaigns
 export async function GET(request: NextRequest) {
   try {
     const user = requireAuth(request)
 
-    // Get all campaigns where user is a member
+    // Find all campaign memberships for the user
     const memberships = await prisma.campaignMembership.findMany({
-      where: { userId: user.userId },
+      where: {
+        userId: user.userId
+      },
       include: {
-        campaign: {
-          include: {
-            createdBy: {
-              select: { id: true, email: true }
-            },
-            _count: {
-              select: { 
-                characters: true,
-                scenes: true
-              }
-            }
-          }
-        }
+        campaign: true
+      },
+      orderBy: {
+        joinedAt: 'desc'
       }
     })
 
-    const campaigns = memberships.map(m => ({
+    // Map to campaigns with role info
+    const campaigns = memberships.map((m) => ({
       ...m.campaign,
-      userRole: m.role
+      role: m.role
     }))
 
     return NextResponse.json({ campaigns })
@@ -60,20 +53,18 @@ export async function POST(request: NextRequest) {
   try {
     const user = requireAuth(request)
     const body: CreateCampaignRequest = await request.json()
-
     const { title, description, universe, aiSystemPrompt, initialWorldSeed } = body
 
-    // Validate input
-    if (!title || !description || !universe || !aiSystemPrompt || !initialWorldSeed) {
+    if (!title) {
       return NextResponse.json<ErrorResponse>(
-        { error: 'All fields are required' },
+        { error: 'Title is required' },
         { status: 400 }
       )
     }
 
-    // Create campaign with WorldMeta and membership in a transaction
+    // Create campaign and membership in a transaction
     const campaign = await prisma.$transaction(async (tx) => {
-      // Create the campaign
+      // Create campaign
       const newCampaign = await tx.campaign.create({
         data: {
           title,
@@ -96,12 +87,12 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Add creator as ADMIN member
+      // Make current user an admin member of the campaign
       await tx.campaignMembership.create({
         data: {
           userId: user.userId,
           campaignId: newCampaign.id,
-          role: CampaignRole.ADMIN
+          role: 'admin' // string column: "admin" | "player"
         }
       })
 

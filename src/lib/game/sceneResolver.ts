@@ -28,7 +28,7 @@ export async function resolveScene(campaignId: string, sceneId: string) {
   // 1. Verify scene exists and is ready to resolve
   const scene = await prisma.scene.findUnique({
     where: { id: sceneId },
-    include: { actions: true }
+    include: { playerActions: true }
   })
 
   if (!scene) {
@@ -39,7 +39,7 @@ export async function resolveScene(campaignId: string, sceneId: string) {
     throw new Error(`Scene is not awaiting actions (status: ${scene.status})`)
   }
 
-  if (scene.actions.length === 0) {
+  if (scene.playerActions.length === 0) {
     throw new Error('No player actions submitted yet')
   }
 
@@ -61,7 +61,7 @@ export async function resolveScene(campaignId: string, sceneId: string) {
       throw new Error('WorldMeta not found')
     }
 
-    const currentTurn = worldMeta.currentTurnNumber
+    const currentTurn = (worldMeta as any).currentTurnNumber
 
     // 4. Build AI request from world state
     console.log('📊 Building AI request...')
@@ -180,7 +180,7 @@ export async function getCurrentScene(campaignId: string) {
       status: { in: ['AWAITING_ACTIONS', 'RESOLVING'] }
     },
     include: {
-      actions: {
+      playerActions: {
         include: {
           character: true,
           user: { select: { id: true, email: true } }
@@ -201,7 +201,7 @@ export async function getRecentScenes(campaignId: string, limit: number = 5) {
       status: 'RESOLVED'
     },
     include: {
-      actions: {
+      playerActions: {
         include: {
           character: { select: { name: true } },
           user: { select: { email: true } }
@@ -217,7 +217,10 @@ export async function getRecentScenes(campaignId: string, limit: number = 5) {
  * Check if a user can trigger scene resolution
  * Only admins can resolve scenes
  */
-export async function canUserResolveScene(userId: string, campaignId: string): Promise<boolean> {
+export async function canUserResolveScene(
+  userId: string,
+  campaignId: string
+): Promise<boolean> {
   const membership = await prisma.campaignMembership.findUnique({
     where: {
       userId_campaignId: {

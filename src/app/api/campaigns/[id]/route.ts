@@ -74,7 +74,7 @@ export async function GET(
           orderBy: { sceneNumber: 'desc' },
           take: 5, // Last 5 scenes
           include: {
-            actions: {
+            playerActions: {
               include: {
                 character: true,
                 user: {
@@ -101,9 +101,9 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       campaign,
-      userRole: membership.role 
+      userRole: membership.role
     })
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {

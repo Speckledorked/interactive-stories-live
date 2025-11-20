@@ -6,7 +6,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
-import { CampaignRole } from '@prisma/client'
 
 export async function POST(
   request: NextRequest,

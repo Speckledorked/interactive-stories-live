@@ -48,10 +48,9 @@ export async function POST(
       )
     }
 
-    // Some callers of getCurrentScene may include related actions,
-    // but the TypeScript type for currentScene doesn't expose them.
+    // FIX: Scenes use "playerActions" not "actions"
     const sceneActions =
-      ((currentScene as any).actions as unknown[] | undefined) ?? []
+      ((currentScene as any).playerActions as unknown[] | undefined) ?? []
 
     if (sceneActions.length === 0) {
       return NextResponse.json<ErrorResponse>(
@@ -89,7 +88,7 @@ export async function POST(
     })
   } catch (error) {
     console.error('❌ Scene resolution error:', error)
-
+    
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json<ErrorResponse>(
         { error: 'Unauthorized' },
@@ -98,7 +97,7 @@ export async function POST(
     }
 
     return NextResponse.json<ErrorResponse>(
-      {
+      { 
         error: 'Failed to resolve scene',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

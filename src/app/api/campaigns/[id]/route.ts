@@ -48,26 +48,25 @@ export async function GET(
         factions: true,
         clocks: {
           where: {
+            // Only show public clocks unless user is admin
             OR: [
               { isHidden: false },
               membership.role === 'ADMIN' ? { isHidden: true } : {}
             ]
           }
         },
-        timelineEvents: {
-          where: {
-            OR: [
-              { visibility: 'PUBLIC' },
-              { visibility: 'MIXED' },
-              membership.role === 'ADMIN' ? { visibility: 'GM_ONLY' } : {}
-            ]
-          },
-          orderBy: { turnNumber: 'desc' },
-          take: 20
+        // Timeline events relation is named "timeline" in the schema
+        timeline: {
+          // Admin sees all events; others see only public ones
+          where: membership.role === 'ADMIN'
+            ? {}
+            : { visibility: 'public' },
+          orderBy: { sessionDate: 'desc' },
+          take: 20 // Last 20 events
         },
         scenes: {
           orderBy: { sceneNumber: 'desc' },
-          take: 5,
+          take: 5, // Last 5 scenes
           include: {
             playerActions: {
               include: {

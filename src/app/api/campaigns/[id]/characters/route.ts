@@ -18,7 +18,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getUser()
+    const user = await getUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -26,7 +26,6 @@ export async function POST(
     const campaignId = params.id
     const body: CreateCharacterBody = await request.json()
 
-    // Validate required fields
     if (!body.name) {
       return NextResponse.json(
         { error: 'Character name is required' },
@@ -34,11 +33,10 @@ export async function POST(
       )
     }
 
-    // Check membership
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId,
         },
       },
@@ -51,11 +49,10 @@ export async function POST(
       )
     }
 
-    // Create character
     const character = await prisma.character.create({
       data: {
         campaignId,
-        userId: user.id,
+        userId: user.userId,
         name: body.name,
         pronouns: body.pronouns,
         description: body.description,
@@ -81,18 +78,17 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getUser()
+    const user = await getUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const campaignId = params.id
 
-    // Check membership
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId,
         },
       },
@@ -105,7 +101,6 @@ export async function GET(
       )
     }
 
-    // Get characters
     const characters = await prisma.character.findMany({
       where: {
         campaignId,

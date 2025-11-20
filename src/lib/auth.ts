@@ -4,6 +4,7 @@
 
 import jwt from 'jsonwebtoken'
 import { NextRequest } from 'next/server'
+import { headers } from 'next/headers'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-me'
 
@@ -44,7 +45,7 @@ export function verifyToken(token: string): TokenPayload | null {
  */
 export function getUserFromRequest(request: NextRequest): TokenPayload | null {
   const authHeader = request.headers.get('authorization')
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null
   }
@@ -59,18 +60,36 @@ export function getUserFromRequest(request: NextRequest): TokenPayload | null {
  */
 export function requireAuth(request: NextRequest): TokenPayload {
   const user = getUserFromRequest(request)
-  
+
   if (!user) {
     throw new Error('Unauthorized')
   }
-  
+
   return user
 }
 
 // -------------------------------------------
-// Convenience helper used by API routes
+// Convenience helper used by API routes and server code
+// Supports both getUser(request) and getUser()
 // -------------------------------------------
 
-export async function getUser(request: NextRequest): Promise<TokenPayload | null> {
-  return getUserFromRequest(request)
+export async function getUser(request?: NextRequest): Promise<TokenPayload | null> {
+  // If an explicit NextRequest is passed (API routes), use it
+  if (request) {
+    return getUserFromRequest(request)
+  }
+
+  // Fallback: read from Next.js request headers in server components/actions
+  try {
+    const authHeader = headers().get('authorization')
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null
+    }
+
+    const token = authHeader.substring(7)
+    return verifyToken(token)
+  } catch {
+    return null
+  }
 }

@@ -9,9 +9,9 @@ export async function PATCH(
   { params }: { params: { id: string; clockId: string } }
 ) {
   try {
-    const user = await getUser()
+const user = await getUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id: campaignId, clockId } = params

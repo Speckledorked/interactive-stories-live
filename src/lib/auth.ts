@@ -68,10 +68,9 @@ export function requireAuth(request: NextRequest): TokenPayload {
 }
 
 // -------------------------------------------
-// NEW ADDITION — Added at bottom of file
+// Convenience helper used by API routes
 // -------------------------------------------
 
-export async function getUser(): Promise<any> {
-  // TODO: Implement real auth lookup (e.g. from cookies/session)
-  return null;
+export async function getUser(request: NextRequest): Promise<TokenPayload | null> {
+  return getUserFromRequest(request)
 }

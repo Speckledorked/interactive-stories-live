@@ -20,7 +20,7 @@ export async function POST(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId,
         },
       },
@@ -43,7 +43,7 @@ export async function POST(
     const invite = await prisma.campaignInvite.create({
       data: {
         campaignId,
-        createdBy: user.id,
+        createdBy: user.userId,
         expiresAt,
         maxUses,
       },
@@ -81,7 +81,7 @@ export async function GET(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId,
         },
       },

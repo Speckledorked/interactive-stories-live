@@ -43,7 +43,7 @@ export async function GET(
         }
       },
       include: {
-        actions: {
+        playerActions: {
           include: {
             character: true,
             user: {
@@ -118,7 +118,6 @@ export async function POST(
     // Create action
     const action = await prisma.playerAction.create({
       data: {
-        campaignId,
         sceneId,
         characterId,
         userId: user.userId,

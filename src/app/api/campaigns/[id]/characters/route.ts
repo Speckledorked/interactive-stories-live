@@ -80,7 +80,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getUser(req)uest)
+    const user = await  getUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

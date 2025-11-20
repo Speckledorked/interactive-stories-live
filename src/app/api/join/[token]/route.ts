@@ -1,21 +1,11 @@
-// src/app/api/campaigns/[id]/characters/route.ts
+// src/app/api/join/[token]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 
-interface CreateCharacterBody {
-  name: string
-  pronouns?: string
-  description?: string
-  stats?: any
-  backstory?: string
-  goals?: string
-  currentLocation?: string
-}
-
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { token: string } }
 ) {
   try {
     const user = await getUser(request)
@@ -23,54 +13,83 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const campaignId = params.id
-    const body: CreateCharacterBody = await request.json()
+    const { token } = params
 
-    // Validate required fields
-    if (!body.name) {
+    // Find the invite
+    const invite = await prisma.campaignInvite.findUnique({
+      where: { token },
+      include: {
+        campaign: true,
+      },
+    })
+
+    if (!invite) {
       return NextResponse.json(
-        { error: 'Character name is required' },
+        { error: 'Invalid invite link' },
+        { status: 404 }
+      )
+    }
+
+    // Check if expired
+    if (new Date() > invite.expiresAt) {
+      return NextResponse.json(
+        { error: 'This invite link has expired' },
         { status: 400 }
       )
     }
 
-    // Check membership
-    const membership = await prisma.campaignMembership.findUnique({
+    // Check if max uses reached
+    if (invite.maxUses > 0 && invite.uses >= invite.maxUses) {
+      return NextResponse.json(
+        { error: 'This invite link has reached its maximum uses' },
+        { status: 400 }
+      )
+    }
+
+    // Check if already a member
+    const existingMembership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
-          campaignId,
+          userId: user.userId,
+          campaignId: invite.campaignId,
         },
       },
     })
 
-    if (!membership) {
+    if (existingMembership) {
       return NextResponse.json(
-        { error: 'You are not a member of this campaign' },
-        { status: 403 }
+        { 
+          message: 'You are already a member of this campaign',
+          campaignId: invite.campaignId 
+        },
+        { status: 200 }
       )
     }
 
-    // Create character
-    const character = await prisma.character.create({
-      data: {
-        campaignId,
-        userId: user.id,
-        name: body.name,
-        pronouns: body.pronouns,
-        description: body.description,
-        stats: body.stats,
-        backstory: body.backstory,
-        goals: body.goals,
-        currentLocation: body.currentLocation,
-      },
-    })
+    // Create membership and increment uses in a transaction
+    const [membership] = await prisma.$transaction([
+      prisma.campaignMembership.create({
+        data: {
+          userId: user.userId,
+          campaignId: invite.campaignId,
+          role: 'player',
+        },
+      }),
+      prisma.campaignInvite.update({
+        where: { id: invite.id },
+        data: { uses: { increment: 1 } },
+      }),
+    ])
 
-    return NextResponse.json({ character })
+    return NextResponse.json({
+      message: 'Successfully joined campaign',
+      campaignId: invite.campaignId,
+      campaign: invite.campaign,
+    })
   } catch (error) {
-    console.error('Create character error:', error)
+    console.error('Join campaign error:', error)
     return NextResponse.json(
-      { error: 'Failed to create character' },
+      { error: 'Failed to join campaign' },
       { status: 500 }
     )
   }
@@ -78,57 +97,47 @@ export async function POST(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { token: string } }
 ) {
   try {
-    const user = await getUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { token } = params
 
-    const campaignId = params.id
-
-    // Check membership
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.id,
-          campaignId,
-        },
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'You are not a member of this campaign' },
-        { status: 403 }
-      )
-    }
-
-    // Get characters
-    const characters = await prisma.character.findMany({
-      where: {
-        campaignId,
-        isAlive: true,
-      },
+    // Find the invite
+    const invite = await prisma.campaignInvite.findUnique({
+      where: { token },
       include: {
-        user: {
+        campaign: {
           select: {
-            name: true,
-            email: true,
+            id: true,
+            title: true,
+            description: true,
+            universe: true,
           },
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
     })
 
-    return NextResponse.json({ characters })
+    if (!invite) {
+      return NextResponse.json(
+        { error: 'Invalid invite link' },
+        { status: 404 }
+      )
+    }
+
+    // Check if expired or exhausted
+    const isExpired = new Date() > invite.expiresAt
+    const isExhausted = invite.maxUses > 0 && invite.uses >= invite.maxUses
+
+    return NextResponse.json({
+      campaign: invite.campaign,
+      isExpired,
+      isExhausted,
+      canJoin: !isExpired && !isExhausted,
+    })
   } catch (error) {
-    console.error('Get characters error:', error)
+    console.error('Get invite error:', error)
     return NextResponse.json(
-      { error: 'Failed to get characters' },
+      { error: 'Failed to get invite details' },
       { status: 500 }
     )
   }

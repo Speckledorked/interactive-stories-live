@@ -48,14 +48,21 @@ export async function POST(
       )
     }
 
-    if (currentScene.actions.length === 0) {
+    // Some callers of getCurrentScene may include related actions,
+    // but the TypeScript type for currentScene doesn't expose them.
+    const sceneActions =
+      ((currentScene as any).actions as unknown[] | undefined) ?? []
+
+    if (sceneActions.length === 0) {
       return NextResponse.json<ErrorResponse>(
         { error: 'No player actions submitted yet. Wait for players to act.' },
         { status: 400 }
       )
     }
 
-    console.log(`📝 Scene ${currentScene.sceneNumber} has ${currentScene.actions.length} action(s)`)
+    console.log(
+      `📝 Scene ${currentScene.sceneNumber} has ${sceneActions.length} action(s)`
+    )
 
     // 3. Resolve the scene (this calls AI and updates DB)
     console.log('🤖 Calling scene resolver...')
@@ -82,7 +89,7 @@ export async function POST(
     })
   } catch (error) {
     console.error('❌ Scene resolution error:', error)
-    
+
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json<ErrorResponse>(
         { error: 'Unauthorized' },
@@ -91,7 +98,7 @@ export async function POST(
     }
 
     return NextResponse.json<ErrorResponse>(
-      { 
+      {
         error: 'Failed to resolve scene',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

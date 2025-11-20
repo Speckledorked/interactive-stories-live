@@ -20,7 +20,7 @@ export async function PATCH(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId,
         },
       },

@@ -139,8 +139,9 @@ export default function StoryPage() {
     }
   }
 
-  const handleResolveScene = async () => {
-    if (!currentScene) return
+  const handleResolveScene = async (sceneId?: string) => {
+    const targetSceneId = sceneId || currentScene?.id
+    if (!targetSceneId) return
 
     setResolving(true)
     setError('')
@@ -149,7 +150,10 @@ export default function StoryPage() {
     try {
       const response = await authenticatedFetch(
         `/api/campaigns/${campaignId}/resolve-scene`,
-        { method: 'POST' }
+        {
+          method: 'POST',
+          body: JSON.stringify({ sceneId: targetSceneId })
+        }
       )
 
       if (!response.ok) {
@@ -363,6 +367,29 @@ export default function StoryPage() {
                       <p className="text-green-400 text-sm">
                         ✓ You've submitted your action. Waiting for other participants...
                       </p>
+                    </div>
+                  )}
+
+                  {/* Manual Resolve Button (Admin Only) */}
+                  {scene.status === 'AWAITING_ACTIONS' && isAdmin && scene.playerActions && scene.playerActions.length > 0 && (
+                    <div className="card bg-yellow-500/10 border-yellow-500/50">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-yellow-400 text-sm font-medium mb-1">
+                            🎲 GM Controls
+                          </p>
+                          <p className="text-gray-400 text-xs">
+                            {scene.playerActions.length} action(s) submitted. You can manually resolve this scene now.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleResolveScene(scene.id)}
+                          disabled={resolving}
+                          className="btn-primary disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {resolving ? 'Resolving...' : 'Resolve Scene'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

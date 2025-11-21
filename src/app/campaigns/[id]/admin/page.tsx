@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 
 interface Campaign {
   id: string
@@ -62,13 +62,10 @@ interface Member {
   }
 }
 
-export default function AdminPage({ 
-  params 
-}: { 
-  params: { id: string } 
-}) {
+export default function AdminPage() {
   const router = useRouter()
-  const campaignId = params.id
+  const params = useParams()
+  const campaignId = params.id as string
 
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'ai' | 'npcs' | 'factions' | 'clocks' | 'invites' | 'members' | 'settings'>('ai')
@@ -98,6 +95,13 @@ export default function AdminPage({
         return
       }
       const campData = await campResponse.json()
+
+      // Check if user is an admin
+      if (campData.userRole !== 'ADMIN') {
+        router.push(`/campaigns/${campaignId}`)
+        return
+      }
+
       setCampaign(campData.campaign)
 
       // Fetch NPCs

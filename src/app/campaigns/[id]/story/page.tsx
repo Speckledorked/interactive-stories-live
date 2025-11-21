@@ -24,6 +24,7 @@ export default function StoryPage() {
   const [resolving, setResolving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [expandedActions, setExpandedActions] = useState<Record<string, boolean>>({})
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
@@ -288,25 +289,37 @@ export default function StoryPage() {
                     )}
                   </div>
 
-                  {/* Player Actions */}
+                  {/* Player Actions - Collapsible */}
                   {scene.playerActions && scene.playerActions.length > 0 && (
                     <div className="card">
-                      <h3 className="text-lg font-bold text-white mb-4">Player Actions</h3>
-                      <div className="space-y-3">
-                        {scene.playerActions.map((action: any) => (
-                          <div key={action.id} className="bg-gray-900 rounded-lg p-4">
-                            <div className="flex items-start justify-between mb-2">
-                              <span className="font-medium text-primary-400">
-                                {action.character.name}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {new Date(action.createdAt).toLocaleTimeString()}
-                              </span>
+                      <button
+                        onClick={() => setExpandedActions(prev => ({ ...prev, [scene.id]: !prev[scene.id] }))}
+                        className="w-full flex items-center justify-between text-left"
+                      >
+                        <h3 className="text-lg font-bold text-white">
+                          Player Actions ({scene.playerActions.length})
+                        </h3>
+                        <span className="text-gray-400">
+                          {expandedActions[scene.id] ? '▼' : '▶'}
+                        </span>
+                      </button>
+                      {expandedActions[scene.id] && (
+                        <div className="space-y-3 mt-4">
+                          {scene.playerActions.map((action: any) => (
+                            <div key={action.id} className="bg-gray-900 rounded-lg p-4">
+                              <div className="flex items-start justify-between mb-2">
+                                <span className="font-medium text-primary-400">
+                                  {action.character.name}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {new Date(action.createdAt).toLocaleTimeString()}
+                                </span>
+                              </div>
+                              <p className="text-gray-300 text-sm">{action.actionText}</p>
                             </div>
-                            <p className="text-gray-300 text-sm">{action.actionText}</p>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 

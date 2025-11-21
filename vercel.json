@@ -1,0 +1,41 @@
+{
+  "buildCommand": "prisma generate && next build",
+  "framework": "nextjs",
+  "installCommand": "npm install",
+  "regions": ["iad1"],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "JWT_SECRET": "@jwt_secret",
+    "OPENAI_API_KEY": "@openai_api_key",
+    "PUSHER_APP_ID": "@pusher_app_id",
+    "PUSHER_SECRET": "@pusher_secret",
+    "NEXT_PUBLIC_PUSHER_KEY": "@next_public_pusher_key",
+    "NEXT_PUBLIC_PUSHER_CLUSTER": "@next_public_pusher_cluster",
+    "NEXT_PUBLIC_APP_URL": "@next_public_app_url"
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ]
+}

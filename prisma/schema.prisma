@@ -412,6 +412,13 @@ model WorldMeta {
   gmNotes           String?
   updatedAt         DateTime @updatedAt
 
+  // Phase 15: AI Health & Cost Tracking
+  aiHealth              Json?     // Circuit breaker state and AI failure tracking
+  aiMetrics             Json?     // Token usage, costs, response times
+  campaignHealthHistory Json?     // Historical health scores and issues
+  lastHealthCheck       DateTime? // Last time health was checked
+  currentHealthScore    Int?      // Current campaign health (0-100)
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 }
 

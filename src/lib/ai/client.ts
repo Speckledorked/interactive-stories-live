@@ -1,6 +1,12 @@
 // src/lib/ai/client.ts
 // OpenAI client wrapper
 // This handles all communication with the AI model
+// Phase 15: Enhanced with strict validation, error handling, and cost tracking
+
+import { validateAIResponse, type ValidationResult } from './validation'
+import { circuitBreakerManager } from './circuit-breaker'
+import { AICostTracker, estimateTokenCount } from './cost-tracker'
+import { aiResponseCache } from './response-cache'
 
 /**
  * AI GM Response Structure
@@ -148,14 +154,57 @@ export interface AIGMRequest {
 
 /**
  * Call the OpenAI API with a structured prompt
+ * Phase 15: Enhanced with validation, caching, circuit breaker, and cost tracking
+ *
  * @param request - The formatted request for the AI GM
+ * @param campaignId - Campaign ID for tracking
+ * @param sceneId - Scene ID for cost tracking
+ * @param options - Additional options
  * @returns AI GM response with scene text and world updates
  */
-export async function callAIGM(request: AIGMRequest): Promise<AIGMResponse> {
+export async function callAIGM(
+  request: AIGMRequest,
+  campaignId?: string,
+  sceneId?: string,
+  options?: {
+    skipCache?: boolean
+    debugMode?: boolean
+  }
+): Promise<AIGMResponse> {
+  const startTime = Date.now()
   const apiKey = process.env.OPENAI_API_KEY
 
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY is not configured')
+  }
+
+  // Phase 15.3: Check circuit breaker
+  if (campaignId) {
+    const circuitBreaker = circuitBreakerManager.getBreaker(campaignId)
+    if (!circuitBreaker.canAttempt()) {
+      console.error('🚫 Circuit breaker OPEN - AI service unavailable')
+      throw new Error('AI service temporarily unavailable - too many recent failures. Please try again later.')
+    }
+  }
+
+  // Phase 15.5: Check cache first
+  if (!options?.skipCache) {
+    const cachedResponse = aiResponseCache.get(request)
+    if (cachedResponse) {
+      // Record cache hit in cost tracker
+      if (campaignId) {
+        const costTracker = new AICostTracker(campaignId)
+        await costTracker.recordRequest({
+          inputTokens: 0,
+          outputTokens: 0,
+          responseTimeMs: Date.now() - startTime,
+          success: true,
+          cacheHit: true,
+          sceneId
+        })
+      }
+      return cachedResponse
+    }
   }
 
   // Build the full prompt for the AI
@@ -165,6 +214,9 @@ export async function callAIGM(request: AIGMRequest): Promise<AIGMResponse> {
   console.log('🤖 Calling AI GM...')
   console.log('System prompt length:', systemPrompt.length)
   console.log('User prompt length:', userPrompt.length)
+
+  // Estimate token count for cost tracking
+  const estimatedInputTokens = estimateTokenCount(systemPrompt + userPrompt)
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -191,31 +243,108 @@ export async function callAIGM(request: AIGMRequest): Promise<AIGMResponse> {
     })
 
     if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`)
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      const error = new Error(`OpenAI API error: ${JSON.stringify(errorData)}`)
+
+      // Record failure in circuit breaker
+      if (campaignId) {
+        circuitBreakerManager.getBreaker(campaignId).recordFailure(error)
+      }
+
+      throw error
     }
 
     const data = await response.json()
     const content = data.choices[0].message.content
+    const usage = data.usage || {}
 
     console.log('✅ AI GM response received')
     console.log('Response length:', content.length)
 
-    // Parse and validate the JSON response
-    const aiResponse: AIGMResponse = JSON.parse(content)
-
-    // Basic validation
-    if (!aiResponse.scene_text) {
-      throw new Error('AI response missing scene_text')
+    // Phase 15.6: Debug mode - log raw prompts and response
+    if (options?.debugMode) {
+      console.log('🐛 DEBUG MODE - Raw AI Data:')
+      console.log('System Prompt:', systemPrompt)
+      console.log('User Prompt:', userPrompt)
+      console.log('Raw Response:', content)
     }
 
-    if (!aiResponse.world_updates) {
-      aiResponse.world_updates = {}
+    // Parse JSON
+    let parsedResponse: any
+    try {
+      parsedResponse = JSON.parse(content)
+    } catch (parseError) {
+      console.error('❌ Failed to parse AI response as JSON')
+      if (campaignId) {
+        circuitBreakerManager.getBreaker(campaignId).recordFailure(parseError as Error)
+      }
+      throw new Error('AI returned invalid JSON')
     }
 
-    return aiResponse
+    // Phase 15.2: Validate response with progressive fallback
+    const validationResult = validateAIResponse(parsedResponse, request.current_scene_intro)
+
+    if (!validationResult.success) {
+      console.error('❌ AI response validation failed completely')
+      if (campaignId) {
+        circuitBreakerManager.getBreaker(campaignId).recordFailure(new Error('Validation failed'))
+      }
+      throw new Error('AI response validation failed')
+    }
+
+    const validatedResponse = validationResult.data as AIGMResponse
+
+    // Log validation level
+    if (validationResult.level === 'partial') {
+      console.warn('⚠️ Using partial AI response - some world updates may be missing')
+    } else if (validationResult.level === 'emergency') {
+      console.warn('⚠️ Using emergency fallback template')
+    } else {
+      console.log('✅ Full AI response validation passed')
+    }
+
+    // Phase 15.3: Record success in circuit breaker
+    if (campaignId) {
+      circuitBreakerManager.getBreaker(campaignId).recordSuccess()
+    }
+
+    // Phase 15.5: Cache successful response
+    if (validationResult.level === 'full') {
+      aiResponseCache.set(request, validatedResponse, request.current_scene_intro)
+    }
+
+    // Phase 15.5.1: Track costs
+    if (campaignId) {
+      const costTracker = new AICostTracker(campaignId)
+      await costTracker.recordRequest({
+        inputTokens: usage.prompt_tokens || estimatedInputTokens,
+        outputTokens: usage.completion_tokens || estimateTokenCount(content),
+        responseTimeMs: Date.now() - startTime,
+        success: true,
+        cacheHit: false,
+        sceneId
+      })
+    }
+
+    return validatedResponse
+
   } catch (error) {
+    const responseTimeMs = Date.now() - startTime
     console.error('❌ AI GM call failed:', error)
+
+    // Record failure in cost tracker
+    if (campaignId) {
+      const costTracker = new AICostTracker(campaignId)
+      await costTracker.recordRequest({
+        inputTokens: estimatedInputTokens,
+        outputTokens: 0,
+        responseTimeMs,
+        success: false,
+        cacheHit: false,
+        sceneId
+      }).catch(console.error)
+    }
+
     throw error
   }
 }

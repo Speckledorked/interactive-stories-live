@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
+import { pusherServer } from '@/lib/pusher'
 
 // GET current scene
 export async function GET(
@@ -122,8 +123,42 @@ export async function POST(
         characterId,
         userId: user.userId,
         actionText
+      },
+      include: {
+        character: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            email: true
+          }
+        }
       }
     })
+
+    // Trigger Pusher event to notify all clients
+    try {
+      await pusherServer.trigger(
+        `campaign-${campaignId}`,
+        'action:created',
+        {
+          actionId: action.id,
+          sceneId: action.sceneId,
+          characterId: action.characterId,
+          characterName: action.character.name,
+          userId: action.userId,
+          actionText: action.actionText,
+          timestamp: action.createdAt
+        }
+      )
+    } catch (pusherError) {
+      console.error('Failed to trigger Pusher event:', pusherError)
+      // Don't fail the request if Pusher fails
+    }
 
     return NextResponse.json({ action }, { status: 201 })
   } catch (error) {

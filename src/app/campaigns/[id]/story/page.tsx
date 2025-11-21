@@ -302,7 +302,11 @@ export default function StoryPage() {
                         value={actionText}
                         onChange={(e) => setActionText(e.target.value)}
                         className="input-field min-h-[100px]"
-                        placeholder="Describe your character's action..."
+                        placeholder={
+                          selectedCharacterId
+                            ? `What does ${userCharacters.find(c => c.id === selectedCharacterId)?.name || 'your character'} do? Be specific about their actions, intentions, and approach...`
+                            : "Describe your character's action in detail..."
+                        }
                         required
                       />
                     </div>

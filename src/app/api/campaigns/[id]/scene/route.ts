@@ -180,15 +180,6 @@ export async function POST(
       }
     })
 
-    // Remove user from waitingOnUsers
-    const waitingOnUsers = (scene.waitingOnUsers as any) || []
-    const updatedWaitingOn = waitingOnUsers.filter((uid: string) => uid !== user.userId)
-
-    await prisma.scene.update({
-      where: { id: sceneId },
-      data: { waitingOnUsers: updatedWaitingOn }
-    })
-
     // Trigger Pusher event to notify all clients
     try {
       await pusherServer.trigger(
@@ -209,36 +200,71 @@ export async function POST(
       // Don't fail the request if Pusher fails
     }
 
-    // Check if all participants have submitted - if so, auto-resolve
-    const allActionsSubmitted = updatedWaitingOn.length === 0 && sceneParticipants.userIds.length > 0
+    // Check if all participants have submitted - auto-resolve if conditions met
+    // Only auto-resolve for scenes with pre-defined participants
+    const hasDefinedParticipants = scene.participants &&
+                                   (scene.participants as any).characterIds &&
+                                   (scene.participants as any).characterIds.length > 0
 
-    if (allActionsSubmitted) {
-      console.log(`🎬 All participants submitted! Auto-resolving scene ${scene.sceneNumber}`)
+    if (hasDefinedParticipants) {
+      // Get all unique user IDs from submitted actions
+      const submittedUserIds = new Set(scene.playerActions.map(a => a.userId))
+      submittedUserIds.add(user.userId) // Include the current action
 
-      // Import and call resolveScene asynchronously (don't wait for it)
-      const { resolveScene } = await import('@/lib/game/sceneResolver')
-      const { runWorldTurn } = await import('@/lib/game/worldTurn')
+      const participantUserIds = sceneParticipants.userIds || []
 
-      // Run in background - don't block the response
-      resolveScene(campaignId, sceneId)
-        .then(async (result) => {
-          console.log(`✅ Scene ${scene.sceneNumber} auto-resolved`)
-          await runWorldTurn(campaignId)
+      // Check if all participants have submitted
+      const allParticipantsSubmitted = participantUserIds.every((uid: string) =>
+        submittedUserIds.has(uid)
+      )
 
-          // Trigger Pusher event for scene resolution
-          await pusherServer.trigger(
-            `campaign-${campaignId}`,
-            'scene:resolved',
-            {
-              sceneId: sceneId,
-              sceneNumber: scene.sceneNumber,
-              timestamp: new Date()
-            }
-          )
+      console.log(`📊 Scene ${scene.sceneNumber} participants: ${participantUserIds.length}, submitted: ${submittedUserIds.size}`)
+
+      if (allParticipantsSubmitted && participantUserIds.length > 0) {
+        console.log(`🎬 All participants submitted! Auto-resolving scene ${scene.sceneNumber}`)
+
+        // Update waitingOnUsers to empty
+        await prisma.scene.update({
+          where: { id: sceneId },
+          data: { waitingOnUsers: [] }
         })
-        .catch((error) => {
-          console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`, error)
+
+        // Import and call resolveScene asynchronously (don't wait for it)
+        const { resolveScene } = await import('@/lib/game/sceneResolver')
+        const { runWorldTurn } = await import('@/lib/game/worldTurn')
+
+        // Run in background - don't block the response
+        resolveScene(campaignId, sceneId)
+          .then(async (result) => {
+            console.log(`✅ Scene ${scene.sceneNumber} auto-resolved`)
+            await runWorldTurn(campaignId)
+
+            // Trigger Pusher event for scene resolution
+            await pusherServer.trigger(
+              `campaign-${campaignId}`,
+              'scene:resolved',
+              {
+                sceneId: sceneId,
+                sceneNumber: scene.sceneNumber,
+                timestamp: new Date()
+              }
+            )
+          })
+          .catch((error) => {
+            console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`, error)
+          })
+      } else {
+        // Update waitingOnUsers to track who hasn't submitted yet
+        const stillWaiting = participantUserIds.filter((uid: string) => !submittedUserIds.has(uid))
+        await prisma.scene.update({
+          where: { id: sceneId },
+          data: { waitingOnUsers: stillWaiting }
         })
+      }
+    } else {
+      // For open scenes (no predefined participants), don't auto-resolve
+      // Admin must manually resolve these scenes
+      console.log(`📝 Scene ${scene.sceneNumber} is an open scene - manual resolution required`)
     }
 
     return NextResponse.json({ action }, { status: 201 })

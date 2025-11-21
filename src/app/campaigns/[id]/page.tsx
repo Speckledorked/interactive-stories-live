@@ -30,6 +30,8 @@ export default function CampaignLobbyPage() {
   const [showCreateCharacter, setShowCreateCharacter] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'notes'>('overview')
   const [showNotifications, setShowNotifications] = useState(false)
+  const [deletingCharacterId, setDeletingCharacterId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -51,6 +53,27 @@ export default function CampaignLobbyPage() {
       setError(err instanceof Error ? err.message : 'Failed to load campaign')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDeleteCharacter = async (characterId: string) => {
+    setDeleteError('')
+    try {
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/characters/${characterId}`,
+        { method: 'DELETE' }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to delete character')
+      }
+
+      // Refresh campaign data
+      await loadCampaign()
+      setDeletingCharacterId(null)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete character')
     }
   }
 
@@ -179,7 +202,7 @@ export default function CampaignLobbyPage() {
                 {userCharacters.map((character: any) => (
                   <div key={character.id} className="bg-gray-900 rounded-lg p-4">
                     <div className="flex items-start justify-between">
-                      <div>
+                      <div className="flex-1">
                         <h3 className="font-bold text-white">{character.name}</h3>
                         <p className="text-sm text-gray-400">{character.concept}</p>
                         {character.currentLocation && (
@@ -188,13 +211,22 @@ export default function CampaignLobbyPage() {
                           </p>
                         )}
                       </div>
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        character.isAlive
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-gray-700 text-gray-400'
-                      }`}>
-                        {character.isAlive ? 'Alive' : 'Dead'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          character.isAlive
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-gray-700 text-gray-400'
+                        }`}>
+                          {character.isAlive ? 'Alive' : 'Dead'}
+                        </span>
+                        <button
+                          onClick={() => setDeletingCharacterId(character.id)}
+                          className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded hover:bg-red-500/10"
+                          title="Delete character"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                     {Array.isArray(character.conditions) && character.conditions.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
@@ -338,6 +370,41 @@ export default function CampaignLobbyPage() {
               }}
               onCancel={() => setShowCreateCharacter(false)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Delete Character Confirmation Modal */}
+      {deletingCharacterId && (
+        <div className="fixed inset-0 bg-gray-900/80 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-950 border border-gray-800 rounded-lg max-w-md w-full p-6">
+            <h2 className="text-2xl font-bold mb-4 text-white">Delete Character?</h2>
+            <p className="text-gray-400 mb-6">
+              Are you sure you want to delete this character? This action cannot be undone.
+              All associated actions and data will be permanently removed.
+            </p>
+            {deleteError && (
+              <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-4">
+                {deleteError}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setDeletingCharacterId(null)
+                  setDeleteError('')
+                }}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteCharacter(deletingCharacterId)}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors flex-1"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

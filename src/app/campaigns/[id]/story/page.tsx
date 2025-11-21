@@ -251,11 +251,11 @@ export default function StoryPage() {
               </div>
 
               {/* Player Actions */}
-              {currentScene.actions && currentScene.actions.length > 0 && (
+              {currentScene.playerActions && currentScene.playerActions.length > 0 && (
                 <div className="card">
                   <h3 className="text-lg font-bold text-white mb-4">Player Actions</h3>
                   <div className="space-y-3">
-                    {currentScene.actions.map((action: any) => (
+                    {currentScene.playerActions.map((action: any) => (
                       <div key={action.id} className="bg-gray-900 rounded-lg p-4">
                         <div className="flex items-start justify-between mb-2">
                           <span className="font-medium text-primary-400">
@@ -329,13 +329,13 @@ export default function StoryPage() {
                     🎭 Admin Controls
                   </h3>
                   <p className="text-gray-300 text-sm mb-4">
-                    {!currentScene.actions || currentScene.actions.length === 0
+                    {!currentScene.playerActions || currentScene.playerActions.length === 0
                       ? 'Waiting for players to submit actions...'
-                      : `${currentScene.actions.length} action(s) submitted. Ready to resolve?`}
+                      : `${currentScene.playerActions.length} action(s) submitted. Ready to resolve?`}
                   </p>
                   <button
                     onClick={handleResolveScene}
-                    disabled={resolving || !currentScene.actions || currentScene.actions.length === 0}
+                    disabled={resolving || !currentScene.playerActions || currentScene.playerActions.length === 0}
                     className="btn-primary disabled:opacity-50"
                   >
                     {resolving ? 'Resolving with AI GM...' : '🤖 Resolve Scene (AI GM)'}

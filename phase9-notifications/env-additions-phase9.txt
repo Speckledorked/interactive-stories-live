@@ -1,0 +1,88 @@
+# Add these to your existing .env file for Phase 9 Notifications
+
+# Pusher Configuration (ALREADY CONFIGURED from Phase 8)
+PUSHER_APP_ID=2080142
+PUSHER_KEY=9343a3f5117e1ac56af2
+PUSHER_SECRET=a9d6c52eb476feca10fc
+PUSHER_CLUSTER=mt1
+NEXT_PUBLIC_PUSHER_KEY=9343a3f5117e1ac56af2
+NEXT_PUBLIC_PUSHER_CLUSTER=mt1
+
+# Email Configuration (SMTP)
+# For Gmail, use these settings:
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+
+# Alternative email providers:
+# For SendGrid:
+# SMTP_HOST=smtp.sendgrid.net
+# SMTP_PORT=587
+# SMTP_USER=apikey
+# SMTP_PASSWORD=your-sendgrid-api-key
+
+# For Mailgun:
+# SMTP_HOST=smtp.mailgun.org
+# SMTP_PORT=587
+# SMTP_USER=your-mailgun-smtp-username
+# SMTP_PASSWORD=your-mailgun-smtp-password
+
+# Application URL (for email links)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+# In production, set this to your actual domain:
+# NEXT_PUBLIC_APP_URL=https://yourdomain.com
+
+# Push Notification Configuration (Optional - for advanced push notifications)
+# Generate VAPID keys at: https://vapidkeys.com/
+# NEXT_PUBLIC_VAPID_PUBLIC_KEY=your-vapid-public-key
+# VAPID_PRIVATE_KEY=your-vapid-private-key
+
+# Cron Jobs and Background Tasks (Optional)
+# Set to 'true' to enable automatic turn reminders and cleanup
+ENABLE_BACKGROUND_TASKS=false
+
+# Notification Rate Limiting (Optional)
+# Maximum notifications per user per hour
+MAX_NOTIFICATIONS_PER_HOUR=50
+
+# Sound Files Location (Optional)
+# If hosting sound files externally
+# SOUND_FILES_BASE_URL=https://your-cdn.com/sounds/
+
+# ============================================
+# QUICK SETUP GUIDE
+# ============================================
+
+# 1. EMAIL SETUP (Choose one):
+#    - Gmail: Enable 2FA and create an App Password
+#    - SendGrid: Create account and get API key
+#    - Mailgun: Create account and get SMTP credentials
+
+# 2. SOUND FILES:
+#    - Sound files will be served from /public/sounds/
+#    - No additional configuration needed
+
+# 3. PUSH NOTIFICATIONS:
+#    - Browser notifications work automatically
+#    - VAPID keys only needed for advanced features
+
+# 4. BACKGROUND TASKS:
+#    - Set ENABLE_BACKGROUND_TASKS=true for automatic reminders
+#    - Requires setting up a cron job or task scheduler
+
+# ============================================
+# GMAIL SETUP INSTRUCTIONS
+# ============================================
+
+# 1. Go to your Google Account settings
+# 2. Enable 2-Factor Authentication
+# 3. Go to "App passwords" in Security settings
+# 4. Generate a new app password for "Mail"
+# 5. Use your Gmail address as SMTP_USER
+# 6. Use the generated app password as SMTP_PASSWORD
+
+# Example:
+# SMTP_USER=youremail@gmail.com
+# SMTP_PASSWORD=abcd efgh ijkl mnop  (16-character app password)

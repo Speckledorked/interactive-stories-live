@@ -1,0 +1,198 @@
+// Add these new models to your existing schema.prisma file
+
+// ============================================
+// NOTIFICATION MODELS (Phase 9)
+// ============================================
+
+enum NotificationType {
+  TURN_REMINDER       // "It's your turn to act"
+  SCENE_CHANGE        // "New scene has started"
+  MENTION             // "@username mentioned you"
+  WHISPER_RECEIVED    // "You received a private message"
+  NOTE_SHARED         // "Someone shared a note with the campaign"
+  CAMPAIGN_INVITE     // "You've been invited to a campaign"
+  SCENE_RESOLVED      // "Scene resolution is complete"
+  AI_RESPONSE_READY   // "AI has responded to your action"
+  WORLD_EVENT         // "Major world event occurred"
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  DISMISSED
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model Notification {
+  id          String             @id @default(cuid())
+  type        NotificationType
+  title       String
+  message     String             @db.Text
+  status      NotificationStatus @default(UNREAD)
+  priority    NotificationPriority @default(NORMAL)
+  
+  // Recipients
+  userId      String
+  campaignId  String?            // Campaign context
+  sceneId     String?            // Scene context
+  
+  // Metadata for rich notifications
+  actionUrl   String?            // Where to go when clicked
+  metadata    Json?              // Additional data (character involved, etc.)
+  
+  // Email/Push settings
+  emailSent   Boolean           @default(false)
+  pushSent    Boolean           @default(false)
+  
+  createdAt   DateTime          @default(now())
+  expiresAt   DateTime?         // Auto-dismiss after this time
+  readAt      DateTime?
+  dismissedAt DateTime?
+
+  // Relationships
+  user        User              @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  campaign    Campaign?         @relation("CampaignNotifications", fields: [campaignId], references: [id], onDelete: Cascade)
+  scene       Scene?            @relation("SceneNotifications", fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([campaignId, type])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model UserNotificationSettings {
+  id        String  @id @default(cuid())
+  userId    String  @unique
+  
+  // Email notification preferences
+  emailEnabled              Boolean @default(true)
+  emailTurnReminders        Boolean @default(true)
+  emailSceneChanges         Boolean @default(true)
+  emailMentions             Boolean @default(true)
+  emailWhispers             Boolean @default(true)
+  emailCampaignInvites      Boolean @default(true)
+  emailWorldEvents          Boolean @default(false)
+  
+  // Browser push notification preferences
+  pushEnabled               Boolean @default(true)
+  pushTurnReminders         Boolean @default(true)
+  pushSceneChanges          Boolean @default(true)
+  pushMentions              Boolean @default(true)
+  pushWhispers              Boolean @default(true)
+  pushCampaignInvites       Boolean @default(true)
+  
+  // Sound notification preferences
+  soundEnabled              Boolean @default(true)
+  soundTurnReminders        Boolean @default(true)
+  soundSceneChanges         Boolean @default(true)
+  soundMentions             Boolean @default(true)
+  soundWhispers             Boolean @default(true)
+  soundCriticalMoments      Boolean @default(true)
+  soundWorldEvents          Boolean @default(true)
+  
+  // Timing preferences
+  quietHoursEnabled         Boolean @default(false)
+  quietHoursStart           String? // "22:00"
+  quietHoursEnd             String? // "08:00"
+  timezone                  String? // "America/New_York"
+  
+  // Digest preferences
+  dailyDigestEnabled        Boolean @default(false)
+  weeklyDigestEnabled       Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user User @relation("UserNotificationSettings", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notification_settings")
+}
+
+model TurnTracker {
+  id          String   @id @default(cuid())
+  campaignId  String
+  sceneId     String?  // Current scene
+  
+  // Turn order and timing
+  currentTurn         Int      @default(0)
+  turnOrder           Json     // Array of character/player IDs
+  turnStartedAt       DateTime?
+  turnDeadline        DateTime?
+  autoAdvanceTurn     Boolean  @default(false)
+  turnTimeoutMinutes  Int      @default(60)
+  
+  // Notifications sent
+  remindersSent       Json     @default("[]") // Array of timestamps
+  lastReminderSent    DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  campaign Campaign @relation("CampaignTurnTracker", fields: [campaignId], references: [id], onDelete: Cascade)
+  scene    Scene?   @relation("SceneTurnTracker", fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, sceneId])
+  @@map("turn_trackers")
+}
+
+// ============================================
+// UPDATE EXISTING MODELS (add these relationships)
+// ============================================
+
+// Add these to your existing User model:
+model User {
+  // ... existing fields ...
+  
+  // New notification relationships
+  notifications           Notification[]           @relation("UserNotifications")
+  notificationSettings    UserNotificationSettings? @relation("UserNotificationSettings")
+  lastSeenAt              DateTime?                 // For "user is online" status
+  isOnline                Boolean                  @default(false)
+}
+
+// Add these to your existing Campaign model:
+model Campaign {
+  // ... existing fields ...
+  
+  // New notification relationships
+  notifications    Notification[]  @relation("CampaignNotifications")
+  turnTracker      TurnTracker[]   @relation("CampaignTurnTracker")
+  
+  // Campaign notification settings
+  mentionsEnabled  Boolean         @default(true)
+  soundEffectsEnabled Boolean      @default(true)
+}
+
+// Add these to your existing Scene model:
+model Scene {
+  // ... existing fields ...
+  
+  // New notification relationships
+  notifications    Notification[]  @relation("SceneNotifications")
+  turnTracker      TurnTracker[]   @relation("SceneTurnTracker")
+  
+  // Scene timing
+  turnDeadline     DateTime?       // When current turn expires
+  waitingOnUsers   Json?           // Array of user IDs who need to act
+}
+
+// Add these to your existing Message model:
+model Message {
+  // ... existing fields ...
+  
+  // Mention detection
+  mentionsUserIds  Json?           @default("[]") // Array of mentioned user IDs
+  hasMentions      Boolean         @default(false)
+  
+  // Sound triggers
+  triggerSound     String?         // Sound effect to play
+  soundVolume      Float?          @default(1.0)
+}

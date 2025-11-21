@@ -7,6 +7,14 @@ import { callAIGM } from '@/lib/ai/client'
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
 import { applyWorldUpdates, summarizeWorldUpdates } from './stateUpdater'
 import { SceneStatus } from '@prisma/client'
+import {
+  computeOrganicGrowth,
+  applyOrganicGrowth,
+  recordStatUsage,
+  validateStats,
+  type RecentAction,
+  type StatUsage
+} from './advancement'
 
 /**
  * Resolve a scene using the AI GM
@@ -78,6 +86,10 @@ export async function resolveScene(campaignId: string, sceneId: string) {
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')
     await applyWorldUpdates(campaignId, aiResponse, currentTurn)
+
+    // 6.5. Apply organic character growth
+    console.log('🌱 Processing organic character growth...')
+    await applyOrganicCharacterGrowth(campaignId, sceneId, aiResponse)
 
     // 7. Store scene resolution and mark as resolved
     await prisma.scene.update({
@@ -231,4 +243,178 @@ export async function canUserResolveScene(
   })
 
   return membership?.role === 'ADMIN'
+}
+
+/**
+ * Apply organic character growth after scene resolution
+ * This processes:
+ * 1. AI-suggested organic_advancement from the response
+ * 2. System-computed growth based on action patterns
+ */
+async function applyOrganicCharacterGrowth(
+  campaignId: string,
+  sceneId: string,
+  aiResponse: any
+): Promise<void> {
+  // Get all characters who acted in this scene
+  const scene = await prisma.scene.findUnique({
+    where: { id: sceneId },
+    include: {
+      playerActions: {
+        include: {
+          character: true
+        }
+      }
+    }
+  })
+
+  if (!scene || scene.playerActions.length === 0) {
+    console.log('  No player actions to process')
+    return
+  }
+
+  // Group actions by character
+  const actionsByCharacter = new Map<string, any[]>()
+  for (const action of scene.playerActions) {
+    const charId = action.characterId
+    if (!actionsByCharacter.has(charId)) {
+      actionsByCharacter.set(charId, [])
+    }
+    actionsByCharacter.get(charId)!.push(action)
+  }
+
+  // Process each character
+  for (const [characterId, actions] of actionsByCharacter.entries()) {
+    const character = actions[0].character
+
+    // Build recent action summary
+    // For now, we'll infer tags and outcomes from action text
+    // In a more advanced system, you'd store this with the action
+    const recentActions: RecentAction[] = actions.map(action => ({
+      actionId: action.id,
+      tags: extractTagsFromAction(action.actionText),
+      statUsed: null, // TODO: extract from rollResult if available
+      outcome: inferOutcomeFromAction(action)
+    }))
+
+    // Update stat usage
+    let updatedStatUsage = character.statUsage as StatUsage
+    for (const action of recentActions) {
+      if (action.statUsed && action.outcome) {
+        updatedStatUsage = recordStatUsage(updatedStatUsage, action.statUsed, action.outcome)
+      }
+    }
+
+    // Compute system-based growth suggestions
+    const systemGrowth = computeOrganicGrowth(character, recentActions)
+
+    // Check if AI suggested growth for this character
+    const aiGrowth = aiResponse.world_updates?.organic_advancement?.find(
+      (adv: any) => adv.character_id === characterId
+    )
+
+    // Merge AI and system suggestions
+    const mergedGrowth = {
+      statIncreases: [
+        ...(systemGrowth.statIncreases || []),
+        ...(aiGrowth?.stat_increases || [])
+      ],
+      newPerks: [
+        ...(systemGrowth.newPerks || []),
+        ...(aiGrowth?.new_perks || [])
+      ],
+      newMoves: [
+        ...(systemGrowth.newMoves || []),
+        ...(aiGrowth?.new_moves || [])
+      ]
+    }
+
+    // Apply growth if there are any changes
+    if (
+      mergedGrowth.statIncreases.length > 0 ||
+      mergedGrowth.newPerks.length > 0 ||
+      mergedGrowth.newMoves.length > 0
+    ) {
+      const applied = applyOrganicGrowth(character, mergedGrowth)
+
+      // Update character in database
+      await prisma.character.update({
+        where: { id: characterId },
+        data: {
+          statUsage: updatedStatUsage,
+          stats: applied.updatedStats,
+          perks: applied.updatedPerks,
+          moves: applied.updatedMoves
+        }
+      })
+
+      console.log(`  ✅ Applied growth to ${character.name}`)
+    } else {
+      // Just update stat usage
+      await prisma.character.update({
+        where: { id: characterId },
+        data: {
+          statUsage: updatedStatUsage
+        }
+      })
+    }
+  }
+}
+
+/**
+ * Extract tags from action text using simple keyword matching
+ * In production, you might use NLP or have players tag actions explicitly
+ */
+function extractTagsFromAction(actionText: string): string[] {
+  const text = actionText.toLowerCase()
+  const tags: string[] = []
+
+  // Combat keywords
+  if (text.match(/\b(attack|fight|combat|battle|strike|hit|shoot|fire)\b/)) {
+    tags.push('combat')
+  }
+
+  // Stealth keywords
+  if (text.match(/\b(sneak|hide|stealth|infiltrate|slip|shadow|quiet)\b/)) {
+    tags.push('stealth')
+  }
+
+  // Investigation keywords
+  if (text.match(/\b(investigate|search|examine|look|study|analyze|inspect)\b/)) {
+    tags.push('investigation')
+  }
+
+  // Social keywords
+  if (text.match(/\b(talk|persuade|convince|negotiate|charm|intimidate|deceive)\b/)) {
+    tags.push('social')
+  }
+
+  // Training keywords
+  if (text.match(/\b(train|practice|study|learn|improve|exercise)\b/)) {
+    tags.push('training')
+  }
+
+  // Spying keywords
+  if (text.match(/\b(spy|surveil|watch|observe|follow|track)\b/)) {
+    tags.push('spying')
+  }
+
+  return tags
+}
+
+/**
+ * Infer outcome from action
+ * In production, this would be stored with dice rolls
+ */
+function inferOutcomeFromAction(action: any): 'success' | 'mixed' | 'failure' | undefined {
+  // Check if there's a rollResult
+  if (action.rollResult) {
+    const result = action.rollResult
+    if (result.outcome === 'strongHit') return 'success'
+    if (result.outcome === 'weakHit') return 'mixed'
+    if (result.outcome === 'miss') return 'failure'
+  }
+
+  // Default: assume mixed success if no roll data
+  return 'mixed'
 }

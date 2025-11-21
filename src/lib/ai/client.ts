@@ -45,6 +45,21 @@ export interface AIGMResponse {
         gm_notes_append?: string
       }
     }>
+    organic_advancement?: Array<{
+      character_id: string
+      stat_increases?: Array<{
+        stat_key: string
+        delta: number
+        reason: string
+      }>
+      new_perks?: Array<{
+        id: string
+        name: string
+        description: string
+        tags?: string[]
+      }>
+      new_moves?: string[]
+    }>
     notes_for_gm?: string // AI's private notes for continuity
   }
 }
@@ -209,9 +224,24 @@ You MUST respond with a JSON object with this exact structure:
     "npc_changes": [...],
     "pc_changes": [...],
     "faction_changes": [...],
+    "organic_advancement": [
+      {
+        "character_id": "CHARACTER_ID",
+        "stat_increases": [{"stat_key": "sharp", "delta": 1, "reason": "Repeated successful investigation"}],
+        "new_perks": [{"id": "keen_eye", "name": "Keen Eye", "description": "...", "tags": ["investigation"]}],
+        "new_moves": ["move_id_here"]
+      }
+    ],
     "notes_for_gm": "Private notes for continuity..."
   }
 }
+
+ORGANIC CHARACTER GROWTH:
+- Stats can grow from -2 to +3 based on consistent successful use
+- Award perks for repeated actions with specific tags (training, combat, stealth, investigation)
+- Suggest moves when characters demonstrate mastery in an area
+- Keep stat total at +2, at most one stat >= +2
+- Growth is driven by what characters DO, not player choices
 
 Be creative, dramatic, and true to the universe while maintaining game balance.`
 }

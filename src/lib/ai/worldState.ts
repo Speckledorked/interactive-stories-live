@@ -61,7 +61,18 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
       stats: c.stats,
       backstory: c.backstory,
       goals: c.goals,
-      location: c.currentLocation
+      location: c.currentLocation,
+      harm: c.harm,
+      conditions: c.conditions,
+      moves: c.moves,
+      experience: c.experience,
+      statUsage: c.statUsage,
+      perks: c.perks,
+      inventory: c.inventory,
+      equipment: c.equipment,
+      resources: c.resources,
+      relationships: c.relationships,
+      consequences: c.consequences
     })),
 
     npcs: npcs.map(n => ({

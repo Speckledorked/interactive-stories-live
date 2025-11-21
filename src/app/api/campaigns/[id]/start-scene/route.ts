@@ -15,10 +15,13 @@ export async function POST(
   try {
     const user = requireAuth(request)
     const campaignId = params.id
+    const body = await request.json().catch(() => ({}))
+    const { characterIds } = body
 
     console.log('🎭 New scene creation requested')
     console.log(`Campaign: ${campaignId}`)
     console.log(`User: ${user.userId}`)
+    console.log(`Participants: ${characterIds?.length || 0} characters`)
 
     // 1. Verify user is admin of this campaign
     const membership = await prisma.campaignMembership.findUnique({
@@ -37,22 +40,50 @@ export async function POST(
       )
     }
 
-    // 2. Check if there's already an active scene
-    const existingScene = await getCurrentScene(campaignId)
+    // 2. Validate character IDs if provided
+    if (characterIds && Array.isArray(characterIds) && characterIds.length > 0) {
+      // Verify all characters belong to this campaign
+      const characters = await prisma.character.findMany({
+        where: {
+          id: { in: characterIds },
+          campaignId
+        }
+      })
 
-    if (existingScene) {
-      return NextResponse.json<ErrorResponse>(
-        { 
-          error: 'There is already an active scene. Resolve it first before starting a new one.',
-          details: `Scene ${existingScene.sceneNumber} is ${existingScene.status}`
+      if (characters.length !== characterIds.length) {
+        return NextResponse.json<ErrorResponse>(
+          { error: 'One or more characters not found or do not belong to this campaign' },
+          { status: 400 }
+        )
+      }
+
+      // Check if any character is already in an active scene
+      const activeScenes = await prisma.scene.findMany({
+        where: {
+          campaignId,
+          status: { in: ['AWAITING_ACTIONS', 'RESOLVING'] }
         },
-        { status: 400 }
-      )
+        select: { id: true, sceneNumber: true, participants: true }
+      })
+
+      for (const scene of activeScenes) {
+        const sceneParticipants = (scene.participants as any)?.characterIds || []
+        const overlap = characterIds.filter((id: string) => sceneParticipants.includes(id))
+        if (overlap.length > 0) {
+          return NextResponse.json<ErrorResponse>(
+            {
+              error: 'One or more characters are already in an active scene',
+              details: `Scene ${scene.sceneNumber} already has some of these characters`
+            },
+            { status: 400 }
+          )
+        }
+      }
     }
 
     // 3. Create new scene (this calls AI to generate intro)
     console.log('🤖 Generating new scene...')
-    const newScene = await createNewScene(campaignId)
+    const newScene = await createNewScene(campaignId, characterIds)
 
     console.log(`✅ Scene ${newScene.sceneNumber} created`)
 
@@ -64,6 +95,7 @@ export async function POST(
         sceneNumber: newScene.sceneNumber,
         introText: newScene.sceneIntroText,
         status: newScene.status,
+        participants: newScene.participants,
         createdAt: newScene.createdAt
       }
     }, { status: 201 })

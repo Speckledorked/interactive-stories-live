@@ -15,11 +15,12 @@ export default function StoryPage() {
 
   const [campaign, setCampaign] = useState<any>(null)
   const [currentScene, setCurrentScene] = useState<any>(null)
+  const [activeScenes, setActiveScenes] = useState<any[]>([])
   const [userCharacters, setUserCharacters] = useState<any[]>([])
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>('')
-  const [actionText, setActionText] = useState('')
+  const [actionText, setActionText] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
+  const [submitting, setSubmitting] = useState<Record<string, boolean>>({})
   const [resolving, setResolving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -44,11 +45,12 @@ export default function StoryPage() {
       const campData = await campResponse.json()
       setCampaign(campData)
 
-      // Load current scene
+      // Load active scenes
       const sceneResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/scene`)
-      if (!sceneResponse.ok) throw new Error('Failed to load scene')
+      if (!sceneResponse.ok) throw new Error('Failed to load scenes')
       const sceneData = await sceneResponse.json()
       setCurrentScene(sceneData.scene)
+      setActiveScenes(sceneData.scenes || [])
 
       // Get user's characters
       const userChars = campData.campaign?.characters?.filter(
@@ -103,11 +105,11 @@ export default function StoryPage() {
     }
   }, [campaignId])
 
-  const handleSubmitAction = async (e: React.FormEvent) => {
+  const handleSubmitAction = async (e: React.FormEvent, sceneId: string) => {
     e.preventDefault()
-    if (!currentScene || !selectedCharacterId || !actionText.trim()) return
+    if (!sceneId || !selectedCharacterId || !actionText[sceneId]?.trim()) return
 
-    setSubmitting(true)
+    setSubmitting(prev => ({ ...prev, [sceneId]: true }))
     setError('')
     setSuccess('')
 
@@ -115,9 +117,9 @@ export default function StoryPage() {
       const response = await authenticatedFetch(`/api/campaigns/${campaignId}/scene`, {
         method: 'POST',
         body: JSON.stringify({
-          sceneId: currentScene.id,
+          sceneId,
           characterId: selectedCharacterId,
-          actionText: actionText.trim()
+          actionText: actionText[sceneId].trim()
         })
       })
 
@@ -126,13 +128,13 @@ export default function StoryPage() {
         throw new Error(data.error || 'Failed to submit action')
       }
 
-      setSuccess('Action submitted!')
-      setActionText('')
+      setSuccess('Action submitted! The AI GM will resolve when all participants submit.')
+      setActionText(prev => ({ ...prev, [sceneId]: '' }))
       await loadData() // Reload to show new action
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit action')
     } finally {
-      setSubmitting(false)
+      setSubmitting(prev => ({ ...prev, [sceneId]: false }))
     }
   }
 
@@ -195,6 +197,29 @@ export default function StoryPage() {
 
   const selectedCharacter = userCharacters.find(c => c.id === selectedCharacterId)
 
+  // Helper to check if a character can participate in a scene
+  const canParticipateInScene = (scene: any, characterId: string) => {
+    const participants = scene.participants as any
+    // If no participants set, it's an open scene (backwards compatibility)
+    if (!participants || !participants.characterIds || participants.characterIds.length === 0) {
+      return true
+    }
+    // Check if character is in the participant list
+    return participants.characterIds.includes(characterId)
+  }
+
+  // Helper to check if user has already submitted action in a scene
+  const hasUserSubmitted = (scene: any) => {
+    return scene.playerActions?.some((action: any) =>
+      action.userId === user?.id && action.characterId === selectedCharacterId
+    )
+  }
+
+  // Filter scenes where the selected character can participate
+  const availableScenes = activeScenes.filter(scene =>
+    selectedCharacterId && canParticipateInScene(scene, selectedCharacterId)
+  )
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -212,155 +237,124 @@ export default function StoryPage() {
             </div>
           )}
 
-          {/* Current Scene */}
-          {currentScene ? (
-            <>
-              <div className="card">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-white">
-                    Scene {currentScene.sceneNumber}
-                  </h2>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    currentScene.status === 'AWAITING_ACTIONS'
-                      ? 'bg-green-500/20 text-green-400'
-                      : currentScene.status === 'RESOLVING'
-                      ? 'bg-yellow-500/20 text-yellow-400'
-                      : 'bg-gray-700 text-gray-400'
-                  }`}>
-                    {currentScene.status.replace('_', ' ')}
-                  </span>
-                </div>
+          {/* Active Scenes */}
+          {availableScenes.length > 0 ? (
+            availableScenes.map(scene => {
+              const userHasSubmitted = hasUserSubmitted(scene)
+              const waitingOn = (scene.waitingOnUsers as any) || []
+              const isWaitingOnUser = waitingOn.includes(user?.id)
 
-                <div className="prose prose-invert max-w-none">
-                  <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
-                    {currentScene.sceneIntroText}
-                  </p>
-                </div>
-
-                {/* Show resolution if resolved */}
-                {currentScene.sceneResolutionText && (
-                  <div className="mt-6 pt-6 border-t border-gray-700">
-                    <h3 className="text-lg font-bold text-primary-400 mb-3">
-                      Resolution
-                    </h3>
-                    <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
-                      {currentScene.sceneResolutionText}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Player Actions */}
-              {currentScene.playerActions && currentScene.playerActions.length > 0 && (
-                <div className="card">
-                  <h3 className="text-lg font-bold text-white mb-4">Player Actions</h3>
-                  <div className="space-y-3">
-                    {currentScene.playerActions.map((action: any) => (
-                      <div key={action.id} className="bg-gray-900 rounded-lg p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <span className="font-medium text-primary-400">
-                            {action.character.name}
+              return (
+                <div key={scene.id} className="space-y-4">
+                  <div className="card">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-xl font-bold text-white">
+                        Scene {scene.sceneNumber}
+                      </h2>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          scene.status === 'AWAITING_ACTIONS'
+                            ? 'bg-green-500/20 text-green-400'
+                            : scene.status === 'RESOLVING'
+                            ? 'bg-yellow-500/20 text-yellow-400'
+                            : 'bg-gray-700 text-gray-400'
+                        }`}>
+                          {scene.status.replace('_', ' ')}
+                        </span>
+                        {scene.status === 'RESOLVING' && (
+                          <span className="text-xs text-yellow-400 animate-pulse">
+                            AI GM processing...
                           </span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(action.createdAt).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        <p className="text-gray-300 text-sm">{action.actionText}</p>
+                        )}
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="prose prose-invert max-w-none">
+                      <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                        {scene.sceneIntroText}
+                      </p>
+                    </div>
+
+                    {/* Show resolution if resolved */}
+                    {scene.sceneResolutionText && (
+                      <div className="mt-6 pt-6 border-t border-gray-700">
+                        <h3 className="text-lg font-bold text-primary-400 mb-3">
+                          Resolution
+                        </h3>
+                        <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                          {scene.sceneResolutionText}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
 
-              {/* Action Form (if scene is awaiting actions) */}
-              {currentScene.status === 'AWAITING_ACTIONS' && userCharacters.length > 0 && (
-                <div className="card">
-                  <h3 className="text-lg font-bold text-white mb-4">Your Action</h3>
-                  <form onSubmit={handleSubmitAction} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Character
-                      </label>
-                      <select
-                        value={selectedCharacterId}
-                        onChange={(e) => setSelectedCharacterId(e.target.value)}
-                        className="input-field"
-                      >
-                        {userCharacters.map(char => (
-                          <option key={char.id} value={char.id}>
-                            {char.name}
-                          </option>
+                  {/* Player Actions */}
+                  {scene.playerActions && scene.playerActions.length > 0 && (
+                    <div className="card">
+                      <h3 className="text-lg font-bold text-white mb-4">Player Actions</h3>
+                      <div className="space-y-3">
+                        {scene.playerActions.map((action: any) => (
+                          <div key={action.id} className="bg-gray-900 rounded-lg p-4">
+                            <div className="flex items-start justify-between mb-2">
+                              <span className="font-medium text-primary-400">
+                                {action.character.name}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {new Date(action.createdAt).toLocaleTimeString()}
+                              </span>
+                            </div>
+                            <p className="text-gray-300 text-sm">{action.actionText}</p>
+                          </div>
                         ))}
-                      </select>
+                      </div>
                     </div>
+                  )}
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        What do you do?
-                      </label>
-                      <textarea
-                        value={actionText}
-                        onChange={(e) => setActionText(e.target.value)}
-                        className="input-field min-h-[100px]"
-                        placeholder={
-                          selectedCharacterId
-                            ? `What does ${userCharacters.find(c => c.id === selectedCharacterId)?.name || 'your character'} do? Be specific about their actions, intentions, and approach...`
-                            : "Describe your character's action in detail..."
-                        }
-                        required
-                      />
+                  {/* Action Form (if scene is awaiting actions and user hasn't submitted) */}
+                  {scene.status === 'AWAITING_ACTIONS' && !userHasSubmitted && selectedCharacterId && (
+                    <div className="card">
+                      <h3 className="text-lg font-bold text-white mb-4">Your Action</h3>
+                      {isWaitingOnUser && (
+                        <div className="bg-blue-500/10 border border-blue-500 text-blue-400 px-3 py-2 rounded-lg mb-4 text-sm">
+                          ⏳ Waiting for your action...
+                        </div>
+                      )}
+                      <form onSubmit={(e) => handleSubmitAction(e, scene.id)} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            What do you do?
+                          </label>
+                          <textarea
+                            value={actionText[scene.id] || ''}
+                            onChange={(e) => setActionText(prev => ({ ...prev, [scene.id]: e.target.value }))}
+                            className="input-field min-h-[100px]"
+                            placeholder={`What does ${selectedCharacter?.name || 'your character'} do? Be specific about their actions, intentions, and approach...`}
+                            required
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={submitting[scene.id]}
+                          className="btn-primary w-full disabled:opacity-50"
+                        >
+                          {submitting[scene.id] ? 'Submitting...' : 'Submit Action'}
+                        </button>
+                      </form>
                     </div>
+                  )}
 
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="btn-primary w-full disabled:opacity-50"
-                    >
-                      {submitting ? 'Submitting...' : 'Submit Action'}
-                    </button>
-                  </form>
+                  {/* User already submitted */}
+                  {scene.status === 'AWAITING_ACTIONS' && userHasSubmitted && (
+                    <div className="card bg-green-500/10 border-green-500/50">
+                      <p className="text-green-400 text-sm">
+                        ✓ You've submitted your action. Waiting for other participants...
+                      </p>
+                    </div>
+                  )}
                 </div>
-              )}
-
-              {/* Admin Controls */}
-              {isAdmin && currentScene.status === 'AWAITING_ACTIONS' && (
-                <div className="card bg-primary-500/10 border-primary-500/50">
-                  <h3 className="text-lg font-bold text-primary-400 mb-4">
-                    🎭 Admin Controls
-                  </h3>
-                  <p className="text-gray-300 text-sm mb-4">
-                    {!currentScene.playerActions || currentScene.playerActions.length === 0
-                      ? 'Waiting for players to submit actions...'
-                      : `${currentScene.playerActions.length} action(s) submitted. Ready to resolve?`}
-                  </p>
-                  <button
-                    onClick={handleResolveScene}
-                    disabled={resolving || !currentScene.playerActions || currentScene.playerActions.length === 0}
-                    className="btn-primary disabled:opacity-50"
-                  >
-                    {resolving ? 'Resolving with AI GM...' : '🤖 Resolve Scene (AI GM)'}
-                  </button>
-                </div>
-              )}
-
-              {/* Start New Scene (if current is resolved) */}
-              {isAdmin && currentScene.status === 'RESOLVED' && (
-                <div className="card bg-primary-500/10 border-primary-500/50">
-                  <h3 className="text-lg font-bold text-primary-400 mb-4">
-                    Scene Complete
-                  </h3>
-                  <p className="text-gray-300 text-sm mb-4">
-                    This scene has been resolved. Start a new scene to continue the story.
-                  </p>
-                  <button
-                    onClick={handleStartNewScene}
-                    className="btn-primary"
-                  >
-                    🎬 Start New Scene
-                  </button>
-                </div>
-              )}
-            </>
+              )
+            })
           ) : (
             <div className="card text-center py-12">
               <div className="text-6xl mb-4">📜</div>
@@ -381,35 +375,49 @@ export default function StoryPage() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Your Character */}
-          {selectedCharacter && (
+          {/* Character Selector */}
+          {userCharacters.length > 0 && (
             <div className="card">
-              <h3 className="text-sm font-bold text-gray-400 mb-3">YOUR CHARACTER</h3>
-              <div className="space-y-2">
-                <h4 className="font-bold text-white text-lg">{selectedCharacter.name}</h4>
-                <p className="text-sm text-gray-400">{selectedCharacter.concept}</p>
-                {selectedCharacter.currentLocation && (
-                  <p className="text-xs text-gray-500">
-                    📍 {selectedCharacter.currentLocation}
-                  </p>
-                )}
-                {Array.isArray(selectedCharacter.conditions) &&
-                  selectedCharacter.conditions.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-xs text-gray-500 mb-1">Conditions:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {selectedCharacter.conditions.map((cond: string, i: number) => (
-                          <span
-                            key={i}
-                            className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs"
-                          >
-                            {cond}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
+              <h3 className="text-sm font-bold text-gray-400 mb-3">SELECT CHARACTER</h3>
+              <select
+                value={selectedCharacterId}
+                onChange={(e) => setSelectedCharacterId(e.target.value)}
+                className="input-field w-full"
+              >
+                <option value="">Choose a character...</option>
+                {userCharacters.map(char => (
+                  <option key={char.id} value={char.id}>
+                    {char.name}
+                  </option>
+                ))}
+              </select>
+              {selectedCharacter && (
+                <div className="mt-4 space-y-2">
+                  <h4 className="font-bold text-white text-lg">{selectedCharacter.name}</h4>
+                  <p className="text-sm text-gray-400">{selectedCharacter.concept}</p>
+                  {selectedCharacter.currentLocation && (
+                    <p className="text-xs text-gray-500">
+                      📍 {selectedCharacter.currentLocation}
+                    </p>
                   )}
-              </div>
+                  {Array.isArray(selectedCharacter.conditions) &&
+                    selectedCharacter.conditions.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-500 mb-1">Conditions:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {selectedCharacter.conditions.map((cond: string, i: number) => (
+                            <span
+                              key={i}
+                              className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs"
+                            >
+                              {cond}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              )}
             </div>
           )}
 

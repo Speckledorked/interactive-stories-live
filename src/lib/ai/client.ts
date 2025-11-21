@@ -391,13 +391,29 @@ ${player_actions.map(a => `
 
 ---
 
-Based on the world state and player actions above, resolve this scene:
+RESOLVE THIS SCENE:
 
-1. Narrate what happens (scene_text)
-2. Propose world state changes (world_updates)
-3. Advance relevant clocks if warranted
-4. Update NPC/faction status as appropriate
-5. Create timeline events for significant outcomes
+Generate a compelling scene resolution that:
+
+1. **VIVID NARRATION** (scene_text):
+   - Paint a detailed picture using sensory details (sight, sound, smell, touch, taste)
+   - Show character actions and reactions through specific, concrete descriptions
+   - Reference each character BY NAME and show how their actions unfold
+   - Include dialogue where appropriate - make NPCs speak naturally
+   - Create dramatic tension and pacing - don't just summarize
+   - Show consequences immediately through description, not exposition
+   - Make the ${request.campaign_universe} setting come alive with specific details
+   - End with a clear transition or new situation that flows naturally
+
+2. **WORLD STATE CHANGES** (world_updates):
+   - Propose appropriate harm, conditions, location changes for characters
+   - Update NPC relationships and faction status based on what happened
+   - Advance relevant clocks if the situation warrants it
+   - Create timeline events for significant outcomes
+   - Track relationship changes subtly through NPC behavior
+
+CRITICAL: Your scene_text should read like a novel excerpt or actual play transcript, NOT like a summary.
+Show what happens through vivid description and action, don't tell what happened.
 
 Remember: Respond ONLY with valid JSON matching the required schema.`
 }

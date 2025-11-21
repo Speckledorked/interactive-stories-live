@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Message } from '@prisma/client';
-import { getPusherClient, subscribeToCampaignMessages, subscribeToUserWhispers, RealtimeMessage } from '@/lib/realtime/pusher-client';
+import { getPusherClient, subscribeToCampaignMessages, subscribeToUserWhispers, RealtimeMessage, isPusherConfigured } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
 
 interface ChatPanelProps {
@@ -50,38 +50,49 @@ export default function ChatPanel({
 
   // Set up real-time subscriptions
   useEffect(() => {
-    const campaignChannel = subscribeToCampaignMessages(campaignId);
-    const whisperChannel = subscribeToUserWhispers(currentUserId);
+    // Check if Pusher is configured before attempting to use it
+    if (!isPusherConfigured()) {
+      console.warn('Pusher is not configured. Real-time chat features will be disabled. Configure NEXT_PUBLIC_PUSHER_KEY and NEXT_PUBLIC_PUSHER_CLUSTER to enable real-time updates.');
+      return;
+    }
 
-    // Listen for new messages
-    campaignChannel.bind('new-message', (message: RealtimeMessage) => {
-      setMessages(prev => [...prev, message]);
-    });
+    try {
+      const campaignChannel = subscribeToCampaignMessages(campaignId);
+      const whisperChannel = subscribeToUserWhispers(currentUserId);
 
-    // Listen for whispers
-    whisperChannel.bind('new-whisper', (message: RealtimeMessage) => {
-      setMessages(prev => [...prev, message]);
-    });
+      // Listen for new messages
+      campaignChannel.bind('new-message', (message: RealtimeMessage) => {
+        setMessages(prev => [...prev, message]);
+      });
 
-    // Listen for typing indicators
-    campaignChannel.bind('user-typing', ({ userId, userName, isTyping }: any) => {
-      if (userId !== currentUserId) {
-        setTypingUsers(prev => {
-          if (isTyping) {
-            return prev.includes(userName) ? prev : [...prev, userName];
-          } else {
-            return prev.filter(name => name !== userName);
-          }
-        });
-      }
-    });
+      // Listen for whispers
+      whisperChannel.bind('new-whisper', (message: RealtimeMessage) => {
+        setMessages(prev => [...prev, message]);
+      });
 
-    return () => {
-      campaignChannel.unbind_all();
-      whisperChannel.unbind_all();
-      getPusherClient().unsubscribe(`campaign-${campaignId}`);
-      getPusherClient().unsubscribe(`user-${currentUserId}`);
-    };
+      // Listen for typing indicators
+      campaignChannel.bind('user-typing', ({ userId, userName, isTyping }: any) => {
+        if (userId !== currentUserId) {
+          setTypingUsers(prev => {
+            if (isTyping) {
+              return prev.includes(userName) ? prev : [...prev, userName];
+            } else {
+              return prev.filter(name => name !== userName);
+            }
+          });
+        }
+      });
+
+      return () => {
+        campaignChannel.unbind_all();
+        whisperChannel.unbind_all();
+        getPusherClient().unsubscribe(`campaign-${campaignId}`);
+        getPusherClient().unsubscribe(`user-${currentUserId}`);
+      };
+    } catch (error) {
+      console.error('Failed to initialize Pusher:', error);
+      // Chat will still work, just without real-time updates
+    }
   }, [campaignId, currentUserId]);
 
   const fetchMessages = async () => {

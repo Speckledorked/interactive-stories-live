@@ -267,7 +267,8 @@ export default function StoryPage() {
                           {scene.status.replace('_', ' ')}
                         </span>
                         {scene.status === 'RESOLVING' && (
-                          <span className="text-xs text-yellow-400 animate-pulse">
+                          <span className="text-xs text-yellow-400 animate-pulse flex items-center gap-1">
+                            <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full animate-bounce"></span>
                             AI GM processing...
                           </span>
                         )}

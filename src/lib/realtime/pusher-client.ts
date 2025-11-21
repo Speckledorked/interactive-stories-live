@@ -4,10 +4,21 @@ import Pusher from 'pusher-js';
 
 let pusherInstance: Pusher | null = null;
 
+export function isPusherConfigured(): boolean {
+  return !!(process.env.NEXT_PUBLIC_PUSHER_KEY && process.env.NEXT_PUBLIC_PUSHER_CLUSTER);
+}
+
 export function getPusherClient(): Pusher {
   if (!pusherInstance) {
-    pusherInstance = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
-      cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+    const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY;
+    const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
+
+    if (!pusherKey || !pusherCluster) {
+      throw new Error('Pusher is not configured. Please set NEXT_PUBLIC_PUSHER_KEY and NEXT_PUBLIC_PUSHER_CLUSTER environment variables.');
+    }
+
+    pusherInstance = new Pusher(pusherKey, {
+      cluster: pusherCluster,
       forceTLS: true,
     });
   }

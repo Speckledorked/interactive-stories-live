@@ -185,6 +185,19 @@ model Character {
   moves           String[] // Character move IDs they've unlocked
   holds           Json?    // Temporary holds/forward from moves
 
+  // Organic growth tracking
+  statUsage       Json? // { [statKey: string]: { uses: Int, successes: Int, failures: Int } }
+  perks           Json? // [{ id, name, description, tags? }]
+
+  // Inventory and equipment
+  inventory       Json? // { items: [{ id, name, quantity?, tags? }], slots?: number }
+  equipment       Json? // { weapon?: {...}, armor?: {...}, misc?: [...] }
+  resources       Json? // { gold?: number, reputation?: { [factionId: string]: number }, contacts?: string[] }
+
+  // Relationships and consequences
+  relationships   Json? // { [entityId: string]: { trust: Int, tension: Int } }
+  consequences    Json? // { promises?: string[], debts?: string[], enemies?: string[] }
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

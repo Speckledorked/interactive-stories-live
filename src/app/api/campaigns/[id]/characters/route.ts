@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
+import { validateStats } from '@/lib/game/advancement'
 
 interface CreateCharacterBody {
   name: string
@@ -31,6 +32,17 @@ export async function POST(
         { error: 'Character name is required' },
         { status: 400 }
       )
+    }
+
+    // Validate stats if provided
+    if (body.stats) {
+      const validation = validateStats(body.stats as Record<string, number>)
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: `Invalid stats: ${validation.error}` },
+          { status: 400 }
+        )
+      }
     }
 
     const membership = await prisma.campaignMembership.findUnique({

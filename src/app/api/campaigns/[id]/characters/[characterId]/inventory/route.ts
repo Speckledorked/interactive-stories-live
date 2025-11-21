@@ -1,4 +1,4 @@
-// src/app/api/campaigns/[campaignId]/characters/[characterId]/inventory/route.ts
+// src/app/api/campaigns/[id]/characters/[characterId]/inventory/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
@@ -11,7 +11,7 @@ import {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { campaignId: string; characterId: string } }
+  { params }: { params: { id: string; characterId: string } }
 ) {
   try {
     const user = await getUser(request)
@@ -19,7 +19,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { campaignId, characterId } = params
+    const { id: campaignId, characterId } = params
     const body = await request.json()
 
     // Check membership

@@ -88,13 +88,13 @@ export async function POST(
       where: { sceneId },
       create: {
         sceneId,
-        order,
+        order: order as any,
         currentTurn: 0,
         roundNumber: 1,
         isActive: true,
       },
       update: {
-        order,
+        order: order as any,
         currentTurn: 0,
         roundNumber: 1,
         isActive: true,
@@ -153,7 +153,7 @@ export async function PATCH(
       )
     }
 
-    const order = turnOrder.order as TurnOrderEntry[]
+    const order = turnOrder.order as unknown as TurnOrderEntry[]
     let currentTurn = turnOrder.currentTurn
     let roundNumber = turnOrder.roundNumber
 
@@ -196,7 +196,7 @@ export async function PATCH(
     const updated = await prisma.turnOrder.update({
       where: { sceneId },
       data: {
-        order,
+        order: order as any,
         currentTurn,
         roundNumber,
       },

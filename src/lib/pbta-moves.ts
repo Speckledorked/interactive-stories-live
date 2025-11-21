@@ -120,7 +120,6 @@ export const PERIPHERAL_MOVES: PbtAMove[] = [
     name: "End of Session",
     trigger: "At the end of each session",
     description: "Mark XP if you hit your highlighted stats. Discuss what happened and what's coming.",
-    rollType: null,
     outcomes: {},
     category: 'peripheral'
   }

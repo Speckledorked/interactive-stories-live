@@ -53,7 +53,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
   return {
     turn_number: worldMeta.currentTurnNumber,
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
-    
+
     characters: characters.map(c => ({
       id: c.id,
       name: c.name,
@@ -72,7 +72,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
       relationship: n.relationship,
       importance: n.importance
     })),
-    
+
     factions: factions.map(f => ({
       id: f.id,
       name: f.name,
@@ -82,16 +82,16 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
       resources: f.resources,
       influence: f.influence
     })),
-    
+
     clocks: clocks.map(cl => ({
       id: cl.id,
       name: cl.name,
       current_ticks: cl.currentTicks,
       max_ticks: cl.maxTicks,
-      description: cl.description,
-      consequence: cl.consequence
+      description: cl.description || '',
+      consequence: cl.consequence || ''
     })),
-    
+
     recent_timeline_events: recentEvents.map(e => ({
       title: e.title,
       summary: e.summaryPublic || e.summaryGM || 'No summary available',

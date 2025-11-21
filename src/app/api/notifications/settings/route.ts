@@ -13,13 +13,13 @@ export async function GET(request: NextRequest) {
     }
 
     let settings = await prisma.userNotificationSettings.findUnique({
-      where: { userId: user.id }
+      where: { userId: user.userId }
     });
 
     // Create default settings if none exist
     if (!settings) {
       settings = await prisma.userNotificationSettings.create({
-        data: { userId: user.id }
+        data: { userId: user.userId }
       });
     }
 
@@ -77,10 +77,10 @@ export async function PUT(request: NextRequest) {
 
     // Update or create settings
     const settings = await prisma.userNotificationSettings.upsert({
-      where: { userId: user.id },
+      where: { userId: user.userId },
       update: updateData,
       create: {
-        userId: user.id,
+        userId: user.userId,
         ...updateData
       }
     });

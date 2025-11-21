@@ -21,14 +21,14 @@ import {
   Filter
 } from 'lucide-react'
 
-interface AIImageLibraryProps {
+export interface AIImageLibraryProps {
   images: SharedImageData[]
   onSearch?: (query: string, tags?: string[]) => void
   popularTags?: string[]
   className?: string
 }
 
-interface ViewModalState {
+export interface ViewModalState {
   isOpen: boolean
   image: SharedImageData | null
 }
@@ -172,7 +172,7 @@ export function AIImageLibrary({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSearch()}
               />
             </div>
             <Button onClick={handleSearch}>

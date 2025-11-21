@@ -379,7 +379,7 @@ export class NotificationService {
           select: { id: true, title: true }
         },
         scene: {
-          select: { id: true, description: true }
+          select: { id: true, title: true }
         }
       },
       orderBy: { createdAt: 'desc' },

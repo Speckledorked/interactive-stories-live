@@ -42,7 +42,7 @@ export class EmailService {
         return null;
       }
 
-      this.transporter = nodemailer.createTransporter(config);
+      this.transporter = nodemailer.createTransport(config);
     }
 
     return this.transporter;

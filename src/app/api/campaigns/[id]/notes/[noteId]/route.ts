@@ -18,7 +18,7 @@ export async function GET(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.id,
+        userId: user.userId,
         campaignId: params.id,
       },
     });
@@ -33,7 +33,7 @@ export async function GET(
         campaignId: params.id,
         OR: [
           // Own private notes
-          { authorId: user.id, visibility: 'PRIVATE' },
+          { authorId: user.userId, visibility: 'PRIVATE' },
           // Shared notes
           { visibility: 'SHARED' },
           // GM notes
@@ -54,7 +54,7 @@ export async function GET(
           select: { id: true, name: true }
         },
         scene: {
-          select: { id: true, description: true }
+          select: { id: true }
         }
       },
     });
@@ -98,7 +98,7 @@ export async function PUT(
       where: {
         id: params.noteId,
         campaignId: params.id,
-        authorId: user.id, // Only author can edit
+        authorId: user.userId, // Only author can edit
       },
     });
 
@@ -183,7 +183,7 @@ export async function PUT(
           select: { id: true, name: true }
         },
         scene: {
-          select: { id: true, description: true }
+          select: { id: true }
         }
       },
     });
@@ -212,7 +212,7 @@ export async function DELETE(
       where: {
         id: params.noteId,
         campaignId: params.id,
-        authorId: user.id, // Only author can delete
+        authorId: user.userId, // Only author can delete
       },
     });
 

@@ -1,8 +1,8 @@
 // PLACE IN: src/app/api/characters/[id]/dynamic-downtime/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { verifyAuth } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import { AIDrivenDowntimeService } from '@/lib/downtime/ai-downtime-service'
 import { z } from 'zod'
 
@@ -21,8 +21,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const user = await verifyAuth(request)
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -39,36 +39,36 @@ export async function GET(
       },
       include: {
         events: {
-          orderBy: { day: 'asc' }
+          orderBy: { dayNumber: 'asc' }
         }
       },
       orderBy: { createdAt: 'desc' }
     })
 
     // Transform to dynamic format
-    const dynamicActivities = activities.map(activity => ({
+    const dynamicActivities = activities.map((activity: any) => ({
       id: activity.id,
       playerDescription: activity.description, // Original player intent
-      aiInterpretation: activity.costResources?.aiInterpretation || {
-        summary: activity.name,
-        estimatedDuration: activity.durationDays,
-        costs: { gold: activity.costGold },
-        requirements: [],
-        skillsInvolved: [],
-        riskLevel: 'medium',
-        potentialOutcomes: []
+      aiInterpretation: {
+        summary: activity.summary,
+        estimatedDuration: activity.estimatedDays,
+        costs: activity.costs || {},
+        requirements: activity.requirements || [],
+        skillsInvolved: activity.skillsInvolved || [],
+        riskLevel: activity.riskLevel || 'medium',
+        potentialOutcomes: activity.outcomes || []
       },
-      progressDays: activity.progressDays,
+      progressDays: activity.currentDay,
       status: activity.status.toLowerCase(),
-      events: activity.events.map(event => ({
+      events: activity.events.map((event: any) => ({
         id: event.id,
-        day: event.day,
-        title: event.title,
-        description: event.description,
-        choices: event.outcomes?.choices || [],
-        playerResponse: event.playerResponse,
-        aiResponse: event.outcomes?.aiResponse,
-        resolvedAt: event.resolvedAt
+        day: event.dayNumber,
+        title: event.eventText,
+        description: event.eventText,
+        choices: event.choices || [],
+        playerResponse: event.response,
+        aiResponse: event.outcome,
+        resolvedAt: event.respondedAt
       })),
       outcomes: activity.outcomes,
       createdAt: activity.createdAt,
@@ -91,8 +91,8 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const user = await verifyAuth(request)
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -121,7 +121,7 @@ export async function POST(
 
     console.error('Error creating dynamic activity:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to create activity' },
+      { error: (error as Error).message || 'Failed to create activity' },
       { status: 500 }
     )
   }
@@ -133,8 +133,8 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const user = await verifyAuth(request)
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

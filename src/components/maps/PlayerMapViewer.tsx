@@ -17,14 +17,14 @@ import {
   VolumeX
 } from 'lucide-react'
 
-interface PlayerMapViewerProps {
+export interface PlayerMapViewerProps {
   map: MapData | null
   characterName: string
-  onZoneInteract?: (zone: any) => void
+  onZoneInteract?: (zone: MapData['zones'][0]) => void
   className?: string
 }
 
-interface ViewState {
+export interface ViewState {
   zoom: number
   panX: number
   panY: number
@@ -54,7 +54,7 @@ export function PlayerMapViewer({
   const [hoveredElement, setHoveredElement] = useState<{
     type: 'token' | 'zone'
     id: string
-    data: any
+    data: MapData['tokens'][0] | MapData['zones'][0]
   } | null>(null)
 
   // Draw the map for players (read-only view)
@@ -91,7 +91,8 @@ export function PlayerMapViewer({
     }
 
     ctx.restore()
-  }, [map, viewState])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, viewState, hoveredElement, characterName])
 
   // Draw only elements that players should see
   const drawVisibleElements = (ctx: CanvasRenderingContext2D) => {
@@ -424,26 +425,26 @@ export function PlayerMapViewer({
               <div className="font-semibold flex items-center gap-2 mb-1">
                 {hoveredElement.type === 'token' ? (
                   <Badge variant="secondary">
-                    {hoveredElement.data.isPC ? 'Player' : 'Character'}
+                    {'isPC' in hoveredElement.data && hoveredElement.data.isPC ? 'Player' : 'Character'}
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="bg-blue-50">
-                    {hoveredElement.data.triggerType ? 'Interactive' : 'Area'}
+                    {'triggerType' in hoveredElement.data && hoveredElement.data.triggerType ? 'Interactive' : 'Area'}
                   </Badge>
                 )}
                 {hoveredElement.data.name}
               </div>
-              {hoveredElement.data.description && (
+              {'description' in hoveredElement.data && hoveredElement.data.description && (
                 <div className="text-xs text-gray-600 mb-1">
                   {hoveredElement.data.description}
                 </div>
               )}
-              {hoveredElement.type === 'zone' && hoveredElement.data.triggerType && (
+              {hoveredElement.type === 'zone' && 'triggerType' in hoveredElement.data && hoveredElement.data.triggerType && (
                 <div className="text-xs text-blue-600 font-medium">
                   Click to interact
                 </div>
               )}
-              {hoveredElement.type === 'token' && hoveredElement.data.character?.name === characterName && (
+              {hoveredElement.type === 'token' && 'character' in hoveredElement.data && hoveredElement.data.character?.name === characterName && (
                 <div className="text-xs text-amber-600 font-medium">
                   This is your character
                 </div>

@@ -1,8 +1,7 @@
 // PLACE IN: src/app/api/campaigns/[id]/scenes/[sceneId]/resolve-visual/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { verifyAuth } from '@/lib/auth'
 import { AISceneVisualIntegration } from '@/lib/ai/ai-scene-visual-integration'
 import { z } from 'zod'
 
@@ -20,15 +19,15 @@ export async function POST(
   { params }: { params: { id: string; sceneId: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const user = await verifyAuth(request)
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const campaignId = params.id
     const sceneId = params.sceneId
     const body = await request.json()
-    
+
     // Validate input
     const { playerActions } = resolveSceneSchema.parse(body)
 

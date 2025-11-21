@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { PlayerNote } from '@prisma/client';
+import { getToken } from '@/lib/clientAuth';
 
 interface NotesPanelProps {
   campaignId: string;
@@ -58,7 +59,7 @@ export default function NotesPanel({
       if (filter.entityType) params.append('entityType', filter.entityType);
       if (filter.entityType && formData.entityId) params.append('entityId', formData.entityId);
 
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`/api/campaigns/${campaignId}/notes?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -116,7 +117,7 @@ export default function NotesPanel({
     setLoading(true);
     
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const payload = {
         title: formData.title.trim(),
         content: formData.content.trim(),
@@ -167,7 +168,7 @@ export default function NotesPanel({
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`/api/campaigns/${campaignId}/notes/${noteId}`, {
         method: 'DELETE',
         headers: {
@@ -211,10 +212,10 @@ export default function NotesPanel({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg">
+    <div className="bg-gray-800 border border-gray-700 rounded-lg">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-        <h3 className="font-semibold text-gray-900">Player Notes</h3>
+      <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+        <h3 className="font-semibold text-gray-100">Player Notes</h3>
         <button
           onClick={() => setShowForm(!showForm)}
           className="px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
@@ -224,22 +225,22 @@ export default function NotesPanel({
       </div>
 
       {/* Filters */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 border-b border-gray-700">
         <div className="flex flex-wrap gap-2">
           <select
             value={filter.visibility || ''}
             onChange={(e) => setFilter(prev => ({ ...prev, visibility: e.target.value || undefined }))}
-            className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+            className="px-3 py-1 bg-gray-900 border border-gray-600 text-gray-200 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
           >
             <option value="">All Visibility</option>
             <option value="PRIVATE">Private Only</option>
             <option value="SHARED">Shared Only</option>
           </select>
-          
+
           <select
             value={filter.entityType || ''}
             onChange={(e) => setFilter(prev => ({ ...prev, entityType: e.target.value || undefined }))}
-            className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+            className="px-3 py-1 bg-gray-900 border border-gray-600 text-gray-200 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
           >
             <option value="">All Types</option>
             <option value="character">Characters</option>
@@ -252,7 +253,7 @@ export default function NotesPanel({
 
       {/* Note Form */}
       {showForm && (
-        <div className="p-4 border-b border-gray-200 bg-gray-50">
+        <div className="p-4 border-b border-gray-700 bg-gray-900">
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <input
@@ -260,27 +261,27 @@ export default function NotesPanel({
                 value={formData.title}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                 placeholder="Note title..."
-                className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                className="w-full p-2 bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
                 required
               />
             </div>
-            
+
             <div>
               <textarea
                 value={formData.content}
                 onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
                 placeholder="Note content..."
                 rows={4}
-                className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                className="w-full p-2 bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
                 required
               />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <select
                 value={formData.visibility}
                 onChange={(e) => setFormData(prev => ({ ...prev, visibility: e.target.value as NoteVisibility }))}
-                className="p-2 border border-gray-300 rounded-md text-sm"
+                className="p-2 bg-gray-800 border border-gray-600 text-gray-100 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
               >
                 <option value="PRIVATE">Private</option>
                 <option value="SHARED">Shared with Campaign</option>
@@ -289,7 +290,7 @@ export default function NotesPanel({
               <select
                 value={formData.entityType}
                 onChange={(e) => setFormData(prev => ({ ...prev, entityType: e.target.value, entityId: '' }))}
-                className="p-2 border border-gray-300 rounded-md text-sm"
+                className="p-2 bg-gray-800 border border-gray-600 text-gray-100 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
               >
                 <option value="">General Note</option>
                 <option value="character">About Character</option>
@@ -302,7 +303,7 @@ export default function NotesPanel({
                 <select
                   value={formData.entityId}
                   onChange={(e) => setFormData(prev => ({ ...prev, entityId: e.target.value }))}
-                  className="p-2 border border-gray-300 rounded-md text-sm"
+                  className="p-2 bg-gray-800 border border-gray-600 text-gray-100 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
                 >
                   <option value="">Select {formData.entityType}...</option>
                   {getEntityOptions().map(option => (
@@ -316,14 +317,14 @@ export default function NotesPanel({
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm hover:bg-primary-700 disabled:opacity-50"
               >
                 {editingNote ? 'Update Note' : 'Save Note'}
               </button>
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-400"
+                className="px-4 py-2 bg-gray-700 text-gray-200 rounded-md text-sm hover:bg-gray-600"
               >
                 Cancel
               </button>
@@ -335,20 +336,20 @@ export default function NotesPanel({
       {/* Notes List */}
       <div className="max-h-96 overflow-y-auto">
         {notes.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 text-center text-gray-400">
             No notes found. Create your first note!
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-gray-700">
             {notes.map((note) => (
-              <div key={note.id} className="p-4 hover:bg-gray-50">
+              <div key={note.id} className="p-4 hover:bg-gray-900">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <h4 className="font-medium text-gray-900">{note.title}</h4>
-                    <p className="text-xs text-gray-500">
-                      {getEntityDisplay(note)} • 
-                      {note.visibility === 'PRIVATE' ? ' Private' : ' Shared'} • 
-                      by {note.author.name || note.author.email} • 
+                    <h4 className="font-medium text-gray-100">{note.title}</h4>
+                    <p className="text-xs text-gray-400">
+                      {getEntityDisplay(note)} •
+                      {note.visibility === 'PRIVATE' ? ' Private' : ' Shared'} •
+                      by {note.author.name || note.author.email} •
                       {new Date(note.updatedAt).toLocaleDateString()}
                     </p>
                   </div>
@@ -356,20 +357,20 @@ export default function NotesPanel({
                     <div className="flex gap-1">
                       <button
                         onClick={() => startEdit(note)}
-                        className="px-2 py-1 text-xs bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
+                        className="px-2 py-1 text-xs bg-blue-600 text-blue-100 rounded hover:bg-blue-700"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => deleteNote(note.id, note.authorId)}
-                        className="px-2 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200"
+                        className="px-2 py-1 text-xs bg-red-600 text-red-100 rounded hover:bg-red-700"
                       >
                         Delete
                       </button>
                     </div>
                   )}
                 </div>
-                <div className="text-sm text-gray-700 whitespace-pre-wrap">
+                <div className="text-sm text-gray-200 whitespace-pre-wrap">
                   {note.content}
                 </div>
               </div>

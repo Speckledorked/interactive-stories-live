@@ -102,7 +102,7 @@ export default function CampaignLobbyPage() {
           </div>
           {userRole === 'ADMIN' && (
             <Link
-              href={`/campaigns/${campaignId}/settings`}
+              href={`/campaigns/${campaignId}/admin`}
               className="btn-secondary"
             >
               ⚙️ Settings

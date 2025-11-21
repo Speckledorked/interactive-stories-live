@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { authenticatedFetch } from '@/lib/clientAuth'
 
 interface CreateCharacterFormProps {
   campaignId: string
@@ -42,7 +43,7 @@ function CreateCharacterForm({
     setError('')
 
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/characters`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/characters`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

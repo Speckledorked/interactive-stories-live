@@ -3,6 +3,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
+import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
 
 /**
  * Fetch and serialize all world state for a campaign
@@ -160,9 +161,44 @@ export async function buildSceneResolutionRequest(
     action_text: action.actionText
   }))
 
+  // Phase 16.3: Check if this is a complex exchange (>3 actions)
+  let exchangeGuidance = ''
+  if (scene.playerActions.length > 3) {
+    console.log('🔀 Complex exchange detected - generating narrative sequence')
+    const resolver = new ComplexExchangeResolver(campaignId, sceneId)
+    const complexExchange = await resolver.resolveComplexExchange()
+
+    exchangeGuidance = complexExchange.narrativeSequence
+
+    if (complexExchange.conflicts.length > 0) {
+      exchangeGuidance += '\n## ⚠️ Conflicts Require Special Attention\n\n'
+      complexExchange.conflicts.forEach(conflict => {
+        exchangeGuidance += `- **${conflict.type.toUpperCase()}**: ${conflict.resolution}\n`
+      })
+      exchangeGuidance += '\n'
+    }
+  }
+
+  // Phase 16.4: Add narrative flow guidance
+  const flowGuidance = NarrativeFlowManager.generateFlowGuidance(scene.playerActions)
+  const specialCases = NarrativeFlowManager.detectSpecialCases(scene.playerActions)
+
+  let additionalGuidance = flowGuidance
+
+  if (specialCases.hasPvP) {
+    additionalGuidance += '\n⚠️ **PvP DETECTED**: Handle player vs player conflict with extreme care. Ensure both players have agency.\n'
+  }
+
+  if (specialCases.hasCompetingGoals) {
+    additionalGuidance += '\n⚠️ **COMPETING GOALS**: Players have different objectives. Narrate how these different approaches unfold.\n'
+  }
+
+  // Combine all guidance
+  const fullGuidance = exchangeGuidance + additionalGuidance
+
   return {
     campaign_universe: campaign.universe || 'Generic Fantasy',
-    ai_system_prompt: campaign.aiSystemPrompt,
+    ai_system_prompt: campaign.aiSystemPrompt + (fullGuidance ? `\n\n${fullGuidance}` : ''),
     world_summary: worldSummary,
     current_scene_intro: scene.sceneIntroText,
     player_actions: playerActions

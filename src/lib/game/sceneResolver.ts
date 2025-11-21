@@ -8,6 +8,7 @@ import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
 import { applyWorldUpdates, summarizeWorldUpdates } from './stateUpdater'
 import { SceneStatus } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
+import { ExchangeManager } from './exchange-manager' // Phase 16
 import {
   computeOrganicGrowth,
   applyOrganicGrowth,
@@ -34,10 +35,20 @@ import {
  * @param sceneId - Scene to resolve
  * @returns Resolution results
  */
-export async function resolveScene(campaignId: string, sceneId: string) {
+export async function resolveScene(campaignId: string, sceneId: string, forceResolve: boolean = false) {
   console.log('🎬 Starting scene resolution...')
   console.log(`Campaign: ${campaignId}`)
   console.log(`Scene: ${sceneId}`)
+
+  // Phase 16: Check exchange readiness
+  const exchangeManager = new ExchangeManager(campaignId, sceneId)
+  const canResolve = await exchangeManager.canResolveExchange(forceResolve)
+
+  if (!canResolve && !forceResolve) {
+    const summary = await exchangeManager.getExchangeSummary()
+    console.warn(`⏸️ Exchange not ready to resolve: ${summary.playersActed}/${summary.totalPlayers} players acted`)
+    throw new Error('Not all players have acted in this exchange. GM can force resolve if needed.')
+  }
 
   // 1. Verify scene exists and is ready to resolve
   const scene = await prisma.scene.findUnique({
@@ -108,6 +119,10 @@ export async function resolveScene(campaignId: string, sceneId: string) {
     })
 
     console.log('✅ Scene marked as RESOLVED')
+
+    // Phase 16: Complete the exchange
+    await exchangeManager.completeExchange()
+    console.log('🔄 Exchange completed')
 
     // 8. Increment turn number
     await prisma.worldMeta.update({

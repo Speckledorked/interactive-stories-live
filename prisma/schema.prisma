@@ -199,6 +199,10 @@ model Character {
   relationships   Json? // { [entityId: string]: { trust: Int, tension: Int, respect: Int, fear: Int } }
   consequences    Json? // { promises?: string[], debts?: string[], enemies?: string[], longTermThreats?: string[] }
 
+  // Phase 16: Zone-based positioning
+  currentZone     String? // "close", "near", "far", "distant"
+  zoneMetadata    Json?   // { customZones?: string[], zoneEffects?: object }
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -315,6 +319,11 @@ model Scene {
   sceneType          String?     @default("dramatic") // "dramatic", "downtime", "combat"
   stakes             String?     // What's at risk in this scene
 
+  // Phase 16: Freeform Combat & Exchange System
+  combatMode         String?     @default("freeform") // "freeform", "structured"
+  exchangeState      Json?       // { playersActed: string[], exchangeNumber: number, isComplete: boolean, complexity: 'simple' | 'complex' }
+  currentExchange    Int         @default(0)
+
   // Phase 14: Consequence tracking per scene
   consequences       Json?       // { created?: string[], resolved?: string[], relationshipChanges?: object[] }
 
@@ -361,6 +370,10 @@ model PlayerAction {
   moveUsed      String?  // Which move was triggered
   rollRequired  Boolean  @default(false) // Does this need a roll?
   rollMade      String?  // Link to DiceRoll.id if rolled
+
+  // Phase 16: Exchange tracking
+  exchangeNumber Int?    // Which exchange this action belongs to
+  actionPriority Int?    @default(0) // For complex exchange ordering
 
   createdAt     DateTime @default(now())
 

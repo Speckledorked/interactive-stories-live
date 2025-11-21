@@ -150,9 +150,9 @@ export async function POST(
       )
     }
 
-    // Check if clock triggers (consequence)
-    if (clock.consequence && clock.currentTicks >= clock.maxTicks) {
-      console.log(`Clock ${clock.name} triggered!`)
+    // Check if clock is full
+    if (clock.currentTicks >= clock.maxTicks && clock.consequence) {
+      console.log(`Clock ${clock.name} triggered: ${clock.consequence}`)
     }
 
     return NextResponse.json({ clock })

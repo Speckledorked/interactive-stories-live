@@ -155,11 +155,11 @@ export default function CampaignLobbyPage() {
                         )}
                       </div>
                       <span className={`px-2 py-1 rounded text-xs ${
-                        character.isActive
+                        character.isAlive
                           ? 'bg-green-500/20 text-green-400'
                           : 'bg-gray-700 text-gray-400'
                       }`}>
-                        {character.isActive ? 'Active' : 'Inactive'}
+                        {character.isAlive ? 'Alive' : 'Dead'}
                       </span>
                     </div>
                     {Array.isArray(character.conditions) && character.conditions.length > 0 && (

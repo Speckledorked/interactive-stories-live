@@ -96,12 +96,13 @@ export async function applyWorldUpdates(
           if (npc) {
             const updateData: any = {}
 
-            // Append to notes if provided
+            // Append to GM notes if provided
             if (npcChange.changes.notes_append) {
               updateData.gmNotes = (npc.gmNotes || '') + '\n\n' + npcChange.changes.notes_append
             }
 
-            // Note: NPC model doesn't have tags field in schema
+            // Note: tags_add and tags_remove are not supported in the current schema
+            // NPCs don't have a tags field
 
             if (Object.keys(updateData).length > 0) {
               await tx.nPC.update({
@@ -140,7 +141,8 @@ export async function applyWorldUpdates(
               updateData.currentLocation = pcChange.changes.location
             }
 
-            // Note: Character model doesn't have conditions field in schema
+            // Note: conditions_add and conditions_remove are not supported in the current schema
+            // Characters don't have a conditions field in the database
 
             if (Object.keys(updateData).length > 0) {
               await tx.character.update({
@@ -179,9 +181,15 @@ export async function applyWorldUpdates(
             }
 
             if (factionChange.changes.threat_level) {
-              // Convert threat level string to number (LOW=1, MEDIUM=2, HIGH=3, EXTREME=4)
-              const threatLevelMap: Record<string, number> = { LOW: 1, MEDIUM: 2, HIGH: 3, EXTREME: 4 }
-              updateData.threatLevel = threatLevelMap[factionChange.changes.threat_level] || 1
+              // Map threat level string to number
+              const threatLevelMap: Record<string, number> = {
+                'LOW': 1,
+                'MEDIUM': 2,
+                'HIGH': 3,
+                'EXTREME': 4
+              }
+              const level = factionChange.changes.threat_level.toUpperCase()
+              updateData.threatLevel = threatLevelMap[level] || faction.threatLevel
             }
 
             if (factionChange.changes.resources) {

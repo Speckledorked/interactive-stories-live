@@ -52,35 +52,37 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
   // Format everything for the AI
   return {
     turn_number: worldMeta.currentTurnNumber,
-    in_game_date: worldMeta.currentInGameDate || 'Unknown',
-    
+    in_game_date: worldMeta.currentInGameDate || 'Day 1',
+
     characters: characters.map(c => ({
       id: c.id,
       name: c.name,
-      concept: c.description || 'Unknown',
+      description: c.description,
       stats: c.stats,
-      conditions: {},
+      backstory: c.backstory,
+      goals: c.goals,
       location: c.currentLocation
     })),
-    
+
     npcs: npcs.map(n => ({
       id: n.id,
       name: n.name,
-      role: n.description || 'NPC',
-      tags: [],
-      notes: n.gmNotes || '',
-      is_important: n.importance > 3
+      description: n.description,
+      goals: n.goals,
+      relationship: n.relationship,
+      importance: n.importance
     })),
-    
+
     factions: factions.map(f => ({
       id: f.id,
       name: f.name,
-      goal: f.goals || 'Unknown',
-      current_plan: f.currentPlan || '',
-      threat_level: f.threatLevel.toString(),
-      resources: f.resources
+      goals: f.goals,
+      currentPlan: f.currentPlan,
+      threatLevel: f.threatLevel,
+      resources: f.resources,
+      influence: f.influence
     })),
-    
+
     clocks: clocks.map(cl => ({
       id: cl.id,
       name: cl.name,
@@ -89,11 +91,11 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
       description: cl.description || '',
       consequence: cl.consequence || ''
     })),
-    
+
     recent_timeline_events: recentEvents.map(e => ({
       title: e.title,
-      summary: e.summaryPublic || '',
-      turn_number: e.turnNumber || 0
+      summary: e.summaryPublic || e.summaryGM || 'No summary available',
+      turn_number: e.turnNumber
     }))
   }
 }
@@ -148,7 +150,7 @@ export async function buildSceneResolutionRequest(
   }))
 
   return {
-    campaign_universe: campaign.universe || 'Unknown',
+    campaign_universe: campaign.universe || 'Generic Fantasy',
     ai_system_prompt: campaign.aiSystemPrompt,
     world_summary: worldSummary,
     current_scene_intro: scene.sceneIntroText,

@@ -3,6 +3,7 @@ import Pusher from 'pusher'
 import PusherClient from 'pusher-js'
 
 // Server-side Pusher instance
+// Provide defaults for build time when env vars may not be set
 export const pusherServer = new Pusher({
   appId: process.env.PUSHER_APP_ID || 'placeholder',
   key: process.env.NEXT_PUBLIC_PUSHER_KEY || 'placeholder',

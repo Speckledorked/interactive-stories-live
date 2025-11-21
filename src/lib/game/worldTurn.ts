@@ -77,9 +77,19 @@ async function advanceClocks(campaignId: string) {
   const advancedClocks: any[] = []
 
   for (const clock of clocks) {
-    // Determine advance rate
-    // Note: Clock model doesn't have relatedFaction in schema
-    let advanceAmount = Math.random() > 0.6 ? 1 : 0 // 40% chance
+    // Determine advance rate based on clock category or random chance
+    let advanceAmount = 0
+
+    // Note: Clock-faction relations are not in the current schema
+    // Using a simple random-based advancement instead
+    if (clock.category === 'urgent') {
+      advanceAmount = 1 // Always advance urgent clocks
+    } else if (clock.category === 'slow') {
+      advanceAmount = Math.random() > 0.8 ? 1 : 0 // 20% chance
+    } else {
+      // Default clocks advance at medium rate
+      advanceAmount = Math.random() > 0.6 ? 1 : 0 // 40% chance
+    }
 
     if (advanceAmount > 0) {
       const newTicks = Math.min(clock.currentTicks + advanceAmount, clock.maxTicks)
@@ -95,7 +105,8 @@ async function advanceClocks(campaignId: string) {
         id: clock.id,
         name: clock.name,
         oldTicks: clock.currentTicks,
-        newTicks
+        newTicks,
+        category: clock.category
       })
     }
   }
@@ -128,7 +139,7 @@ async function generateOffscreenEvents(
 
     // Call AI to generate offscreen events
     const aiResult = await callAIForWorldTurn(
-      campaign.universe || 'Unknown',
+      campaign.universe || 'Generic Fantasy',
       campaign.aiSystemPrompt,
       worldSummary,
       [...advancedClocks, ...completedClocks]

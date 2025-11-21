@@ -70,8 +70,8 @@ export async function POST(request: NextRequest) {
           title,
           description,
           universe,
-          aiSystemPrompt,
-          initialWorldSeed
+          aiSystemPrompt: aiSystemPrompt || '',
+          initialWorldSeed: initialWorldSeed || ''
         }
       })
 
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       await tx.worldMeta.create({
         data: {
           campaignId: newCampaign.id,
-          currentTurnNumber: 0,
+          currentTurnNumber: 1,
           currentInGameDate: 'Day 1',
           otherMeta: {}
         }

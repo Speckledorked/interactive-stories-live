@@ -93,3 +93,11 @@ export async function getUser(request?: NextRequest): Promise<TokenPayload | nul
     return null
   }
 }
+
+/**
+ * Verify authentication and return user, or null if not authenticated
+ * Used by API routes that need auth but want to handle unauthorized state themselves
+ */
+export async function verifyAuth(request: NextRequest): Promise<TokenPayload | null> {
+  return getUserFromRequest(request)
+}

@@ -35,6 +35,46 @@ enum UserRole {
   PLAYER
 }
 
+// Phase 8: Communication enums
+enum MessageType {
+  IN_CHARACTER
+  OUT_OF_CHARACTER
+  WHISPER
+  SYSTEM
+}
+
+enum NoteVisibility {
+  PRIVATE
+  GM
+  SHARED
+}
+
+// Phase 9: Notification enums
+enum NotificationType {
+  TURN_REMINDER
+  SCENE_CHANGE
+  MENTION
+  WHISPER_RECEIVED
+  NOTE_SHARED
+  CAMPAIGN_INVITE
+  SCENE_RESOLVED
+  AI_RESPONSE_READY
+  WORLD_EVENT
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  DISMISSED
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
 //
 // USER & MEMBERSHIP
 //
@@ -47,11 +87,24 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Phase 9: Online status
+  lastSeenAt DateTime?
+  isOnline   Boolean  @default(false)
+
   campaignMemberships CampaignMembership[]
   characters          Character[]
   playerActions       PlayerAction[]
   createInvites       CampaignInvite[] @relation("InviteCreator")
   diceRolls           DiceRoll[]
+
+  // Phase 8: Communication
+  sentMessages     Message[]    @relation("UserMessages")
+  receivedWhispers Message[]    @relation("UserWhispers")
+  notes            PlayerNote[] @relation("UserNotes")
+
+  // Phase 9: Notifications
+  notifications        Notification[]            @relation("UserNotifications")
+  notificationSettings UserNotificationSettings? @relation("UserNotificationSettings")
 }
 
 model CampaignMembership {
@@ -82,6 +135,10 @@ model Campaign {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  // Phase 9: Campaign notification settings
+  mentionsEnabled      Boolean @default(true)
+  soundEffectsEnabled  Boolean @default(true)
+
   memberships CampaignMembership[]
   characters  Character[]
   npcs        NPC[]
@@ -93,6 +150,14 @@ model Campaign {
   invites     CampaignInvite[]
   moves       Move[]
   diceRolls   DiceRoll[]
+
+  // Phase 8: Communication
+  messages Message[]    @relation("CampaignMessages")
+  notes    PlayerNote[] @relation("CampaignNotes")
+
+  // Phase 9: Notifications
+  notifications Notification[] @relation("CampaignNotifications")
+  turnTracker   TurnTracker[]  @relation("CampaignTurnTracker")
 }
 
 //
@@ -129,6 +194,10 @@ model Character {
   diceRolls     DiceRoll[]
   turnOrders    TurnOrder[]
 
+  // Phase 8: Communication
+  messages Message[]    @relation("CharacterMessages")
+  notes    PlayerNote[] @relation("CharacterNotes")
+
   @@index([campaignId])
   @@index([userId])
 }
@@ -160,6 +229,9 @@ model NPC {
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
+  // Phase 8: Communication
+  notes PlayerNote[] @relation("NPCNotes")
+
   @@index([campaignId])
 }
 
@@ -179,6 +251,9 @@ model Faction {
   updatedAt     DateTime @updatedAt
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  // Phase 8: Communication
+  notes PlayerNote[] @relation("FactionNotes")
 
   @@index([campaignId])
 }
@@ -226,6 +301,10 @@ model Scene {
   sceneType          String?     @default("dramatic") // "dramatic", "downtime", "combat"
   stakes             String?     // What's at risk in this scene
 
+  // Phase 9: Turn tracking
+  turnDeadline       DateTime?
+  waitingOnUsers     Json?       // Array of user IDs who need to act
+
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -233,6 +312,14 @@ model Scene {
   playerActions PlayerAction[]
   diceRolls     DiceRoll[]
   turnOrder     TurnOrder?
+
+  // Phase 8: Communication
+  messages Message[]    @relation("SceneMessages")
+  notes    PlayerNote[] @relation("SceneNotes")
+
+  // Phase 9: Notifications
+  notifications Notification[] @relation("SceneNotifications")
+  turnTracker   TurnTracker[]  @relation("SceneTurnTracker")
 
   @@index([campaignId])
   @@index([status])
@@ -408,4 +495,401 @@ model TurnOrder {
   characters Character[]
 
   @@index([sceneId])
+}
+
+//
+// PHASE 8: COMMUNICATION MODELS
+//
+
+model Message {
+  id         String      @id @default(cuid())
+  content    String      @db.Text
+  type       MessageType @default(OUT_OF_CHARACTER)
+  authorId   String
+  campaignId String
+  sceneId    String?
+
+  // For whisper/private messages
+  targetUserId String?
+
+  // Character context (for IC messages)
+  characterId String?
+
+  // Phase 9: Mention detection
+  mentionsUserIds Json?    @default("[]")
+  hasMentions     Boolean  @default(false)
+
+  // Phase 9: Sound triggers
+  triggerSound String?
+  soundVolume  Float?   @default(1.0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  author     User       @relation("UserMessages", fields: [authorId], references: [id], onDelete: Cascade)
+  targetUser User?      @relation("UserWhispers", fields: [targetUserId], references: [id], onDelete: Cascade)
+  campaign   Campaign   @relation("CampaignMessages", fields: [campaignId], references: [id], onDelete: Cascade)
+  scene      Scene?     @relation("SceneMessages", fields: [sceneId], references: [id], onDelete: Cascade)
+  character  Character? @relation("CharacterMessages", fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, createdAt])
+  @@index([campaignId, sceneId])
+  @@map("messages")
+}
+
+model PlayerNote {
+  id          String         @id @default(cuid())
+  title       String
+  content     String         @db.Text
+  visibility  NoteVisibility @default(PRIVATE)
+  authorId    String
+  campaignId  String
+
+  // Optional associations
+  characterId String?
+  npcId       String?
+  factionId   String?
+  sceneId     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  author    User       @relation("UserNotes", fields: [authorId], references: [id], onDelete: Cascade)
+  campaign  Campaign   @relation("CampaignNotes", fields: [campaignId], references: [id], onDelete: Cascade)
+  character Character? @relation("CharacterNotes", fields: [characterId], references: [id], onDelete: Cascade)
+  npc       NPC?       @relation("NPCNotes", fields: [npcId], references: [id], onDelete: Cascade)
+  faction   Faction?   @relation("FactionNotes", fields: [factionId], references: [id], onDelete: Cascade)
+  scene     Scene?     @relation("SceneNotes", fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, authorId])
+  @@index([campaignId, visibility])
+  @@map("player_notes")
+}
+
+//
+// PHASE 9: NOTIFICATION MODELS
+//
+
+model Notification {
+  id         String               @id @default(cuid())
+  type       NotificationType
+  title      String
+  message    String               @db.Text
+  status     NotificationStatus   @default(UNREAD)
+  priority   NotificationPriority @default(NORMAL)
+
+  // Recipients
+  userId     String
+  campaignId String?
+  sceneId    String?
+
+  // Metadata for rich notifications
+  actionUrl String?
+  metadata  Json?
+
+  // Email/Push settings
+  emailSent Boolean @default(false)
+  pushSent  Boolean @default(false)
+
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+  readAt      DateTime?
+  dismissedAt DateTime?
+
+  // Relationships
+  user     User      @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  campaign Campaign? @relation("CampaignNotifications", fields: [campaignId], references: [id], onDelete: Cascade)
+  scene    Scene?    @relation("SceneNotifications", fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([campaignId, type])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model UserNotificationSettings {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Email notification preferences
+  emailEnabled         Boolean @default(true)
+  emailTurnReminders   Boolean @default(true)
+  emailSceneChanges    Boolean @default(true)
+  emailMentions        Boolean @default(true)
+  emailWhispers        Boolean @default(true)
+  emailCampaignInvites Boolean @default(true)
+  emailWorldEvents     Boolean @default(false)
+
+  // Browser push notification preferences
+  pushEnabled         Boolean @default(true)
+  pushTurnReminders   Boolean @default(true)
+  pushSceneChanges    Boolean @default(true)
+  pushMentions        Boolean @default(true)
+  pushWhispers        Boolean @default(true)
+  pushCampaignInvites Boolean @default(true)
+
+  // Sound notification preferences
+  soundEnabled         Boolean @default(true)
+  soundTurnReminders   Boolean @default(true)
+  soundSceneChanges    Boolean @default(true)
+  soundMentions        Boolean @default(true)
+  soundWhispers        Boolean @default(true)
+  soundCriticalMoments Boolean @default(true)
+  soundWorldEvents     Boolean @default(true)
+
+  // Timing preferences
+  quietHoursEnabled Boolean @default(false)
+  quietHoursStart   String? // "22:00"
+  quietHoursEnd     String? // "08:00"
+  timezone          String? // "America/New_York"
+
+  // Digest preferences
+  dailyDigestEnabled  Boolean @default(false)
+  weeklyDigestEnabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user User @relation("UserNotificationSettings", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notification_settings")
+}
+
+model TurnTracker {
+  id         String @id @default(cuid())
+  campaignId String
+  sceneId    String?
+
+  // Turn order and timing
+  currentTurn        Int       @default(0)
+  turnOrder          Json // Array of character/player IDs
+  turnStartedAt      DateTime?
+  turnDeadline       DateTime?
+  autoAdvanceTurn    Boolean   @default(false)
+  turnTimeoutMinutes Int       @default(60)
+
+  // Notifications sent
+  remindersSent    Json      @default("[]") // Array of timestamps
+  lastReminderSent DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  campaign Campaign @relation("CampaignTurnTracker", fields: [campaignId], references: [id], onDelete: Cascade)
+  scene    Scene?   @relation("SceneTurnTracker", fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, sceneId])
+  @@map("turn_trackers")
+}
+
+//
+// PHASE 10.5: AI VISUAL GENERATION MODELS
+//
+
+model Map {
+  id          String   @id @default(cuid())
+  campaignId  String
+  sceneId     String?
+  name        String
+  description String?  @db.Text
+  width       Int      @default(800)
+  height      Int      @default(600)
+  gridSize    Int      @default(40)
+  background  String?  // Color or image URL
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  zones  Zone[]
+  tokens Token[]
+
+  @@index([campaignId])
+  @@index([sceneId])
+  @@map("maps")
+}
+
+model Zone {
+  id          String  @id @default(cuid())
+  mapId       String
+  name        String
+  description String? @db.Text
+  x           Int
+  y           Int
+  width       Int
+  height      Int
+  color       String? @default("#3b82f6")
+  isActive    Boolean @default(true)
+  metadata    Json?   // For additional properties
+
+  map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
+
+  @@index([mapId])
+  @@map("zones")
+}
+
+model Token {
+  id        String  @id @default(cuid())
+  mapId     String
+  name      String
+  x         Int
+  y         Int
+  color     String  @default("#ef4444")
+  size      Int     @default(30)
+  isPlayer  Boolean @default(false)
+  isVisible Boolean @default(true)
+  metadata  Json?   // For character ID, NPC ID, etc.
+
+  map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
+
+  @@index([mapId])
+  @@map("tokens")
+}
+
+model CampaignImage {
+  id         String   @id @default(cuid())
+  campaignId String
+  url        String
+  prompt     String?  @db.Text
+  tags       String[]
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([campaignId])
+  @@map("campaign_images")
+}
+
+//
+// PHASE 11: SESSION & DOWNTIME MODELS
+//
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ActivityStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Session {
+  id          String        @id @default(cuid())
+  campaignId  String
+  name        String
+  description String?       @db.Text
+  status      SessionStatus @default(SCHEDULED)
+  startTime   DateTime?
+  endTime     DateTime?
+  objectives  String[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  participants SessionParticipant[]
+  scenes       SessionScene[]
+  notes        SessionNote[]
+
+  @@index([campaignId])
+  @@index([status])
+  @@map("sessions")
+}
+
+model SessionParticipant {
+  id            String   @id @default(cuid())
+  sessionId     String
+  characterId   String
+  userId        String
+  joinedAt      DateTime @default(now())
+  leftAt        DateTime?
+  wasPresent    Boolean  @default(true)
+  notes         String?  @db.Text
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, characterId])
+  @@index([sessionId])
+  @@map("session_participants")
+}
+
+model SessionScene {
+  id          String   @id @default(cuid())
+  sessionId   String
+  sceneId     String
+  orderIndex  Int
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  notes       String?  @db.Text
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("session_scenes")
+}
+
+model SessionNote {
+  id        String   @id @default(cuid())
+  sessionId String
+  authorId  String
+  content   String   @db.Text
+  noteType  String   @default("general") // general, highlight, decision, npc
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("session_notes")
+}
+
+model DowntimeActivity {
+  id              String         @id @default(cuid())
+  characterId     String
+  description     String         @db.Text // Natural language description
+  summary         String         @db.Text // AI-generated summary
+  status          ActivityStatus @default(ACTIVE)
+
+  // AI-determined properties
+  estimatedDays   Int
+  currentDay      Int            @default(0)
+  costs           Json?          // {gold: 100, resources: [...]}
+  requirements    String[]       // Prerequisites
+  skillsInvolved  String[]       // Skills being used
+  riskLevel       String?        // low, medium, high
+
+  outcomes        Json?          // Potential outcomes
+  finalOutcome    String?        @db.Text
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  completedAt     DateTime?
+
+  events DowntimeEvent[]
+
+  @@index([characterId])
+  @@index([status])
+  @@map("downtime_activities")
+}
+
+model DowntimeEvent {
+  id         String   @id @default(cuid())
+  activityId String
+  dayNumber  Int
+  eventText  String   @db.Text // AI-generated event
+  choices    Json?    // Available choices
+  response   String?  @db.Text // Player response
+  outcome    String?  @db.Text // Result of response
+  createdAt  DateTime @default(now())
+  respondedAt DateTime?
+
+  activity DowntimeActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@index([activityId])
+  @@map("downtime_events")
 }

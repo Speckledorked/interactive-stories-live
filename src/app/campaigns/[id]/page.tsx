@@ -1,5 +1,6 @@
 // src/app/campaigns/[id]/page.tsx
 // Campaign lobby - shows campaign info, players, characters
+// UPDATED WITH PHASE 8 COMMUNICATION FEATURES
 
 'use client'
 
@@ -7,7 +8,11 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
-import CreateCharacterForm from "@/components/forms/CreateCharacterForm";
+import CreateCharacterForm from "@/components/forms/CreateCharacterForm"
+import ChatPanel from '@/components/chat/ChatPanel'
+import NotesPanel from '@/components/notes/NotesPanel'
+import NotificationPanel from '@/components/notifications/NotificationPanel'
+import TurnTracker from '@/components/turns/TurnTracker'
 
 interface CampaignData {
   campaign: any
@@ -23,6 +28,8 @@ export default function CampaignLobbyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreateCharacter, setShowCreateCharacter] = useState(false)
+  const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'notes'>('overview')
+  const [showNotifications, setShowNotifications] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -104,6 +111,33 @@ export default function CampaignLobbyPage() {
         </div>
       </div>
 
+      {/* Navigation Tabs - Phase 8 Communication */}
+      <div className="border-b border-gray-700 mb-6 sticky top-0 bg-gray-950/95 backdrop-blur z-10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex space-x-8">
+            {[
+              { key: 'overview', label: 'Overview' },
+              { key: 'chat', label: 'Chat' },
+              { key: 'notes', label: 'Notes' },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key as any)}
+                className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === tab.key
+                    ? 'border-primary-500 text-primary-400'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      {/* Overview Tab - Existing Content */}
+      {activeTab === 'overview' && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Column */}
         <div className="lg:col-span-2 space-y-6">
@@ -251,6 +285,44 @@ export default function CampaignLobbyPage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Chat Tab - Phase 8 Communication */}
+      {activeTab === 'chat' && data && (
+        <div className="max-w-6xl mx-auto">
+          <ChatPanel
+            campaignId={campaignId}
+            currentUserId={data.campaign.memberships[0]?.userId || ''}
+            currentUserName={data.campaign.memberships[0]?.user?.email || 'Unknown'}
+            userCharacters={data.campaign.characters}
+            sceneId={''}
+          />
+        </div>
+      )}
+
+      {/* Notes Tab - Phase 8 Communication */}
+      {activeTab === 'notes' && data && (
+        <div className="max-w-6xl mx-auto">
+          <NotesPanel
+            campaignId={campaignId}
+            currentUserId={data.campaign.memberships[0]?.userId || ''}
+            characters={data.campaign.characters}
+            npcs={data.campaign.npcs || []}
+            factions={data.campaign.factions || []}
+            scenes={data.campaign.scenes || []}
+          />
+        </div>
+      )}
+
+      {/* Notification Panel - Phase 8/9 Communication */}
+      {data && (
+        <NotificationPanel
+          userId={data.campaign.memberships[0]?.userId || ''}
+          campaignId={campaignId}
+          isOpen={showNotifications}
+          onClose={() => setShowNotifications(false)}
+        />
+      )}
 
       {/* Character Creation Modal */}
       {showCreateCharacter && (

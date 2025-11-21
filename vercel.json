@@ -4,7 +4,8 @@
   "framework": "nextjs",
   "git": {
     "deploymentEnabled": {
-      "main": false
+      "main": true,      // only main auto-deploys
+      "preview": false   // ALL non-main branches won't auto-deploy
     }
   },
   "github": {

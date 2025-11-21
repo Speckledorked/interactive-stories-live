@@ -47,6 +47,21 @@ interface Clock {
   gmNotes: string
 }
 
+interface Member {
+  id: string
+  role: 'ADMIN' | 'PLAYER'
+  joinedAt: string
+  user: {
+    id: string
+    name: string | null
+    email: string
+    createdAt: string
+  }
+  _count: {
+    characters: number
+  }
+}
+
 export default function AdminPage({ 
   params 
 }: { 
@@ -56,17 +71,19 @@ export default function AdminPage({
   const campaignId = params.id
 
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'ai' | 'npcs' | 'factions' | 'clocks' | 'invites'>('ai')
+  const [activeTab, setActiveTab] = useState<'ai' | 'npcs' | 'factions' | 'clocks' | 'invites' | 'members' | 'settings'>('ai')
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [npcs, setNpcs] = useState<NPC[]>([])
   const [factions, setFactions] = useState<Faction[]>([])
   const [clocks, setClocks] = useState<Clock[]>([])
   const [invites, setInvites] = useState<any[]>([])
+  const [members, setMembers] = useState<Member[]>([])
   const [editingNpc, setEditingNpc] = useState<string | null>(null)
   const [editingFaction, setEditingFaction] = useState<string | null>(null)
   const [editingClock, setEditingClock] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -109,6 +126,13 @@ export default function AdminPage({
       if (invitesResponse.ok) {
         const invitesData = await invitesResponse.json()
         setInvites(invitesData.invites || [])
+      }
+
+      // Fetch Members
+      const membersResponse = await fetch(`/api/campaigns/${campaignId}/members`)
+      if (membersResponse.ok) {
+        const membersData = await membersResponse.json()
+        setMembers(membersData.members || [])
       }
     } catch (err) {
       setError('Failed to load admin data')
@@ -225,12 +249,74 @@ export default function AdminPage({
       })
 
       if (!response.ok) throw new Error('Failed to create invite')
-      
+
       const data = await response.json()
       alert(`Invite created! Share this link: ${data.joinUrl}`)
       await fetchData()
     } catch (err) {
       setError('Failed to create invite')
+    }
+  }
+
+  const handleRemoveMember = async (userId: string) => {
+    if (!confirm('Are you sure you want to remove this member? Their characters will also be deleted.')) {
+      return
+    }
+
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/campaigns/${campaignId}/members/${userId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to remove member')
+      }
+
+      await fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove member')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleChangeRole = async (userId: string, newRole: 'ADMIN' | 'PLAYER') => {
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/campaigns/${campaignId}/members/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to change role')
+      }
+
+      await fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to change role')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteCampaign = async () => {
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/campaigns/${campaignId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) throw new Error('Failed to delete campaign')
+
+      router.push('/campaigns')
+    } catch (err) {
+      setError('Failed to delete campaign')
+      setSaving(false)
     }
   }
 
@@ -260,7 +346,7 @@ export default function AdminPage({
             {/* Tab Navigation */}
             <div className="border-b border-gray-200 mb-6">
               <nav className="-mb-px flex space-x-8">
-                {(['ai', 'npcs', 'factions', 'clocks', 'invites'] as const).map((tab) => (
+                {(['ai', 'npcs', 'factions', 'clocks', 'invites', 'members', 'settings'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -528,7 +614,7 @@ export default function AdminPage({
                 >
                   Create New Invite
                 </button>
-                
+
                 <div className="space-y-2">
                   {invites.map((invite) => (
                     <div key={invite.id} className="border rounded-lg p-4">
@@ -553,6 +639,123 @@ export default function AdminPage({
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Members Tab */}
+            {activeTab === 'members' && (
+              <div className="space-y-4">
+                <div className="text-sm text-gray-600 mb-4">
+                  Total Members: {members.length}
+                </div>
+
+                <div className="space-y-2">
+                  {members.map((member) => (
+                    <div key={member.id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">
+                              {member.user.name || member.user.email}
+                            </h3>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              member.role === 'ADMIN'
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {member.role}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600">{member.user.email}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Joined: {new Date(member.joinedAt).toLocaleDateString()} •
+                            Characters: {member._count.characters}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <select
+                            value={member.role}
+                            onChange={(e) => handleChangeRole(member.user.id, e.target.value as 'ADMIN' | 'PLAYER')}
+                            disabled={saving}
+                            className="px-3 py-1 border rounded-md text-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50"
+                          >
+                            <option value="PLAYER">Player</option>
+                            <option value="ADMIN">Admin</option>
+                          </select>
+                          <button
+                            onClick={() => handleRemoveMember(member.user.id)}
+                            disabled={saving}
+                            className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 text-sm"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Settings Tab */}
+            {activeTab === 'settings' && campaign && (
+              <div className="space-y-6">
+                <div className="border-b pb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Campaign Information
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">Campaign ID:</span>
+                      <span className="ml-2 text-gray-600 font-mono">{campaignId}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Title:</span>
+                      <span className="ml-2 text-gray-600">{campaign.title}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border border-red-200 rounded-lg p-6 bg-red-50">
+                  <h3 className="text-lg font-semibold text-red-900 mb-2">
+                    Danger Zone
+                  </h3>
+                  <p className="text-sm text-red-700 mb-4">
+                    Once you delete a campaign, there is no going back. This will permanently delete
+                    all campaign data including characters, scenes, NPCs, factions, clocks, and timeline events.
+                  </p>
+
+                  {!showDeleteConfirm ? (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                    >
+                      Delete Campaign
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold text-red-900">
+                        Are you absolutely sure? This action cannot be undone.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleDeleteCampaign}
+                          disabled={saving}
+                          className="px-4 py-2 bg-red-700 text-white rounded-md hover:bg-red-800 disabled:opacity-50"
+                        >
+                          {saving ? 'Deleting...' : 'Yes, Delete Campaign'}
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteConfirm(false)}
+                          disabled={saving}
+                          className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

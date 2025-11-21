@@ -143,20 +143,8 @@ export async function resolveScene(campaignId: string, sceneId: string) {
  * @param campaignId - Campaign to create scene for
  * @returns New scene object
  */
-export async function createNewScene(campaignId: string) {
+export async function createNewScene(campaignId: string, characterIds?: string[]) {
   console.log('🎭 Creating new scene...')
-
-  // Check if there's already an active scene
-  const existingActiveScene = await prisma.scene.findFirst({
-    where: {
-      campaignId,
-      status: { in: ['AWAITING_ACTIONS', 'RESOLVING'] }
-    }
-  })
-
-  if (existingActiveScene) {
-    throw new Error('There is already an active scene. Resolve it first.')
-  }
 
   // Get the highest scene number
   const lastScene = await prisma.scene.findFirst({
@@ -165,6 +153,29 @@ export async function createNewScene(campaignId: string) {
   })
 
   const nextSceneNumber = (lastScene?.sceneNumber || 0) + 1
+
+  // Prepare participants data
+  let participants: any = null
+  let waitingOnUsers: any = null
+
+  if (characterIds && characterIds.length > 0) {
+    // Get user IDs for the characters
+    const characters = await prisma.character.findMany({
+      where: { id: { in: characterIds } },
+      select: { id: true, userId: true }
+    })
+
+    const userIds = [...new Set(characters.map(c => c.userId))]
+
+    participants = {
+      characterIds,
+      userIds
+    }
+
+    waitingOnUsers = userIds
+
+    console.log(`📋 Scene participants: ${characterIds.length} characters, ${userIds.length} users`)
+  }
 
   // Generate scene intro using AI (imported from worldState.ts)
   const { generateNewSceneIntro } = await import('@/lib/ai/worldState')
@@ -177,7 +188,9 @@ export async function createNewScene(campaignId: string) {
       campaignId,
       sceneNumber: nextSceneNumber,
       sceneIntroText: sceneIntro,
-      status: 'AWAITING_ACTIONS' as SceneStatus
+      status: 'AWAITING_ACTIONS' as SceneStatus,
+      participants: participants as any,
+      waitingOnUsers: waitingOnUsers as any
     }
   })
 

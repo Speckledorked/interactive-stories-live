@@ -9,7 +9,7 @@ import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
 import { pusherServer } from '@/lib/pusher'
 
-// GET current scene
+// GET active scenes
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -35,8 +35,8 @@ export async function GET(
       )
     }
 
-    // Get current active scene (awaiting_actions or resolving)
-    const currentScene = await prisma.scene.findFirst({
+    // Get all active scenes (awaiting_actions or resolving)
+    const activeScenes = await prisma.scene.findMany({
       where: {
         campaignId,
         status: {
@@ -56,7 +56,10 @@ export async function GET(
       orderBy: { sceneNumber: 'desc' }
     })
 
-    return NextResponse.json({ scene: currentScene })
+    // For backwards compatibility, also return the first scene as "scene"
+    const currentScene = activeScenes.length > 0 ? activeScenes[0] : null
+
+    return NextResponse.json({ scene: currentScene, scenes: activeScenes })
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json<ErrorResponse>(
@@ -106,7 +109,8 @@ export async function POST(
 
     // Verify scene is accepting actions
     const scene = await prisma.scene.findUnique({
-      where: { id: sceneId }
+      where: { id: sceneId },
+      include: { playerActions: true }
     })
 
     if (!scene || scene.status !== 'AWAITING_ACTIONS') {
@@ -114,6 +118,42 @@ export async function POST(
         { error: 'Scene is not accepting actions' },
         { status: 400 }
       )
+    }
+
+    // Check if character is already in another active scene
+    const otherActiveScenes = await prisma.scene.findMany({
+      where: {
+        campaignId,
+        id: { not: sceneId },
+        status: { in: ['AWAITING_ACTIONS', 'RESOLVING'] }
+      },
+      select: { id: true, sceneNumber: true, participants: true }
+    })
+
+    for (const otherScene of otherActiveScenes) {
+      const participants = (otherScene.participants as any)?.characterIds || []
+      if (participants.includes(characterId)) {
+        return NextResponse.json<ErrorResponse>(
+          {
+            error: `This character is already in another active scene (Scene ${otherScene.sceneNumber})`,
+            details: 'A character can only be in one active scene at a time'
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Add character to scene participants if not already there
+    const sceneParticipants = (scene.participants as any) || { characterIds: [], userIds: [] }
+    if (!sceneParticipants.characterIds.includes(characterId)) {
+      sceneParticipants.characterIds.push(characterId)
+      if (!sceneParticipants.userIds.includes(user.userId)) {
+        sceneParticipants.userIds.push(user.userId)
+      }
+      await prisma.scene.update({
+        where: { id: sceneId },
+        data: { participants: sceneParticipants }
+      })
     }
 
     // Create action
@@ -140,6 +180,15 @@ export async function POST(
       }
     })
 
+    // Remove user from waitingOnUsers
+    const waitingOnUsers = (scene.waitingOnUsers as any) || []
+    const updatedWaitingOn = waitingOnUsers.filter((uid: string) => uid !== user.userId)
+
+    await prisma.scene.update({
+      where: { id: sceneId },
+      data: { waitingOnUsers: updatedWaitingOn }
+    })
+
     // Trigger Pusher event to notify all clients
     try {
       await pusherServer.trigger(
@@ -158,6 +207,38 @@ export async function POST(
     } catch (pusherError) {
       console.error('Failed to trigger Pusher event:', pusherError)
       // Don't fail the request if Pusher fails
+    }
+
+    // Check if all participants have submitted - if so, auto-resolve
+    const allActionsSubmitted = updatedWaitingOn.length === 0 && sceneParticipants.userIds.length > 0
+
+    if (allActionsSubmitted) {
+      console.log(`🎬 All participants submitted! Auto-resolving scene ${scene.sceneNumber}`)
+
+      // Import and call resolveScene asynchronously (don't wait for it)
+      const { resolveScene } = await import('@/lib/game/sceneResolver')
+      const { runWorldTurn } = await import('@/lib/game/worldTurn')
+
+      // Run in background - don't block the response
+      resolveScene(campaignId, sceneId)
+        .then(async (result) => {
+          console.log(`✅ Scene ${scene.sceneNumber} auto-resolved`)
+          await runWorldTurn(campaignId)
+
+          // Trigger Pusher event for scene resolution
+          await pusherServer.trigger(
+            `campaign-${campaignId}`,
+            'scene:resolved',
+            {
+              sceneId: sceneId,
+              sceneNumber: scene.sceneNumber,
+              timestamp: new Date()
+            }
+          )
+        })
+        .catch((error) => {
+          console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`, error)
+        })
     }
 
     return NextResponse.json({ action }, { status: 201 })

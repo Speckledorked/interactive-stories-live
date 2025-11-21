@@ -14,8 +14,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const campaignId = params.id
-    const { characterId } = params
+    const { id: campaignId, characterId } = params
     const body = await request.json()
 
     // Check membership

@@ -14,7 +14,7 @@ export interface AIGMResponse {
       summary_public: string
       summary_gm: string
       is_offscreen: boolean
-      visibility: 'public' | 'gm_only' | 'mixed'
+      visibility: 'PUBLIC' | 'GM_ONLY' | 'MIXED'
     }>
     clock_changes?: Array<{
       clock_name_or_id: string

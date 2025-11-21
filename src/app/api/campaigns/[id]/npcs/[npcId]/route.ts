@@ -26,7 +26,7 @@ export async function PATCH(
       },
     })
 
-    if (!membership || membership.role !== 'admin') {
+    if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Only campaign admins can update NPCs' },
         { status: 403 }
@@ -83,7 +83,7 @@ export async function DELETE(
       },
     })
 
-    if (!membership || membership.role !== 'admin') {
+    if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Only campaign admins can delete NPCs' },
         { status: 403 }

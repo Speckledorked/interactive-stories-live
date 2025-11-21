@@ -26,7 +26,7 @@ export async function POST(
       },
     })
 
-    if (!membership || membership.role !== 'admin') {
+    if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Only campaign admins can create invites' },
         { status: 403 }
@@ -87,7 +87,7 @@ export async function GET(
       },
     })
 
-    if (!membership || membership.role !== 'admin') {
+    if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Only campaign admins can view invites' },
         { status: 403 }

@@ -51,6 +51,7 @@ model User {
   characters          Character[]
   playerActions       PlayerAction[]
   createInvites       CampaignInvite[] @relation("InviteCreator")
+  diceRolls           DiceRoll[]
 }
 
 model CampaignMembership {
@@ -90,6 +91,8 @@ model Campaign {
   timeline    TimelineEvent[]
   worldMeta   WorldMeta?
   invites     CampaignInvite[]
+  moves       Move[]
+  diceRolls   DiceRoll[]
 }
 
 //
@@ -103,18 +106,28 @@ model Character {
   name            String
   pronouns        String?
   description     String?
-  stats           Json?
+  stats           Json? // For PbtA: {cool: 1, hard: 2, hot: -1, sharp: 1, weird: 0}
   backstory       String?
   goals           String?
   isAlive         Boolean  @default(true)
   currentLocation String?
   gmNotes         String?
+
+  // PbtA specific fields
+  harm            Int      @default(0) // 0-6 harm track
+  experience      Int      @default(0) // XP counter
+  conditions      String[] // ["shaken", "wounded", "unstable"] etc
+  moves           String[] // Character move IDs they've unlocked
+  holds           Json?    // Temporary holds/forward from moves
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   playerActions PlayerAction[]
+  diceRolls     DiceRoll[]
+  turnOrders    TurnOrder[]
 
   @@index([campaignId])
   @@index([userId])
@@ -136,6 +149,12 @@ model NPC {
   isAlive         Boolean  @default(true)
   importance      Int      @default(1)
   gmNotes         String?
+
+  // PbtA fields for significant NPCs
+  threat          String?  // Type of threat (warlord, grotesque, landscape, etc)
+  impulses        String[] // What drives this NPC
+  moves           String[] // Custom moves this NPC can trigger
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -202,11 +221,18 @@ model Scene {
   participants       Json?
   status             SceneStatus @default(AWAITING_ACTIONS)
   sceneResolutionText String?    @db.Text
+
+  // PbtA scene tracking
+  sceneType          String?     @default("dramatic") // "dramatic", "downtime", "combat"
+  stakes             String?     // What's at risk in this scene
+
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
   campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   playerActions PlayerAction[]
+  diceRolls     DiceRoll[]
+  turnOrder     TurnOrder?
 
   @@index([campaignId])
   @@index([status])
@@ -226,6 +252,12 @@ model PlayerAction {
   status        String   @default("pending")
   resolution    String?  @db.Text
   rollResult    Json?
+
+  // PbtA move tracking
+  moveUsed      String?  // Which move was triggered
+  rollRequired  Boolean  @default(false) // Does this need a roll?
+  rollMade      String?  // Link to DiceRoll.id if rolled
+
   createdAt     DateTime @default(now())
 
   scene     Scene     @relation(fields: [sceneId], references: [id], onDelete: Cascade)
@@ -298,4 +330,82 @@ model CampaignInvite {
 
   @@index([token])
   @@index([campaignId])
+}
+
+//
+// PHASE 7 ADDITIONS: PbtA System
+//
+
+model Move {
+  id          String   @id @default(cuid())
+  campaignId  String
+  name        String
+  trigger     String   // "When you..."
+  description String   @db.Text
+  rollType    String?  // "roll+cool", "roll+hard", "act under fire", null for no roll
+  outcomes    Json     // {success: "...", partial: "...", miss: "..."}
+  category    String   @default("basic") // "basic", "special", "custom"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  campaign  Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  diceRolls DiceRoll[]
+
+  @@index([campaignId])
+}
+
+model DiceRoll {
+  id          String   @id @default(cuid())
+  campaignId  String
+  sceneId     String?
+  characterId String
+  userId      String
+
+  rollType    String   // "move", "custom", "help", "interfere"
+  moveId      String?  // If rolling a specific move
+
+  dice        Int[]    // [6, 4] for 2d6 showing 6 and 4
+  modifier    Int      @default(0) // Stat modifier or forward
+  total       Int      // Sum of dice + modifier
+
+  outcome     String   // "strongHit" (10+), "weakHit" (7-9), "miss" (6-)
+  description String?  // Context for the roll
+
+  forward     Int?     @default(0) // +1 forward granted
+  ongoing     Int?     @default(0) // +1 ongoing granted
+  hold        Int?     @default(0) // Hold generated
+
+  isSecret    Boolean  @default(false) // Hidden from other players
+  createdAt   DateTime @default(now())
+
+  campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scene     Scene?    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  move      Move?     @relation(fields: [moveId], references: [id])
+
+  @@index([campaignId])
+  @@index([sceneId])
+  @@index([characterId])
+}
+
+model TurnOrder {
+  id         String   @id @default(cuid())
+  sceneId    String   @unique
+
+  // JSON array of {characterId, initiative, hasActed}
+  order      Json     // [{characterId: "...", initiative: 12, hasActed: false}]
+
+  currentTurn Int     @default(0) // Index in the order array
+  roundNumber Int     @default(1)
+  isActive    Boolean @default(false)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  scene      Scene      @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  characters Character[]
+
+  @@index([sceneId])
 }

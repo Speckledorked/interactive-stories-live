@@ -24,8 +24,8 @@ interface ExtendedNote extends PlayerNote {
   scene?: { id: string; description: string; };
 }
 
-export default function NotesPanel({
-  campaignId,
+export default function NotesPanel({ 
+  campaignId, 
   currentUserId,
   characters,
   npcs,
@@ -37,7 +37,7 @@ export default function NotesPanel({
   const [editingNote, setEditingNote] = useState<ExtendedNote | null>(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<{ visibility?: string; entityType?: string; }>({});
-
+  
   // Form state
   const [formData, setFormData] = useState({
     title: '',
@@ -97,9 +97,9 @@ export default function NotesPanel({
       title: note.title,
       content: note.content,
       visibility: note.visibility as NoteVisibility,
-      entityType: note.characterId ? 'character' :
-                  note.npcId ? 'npc' :
-                  note.factionId ? 'faction' :
+      entityType: note.characterId ? 'character' : 
+                  note.npcId ? 'npc' : 
+                  note.factionId ? 'faction' : 
                   note.sceneId ? 'scene' : '',
       entityId: note.characterId || note.npcId || note.factionId || note.sceneId || '',
     });
@@ -114,7 +114,7 @@ export default function NotesPanel({
     }
 
     setLoading(true);
-
+    
     try {
       const token = localStorage.getItem('token');
       const payload = {
@@ -126,10 +126,10 @@ export default function NotesPanel({
         })
       };
 
-      const url = editingNote
+      const url = editingNote 
         ? `/api/campaigns/${campaignId}/notes/${editingNote.id}`
         : `/api/campaigns/${campaignId}/notes`;
-
+      
       const method = editingNote ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -235,7 +235,7 @@ export default function NotesPanel({
             <option value="PRIVATE">Private Only</option>
             <option value="SHARED">Shared Only</option>
           </select>
-
+          
           <select
             value={filter.entityType || ''}
             onChange={(e) => setFilter(prev => ({ ...prev, entityType: e.target.value || undefined }))}
@@ -264,7 +264,7 @@ export default function NotesPanel({
                 required
               />
             </div>
-
+            
             <div>
               <textarea
                 value={formData.content}
@@ -346,9 +346,9 @@ export default function NotesPanel({
                   <div>
                     <h4 className="font-medium text-gray-900">{note.title}</h4>
                     <p className="text-xs text-gray-500">
-                      {getEntityDisplay(note)} •
-                      {note.visibility === 'PRIVATE' ? ' Private' : ' Shared'} •
-                      by {note.author.name || note.author.email} •
+                      {getEntityDisplay(note)} • 
+                      {note.visibility === 'PRIVATE' ? ' Private' : ' Shared'} • 
+                      by {note.author.name || note.author.email} • 
                       {new Date(note.updatedAt).toLocaleDateString()}
                     </p>
                   </div>

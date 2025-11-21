@@ -13,13 +13,13 @@ export async function GET(request: NextRequest) {
     }
 
     let settings = await prisma.userNotificationSettings.findUnique({
-      where: { userId: user.userId }
+      where: { userId: user.id }
     });
 
     // Create default settings if none exist
     if (!settings) {
       settings = await prisma.userNotificationSettings.create({
-        data: { userId: user.userId }
+        data: { userId: user.id }
       });
     }
 
@@ -40,7 +40,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-
+    
     // Validate settings
     const allowedFields = [
       'emailEnabled', 'emailTurnReminders', 'emailSceneChanges', 'emailMentions',
@@ -77,10 +77,10 @@ export async function PUT(request: NextRequest) {
 
     // Update or create settings
     const settings = await prisma.userNotificationSettings.upsert({
-      where: { userId: user.userId },
+      where: { userId: user.id },
       update: updateData,
       create: {
-        userId: user.userId,
+        userId: user.id,
         ...updateData
       }
     });

@@ -226,7 +226,7 @@ export class SoundService {
       const response = await fetch(sound.file);
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await this.audioContext!.decodeAudioData(arrayBuffer);
-
+      
       this.audioBuffers.set(soundId, audioBuffer);
       return audioBuffer;
     } catch (error) {
@@ -312,7 +312,7 @@ export class SoundService {
   // Set master volume
   static setMasterVolume(volume: number): void {
     this.masterVolume = Math.max(0, Math.min(1, volume));
-
+    
     // Apply to currently playing sounds
     for (const [soundId, source] of this.currentSounds) {
       // Note: This won't affect already playing sounds
@@ -343,7 +343,7 @@ export class SoundService {
     const promises = soundIds.map(id => this.loadSound(id).catch(err => {
       console.warn(`Failed to preload sound ${id}:`, err);
     }));
-
+    
     await Promise.allSettled(promises);
   }
 
@@ -377,8 +377,8 @@ export class SoundService {
 
     const soundId = soundMap[momentType];
     if (soundId) {
-      await this.playSound({
-        soundId,
+      await this.playSound({ 
+        soundId, 
         volume: intensity,
         fade: true
       });
@@ -403,8 +403,8 @@ export class SoundService {
 
     const soundId = ambientMap[sceneType.toLowerCase()];
     if (soundId) {
-      await this.playSound({
-        soundId,
+      await this.playSound({ 
+        soundId, 
         volume: 0.3,
         fade: true,
         loop: true

@@ -58,7 +58,7 @@ export class MentionService {
         const userEmail = m.user.email.toLowerCase();
         const emailUsername = userEmail.split('@')[0].toLowerCase();
 
-        return userName === mentionedUsername ||
+        return userName === mentionedUsername || 
                emailUsername === mentionedUsername ||
                userEmail === mentionedUsername;
       });
@@ -179,7 +179,7 @@ export class MentionService {
       .filter(user => {
         if (!query) return true;
         const searchQuery = query.toLowerCase();
-        return user.username.includes(searchQuery) ||
+        return user.username.includes(searchQuery) || 
                user.displayName.toLowerCase().includes(searchQuery) ||
                user.email.toLowerCase().includes(searchQuery);
       })
@@ -286,16 +286,16 @@ export class MentionService {
 
     const [total, unread, thisWeek] = await Promise.all([
       prisma.notification.count({ where }),
-      prisma.notification.count({
-        where: { ...where, status: 'UNREAD' }
+      prisma.notification.count({ 
+        where: { ...where, status: 'UNREAD' } 
       }),
-      prisma.notification.count({
-        where: {
-          ...where,
-          createdAt: {
-            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-          }
-        }
+      prisma.notification.count({ 
+        where: { 
+          ...where, 
+          createdAt: { 
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) 
+          } 
+        } 
       })
     ]);
 
@@ -328,7 +328,7 @@ export class MentionService {
   // Replace mentions with display names
   static async replaceMentionsWithDisplayNames(content: string, campaignId: string): Promise<string> {
     const mentionResult = await this.parseMentions(content, campaignId);
-
+    
     let processedContent = content;
     for (const mention of mentionResult.mentions) {
       const mentionPattern = new RegExp(`@${mention.username}\\b`, 'gi');

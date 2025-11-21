@@ -23,7 +23,7 @@ export async function GET(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.userId,
+        userId: user.id,
         campaignId: params.id,
       },
     });
@@ -37,7 +37,7 @@ export async function GET(
       campaignId: params.id,
       OR: [
         // Own private notes
-        { authorId: user.userId, visibility: 'PRIVATE' },
+        { authorId: user.id, visibility: 'PRIVATE' },
         // Shared notes
         { visibility: 'SHARED' },
         // GM notes (in AI-only system, these would be system-generated)
@@ -85,7 +85,7 @@ export async function GET(
           select: { id: true, name: true }
         },
         scene: {
-          select: { id: true, sceneIntroText: true }
+          select: { id: true, description: true }
         }
       },
       orderBy: { updatedAt: 'desc' },
@@ -111,14 +111,14 @@ export async function POST(
     }
 
     const body = await request.json();
-    const {
-      title,
-      content,
+    const { 
+      title, 
+      content, 
       visibility = 'PRIVATE',
       characterId,
       npcId,
       factionId,
-      sceneId
+      sceneId 
     } = body;
 
     // Validate required fields
@@ -133,7 +133,7 @@ export async function POST(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.userId,
+        userId: user.id,
         campaignId: params.id,
       },
     });
@@ -185,7 +185,7 @@ export async function POST(
         title: title.trim(),
         content: content.trim(),
         visibility,
-        authorId: user.userId,
+        authorId: user.id,
         campaignId: params.id,
         characterId: characterId || null,
         npcId: npcId || null,
@@ -206,7 +206,7 @@ export async function POST(
           select: { id: true, name: true }
         },
         scene: {
-          select: { id: true, sceneIntroText: true }
+          select: { id: true, description: true }
         }
       },
     });

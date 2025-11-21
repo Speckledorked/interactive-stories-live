@@ -28,11 +28,11 @@ interface NotificationPanelProps {
   onClose: () => void;
 }
 
-export default function NotificationPanel({
-  userId,
-  campaignId,
-  isOpen,
-  onClose
+export default function NotificationPanel({ 
+  userId, 
+  campaignId, 
+  isOpen, 
+  onClose 
 }: NotificationPanelProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread' | 'mentions' | 'turns'>('all');
@@ -72,7 +72,7 @@ export default function NotificationPanel({
       if (response.ok) {
         const data = await response.json();
         setNotifications(data.notifications);
-
+        
         // Update unread count
         const unread = data.notifications.filter((n: Notification) => n.status === 'UNREAD').length;
         setUnreadCount(unread);
@@ -118,9 +118,9 @@ export default function NotificationPanel({
       });
 
       // Update local state
-      setNotifications(prev =>
-        prev.map(n =>
-          n.id === notificationId
+      setNotifications(prev => 
+        prev.map(n => 
+          n.id === notificationId 
             ? { ...n, status: 'READ' as const }
             : n
         )
@@ -167,7 +167,7 @@ export default function NotificationPanel({
 
   const markAllAsRead = async () => {
     const unreadNotifications = notifications.filter(n => n.status === 'UNREAD');
-
+    
     for (const notification of unreadNotifications) {
       await markAsRead(notification.id);
     }
@@ -218,7 +218,7 @@ export default function NotificationPanel({
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
       <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose} />
-
+      
       <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">

@@ -24,11 +24,11 @@ export async function GET(request: NextRequest) {
     if (status) options.status = status;
     if (campaignId) options.campaignId = campaignId;
 
-    const notifications = await NotificationService.getNotifications(user.userId, options);
+    const notifications = await NotificationService.getNotifications(user.id, options);
 
     // Filter by type if specified
-    const filteredNotifications = type ?
-      notifications.filter(n => n.type === type) :
+    const filteredNotifications = type ? 
+      notifications.filter(n => n.type === type) : 
       notifications;
 
     return NextResponse.json({
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       type: type || 'TURN_REMINDER',
       title: title || 'Test Notification',
       message: message || 'This is a test notification.',
-      userId: user.userId,
+      userId: user.id,
       campaignId,
       priority: priority || 'NORMAL',
       triggerSound
@@ -88,7 +88,7 @@ export async function DELETE(request: NextRequest) {
     const campaignId = searchParams.get('campaignId');
 
     const where: any = {
-      userId: user.userId,
+      userId: user.id,
       status: { in: ['READ', 'DISMISSED'] } // Only delete read/dismissed notifications
     };
 
@@ -98,8 +98,8 @@ export async function DELETE(request: NextRequest) {
 
     const deleted = await prisma.notification.deleteMany({ where });
 
-    return NextResponse.json({
-      message: `Deleted ${deleted.count} notifications`
+    return NextResponse.json({ 
+      message: `Deleted ${deleted.count} notifications` 
     });
 
   } catch (error) {

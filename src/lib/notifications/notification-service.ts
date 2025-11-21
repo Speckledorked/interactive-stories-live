@@ -33,7 +33,7 @@ interface NotificationPreferences {
 }
 
 export class NotificationService {
-
+  
   // Create and send notification
   static async createNotification(params: CreateNotificationParams) {
     const {
@@ -52,7 +52,7 @@ export class NotificationService {
 
     // Get user preferences
     const preferences = await this.getUserPreferences(userId);
-
+    
     // Check quiet hours
     if (this.isQuietHours(preferences.quietHours)) {
       // During quiet hours, only send URGENT notifications
@@ -125,7 +125,7 @@ export class NotificationService {
       await prisma.userNotificationSettings.create({
         data: { userId }
       });
-
+      
       return {
         emailEnabled: true,
         pushEnabled: true,
@@ -151,7 +151,7 @@ export class NotificationService {
     if (!quietHours?.enabled) return false;
 
     const now = new Date();
-    const currentTime = now.toLocaleTimeString('en-US', {
+    const currentTime = now.toLocaleTimeString('en-US', { 
       hour12: false,
       hour: '2-digit',
       minute: '2-digit',
@@ -165,7 +165,7 @@ export class NotificationService {
     if (start > end) {
       return currentTime >= start || currentTime <= end;
     }
-
+    
     return currentTime >= start && currentTime <= end;
   }
 
@@ -244,7 +244,7 @@ export class NotificationService {
 
   // Send sound notification
   private static async sendSoundNotification(
-    notification: any,
+    notification: any, 
     preferences: NotificationPreferences,
     triggerSound?: string
   ) {
@@ -272,7 +272,7 @@ export class NotificationService {
   // Send real-time notification
   private static async sendRealtimeNotification(notification: any) {
     const { triggerNotificationUpdate } = await import('../realtime/pusher-server');
-
+    
     try {
       await triggerNotificationUpdate(notification.userId, {
         id: notification.id,
@@ -293,26 +293,26 @@ export class NotificationService {
   // Build email content
   private static buildEmailContent(notification: any): string {
     const campaignName = notification.campaign?.title || 'Your Campaign';
-
+    
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2563eb;">${notification.title}</h2>
         <p style="font-size: 16px; line-height: 1.6;">${notification.message}</p>
-
+        
         ${notification.campaign ? `<p><strong>Campaign:</strong> ${campaignName}</p>` : ''}
-
+        
         ${notification.actionUrl ? `
           <div style="margin: 20px 0;">
-            <a href="${notification.actionUrl}"
+            <a href="${notification.actionUrl}" 
                style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
               View in Game
             </a>
           </div>
         ` : ''}
-
+        
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #e5e7eb;">
         <p style="font-size: 12px; color: #6b7280;">
-          This notification was sent from your AI Game Master application.
+          This notification was sent from your AI Game Master application. 
           <a href="/settings/notifications">Update notification preferences</a>
         </p>
       </div>
@@ -379,7 +379,7 @@ export class NotificationService {
           select: { id: true, title: true }
         },
         scene: {
-          select: { id: true, sceneIntroText: true }
+          select: { id: true, description: true }
         }
       },
       orderBy: { createdAt: 'desc' },

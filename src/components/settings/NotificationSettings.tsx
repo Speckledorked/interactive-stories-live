@@ -102,7 +102,7 @@ export default function NotificationSettings() {
 
   const handleToggle = (field: keyof NotificationSettings) => {
     if (!settings) return;
-
+    
     const newValue = !settings[field];
     setSettings(prev => prev ? { ...prev, [field]: newValue } : null);
     updateSettings({ [field]: newValue });
@@ -115,7 +115,7 @@ export default function NotificationSettings() {
 
   const testSound = async (soundId: string) => {
     setTestingSounds(soundId);
-
+    
     try {
       // Import sound service dynamically
       const { SoundService } = await import('@/lib/notifications/sound-service');
@@ -158,15 +158,15 @@ export default function NotificationSettings() {
     );
   }
 
-  const ToggleSwitch = ({
-    enabled,
-    onChange,
-    label,
-    description
-  }: {
-    enabled: boolean;
-    onChange: () => void;
-    label: string;
+  const ToggleSwitch = ({ 
+    enabled, 
+    onChange, 
+    label, 
+    description 
+  }: { 
+    enabled: boolean; 
+    onChange: () => void; 
+    label: string; 
     description?: string;
   }) => (
     <div className="flex items-center justify-between py-2">
@@ -201,7 +201,7 @@ export default function NotificationSettings() {
       {/* Email Notifications */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">📧 Email Notifications</h2>
-
+        
         <ToggleSwitch
           enabled={settings.emailEnabled}
           onChange={() => handleToggle('emailEnabled')}
@@ -254,7 +254,7 @@ export default function NotificationSettings() {
       {/* Push Notifications */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">🔔 Browser Notifications</h2>
-
+        
         <ToggleSwitch
           enabled={settings.pushEnabled}
           onChange={() => settings.pushEnabled ? handleToggle('pushEnabled') : requestNotificationPermission()}
@@ -296,7 +296,7 @@ export default function NotificationSettings() {
       {/* Sound Notifications */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">🔊 Sound Effects</h2>
-
+        
         <ToggleSwitch
           enabled={settings.soundEnabled}
           onChange={() => handleToggle('soundEnabled')}
@@ -392,14 +392,14 @@ export default function NotificationSettings() {
               onChange={() => handleToggle('soundWhispers')}
               label="Private Messages"
             />
-
+            
             <ToggleSwitch
               enabled={settings.soundCriticalMoments}
               onChange={() => handleToggle('soundCriticalMoments')}
               label="Critical Moments"
               description="Dramatic events like critical hits, character deaths"
             />
-
+            
             <ToggleSwitch
               enabled={settings.soundWorldEvents}
               onChange={() => handleToggle('soundWorldEvents')}
@@ -413,7 +413,7 @@ export default function NotificationSettings() {
       {/* Quiet Hours */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">🌙 Quiet Hours</h2>
-
+        
         <ToggleSwitch
           enabled={settings.quietHoursEnabled}
           onChange={() => handleToggle('quietHoursEnabled')}
@@ -452,14 +452,14 @@ export default function NotificationSettings() {
       {/* Digest Preferences */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 Digest Emails</h2>
-
+        
         <ToggleSwitch
           enabled={settings.dailyDigestEnabled}
           onChange={() => handleToggle('dailyDigestEnabled')}
           label="Daily Digest"
           description="Summary of activity sent daily"
         />
-
+        
         <ToggleSwitch
           enabled={settings.weeklyDigestEnabled}
           onChange={() => handleToggle('weeklyDigestEnabled')}

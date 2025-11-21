@@ -3,7 +3,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
-import { triggerNewMessage } from '@/lib/realtime/pusher-server';
 
 // GET /api/campaigns/[id]/messages - Get messages for campaign
 export async function GET(
@@ -25,7 +24,7 @@ export async function GET(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.userId,
+        userId: user.id,
         campaignId: params.id,
       },
     });
@@ -41,9 +40,9 @@ export async function GET(
         // Public messages (not whispers)
         { targetUserId: null },
         // Whispers to this user
-        { targetUserId: user.userId },
+        { targetUserId: user.id },
         // Whispers from this user
-        { authorId: user.userId }
+        { authorId: user.id }
       ]
     };
 
@@ -110,7 +109,7 @@ export async function POST(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.userId,
+        userId: user.id,
         campaignId: params.id,
       },
     });
@@ -138,7 +137,7 @@ export async function POST(
       const character = await prisma.character.findFirst({
         where: {
           id: characterId,
-          userId: user.userId,
+          userId: user.id,
           campaignId: params.id,
         },
       });
@@ -153,7 +152,7 @@ export async function POST(
       data: {
         content: content.trim(),
         type,
-        authorId: user.userId,
+        authorId: user.id,
         campaignId: params.id,
         sceneId: sceneId || null,
         targetUserId: type === 'WHISPER' ? targetUserId : null,
@@ -171,9 +170,6 @@ export async function POST(
         }
       },
     });
-
-    // Trigger real-time event
-    await triggerNewMessage(message as any);
 
     return NextResponse.json(message);
 

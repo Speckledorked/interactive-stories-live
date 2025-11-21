@@ -26,7 +26,7 @@ export async function GET(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.userId,
+        userId: user.id,
         campaignId: params.id,
       },
     });
@@ -36,7 +36,7 @@ export async function GET(
     }
 
     const turnInfo = await TurnTracker.getCurrentTurn(params.id, sceneId);
-
+    
     return NextResponse.json({ turnInfo });
 
   } catch (error) {
@@ -70,7 +70,7 @@ export async function POST(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.userId,
+        userId: user.id,
         campaignId: params.id,
       },
     });
@@ -87,15 +87,15 @@ export async function POST(
           return NextResponse.json({ error: 'Participants required for initialization' }, { status: 400 });
         }
         result = await TurnTracker.initializeScene(
-          params.id,
-          sceneId,
+          params.id, 
+          sceneId, 
           participants,
           turnTimeoutMinutes || 60
         );
         break;
 
       case 'advance':
-        result = await TurnTracker.advanceTurn(params.id, sceneId, user.userId);
+        result = await TurnTracker.advanceTurn(params.id, sceneId, user.id);
         break;
 
       case 'skip':
@@ -107,14 +107,14 @@ export async function POST(
         break;
     }
 
-    return NextResponse.json({
+    return NextResponse.json({ 
       message: `Turn ${action}d successfully`,
-      result
+      result 
     });
 
   } catch (error) {
     console.error('Error managing turn:', error);
-
+    
     // Handle specific errors
     if (error instanceof Error) {
       if (error.message === 'Not your turn') {
@@ -150,7 +150,7 @@ export async function DELETE(
     // Verify user is admin of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.userId,
+        userId: user.id,
         campaignId: params.id,
         role: 'ADMIN'
       },

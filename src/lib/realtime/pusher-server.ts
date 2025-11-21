@@ -21,12 +21,12 @@ function getPusherServer(): Pusher {
 // Trigger new message to campaign channel
 export async function triggerNewMessage(message: RealtimeMessage) {
   const pusher = getPusherServer();
-
+  
   // Send to campaign channel (for public messages)
   if (!message.targetUserId) {
     await pusher.trigger(`campaign-${message.campaignId}`, 'new-message', message);
   }
-
+  
   // Send to whisper recipient (for private messages)
   if (message.type === 'WHISPER' && message.targetUserId) {
     await pusher.trigger(`user-${message.targetUserId}`, 'new-whisper', message);
@@ -38,7 +38,7 @@ export async function triggerNewMessage(message: RealtimeMessage) {
 // Trigger note updates to campaign channel
 export async function triggerNoteUpdate(noteUpdate: RealtimeNoteUpdate) {
   const pusher = getPusherServer();
-
+  
   // Only trigger for shared notes or GM notes
   if (noteUpdate.visibility === 'SHARED' || noteUpdate.visibility === 'GM') {
     await pusher.trigger(`campaign-${noteUpdate.campaignId}`, 'note-update', noteUpdate);
@@ -48,7 +48,7 @@ export async function triggerNoteUpdate(noteUpdate: RealtimeNoteUpdate) {
 // Trigger user typing indicator
 export async function triggerUserTyping(campaignId: string, userId: string, userName: string, isTyping: boolean) {
   const pusher = getPusherServer();
-
+  
   await pusher.trigger(`campaign-${campaignId}`, 'user-typing', {
     userId,
     userName,
@@ -60,33 +60,8 @@ export async function triggerUserTyping(campaignId: string, userId: string, user
 // Trigger scene updates (for context in chat)
 export async function triggerSceneUpdate(campaignId: string, sceneData: any) {
   const pusher = getPusherServer();
-
+  
   await pusher.trigger(`campaign-${campaignId}`, 'scene-update', sceneData);
-}
-
-// Trigger notification update to user
-export async function triggerNotificationUpdate(userId: string, notification: any) {
-  const pusher = getPusherServer();
-
-  await pusher.trigger(`user-${userId}`, 'notification-update', notification);
-}
-
-// Trigger push notification event
-export async function triggerPushNotificationEvent(userId: string, event: any) {
-  const pusher = getPusherServer();
-
-  await pusher.trigger(`user-${userId}`, 'push-notification', event);
-}
-
-// Trigger sound notification
-export async function triggerSoundNotification(userId: string, campaignId: string, soundData: any) {
-  const pusher = getPusherServer();
-
-  await pusher.trigger(`user-${userId}`, 'sound-notification', {
-    ...soundData,
-    campaignId,
-    timestamp: new Date().toISOString()
-  });
 }
 
 export default getPusherServer;

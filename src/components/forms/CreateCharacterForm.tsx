@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { authenticatedFetch } from '@/lib/clientAuth'
+import { PBTA_STATS } from '@/lib/pbta-moves'
 
 interface CreateCharacterFormProps {
   campaignId: string
@@ -28,12 +29,11 @@ function CreateCharacterForm({
     goals: '',
     currentLocation: '',
     stats: {
-      strength: 10,
-      dexterity: 10,
-      intelligence: 10,
-      wisdom: 10,
-      charisma: 10,
-      constitution: 10,
+      cool: 0,
+      hard: 0,
+      hot: 0,
+      sharp: 0,
+      weird: 0,
     },
   })
 
@@ -171,23 +171,31 @@ function CreateCharacterForm({
 
       <div>
         <label className="block text-sm font-medium text-gray-200 mb-2">
-          Character Stats
+          Character Stats (PbtA)
         </label>
-        <div className="grid grid-cols-2 gap-4">
+        <p className="text-xs text-gray-400 mb-3">
+          Range: -1 (weak) to +2 (strong). Most stats start at 0.
+        </p>
+        <div className="space-y-3">
           {Object.entries(formData.stats).map(([stat, value]) => (
-            <div key={stat} className="flex items-center space-x-2">
-              <label htmlFor={stat} className="text-sm capitalize w-24 text-gray-300">
-                {stat}:
-              </label>
-              <input
-                type="number"
-                id={stat}
-                min="1"
-                max="20"
-                value={value}
-                onChange={(e) => handleStatChange(stat, parseInt(e.target.value) || 0)}
-                className="w-20 rounded-md bg-gray-800 border-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-              />
+            <div key={stat} className="bg-gray-800 rounded-md p-3 border border-gray-700">
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor={stat} className="text-sm font-medium capitalize text-white">
+                  {stat}
+                </label>
+                <input
+                  type="number"
+                  id={stat}
+                  min="-1"
+                  max="2"
+                  value={value}
+                  onChange={(e) => handleStatChange(stat, parseInt(e.target.value) || 0)}
+                  className="w-16 text-center rounded-md bg-gray-900 border-gray-600 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm font-bold"
+                />
+              </div>
+              <p className="text-xs text-gray-400">
+                {PBTA_STATS[stat as keyof typeof PBTA_STATS]}
+              </p>
             </div>
           ))}
         </div>

@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,10 +7,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//
+// ENUMS — must match your existing code usage
+//
+
+enum SceneStatus {
+  AWAITING_ACTIONS
+  RESOLVING
+  RESOLVED
+}
+
+enum EventVisibility {
+  PUBLIC
+  GM_ONLY
+  MIXED
+}
+
+enum EventType {
+  SCENE
+  DOWNTIME
+  TIMESKIP
+  WORLD_EVENT
+}
+
+enum UserRole {
+  ADMIN
+  PLAYER
+}
+
+//
+// USER & MEMBERSHIP
+//
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
-  password  String?          // <- use password, optional
+  password  String?
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -24,11 +53,28 @@ model User {
   createInvites       CampaignInvite[] @relation("InviteCreator")
 }
 
+model CampaignMembership {
+  id         String   @id @default(cuid())
+  userId     String
+  campaignId String
+  role       UserRole @default(PLAYER)
+  joinedAt   DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, campaignId])
+}
+
+//
+// CAMPAIGN ROOT
+//
+
 model Campaign {
   id               String   @id @default(cuid())
   title            String
   description      String?
-  universe         String? // e.g., "MHA", "Cosmere", "Original"
+  universe         String?
   aiSystemPrompt   String   @db.Text
   initialWorldSeed String   @db.Text
   isActive         Boolean  @default(true)
@@ -46,18 +92,9 @@ model Campaign {
   invites     CampaignInvite[]
 }
 
-model CampaignMembership {
-  id         String   @id @default(cuid())
-  userId     String
-  campaignId String
-  role       String   @default("player") // "admin", "player"
-  joinedAt   DateTime @default(now())
-
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, campaignId])
-}
+//
+// CHARACTERS
+//
 
 model Character {
   id              String   @id @default(cuid())
@@ -66,7 +103,7 @@ model Character {
   name            String
   pronouns        String?
   description     String?
-  stats           Json? // Flexible stats object
+  stats           Json?
   backstory       String?
   goals           String?
   isAlive         Boolean  @default(true)
@@ -83,6 +120,10 @@ model Character {
   @@index([userId])
 }
 
+//
+// NPCs & FACTIONS
+//
+
 model NPC {
   id              String   @id @default(cuid())
   campaignId      String
@@ -91,9 +132,9 @@ model NPC {
   description     String?
   currentLocation String?
   goals           String?
-  relationship    String? // relationship to PCs or world
+  relationship    String?
   isAlive         Boolean  @default(true)
-  importance      Int      @default(1) // 1-5 scale
+  importance      Int      @default(1)
   gmNotes         String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -109,11 +150,11 @@ model Faction {
   name          String
   description   String?
   goals         String?
-  resources     Int      @default(50) // 0-100 scale
-  influence     Int      @default(50) // 0-100 scale
+  resources     Int      @default(50)
+  influence     Int      @default(50)
   currentPlan   String?
-  threatLevel   Int      @default(1) // 1-5 scale
-  relationships Json? // Relations to other factions/PCs
+  threatLevel   Int      @default(1)
+  relationships Json?
   gmNotes       String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -123,37 +164,46 @@ model Faction {
   @@index([campaignId])
 }
 
+//
+// CLOCKS — FULL feature version
+//
+
 model Clock {
-  id          String   @id @default(cuid())
-  campaignId  String
-  name        String
-  description String?
-  segments    Int      @default(4)
-  filled      Int      @default(0)
-  category    String? // "threat", "opportunity", "countdown", etc.
-  isHidden    Boolean  @default(false) // Hidden from players
-  triggersAt  Int? // Auto-trigger when this many segments filled
-  gmNotes     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  campaignId    String
+  name          String
+  description   String?
+  currentTicks  Int      @default(0)     // required by worldTurn + stateUpdater
+  maxTicks      Int      @default(4)     // required by code
+  category      String?
+  isHidden      Boolean  @default(false)
+  consequence   String?                 // triggered result
+  gmNotes       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
 }
 
+//
+// SCENES — FULL feature version
+//
+
 model Scene {
-  id          String   @id @default(cuid())
-  campaignId  String
-  sceneNumber Int
-  title       String?
-  framing     String   @db.Text // AI's scene setup
-  location    String?
-  participants Json? // Array of character/NPC IDs present
-  status      String   @default("active") // "active", "resolved", "paused"
-  resolution  String?  @db.Text // How the scene concluded
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String      @id @default(cuid())
+  campaignId         String
+  sceneNumber        Int
+  title              String?
+  sceneIntroText     String      @db.Text       // required by createNewScene()
+  framing            String?     @db.Text       // optional alternative, preserved
+  location           String?
+  participants       Json?
+  status             SceneStatus @default(AWAITING_ACTIONS)
+  sceneResolutionText String?    @db.Text
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 
   campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   playerActions PlayerAction[]
@@ -162,16 +212,20 @@ model Scene {
   @@index([status])
 }
 
+//
+// PLAYER ACTIONS
+//
+
 model PlayerAction {
   id            String   @id @default(cuid())
   sceneId       String
   characterId   String
   userId        String
   actionText    String   @db.Text
-  intentOutcome String? // What the player hopes to achieve
-  status        String   @default("pending") // "pending", "resolved"
-  resolution    String?  @db.Text // AI's resolution of this action
-  rollResult    Json? // If using dice mechanics
+  intentOutcome String?
+  status        String   @default("pending")
+  resolution    String?  @db.Text
+  rollResult    Json?
   createdAt     DateTime @default(now())
 
   scene     Scene     @relation(fields: [sceneId], references: [id], onDelete: Cascade)
@@ -182,49 +236,65 @@ model PlayerAction {
   @@index([characterId])
 }
 
+//
+// TIMELINE — FULL feature version
+//
+
 model TimelineEvent {
-  id          String   @id @default(cuid())
-  campaignId  String
-  sessionDate DateTime @default(now())
-  title       String
-  summary     String   @db.Text
-  eventType   String? // "scene", "downtime", "timeskip", "world_event"
-  visibility  String   @default("public") // "public", "hidden"
-  gmNotes     String?
-  createdAt   DateTime @default(now())
+  id             String          @id @default(cuid())
+  campaignId     String
+  turnNumber     Int?                              // required by world turn + UI
+  title          String
+  summaryPublic  String?        @db.Text
+  summaryGM      String?        @db.Text
+  isOffscreen    Boolean?       @default(false)
+  eventType      EventType?
+  visibility     EventVisibility @default(PUBLIC)
+  sessionDate    DateTime        @default(now())
+  gmNotes        String?
+  createdAt      DateTime        @default(now())
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
-  @@index([sessionDate])
+  @@index([turnNumber])
 }
 
+//
+// WORLD META — FULL feature version
+//
+
 model WorldMeta {
-  id              String   @id @default(cuid())
-  campaignId      String   @unique
-  currentDate     String? // In-world date/time
-  currentLocation String? // Primary focus location
-  tension         Int      @default(50) // 0-100 overall tension
-  phase           String? // "introduction", "rising_action", "climax", etc.
-  customFlags     Json? // Flexible storage for campaign-specific data
-  gmNotes         String?
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  campaignId       String   @unique
+  currentTurnNumber Int      @default(1)
+  currentInGameDate String?
+  currentLocation   String?
+  tension           Int      @default(50)
+  phase             String?
+  otherMeta         Json?
+  gmNotes           String?
+  updatedAt         DateTime @updatedAt
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 }
 
-model CampaignInvite {
-  id        String   @id @default(cuid())
-  campaignId String
-  token     String   @unique @default(cuid())
-  createdBy String
-  expiresAt DateTime
-  maxUses   Int      @default(0) // 0 = unlimited
-  uses      Int      @default(0)
-  createdAt DateTime @default(now())
+//
+// INVITES
+//
 
-  campaign  Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  createdByUser User @relation("InviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+model CampaignInvite {
+  id         String   @id @default(cuid())
+  campaignId String
+  token      String   @unique @default(cuid())
+  createdBy  String
+  expiresAt  DateTime
+  maxUses    Int      @default(0)
+  uses       Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdByUser  User     @relation("InviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@index([token])
   @@index([campaignId])

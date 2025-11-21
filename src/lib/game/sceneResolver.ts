@@ -12,8 +12,13 @@ import {
   applyOrganicGrowth,
   recordStatUsage,
   validateStats,
+  createAdvancementLog,
+  logStatIncrease,
+  logPerkGained,
+  logMoveLearned,
   type RecentAction,
-  type StatUsage
+  type StatUsage,
+  type AdvancementLog
 } from './advancement'
 
 /**
@@ -337,6 +342,56 @@ async function applyOrganicCharacterGrowth(
     ) {
       const applied = applyOrganicGrowth(character, mergedGrowth)
 
+      // Get or create advancement log
+      let advancementLog: AdvancementLog = (character.advancementLog as any) || createAdvancementLog()
+
+      // Get turn number for logging
+      const worldMeta = await prisma.worldMeta.findUnique({
+        where: { campaignId }
+      })
+      const turnNumber = worldMeta?.currentTurnNumber
+
+      // Log all stat increases
+      const oldStats = (character.stats as Record<string, number>) || {}
+      for (const statIncrease of mergedGrowth.statIncreases) {
+        const oldValue = oldStats[statIncrease.statKey] || 0
+        const newValue = applied.updatedStats[statIncrease.statKey] || 0
+        if (newValue !== oldValue) {
+          advancementLog = logStatIncrease(
+            advancementLog,
+            statIncrease.statKey,
+            oldValue,
+            newValue,
+            statIncrease.reason,
+            turnNumber,
+            sceneId
+          )
+        }
+      }
+
+      // Log all new perks
+      for (const perk of mergedGrowth.newPerks) {
+        advancementLog = logPerkGained(
+          advancementLog,
+          perk.id,
+          perk.name,
+          `Earned through play`,
+          turnNumber,
+          sceneId
+        )
+      }
+
+      // Log all new moves
+      for (const move of mergedGrowth.newMoves) {
+        advancementLog = logMoveLearned(
+          advancementLog,
+          move,
+          `Demonstrated mastery`,
+          turnNumber,
+          sceneId
+        )
+      }
+
       // Update character in database
       await prisma.character.update({
         where: { id: characterId },
@@ -344,7 +399,8 @@ async function applyOrganicCharacterGrowth(
           statUsage: updatedStatUsage,
           stats: applied.updatedStats,
           perks: applied.updatedPerks,
-          moves: applied.updatedMoves
+          moves: applied.updatedMoves,
+          advancementLog: advancementLog
         }
       })
 

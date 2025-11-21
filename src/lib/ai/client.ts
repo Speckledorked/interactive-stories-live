@@ -62,39 +62,41 @@ export interface AIGMRequest {
     characters: Array<{
       id: string
       name: string
-      concept: string
+      description: string | null
       stats: any
-      conditions: any
+      backstory: string | null
+      goals: string | null
       location: string | null
     }>
     npcs: Array<{
       id: string
       name: string
-      role: string
-      tags: any
-      notes: string
-      is_important: boolean
+      description: string | null
+      goals: string | null
+      relationship: string | null
+      importance: number
     }>
     factions: Array<{
       id: string
       name: string
-      goal: string
-      current_plan: string
-      threat_level: string
-      resources: any
+      goals: string | null
+      currentPlan: string | null
+      threatLevel: number
+      resources: number
+      influence: number
     }>
     clocks: Array<{
       id: string
       name: string
       current_ticks: number
       max_ticks: number
-      description: string
-      consequence: string
+      description: string | null
+      consequence: string | null
     }>
     recent_timeline_events: Array<{
       title: string
       summary: string
-      turn_number: number
+      turn_number: number | null
     }>
   }
   current_scene_intro: string
@@ -227,24 +229,27 @@ In-Game Date: ${world_summary.in_game_date}
 
 PLAYER CHARACTERS:
 ${world_summary.characters.map(c => `
-- ${c.name} (${c.concept})
+- ${c.name}${c.description ? ` (${c.description})` : ''}
   Location: ${c.location || 'Unknown'}
-  Conditions: ${JSON.stringify(c.conditions)}
+  Backstory: ${c.backstory || 'Unknown'}
+  Goals: ${c.goals || 'None'}
   Stats: ${JSON.stringify(c.stats)}
 `).join('\n')}
 
 IMPORTANT NPCs:
-${world_summary.npcs.filter(n => n.is_important).map(n => `
-- ${n.name} (${n.role})
-  Tags: ${JSON.stringify(n.tags)}
-  Notes: ${n.notes}
+${world_summary.npcs.filter(n => n.importance >= 3).map(n => `
+- ${n.name}${n.description ? ` (${n.description})` : ''}
+  Relationship: ${n.relationship || 'Unknown'}
+  Goals: ${n.goals || 'Unknown'}
+  Importance: ${n.importance}
 `).join('\n')}
 
 ACTIVE FACTIONS:
 ${world_summary.factions.map(f => `
-- ${f.name} (Threat: ${f.threat_level})
-  Goal: ${f.goal}
-  Current Plan: ${f.current_plan}
+- ${f.name} (Threat: ${f.threatLevel})
+  Goals: ${f.goals || 'Unknown'}
+  Current Plan: ${f.currentPlan || 'Unknown'}
+  Resources: ${f.resources}, Influence: ${f.influence}
 `).join('\n')}
 
 ACTIVE CLOCKS:

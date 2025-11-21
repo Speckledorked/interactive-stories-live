@@ -60,7 +60,7 @@ export async function GET(
           // Admin sees all events; others see only public ones
           where: membership.role === 'ADMIN'
             ? {}
-            : { visibility: 'public' },
+            : { visibility: 'PUBLIC' },
           orderBy: { sessionDate: 'desc' },
           take: 20 // Last 20 events
         },

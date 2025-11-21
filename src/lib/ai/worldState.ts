@@ -26,8 +26,8 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
   ] = await Promise.all([
     prisma.campaign.findUnique({ where: { id: campaignId } }),
     prisma.worldMeta.findUnique({ where: { campaignId } }),
-    prisma.character.findMany({ 
-      where: { campaignId, isActive: true },
+    prisma.character.findMany({
+      where: { campaignId, isAlive: true },
       include: { user: { select: { email: true } } }
     }),
     prisma.nPC.findMany({ where: { campaignId } }),
@@ -52,33 +52,35 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
   // Format everything for the AI
   return {
     turn_number: worldMeta.currentTurnNumber,
-    in_game_date: worldMeta.currentInGameDate,
+    in_game_date: worldMeta.currentInGameDate || 'Day 1',
     
     characters: characters.map(c => ({
       id: c.id,
       name: c.name,
-      concept: c.concept,
+      description: c.description,
       stats: c.stats,
-      conditions: c.conditions,
+      backstory: c.backstory,
+      goals: c.goals,
       location: c.currentLocation
     })),
-    
+
     npcs: npcs.map(n => ({
       id: n.id,
       name: n.name,
-      role: n.role,
-      tags: n.tags,
-      notes: n.notes,
-      is_important: n.isImportant
+      description: n.description,
+      goals: n.goals,
+      relationship: n.relationship,
+      importance: n.importance
     })),
     
     factions: factions.map(f => ({
       id: f.id,
       name: f.name,
-      goal: f.goal,
-      current_plan: f.currentPlan,
-      threat_level: f.threatLevel,
-      resources: f.resources
+      goals: f.goals,
+      currentPlan: f.currentPlan,
+      threatLevel: f.threatLevel,
+      resources: f.resources,
+      influence: f.influence
     })),
     
     clocks: clocks.map(cl => ({
@@ -92,7 +94,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
     
     recent_timeline_events: recentEvents.map(e => ({
       title: e.title,
-      summary: e.summaryPublic,
+      summary: e.summaryPublic || e.summaryGM || 'No summary available',
       turn_number: e.turnNumber
     }))
   }
@@ -124,7 +126,7 @@ export async function buildSceneResolutionRequest(
   const scene = await prisma.scene.findUnique({
     where: { id: sceneId },
     include: {
-      actions: {
+      playerActions: {
         include: {
           character: true,
           user: { select: { email: true } }
@@ -141,14 +143,14 @@ export async function buildSceneResolutionRequest(
   const worldSummary = await buildWorldSummaryForAI(campaignId)
 
   // Format player actions
-  const playerActions = scene.actions.map(action => ({
+  const playerActions = scene.playerActions.map(action => ({
     character_name: action.character.name,
     character_id: action.character.id,
     action_text: action.actionText
   }))
 
   return {
-    campaign_universe: campaign.universe,
+    campaign_universe: campaign.universe || 'Generic Fantasy',
     ai_system_prompt: campaign.aiSystemPrompt,
     world_summary: worldSummary,
     current_scene_intro: scene.sceneIntroText,
@@ -255,9 +257,8 @@ export async function buildFullWorldState(campaignId: string) {
     allClocks, // Including hidden ones
     allEvents  // Including GM-only events
   ] = await Promise.all([
-    prisma.campaign.findUnique({ 
-      where: { id: campaignId },
-      include: { createdBy: { select: { email: true } } }
+    prisma.campaign.findUnique({
+      where: { id: campaignId }
     }),
     prisma.worldMeta.findUnique({ where: { campaignId } }),
     prisma.character.findMany({ 

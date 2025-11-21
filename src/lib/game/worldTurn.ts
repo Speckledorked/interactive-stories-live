@@ -71,36 +71,23 @@ async function advanceClocks(campaignId: string) {
     where: {
       campaignId,
       currentTicks: { lt: prisma.clock.fields.maxTicks } // Not completed
-    },
-    include: {
-      relatedFaction: true
     }
   })
 
   const advancedClocks: any[] = []
 
   for (const clock of clocks) {
-    // Determine advance rate based on faction threat level or clock metadata
+    // Determine advance rate based on clock category or random chance
     let advanceAmount = 0
 
-    if (clock.relatedFaction) {
-      // Advance based on faction threat
-      switch (clock.relatedFaction.threatLevel) {
-        case 'EXTREME':
-          advanceAmount = 2 // Fast-moving threats
-          break
-        case 'HIGH':
-          advanceAmount = 1
-          break
-        case 'MEDIUM':
-          advanceAmount = Math.random() > 0.5 ? 1 : 0 // 50% chance
-          break
-        case 'LOW':
-          advanceAmount = Math.random() > 0.7 ? 1 : 0 // 30% chance
-          break
-      }
+    // Note: Clock-faction relations are not in the current schema
+    // Using a simple random-based advancement instead
+    if (clock.category === 'urgent') {
+      advanceAmount = 1 // Always advance urgent clocks
+    } else if (clock.category === 'slow') {
+      advanceAmount = Math.random() > 0.8 ? 1 : 0 // 20% chance
     } else {
-      // Clocks without factions advance slowly
+      // Default clocks advance at medium rate
       advanceAmount = Math.random() > 0.6 ? 1 : 0 // 40% chance
     }
 
@@ -119,7 +106,7 @@ async function advanceClocks(campaignId: string) {
         name: clock.name,
         oldTicks: clock.currentTicks,
         newTicks,
-        faction: clock.relatedFaction?.name
+        category: clock.category
       })
     }
   }
@@ -152,7 +139,7 @@ async function generateOffscreenEvents(
 
     // Call AI to generate offscreen events
     const aiResult = await callAIForWorldTurn(
-      campaign.universe,
+      campaign.universe || 'Generic Fantasy',
       campaign.aiSystemPrompt,
       worldSummary,
       [...advancedClocks, ...completedClocks]
@@ -229,7 +216,7 @@ async function advanceInGameDate(campaignId: string) {
   }
 
   // Parse current date (assumes format like "Day 1", "Day 2", etc.)
-  const currentDate = worldMeta.currentInGameDate
+  const currentDate = worldMeta.currentInGameDate || 'Day 1'
   const dayMatch = currentDate.match(/Day (\d+)/)
 
   if (dayMatch) {

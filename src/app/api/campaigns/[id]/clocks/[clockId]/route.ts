@@ -27,7 +27,7 @@ export async function PATCH(
       },
     })
 
-    if (!membership || membership.role !== 'admin') {
+    if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Only campaign admins can update clocks' },
         { status: 403 }
@@ -36,18 +36,18 @@ export async function PATCH(
 
     // Update Clock
     const clock = await prisma.clock.update({
-      where: { 
+      where: {
         id: clockId,
         campaignId,
       },
       data: {
         name: body.name,
         description: body.description,
-        segments: body.segments,
-        filled: body.filled,
+        maxTicks: body.maxTicks,
+        currentTicks: body.currentTicks,
         category: body.category,
         isHidden: body.isHidden,
-        triggersAt: body.triggersAt,
+        consequence: body.consequence,
         gmNotes: body.gmNotes,
       },
     })
@@ -60,8 +60,8 @@ export async function PATCH(
         {
           clockId: clock.id,
           name: clock.name,
-          filled: clock.filled,
-          segments: clock.segments,
+          currentTicks: clock.currentTicks,
+          maxTicks: clock.maxTicks,
         }
       )
     }
@@ -99,7 +99,7 @@ export async function POST(
       },
     })
 
-    if (!membership || membership.role !== 'admin') {
+    if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Only campaign admins can modify clocks' },
         { status: 403 }
@@ -121,18 +121,18 @@ export async function POST(
       )
     }
 
-    // Calculate new filled value
-    let newFilled = currentClock.filled
-    if (action === 'tick' && newFilled < currentClock.segments) {
-      newFilled++
-    } else if (action === 'untick' && newFilled > 0) {
-      newFilled--
+    // Calculate new currentTicks value
+    let newCurrentTicks = currentClock.currentTicks
+    if (action === 'tick' && newCurrentTicks < currentClock.maxTicks) {
+      newCurrentTicks++
+    } else if (action === 'untick' && newCurrentTicks > 0) {
+      newCurrentTicks--
     }
 
     // Update clock
     const clock = await prisma.clock.update({
       where: { id: clockId },
-      data: { filled: newFilled },
+      data: { currentTicks: newCurrentTicks },
     })
 
     // Broadcast clock update if not hidden
@@ -143,16 +143,16 @@ export async function POST(
         {
           clockId: clock.id,
           name: clock.name,
-          filled: clock.filled,
-          segments: clock.segments,
+          currentTicks: clock.currentTicks,
+          maxTicks: clock.maxTicks,
           action,
         }
       )
     }
 
-    // Check if clock triggers
-    if (clock.triggersAt && clock.filled >= clock.triggersAt) {
-      console.log(`Clock ${clock.name} triggered!`)
+    // Check if clock is full
+    if (clock.currentTicks >= clock.maxTicks && clock.consequence) {
+      console.log(`Clock ${clock.name} triggered: ${clock.consequence}`)
     }
 
     return NextResponse.json({ clock })

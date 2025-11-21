@@ -4,7 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { AIGMResponse } from '@/lib/ai/client'
-import { EventVisibility, ThreatLevel } from '@prisma/client'
+import { EventVisibility } from '@prisma/client'
 
 /**
  * Apply all world updates from an AI GM response to the database
@@ -96,29 +96,13 @@ export async function applyWorldUpdates(
           if (npc) {
             const updateData: any = {}
 
-            // Append to notes if provided
+            // Append to GM notes if provided
             if (npcChange.changes.notes_append) {
-              updateData.notes = npc.notes + '\n\n' + npcChange.changes.notes_append
+              updateData.gmNotes = (npc.gmNotes || '') + '\n\n' + npcChange.changes.notes_append
             }
 
-            // Add/remove tags
-            if (npcChange.changes.tags_add || npcChange.changes.tags_remove) {
-              const currentTags = Array.isArray(npc.tags) ? npc.tags : []
-              let newTags = [...currentTags]
-
-              if (npcChange.changes.tags_add) {
-                newTags = [...newTags, ...npcChange.changes.tags_add]
-              }
-
-         if (npcChange.changes.tags_remove) {
-  newTags = newTags
-    .filter((t): t is string => typeof t === "string")
-    .filter(t => !npcChange.changes.tags_remove!.includes(t));
-}
-
-
-              updateData.tags = Array.from(new Set(newTags)) // Remove duplicates
-            }
+            // Note: tags_add and tags_remove are not supported in the current schema
+            // NPCs don't have a tags field
 
             if (Object.keys(updateData).length > 0) {
               await tx.nPC.update({
@@ -157,24 +141,8 @@ export async function applyWorldUpdates(
               updateData.currentLocation = pcChange.changes.location
             }
 
-            // Add/remove conditions
-            if (pcChange.changes.conditions_add || pcChange.changes.conditions_remove) {
-              const currentConditions = Array.isArray(character.conditions) 
-                ? character.conditions 
-                : []
-              let newConditions = [...currentConditions]
-
-              if (pcChange.changes.conditions_add) {
-                newConditions = [...newConditions, ...pcChange.changes.conditions_add]
-              }
-
-             if (pcChange.changes.conditions_remove) {
-  newConditions = newConditions
-    .filter((c): c is string => typeof c === "string")
-    .filter(c => !pcChange.changes.conditions_remove!.includes(c));
-}
-              updateData.conditions = newConditions
-            }
+            // Note: conditions_add and conditions_remove are not supported in the current schema
+            // Characters don't have a conditions field in the database
 
             if (Object.keys(updateData).length > 0) {
               await tx.character.update({
@@ -213,7 +181,15 @@ export async function applyWorldUpdates(
             }
 
             if (factionChange.changes.threat_level) {
-              updateData.threatLevel = factionChange.changes.threat_level as ThreatLevel
+              // Map threat level string to number
+              const threatLevelMap: Record<string, number> = {
+                'LOW': 1,
+                'MEDIUM': 2,
+                'HIGH': 3,
+                'EXTREME': 4
+              }
+              const level = factionChange.changes.threat_level.toUpperCase()
+              updateData.threatLevel = threatLevelMap[level] || faction.threatLevel
             }
 
             if (factionChange.changes.resources) {
@@ -298,9 +274,6 @@ export async function checkAndResolveCompletedClocks(
     where: {
       campaignId,
       currentTicks: { gte: prisma.clock.fields.maxTicks }
-    },
-    include: {
-      relatedFaction: true
     }
   })
 

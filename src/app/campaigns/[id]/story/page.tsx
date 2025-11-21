@@ -51,9 +51,9 @@ export default function StoryPage() {
       setCurrentScene(sceneData.scene)
 
       // Get user's characters
-      const userChars = campData.campaign.characters.filter(
+      const userChars = campData.campaign?.characters?.filter(
         (c: any) => c.userId === user?.id
-      )
+      ) || []
       setUserCharacters(userChars)
       if (userChars.length > 0 && !selectedCharacterId) {
         setSelectedCharacterId(userChars[0].id)
@@ -325,13 +325,13 @@ export default function StoryPage() {
                     🎭 Admin Controls
                   </h3>
                   <p className="text-gray-300 text-sm mb-4">
-                    {currentScene.actions.length === 0
+                    {!currentScene.actions || currentScene.actions.length === 0
                       ? 'Waiting for players to submit actions...'
                       : `${currentScene.actions.length} action(s) submitted. Ready to resolve?`}
                   </p>
                   <button
                     onClick={handleResolveScene}
-                    disabled={resolving || currentScene.actions.length === 0}
+                    disabled={resolving || !currentScene.actions || currentScene.actions.length === 0}
                     className="btn-primary disabled:opacity-50"
                   >
                     {resolving ? 'Resolving with AI GM...' : '🤖 Resolve Scene (AI GM)'}
@@ -410,7 +410,7 @@ export default function StoryPage() {
           )}
 
           {/* Active Clocks */}
-          {campaign?.campaign.clocks && campaign.campaign.clocks.length > 0 && (
+          {campaign?.campaign?.clocks && campaign.campaign.clocks.length > 0 && (
             <div className="card">
               <h3 className="text-sm font-bold text-gray-400 mb-3">ACTIVE CLOCKS</h3>
               <div className="space-y-3">
@@ -438,12 +438,12 @@ export default function StoryPage() {
           )}
 
           {/* Recent Timeline */}
-          {campaign?.campaign.timelineEvents &&
-            campaign.campaign.timelineEvents.length > 0 && (
+          {campaign?.campaign?.timeline &&
+            campaign.campaign.timeline.length > 0 && (
               <div className="card">
                 <h3 className="text-sm font-bold text-gray-400 mb-3">RECENT EVENTS</h3>
                 <div className="space-y-2">
-                  {campaign.campaign.timelineEvents.slice(0, 5).map((event: any) => (
+                  {campaign.campaign.timeline.slice(0, 5).map((event: any) => (
                     <div key={event.id} className="text-sm">
                       <p className="font-medium text-white">{event.title}</p>
                       <p className="text-xs text-gray-500">Turn {event.turnNumber}</p>

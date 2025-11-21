@@ -1,0 +1,134 @@
+// Add these new models to your existing schema.prisma file
+
+// ============================================
+// COMMUNICATION MODELS (Phase 8)
+// ============================================
+
+enum MessageType {
+  IN_CHARACTER  // IC chat
+  OUT_OF_CHARACTER  // OOC chat
+  WHISPER      // Private message
+  SYSTEM       // Automated messages
+}
+
+enum NoteVisibility {
+  PRIVATE      // Only visible to creator
+  GM           // Visible to GM (not implemented in AI-only)
+  SHARED       // Visible to all campaign members
+}
+
+model Message {
+  id         String      @id @default(cuid())
+  content    String      @db.Text
+  type       MessageType @default(OUT_OF_CHARACTER)
+  authorId   String
+  campaignId String
+  sceneId    String?     // Optional: associate with specific scene
+  
+  // For whisper/private messages
+  targetUserId String?   // If set, this is a private message to this user
+  
+  // Character context (for IC messages)
+  characterId String?    // Which character is speaking (for IC)
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relationships
+  author     User      @relation("UserMessages", fields: [authorId], references: [id], onDelete: Cascade)
+  targetUser User?     @relation("UserWhispers", fields: [targetUserId], references: [id], onDelete: Cascade)
+  campaign   Campaign  @relation("CampaignMessages", fields: [campaignId], references: [id], onDelete: Cascade)
+  scene      Scene?    @relation("SceneMessages", fields: [sceneId], references: [id], onDelete: Cascade)
+  character  Character? @relation("CharacterMessages", fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, createdAt])
+  @@index([campaignId, sceneId])
+  @@map("messages")
+}
+
+model PlayerNote {
+  id          String         @id @default(cuid())
+  title       String
+  content     String         @db.Text
+  visibility  NoteVisibility @default(PRIVATE)
+  authorId    String
+  campaignId  String
+  
+  // Optional associations
+  characterId String?        // Note about a specific character
+  npcId       String?        // Note about an NPC
+  factionId   String?        // Note about a faction
+  sceneId     String?        // Note about a scene
+  
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Relationships
+  author    User       @relation("UserNotes", fields: [authorId], references: [id], onDelete: Cascade)
+  campaign  Campaign   @relation("CampaignNotes", fields: [campaignId], references: [id], onDelete: Cascade)
+  character Character? @relation("CharacterNotes", fields: [characterId], references: [id], onDelete: Cascade)
+  npc       NPC?       @relation("NPCNotes", fields: [npcId], references: [id], onDelete: Cascade)
+  faction   Faction?   @relation("FactionNotes", fields: [factionId], references: [id], onDelete: Cascade)
+  scene     Scene?     @relation("SceneNotes", fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, authorId])
+  @@index([campaignId, visibility])
+  @@map("player_notes")
+}
+
+// ============================================
+// UPDATE EXISTING MODELS (add these relationships)
+// ============================================
+
+// Add these to your existing User model:
+model User {
+  // ... existing fields ...
+  
+  // New communication relationships
+  sentMessages     Message[]     @relation("UserMessages")
+  receivedWhispers Message[]     @relation("UserWhispers")
+  notes           PlayerNote[]  @relation("UserNotes")
+}
+
+// Add these to your existing Campaign model:
+model Campaign {
+  // ... existing fields ...
+  
+  // New communication relationships
+  messages Message[]     @relation("CampaignMessages")
+  notes    PlayerNote[] @relation("CampaignNotes")
+}
+
+// Add these to your existing Scene model:
+model Scene {
+  // ... existing fields ...
+  
+  // New communication relationships
+  messages Message[] @relation("SceneMessages")
+  notes    PlayerNote[] @relation("SceneNotes")
+}
+
+// Add these to your existing Character model:
+model Character {
+  // ... existing fields ...
+  
+  // New communication relationships
+  messages Message[]     @relation("CharacterMessages")
+  notes    PlayerNote[] @relation("CharacterNotes")
+}
+
+// Add these to your existing NPC model:
+model NPC {
+  // ... existing fields ...
+  
+  // New communication relationships
+  notes PlayerNote[] @relation("NPCNotes")
+}
+
+// Add these to your existing Faction model:
+model Faction {
+  // ... existing fields ...
+  
+  // New communication relationships
+  notes PlayerNote[] @relation("FactionNotes")
+}

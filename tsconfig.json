@@ -23,5 +23,11 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "phase8-communication",
+    "phase9-notifications",
+    "phase10-5-ai-visual",
+    "phase11-dynamic-redesigned"
+  ]
 }

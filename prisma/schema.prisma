@@ -685,3 +685,211 @@ model TurnTracker {
   @@unique([campaignId, sceneId])
   @@map("turn_trackers")
 }
+
+//
+// PHASE 10.5: AI VISUAL GENERATION MODELS
+//
+
+model Map {
+  id          String   @id @default(cuid())
+  campaignId  String
+  sceneId     String?
+  name        String
+  description String?  @db.Text
+  width       Int      @default(800)
+  height      Int      @default(600)
+  gridSize    Int      @default(40)
+  background  String?  // Color or image URL
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  zones  Zone[]
+  tokens Token[]
+
+  @@index([campaignId])
+  @@index([sceneId])
+  @@map("maps")
+}
+
+model Zone {
+  id          String  @id @default(cuid())
+  mapId       String
+  name        String
+  description String? @db.Text
+  x           Int
+  y           Int
+  width       Int
+  height      Int
+  color       String? @default("#3b82f6")
+  isActive    Boolean @default(true)
+  metadata    Json?   // For additional properties
+
+  map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
+
+  @@index([mapId])
+  @@map("zones")
+}
+
+model Token {
+  id        String  @id @default(cuid())
+  mapId     String
+  name      String
+  x         Int
+  y         Int
+  color     String  @default("#ef4444")
+  size      Int     @default(30)
+  isPlayer  Boolean @default(false)
+  isVisible Boolean @default(true)
+  metadata  Json?   // For character ID, NPC ID, etc.
+
+  map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
+
+  @@index([mapId])
+  @@map("tokens")
+}
+
+model CampaignImage {
+  id         String   @id @default(cuid())
+  campaignId String
+  url        String
+  prompt     String?  @db.Text
+  tags       String[]
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([campaignId])
+  @@map("campaign_images")
+}
+
+//
+// PHASE 11: SESSION & DOWNTIME MODELS
+//
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ActivityStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Session {
+  id          String        @id @default(cuid())
+  campaignId  String
+  name        String
+  description String?       @db.Text
+  status      SessionStatus @default(SCHEDULED)
+  startTime   DateTime?
+  endTime     DateTime?
+  objectives  String[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  participants SessionParticipant[]
+  scenes       SessionScene[]
+  notes        SessionNote[]
+
+  @@index([campaignId])
+  @@index([status])
+  @@map("sessions")
+}
+
+model SessionParticipant {
+  id            String   @id @default(cuid())
+  sessionId     String
+  characterId   String
+  userId        String
+  joinedAt      DateTime @default(now())
+  leftAt        DateTime?
+  wasPresent    Boolean  @default(true)
+  notes         String?  @db.Text
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, characterId])
+  @@index([sessionId])
+  @@map("session_participants")
+}
+
+model SessionScene {
+  id          String   @id @default(cuid())
+  sessionId   String
+  sceneId     String
+  orderIndex  Int
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  notes       String?  @db.Text
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("session_scenes")
+}
+
+model SessionNote {
+  id        String   @id @default(cuid())
+  sessionId String
+  authorId  String
+  content   String   @db.Text
+  noteType  String   @default("general") // general, highlight, decision, npc
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("session_notes")
+}
+
+model DowntimeActivity {
+  id              String         @id @default(cuid())
+  characterId     String
+  description     String         @db.Text // Natural language description
+  summary         String         @db.Text // AI-generated summary
+  status          ActivityStatus @default(ACTIVE)
+
+  // AI-determined properties
+  estimatedDays   Int
+  currentDay      Int            @default(0)
+  costs           Json?          // {gold: 100, resources: [...]}
+  requirements    String[]       // Prerequisites
+  skillsInvolved  String[]       // Skills being used
+  riskLevel       String?        // low, medium, high
+
+  outcomes        Json?          // Potential outcomes
+  finalOutcome    String?        @db.Text
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  completedAt     DateTime?
+
+  events DowntimeEvent[]
+
+  @@index([characterId])
+  @@index([status])
+  @@map("downtime_activities")
+}
+
+model DowntimeEvent {
+  id         String   @id @default(cuid())
+  activityId String
+  dayNumber  Int
+  eventText  String   @db.Text // AI-generated event
+  choices    Json?    // Available choices
+  response   String?  @db.Text // Player response
+  outcome    String?  @db.Text // Result of response
+  createdAt  DateTime @default(now())
+  respondedAt DateTime?
+
+  activity DowntimeActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@index([activityId])
+  @@map("downtime_events")
+}

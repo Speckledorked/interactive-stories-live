@@ -155,8 +155,8 @@ export async function createNewScene(campaignId: string, characterIds?: string[]
   const nextSceneNumber = (lastScene?.sceneNumber || 0) + 1
 
   // Prepare participants data
-  let participants = null
-  let waitingOnUsers = null
+  let participants: any = null
+  let waitingOnUsers: any = null
 
   if (characterIds && characterIds.length > 0) {
     // Get user IDs for the characters
@@ -189,8 +189,8 @@ export async function createNewScene(campaignId: string, characterIds?: string[]
       sceneNumber: nextSceneNumber,
       sceneIntroText: sceneIntro,
       status: 'AWAITING_ACTIONS' as SceneStatus,
-      participants,
-      waitingOnUsers
+      participants: participants as any,
+      waitingOnUsers: waitingOnUsers as any
     }
   })
 

@@ -19,7 +19,16 @@ export async function GET(request: NextRequest) {
         userId: user.userId
       },
       include: {
-        campaign: true
+        campaign: {
+          include: {
+            _count: {
+              select: {
+                characters: true,
+                scenes: true
+              }
+            }
+          }
+        }
       },
       orderBy: {
         joinedAt: 'desc'
@@ -29,7 +38,7 @@ export async function GET(request: NextRequest) {
     // Map to campaigns with role info
     const campaigns = memberships.map((m) => ({
       ...m.campaign,
-      role: m.role
+      userRole: m.role
     }))
 
     return NextResponse.json({ campaigns })

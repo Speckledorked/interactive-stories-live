@@ -1,0 +1,34 @@
+# PHASE 10.5 ENVIRONMENT VARIABLES
+# Add these to your .env.local file (in addition to Phase 10 variables)
+
+# AI Visual Generation
+AI_VISUAL_ENABLED=true              # Enable/disable AI visual generation
+AI_VISUAL_MODEL=gpt-4               # OpenAI model for visual analysis
+AI_VISUAL_TEMPERATURE=0.3           # Temperature for visual generation (0-1)
+AI_VISUAL_MAX_TOKENS=800            # Max tokens for visual analysis
+
+# Automatic Map Generation
+AUTO_MAP_GENERATION=true            # Auto-generate maps from scene descriptions
+AUTO_TOKEN_PLACEMENT=true           # Auto-place character/NPC tokens
+AUTO_ZONE_CREATION=true             # Auto-create interactive zones
+MAP_TRANSITION_DETECTION=true       # Auto-detect when new maps are needed
+
+# AI Image Generation (optional - for future AI art integration)
+# AI_IMAGE_PROVIDER=openai           # Options: openai, dall-e, midjourney, stable-diffusion
+# AI_IMAGE_API_KEY=your_key          # API key for image generation service
+# AI_IMAGE_QUALITY=standard          # Image quality: standard, hd
+# AI_IMAGE_STYLE=natural             # Image style: natural, vivid, artistic
+
+# Background Image Library
+DEFAULT_BACKGROUNDS_ENABLED=true    # Use default background templates
+CUSTOM_BACKGROUNDS_PATH=backgrounds # Custom background images folder
+ATMOSPHERE_SOUND_MAPPING=true       # Auto-play sounds based on atmosphere
+
+# Performance Settings
+VISUAL_UPDATE_DEBOUNCE=1000         # Milliseconds to debounce visual updates
+MAX_CONCURRENT_VISUALS=3            # Max simultaneous visual generation requests
+VISUAL_CACHE_DURATION=3600          # Cache visual analysis for N seconds
+
+# Debug Settings (development only)
+AI_VISUAL_DEBUG=false               # Enable debug logging for AI visual generation
+VISUAL_FALLBACK_MODE=true           # Use fallback analysis if OpenAI fails

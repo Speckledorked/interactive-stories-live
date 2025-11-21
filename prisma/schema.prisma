@@ -195,9 +195,9 @@ model Character {
   equipment       Json? // { weapon?: {...}, armor?: {...}, misc?: [...] }
   resources       Json? // { gold?: number, reputation?: { [factionId: string]: number }, contacts?: string[] }
 
-  // Relationships and consequences
-  relationships   Json? // { [entityId: string]: { trust: Int, tension: Int } }
-  consequences    Json? // { promises?: string[], debts?: string[], enemies?: string[] }
+  // Phase 14: Relationships and consequences (HIDDEN from players)
+  relationships   Json? // { [entityId: string]: { trust: Int, tension: Int, respect: Int, fear: Int } }
+  consequences    Json? // { promises?: string[], debts?: string[], enemies?: string[], longTermThreats?: string[] }
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -314,6 +314,9 @@ model Scene {
   // PbtA scene tracking
   sceneType          String?     @default("dramatic") // "dramatic", "downtime", "combat"
   stakes             String?     // What's at risk in this scene
+
+  // Phase 14: Consequence tracking per scene
+  consequences       Json?       // { created?: string[], resolved?: string[], relationshipChanges?: object[] }
 
   // Phase 9: Turn tracking
   turnDeadline       DateTime?

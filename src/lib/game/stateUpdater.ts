@@ -225,6 +225,74 @@ export async function applyWorldUpdates(
               console.log(`  💔 ${character.name}: ${harmMessages.join(', ')}`)
             }
 
+            // Phase 14: Process relationship changes
+            if (pcChange.changes.relationship_changes && pcChange.changes.relationship_changes.length > 0) {
+              const currentRelationships: any = (character.relationships as any) || {}
+
+              for (const relChange of pcChange.changes.relationship_changes) {
+                const entityId = relChange.entity_id
+                const currentRel = currentRelationships[entityId] || {
+                  trust: 0,
+                  tension: 0,
+                  respect: 0,
+                  fear: 0
+                }
+
+                // Apply deltas and clamp between -100 and 100
+                const clamp = (value: number) => Math.max(-100, Math.min(100, value))
+
+                currentRelationships[entityId] = {
+                  trust: relChange.trust_delta !== undefined ? clamp(currentRel.trust + relChange.trust_delta) : currentRel.trust,
+                  tension: relChange.tension_delta !== undefined ? clamp(currentRel.tension + relChange.tension_delta) : currentRel.tension,
+                  respect: relChange.respect_delta !== undefined ? clamp(currentRel.respect + relChange.respect_delta) : currentRel.respect,
+                  fear: relChange.fear_delta !== undefined ? clamp(currentRel.fear + relChange.fear_delta) : currentRel.fear
+                }
+
+                console.log(`  🤝 ${character.name} → ${relChange.entity_name}: ${relChange.reason}`)
+              }
+
+              updateData.relationships = currentRelationships
+            }
+
+            // Phase 14: Process consequence changes
+            if (pcChange.changes.consequences_add || pcChange.changes.consequences_remove) {
+              const currentConsequences: any = (character.consequences as any) || {
+                promises: [],
+                debts: [],
+                enemies: [],
+                longTermThreats: []
+              }
+
+              // Add new consequences
+              if (pcChange.changes.consequences_add) {
+                for (const newConseq of pcChange.changes.consequences_add) {
+                  const typeKey = newConseq.type === 'longTermThreat' ? 'longTermThreats' : newConseq.type + 's'
+                  if (!currentConsequences[typeKey]) {
+                    currentConsequences[typeKey] = []
+                  }
+                  currentConsequences[typeKey].push(newConseq.description)
+                  console.log(`  ⚠️ ${character.name} gained ${newConseq.type}: ${newConseq.description}`)
+                }
+              }
+
+              // Remove consequences
+              if (pcChange.changes.consequences_remove) {
+                for (const toRemove of pcChange.changes.consequences_remove) {
+                  // Search all consequence arrays for matching description
+                  for (const key of Object.keys(currentConsequences)) {
+                    if (Array.isArray(currentConsequences[key])) {
+                      currentConsequences[key] = currentConsequences[key].filter(
+                        (item: string) => !item.toLowerCase().includes(toRemove.toLowerCase())
+                      )
+                    }
+                  }
+                  console.log(`  ✅ ${character.name} resolved consequence: ${toRemove}`)
+                }
+              }
+
+              updateData.consequences = currentConsequences
+            }
+
             if (Object.keys(updateData).length > 0) {
               await tx.character.update({
                 where: { id: character.id },

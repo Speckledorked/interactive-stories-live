@@ -1,0 +1,40 @@
+# PHASE 11 ENVIRONMENT VARIABLES
+# Add these to your .env.local file
+
+# Session Management
+SESSION_AUTO_ARCHIVE_DAYS=90        # Auto-archive sessions older than this
+SESSION_MAX_DURATION_HOURS=8        # Maximum session duration in hours
+SESSION_REMINDER_MINUTES=15         # Send reminder X minutes before scheduled session
+SESSION_AUTO_END_HOURS=24          # Auto-end sessions left open after X hours
+
+# Downtime Activities
+DOWNTIME_MAX_CONCURRENT=3           # Maximum concurrent activities per character
+DOWNTIME_MAX_DURATION_DAYS=365      # Maximum activity duration
+DOWNTIME_EVENT_CHANCE=0.3           # Probability of random events (0-1)
+DOWNTIME_AI_ENABLED=true            # Enable AI-generated events and outcomes
+
+# AI Downtime Generation
+AI_DOWNTIME_MODEL=gpt-4             # OpenAI model for downtime content
+AI_DOWNTIME_TEMPERATURE=0.7         # Temperature for downtime generation
+AI_DOWNTIME_MAX_TOKENS=500          # Max tokens for downtime responses
+
+# Session Analytics
+SESSION_TRACK_PARTICIPATION=true    # Track player participation metrics
+SESSION_TRACK_DURATION=true         # Track scene and action durations
+SESSION_EXPORT_LOGS=false          # Export session logs for analysis
+
+# Notification Integration
+NOTIFY_SESSION_START=true           # Send notifications when sessions start
+NOTIFY_SESSION_END=true             # Send notifications when sessions end
+NOTIFY_DOWNTIME_EVENTS=true         # Send notifications for downtime events
+NOTIFY_DOWNTIME_COMPLETION=true     # Send notifications when activities complete
+
+# Performance Settings
+SESSION_CLEANUP_INTERVAL=24         # Hours between session cleanup runs
+DOWNTIME_PROCESS_INTERVAL=1         # Hours between downtime processing
+ACTIVITY_CACHE_DURATION=3600        # Cache activity data for N seconds
+
+# Debug Settings (development only)
+SESSION_DEBUG=false                 # Enable debug logging for sessions
+DOWNTIME_DEBUG=false               # Enable debug logging for downtime
+SESSION_MOCK_TIME=false            # Use mock time for testing (dev only)

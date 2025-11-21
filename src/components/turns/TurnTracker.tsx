@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { getPusherClient } from '@/lib/realtime/pusher-client';
+import { getToken } from '@/lib/clientAuth';
 
 interface TurnInfo {
   currentPlayer: {
@@ -66,7 +67,7 @@ export default function TurnTracker({
 
   const fetchTurnInfo = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(
         `/api/campaigns/${campaignId}/turns?sceneId=${sceneId}`,
         {
@@ -118,7 +119,7 @@ export default function TurnTracker({
 
   const advanceTurn = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`/api/campaigns/${campaignId}/turns`, {
         method: 'POST',
         headers: {
@@ -151,7 +152,7 @@ export default function TurnTracker({
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`/api/campaigns/${campaignId}/turns`, {
         method: 'POST',
         headers: {

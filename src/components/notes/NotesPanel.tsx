@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { PlayerNote } from '@prisma/client';
+import { getToken } from '@/lib/clientAuth';
 
 interface NotesPanelProps {
   campaignId: string;
@@ -58,7 +59,7 @@ export default function NotesPanel({
       if (filter.entityType) params.append('entityType', filter.entityType);
       if (filter.entityType && formData.entityId) params.append('entityId', formData.entityId);
 
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`/api/campaigns/${campaignId}/notes?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -116,7 +117,7 @@ export default function NotesPanel({
     setLoading(true);
     
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const payload = {
         title: formData.title.trim(),
         content: formData.content.trim(),
@@ -167,7 +168,7 @@ export default function NotesPanel({
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`/api/campaigns/${campaignId}/notes/${noteId}`, {
         method: 'DELETE',
         headers: {

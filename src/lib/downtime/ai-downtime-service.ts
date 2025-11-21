@@ -185,11 +185,6 @@ If the request seems impossible, suggest a viable alternative.`
     playerDescription: string,
     campaignContext?: any
   ) {
-    // DISABLED: Schema mismatch - Character model missing required fields
-    console.warn('AIDrivenDowntimeService.createDynamicActivity is disabled due to schema mismatches');
-    throw new Error('Dynamic downtime activities are currently disabled due to schema mismatches');
-
-    /* ORIGINAL CODE - DISABLED DUE TO SCHEMA MISMATCHES
     const interpretationResult = await this.interpretDowntimeActivity(
       characterId,
       playerDescription,
@@ -197,57 +192,41 @@ If the request seems impossible, suggest a viable alternative.`
     )
 
     if (!interpretationResult.success) {
-      throw new Error(`Cannot create activity: ${interpretationResult.suggestion}`)
+      throw new Error(`Cannot create activity: Activity is not viable`)
     }
 
     const interpretation = interpretationResult.interpretation
 
-    // Check if character can afford the activity
-    const character = await prisma.character.findUnique({
-      where: { id: characterId }
-    })
+    // Note: Character gold tracking removed - can be added back if needed
+    // For now, we assume the activity is affordable
 
-    if (character && interpretation.costs.gold > 0 && character.gold < interpretation.costs.gold) {
-      throw new Error(`Insufficient gold. Requires ${interpretation.costs.gold}, but character has ${character.gold}`)
-    }
-
-    // Create the activity
+    // Create the activity using the correct schema fields
     const activity = await prisma.downtimeActivity.create({
       data: {
         characterId,
-        activityType: 'CUSTOM', // All AI-interpreted activities are custom
-        name: interpretation.summary,
+        summary: interpretation.summary,
         description: playerDescription, // Store original player intent
-        durationDays: interpretation.estimatedDuration,
-        costGold: interpretation.costs.gold || 0,
-        costResources: {
-          resources: interpretation.costs.resources,
-          requirements: interpretation.requirements,
-          skillsInvolved: interpretation.skillsInvolved,
-          riskLevel: interpretation.riskLevel,
+        estimatedDays: interpretation.estimatedDuration,
+        currentDay: 0,
+        costs: {
+          gold: interpretation.costs.gold || 0,
+          resources: interpretation.costs.resources
+        },
+        requirements: interpretation.requirements,
+        skillsInvolved: interpretation.skillsInvolved,
+        riskLevel: interpretation.riskLevel,
+        outcomes: {
           potentialOutcomes: interpretation.potentialOutcomes,
           aiInterpretation: interpretation
-        }
+        },
+        status: 'ACTIVE'
       }
     })
-
-    // Deduct costs if any
-    if (interpretation.costs.gold > 0) {
-      await prisma.character.update({
-        where: { id: characterId },
-        data: {
-          gold: {
-            decrement: interpretation.costs.gold
-          }
-        }
-      })
-    }
 
     // Generate initial events for the activity
     await this.generateInitialEvents(activity.id, interpretation)
 
     return activity
-    */
   }
 
   // Generate AI events for any type of activity
@@ -258,11 +237,6 @@ If the request seems impossible, suggest a viable alternative.`
     character?: any,
     campaignContext?: any
   ) {
-    // DISABLED: Schema mismatch
-    console.warn('AIDrivenDowntimeService.generateDynamicEvent is disabled due to schema mismatches');
-    return null;
-
-    /* ORIGINAL CODE - DISABLED DUE TO SCHEMA MISMATCHES
     try {
       const activity = await prisma.downtimeActivity.findUnique({
         where: { id: activityId }
@@ -272,7 +246,7 @@ If the request seems impossible, suggest a viable alternative.`
 
       const prompt = `Generate a downtime event for day ${day} of this activity:
 
-Activity: ${activity.name}
+Activity: ${activity.summary}
 Original Player Intent: ${activity.description}
 AI Interpretation: ${JSON.stringify(interpretation)}
 
@@ -281,7 +255,7 @@ Campaign Context: ${JSON.stringify(campaignContext) || 'Standard fantasy'}
 
 Create an engaging event that:
 1. Relates to the specific activity the player described
-2. Feels natural and realistic for day ${day} of ${activity.durationDays}
+2. Feels natural and realistic for day ${day} of ${activity.estimatedDays}
 3. May require player input or be purely narrative
 4. Advances the story or creates interesting complications/opportunities
 5. Respects player agency and the AI's interpretation
@@ -324,36 +298,33 @@ Return a JSON object:
       const event = await prisma.downtimeEvent.create({
         data: {
           activityId,
-          day,
-          eventType: eventData.eventType,
-          title: eventData.title,
-          description: eventData.narrative || eventData.description,
-          requiresInput: eventData.requiresPlayerChoice,
-          skillChecks: eventData.skillCheck ? { skill: eventData.skillCheck } : null,
-          outcomes: {
+          dayNumber: day,
+          eventText: eventData.narrative || eventData.description,
+          choices: eventData.requiresPlayerChoice ? {
             choices: eventData.choices || [],
             automaticOutcome: eventData.automaticOutcome
-          }
+          } : undefined
         }
       })
 
       return event
     } catch (error) {
       console.error('Error generating dynamic event:', error)
-      
+
       // Fallback to simple event
+      const activity = await prisma.downtimeActivity.findUnique({
+        where: { id: activityId }
+      })
+
       return await prisma.downtimeEvent.create({
         data: {
           activityId,
-          day,
-          eventType: 'PROGRESS',
-          title: 'Steady Progress',
-          description: `You continue working on your activity: ${activity?.name}`,
-          requiresInput: false
+          dayNumber: day,
+          eventText: `You continue working on your activity: ${activity?.summary || 'your downtime'}`,
+          choices: undefined
         }
       })
     }
-    */
   }
 
   // Process player response to dynamic events
@@ -362,28 +333,10 @@ Return a JSON object:
     playerResponse: string,
     campaignContext?: any
   ) {
-    // DISABLED: Schema mismatch
-    console.warn('AIDrivenDowntimeService.respondToDynamicEvent is disabled due to schema mismatches');
-    return {
-      playerResponse,
-      aiResponse: "Response system disabled - schema mismatch",
-      event: null
-    };
-
-    /* ORIGINAL CODE - DISABLED DUE TO SCHEMA MISMATCHES
     const event = await prisma.downtimeEvent.findUnique({
       where: { id: eventId },
       include: {
-        activity: {
-          include: {
-            character: {
-              include: {
-                campaign: true,
-                user: true
-              }
-            }
-          }
-        }
+        activity: true
       }
     })
 
@@ -393,14 +346,13 @@ Return a JSON object:
 
     const prompt = `As an AI Game Master, respond to the player's choice for this downtime event:
 
-Event: ${event.title}
-Description: ${event.description}
-Available Choices: ${JSON.stringify(event.outcomes?.choices || [])}
+Event: Day ${event.dayNumber}
+Description: ${event.eventText}
+Available Choices: ${JSON.stringify(event.choices || {})}
 
 Player Response: "${playerResponse}"
 
-Activity Context: ${event.activity.name} (${event.activity.description})
-Character: ${event.activity.character.name}
+Activity Context: ${event.activity.summary} (${event.activity.description})
 
 Generate a response that:
 1. Acknowledges the player's choice
@@ -429,29 +381,15 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
       const data = await response.json()
       const aiResponse = data.choices[0].message.content
 
-      // Update event with player response and AI resolution
+      // Update event with player response and outcome
       await prisma.downtimeEvent.update({
         where: { id: eventId },
         data: {
-          playerResponse,
-          resolvedAt: new Date()
+          response: playerResponse,
+          outcome: aiResponse,
+          respondedAt: new Date()
         }
       })
-
-      // Notify other campaign members if relevant
-      if (event.activity.character.campaign) {
-        await NotificationService.createNotification({
-          type: 'DOWNTIME_EVENT',
-          campaignId: event.activity.character.campaign.id,
-          title: `${event.activity.character.name}'s Downtime`,
-          message: `${event.activity.character.name} had an event during: ${event.activity.name}`,
-          data: {
-            characterName: event.activity.character.name,
-            activityName: event.activity.name,
-            eventTitle: event.title
-          }
-        })
-      }
 
       return {
         playerResponse,
@@ -466,45 +404,34 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
         event
       }
     }
-    */
   }
 
   // Advance time for all activities with dynamic processing
   static async advanceDynamicDowntime(characterId: string, days: number = 1) {
-    // DISABLED: Schema mismatch
-    console.warn('AIDrivenDowntimeService.advanceDynamicDowntime is disabled due to schema mismatches');
-    return [];
-
-    /* ORIGINAL CODE - DISABLED DUE TO SCHEMA MISMATCHES
     const activeActivities = await prisma.downtimeActivity.findMany({
       where: {
         characterId,
-        status: 'IN_PROGRESS'
+        status: 'ACTIVE'
       },
       include: {
-        events: true,
-        character: {
-          include: {
-            campaign: true
-          }
-        }
+        events: true
       }
     })
 
     const results = []
 
     for (const activity of activeActivities) {
-      const newProgressDays = Math.min(
-        activity.progressDays + days,
-        activity.durationDays
+      const newCurrentDay = Math.min(
+        activity.currentDay + days,
+        activity.estimatedDays
       )
 
       // Update progress
       await prisma.downtimeActivity.update({
         where: { id: activity.id },
         data: {
-          progressDays: newProgressDays,
-          ...(newProgressDays >= activity.durationDays ? {
+          currentDay: newCurrentDay,
+          ...(newCurrentDay >= activity.estimatedDays ? {
             status: 'COMPLETED',
             completedAt: new Date()
           } : {})
@@ -512,21 +439,22 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
       })
 
       // Process each day that advanced
-      for (let day = activity.progressDays + 1; day <= newProgressDays; day++) {
+      for (let day = activity.currentDay + 1; day <= newCurrentDay; day++) {
         // 40% chance of an event each day (adjustable)
         if (Math.random() < 0.4) {
+          const aiInterpretation = (activity.outcomes as any)?.aiInterpretation || {}
           const event = await this.generateDynamicEvent(
             activity.id,
             day,
-            activity.costResources.aiInterpretation,
-            activity.character,
-            { campaign: activity.character.campaign }
+            aiInterpretation,
+            null,
+            null
           )
-          
+
           if (event) {
             results.push({
               activityId: activity.id,
-              activityName: activity.name,
+              activityName: activity.summary,
               day,
               event
             })
@@ -535,16 +463,17 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
       }
 
       // Generate completion outcomes if activity is finished
-      if (newProgressDays >= activity.durationDays) {
+      if (newCurrentDay >= activity.estimatedDays) {
+        const aiInterpretation = (activity.outcomes as any)?.aiInterpretation || {}
         const outcomes = await this.generateDynamicOutcomes(
           activity.id,
           activity.description,
-          activity.costResources.aiInterpretation
+          aiInterpretation
         )
-        
+
         results.push({
           activityId: activity.id,
-          activityName: activity.name,
+          activityName: activity.summary,
           completed: true,
           outcomes
         })
@@ -552,7 +481,6 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
     }
 
     return results
-    */
   }
 
   // Generate dynamic outcomes based on the player's original intent
@@ -561,21 +489,11 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
     playerDescription: string,
     interpretation: any
   ) {
-    // DISABLED: Schema mismatch
-    console.warn('AIDrivenDowntimeService.generateDynamicOutcomes is disabled due to schema mismatches');
-    return {
-      primaryOutcome: "The activity was completed successfully.",
-      skillProgress: { experienceGained: 10 },
-      narrative: "Service disabled - schema mismatch"
-    };
-
-    /* ORIGINAL CODE - DISABLED DUE TO SCHEMA MISMATCHES
     try {
       const activity = await prisma.downtimeActivity.findUnique({
         where: { id: activityId },
         include: {
-          events: true,
-          character: true
+          events: true
         }
       })
 
@@ -585,9 +503,8 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
 
 Original Player Intent: "${playerDescription}"
 AI Interpretation: ${JSON.stringify(interpretation)}
-Activity Duration: ${activity.durationDays} days
+Activity Duration: ${activity.estimatedDays} days
 Events that occurred: ${activity.events.length}
-Character: ${activity.character.name}
 
 Based on the player's original intent and what happened during the activity, generate realistic outcomes:
 
@@ -632,34 +549,17 @@ Based on the player's original intent and what happened during the activity, gen
       const data = await response.json()
       const outcomes = JSON.parse(data.choices[0].message.content)
 
-      // Update activity with outcomes
+      // Update activity with outcomes and set final outcome
       await prisma.downtimeActivity.update({
         where: { id: activityId },
-        data: { outcomes }
+        data: {
+          outcomes,
+          finalOutcome: outcomes.narrative
+        }
       })
 
-      // Apply rewards to character
-      if (outcomes.skillProgress?.experienceGained > 0) {
-        await prisma.character.update({
-          where: { id: activity.characterId },
-          data: {
-            experience: {
-              increment: outcomes.skillProgress.experienceGained
-            }
-          }
-        })
-      }
-
-      if (outcomes.materialRewards?.goldGained > 0) {
-        await prisma.character.update({
-          where: { id: activity.characterId },
-          data: {
-            gold: {
-              increment: outcomes.materialRewards.goldGained
-            }
-          }
-        })
-      }
+      // Note: Character experience/gold rewards removed as Character model
+      // doesn't have these fields. Can be added back if needed.
 
       return outcomes
     } catch (error) {
@@ -670,42 +570,35 @@ Based on the player's original intent and what happened during the activity, gen
         narrative: "Your efforts have paid off in ways both expected and surprising."
       }
     }
-    */
   }
 
   // Helper method to generate initial events
   private static async generateInitialEvents(activityId: string, interpretation: any) {
-    // DISABLED: Schema mismatch
-    console.warn('AIDrivenDowntimeService.generateInitialEvents is disabled due to schema mismatches');
-    return;
-
-    /* ORIGINAL CODE - DISABLED DUE TO SCHEMA MISMATCHES
     // Generate 1-3 initial events throughout the activity duration
     const activity = await prisma.downtimeActivity.findUnique({
       where: { id: activityId }
     })
-    
+
     if (!activity) return
 
     const eventDays = []
-    
+
     // Always have a day 1 event to set the tone
     eventDays.push(1)
-    
+
     // Add a mid-point event if duration > 7 days
-    if (activity.durationDays > 7) {
-      eventDays.push(Math.floor(activity.durationDays / 2))
+    if (activity.estimatedDays > 7) {
+      eventDays.push(Math.floor(activity.estimatedDays / 2))
     }
-    
+
     // Add a late event if duration > 14 days
-    if (activity.durationDays > 14) {
-      eventDays.push(Math.floor(activity.durationDays * 0.8))
+    if (activity.estimatedDays > 14) {
+      eventDays.push(Math.floor(activity.estimatedDays * 0.8))
     }
-    
+
     for (const day of eventDays) {
       await this.generateDynamicEvent(activityId, day, interpretation)
     }
-    */
   }
 
   // Get suggestions based on character and campaign context

@@ -785,10 +785,18 @@ model Session {
   campaignId  String
   name        String
   description String?       @db.Text
+  sessionNumber Int
   status      SessionStatus @default(SCHEDULED)
-  startTime   DateTime?
-  endTime     DateTime?
+  scheduledAt DateTime?
+  startTime   DateTime?     // Keep for compatibility
+  startedAt   DateTime?     // Add for service compatibility
+  endTime     DateTime?     // Keep for compatibility
+  endedAt     DateTime?     // Add for service compatibility
+  duration    Int?          // In minutes
   objectives  String[]
+  experienceAwarded Int     @default(0)
+  goldAwarded Int           @default(0)
+  itemsAwarded String[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -809,6 +817,9 @@ model SessionParticipant {
   joinedAt      DateTime @default(now())
   leftAt        DateTime?
   wasPresent    Boolean  @default(true)
+  attendanceStatus String @default("PRESENT") // PRESENT, ABSENT, LATE, LEFT_EARLY
+  actionsCount  Int      @default(0)
+  messagesCount Int      @default(0)
   notes         String?  @db.Text
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -823,6 +834,8 @@ model SessionScene {
   sessionId   String
   sceneId     String
   orderIndex  Int
+  duration    Int?     // In minutes
+  summary     String?  @db.Text
   startedAt   DateTime @default(now())
   endedAt     DateTime?
   notes       String?  @db.Text
@@ -839,6 +852,8 @@ model SessionNote {
   authorId  String
   content   String   @db.Text
   noteType  String   @default("general") // general, highlight, decision, npc
+  isPublic  Boolean  @default(true)
+  timestamp DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

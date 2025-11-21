@@ -1,4 +1,4 @@
-// src/app/api/campaigns/[campaignId]/characters/[characterId]/inventory/route.ts
+// src/app/api/campaigns/[id]/characters/[characterId]/inventory/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
@@ -11,7 +11,7 @@ import {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { campaignId: string; characterId: string } }
+  { params }: { params: { id: string; characterId: string } }
 ) {
   try {
     const user = await getUser(request)
@@ -19,7 +19,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { campaignId, characterId } = params
+    const campaignId = params.id
+    const { characterId } = params
     const body = await request.json()
 
     // Check membership
@@ -69,13 +70,13 @@ export async function PATCH(
     } else if (operation === 'add' && item) {
       // Add item
       updatedInventory = addItemToInventory(
-        character.inventory as CharacterInventory,
+        character.inventory as any,
         item as InventoryItem
       )
     } else if (operation === 'remove' && item) {
       // Remove item
       updatedInventory = removeItemFromInventory(
-        character.inventory as CharacterInventory,
+        character.inventory as any,
         item.id,
         item.quantity || 1
       )
@@ -89,7 +90,7 @@ export async function PATCH(
     // Update character
     const updated = await prisma.character.update({
       where: { id: characterId },
-      data: { inventory: updatedInventory },
+      data: { inventory: updatedInventory as any },
     })
 
     return NextResponse.json({

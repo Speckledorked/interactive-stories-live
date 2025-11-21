@@ -42,6 +42,22 @@ export interface AIGMResponse {
         }>
         conditions_remove?: string[] // IDs or names of conditions to remove
         location?: string
+        // Phase 14: Relationship changes
+        relationship_changes?: Array<{
+          entity_id: string // NPC or faction ID
+          entity_name: string // For logging
+          trust_delta?: number
+          tension_delta?: number
+          respect_delta?: number
+          fear_delta?: number
+          reason: string // Why this changed (for GM notes)
+        }>
+        // Phase 14: Consequence changes
+        consequences_add?: Array<{
+          type: 'promise' | 'debt' | 'enemy' | 'longTermThreat'
+          description: string
+        }>
+        consequences_remove?: string[] // Descriptions of consequences to remove
       }
     }>
     faction_changes?: Array<{
@@ -238,7 +254,14 @@ You MUST respond with a JSON object with this exact structure:
           "harm_healing": 1,
           "conditions_add": [{"name": "Bleeding", "category": "Physical", "description": "...", "mechanicalEffect": "1 harm per turn"}],
           "conditions_remove": ["stunned"],
-          "location": "New location"
+          "location": "New location",
+          "relationship_changes": [
+            {"entity_id": "npc_123", "entity_name": "Guard Captain", "trust_delta": 10, "respect_delta": 5, "reason": "Character helped save the captain's life"}
+          ],
+          "consequences_add": [
+            {"type": "debt", "description": "Owes the merchant 50 gold for the stolen goods"}
+          ],
+          "consequences_remove": ["Promise to deliver message to the mayor"]
         }
       }
     ],
@@ -272,6 +295,30 @@ ORGANIC CHARACTER GROWTH:
 - Keep stat total at +2, at most one stat >= +2
 - Growth is driven by what characters DO, not player choices
 
+PHASE 14: HIDDEN RELATIONSHIPS & CONSEQUENCES
+CRITICAL: Characters have hidden relationship tracking (trust, tension, respect, fear) with NPCs and factions.
+- NPC reactions MUST reference these hidden values through BEHAVIOR, not numbers
+- NEVER reveal numeric relationship values to players
+- Players discover relationships through NPC actions, dialogue tone, and consequences
+- If a debt exists in consequences, it should shape outcomes SUBTLY
+- Enemies escalate threats over time through BEHAVIOR and actions, not exposition
+- Relationship changes should feel organic and earned based on player actions
+- Use relationship data to determine:
+  * How NPCs respond to character requests
+  * Whether NPCs offer help or create obstacles
+  * Dialogue tone (warm/cold, respectful/dismissive, fearful/bold)
+  * Whether NPCs betray or support characters at critical moments
+
+RELATIONSHIP INTERPRETATION GUIDE:
+- High trust (50+): NPC goes out of their way to help, shares secrets, takes risks for character
+- Low trust (-50): NPC withholds information, creates obstacles, may betray
+- High tension (50+): NPC is confrontational, aggressive, creates conflict
+- Low tension (<10): NPC is calm, cooperative, seeks harmony
+- High respect (50+): NPC defers to character, seeks their opinion, praises them
+- Low respect (-50): NPC dismisses character, talks down to them, ignores requests
+- High fear (50+): NPC avoids character, complies out of fear, may plot revenge
+- Low fear (<10): NPC treats character as equal or inferior, not intimidated
+
 Be creative, dramatic, and true to the universe while maintaining game balance.`
 }
 
@@ -287,13 +334,21 @@ Turn Number: ${world_summary.turn_number}
 In-Game Date: ${world_summary.in_game_date}
 
 PLAYER CHARACTERS:
-${world_summary.characters.map(c => `
+${world_summary.characters.map(c => {
+  const relationshipsText = c.relationships && Object.keys(c.relationships).length > 0
+    ? `\n  Hidden Relationships (GM ONLY - use for NPC behavior): ${JSON.stringify(c.relationships, null, 2)}`
+    : '';
+  const consequencesText = c.consequences && Object.keys(c.consequences).length > 0
+    ? `\n  Consequences: ${JSON.stringify(c.consequences, null, 2)}`
+    : '';
+  return `
 - ${c.name}${c.description ? ` (${c.description})` : ''}
   Location: ${c.location || 'Unknown'}
   Backstory: ${c.backstory || 'Unknown'}
   Goals: ${c.goals || 'None'}
-  Stats: ${JSON.stringify(c.stats)}
-`).join('\n')}
+  Stats: ${JSON.stringify(c.stats)}${relationshipsText}${consequencesText}
+`;
+}).join('\n')}
 
 IMPORTANT NPCs:
 ${world_summary.npcs.filter(n => n.importance >= 3).map(n => `
@@ -336,13 +391,29 @@ ${player_actions.map(a => `
 
 ---
 
-Based on the world state and player actions above, resolve this scene:
+RESOLVE THIS SCENE:
 
-1. Narrate what happens (scene_text)
-2. Propose world state changes (world_updates)
-3. Advance relevant clocks if warranted
-4. Update NPC/faction status as appropriate
-5. Create timeline events for significant outcomes
+Generate a compelling scene resolution that:
+
+1. **VIVID NARRATION** (scene_text):
+   - Paint a detailed picture using sensory details (sight, sound, smell, touch, taste)
+   - Show character actions and reactions through specific, concrete descriptions
+   - Reference each character BY NAME and show how their actions unfold
+   - Include dialogue where appropriate - make NPCs speak naturally
+   - Create dramatic tension and pacing - don't just summarize
+   - Show consequences immediately through description, not exposition
+   - Make the ${request.campaign_universe} setting come alive with specific details
+   - End with a clear transition or new situation that flows naturally
+
+2. **WORLD STATE CHANGES** (world_updates):
+   - Propose appropriate harm, conditions, location changes for characters
+   - Update NPC relationships and faction status based on what happened
+   - Advance relevant clocks if the situation warrants it
+   - Create timeline events for significant outcomes
+   - Track relationship changes subtly through NPC behavior
+
+CRITICAL: Your scene_text should read like a novel excerpt or actual play transcript, NOT like a summary.
+Show what happens through vivid description and action, don't tell what happened.
 
 Remember: Respond ONLY with valid JSON matching the required schema.`
 }

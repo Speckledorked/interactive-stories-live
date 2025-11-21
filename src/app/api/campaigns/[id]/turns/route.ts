@@ -26,7 +26,7 @@ export async function GET(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.id,
+        userId: user.userId,
         campaignId: params.id,
       },
     });
@@ -70,7 +70,7 @@ export async function POST(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.id,
+        userId: user.userId,
         campaignId: params.id,
       },
     });
@@ -95,7 +95,7 @@ export async function POST(
         break;
 
       case 'advance':
-        result = await TurnTracker.advanceTurn(params.id, sceneId, user.id);
+        result = await TurnTracker.advanceTurn(params.id, sceneId, user.userId);
         break;
 
       case 'skip':
@@ -150,7 +150,7 @@ export async function DELETE(
     // Verify user is admin of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.id,
+        userId: user.userId,
         campaignId: params.id,
         role: 'ADMIN'
       },

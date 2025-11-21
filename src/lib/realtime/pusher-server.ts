@@ -60,8 +60,42 @@ export async function triggerUserTyping(campaignId: string, userId: string, user
 // Trigger scene updates (for context in chat)
 export async function triggerSceneUpdate(campaignId: string, sceneData: any) {
   const pusher = getPusherServer();
-  
+
   await pusher.trigger(`campaign-${campaignId}`, 'scene-update', sceneData);
 }
+
+// Trigger sound notification (stub function for notifications)
+export async function triggerSoundNotification(userId: string, campaignId: string, data: any) {
+  const pusher = getPusherServer();
+
+  await pusher.trigger(`user-${userId}`, 'sound-notification', {
+    campaignId,
+    ...data,
+    timestamp: new Date().toISOString()
+  });
+}
+
+// Trigger notification update (stub function for notifications)
+export async function triggerNotificationUpdate(userId: string, notification: any) {
+  const pusher = getPusherServer();
+
+  await pusher.trigger(`user-${userId}`, 'notification-update', {
+    ...notification,
+    timestamp: new Date().toISOString()
+  });
+}
+
+// Trigger push notification event (stub function for notifications)
+export async function triggerPushNotificationEvent(userId: string, data: any) {
+  const pusher = getPusherServer();
+
+  await pusher.trigger(`user-${userId}`, 'push-notification', {
+    ...data,
+    timestamp: new Date().toISOString()
+  });
+}
+
+// Export PusherServer as named export (alias for getPusherServer)
+export const PusherServer = getPusherServer;
 
 export default getPusherServer;

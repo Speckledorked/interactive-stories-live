@@ -24,7 +24,7 @@ export async function GET(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.id,
+        userId: user.userId,
         campaignId: params.id,
       },
     });
@@ -40,9 +40,9 @@ export async function GET(
         // Public messages (not whispers)
         { targetUserId: null },
         // Whispers to this user
-        { targetUserId: user.id },
+        { targetUserId: user.userId },
         // Whispers from this user
-        { authorId: user.id }
+        { authorId: user.userId }
       ]
     };
 
@@ -109,7 +109,7 @@ export async function POST(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.id,
+        userId: user.userId,
         campaignId: params.id,
       },
     });
@@ -137,7 +137,7 @@ export async function POST(
       const character = await prisma.character.findFirst({
         where: {
           id: characterId,
-          userId: user.id,
+          userId: user.userId,
           campaignId: params.id,
         },
       });
@@ -152,7 +152,7 @@ export async function POST(
       data: {
         content: content.trim(),
         type,
-        authorId: user.id,
+        authorId: user.userId,
         campaignId: params.id,
         sceneId: sceneId || null,
         targetUserId: type === 'WHISPER' ? targetUserId : null,

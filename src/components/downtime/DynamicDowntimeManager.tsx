@@ -75,7 +75,7 @@ interface DynamicDowntimeManagerProps {
 interface CreateActivityState {
   isOpen: boolean
   description: string
-  interpretation?: any
+  interpretation?: DynamicActivity['aiInterpretation']
   isAnalyzing: boolean
 }
 
@@ -83,7 +83,7 @@ interface EventResponseState {
   eventId: string
   isOpen: boolean
   response: string
-  event?: any
+  event?: DynamicActivity['events'][0]
 }
 
 export function DynamicDowntimeManager({
@@ -147,7 +147,7 @@ export function DynamicDowntimeManager({
   }
 
   // Open event response dialog
-  const openEventResponse = (eventId: string, event: any) => {
+  const openEventResponse = (eventId: string, event: DynamicActivity['events'][0]) => {
     setEventResponse({
       eventId,
       isOpen: true,
@@ -268,10 +268,10 @@ export function DynamicDowntimeManager({
                     <div className="space-y-2 text-sm">
                       <p><strong>Activity:</strong> {createModal.interpretation.summary}</p>
                       <p><strong>Duration:</strong> ~{createModal.interpretation.estimatedDuration} days</p>
-                      {createModal.interpretation.costs.gold > 0 && (
+                      {createModal.interpretation.costs?.gold && createModal.interpretation.costs.gold > 0 && (
                         <p><strong>Cost:</strong> {createModal.interpretation.costs.gold} gold</p>
                       )}
-                      <p><strong>Risk Level:</strong> 
+                      <p><strong>Risk Level:</strong>
                         <Badge className={`ml-2 ${getRiskColor(createModal.interpretation.riskLevel)}`}>
                           {createModal.interpretation.riskLevel}
                         </Badge>
@@ -457,9 +457,9 @@ export function DynamicDowntimeManager({
                   </div>
 
                   {/* Costs & Requirements */}
-                  {(activity.aiInterpretation.costs.gold > 0 || activity.aiInterpretation.requirements.length > 0) && (
+                  {((activity.aiInterpretation.costs?.gold && activity.aiInterpretation.costs.gold > 0) || activity.aiInterpretation.requirements.length > 0) && (
                     <div className="text-xs space-y-1">
-                      {activity.aiInterpretation.costs.gold > 0 && (
+                      {activity.aiInterpretation.costs?.gold && activity.aiInterpretation.costs.gold > 0 && (
                         <div className="flex items-center gap-1">
                           <Coins className="w-3 h-3 text-yellow-600" />
                           <span>Cost: {activity.aiInterpretation.costs.gold} gold</span>

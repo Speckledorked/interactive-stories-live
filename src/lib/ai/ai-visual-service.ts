@@ -1,8 +1,7 @@
 // PLACE IN: src/lib/ai/ai-visual-service.ts
 
 import { MapService } from '@/lib/maps/map-service'
-import { ImageService } from '@/lib/images/image-service'
-import { PusherServer } from '@/lib/realtime/pusher-server'
+import PusherServer from '@/lib/realtime/pusher-server'
 import { NotificationService } from '@/lib/notifications/notification-service'
 
 export interface SceneVisualData {
@@ -71,7 +70,8 @@ export class AIVisualService {
       const tokens = await this.generateTokens(visualAnalysis, mapData.id)
 
       // Broadcast new map to players
-      await PusherServer.trigger(`campaign-${campaignId}`, 'ai-map-generated', {
+      const pusher = PusherServer()
+      await pusher.trigger(`campaign-${campaignId}`, 'ai-map-generated', {
         mapId: mapData.id,
         mapName: mapData.name,
         sceneDescription,
@@ -84,8 +84,8 @@ export class AIVisualService {
         mapName: mapData.name,
         description: sceneDescription,
         backgroundType: visualAnalysis.backgroundType,
-        zones,
-        tokens,
+        zones: zones as any,
+        tokens: tokens as any,
         atmosphere: visualAnalysis.atmosphere
       }
     } catch (error) {
@@ -159,7 +159,8 @@ Return a JSON object with:
     campaignId: string,
     previousMapId?: string
   ) {
-    const template = this.BACKGROUND_TEMPLATES[analysis.backgroundType] || this.BACKGROUND_TEMPLATES['dungeon']
+    const backgroundType = analysis.backgroundType as keyof typeof this.BACKGROUND_TEMPLATES
+    const template = this.BACKGROUND_TEMPLATES[backgroundType] || this.BACKGROUND_TEMPLATES['dungeon']
     
     // Check if we should update existing map or create new one
     if (previousMapId && this.shouldReuseMap(analysis)) {
@@ -186,7 +187,8 @@ Return a JSON object with:
 
   // Generate zones based on scene analysis
   private static async generateZones(analysis: any, mapId: string) {
-    const template = this.BACKGROUND_TEMPLATES[analysis.backgroundType] || this.BACKGROUND_TEMPLATES['dungeon']
+    const backgroundType = analysis.backgroundType as keyof typeof this.BACKGROUND_TEMPLATES
+    const template = this.BACKGROUND_TEMPLATES[backgroundType] || this.BACKGROUND_TEMPLATES['dungeon']
     const zones = []
 
     // Create zones for interactable areas
@@ -200,8 +202,8 @@ Return a JSON object with:
         width: 150 + Math.random() * 100,
         height: 100 + Math.random() * 100,
         color: this.getZoneColor(area),
-        triggerType: 'interact',
-        triggerData: { 
+        triggerType: 'interaction',
+        triggerData: {
           areaName: area,
           description: `You approach the ${area.toLowerCase()}`
         }
@@ -220,7 +222,7 @@ Return a JSON object with:
         width: 100 + Math.random() * 50,
         height: 80 + Math.random() * 40,
         color: '#3B82F6',
-        triggerType: 'enter',
+        triggerType: 'discovery',
         triggerData: {
           elementName: element,
           description: `You notice the ${element.toLowerCase()}`
@@ -234,7 +236,8 @@ Return a JSON object with:
 
   // Generate tokens for characters and objects
   private static async generateTokens(analysis: any, mapId: string) {
-    const template = this.BACKGROUND_TEMPLATES[analysis.backgroundType] || this.BACKGROUND_TEMPLATES['dungeon']
+    const backgroundType = analysis.backgroundType as keyof typeof this.BACKGROUND_TEMPLATES
+    const template = this.BACKGROUND_TEMPLATES[backgroundType] || this.BACKGROUND_TEMPLATES['dungeon']
     const tokens = []
 
     // Create tokens for NPCs and enemies
@@ -297,9 +300,10 @@ Return a JSON object with:
 
       if (newPosition) {
         await MapService.moveToken(characterToken.id, newPosition.x, newPosition.y)
-        
+
         // Broadcast movement
-        await PusherServer.trigger(`campaign-${campaignId}`, 'ai-character-moved', {
+        const pusher = PusherServer()
+        await pusher.trigger(`campaign-${campaignId}`, 'ai-character-moved', {
           characterName,
           tokenId: characterToken.id,
           newPosition,
@@ -366,7 +370,8 @@ Return a JSON object with:
       })
 
       // Broadcast new element
-      await PusherServer.trigger(`campaign-${campaignId}`, 'ai-element-added', {
+      const pusher = PusherServer()
+      await pusher.trigger(`campaign-${campaignId}`, 'ai-element-added', {
         elementName,
         elementType,
         description,
@@ -395,8 +400,9 @@ Return a JSON object with:
 
       if (token) {
         await MapService.deleteToken(token.id)
-        
-        await PusherServer.trigger(`campaign-${campaignId}`, 'ai-element-removed', {
+
+        const pusher = PusherServer()
+        await pusher.trigger(`campaign-${campaignId}`, 'ai-element-removed', {
           elementName,
           tokenId: token.id
         })

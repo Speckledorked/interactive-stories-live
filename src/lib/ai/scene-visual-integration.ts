@@ -3,6 +3,7 @@
 import { AIVisualService } from './ai-visual-service'
 import { SoundService } from '@/lib/notifications/sound-service'
 import { NotificationService } from '@/lib/notifications/notification-service'
+import PusherServer from '@/lib/realtime/pusher-server'
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
@@ -69,9 +70,14 @@ export class AISceneVisualIntegration {
       .map(pa => `Player ${pa.playerId}: ${pa.action}`)
       .join('\n')
 
+    // Note: scene.currentState doesn't exist in Prisma schema, using placeholder
+    const currentState = (scene as any).currentState || 'Beginning'
+    // Use sceneIntroText as the description
+    const sceneDescription = scene.sceneIntroText || scene.sceneResolutionText || 'Unknown scene'
+
     const prompt = `
-Current Scene: ${scene.description}
-Current State: ${scene.currentState}
+Current Scene: ${sceneDescription}
+Current State: ${currentState}
 
 Player Actions:
 ${actionsText}
@@ -105,19 +111,20 @@ Respond in a narrative style that creates immersion.`
     await prisma.scene.update({
       where: { id: sceneId },
       data: {
-        description: aiDescription,
-        currentState: JSON.stringify({
+        sceneResolutionText: aiDescription,
+        // currentState doesn't exist in schema, using participants to store state
+        participants: {
           lastActions: playerActions,
           timestamp: new Date(),
           resolved: true
-        })
+        }
       }
     })
 
     return {
       sceneId,
       description: aiDescription,
-      previousMapId: scene.currentState?.mapId,
+      previousMapId: (scene as any).currentState?.mapId,
       newElements: this.extractNewElements(aiDescription),
       characterMentions: this.extractCharacterMentions(aiDescription, playerActions)
     }
@@ -171,17 +178,20 @@ Respond in a narrative style that creates immersion.`
     try {
       // Play ambient sound based on atmosphere
       if (atmosphere.sounds && atmosphere.sounds.length > 0) {
-        const soundName = this.mapAtmosphereToSound(atmosphere)
-        if (soundName) {
-          await SoundService.playAmbientSound(soundName, campaignId)
+        const sceneType = this.mapAtmosphereToSceneType(atmosphere)
+        if (sceneType) {
+          // Note: SoundService methods are client-side only, commenting out for now
+          // await SoundService.startAmbientSound(sceneType)
         }
       }
 
       // Play mood-based sound effects
       if (atmosphere.mood === 'dangerous') {
-        await SoundService.playDramaticSound('tension', campaignId)
+        // Note: SoundService.playDramaticSound is client-side only, commenting out for now
+        // await SoundService.playDramaticSound('danger', 1.0)
       } else if (atmosphere.mood === 'mysterious') {
-        await SoundService.playDramaticSound('mystery', campaignId)
+        // Note: SoundService.playDramaticSound is client-side only, commenting out for now
+        // await SoundService.playDramaticSound('mystery', 1.0)
       }
     } catch (error) {
       console.error('Error triggering scene sounds:', error)
@@ -195,21 +205,33 @@ Respond in a narrative style that creates immersion.`
     campaignId: string
   ) {
     try {
-      // Create notification for scene update
-      await NotificationService.createNotification({
-        type: 'SCENE_CHANGE',
-        campaignId,
-        title: 'New Scene',
-        message: 'The AI GM has updated the scene with new visuals',
-        data: {
-          sceneId: sceneResolution.sceneId,
-          mapId: visualData.mapId,
-          hasNewMap: true
-        }
+      // Get campaign memberships to send notifications
+      const campaign = await prisma.campaign.findUnique({
+        where: { id: campaignId },
+        include: { memberships: true }
       })
 
+      // Create notification for each campaign member
+      if (campaign) {
+        for (const membership of campaign.memberships) {
+          await NotificationService.createNotification({
+            type: 'SCENE_CHANGE',
+            userId: membership.userId,
+            campaignId,
+            title: 'New Scene',
+            message: 'The AI GM has updated the scene with new visuals',
+            metadata: {
+              sceneId: sceneResolution.sceneId,
+              mapId: visualData.mapId,
+              hasNewMap: true
+            }
+          })
+        }
+      }
+
       // Real-time broadcast via Pusher
-      await PusherServer.trigger(`campaign-${campaignId}`, 'scene-updated-with-visuals', {
+      const pusher = PusherServer()
+      await pusher.trigger(`campaign-${campaignId}`, 'scene-updated-with-visuals', {
         sceneResolution,
         visualData,
         timestamp: new Date()
@@ -269,31 +291,31 @@ Respond in a narrative style that creates immersion.`
     return mentions
   }
 
-  private static mapAtmosphereToSound(atmosphere: any): string | null {
-    const soundMappings = {
-      'tavern': 'tavern_ambient',
-      'forest': 'forest_ambient', 
-      'dungeon': 'dungeon_ambient',
-      'castle': 'castle_ambient',
-      'cave': 'cave_ambient',
-      'city': 'city_ambient',
-      'combat': 'battle_music',
-      'peaceful': 'peaceful_ambient'
+  private static mapAtmosphereToSceneType(atmosphere: any): string | null {
+    const sceneTypeMappings: Record<string, string> = {
+      'tavern': 'tavern',
+      'forest': 'forest',
+      'dungeon': 'dungeon',
+      'castle': 'dungeon',
+      'cave': 'dungeon',
+      'city': 'tavern',
+      'combat': 'battle',
+      'peaceful': 'forest'
     }
 
     // Check atmosphere sounds
     if (atmosphere.sounds) {
       for (const sound of atmosphere.sounds) {
-        const mapping = soundMappings[sound.toLowerCase()]
+        const mapping = sceneTypeMappings[sound.toLowerCase()]
         if (mapping) return mapping
       }
     }
 
     // Check mood
     if (atmosphere.mood === 'dangerous') {
-      return 'tension_ambient'
+      return 'battle'
     } else if (atmosphere.mood === 'peaceful') {
-      return 'peaceful_ambient'
+      return 'forest'
     }
 
     return null

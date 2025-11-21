@@ -22,7 +22,7 @@ export async function POST(
     // Verify user is member of campaign
     const membership = await prisma.campaignMembership.findFirst({
       where: {
-        userId: user.id,
+        userId: user.userId,
         campaignId: params.id,
       },
     });
@@ -33,9 +33,9 @@ export async function POST(
 
     // Trigger typing indicator
     await triggerUserTyping(
-      params.id, 
-      user.id, 
-      user.name || user.email,
+      params.id,
+      user.userId,
+      user.email,
       Boolean(isTyping)
     );
 

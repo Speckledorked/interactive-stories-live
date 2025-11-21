@@ -16,10 +16,13 @@ export async function POST(
   try {
     const user = requireAuth(request)
     const campaignId = params.id
+    const body = await request.json().catch(() => ({}))
+    const requestedSceneId = body.sceneId
 
     console.log('🎬 Scene resolution requested')
     console.log(`Campaign: ${campaignId}`)
     console.log(`User: ${user.userId}`)
+    console.log(`Requested scene: ${requestedSceneId || 'current'}`)
 
     // 1. Verify user is admin of this campaign
     const membership = await prisma.campaignMembership.findUnique({
@@ -38,8 +41,32 @@ export async function POST(
       )
     }
 
-    // 2. Get current active scene
-    const currentScene = await getCurrentScene(campaignId)
+    // 2. Get target scene (either requested scene or current scene)
+    let currentScene
+    if (requestedSceneId) {
+      currentScene = await prisma.scene.findFirst({
+        where: {
+          id: requestedSceneId,
+          campaignId
+        },
+        include: {
+          playerActions: {
+            include: {
+              character: true,
+              user: true
+            }
+          }
+        }
+      })
+      if (!currentScene) {
+        return NextResponse.json<ErrorResponse>(
+          { error: 'Scene not found' },
+          { status: 404 }
+        )
+      }
+    } else {
+      currentScene = await getCurrentScene(campaignId)
+    }
 
     if (!currentScene) {
       return NextResponse.json<ErrorResponse>(

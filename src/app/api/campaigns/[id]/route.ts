@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
+import { UserRole } from '@prisma/client'
 
 export async function GET(
   request: NextRequest,
@@ -103,6 +104,60 @@ export async function GET(
       )
     }
     console.error('Get campaign error:', error)
+    return NextResponse.json<ErrorResponse>(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/campaigns/:id - Delete campaign
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = requireAuth(request)
+    const campaignId = params.id
+
+    // Check if user is an admin of this campaign
+    const membership = await prisma.campaignMembership.findUnique({
+      where: {
+        userId_campaignId: {
+          userId: user.userId,
+          campaignId
+        }
+      }
+    })
+
+    if (!membership) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Not a member of this campaign' },
+        { status: 403 }
+      )
+    }
+
+    if (membership.role !== UserRole.ADMIN) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Only admins can delete campaigns' },
+        { status: 403 }
+      )
+    }
+
+    // Delete the campaign (cascade will handle all related data)
+    await prisma.campaign.delete({
+      where: { id: campaignId }
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+    console.error('Delete campaign error:', error)
     return NextResponse.json<ErrorResponse>(
       { error: 'Internal server error' },
       { status: 500 }

@@ -72,7 +72,7 @@ export async function POST(
         data: {
           userId: user.userId,
           campaignId: invite.campaignId,
-          role: 'player',
+          role: 'PLAYER',
         },
       }),
       prisma.campaignInvite.update({

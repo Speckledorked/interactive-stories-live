@@ -49,7 +49,7 @@ export async function POST(
       data: {
         userId: user.userId,
         campaignId,
-        role: 'player'   // FIXED: CampaignRole.PLAYER → "player"
+        role: 'PLAYER'
       }
     })
 

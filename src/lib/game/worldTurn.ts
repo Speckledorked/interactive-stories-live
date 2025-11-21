@@ -71,38 +71,15 @@ async function advanceClocks(campaignId: string) {
     where: {
       campaignId,
       currentTicks: { lt: prisma.clock.fields.maxTicks } // Not completed
-    },
-    include: {
-      relatedFaction: true
     }
   })
 
   const advancedClocks: any[] = []
 
   for (const clock of clocks) {
-    // Determine advance rate based on faction threat level or clock metadata
-    let advanceAmount = 0
-
-    if (clock.relatedFaction) {
-      // Advance based on faction threat
-      switch (clock.relatedFaction.threatLevel) {
-        case 'EXTREME':
-          advanceAmount = 2 // Fast-moving threats
-          break
-        case 'HIGH':
-          advanceAmount = 1
-          break
-        case 'MEDIUM':
-          advanceAmount = Math.random() > 0.5 ? 1 : 0 // 50% chance
-          break
-        case 'LOW':
-          advanceAmount = Math.random() > 0.7 ? 1 : 0 // 30% chance
-          break
-      }
-    } else {
-      // Clocks without factions advance slowly
-      advanceAmount = Math.random() > 0.6 ? 1 : 0 // 40% chance
-    }
+    // Determine advance rate
+    // Note: Clock model doesn't have relatedFaction in schema
+    let advanceAmount = Math.random() > 0.6 ? 1 : 0 // 40% chance
 
     if (advanceAmount > 0) {
       const newTicks = Math.min(clock.currentTicks + advanceAmount, clock.maxTicks)
@@ -118,8 +95,7 @@ async function advanceClocks(campaignId: string) {
         id: clock.id,
         name: clock.name,
         oldTicks: clock.currentTicks,
-        newTicks,
-        faction: clock.relatedFaction?.name
+        newTicks
       })
     }
   }
@@ -152,7 +128,7 @@ async function generateOffscreenEvents(
 
     // Call AI to generate offscreen events
     const aiResult = await callAIForWorldTurn(
-      campaign.universe,
+      campaign.universe || 'Unknown',
       campaign.aiSystemPrompt,
       worldSummary,
       [...advancedClocks, ...completedClocks]
@@ -229,7 +205,7 @@ async function advanceInGameDate(campaignId: string) {
   }
 
   // Parse current date (assumes format like "Day 1", "Day 2", etc.)
-  const currentDate = worldMeta.currentInGameDate
+  const currentDate = worldMeta.currentInGameDate || 'Day 1'
   const dayMatch = currentDate.match(/Day (\d+)/)
 
   if (dayMatch) {

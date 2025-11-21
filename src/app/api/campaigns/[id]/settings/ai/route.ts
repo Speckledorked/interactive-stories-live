@@ -26,7 +26,7 @@ export async function PATCH(
       },
     })
 
-    if (!membership || membership.role !== 'admin') {
+    if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Only campaign admins can update settings' },
         { status: 403 }

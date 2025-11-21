@@ -71,8 +71,7 @@ export async function POST(request: NextRequest) {
           description,
           universe,
           aiSystemPrompt,
-          initialWorldSeed,
-          createdByUserId: user.userId
+          initialWorldSeed
         }
       })
 
@@ -82,7 +81,6 @@ export async function POST(request: NextRequest) {
           campaignId: newCampaign.id,
           currentTurnNumber: 0,
           currentInGameDate: 'Day 1',
-          gmStyleNotes: {},
           otherMeta: {}
         }
       })
@@ -92,7 +90,7 @@ export async function POST(request: NextRequest) {
         data: {
           userId: user.userId,
           campaignId: newCampaign.id,
-          role: 'admin' // string column: "admin" | "player"
+          role: 'ADMIN'
         }
       })
 

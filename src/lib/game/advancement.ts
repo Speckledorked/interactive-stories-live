@@ -125,8 +125,8 @@ export function computeOrganicGrowth(
     newMoves: []
   }
 
-  const statUsage = (character.statUsage as StatUsage) || {}
-  const existingPerks = (character.perks as Perk[]) || []
+  const statUsage = (character.statUsage as any as StatUsage) || {}
+  const existingPerks = (character.perks as any as Perk[]) || []
 
   // Count tag frequencies in recent actions
   const tagCounts: Record<string, number> = {}
@@ -267,8 +267,8 @@ export function applyOrganicGrowth(
   updatedMoves: string[]
 } {
   // Start with current values
-  let stats = character.stats ? { ...(character.stats as Record<string, number>) } : {}
-  let perks = character.perks ? [...(character.perks as Perk[])] : []
+  let stats = character.stats ? { ...(character.stats as any as Record<string, number>) } : {}
+  let perks = character.perks ? [...(character.perks as any as Perk[])] : []
   let moves = character.moves ? [...character.moves] : []
 
   // Apply stat increases

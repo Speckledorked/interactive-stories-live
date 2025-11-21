@@ -400,7 +400,7 @@ async function applyOrganicCharacterGrowth(
           stats: applied.updatedStats,
           perks: applied.updatedPerks,
           moves: applied.updatedMoves,
-          advancementLog: advancementLog
+          advancementLog: advancementLog as any
         }
       })
 

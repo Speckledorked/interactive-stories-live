@@ -47,13 +47,9 @@ export async function GET(
         npcs: true,
         factions: true,
         clocks: {
-          where: {
-            // Only show public clocks unless user is admin
-            OR: [
-              { isHidden: false },
-              membership.role === 'ADMIN' ? { isHidden: true } : {}
-            ]
-          }
+          where: membership.role === 'ADMIN'
+            ? {} // Admin sees all clocks
+            : { isHidden: false } // Others see only public clocks
         },
         // Timeline events relation is named "timeline" in the schema
         timeline: {

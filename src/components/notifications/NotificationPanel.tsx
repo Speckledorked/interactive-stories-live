@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { NotificationService } from '@/lib/notifications/notification-service';
 import { getPusherClient } from '@/lib/realtime/pusher-client';
+import { getToken } from '@/lib/clientAuth';
 
 interface Notification {
   id: string;
@@ -62,7 +63,7 @@ export default function NotificationPanel({
       if (campaignId) params.append('campaignId', campaignId);
       params.append('limit', '50');
 
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`/api/notifications?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -107,7 +108,7 @@ export default function NotificationPanel({
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       await fetch(`/api/notifications/${notificationId}`, {
         method: 'PUT',
         headers: {
@@ -133,7 +134,7 @@ export default function NotificationPanel({
 
   const dismissNotification = async (notificationId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       await fetch(`/api/notifications/${notificationId}`, {
         method: 'PUT',
         headers: {

@@ -69,13 +69,13 @@ export async function PATCH(
     } else if (operation === 'add' && item) {
       // Add item
       updatedInventory = addItemToInventory(
-        character.inventory as CharacterInventory,
+        character.inventory as any,
         item as InventoryItem
       )
     } else if (operation === 'remove' && item) {
       // Remove item
       updatedInventory = removeItemFromInventory(
-        character.inventory as CharacterInventory,
+        character.inventory as any,
         item.id,
         item.quantity || 1
       )
@@ -89,7 +89,7 @@ export async function PATCH(
     // Update character
     const updated = await prisma.character.update({
       where: { id: characterId },
-      data: { inventory: updatedInventory },
+      data: { inventory: updatedInventory as any },
     })
 
     return NextResponse.json({

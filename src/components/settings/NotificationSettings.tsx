@@ -3,6 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getToken } from '@/lib/clientAuth';
 
 interface NotificationSettings {
   // Email notifications
@@ -54,7 +55,7 @@ export default function NotificationSettings() {
 
   const fetchSettings = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch('/api/notifications/settings', {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -75,7 +76,7 @@ export default function NotificationSettings() {
   const updateSettings = async (newSettings: Partial<NotificationSettings>) => {
     setSaving(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch('/api/notifications/settings', {
         method: 'PUT',
         headers: {

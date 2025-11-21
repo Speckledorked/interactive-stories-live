@@ -259,7 +259,7 @@ class NotificationManager {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${localStorage.getItem('token')}\`
+        'Authorization': \`Bearer \${localStorage.getItem('ai_gm_token')}\`
       },
       body: JSON.stringify({
         userId,
@@ -301,7 +301,7 @@ class NotificationManager {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${localStorage.getItem('token')}\`
+        'Authorization': \`Bearer \${localStorage.getItem('ai_gm_token')}\`
       },
       body: JSON.stringify({ userId })
     });

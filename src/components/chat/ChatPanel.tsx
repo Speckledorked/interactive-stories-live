@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Message } from '@prisma/client';
 import { getPusherClient, subscribeToCampaignMessages, subscribeToUserWhispers, RealtimeMessage } from '@/lib/realtime/pusher-client';
+import { getToken } from '@/lib/clientAuth';
 
 interface ChatPanelProps {
   campaignId: string;
@@ -89,7 +90,7 @@ export default function ChatPanel({
       if (sceneId) params.append('sceneId', sceneId);
       params.append('limit', '50');
 
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`/api/campaigns/${campaignId}/messages?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -107,7 +108,7 @@ export default function ChatPanel({
 
   const fetchCampaignMembers = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`/api/campaigns/${campaignId}/members`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -129,7 +130,7 @@ export default function ChatPanel({
 
   const sendTypingIndicator = async (typing: boolean) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       await fetch(`/api/campaigns/${campaignId}/typing`, {
         method: 'POST',
         headers: {
@@ -183,7 +184,7 @@ export default function ChatPanel({
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const response = await fetch(`/api/campaigns/${campaignId}/messages`, {
         method: 'POST',
         headers: {
@@ -242,19 +243,19 @@ export default function ChatPanel({
 
     return (
       <div key={message.id} className={`p-3 rounded-lg ${
-        isOwnMessage ? 'bg-blue-50 ml-8' : 'bg-gray-50 mr-8'
-      } ${isWhisper ? 'border-l-4 border-purple-400' : ''}`}>
+        isOwnMessage ? 'bg-blue-100 ml-8' : 'bg-gray-100 mr-8'
+      } ${isWhisper ? 'border-l-4 border-purple-500' : ''}`}>
         <div className="flex items-center gap-2 mb-1">
-          <span className={`text-sm font-medium ${
-            isIC ? 'text-green-600' : isWhisper ? 'text-purple-600' : 'text-blue-600'
+          <span className={`text-sm font-semibold ${
+            isIC ? 'text-green-700' : isWhisper ? 'text-purple-700' : 'text-blue-700'
           }`}>
             {prefix}{authorName}
           </span>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-700">
             {new Date(message.createdAt).toLocaleTimeString()}
           </span>
         </div>
-        <div className="text-gray-800 whitespace-pre-wrap">{message.content}</div>
+        <div className="text-gray-900 whitespace-pre-wrap">{message.content}</div>
       </div>
     );
   };
@@ -265,7 +266,7 @@ export default function ChatPanel({
       <div className="p-4 border-b border-gray-200">
         <h3 className="font-semibold text-gray-900">Campaign Chat</h3>
         {typingUsers.length > 0 && (
-          <p className="text-sm text-gray-500 italic">
+          <p className="text-sm text-gray-700 italic">
             {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
           </p>
         )}

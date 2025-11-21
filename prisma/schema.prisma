@@ -181,13 +181,14 @@ model Character {
   // PbtA specific fields
   harm            Int      @default(0) // 0-6 harm track
   experience      Int      @default(0) // XP counter
-  conditions      String[] // ["shaken", "wounded", "unstable"] etc
+  conditions      Json?    // { conditions: [{ id, name, category, description, mechanicalEffect?, appliedAt? }] }
   moves           String[] // Character move IDs they've unlocked
   holds           Json?    // Temporary holds/forward from moves
 
   // Organic growth tracking
   statUsage       Json? // { [statKey: string]: { uses: Int, successes: Int, failures: Int } }
   perks           Json? // [{ id, name, description, tags? }]
+  advancementLog  Json? // { entries: [], totalStatIncreases, totalPerksGained, totalMovesLearned }
 
   // Inventory and equipment
   inventory       Json? // { items: [{ id, name, quantity?, tags? }], slots?: number }

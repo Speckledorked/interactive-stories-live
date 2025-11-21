@@ -5,6 +5,15 @@
 import { prisma } from '@/lib/prisma'
 import { AIGMResponse } from '@/lib/ai/client'
 import { EventVisibility } from '@prisma/client'
+import {
+  applyHarm,
+  healHarm,
+  markCondition,
+  clearCondition,
+  HarmState,
+  Condition,
+  HarmLevel
+} from './harm'
 
 /**
  * Apply all world updates from an AI GM response to the database
@@ -121,7 +130,7 @@ export async function applyWorldUpdates(
       // 4. Update player characters
       if (world_updates.pc_changes) {
         console.log(`🦸 Updating ${world_updates.pc_changes.length} characters`)
-        
+
         for (const pcChange of world_updates.pc_changes) {
           const character = await tx.character.findFirst({
             where: {
@@ -141,8 +150,80 @@ export async function applyWorldUpdates(
               updateData.currentLocation = pcChange.changes.location
             }
 
-            // Note: conditions_add and conditions_remove are not supported in the current schema
-            // Characters don't have a conditions field in the database
+            // Process harm and conditions
+            let currentHarm = (character.harm as number) || 0
+            let currentConditions: Condition[] = (character.conditions as any)?.conditions || []
+            let harmMessages: string[] = []
+
+            // Apply harm damage
+            if (pcChange.changes.harm_damage && pcChange.changes.harm_damage > 0) {
+              const harmResult = applyHarm(
+                currentHarm as HarmLevel,
+                pcChange.changes.harm_damage,
+                0 // TODO: Factor in armor when equipment system is integrated
+              )
+              currentHarm = harmResult.newHarm
+              harmMessages.push(harmResult.message)
+
+              // Auto-add conditions from harm
+              for (const autoCondition of harmResult.autoConditions) {
+                const condResult = markCondition(currentConditions, autoCondition)
+                currentConditions = condResult.updatedConditions
+              }
+            }
+
+            // Apply harm healing
+            if (pcChange.changes.harm_healing && pcChange.changes.harm_healing > 0) {
+              const healResult = healHarm(
+                currentHarm as HarmLevel,
+                pcChange.changes.harm_healing
+              )
+              currentHarm = healResult.newHarm
+              harmMessages.push(healResult.message)
+            }
+
+            // Add conditions
+            if (pcChange.changes.conditions_add && pcChange.changes.conditions_add.length > 0) {
+              for (const conditionData of pcChange.changes.conditions_add) {
+                const newCondition: Condition = {
+                  id: conditionData.id || `condition_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  name: conditionData.name,
+                  category: conditionData.category,
+                  description: conditionData.description,
+                  mechanicalEffect: conditionData.mechanicalEffect,
+                  appliedAt: currentTurnNumber
+                }
+                const condResult = markCondition(currentConditions, newCondition)
+                currentConditions = condResult.updatedConditions
+                harmMessages.push(condResult.message)
+              }
+            }
+
+            // Remove conditions
+            if (pcChange.changes.conditions_remove && pcChange.changes.conditions_remove.length > 0) {
+              for (const conditionIdOrName of pcChange.changes.conditions_remove) {
+                // Try to find by ID first, then by name
+                const conditionToRemove = currentConditions.find(c =>
+                  c.id === conditionIdOrName ||
+                  c.name.toLowerCase() === conditionIdOrName.toLowerCase()
+                )
+
+                if (conditionToRemove) {
+                  const clearResult = clearCondition(currentConditions, conditionToRemove.id)
+                  currentConditions = clearResult.updatedConditions
+                  harmMessages.push(clearResult.message)
+                }
+              }
+            }
+
+            // Update harm and conditions if changed
+            if (harmMessages.length > 0) {
+              updateData.harm = currentHarm
+              updateData.conditions = {
+                conditions: currentConditions
+              }
+              console.log(`  💔 ${character.name}: ${harmMessages.join(', ')}`)
+            }
 
             if (Object.keys(updateData).length > 0) {
               await tx.character.update({

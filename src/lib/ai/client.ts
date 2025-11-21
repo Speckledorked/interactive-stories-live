@@ -31,8 +31,16 @@ export interface AIGMResponse {
     pc_changes?: Array<{
       character_name_or_id: string
       changes: {
-        conditions_add?: string[]
-        conditions_remove?: string[]
+        harm_damage?: number // Apply this much harm
+        harm_healing?: number // Heal this much harm
+        conditions_add?: Array<{
+          id?: string
+          name: string
+          category: 'Physical' | 'Emotional' | 'Special'
+          description: string
+          mechanicalEffect?: string
+        }>
+        conditions_remove?: string[] // IDs or names of conditions to remove
         location?: string
       }
     }>
@@ -222,7 +230,18 @@ You MUST respond with a JSON object with this exact structure:
     "new_timeline_events": [...],
     "clock_changes": [...],
     "npc_changes": [...],
-    "pc_changes": [...],
+    "pc_changes": [
+      {
+        "character_name_or_id": "CHARACTER_NAME",
+        "changes": {
+          "harm_damage": 2,
+          "harm_healing": 1,
+          "conditions_add": [{"name": "Bleeding", "category": "Physical", "description": "...", "mechanicalEffect": "1 harm per turn"}],
+          "conditions_remove": ["stunned"],
+          "location": "New location"
+        }
+      }
+    ],
     "faction_changes": [...],
     "organic_advancement": [
       {
@@ -235,6 +254,16 @@ You MUST respond with a JSON object with this exact structure:
     "notes_for_gm": "Private notes for continuity..."
   }
 }
+
+HARM AND CONDITIONS:
+- Characters have a 6-segment harm track (0-6)
+- 0-3: Fine (no penalties)
+- 4-5: Impaired (-1 to all rolls)
+- 6: Taken Out (unconscious, captured, or dying)
+- Apply harm_damage when characters are hurt in combat or dangerous situations
+- Apply harm_healing when characters rest or receive medical attention
+- Add conditions for specific effects: Physical (Bleeding, Stunned, Poisoned), Emotional (Terrified, Enraged), Special (Cursed, Marked)
+- Remove conditions when narratively appropriate or when treated
 
 ORGANIC CHARACTER GROWTH:
 - Stats can grow from -2 to +3 based on consistent successful use

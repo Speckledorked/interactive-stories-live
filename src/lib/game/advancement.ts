@@ -49,6 +49,37 @@ export interface RecentAction {
 }
 
 /**
+ * Advancement Log Entry
+ * Records when and why a character advanced
+ */
+export interface AdvancementLogEntry {
+  timestamp: string
+  turnNumber?: number
+  sceneId?: string
+  type: 'stat_increase' | 'perk_gained' | 'move_learned'
+  details: {
+    statKey?: string
+    oldValue?: number
+    newValue?: number
+    perkId?: string
+    perkName?: string
+    moveId?: string
+    reason: string
+  }
+}
+
+/**
+ * Advancement Log
+ * Full history of a character's growth
+ */
+export interface AdvancementLog {
+  entries: AdvancementLogEntry[]
+  totalStatIncreases: number
+  totalPerksGained: number
+  totalMovesLearned: number
+}
+
+/**
  * Record stat usage for a character
  * Updates the statUsage JSON field
  */
@@ -276,5 +307,146 @@ export function applyOrganicGrowth(
     updatedStats: stats,
     updatedPerks: perks,
     updatedMoves: moves
+  }
+}
+
+/**
+ * Initialize an empty advancement log
+ */
+export function createAdvancementLog(): AdvancementLog {
+  return {
+    entries: [],
+    totalStatIncreases: 0,
+    totalPerksGained: 0,
+    totalMovesLearned: 0
+  }
+}
+
+/**
+ * Add a stat increase to the advancement log
+ */
+export function logStatIncrease(
+  log: AdvancementLog,
+  statKey: string,
+  oldValue: number,
+  newValue: number,
+  reason: string,
+  turnNumber?: number,
+  sceneId?: string
+): AdvancementLog {
+  const entry: AdvancementLogEntry = {
+    timestamp: new Date().toISOString(),
+    turnNumber,
+    sceneId,
+    type: 'stat_increase',
+    details: {
+      statKey,
+      oldValue,
+      newValue,
+      reason
+    }
+  }
+
+  return {
+    entries: [...log.entries, entry],
+    totalStatIncreases: log.totalStatIncreases + 1,
+    totalPerksGained: log.totalPerksGained,
+    totalMovesLearned: log.totalMovesLearned
+  }
+}
+
+/**
+ * Add a perk gain to the advancement log
+ */
+export function logPerkGained(
+  log: AdvancementLog,
+  perkId: string,
+  perkName: string,
+  reason: string,
+  turnNumber?: number,
+  sceneId?: string
+): AdvancementLog {
+  const entry: AdvancementLogEntry = {
+    timestamp: new Date().toISOString(),
+    turnNumber,
+    sceneId,
+    type: 'perk_gained',
+    details: {
+      perkId,
+      perkName,
+      reason
+    }
+  }
+
+  return {
+    entries: [...log.entries, entry],
+    totalStatIncreases: log.totalStatIncreases,
+    totalPerksGained: log.totalPerksGained + 1,
+    totalMovesLearned: log.totalMovesLearned
+  }
+}
+
+/**
+ * Add a move learned to the advancement log
+ */
+export function logMoveLearned(
+  log: AdvancementLog,
+  moveId: string,
+  reason: string,
+  turnNumber?: number,
+  sceneId?: string
+): AdvancementLog {
+  const entry: AdvancementLogEntry = {
+    timestamp: new Date().toISOString(),
+    turnNumber,
+    sceneId,
+    type: 'move_learned',
+    details: {
+      moveId,
+      reason
+    }
+  }
+
+  return {
+    entries: [...log.entries, entry],
+    totalStatIncreases: log.totalStatIncreases,
+    totalPerksGained: log.totalPerksGained,
+    totalMovesLearned: log.totalMovesLearned + 1
+  }
+}
+
+/**
+ * Get recent advancement entries (last N)
+ */
+export function getRecentAdvancements(log: AdvancementLog, limit: number = 10): AdvancementLogEntry[] {
+  return log.entries.slice(-limit)
+}
+
+/**
+ * Get all advancements of a specific type
+ */
+export function getAdvancementsByType(
+  log: AdvancementLog,
+  type: 'stat_increase' | 'perk_gained' | 'move_learned'
+): AdvancementLogEntry[] {
+  return log.entries.filter(entry => entry.type === type)
+}
+
+/**
+ * Format advancement log entry for display
+ */
+export function formatAdvancementEntry(entry: AdvancementLogEntry): string {
+  const date = new Date(entry.timestamp).toLocaleDateString()
+  const turnInfo = entry.turnNumber ? ` (Turn ${entry.turnNumber})` : ''
+
+  switch (entry.type) {
+    case 'stat_increase':
+      return `${date}${turnInfo}: ${entry.details.statKey} increased from ${entry.details.oldValue} to ${entry.details.newValue} - ${entry.details.reason}`
+    case 'perk_gained':
+      return `${date}${turnInfo}: Gained perk "${entry.details.perkName}" - ${entry.details.reason}`
+    case 'move_learned':
+      return `${date}${turnInfo}: Learned move "${entry.details.moveId}" - ${entry.details.reason}`
+    default:
+      return `${date}${turnInfo}: Unknown advancement type`
   }
 }

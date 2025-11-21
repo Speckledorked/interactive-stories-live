@@ -16,12 +16,12 @@ interface ChatPanelProps {
 
 type MessageType = 'OUT_OF_CHARACTER' | 'IN_CHARACTER' | 'WHISPER';
 
-export default function ChatPanel({
-  campaignId,
-  currentUserId,
+export default function ChatPanel({ 
+  campaignId, 
+  currentUserId, 
   currentUserName,
   userCharacters,
-  sceneId
+  sceneId 
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<RealtimeMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -32,7 +32,7 @@ export default function ChatPanel({
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [campaignMembers, setCampaignMembers] = useState<Array<{ id: string; name: string; email: string; }>>([]);
   const [loading, setLoading] = useState(false);
-
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -166,7 +166,7 @@ export default function ChatPanel({
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     if (!newMessage.trim()) return;
 
     // Validation

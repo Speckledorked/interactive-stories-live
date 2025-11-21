@@ -12,11 +12,11 @@ interface PushNotificationParams {
 }
 
 export class PushService {
-
+  
   // Send browser push notification via Pusher
   static async triggerPushNotification(params: PushNotificationParams) {
     const { triggerPushNotificationEvent } = await import('../realtime/pusher-server');
-
+    
     const payload = {
       title: params.title,
       body: params.message,
@@ -56,7 +56,7 @@ export class PushService {
 
 self.addEventListener('push', function(event) {
   const data = event.data ? event.data.json() : {};
-
+  
   const options = {
     body: data.body || 'You have a new notification',
     icon: data.icon || '/icons/notification-icon.png',
@@ -79,11 +79,11 @@ self.addEventListener('push', function(event) {
 
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-
+  
   if (event.action === 'view' || !event.action) {
     // Open the app at the specified URL
     const url = event.notification.data.url || '/';
-
+    
     event.waitUntil(
       clients.matchAll({ type: 'window', includeUncontrolled: true })
         .then(function(clientList) {
@@ -94,7 +94,7 @@ self.addEventListener('notificationclick', function(event) {
               return client.focus();
             }
           }
-
+          
           // Open new window
           if (clients.openWindow) {
             return clients.openWindow(url);
@@ -135,7 +135,7 @@ self.addEventListener('sync', function(event) {
             data: notification.data
           });
         });
-
+        
         localStorage.setItem('lastNotificationSync', Date.now());
       })
       .catch(err => console.log('Background sync failed:', err))
@@ -171,7 +171,7 @@ class NotificationManager {
 
     const permission = await Notification.requestPermission();
     this.permission = permission;
-
+    
     return permission === 'granted';
   }
 
@@ -220,7 +220,7 @@ class NotificationManager {
     notification.onclick = function(event) {
       event.preventDefault();
       notification.close();
-
+      
       if (options.actionUrl) {
         window.open(options.actionUrl, '_blank');
       }
@@ -241,7 +241,7 @@ class NotificationManager {
   // Subscribe to push notifications
   async subscribeToPush(userId) {
     const registration = await this.registerServiceWorker();
-
+    
     // Check if already subscribed
     const existingSubscription = await registration.pushManager.getSubscription();
     if (existingSubscription) {

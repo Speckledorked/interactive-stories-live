@@ -32,9 +32,9 @@ interface TurnTrackerProps {
   isGM?: boolean;
 }
 
-export default function TurnTracker({
-  campaignId,
-  sceneId,
+export default function TurnTracker({ 
+  campaignId, 
+  sceneId, 
   currentUserId,
   isGM = false
 }: TurnTrackerProps) {
@@ -46,10 +46,10 @@ export default function TurnTracker({
   useEffect(() => {
     fetchTurnInfo();
     setupRealtimeSubscription();
-
+    
     // Update timer every second
     const timer = setInterval(updateTimeRemaining, 1000);
-
+    
     return () => {
       clearInterval(timer);
       cleanup();
@@ -108,11 +108,11 @@ export default function TurnTracker({
 
   const updateTimeRemaining = () => {
     if (!turnInfo?.turnDeadline) return;
-
+    
     const deadline = new Date(turnInfo.turnDeadline).getTime();
     const now = new Date().getTime();
     const remaining = Math.max(0, deadline - now);
-
+    
     setTimeRemaining(remaining);
   };
 
@@ -145,7 +145,7 @@ export default function TurnTracker({
 
   const skipTurn = async () => {
     if (!isGM) return;
-
+    
     if (!confirm('Skip the current player\'s turn?')) {
       return;
     }
@@ -192,13 +192,13 @@ export default function TurnTracker({
 
   const getProgressPercentage = (): number => {
     if (!turnInfo?.turnDeadline || !turnInfo?.turnStartedAt) return 100;
-
+    
     const start = new Date(turnInfo.turnStartedAt).getTime();
     const end = new Date(turnInfo.turnDeadline).getTime();
     const now = new Date().getTime();
     const total = end - start;
     const elapsed = now - start;
-
+    
     return Math.min(100, Math.max(0, (elapsed / total) * 100));
   };
 
@@ -249,7 +249,7 @@ export default function TurnTracker({
 
           {/* Progress Bar */}
           <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-            <div
+            <div 
               className={`h-2 rounded-full transition-all duration-1000 ${
                 timeRemaining <= 60000 ? 'bg-red-500' :
                 timeRemaining <= 300000 ? 'bg-orange-500' :
@@ -265,7 +265,7 @@ export default function TurnTracker({
               <button
                 onClick={advanceTurn}
                 className={`px-4 py-2 rounded-md text-sm font-medium ${
-                  isMyTurn
+                  isMyTurn 
                     ? 'bg-blue-600 text-white hover:bg-blue-700'
                     : 'bg-gray-600 text-white hover:bg-gray-700'
                 }`}
@@ -273,7 +273,7 @@ export default function TurnTracker({
                 {isMyTurn ? 'End My Turn' : 'Advance Turn'}
               </button>
             )}
-
+            
             {isGM && (
               <button
                 onClick={skipTurn}
@@ -293,7 +293,7 @@ export default function TurnTracker({
               <div
                 key={`${player.userId}-${index}`}
                 className={`flex items-center justify-between p-2 rounded ${
-                  index === turnInfo.turnIndex
+                  index === turnInfo.turnIndex 
                     ? 'bg-blue-100 border border-blue-200'
                     : 'bg-gray-50'
                 }`}
@@ -312,7 +312,7 @@ export default function TurnTracker({
                   )}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {index < turnInfo.turnIndex ? '✓' :
+                  {index < turnInfo.turnIndex ? '✓' : 
                    index === turnInfo.turnIndex ? '⏳' : '⏸️'}
                 </div>
               </div>

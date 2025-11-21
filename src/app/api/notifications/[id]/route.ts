@@ -1,7 +1,6 @@
 // src/app/api/notifications/[id]/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { NotificationService } from '@/lib/notifications/notification-service';
 import { verifyAuth } from '@/lib/auth';
 
@@ -16,13 +15,13 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const notifications = await NotificationService.getNotifications(user.userId, {
+    const notifications = await NotificationService.getNotifications(user.id, {
       limit: 1,
       offset: 0
     });
 
     const notification = notifications.find(n => n.id === params.id);
-
+    
     if (!notification) {
       return NextResponse.json({ error: 'Notification not found' }, { status: 404 });
     }
@@ -55,17 +54,17 @@ export async function PUT(
 
     let result;
     if (action === 'read') {
-      result = await NotificationService.markAsRead(params.id, user.userId);
+      result = await NotificationService.markAsRead(params.id, user.id);
     } else {
-      result = await NotificationService.dismiss(params.id, user.userId);
+      result = await NotificationService.dismiss(params.id, user.id);
     }
 
     if (result.count === 0) {
       return NextResponse.json({ error: 'Notification not found' }, { status: 404 });
     }
 
-    return NextResponse.json({
-      message: `Notification ${action === 'read' ? 'marked as read' : 'dismissed'}`
+    return NextResponse.json({ 
+      message: `Notification ${action === 'read' ? 'marked as read' : 'dismissed'}` 
     });
 
   } catch (error) {
@@ -88,7 +87,7 @@ export async function DELETE(
     const deleted = await prisma.notification.deleteMany({
       where: {
         id: params.id,
-        userId: user.userId
+        userId: user.id
       }
     });
 

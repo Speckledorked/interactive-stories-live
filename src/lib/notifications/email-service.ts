@@ -42,7 +42,7 @@ export class EmailService {
         return null;
       }
 
-      this.transporter = nodemailer.createTransport(config);
+      this.transporter = nodemailer.createTransporter(config);
     }
 
     return this.transporter;
@@ -51,7 +51,7 @@ export class EmailService {
   // Send email notification
   static async sendEmail(params: EmailParams): Promise<boolean> {
     const transporter = this.getTransporter();
-
+    
     if (!transporter) {
       console.warn('Email not sent - transporter not configured');
       return false;
@@ -82,7 +82,7 @@ export class EmailService {
 
   // Send welcome email to new users
   static async sendWelcomeEmail(userEmail: string, userName: string) {
-    const subject = 'Welcome to AI Game Master!';
+    const subject = '🎮 Welcome to AI Game Master!';
     const html = this.buildWelcomeEmailTemplate(userName);
 
     return await this.sendEmail({
@@ -94,12 +94,12 @@ export class EmailService {
 
   // Send campaign invitation email
   static async sendCampaignInviteEmail(
-    userEmail: string,
-    campaignTitle: string,
+    userEmail: string, 
+    campaignTitle: string, 
     inviterName: string,
     inviteToken: string
   ) {
-    const subject = `You're invited to join "${campaignTitle}"`;
+    const subject = `🎲 You're invited to join "${campaignTitle}"`;
     const html = this.buildInviteEmailTemplate(campaignTitle, inviterName, inviteToken);
 
     return await this.sendEmail({
@@ -111,7 +111,7 @@ export class EmailService {
 
   // Send daily digest email
   static async sendDailyDigest(
-    userEmail: string,
+    userEmail: string, 
     userName: string,
     digestData: {
       unreadNotifications: number;
@@ -124,7 +124,7 @@ export class EmailService {
       }>;
     }
   ) {
-    const subject = 'Your Daily AI GM Digest';
+    const subject = '📊 Your Daily AI GM Digest';
     const html = this.buildDigestEmailTemplate(userName, digestData);
 
     return await this.sendEmail({
@@ -136,7 +136,7 @@ export class EmailService {
 
   // Send password reset email
   static async sendPasswordResetEmail(userEmail: string, resetToken: string) {
-    const subject = 'Reset Your AI GM Password';
+    const subject = '🔒 Reset Your AI GM Password';
     const html = this.buildPasswordResetTemplate(resetToken);
 
     return await this.sendEmail({
@@ -152,19 +152,19 @@ export class EmailService {
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 20px;">
         <div style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #1e40af; margin: 0; font-size: 28px;">AI Game Master</h1>
+            <h1 style="color: #1e40af; margin: 0; font-size: 28px;">🎮 AI Game Master</h1>
             <p style="color: #64748b; margin: 10px 0 0 0;">Your AI-powered tabletop RPG experience</p>
           </div>
 
           <h2 style="color: #1e3a8a;">Welcome, ${userName}!</h2>
-
+          
           <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-            You've successfully joined the future of tabletop RPGs! Our AI Game Master is ready to create
+            You've successfully joined the future of tabletop RPGs! Our AI Game Master is ready to create 
             unlimited adventures, manage complex campaigns, and bring your stories to life.
           </p>
 
           <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
-            <h3 style="color: #1e40af; margin: 0 0 10px 0;">Ready to Start?</h3>
+            <h3 style="color: #1e40af; margin: 0 0 10px 0;">🚀 Ready to Start?</h3>
             <ul style="color: #1e40af; margin: 0; padding-left: 20px;">
               <li>Create your first campaign</li>
               <li>Invite friends to join</li>
@@ -174,7 +174,7 @@ export class EmailService {
           </div>
 
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/campaigns"
+            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/campaigns" 
                style="background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
               Start Your Adventure
             </a>
@@ -182,7 +182,7 @@ export class EmailService {
 
           <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 30px;">
             <p style="font-size: 14px; color: #6b7280; text-align: center; margin: 0;">
-              Questions? Reply to this email or check our
+              Questions? Reply to this email or check our 
               <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/help" style="color: #2563eb;">help center</a>.
             </p>
           </div>
@@ -193,8 +193,8 @@ export class EmailService {
 
   // Build campaign invite email template
   private static buildInviteEmailTemplate(
-    campaignTitle: string,
-    inviterName: string,
+    campaignTitle: string, 
+    inviterName: string, 
     inviteToken: string
   ): string {
     const joinUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/join/${inviteToken}`;
@@ -203,11 +203,11 @@ export class EmailService {
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 20px;">
         <div style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #1e40af; margin: 0; font-size: 28px;">Campaign Invitation</h1>
+            <h1 style="color: #1e40af; margin: 0; font-size: 28px;">🎲 Campaign Invitation</h1>
           </div>
 
           <h2 style="color: #1e3a8a;">You're Invited!</h2>
-
+          
           <p style="font-size: 16px; line-height: 1.6; color: #374151;">
             <strong>${inviterName}</strong> has invited you to join the campaign:
           </p>
@@ -217,12 +217,12 @@ export class EmailService {
           </div>
 
           <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-            Join this AI-powered campaign where epic adventures await! Create your character,
+            Join this AI-powered campaign where epic adventures await! Create your character, 
             collaborate with other players, and experience stories guided by our intelligent Game Master.
           </p>
 
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${joinUrl}"
+            <a href="${joinUrl}" 
                style="background: #22c55e; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 16px;">
               Join Campaign
             </a>
@@ -230,7 +230,7 @@ export class EmailService {
 
           <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
             <p style="color: #92400e; margin: 0; font-size: 14px;">
-              <strong>Note:</strong> This invitation link will expire in 7 days.
+              <strong>Note:</strong> This invitation link will expire in 7 days. 
               Don't wait too long to join the adventure!
             </p>
           </div>
@@ -254,20 +254,20 @@ export class EmailService {
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 20px;">
         <div style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-          <h1 style="color: #1e40af; margin: 0 0 20px 0; font-size: 24px;">Daily Digest</h1>
-
+          <h1 style="color: #1e40af; margin: 0 0 20px 0; font-size: 24px;">📊 Daily Digest</h1>
+          
           <p style="color: #374151; margin-bottom: 25px;">Hi ${userName}, here's your AI GM activity summary:</p>
 
           <div style="display: grid; gap: 15px; margin-bottom: 25px;">
             <div style="background: #eff6ff; border-radius: 6px; padding: 15px;">
-              <h3 style="color: #1e40af; margin: 0 0 5px 0; font-size: 16px;">Notifications</h3>
+              <h3 style="color: #1e40af; margin: 0 0 5px 0; font-size: 16px;">🔔 Notifications</h3>
               <p style="color: #374151; margin: 0; font-size: 14px;">
                 ${digestData.unreadNotifications} unread notification${digestData.unreadNotifications !== 1 ? 's' : ''}
               </p>
             </div>
-
+            
             <div style="background: #f0fdf4; border-radius: 6px; padding: 15px;">
-              <h3 style="color: #15803d; margin: 0 0 5px 0; font-size: 16px;">Active Campaigns</h3>
+              <h3 style="color: #15803d; margin: 0 0 5px 0; font-size: 16px;">🎮 Active Campaigns</h3>
               <p style="color: #374151; margin: 0; font-size: 14px;">
                 ${digestData.activeCampaigns.join(', ') || 'No active campaigns'}
               </p>
@@ -275,7 +275,7 @@ export class EmailService {
           </div>
 
           <div style="text-align: center; margin-top: 30px;">
-            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/campaigns"
+            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/campaigns" 
                style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
               View Campaigns
             </a>
@@ -292,15 +292,15 @@ export class EmailService {
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 20px;">
         <div style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-          <h1 style="color: #dc2626; margin: 0 0 20px 0; font-size: 24px;">Password Reset</h1>
-
+          <h1 style="color: #dc2626; margin: 0 0 20px 0; font-size: 24px;">🔒 Password Reset</h1>
+          
           <p style="color: #374151; line-height: 1.6;">
-            You requested a password reset for your AI Game Master account.
+            You requested a password reset for your AI Game Master account. 
             Click the button below to create a new password:
           </p>
 
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${resetUrl}"
+            <a href="${resetUrl}" 
                style="background: #dc2626; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
               Reset Password
             </a>
@@ -308,7 +308,7 @@ export class EmailService {
 
           <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0;">
             <p style="color: #991b1b; margin: 0; font-size: 14px;">
-              <strong>Security Note:</strong> This link expires in 1 hour.
+              <strong>Security Note:</strong> This link expires in 1 hour. 
               If you didn't request this reset, please ignore this email.
             </p>
           </div>
@@ -328,7 +328,7 @@ export class EmailService {
   // Test email configuration
   static async testConnection(): Promise<boolean> {
     const transporter = this.getTransporter();
-
+    
     if (!transporter) {
       return false;
     }

@@ -2,7 +2,6 @@
 
 import { prisma } from '@/lib/prisma';
 import { NotificationService } from './notification-service';
-import { Prisma } from '@prisma/client';
 
 export interface TurnOrder {
   userId: string;
@@ -15,8 +14,8 @@ export class TurnTracker {
 
   // Initialize turn tracking for a scene
   static async initializeScene(
-    campaignId: string,
-    sceneId: string,
+    campaignId: string, 
+    sceneId: string, 
     participants: TurnOrder[],
     turnTimeoutMinutes: number = 60
   ) {
@@ -31,7 +30,7 @@ export class TurnTracker {
         campaignId,
         sceneId,
         currentTurn: 0,
-        turnOrder: participants as unknown as Prisma.InputJsonValue,
+        turnOrder: participants,
         turnStartedAt: new Date(),
         turnDeadline: new Date(Date.now() + turnTimeoutMinutes * 60 * 1000),
         turnTimeoutMinutes,
@@ -58,7 +57,7 @@ export class TurnTracker {
       throw new Error('Turn tracker not found');
     }
 
-    const turnOrder = turnTracker.turnOrder as unknown as TurnOrder[];
+    const turnOrder = turnTracker.turnOrder as TurnOrder[];
     const currentPlayer = turnOrder[turnTracker.currentTurn];
 
     // Verify it's actually this user's turn
@@ -85,9 +84,9 @@ export class TurnTracker {
 
     // Notify next player
     await this.notifyPlayerTurn(
-      campaignId,
-      sceneId,
-      nextPlayer,
+      campaignId, 
+      sceneId, 
+      nextPlayer, 
       turnTracker.turnTimeoutMinutes
     );
 
@@ -113,7 +112,7 @@ export class TurnTracker {
       throw new Error('Turn tracker not found');
     }
 
-    const turnOrder = turnTracker.turnOrder as unknown as TurnOrder[];
+    const turnOrder = turnTracker.turnOrder as TurnOrder[];
     const skippedPlayer = turnOrder[turnTracker.currentTurn];
 
     // Notify that turn was skipped
@@ -140,9 +139,9 @@ export class TurnTracker {
 
     if (!turnTracker) return;
 
-    const turnOrder = turnTracker.turnOrder as unknown as TurnOrder[];
+    const turnOrder = turnTracker.turnOrder as TurnOrder[];
     const currentPlayer = turnOrder[turnTracker.currentTurn];
-    const remindersSent = (turnTracker.remindersSent as unknown as Date[]) || [];
+    const remindersSent = (turnTracker.remindersSent as Date[]) || [];
 
     // Don't send more than 3 reminders
     if (remindersSent.length >= 3) return;
@@ -153,9 +152,9 @@ export class TurnTracker {
       if (timeSinceLastReminder < 10 * 60 * 1000) return;
     }
 
-    const timeRemaining = turnTracker.turnDeadline ?
+    const timeRemaining = turnTracker.turnDeadline ? 
       Math.max(0, new Date(turnTracker.turnDeadline).getTime() - Date.now()) : 0;
-
+    
     const minutesRemaining = Math.ceil(timeRemaining / (60 * 1000));
 
     await NotificationService.createNotification({
@@ -222,10 +221,10 @@ export class TurnTracker {
 
     if (!turnTracker) return null;
 
-    const turnOrder = turnTracker.turnOrder as unknown as TurnOrder[];
+    const turnOrder = turnTracker.turnOrder as TurnOrder[];
     const currentPlayer = turnOrder[turnTracker.currentTurn];
 
-    const timeRemaining = turnTracker.turnDeadline ?
+    const timeRemaining = turnTracker.turnDeadline ? 
       Math.max(0, new Date(turnTracker.turnDeadline).getTime() - Date.now()) : 0;
 
     return {
@@ -259,8 +258,8 @@ export class TurnTracker {
     for (const tracker of expiredTurns) {
       try {
         await this.skipTurn(
-          tracker.campaignId,
-          tracker.sceneId || '',
+          tracker.campaignId, 
+          tracker.sceneId || '', 
           'Turn timeout'
         );
       } catch (error) {
@@ -309,7 +308,7 @@ export class TurnTracker {
       where: { id: sceneId },
       data: {
         turnDeadline: null,
-        waitingOnUsers: Prisma.JsonNull
+        waitingOnUsers: null
       }
     });
 
@@ -361,16 +360,16 @@ export class TurnTracker {
       throw new Error('Turn tracker not found');
     }
 
-    const turnOrder = turnTracker.turnOrder as unknown as TurnOrder[];
-    const insertIndex = insertAfterCurrent ?
-      turnTracker.currentTurn + 1 :
+    const turnOrder = turnTracker.turnOrder as TurnOrder[];
+    const insertIndex = insertAfterCurrent ? 
+      turnTracker.currentTurn + 1 : 
       turnOrder.length;
 
     turnOrder.splice(insertIndex, 0, player);
 
     await prisma.turnTracker.update({
       where: { id: turnTracker.id },
-      data: { turnOrder: turnOrder as unknown as Prisma.InputJsonValue }
+      data: { turnOrder }
     });
 
     return turnOrder;
@@ -390,9 +389,9 @@ export class TurnTracker {
       throw new Error('Turn tracker not found');
     }
 
-    const turnOrder = turnTracker.turnOrder as unknown as TurnOrder[];
+    const turnOrder = turnTracker.turnOrder as TurnOrder[];
     const playerIndex = turnOrder.findIndex(p => p.userId === userId);
-
+    
     if (playerIndex === -1) {
       throw new Error('Player not found in turn order');
     }
@@ -411,8 +410,8 @@ export class TurnTracker {
 
     await prisma.turnTracker.update({
       where: { id: turnTracker.id },
-      data: {
-        turnOrder: turnOrder as unknown as Prisma.InputJsonValue,
+      data: { 
+        turnOrder,
         currentTurn: newCurrentTurn
       }
     });

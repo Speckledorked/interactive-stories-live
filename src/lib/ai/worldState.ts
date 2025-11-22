@@ -225,7 +225,16 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
           pronouns: true,
           description: true,
           goals: true,
-          backstory: true
+          backstory: true,
+          stats: true,
+          inventory: true,
+          equipment: true,
+          resources: true,
+          currentLocation: true,
+          moves: true,
+          perks: true,
+          relationships: true,
+          consequences: true
         }
       }
     }
@@ -248,12 +257,74 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
     throw new Error('OPENAI_API_KEY not configured')
   }
 
-  // Build character context
+  // Build comprehensive character context
   const characterContext = campaign.characters.length > 0
-    ? `\n\nPLAYER CHARACTERS:
-${campaign.characters.map(c => `- ${c.name} (${c.pronouns || 'they/them'}): ${c.description || 'A mysterious adventurer'}
-  Goals: ${c.goals || 'To be determined'}
-  Background: ${c.backstory || 'Unknown'}`).join('\n')}`
+    ? `\n\nPLAYER CHARACTERS (use these details to personalize the opening scene):\n${campaign.characters.map(c => {
+      const parts = [
+        `\n## ${c.name} (${c.pronouns || 'they/them'})`,
+        `Description: ${c.description || 'A mysterious adventurer'}`,
+        `Background: ${c.backstory || 'Unknown'}`,
+        `Goals: ${c.goals || 'To be determined'}`
+      ]
+
+      if (c.currentLocation) {
+        parts.push(`Current Location: ${c.currentLocation}`)
+      }
+
+      if (c.stats) {
+        const stats = c.stats as any
+        parts.push(`Stats: ${Object.entries(stats).map(([key, val]) => `${key} ${(val as number) >= 0 ? '+' : ''}${val}`).join(', ')}`)
+      }
+
+      if (c.equipment) {
+        const eq = c.equipment as any
+        const items = []
+        if (eq.weapon) items.push(`Weapon: ${eq.weapon.name || eq.weapon}`)
+        if (eq.armor) items.push(`Armor: ${eq.armor.name || eq.armor}`)
+        if (items.length > 0) parts.push(`Equipment: ${items.join(', ')}`)
+      }
+
+      if (c.inventory) {
+        const inv = c.inventory as any
+        if (inv.items && inv.items.length > 0) {
+          const itemList = inv.items.slice(0, 5).map((item: any) =>
+            typeof item === 'string' ? item : `${item.name}${item.quantity ? ` (x${item.quantity})` : ''}`
+          ).join(', ')
+          parts.push(`Carrying: ${itemList}${inv.items.length > 5 ? ', and more...' : ''}`)
+        }
+      }
+
+      if (c.resources) {
+        const res = c.resources as any
+        const resourceParts = []
+        if (res.gold !== undefined) resourceParts.push(`${res.gold} gold`)
+        if (res.contacts && res.contacts.length > 0) resourceParts.push(`contacts: ${res.contacts.join(', ')}`)
+        if (resourceParts.length > 0) parts.push(`Resources: ${resourceParts.join('; ')}`)
+      }
+
+      if (c.moves && c.moves.length > 0) {
+        parts.push(`Special Moves: ${c.moves.slice(0, 3).join(', ')}${c.moves.length > 3 ? '...' : ''}`)
+      }
+
+      if (c.perks) {
+        const perks = c.perks as any
+        if (Array.isArray(perks) && perks.length > 0) {
+          parts.push(`Abilities: ${perks.map((p: any) => p.name).slice(0, 3).join(', ')}`)
+        }
+      }
+
+      if (c.consequences) {
+        const cons = c.consequences as any
+        if (cons.enemies && cons.enemies.length > 0) {
+          parts.push(`⚠️ Enemies: ${cons.enemies.join(', ')}`)
+        }
+        if (cons.debts && cons.debts.length > 0) {
+          parts.push(`⚠️ Debts: ${cons.debts.join(', ')}`)
+        }
+      }
+
+      return parts.join('\n  ')
+    }).join('\n')}`
     : '\n\nNo player characters have been created yet.'
 
   const prompt = `You are the Game Master for a ${campaign.universe} campaign.
@@ -268,18 +339,25 @@ LAST SCENE RESOLUTION:
 ${lastScene?.sceneResolutionText || 'This is the first scene of the campaign.'}
 
 Generate a compelling, dynamic scene introduction that:
-1. Directly involves the player characters by name and references their goals or backstories
+1. PERSONALIZE to the characters - reference their specific equipment, inventory, location, backstory, goals, and abilities
 2. Creates IMMEDIATE stakes and tension - what's at risk right now?
 3. Provides vivid, immersive sensory details specific to the ${campaign.universe} setting
 4. Presents a clear dramatic question or choice the characters must face
 5. Sets the tone and atmosphere appropriate to the universe
-6. Advances active faction plans or clocks where appropriate
-7. Is 2-4 paragraphs long and ends with a clear moment of decision or action
+6. If characters have enemies, debts, or consequences listed - consider incorporating these into the opening tension
+7. If characters have specific locations listed, start them there rather than a generic gathering point
+8. Reference their equipment/inventory naturally (e.g., "As you check your sword..." or "The gold purse weighs heavy...")
+9. Is 2-4 paragraphs long and ends with a clear moment of decision or action
 
-For the first scene of a campaign:
-- Start with action or a compelling hook, not generic descriptions
-- Establish the world through specific details, not exposition
-- Create an immediate situation that demands character response
+CRITICAL - For the first scene of a campaign:
+- DO NOT use generic openings like "The heroes gather" or "Times are uncertain"
+- START with the characters already in a specific situation that relates to their backgrounds/goals
+- USE their equipment, resources, and abilities to make the scene feel tailored to THEM
+- REFERENCE their backstories, enemies, or debts to create personal stakes
+- If they have a current location, start there; otherwise, choose a location relevant to their goals
+- Establish the world through specific details that matter to THESE characters, not generic exposition
+
+Example approach: If a character has "seeking revenge" as a goal and a sword as equipment, start with them tracking their enemy. If they have contacts listed, maybe a contact brings them urgent news. Make it SPECIFIC to who they are.
 
 Write ONLY the scene introduction text. Do not include JSON, meta-commentary, or any other formatting.`
 

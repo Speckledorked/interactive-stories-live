@@ -320,7 +320,66 @@ export default function StoryPage() {
   )
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Navigation Bar */}
+      <div className="mb-6">
+        <Link
+          href="/campaigns"
+          className="text-gray-400 hover:text-white transition-colors text-sm mb-3 inline-block"
+        >
+          ← Back to Campaigns
+        </Link>
+
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-3xl font-bold text-white">{campaign?.campaign?.name}</h1>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex gap-2 border-b border-gray-700 pb-2 overflow-x-auto">
+          <Link
+            href={`/campaigns/${campaignId}`}
+            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+          >
+            Overview
+          </Link>
+          <span className="px-4 py-2 bg-primary-600 text-white rounded-t whitespace-nowrap">
+            Story
+          </span>
+          <Link
+            href={`/campaigns/${campaignId}/story-log`}
+            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+          >
+            Story Log
+          </Link>
+          <Link
+            href={`/campaigns/${campaignId}`}
+            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+          >
+            Notes
+          </Link>
+          <Link
+            href={`/campaigns/${campaignId}`}
+            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+          >
+            Maps
+          </Link>
+          <Link
+            href={`/campaigns/${campaignId}`}
+            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+          >
+            Chat
+          </Link>
+          {isAdmin && (
+            <Link
+              href={`/campaigns/${campaignId}/admin`}
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+            >
+              ⚙️ Admin
+            </Link>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Story Column */}
         <div className="lg:col-span-3 space-y-6">

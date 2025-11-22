@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
+import PusherServer from '@/lib/realtime/pusher-server';
 
 // GET /api/campaigns/[id]/messages - Get messages for campaign
 export async function GET(
@@ -170,6 +171,23 @@ export async function POST(
         }
       },
     });
+
+    // Broadcast message via Pusher
+    const pusher = PusherServer()
+    if (pusher) {
+      try {
+        // Broadcast to campaign channel for all messages (including scene-specific ones)
+        await pusher.trigger(`campaign-${params.id}`, 'new-message', message)
+
+        // If it's a whisper, also send to the target user's channel
+        if (type === 'WHISPER' && targetUserId) {
+          await pusher.trigger(`user-${targetUserId}`, 'new-whisper', message)
+        }
+      } catch (pusherError) {
+        console.error('Failed to broadcast message via Pusher:', pusherError)
+        // Don't fail the request if Pusher fails - message is still saved
+      }
+    }
 
     return NextResponse.json(message);
 

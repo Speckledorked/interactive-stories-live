@@ -367,10 +367,17 @@ export default function CampaignLobbyPage() {
                 <span className="text-gray-400">Scenes:</span>
                 <span className="text-white font-medium">{campaign.scenes.length}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Characters:</span>
-                <span className="text-white font-medium">{campaign.characters.length}</span>
-              </div>
+              <Link
+                href={`/campaigns/${campaignId}/characters`}
+                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+              >
+                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                  Characters:
+                </span>
+                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                  {campaign.characters.length} →
+                </span>
+              </Link>
               <Link
                 href={`/campaigns/${campaignId}/wiki?type=NPC`}
                 className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"

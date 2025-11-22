@@ -23,6 +23,12 @@ import {
   type AdvancementLog
 } from './advancement'
 import { AIVisualService } from '@/lib/ai/ai-visual-service'
+import {
+  captureWorldStateSnapshot,
+  detectWorldStateChanges,
+  storeWorldStateChanges,
+  createCharacterProgressionNotifications
+} from './world-state-tracker'
 
 /**
  * Resolve a scene using the AI GM
@@ -102,6 +108,10 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     console.log(`Scene text length: ${aiResponse.scene_text.length}`)
     console.log(`Updates: ${summarizeWorldUpdates(aiResponse)}`)
 
+    // 5.5. Capture world state before applying updates (for transparency)
+    console.log('📸 Capturing world state snapshot...')
+    const beforeSnapshot = await captureWorldStateSnapshot(campaignId)
+
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')
     await applyWorldUpdates(campaignId, aiResponse, currentTurn)
@@ -109,6 +119,33 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     // 6.5. Apply organic character growth
     console.log('🌱 Processing organic character growth...')
     await applyOrganicCharacterGrowth(campaignId, sceneId, aiResponse)
+
+    // 6.6. Detect and store world state changes for transparency
+    console.log('🔍 Detecting world state changes...')
+    const worldStateChanges = await detectWorldStateChanges(campaignId, beforeSnapshot)
+    await storeWorldStateChanges(sceneId, worldStateChanges)
+    console.log(`✅ Tracked ${worldStateChanges.length} world state changes`)
+
+    // 6.7. Create notifications for character progression
+    const characterChanges = worldStateChanges.filter(c => c.category === 'character')
+    for (const change of characterChanges) {
+      // Find the character ID from the name
+      const character = await prisma.character.findFirst({
+        where: {
+          campaignId,
+          name: change.entityName
+        }
+      })
+      if (character) {
+        await createCharacterProgressionNotifications(
+          campaignId,
+          character.id,
+          [change],
+          scene.sceneNumber
+        )
+      }
+    }
+    console.log(`✅ Created ${characterChanges.length} progression notifications`)
 
     // 7. Store scene resolution and mark as resolved
     await prisma.scene.update({

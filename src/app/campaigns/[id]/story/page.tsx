@@ -14,6 +14,9 @@ import AILoadingState from '@/components/scene/AILoadingState'
 import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
 import { CompactClock } from '@/components/clock/ClockProgress'
 import { CompactTimeline } from '@/components/scene/VisualTimeline'
+import AITransparencyPanel, { type WorldStateChange } from '@/components/scene/AITransparencyPanel'
+import CharacterSnapshotModal from '@/components/character/CharacterSnapshotModal'
+import NPCRelationshipHints, { extractNPCHintsFromScene } from '@/components/scene/NPCRelationshipHints'
 
 export default function StoryPage() {
   const router = useRouter()
@@ -34,6 +37,9 @@ export default function StoryPage() {
   const [expandedActions, setExpandedActions] = useState<Record<string, boolean>>({})
   const [activeMap, setActiveMap] = useState<MapData | null>(null)
   const [showMap, setShowMap] = useState(true)
+  const [showCharacterSnapshot, setShowCharacterSnapshot] = useState(false)
+  const [sceneWorldStateChanges, setSceneWorldStateChanges] = useState<Record<string, WorldStateChange[]>>({})
+  const [expandedTransparency, setExpandedTransparency] = useState<Record<string, boolean>>({})
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
@@ -61,6 +67,15 @@ export default function StoryPage() {
       const sceneData = await sceneResponse.json()
       setCurrentScene(sceneData.scene)
       setActiveScenes(sceneData.scenes || [])
+
+      // Load world state changes for scenes
+      const changesMap: Record<string, WorldStateChange[]> = {}
+      for (const scene of sceneData.scenes || []) {
+        if (scene.consequences?.worldStateChanges) {
+          changesMap[scene.id] = scene.consequences.worldStateChanges
+        }
+      }
+      setSceneWorldStateChanges(changesMap)
 
       // Get user's characters
       const userChars = campData.campaign?.characters?.filter(
@@ -329,16 +344,54 @@ export default function StoryPage() {
                       </p>
                     </div>
 
+                    {/* NPC Relationship Hints */}
+                    {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
+                      <div className="mt-4">
+                        <NPCRelationshipHints
+                          hints={extractNPCHintsFromScene(
+                            scene.sceneIntroText,
+                            campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
+                          )}
+                        />
+                      </div>
+                    )}
+
                     {/* Show resolution if resolved */}
                     {scene.sceneResolutionText && (
-                      <div className="mt-6 pt-6 border-t border-gray-700">
-                        <h3 className="text-lg font-bold text-primary-400 mb-3">
-                          Resolution
-                        </h3>
-                        <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
-                          {scene.sceneResolutionText}
-                        </p>
-                      </div>
+                      <>
+                        <div className="mt-6 pt-6 border-t border-gray-700">
+                          <h3 className="text-lg font-bold text-primary-400 mb-3">
+                            Resolution
+                          </h3>
+                          <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                            {scene.sceneResolutionText}
+                          </p>
+
+                          {/* NPC Relationship Hints in Resolution */}
+                          {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
+                            <div className="mt-4">
+                              <NPCRelationshipHints
+                                hints={extractNPCHintsFromScene(
+                                  scene.sceneResolutionText,
+                                  campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
+                                )}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* AI Transparency Panel - Show world state changes */}
+                        {sceneWorldStateChanges[scene.id] && sceneWorldStateChanges[scene.id].length > 0 && (
+                          <div className="mt-4">
+                            <AITransparencyPanel
+                              changes={sceneWorldStateChanges[scene.id]}
+                              sceneNumber={scene.sceneNumber}
+                              isOpen={expandedTransparency[scene.id] !== false}
+                              onClose={() => setExpandedTransparency(prev => ({ ...prev, [scene.id]: false }))}
+                            />
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -482,8 +535,19 @@ export default function StoryPage() {
               </select>
               {selectedCharacter && (
                 <div className="mt-4 space-y-2">
-                  <h4 className="font-bold text-white text-lg">{selectedCharacter.name}</h4>
-                  <p className="text-sm text-gray-400">{selectedCharacter.concept}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <h4 className="font-bold text-white text-lg">{selectedCharacter.name}</h4>
+                      <p className="text-sm text-gray-400">{selectedCharacter.concept}</p>
+                    </div>
+                    <button
+                      onClick={() => setShowCharacterSnapshot(true)}
+                      className="px-2 py-1 bg-primary-600 hover:bg-primary-700 text-white rounded text-xs font-medium transition-colors"
+                      title="Quick Reference"
+                    >
+                      👁️ View
+                    </button>
+                  </div>
                   {selectedCharacter.currentLocation && (
                     <p className="text-xs text-gray-500">
                       📍 {selectedCharacter.currentLocation}
@@ -575,6 +639,16 @@ export default function StoryPage() {
             )}
         </div>
       </div>
+
+      {/* Character Snapshot Modal */}
+      {selectedCharacterId && (
+        <CharacterSnapshotModal
+          characterId={selectedCharacterId}
+          campaignId={campaignId}
+          isOpen={showCharacterSnapshot}
+          onClose={() => setShowCharacterSnapshot(false)}
+        />
+      )}
     </div>
   )
 }

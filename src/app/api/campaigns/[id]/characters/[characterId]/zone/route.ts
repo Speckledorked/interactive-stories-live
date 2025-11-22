@@ -43,7 +43,7 @@ export async function PUT(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId
         }
       }
@@ -62,7 +62,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Character not found' }, { status: 404 })
     }
 
-    if (character.userId !== user.id && membership.role !== 'ADMIN') {
+    if (character.userId !== user.userId && membership.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Can only update your own character zone' },
         { status: 403 }
@@ -105,7 +105,7 @@ export async function GET(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId
         }
       }

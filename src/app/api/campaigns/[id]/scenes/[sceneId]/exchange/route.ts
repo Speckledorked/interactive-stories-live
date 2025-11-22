@@ -26,7 +26,7 @@ export async function GET(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId
         }
       }
@@ -82,7 +82,7 @@ export async function POST(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId
         }
       }
@@ -118,7 +118,7 @@ export async function POST(
         where: { id: characterId }
       })
 
-      if (!character || character.userId !== user.id) {
+      if (!character || character.userId !== user.userId) {
         return NextResponse.json(
           { error: 'Character not found or not owned by user' },
           { status: 403 }

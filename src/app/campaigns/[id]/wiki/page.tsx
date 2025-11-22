@@ -16,12 +16,13 @@ export default function WikiPage() {
   const searchParams = useSearchParams()
   const campaignId = params.id as string
   const initialType = (searchParams.get('type') as WikiEntryType) || 'NPC'
+  const initialSearch = searchParams.get('search') || ''
 
   const [entries, setEntries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedType, setSelectedType] = useState<WikiEntryType>(initialType)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(initialSearch)
   const [selectedEntry, setSelectedEntry] = useState<any>(null)
 
   useEffect(() => {

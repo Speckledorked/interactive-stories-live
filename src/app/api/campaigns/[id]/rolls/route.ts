@@ -108,6 +108,21 @@ export async function POST(
       }
     })
 
+    // PbtA Rule: Award XP on misses (6-)
+    // "Fail forward" - failures create complications AND character growth
+    if (outcome === 'miss') {
+      await prisma.character.update({
+        where: { id: body.characterId },
+        data: {
+          experience: {
+            increment: 1
+          }
+        }
+      })
+
+      console.log(`📈 ${character.name} gained 1 XP from a miss (total: ${total})`)
+    }
+
     // If this was part of a player action, update it
     if (body.sceneId) {
       const latestAction = await prisma.playerAction.findFirst({

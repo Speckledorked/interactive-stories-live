@@ -7,6 +7,11 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import CharacterAvatar from '@/components/character/CharacterAvatar'
+import HarmTracker from '@/components/character/HarmTracker'
+import StatBar from '@/components/character/StatBar'
+import ConsequenceBadge from '@/components/character/ConsequenceBadge'
+import InventoryGrid from '@/components/character/InventoryGrid'
 
 export default function CharacterSheetPage() {
   const router = useRouter()
@@ -87,40 +92,62 @@ export default function CharacterSheetPage() {
         >
           ← Back to Campaign
         </Link>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white">{character.name}</h1>
-            {character.pronouns && (
-              <p className="text-gray-400 mt-1">({character.pronouns})</p>
-            )}
-            {character.description && (
-              <p className="text-gray-300 mt-2">{character.description}</p>
-            )}
-          </div>
-          <div className="text-right">
-            <div className="text-sm text-gray-400">Status</div>
-            <div className="text-lg font-bold text-green-400">{character.isAlive ? 'Active' : 'Inactive'}</div>
+        <div className="card bg-gradient-to-br from-gray-800 via-gray-900 to-gray-800">
+          <div className="flex items-start gap-6">
+            {/* Character Avatar */}
+            <CharacterAvatar name={character.name} size="xl" />
+
+            {/* Character Info */}
+            <div className="flex-1">
+              <h1 className="text-4xl font-bold text-white mb-2">{character.name}</h1>
+              {character.pronouns && (
+                <p className="text-gray-400 mb-3">({character.pronouns})</p>
+              )}
+              {character.description && (
+                <p className="text-gray-300 mb-4">{character.description}</p>
+              )}
+
+              {/* Health Bar */}
+              <div className="max-w-md">
+                <HarmTracker current={character.harm || 0} showLabel={true} size="md" />
+              </div>
+            </div>
+
+            {/* Status Badge */}
+            <div className="text-right">
+              <div className={`
+                px-4 py-2 rounded-lg font-bold text-sm
+                ${character.isAlive
+                  ? 'bg-green-500/20 border border-green-500/50 text-green-400'
+                  : 'bg-gray-500/20 border border-gray-500/50 text-gray-400'
+                }
+              `}>
+                {character.isAlive ? '✓ Active' : '✕ Inactive'}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Quick Stats Bar */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="card text-center">
+        <div className="card text-center bg-gradient-to-br from-green-900/20 to-gray-800 border-green-700/30">
           <div className="text-xs text-gray-400 mb-1">Health</div>
-          <div className="text-xl font-bold text-green-400">{6 - (character.harm || 0)}/6</div>
+          <div className="text-3xl font-bold text-green-400">{6 - (character.harm || 0)}</div>
+          <div className="text-xs text-gray-500">/ 6</div>
         </div>
-        <div className="card text-center">
-          <div className="text-xs text-gray-400 mb-1">Gold</div>
-          <div className="text-xl font-bold text-yellow-400">{resources.gold || 0}</div>
+        <div className="card text-center bg-gradient-to-br from-yellow-900/20 to-gray-800 border-yellow-700/30">
+          <div className="text-xs text-gray-400 mb-1">💰 Gold</div>
+          <div className="text-3xl font-bold text-yellow-400">{resources.gold || 0}</div>
         </div>
-        <div className="card text-center">
-          <div className="text-xs text-gray-400 mb-1">Inventory</div>
-          <div className="text-xl font-bold text-blue-400">{inventory.items?.length || 0}/{inventory.slots || 10}</div>
+        <div className="card text-center bg-gradient-to-br from-blue-900/20 to-gray-800 border-blue-700/30">
+          <div className="text-xs text-gray-400 mb-1">🎒 Inventory</div>
+          <div className="text-3xl font-bold text-blue-400">{inventory.items?.length || 0}</div>
+          <div className="text-xs text-gray-500">/ {inventory.slots || 10} slots</div>
         </div>
-        <div className="card text-center">
-          <div className="text-xs text-gray-400 mb-1">Location</div>
-          <div className="text-sm font-medium text-white truncate">{character.currentLocation || 'Unknown'}</div>
+        <div className="card text-center bg-gradient-to-br from-purple-900/20 to-gray-800 border-purple-700/30">
+          <div className="text-xs text-gray-400 mb-1">📍 Location</div>
+          <div className="text-sm font-medium text-white truncate px-2">{character.currentLocation || 'Unknown'}</div>
         </div>
       </div>
 
@@ -246,17 +273,24 @@ export default function CharacterSheetPage() {
         {/* Stats & Abilities Tab */}
         {activeTab === 'stats' && (
           <div className="space-y-6">
-            <div className="card">
-              <h2 className="text-xl font-bold text-white mb-4">Character Stats</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="card bg-gradient-to-br from-gray-800 to-gray-900">
+              <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                <span className="text-2xl">⚡</span>
+                Character Stats
+              </h2>
+              <div className="space-y-4">
                 {Object.entries(stats).map(([stat, value]: [string, any]) => (
-                  <div key={stat} className="bg-gray-800 rounded-lg p-4 text-center border border-gray-700">
-                    <div className="text-2xl font-bold text-white mb-1">
-                      {(value as number) >= 0 ? '+' : ''}{value}
-                    </div>
-                    <div className="text-sm font-medium capitalize text-gray-400">{stat}</div>
-                  </div>
+                  <StatBar
+                    key={stat}
+                    name={stat}
+                    value={value as number}
+                  />
                 ))}
+              </div>
+              <div className="mt-6 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                <p className="text-sm text-gray-400">
+                  <span className="font-bold text-gray-300">Stats range from -2 to +3.</span> When you make a move, roll 2d6 and add the relevant stat. The AI awards stat increases based on repeated successful use.
+                </p>
               </div>
             </div>
 
@@ -344,35 +378,24 @@ export default function CharacterSheetPage() {
               </div>
             </div>
 
-            <div className="card">
-              <h2 className="text-xl font-bold text-white mb-4">
-                Inventory ({inventory.items?.length || 0}/{inventory.slots || 10} slots)
+            <div className="card bg-gradient-to-br from-gray-800 to-gray-900">
+              <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                <span className="text-2xl">🎒</span>
+                Inventory
+                <span className="text-sm font-normal text-gray-400">
+                  ({inventory.items?.length || 0}/{inventory.slots || 10} slots)
+                </span>
               </h2>
               {inventory.items && inventory.items.length > 0 ? (
-                <div className="space-y-2">
-                  {inventory.items.map((item: any, i: number) => (
-                    <div key={i} className="bg-gray-800 border border-gray-700 rounded-lg p-3 flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-white">{item.name}</div>
-                        {item.tags && item.tags.length > 0 && (
-                          <div className="flex gap-1 mt-1">
-                            {item.tags.map((tag: string, j: number) => (
-                              <span key={j} className="text-xs px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded">
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {item.quantity > 1 && (
-                        <span className="text-gray-400 font-medium">x{item.quantity}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <InventoryGrid
+                  items={inventory.items}
+                  maxSlots={inventory.slots || 10}
+                />
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  No items in inventory
+                <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-700 rounded-lg">
+                  <div className="text-6xl mb-4">🎒</div>
+                  <p>No items in inventory</p>
+                  <p className="text-sm mt-2">Items will appear here as the AI grants them during your adventure</p>
                 </div>
               )}
             </div>
@@ -433,51 +456,79 @@ export default function CharacterSheetPage() {
         {activeTab === 'consequences' && (
           <div className="space-y-6">
             {consequences.promises && consequences.promises.length > 0 && (
-              <div className="card">
-                <h2 className="text-xl font-bold text-white mb-4">Promises & Oaths</h2>
-                <ul className="space-y-2">
-                  {consequences.promises.map((promise: string, i: number) => (
-                    <li key={i} className="bg-gray-800 border border-gray-700 rounded-lg p-3 text-sm text-gray-300">
-                      {promise}
-                    </li>
-                  ))}
-                </ul>
+              <div className="space-y-3">
+                <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <span className="text-2xl">🤝</span>
+                  Promises & Oaths
+                </h2>
+                {consequences.promises.map((promise: string, i: number) => (
+                  <ConsequenceBadge
+                    key={i}
+                    type="promise"
+                    description={promise}
+                  />
+                ))}
               </div>
             )}
 
             {consequences.debts && consequences.debts.length > 0 && (
-              <div className="card">
-                <h2 className="text-xl font-bold text-white mb-4">Debts & Favors Owed</h2>
-                <ul className="space-y-2">
-                  {consequences.debts.map((debt: string, i: number) => (
-                    <li key={i} className="bg-gray-800 border border-yellow-700 rounded-lg p-3 text-sm text-yellow-200">
-                      {debt}
-                    </li>
-                  ))}
-                </ul>
+              <div className="space-y-3">
+                <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <span className="text-2xl">⚖️</span>
+                  Debts & Favors Owed
+                </h2>
+                {consequences.debts.map((debt: string, i: number) => (
+                  <ConsequenceBadge
+                    key={i}
+                    type="debt"
+                    description={debt}
+                  />
+                ))}
               </div>
             )}
 
             {consequences.enemies && consequences.enemies.length > 0 && (
-              <div className="card">
-                <h2 className="text-xl font-bold text-white mb-4">Enemies & Rivals</h2>
-                <ul className="space-y-2">
-                  {consequences.enemies.map((enemy: string, i: number) => (
-                    <li key={i} className="bg-gray-800 border border-red-700 rounded-lg p-3 text-sm text-red-200">
-                      {enemy}
-                    </li>
-                  ))}
-                </ul>
+              <div className="space-y-3">
+                <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <span className="text-2xl">⚔️</span>
+                  Enemies & Rivals
+                </h2>
+                {consequences.enemies.map((enemy: string, i: number) => (
+                  <ConsequenceBadge
+                    key={i}
+                    type="enemy"
+                    description={enemy}
+                  />
+                ))}
+              </div>
+            )}
+
+            {consequences.longTermThreats && consequences.longTermThreats.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <span className="text-2xl">☠️</span>
+                  Long-Term Threats
+                </h2>
+                {consequences.longTermThreats.map((threat: string, i: number) => (
+                  <ConsequenceBadge
+                    key={i}
+                    type="longTermThreat"
+                    description={threat}
+                  />
+                ))}
               </div>
             )}
 
             {(!consequences.promises || consequences.promises.length === 0) &&
               (!consequences.debts || consequences.debts.length === 0) &&
-              (!consequences.enemies || consequences.enemies.length === 0) && (
-                <div className="card text-center py-12">
-                  <div className="text-6xl mb-4">✨</div>
-                  <p className="text-gray-400">No debts, promises, or enemies... yet.</p>
-                  <p className="text-sm text-gray-500 mt-2">These will develop as your story unfolds.</p>
+              (!consequences.enemies || consequences.enemies.length === 0) &&
+              (!consequences.longTermThreats || consequences.longTermThreats.length === 0) && (
+                <div className="card text-center py-16 bg-gradient-to-br from-gray-800 to-gray-900">
+                  <div className="text-8xl mb-6">✨</div>
+                  <p className="text-xl text-gray-300 mb-2">No consequences... yet.</p>
+                  <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
+                    Promises, debts, enemies, and threats will develop naturally as your story unfolds. The AI tracks these relationships and they'll shape future scenes.
+                  </p>
                 </div>
               )}
           </div>

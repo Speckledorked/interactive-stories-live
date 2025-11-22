@@ -199,6 +199,10 @@ model Character {
   relationships   Json? // { [entityId: string]: { trust: Int, tension: Int, respect: Int, fear: Int } }
   consequences    Json? // { promises?: string[], debts?: string[], enemies?: string[], longTermThreats?: string[] }
 
+  // Phase 16: Zone-based positioning
+  currentZone     String? // "close", "near", "far", "distant"
+  zoneMetadata    Json?   // { customZones?: string[], zoneEffects?: object }
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -315,6 +319,11 @@ model Scene {
   sceneType          String?     @default("dramatic") // "dramatic", "downtime", "combat"
   stakes             String?     // What's at risk in this scene
 
+  // Phase 16: Freeform Combat & Exchange System
+  combatMode         String?     @default("freeform") // "freeform", "structured"
+  exchangeState      Json?       // { playersActed: string[], exchangeNumber: number, isComplete: boolean, complexity: 'simple' | 'complex' }
+  currentExchange    Int         @default(0)
+
   // Phase 14: Consequence tracking per scene
   consequences       Json?       // { created?: string[], resolved?: string[], relationshipChanges?: object[] }
 
@@ -361,6 +370,10 @@ model PlayerAction {
   moveUsed      String?  // Which move was triggered
   rollRequired  Boolean  @default(false) // Does this need a roll?
   rollMade      String?  // Link to DiceRoll.id if rolled
+
+  // Phase 16: Exchange tracking
+  exchangeNumber Int?    // Which exchange this action belongs to
+  actionPriority Int?    @default(0) // For complex exchange ordering
 
   createdAt     DateTime @default(now())
 
@@ -411,6 +424,13 @@ model WorldMeta {
   otherMeta         Json?
   gmNotes           String?
   updatedAt         DateTime @updatedAt
+
+  // Phase 15: AI Health & Cost Tracking
+  aiHealth              Json?     // Circuit breaker state and AI failure tracking
+  aiMetrics             Json?     // Token usage, costs, response times
+  campaignHealthHistory Json?     // Historical health scores and issues
+  lastHealthCheck       DateTime? // Last time health was checked
+  currentHealthScore    Int?      // Current campaign health (0-100)
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 }
@@ -924,4 +944,245 @@ model DowntimeEvent {
 
   @@index([activityId])
   @@map("downtime_events")
+}
+
+//
+// PHASE 16.5: TUTORIAL & ONBOARDING
+//
+
+enum TutorialStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+model TutorialStep {
+  id            String   @id @default(cuid())
+  stepKey       String   @unique // e.g., "create_character", "first_action"
+  title         String
+  description   String   @db.Text
+  category      String   // "basics", "combat", "social", "advanced"
+  orderIndex    Int
+  isOptional    Boolean  @default(false)
+  prerequisites String[] // Array of stepKeys that must be completed first
+
+  // Interactive tutorial data
+  contentBlocks Json?    // Array of content blocks with type, text, images
+  targetElement String?  // CSS selector for highlighting
+  tooltipPosition String? @default("bottom") // top, bottom, left, right
+
+  // Completion criteria
+  completionTrigger String? // e.g., "submit_action", "create_character"
+  validationRules   Json?   // Rules to check if step is complete
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  userProgress UserTutorialProgress[]
+
+  @@index([category, orderIndex])
+  @@map("tutorial_steps")
+}
+
+model UserTutorialProgress {
+  id          String         @id @default(cuid())
+  userId      String
+  stepId      String
+  status      TutorialStatus @default(NOT_STARTED)
+  startedAt   DateTime?
+  completedAt DateTime?
+  skippedAt   DateTime?
+
+  // User's interaction data
+  attemptsCount Int @default(0)
+  hintsViewed   Int @default(0)
+  timeSpent     Int @default(0) // In seconds
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  step TutorialStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, stepId])
+  @@index([userId, status])
+  @@map("user_tutorial_progress")
+}
+
+model CampaignTutorialMode {
+  id          String  @id @default(cuid())
+  campaignId  String  @unique
+  isEnabled   Boolean @default(true)
+
+  // Tutorial campaign settings
+  useGuidedScenes    Boolean @default(true)
+  showTooltips       Boolean @default(true)
+  provideHints       Boolean @default(true)
+  allowSkip          Boolean @default(true)
+
+  // Progress tracking
+  currentStepKey String?
+  completedSteps String[] // Array of stepKeys
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("campaign_tutorial_mode")
+}
+
+//
+// PHASE 25: SAFETY TOOLS & CONTENT MODERATION
+//
+
+enum ContentWarningType {
+  VIOLENCE
+  SEXUAL_CONTENT
+  GORE
+  HORROR
+  SUBSTANCE_ABUSE
+  MENTAL_HEALTH
+  DISCRIMINATION
+  DEATH
+  TRAUMA
+  CUSTOM
+}
+
+enum XCardTrigger {
+  SCENE_CONTENT
+  MESSAGE
+  CHARACTER_ACTION
+  NPC_BEHAVIOR
+  GENERAL
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model CampaignSafetySettings {
+  id         String   @id @default(cuid())
+  campaignId String   @unique
+
+  // X-Card settings
+  xCardEnabled          Boolean @default(true)
+  anonymousXCard        Boolean @default(true) // Don't show who used X-Card
+  pauseOnXCard          Boolean @default(true)
+  xCardNotifyGMOnly     Boolean @default(false)
+
+  // Content warnings
+  contentWarningsEnabled Boolean @default(true)
+  activeWarnings         Json    @default("[]") // Array of ContentWarningType
+
+  // Lines and Veils (pre-game safety discussion)
+  lines                 String[] // Hard boundaries - will not be included
+  veils                 String[] // Soft boundaries - will be implied, not detailed
+
+  // Session Zero settings
+  sessionZeroCompleted  Boolean  @default(false)
+  sessionZeroDate       DateTime?
+  sessionZeroNotes      String?  @db.Text
+
+  // Content moderation
+  autoModeration        Boolean  @default(false)
+  moderationLevel       String   @default("medium") // low, medium, high
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("campaign_safety_settings")
+}
+
+model XCardUse {
+  id         String       @id @default(cuid())
+  campaignId String
+  sceneId    String?
+  userId     String
+
+  trigger    XCardTrigger
+  targetId   String?      // ID of message, action, scene, etc.
+  reason     String?      @db.Text // Optional explanation
+  isAnonymous Boolean     @default(true)
+
+  // GM/Moderator response
+  acknowledged  Boolean   @default(false)
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  resolution    String?   @db.Text
+
+  createdAt  DateTime @default(now())
+
+  @@index([campaignId, createdAt])
+  @@index([sceneId])
+  @@map("x_card_uses")
+}
+
+model ContentReport {
+  id          String         @id @default(cuid())
+  reporterId  String
+  campaignId  String
+
+  // What's being reported
+  contentType String         // "message", "note", "character", "scene", "user_behavior"
+  contentId   String?
+  contentText String?        @db.Text
+
+  reason      String         @db.Text
+  category    String?        // harassment, inappropriate_content, cheating, other
+  severity    ReportSeverity @default(MEDIUM)
+  status      ReportStatus   @default(PENDING)
+
+  // Moderation
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  resolution  String?        @db.Text
+  actionTaken String?        // warning, content_removed, user_banned, dismissed
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([campaignId, status])
+  @@index([reporterId])
+  @@index([status, severity])
+  @@map("content_reports")
+}
+
+model UserBlock {
+  id            String   @id @default(cuid())
+  userId        String   // User doing the blocking
+  blockedUserId String   // User being blocked
+  campaignId    String?  // Optional: block only in specific campaign
+  reason        String?  @db.Text
+
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, blockedUserId, campaignId])
+  @@index([userId])
+  @@index([blockedUserId])
+  @@map("user_blocks")
+}
+
+model CampaignBan {
+  id         String   @id @default(cuid())
+  campaignId String
+  userId     String
+  bannedBy   String   // GM/Admin who issued the ban
+  reason     String   @db.Text
+  isPermanent Boolean @default(false)
+  expiresAt  DateTime?
+
+  createdAt  DateTime @default(now())
+
+  @@unique([campaignId, userId])
+  @@index([userId])
+  @@map("campaign_bans")
 }

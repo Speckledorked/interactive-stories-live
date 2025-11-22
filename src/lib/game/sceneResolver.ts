@@ -7,6 +7,8 @@ import { callAIGM } from '@/lib/ai/client'
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
 import { applyWorldUpdates, summarizeWorldUpdates } from './stateUpdater'
 import { SceneStatus } from '@prisma/client'
+import { CampaignHealthMonitor } from './campaign-health'
+import { ExchangeManager } from './exchange-manager' // Phase 16
 import {
   computeOrganicGrowth,
   applyOrganicGrowth,
@@ -33,10 +35,20 @@ import {
  * @param sceneId - Scene to resolve
  * @returns Resolution results
  */
-export async function resolveScene(campaignId: string, sceneId: string) {
+export async function resolveScene(campaignId: string, sceneId: string, forceResolve: boolean = false) {
   console.log('🎬 Starting scene resolution...')
   console.log(`Campaign: ${campaignId}`)
   console.log(`Scene: ${sceneId}`)
+
+  // Phase 16: Check exchange readiness
+  const exchangeManager = new ExchangeManager(campaignId, sceneId)
+  const canResolve = await exchangeManager.canResolveExchange(forceResolve)
+
+  if (!canResolve && !forceResolve) {
+    const summary = await exchangeManager.getExchangeSummary()
+    console.warn(`⏸️ Exchange not ready to resolve: ${summary.playersActed}/${summary.totalPlayers} players acted`)
+    throw new Error('Not all players have acted in this exchange. GM can force resolve if needed.')
+  }
 
   // 1. Verify scene exists and is ready to resolve
   const scene = await prisma.scene.findUnique({
@@ -80,9 +92,10 @@ export async function resolveScene(campaignId: string, sceneId: string) {
     console.log('📊 Building AI request...')
     const aiRequest = await buildSceneResolutionRequest(campaignId, sceneId)
 
-    // 5. Call AI GM
+    // 5. Call AI GM (Phase 15: with enhanced error handling and tracking)
     console.log('🤖 Calling AI GM...')
-    const aiResponse = await callAIGM(aiRequest)
+    const debugMode = process.env.AI_DEBUG_MODE === 'true'
+    const aiResponse = await callAIGM(aiRequest, campaignId, sceneId, { debugMode })
 
     console.log('✅ AI GM responded')
     console.log(`Scene text length: ${aiResponse.scene_text.length}`)
@@ -107,6 +120,10 @@ export async function resolveScene(campaignId: string, sceneId: string) {
 
     console.log('✅ Scene marked as RESOLVED')
 
+    // Phase 16: Complete the exchange
+    await exchangeManager.completeExchange()
+    console.log('🔄 Exchange completed')
+
     // 8. Increment turn number
     await prisma.worldMeta.update({
       where: { id: worldMeta.id },
@@ -116,6 +133,23 @@ export async function resolveScene(campaignId: string, sceneId: string) {
     })
 
     console.log(`✅ Turn incremented: ${currentTurn} → ${currentTurn + 1}`)
+
+    // Phase 15.4: Check campaign health periodically
+    if (currentTurn % 5 === 0) { // Check every 5 scenes
+      console.log('🏥 Running campaign health check...')
+      const healthMonitor = new CampaignHealthMonitor(campaignId)
+      const health = await healthMonitor.calculateHealth()
+      await healthMonitor.recordHealthCheck(health)
+
+      if (!health.isHealthy) {
+        console.warn('⚠️ Campaign health issues detected:')
+        health.issues.forEach(issue => console.warn(`  - ${issue}`))
+        console.warn('💡 Recommendations:')
+        health.recommendations.forEach(rec => console.warn(`  - ${rec}`))
+      } else {
+        console.log(`✅ Campaign health: ${health.score}/100`)
+      }
+    }
 
     return {
       success: true,

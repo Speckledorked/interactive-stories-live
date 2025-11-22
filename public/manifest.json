@@ -1,0 +1,39 @@
+{
+  "name": "Interactive Stories - AI Game Master",
+  "short_name": "Interactive Stories",
+  "description": "AI-powered tabletop RPG adventures with dynamic storytelling",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#0ea5e9",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "entertainment"],
+  "shortcuts": [
+    {
+      "name": "My Campaigns",
+      "short_name": "Campaigns",
+      "description": "View all your campaigns",
+      "url": "/campaigns",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

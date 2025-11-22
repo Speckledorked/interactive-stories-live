@@ -171,6 +171,8 @@ model Character {
   name            String
   pronouns        String?
   description     String?
+  appearance      String?  // Physical appearance
+  personality     String?  // Personality traits and demeanor
   stats           Json? // For PbtA: {cool: 1, hard: 2, hot: -1, sharp: 1, weird: 0}
   backstory       String?
   goals           String?

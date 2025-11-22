@@ -224,6 +224,8 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
           name: true,
           pronouns: true,
           description: true,
+          appearance: true,
+          personality: true,
           goals: true,
           backstory: true,
           stats: true,
@@ -263,9 +265,18 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
       const parts = [
         `\n## ${c.name} (${c.pronouns || 'they/them'})`,
         `Description: ${c.description || 'A mysterious adventurer'}`,
-        `Background: ${c.backstory || 'Unknown'}`,
-        `Goals: ${c.goals || 'To be determined'}`
       ]
+
+      if (c.appearance) {
+        parts.push(`Appearance: ${c.appearance}`)
+      }
+
+      if (c.personality) {
+        parts.push(`Personality: ${c.personality}`)
+      }
+
+      parts.push(`Background: ${c.backstory || 'Unknown'}`)
+      parts.push(`Goals: ${c.goals || 'To be determined'}`)
 
       if (c.currentLocation) {
         parts.push(`Current Location: ${c.currentLocation}`)

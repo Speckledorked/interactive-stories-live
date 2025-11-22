@@ -253,7 +253,16 @@ export default function StoryPage() {
         throw new Error(data.error || 'Failed to submit action')
       }
 
-      setSuccess('Action submitted! The AI GM will resolve when all participants submit.')
+      // Check if this scene has predefined participants for better success message
+      const scene = activeScenes.find(s => s.id === sceneId)
+      const participants = scene?.participants as any
+      const hasDefinedParticipants = participants?.characterIds && participants.characterIds.length > 0
+
+      setSuccess(
+        hasDefinedParticipants
+          ? '✓ Action submitted! The scene will auto-resolve when all participants submit.'
+          : '✓ Action submitted! Waiting for GM to resolve this exchange.'
+      )
       setActionText(prev => ({ ...prev, [sceneId]: '' }))
       await loadData() // Reload to show new action
     } catch (err) {
@@ -661,39 +670,63 @@ export default function StoryPage() {
                   )}
 
                   {/* GM Controls (Admin Only) */}
-                  {scene.status === 'AWAITING_ACTIONS' && isAdmin && scene.playerActions && scene.playerActions.length > 0 && (
-                    <div className="card bg-yellow-500/10 border-yellow-500/50">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <p className="text-yellow-400 text-sm font-medium mb-1">
-                            🎲 GM Controls
-                          </p>
-                          <p className="text-gray-400 text-xs mb-2">
-                            {scene.playerActions.length} action(s) submitted. Current exchange: {scene.currentExchange || 1}
-                          </p>
-                          <p className="text-gray-500 text-xs">
-                            Resolving will process actions and continue the scene. End the scene when the story concludes.
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleResolveScene(scene.id)}
-                            disabled={resolving}
-                            className="btn-primary disabled:opacity-50 whitespace-nowrap"
-                          >
-                            {resolving ? 'Resolving...' : 'Resolve Exchange'}
-                          </button>
-                          <button
-                            onClick={() => handleEndScene(scene.id)}
-                            disabled={endingScene}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
-                          >
-                            {endingScene ? 'Ending...' : 'End Scene'}
-                          </button>
+                  {scene.status === 'AWAITING_ACTIONS' && isAdmin && scene.playerActions && scene.playerActions.length > 0 && (() => {
+                    const participants = scene.participants as any
+                    const hasDefinedParticipants = participants?.characterIds && participants.characterIds.length > 0
+                    const submittedUserIds = new Set(scene.playerActions.map((a: any) => a.userId))
+                    const participantUserIds = participants?.userIds || []
+                    const allParticipantsSubmitted = participantUserIds.length > 0 && participantUserIds.every((uid: string) => submittedUserIds.has(uid))
+
+                    return (
+                      <div className={`card ${hasDefinedParticipants && allParticipantsSubmitted ? 'bg-green-500/10 border-green-500/50' : 'bg-yellow-500/10 border-yellow-500/50'}`}>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <p className={`text-sm font-medium mb-1 ${hasDefinedParticipants && allParticipantsSubmitted ? 'text-green-400' : 'text-yellow-400'}`}>
+                              🎲 GM Controls
+                            </p>
+                            <p className="text-gray-400 text-xs mb-2">
+                              {scene.playerActions.length} action(s) submitted. Current exchange: {scene.currentExchange || 1}
+                            </p>
+                            {hasDefinedParticipants ? (
+                              allParticipantsSubmitted ? (
+                                <p className="text-green-400 text-xs mb-1">
+                                  ✓ All participants have submitted! Auto-resolving now...
+                                </p>
+                              ) : (
+                                <p className="text-gray-500 text-xs">
+                                  ⏳ Waiting for {participantUserIds.length - submittedUserIds.size} more participant(s). Scene will auto-resolve when all submit.
+                                </p>
+                              )
+                            ) : (
+                              <p className="text-gray-500 text-xs">
+                                This is an open scene. Manually resolve when ready or end the scene when the story concludes.
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            {/* Only show manual resolve for open scenes or as "force early" for closed scenes */}
+                            {(!hasDefinedParticipants || !allParticipantsSubmitted) && (
+                              <button
+                                onClick={() => handleResolveScene(scene.id)}
+                                disabled={resolving}
+                                className="btn-primary disabled:opacity-50 whitespace-nowrap"
+                                title={hasDefinedParticipants ? "Force resolution before all participants submit" : "Manually resolve this exchange"}
+                              >
+                                {resolving ? 'Resolving...' : hasDefinedParticipants ? 'Force Resolve' : 'Resolve Exchange'}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleEndScene(scene.id)}
+                              disabled={endingScene}
+                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                            >
+                              {endingScene ? 'Ending...' : 'End Scene'}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
                 </div>
               )
             })

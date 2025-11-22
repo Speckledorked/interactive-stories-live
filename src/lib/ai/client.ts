@@ -226,7 +226,7 @@ export async function callAIGM(
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4-turbo-preview', // or 'gpt-4' or 'gpt-3.5-turbo'
+        model: 'gpt-4o', // Latest GPT-4 Omni model (best quality, Nov 2024)
         messages: [
           {
             role: 'system',
@@ -364,6 +364,16 @@ CRITICAL INSTRUCTIONS:
 - Stay true to established world facts and character abilities.
 - Make consequences matter and feel earned.
 - Advance villain plans and background events naturally.
+
+STORYTELLING EXCELLENCE:
+- Write like a bestselling novelist - vivid, sensory, dramatic
+- Show don't tell - use action, dialogue, and description
+- Create tension through pacing - slow down for dramatic moments
+- Make every NPC memorable with distinct voice and personality
+- Use the "rule of three" for dramatic structure
+- End scenes with hooks that make players eager for more
+- Weave character backstories and goals into the narrative
+- Make failures interesting and successes earned
 
 UNIVERSE: ${request.campaign_universe}
 
@@ -525,14 +535,18 @@ RESOLVE THIS SCENE:
 Generate a compelling scene resolution that:
 
 1. **VIVID NARRATION** (scene_text):
+   - MINIMUM 800 words - this is a full scene, not a summary
    - Paint a detailed picture using sensory details (sight, sound, smell, touch, taste)
    - Show character actions and reactions through specific, concrete descriptions
    - Reference each character BY NAME and show how their actions unfold
-   - Include dialogue where appropriate - make NPCs speak naturally
-   - Create dramatic tension and pacing - don't just summarize
+   - Include dialogue where appropriate - make NPCs speak naturally with distinct voices
+   - Create dramatic tension and pacing - slow down for key moments
    - Show consequences immediately through description, not exposition
    - Make the ${request.campaign_universe} setting come alive with specific details
-   - End with a clear transition or new situation that flows naturally
+   - Use metaphors, imagery, and literary devices for impact
+   - Create emotional resonance - make players FEEL the scene
+   - End with a hook, cliffhanger, or compelling transition
+   - Think "HBO prestige drama" not "Saturday morning cartoon"
 
 2. **WORLD STATE CHANGES** (world_updates):
    - Propose appropriate harm, conditions, location changes for characters
@@ -604,7 +618,7 @@ Respond with JSON:
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-4o', // Latest GPT-4 Omni model
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }

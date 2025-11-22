@@ -10,6 +10,10 @@ import { pusherClient } from '@/lib/pusher'
 import ChatPanel from '@/components/chat/ChatPanel'
 import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
 import type { MapData } from '@/lib/maps/map-service'
+import AILoadingState from '@/components/scene/AILoadingState'
+import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
+import { CompactClock } from '@/components/clock/ClockProgress'
+import { CompactTimeline } from '@/components/scene/VisualTimeline'
 
 export default function StoryPage() {
   const router = useRouter()
@@ -234,7 +238,7 @@ export default function StoryPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <AILoadingState type="scene" />
       </div>
     )
   }
@@ -292,9 +296,17 @@ export default function StoryPage() {
                 <div key={scene.id} className="space-y-4">
                   <div className="card">
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-xl font-bold text-white">
-                        Scene {scene.sceneNumber}
-                      </h2>
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-xl font-bold text-white">
+                          Scene {scene.sceneNumber}
+                        </h2>
+                        {/* Scene mood indicators */}
+                        <div className="flex gap-2">
+                          {detectSceneMood(scene.sceneIntroText).map((mood, idx) => (
+                            <SceneMoodTag key={idx} mood={mood} />
+                          ))}
+                        </div>
+                      </div>
                       <div className="flex items-center gap-2">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           scene.status === 'AWAITING_ACTIONS'
@@ -306,10 +318,7 @@ export default function StoryPage() {
                           {scene.status.replace('_', ' ')}
                         </span>
                         {scene.status === 'RESOLVING' && (
-                          <span className="text-xs text-yellow-400 animate-pulse flex items-center gap-1">
-                            <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full animate-bounce"></span>
-                            AI GM processing...
-                          </span>
+                          <AILoadingState type="resolution" />
                         )}
                       </div>
                     </div>
@@ -542,26 +551,17 @@ export default function StoryPage() {
           {campaign?.campaign?.clocks && campaign.campaign.clocks.length > 0 && (
             <div className="card">
               <h3 className="text-sm font-bold text-gray-400 mb-3">ACTIVE CLOCKS</h3>
-              <div className="space-y-3">
-                {campaign.campaign.clocks.map((clock: any) => (
-                  <div key={clock.id}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-white">{clock.name}</span>
-                      <span className="text-xs text-gray-500">
-                        {clock.currentTicks}/{clock.maxTicks}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2">
-                      <div
-                        className="bg-primary-500 h-2 rounded-full transition-all"
-                        style={{
-                          width: `${(clock.currentTicks / clock.maxTicks) * 100}%`
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">{clock.description}</p>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                {campaign.campaign.clocks
+                  .filter((clock: any) => !clock.isHidden)
+                  .map((clock: any) => (
+                    <CompactClock
+                      key={clock.id}
+                      name={clock.name}
+                      current={clock.currentTicks}
+                      max={clock.maxTicks}
+                    />
+                  ))}
               </div>
             </div>
           )}
@@ -569,16 +569,8 @@ export default function StoryPage() {
           {/* Recent Timeline */}
           {campaign?.campaign?.timeline &&
             campaign.campaign.timeline.length > 0 && (
-              <div className="card">
-                <h3 className="text-sm font-bold text-gray-400 mb-3">RECENT EVENTS</h3>
-                <div className="space-y-2">
-                  {campaign.campaign.timeline.slice(0, 5).map((event: any) => (
-                    <div key={event.id} className="text-sm">
-                      <p className="font-medium text-white">{event.title}</p>
-                      <p className="text-xs text-gray-500">Turn {event.turnNumber}</p>
-                    </div>
-                  ))}
-                </div>
+              <div className="card p-0">
+                <CompactTimeline events={campaign.campaign.timeline.slice(0, 5)} />
               </div>
             )}
         </div>

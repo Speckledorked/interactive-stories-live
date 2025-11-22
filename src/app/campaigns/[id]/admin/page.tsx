@@ -3,6 +3,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import WorldStateDashboard from '@/components/admin/WorldStateDashboard'
+import ClockProgress from '@/components/clock/ClockProgress'
+import AILoadingState from '@/components/scene/AILoadingState'
 
 interface Campaign {
   id: string
@@ -70,7 +73,7 @@ export default function AdminPage() {
   const campaignId = params.id as string
 
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'ai' | 'npcs' | 'factions' | 'clocks' | 'invites' | 'members' | 'settings'>('ai')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'clocks' | 'invites' | 'members' | 'settings'>('dashboard')
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [npcs, setNpcs] = useState<NPC[]>([])
   const [factions, setFactions] = useState<Faction[]>([])
@@ -421,7 +424,7 @@ export default function AdminPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+        <AILoadingState />
       </div>
     )
   }
@@ -444,7 +447,7 @@ export default function AdminPage() {
             {/* Tab Navigation */}
             <div className="border-b border-gray-200 mb-6">
               <nav className="-mb-px flex space-x-8">
-                {(['ai', 'npcs', 'factions', 'clocks', 'invites', 'members', 'settings'] as const).map((tab) => (
+                {(['dashboard', 'ai', 'npcs', 'factions', 'clocks', 'invites', 'members', 'settings'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -460,6 +463,34 @@ export default function AdminPage() {
                 ))}
               </nav>
             </div>
+
+            {/* Dashboard Tab */}
+            {activeTab === 'dashboard' && (
+              <WorldStateDashboard
+                npcs={npcs.map(npc => ({
+                  id: npc.id,
+                  name: npc.name,
+                  role: npc.description || '',
+                  status: npc.isAlive ? 'alive' : 'dead',
+                  relationship: npc.relationship as 'friendly' | 'neutral' | 'hostile' | undefined,
+                  lastSeen: npc.currentLocation
+                }))}
+                factions={factions.map(faction => ({
+                  id: faction.id,
+                  name: faction.name,
+                  influence: faction.influence,
+                  relationship: faction.threatLevel >= 4 ? 'hostile' : faction.threatLevel >= 3 ? 'neutral' : 'allied',
+                  description: faction.description
+                }))}
+                clocks={clocks.map(clock => ({
+                  id: clock.id,
+                  name: clock.name,
+                  current: clock.currentTicks,
+                  max: clock.maxTicks
+                }))}
+                worldNotes={campaign?.initialWorldSeed ? [campaign.initialWorldSeed] : []}
+              />
+            )}
 
             {/* AI Settings Tab */}
             {activeTab === 'ai' && campaign && (
@@ -981,58 +1012,45 @@ export default function AdminPage() {
                   </div>
                 )}
 
-                {clocks.map((clock) => (
-                  <div key={clock.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold">
-                          {clock.name} {clock.isHidden && '(Hidden)'}
-                        </h3>
-                        <p className="text-sm text-gray-600">{clock.description}</p>
-                        <div className="mt-2">
-                          <div className="flex space-x-1">
-                            {Array.from({ length: clock.maxTicks }).map((_, i) => (
-                              <div
-                                key={i}
-                                className={`w-8 h-8 border-2 rounded-full ${
-                                  i < clock.currentTicks
-                                    ? 'bg-indigo-600 border-indigo-600'
-                                    : 'bg-white border-gray-300'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleTickClock(clock.id, 'tick')}
-                          disabled={clock.currentTicks >= clock.maxTicks}
-                          className="px-2 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-                        >
-                          +
-                        </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {clocks.map((clock) => (
+                    <div key={clock.id}>
+                      <ClockProgress
+                        name={clock.name}
+                        current={clock.currentTicks}
+                        max={clock.maxTicks}
+                        description={clock.description || undefined}
+                        consequence={clock.consequence || undefined}
+                        size="md"
+                        isHidden={clock.isHidden}
+                        onTick={
+                          clock.currentTicks < clock.maxTicks
+                            ? () => handleTickClock(clock.id, 'tick')
+                            : undefined
+                        }
+                      />
+                      <div className="mt-2 flex gap-2">
                         <button
                           onClick={() => handleTickClock(clock.id, 'untick')}
                           disabled={clock.currentTicks <= 0}
-                          className="px-2 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                          className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 text-sm flex-1"
                         >
-                          -
+                          - Remove Tick
                         </button>
                         <button
                           onClick={() => handleToggleClockVisibility(clock)}
-                          className={`px-3 py-1 rounded-md ${
+                          className={`px-3 py-1 rounded-md text-sm flex-1 ${
                             clock.isHidden
                               ? 'bg-gray-600 text-white hover:bg-gray-700'
                               : 'bg-indigo-600 text-white hover:bg-indigo-700'
                           }`}
                         >
-                          {clock.isHidden ? 'Show' : 'Hide'}
+                          {clock.isHidden ? '👁️ Show' : '🔒 Hide'}
                         </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
 

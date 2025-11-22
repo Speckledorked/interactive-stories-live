@@ -4,7 +4,7 @@
  * Provides X-Card functionality, content warnings, and moderation tools
  */
 
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { XCardTrigger, ReportStatus, ReportSeverity, ContentWarningType } from '@prisma/client';
 
 export interface SafetySettings {

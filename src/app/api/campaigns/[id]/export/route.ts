@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CampaignExporter } from '@/lib/export/campaign-exporter';
 import { verifyAuth } from '@/lib/auth';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 
 /**
  * GET /api/campaigns/[id]/export

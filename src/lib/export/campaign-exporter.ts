@@ -5,7 +5,7 @@
  * Supports JSON format for full data export
  */
 
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 
 export interface ExportOptions {
   includeCharacters?: boolean;

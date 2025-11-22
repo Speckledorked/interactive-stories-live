@@ -22,6 +22,7 @@ import {
   type StatUsage,
   type AdvancementLog
 } from './advancement'
+import { AIVisualService } from '@/lib/ai/ai-visual-service'
 
 /**
  * Resolve a scene using the AI GM
@@ -119,6 +120,31 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     })
 
     console.log('✅ Scene marked as RESOLVED')
+
+    // 7.5. Generate map visualization from scene description
+    try {
+      console.log('🗺️  Generating map visualization...')
+
+      // Get the active map for the campaign (if any)
+      const activeMap = await prisma.map.findFirst({
+        where: {
+          campaignId,
+          isActive: true
+        },
+        select: { id: true }
+      })
+
+      await AIVisualService.generateMapFromScene(
+        aiResponse.scene_text,
+        campaignId,
+        activeMap?.id
+      )
+
+      console.log('✅ Map visualization generated')
+    } catch (visualError) {
+      // Don't fail the entire scene resolution if map generation fails
+      console.error('⚠️  Map generation failed (non-critical):', visualError)
+    }
 
     // Phase 16: Complete the exchange
     await exchangeManager.completeExchange()

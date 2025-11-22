@@ -8,6 +8,8 @@ import { useRouter, useParams } from 'next/navigation'
 import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
 import ChatPanel from '@/components/chat/ChatPanel'
+import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
+import type { MapData } from '@/lib/maps/map-service'
 
 export default function StoryPage() {
   const router = useRouter()
@@ -26,6 +28,8 @@ export default function StoryPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [expandedActions, setExpandedActions] = useState<Record<string, boolean>>({})
+  const [activeMap, setActiveMap] = useState<MapData | null>(null)
+  const [showMap, setShowMap] = useState(true)
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
@@ -61,6 +65,18 @@ export default function StoryPage() {
       setUserCharacters(userChars)
       if (userChars.length > 0 && !selectedCharacterId) {
         setSelectedCharacterId(userChars[0].id)
+      }
+
+      // Load active map
+      try {
+        const mapResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/maps/active`)
+        if (mapResponse.ok) {
+          const mapData = await mapResponse.json()
+          setActiveMap(mapData.map)
+        }
+      } catch (mapErr) {
+        // Map loading is optional, don't fail the whole page
+        console.error('Failed to load map:', mapErr)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
@@ -98,6 +114,28 @@ export default function StoryPage() {
     channel.bind('clock:ticked', (data: any) => {
       console.log('Clock ticked:', data)
       // Reload to update clock progress
+      loadData()
+    })
+
+    // Listen for map updates
+    channel.bind('ai-map-generated', (data: any) => {
+      console.log('Map generated:', data)
+      setActiveMap(data.map)
+    })
+
+    channel.bind('ai-character-moved', (data: any) => {
+      console.log('Character moved:', data)
+      // Reload map to get updated token positions
+      loadData()
+    })
+
+    channel.bind('ai-element-added', (data: any) => {
+      console.log('Element added to map:', data)
+      loadData()
+    })
+
+    channel.bind('ai-element-removed', (data: any) => {
+      console.log('Element removed from map:', data)
       loadData()
     })
 
@@ -458,6 +496,29 @@ export default function StoryPage() {
                         </div>
                       </div>
                     )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Map Viewer */}
+          {activeMap && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-gray-400">MAP</h3>
+                <button
+                  onClick={() => setShowMap(!showMap)}
+                  className="text-xs text-gray-500 hover:text-white transition-colors"
+                >
+                  {showMap ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {showMap && (
+                <div className="rounded-lg overflow-hidden border border-gray-700">
+                  <PlayerMapViewer
+                    map={activeMap}
+                    characterName={selectedCharacter?.name || ''}
+                  />
                 </div>
               )}
             </div>

@@ -28,10 +28,16 @@ export default function CampaignLobbyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreateCharacter, setShowCreateCharacter] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'notes'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'notes' | 'maps'>('overview')
   const [showNotifications, setShowNotifications] = useState(false)
   const [deletingCharacterId, setDeletingCharacterId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState('')
+  const [maps, setMaps] = useState<any[]>([])
+  const [mapsLoading, setMapsLoading] = useState(false)
+  const [showCreateMap, setShowCreateMap] = useState(false)
+  const [newMapName, setNewMapName] = useState('')
+  const [newMapDescription, setNewMapDescription] = useState('')
+  const [creatingMap, setCreatingMap] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -76,6 +82,28 @@ export default function CampaignLobbyPage() {
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete character')
     }
   }
+
+  const loadMaps = async () => {
+    setMapsLoading(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/maps`)
+      if (response.ok) {
+        const data = await response.json()
+        setMaps(data.maps || [])
+      }
+    } catch (err) {
+      console.error('Failed to load maps:', err)
+    } finally {
+      setMapsLoading(false)
+    }
+  }
+
+  // Load maps when switching to maps tab
+  useEffect(() => {
+    if (activeTab === 'maps') {
+      loadMaps()
+    }
+  }, [activeTab])
 
   if (loading) {
     return (
@@ -142,6 +170,7 @@ export default function CampaignLobbyPage() {
               { key: 'overview', label: 'Overview' },
               { key: 'chat', label: 'Chat' },
               { key: 'notes', label: 'Notes' },
+              { key: 'maps', label: 'Maps' },
             ].map(tab => (
               <button
                 key={tab.key}
@@ -343,6 +372,180 @@ export default function CampaignLobbyPage() {
             factions={data.campaign.factions || []}
             scenes={data.campaign.scenes || []}
           />
+        </div>
+      )}
+
+      {/* Maps Tab */}
+      {activeTab === 'maps' && data && (
+        <div className="max-w-6xl mx-auto">
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="card-header mb-0">Campaign Maps</h2>
+              {userRole === 'ADMIN' && (
+                <button
+                  onClick={() => setShowCreateMap(true)}
+                  className="text-primary-400 hover:text-primary-300 text-sm"
+                >
+                  + Create Map
+                </button>
+              )}
+            </div>
+
+            {/* Create Map Form */}
+            {showCreateMap && userRole === 'ADMIN' && (
+              <div className="bg-gray-900 rounded-lg p-4 mb-4 border border-gray-700">
+                <h3 className="text-white font-bold mb-3">Create New Map</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault()
+                  if (!newMapName.trim()) return
+
+                  setCreatingMap(true)
+                  try {
+                    const response = await authenticatedFetch(`/api/campaigns/${campaignId}/maps`, {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        name: newMapName,
+                        description: newMapDescription,
+                        width: 800,
+                        height: 600,
+                        gridSize: 40
+                      })
+                    })
+
+                    if (!response.ok) {
+                      const data = await response.json()
+                      throw new Error(data.error || 'Failed to create map')
+                    }
+
+                    setNewMapName('')
+                    setNewMapDescription('')
+                    setShowCreateMap(false)
+                    // Reload maps
+                    loadMaps()
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Failed to create map')
+                  } finally {
+                    setCreatingMap(false)
+                  }
+                }}>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Map Name</label>
+                      <input
+                        type="text"
+                        value={newMapName}
+                        onChange={(e) => setNewMapName(e.target.value)}
+                        className="input-field w-full"
+                        placeholder="e.g., Tavern Floor Plan, Dungeon Level 1"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Description</label>
+                      <textarea
+                        value={newMapDescription}
+                        onChange={(e) => setNewMapDescription(e.target.value)}
+                        className="input-field w-full"
+                        rows={2}
+                        placeholder="Optional description"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={creatingMap || !newMapName.trim()}
+                        className="btn-primary"
+                      >
+                        {creatingMap ? 'Creating...' : 'Create Map'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCreateMap(false)
+                          setNewMapName('')
+                          setNewMapDescription('')
+                        }}
+                        className="btn-secondary"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Maps List */}
+            {mapsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+              </div>
+            ) : maps.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">🗺️</div>
+                <p className="text-gray-400 mb-2">No maps yet</p>
+                <p className="text-sm text-gray-500">
+                  {userRole === 'ADMIN'
+                    ? 'Create a map to visualize locations and track character positions'
+                    : 'The GM will create maps as the adventure unfolds'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {maps.map((map: any) => (
+                  <div key={map.id} className="bg-gray-900 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors">
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-bold text-white">{map.name}</h3>
+                      {map.isActive && (
+                        <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    {map.description && (
+                      <p className="text-sm text-gray-400 mb-3">{map.description}</p>
+                    )}
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>{map.tokens?.length || 0} tokens</span>
+                      <span>{map.zones?.length || 0} zones</span>
+                      <span>{map.width}×{map.height}</span>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Link
+                        href={`/campaigns/${campaignId}/story`}
+                        className="text-xs text-primary-400 hover:text-primary-300"
+                      >
+                        View in Story
+                      </Link>
+                      {userRole === 'ADMIN' && !map.isActive && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const response = await authenticatedFetch(
+                                `/api/campaigns/${campaignId}/maps/active`,
+                                {
+                                  method: 'PUT',
+                                  body: JSON.stringify({ mapId: map.id })
+                                }
+                              )
+                              if (response.ok) {
+                                loadMaps()
+                              }
+                            } catch (err) {
+                              console.error('Failed to set active map:', err)
+                            }
+                          }}
+                          className="text-xs text-gray-400 hover:text-white"
+                        >
+                          Set Active
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

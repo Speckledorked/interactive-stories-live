@@ -2,8 +2,7 @@
 // Phase 15.5.1: AI Cost & Performance Metrics API
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { AICostTracker } from '@/lib/ai/cost-tracker'
 import { aiResponseCache } from '@/lib/ai/response-cache'
@@ -18,9 +17,9 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const user = await getUser(request)
 
-    if (!session?.user?.id) {
+    if (!user?.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -30,7 +29,7 @@ export async function GET(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: session.user.id,
+          userId: user.userId,
           campaignId
         }
       }
@@ -89,9 +88,9 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const user = await getUser(request)
 
-    if (!session?.user?.id) {
+    if (!user?.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -101,7 +100,7 @@ export async function DELETE(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: session.user.id,
+          userId: user.userId,
           campaignId
         }
       }

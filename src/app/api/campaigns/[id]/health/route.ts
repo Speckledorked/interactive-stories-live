@@ -2,8 +2,7 @@
 // Phase 15.4: Campaign Health Monitoring API
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CampaignHealthMonitor } from '@/lib/game/campaign-health'
 
@@ -16,9 +15,9 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const user = await getUser(request)
 
-    if (!session?.user?.id) {
+    if (!user?.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -28,7 +27,7 @@ export async function GET(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: session.user.id,
+          userId: user.userId,
           campaignId
         }
       }
@@ -85,9 +84,9 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const user = await getUser(request)
 
-    if (!session?.user?.id) {
+    if (!user?.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -97,7 +96,7 @@ export async function POST(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: session.user.id,
+          userId: user.userId,
           campaignId
         }
       }

@@ -128,7 +128,10 @@ export default function CampaignLobbyPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <div className="relative">
+          <div className="spinner h-16 w-16"></div>
+          <div className="absolute inset-0 h-16 w-16 rounded-full bg-primary-500/20 animate-ping"></div>
+        </div>
       </div>
     )
   }
@@ -151,63 +154,84 @@ export default function CampaignLobbyPage() {
   )
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto animate-fade-in">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-8">
         <Link
           href="/campaigns"
-          className="text-primary-400 hover:text-primary-300 text-sm mb-4 inline-block"
+          className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6 transition-colors group"
         >
-          ← Back to campaigns
+          <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Campaigns
         </Link>
         <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2">{campaign.title}</h1>
-            <p className="text-gray-400">{campaign.description}</p>
-            <div className="flex items-center space-x-4 mt-4 text-sm text-gray-500">
-              <span>Universe: {campaign.universe}</span>
-              <span>•</span>
-              <span>Turn {campaign.worldMeta?.currentTurnNumber || 0}</span>
-              <span>•</span>
-              <span>{campaign.worldMeta?.currentInGameDate || 'Day 1'}</span>
+          <div className="flex-1">
+            <div className="relative mb-3">
+              <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary-500/10 via-accent-500/5 to-transparent blur-3xl"></div>
+              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
+                {campaign.title}
+              </h1>
+            </div>
+            <p className="text-gray-300 leading-relaxed mb-4">{campaign.description}</p>
+            <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
+                <span className="text-gray-400">Universe:</span>
+                <span className="text-white font-medium">{campaign.universe}</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
+                <span className="text-gray-400">Turn:</span>
+                <span className="text-primary-400 font-medium">{campaign.worldMeta?.currentTurnNumber || 0}</span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
+                <span className="text-gray-400">📅</span>
+                <span className="text-white font-medium">{campaign.worldMeta?.currentInGameDate || 'Day 1'}</span>
+              </div>
             </div>
           </div>
           {userRole === 'ADMIN' && (
             <Link
               href={`/campaigns/${campaignId}/admin`}
-              className="btn-secondary"
+              className="btn-secondary flex items-center gap-2"
             >
-              ⚙️ Settings
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Settings
             </Link>
           )}
         </div>
       </div>
 
       {/* Navigation Tabs - Phase 8 Communication */}
-      <div className="border-b border-gray-700 mb-6 sticky top-0 bg-gray-950/95 backdrop-blur z-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex space-x-8">
-            {[
-              { key: 'overview', label: 'Overview' },
-              { key: 'progression', label: 'Story Log' },
-              { key: 'chat', label: 'Chat' },
-              { key: 'notes', label: 'Notes' },
-              { key: 'maps', label: 'Maps' },
-            ].map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
-                className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === tab.key
-                    ? 'border-primary-500 text-primary-400'
-                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
+      <div className="border-b border-dark-700/50 mb-8 sticky top-0 bg-dark-950/95 backdrop-blur-md z-10 -mx-4 px-4">
+        <nav className="flex space-x-2">
+          {[
+            { key: 'overview', label: 'Overview', icon: '🏠' },
+            { key: 'progression', label: 'Story Log', icon: '📜' },
+            { key: 'chat', label: 'Chat', icon: '💬' },
+            { key: 'notes', label: 'Notes', icon: '📝' },
+            { key: 'maps', label: 'Maps', icon: '🗺️' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
+              className={`relative py-3 px-6 font-semibold text-sm transition-all duration-200 flex items-center gap-2 rounded-t-xl ${
+                activeTab === tab.key
+                  ? 'text-primary-400 bg-gradient-to-b from-primary-500/10 to-transparent'
+                  : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'
+              }`}
+            >
+              <span className="text-base">{tab.icon}</span>
+              <span>{tab.label}</span>
+              {activeTab === tab.key && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-600 via-primary-500 to-primary-400 shadow-glow"></div>
+              )}
+            </button>
+          ))}
+        </nav>
       </div>
 
       {/* Overview Tab - Existing Content */}

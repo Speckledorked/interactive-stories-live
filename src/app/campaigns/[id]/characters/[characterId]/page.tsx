@@ -76,7 +76,7 @@ export default function CharacterPage() {
           <h2 className="text-2xl font-bold text-red-400 mb-4">Error</h2>
           <p className="text-gray-400 mb-4">{error || 'Character not found'}</p>
           <Link
-            href={\`/campaigns/\${campaignId}\`}
+            href={`/campaigns/${campaignId}`}
             className="text-primary-400 hover:text-primary-300"
           >
             ← Back to Campaign
@@ -91,7 +91,7 @@ export default function CharacterPage() {
       {/* Navigation */}
       <div className="mb-6">
         <Link
-          href={\`/campaigns/\${campaignId}\`}
+          href={`/campaigns/${campaignId}`}
           className="text-gray-400 hover:text-white transition-colors text-sm mb-3 inline-block"
         >
           ← Back to Campaign
@@ -107,13 +107,13 @@ export default function CharacterPage() {
         {/* Tab Navigation */}
         <div className="flex gap-2 border-b border-gray-700 pb-2 overflow-x-auto">
           <Link
-            href={\`/campaigns/\${campaignId}\`}
+            href={`/campaigns/${campaignId}`}
             className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
           >
             Overview
           </Link>
           <Link
-            href={\`/campaigns/\${campaignId}/story\`}
+            href={`/campaigns/${campaignId}/story`}
             className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
           >
             Story

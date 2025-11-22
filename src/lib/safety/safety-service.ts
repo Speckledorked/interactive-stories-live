@@ -5,7 +5,22 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { XCardTrigger, ReportStatus, ReportSeverity, ContentWarningType } from '@prisma/client';
+import { XCardTrigger, ReportStatus, ReportSeverity } from '@prisma/client';
+
+// ContentWarningType enum - matches prisma schema but not exported by Prisma client
+// because it's stored as Json in the database
+export enum ContentWarningType {
+  VIOLENCE = 'VIOLENCE',
+  SEXUAL_CONTENT = 'SEXUAL_CONTENT',
+  GORE = 'GORE',
+  HORROR = 'HORROR',
+  SUBSTANCE_ABUSE = 'SUBSTANCE_ABUSE',
+  MENTAL_HEALTH = 'MENTAL_HEALTH',
+  DISCRIMINATION = 'DISCRIMINATION',
+  DEATH = 'DEATH',
+  TRAUMA = 'TRAUMA',
+  CUSTOM = 'CUSTOM',
+}
 
 export interface SafetySettings {
   xCardEnabled?: boolean;

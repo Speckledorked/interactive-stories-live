@@ -112,6 +112,8 @@ export interface AIGMRequest {
       backstory: string | null
       goals: string | null
       location: string | null
+      relationships?: any
+      consequences?: any
     }>
     npcs: Array<{
       id: string

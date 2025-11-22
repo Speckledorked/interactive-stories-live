@@ -247,19 +247,7 @@ export class CampaignExporter {
   private static async exportSessions(campaignId: string) {
     const sessions = await prisma.session.findMany({
       where: {
-        participants: {
-          some: {
-            session: {
-              scenes: {
-                some: {
-                  scene: {
-                    campaignId,
-                  },
-                },
-              },
-            },
-          },
-        },
+        campaignId,
       },
       include: {
         participants: true,

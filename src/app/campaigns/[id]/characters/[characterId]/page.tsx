@@ -98,8 +98,8 @@ export default function CharacterSheetPage() {
             )}
           </div>
           <div className="text-right">
-            <div className="text-sm text-gray-400">Level / XP</div>
-            <div className="text-2xl font-bold text-primary-400">{character.experience || 0} XP</div>
+            <div className="text-sm text-gray-400">Status</div>
+            <div className="text-lg font-bold text-green-400">{character.isAlive ? 'Active' : 'Inactive'}</div>
           </div>
         </div>
       </div>
@@ -296,15 +296,26 @@ export default function CharacterSheetPage() {
               </div>
             )}
 
-            <div className="card">
-              <h2 className="text-xl font-bold text-white mb-4">Progression</h2>
-              <div className="space-y-3">
+            <div className="card bg-gradient-to-br from-gray-900 to-gray-800 border-primary-700">
+              <h2 className="text-xl font-bold text-white mb-2">Character Advancement</h2>
+              <p className="text-sm text-gray-400 mb-4">
+                Your character grows organically based on their actions in the story. The AI awards new abilities, stat increases, and perks as you demonstrate mastery and face challenges.
+              </p>
+              <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-400">Experience Points</span>
-                  <span className="text-lg font-bold text-primary-400">{character.experience || 0} XP</span>
+                  <span className="text-sm text-gray-400">Stats Unlocked</span>
+                  <span className="text-lg font-bold text-primary-400">{Object.keys(stats).length}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-400">Harm Taken</span>
+                  <span className="text-sm text-gray-400">Perks Gained</span>
+                  <span className="text-lg font-bold text-purple-400">{Array.isArray(perks) ? perks.length : 0}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-400">Moves Known</span>
+                  <span className="text-lg font-bold text-blue-400">{character.moves?.length || 0}</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-gray-700">
+                  <span className="text-sm text-gray-400">Current Harm</span>
                   <span className="text-lg font-bold text-red-400">{character.harm || 0} / 6</span>
                 </div>
               </div>

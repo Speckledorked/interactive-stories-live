@@ -64,6 +64,47 @@ export interface AIGMResponse {
           description: string
         }>
         consequences_remove?: string[] // Descriptions of consequences to remove
+        // Physical appearance changes (scars, lost limbs, etc.)
+        appearance_changes?: {
+          description: string // New or updated appearance text
+          append?: boolean // If true, append to existing; if false, replace
+        }
+        // Personality evolution (trauma, character development)
+        personality_changes?: {
+          description: string // New or updated personality text
+          append?: boolean // If true, append to existing; if false, replace
+        }
+        // Equipment changes (weapons, armor, accessories)
+        equipment_changes?: {
+          weapon?: { action: 'add' | 'remove' | 'replace', value: string }
+          armor?: { action: 'add' | 'remove' | 'replace', value: string }
+          misc?: { action: 'add' | 'remove' | 'replace', value: string }
+        }
+        // Inventory changes (items gained/lost)
+        inventory_changes?: {
+          items_add?: Array<{
+            id: string
+            name: string
+            quantity: number
+            tags: string[]
+          }>
+          items_remove?: string[] // Item IDs or names to remove
+          items_modify?: Array<{
+            id: string
+            quantity_delta: number // +/- to adjust quantity
+          }>
+          slots_delta?: number // Adjust total inventory slots
+        }
+        // Resource changes
+        resource_changes?: {
+          gold_delta?: number // +/- gold
+          contacts_add?: string[]
+          contacts_remove?: string[]
+          reputation_changes?: Array<{
+            faction: string
+            delta: number
+          }>
+        }
       }
     }>
     faction_changes?: Array<{
@@ -402,7 +443,23 @@ You MUST respond with a JSON object with this exact structure:
           "consequences_add": [
             {"type": "debt", "description": "Owes the merchant 50 gold for the stolen goods"}
           ],
-          "consequences_remove": ["Promise to deliver message to the mayor"]
+          "consequences_remove": ["Promise to deliver message to the mayor"],
+          "appearance_changes": {"description": "Missing left eye, deep scar across face", "append": true},
+          "personality_changes": {"description": "More cautious and paranoid after the betrayal", "append": true},
+          "equipment_changes": {
+            "weapon": {"action": "remove", "value": "Lucky sword"},
+            "armor": {"action": "add", "value": "Captain's breastplate"}
+          },
+          "inventory_changes": {
+            "items_add": [{"id": "ancient_key", "name": "Ancient Key", "quantity": 1, "tags": ["quest", "important"]}],
+            "items_remove": ["Rope"],
+            "items_modify": [{"id": "healing_potion", "quantity_delta": -1}]
+          },
+          "resource_changes": {
+            "gold_delta": -50,
+            "contacts_add": ["Marcus the Fence"],
+            "reputation_changes": [{"faction": "Thieves Guild", "delta": 10}]
+          }
         }
       }
     ],
@@ -435,6 +492,52 @@ ORGANIC CHARACTER GROWTH:
 - Suggest moves when characters demonstrate mastery in an area
 - Keep stat total at +2, at most one stat >= +2
 - Growth is driven by what characters DO, not player choices
+
+CHARACTER PHYSICAL & NARRATIVE CHANGES:
+CRITICAL: You can and SHOULD modify character appearance, equipment, inventory, and personality when narratively appropriate.
+
+APPEARANCE CHANGES (appearance_changes):
+- Use when characters suffer permanent physical changes: lost limbs, scars, burns, disfigurement
+- Use when characters undergo transformations: aging, mutations, curses
+- Set append=true to add details (e.g., "Deep scar across left cheek"), append=false to replace entirely
+- Examples: "Missing right eye socket covered with leather patch", "Burn scars covering left arm", "Hair turned white from shock"
+
+PERSONALITY CHANGES (personality_changes):
+- Use when characters experience trauma, character development, or dramatic events
+- Use when relationships or betrayals fundamentally change their outlook
+- Set append=true to add new traits, append=false to replace
+- Examples: "Paranoid and suspicious after the betrayal", "More confident after proving themselves", "Haunted by guilt"
+
+EQUIPMENT CHANGES (equipment_changes):
+- Use "remove" when equipment is lost, stolen, destroyed, or given away
+- Use "add" when equipment is found, purchased, or received
+- Use "replace" when equipment is upgraded or swapped
+- Track significant items that matter narratively (lucky coat, ancestral sword, etc.)
+- Examples: Losing a lucky sword in battle, gaining a captain's breastplate as reward
+
+INVENTORY CHANGES (inventory_changes):
+- items_add: When characters find, purchase, or receive items
+- items_remove: When items are lost, stolen, used up, sold, or given away
+- items_modify: When consuming items (potions, food) or combining quantities
+- slots_delta: When gaining/losing carrying capacity (new bag, injury)
+- Track quest items, consumables, and narrative items (companion animals, keepsakes)
+
+RESOURCE CHANGES (resource_changes):
+- gold_delta: Spending, earning, stealing, losing gold
+- contacts_add/remove: Meeting new allies or losing connections
+- reputation_changes: How actions affect standing with factions
+
+WHEN TO USE THESE CHANGES:
+✅ Character loses an arm in combat → appearance_changes
+✅ Character's lucky coat is stolen → equipment_changes (remove misc)
+✅ Character's dog companion is killed → inventory_changes (remove)
+✅ Character spends gold to bribe guard → resource_changes (gold_delta: -50)
+✅ Character becomes hardened after witnessing massacre → personality_changes
+✅ Character's sword breaks in battle → equipment_changes (weapon remove)
+✅ Character drinks healing potion → inventory_changes (items_modify quantity_delta: -1)
+✅ Character earns reputation with thieves guild → resource_changes (reputation_changes)
+
+Make these changes MATTER in the narrative. Reference them in scene_text. If a character loses an eye, describe how it affects their vision and combat. If equipment is lost, show their reaction and the impact.
 
 PHASE 14: HIDDEN RELATIONSHIPS & CONSEQUENCES
 CRITICAL: Characters have hidden relationship tracking (trust, tension, respect, fear) with NPCs and factions.

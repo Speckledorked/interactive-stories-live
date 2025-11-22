@@ -17,6 +17,9 @@ import { CompactTimeline } from '@/components/scene/VisualTimeline'
 import AITransparencyPanel, { type WorldStateChange } from '@/components/scene/AITransparencyPanel'
 import CharacterSnapshotModal from '@/components/character/CharacterSnapshotModal'
 import NPCRelationshipHints, { extractNPCHintsFromScene } from '@/components/scene/NPCRelationshipHints'
+import { useCommandPalette } from '@/contexts/CommandPaletteContext'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal'
 
 export default function StoryPage() {
   const router = useRouter()
@@ -42,9 +45,13 @@ export default function StoryPage() {
   const [expandedTransparency, setExpandedTransparency] = useState<Record<string, boolean>>({})
   const [startingScene, setStartingScene] = useState(false)
   const [endingScene, setEndingScene] = useState(false)
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
+
+  // Command palette context
+  const { setContext, registerAction } = useCommandPalette()
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -165,6 +172,62 @@ export default function StoryPage() {
       pusherClient.unsubscribe(`campaign-${campaignId}`)
     }
   }, [campaignId])
+
+  // Set command palette context
+  useEffect(() => {
+    setContext({ campaignId, sceneId: currentScene?.id })
+  }, [campaignId, currentScene?.id, setContext])
+
+  // Register command palette actions
+  useEffect(() => {
+    registerAction('submit-action', () => {
+      const firstScene = activeScenes[0]
+      if (firstScene) {
+        const formEvent = new Event('submit') as any
+        handleSubmitAction(formEvent, firstScene.id)
+      }
+    })
+
+    registerAction('resolve-exchange', () => {
+      if (currentScene) handleResolveScene(currentScene.id)
+    })
+
+    registerAction('end-scene', () => {
+      if (currentScene) handleEndScene(currentScene.id)
+    })
+
+    registerAction('create-character', () => {
+      router.push(`/campaigns/${campaignId}`)
+    })
+
+    registerAction('show-shortcuts', () => {
+      setShowKeyboardShortcuts(true)
+    })
+  }, [activeScenes, currentScene, registerAction, campaignId, router])
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    campaignId,
+    onSubmitAction: () => {
+      const firstScene = activeScenes[0]
+      if (firstScene && selectedCharacterId && actionText[firstScene.id]?.trim()) {
+        const formEvent = { preventDefault: () => {} } as React.FormEvent
+        handleSubmitAction(formEvent, firstScene.id)
+      }
+    },
+    onResolveExchange: () => {
+      if (currentScene && isAdmin) handleResolveScene(currentScene.id)
+    },
+    onEndScene: () => {
+      if (currentScene && isAdmin) handleEndScene(currentScene.id)
+    },
+    onStartScene: () => {
+      if (isAdmin) handleStartNewScene()
+    },
+    onShowShortcuts: () => {
+      setShowKeyboardShortcuts(true)
+    }
+  })
 
   const handleSubmitAction = async (e: React.FormEvent, sceneId: string) => {
     e.preventDefault()
@@ -335,48 +398,60 @@ export default function StoryPage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex gap-2 border-b border-gray-700 pb-2 overflow-x-auto">
-          <Link
-            href={`/campaigns/${campaignId}`}
-            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
-          >
-            Overview
-          </Link>
-          <span className="px-4 py-2 bg-primary-600 text-white rounded-t whitespace-nowrap">
-            Story
-          </span>
-          <Link
-            href={`/campaigns/${campaignId}/story-log`}
-            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
-          >
-            Story Log
-          </Link>
-          <Link
-            href={`/campaigns/${campaignId}`}
-            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
-          >
-            Notes
-          </Link>
-          <Link
-            href={`/campaigns/${campaignId}`}
-            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
-          >
-            Maps
-          </Link>
-          <Link
-            href={`/campaigns/${campaignId}`}
-            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
-          >
-            Chat
-          </Link>
-          {isAdmin && (
+        <div className="flex items-center justify-between gap-4 border-b border-gray-700 pb-2">
+          <div className="flex gap-2 overflow-x-auto">
             <Link
-              href={`/campaigns/${campaignId}/admin`}
+              href={`/campaigns/${campaignId}`}
               className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
             >
-              ⚙️ Admin
+              Overview
             </Link>
-          )}
+            <span className="px-4 py-2 bg-primary-600 text-white rounded-t whitespace-nowrap">
+              Story
+            </span>
+            <Link
+              href={`/campaigns/${campaignId}/story-log`}
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+            >
+              Story Log
+            </Link>
+            <Link
+              href={`/campaigns/${campaignId}`}
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+            >
+              Notes
+            </Link>
+            <Link
+              href={`/campaigns/${campaignId}`}
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+            >
+              Maps
+            </Link>
+            <Link
+              href={`/campaigns/${campaignId}`}
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+            >
+              Chat
+            </Link>
+            {isAdmin && (
+              <Link
+                href={`/campaigns/${campaignId}/admin`}
+                className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+              >
+                ⚙️ Admin
+              </Link>
+            )}
+          </div>
+          <button
+            onClick={() => setShowKeyboardShortcuts(true)}
+            className="flex items-center gap-2 px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors whitespace-nowrap"
+            title="Keyboard shortcuts"
+          >
+            <span>⌨️</span>
+            <kbd className="hidden sm:inline px-1.5 py-0.5 text-xs bg-gray-700 rounded border border-gray-600">
+              ?
+            </kbd>
+          </button>
         </div>
       </div>
 
@@ -770,6 +845,12 @@ export default function StoryPage() {
           onClose={() => setShowCharacterSnapshot(false)}
         />
       )}
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={showKeyboardShortcuts}
+        onClose={() => setShowKeyboardShortcuts(false)}
+      />
     </div>
   )
 }

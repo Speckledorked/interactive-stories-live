@@ -14,6 +14,13 @@ import { aiResponseCache } from './response-cache'
  */
 export interface AIGMResponse {
   scene_text: string // The narrated resolution
+  time_passage?: {
+    // How much in-game time has passed in this exchange
+    days?: number // Days elapsed
+    hours?: number // Hours elapsed (in addition to days)
+    new_date?: string // Optional: AI can provide a formatted date/time string
+    description?: string // Optional: describe the time passage (e.g., "Several hours later", "The next morning")
+  }
   world_updates: {
     new_timeline_events?: Array<{
       title: string
@@ -424,6 +431,11 @@ RESPONSE FORMAT:
 You MUST respond with a JSON object with this exact structure:
 {
   "scene_text": "Full narrated resolution of the scene...",
+  "time_passage": {
+    "days": 0,
+    "hours": 2,
+    "description": "A couple hours later..."
+  },
   "world_updates": {
     "new_timeline_events": [...],
     "clock_changes": [...],
@@ -538,6 +550,18 @@ WHEN TO USE THESE CHANGES:
 ✅ Character earns reputation with thieves guild → resource_changes (reputation_changes)
 
 Make these changes MATTER in the narrative. Reference them in scene_text. If a character loses an eye, describe how it affects their vision and combat. If equipment is lost, show their reaction and the impact.
+
+TIME PASSAGE:
+- CRITICAL: Determine how much in-game time has passed during this exchange
+- Consider the nature of actions: Combat is minutes, travel is hours, investigations are hours, resting is hours/days
+- Be realistic: A short conversation is minutes, a journey across town is hours, recuperating from injury is days
+- Include time_passage in your response with days and/or hours
+- Provide a brief description to help narrate the passage of time
+- Examples:
+  * Quick combat: {"days": 0, "hours": 0, "description": "The fight lasted mere moments"}
+  * Investigation: {"days": 0, "hours": 3, "description": "After several hours of searching"}
+  * Travel: {"days": 1, "hours": 6, "description": "A day and a half of travel"}
+  * Rest and recovery: {"days": 2, "hours": 0, "description": "Two days of rest"}
 
 PHASE 14: HIDDEN RELATIONSHIPS & CONSEQUENCES
 CRITICAL: Characters have hidden relationship tracking (trust, tension, respect, fear) with NPCs and factions.

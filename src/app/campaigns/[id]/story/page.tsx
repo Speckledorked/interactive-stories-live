@@ -40,6 +40,8 @@ export default function StoryPage() {
   const [showCharacterSnapshot, setShowCharacterSnapshot] = useState(false)
   const [sceneWorldStateChanges, setSceneWorldStateChanges] = useState<Record<string, WorldStateChange[]>>({})
   const [expandedTransparency, setExpandedTransparency] = useState<Record<string, boolean>>({})
+  const [startingScene, setStartingScene] = useState(false)
+  const [endingScene, setEndingScene] = useState(false)
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
@@ -228,9 +230,13 @@ export default function StoryPage() {
     }
   }
 
+  const [startingScene, setStartingScene] = useState(false)
+  const [endingScene, setEndingScene] = useState(false)
+
   const handleStartNewScene = async () => {
     setError('')
     setSuccess('')
+    setStartingScene(true)
 
     try {
       const response = await authenticatedFetch(
@@ -247,6 +253,36 @@ export default function StoryPage() {
       await loadData()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start scene')
+    } finally {
+      setStartingScene(false)
+    }
+  }
+
+  const handleEndScene = async (sceneId: string) => {
+    setError('')
+    setSuccess('')
+    setEndingScene(true)
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/end-scene`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ sceneId })
+        }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to end scene')
+      }
+
+      setSuccess('Scene ended!')
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to end scene')
+    } finally {
+      setEndingScene(false)
     }
   }
 
@@ -356,28 +392,38 @@ export default function StoryPage() {
                       </div>
                     )}
 
-                    {/* Show resolution if resolved */}
+                    {/* Show resolutions if any exist */}
                     {scene.sceneResolutionText && (
                       <>
                         <div className="mt-6 pt-6 border-t border-gray-700">
                           <h3 className="text-lg font-bold text-primary-400 mb-3">
-                            Resolution
+                            {scene.sceneResolutionText.includes('---') ? 'Resolutions' : 'Resolution'}
                           </h3>
-                          <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
-                            {scene.sceneResolutionText}
-                          </p>
+                          {/* Split multiple resolutions by separator */}
+                          {scene.sceneResolutionText.split('\n\n---\n\n').map((resolution: string, idx: number) => (
+                            <div key={idx} className={idx > 0 ? 'mt-6 pt-6 border-t border-gray-600' : ''}>
+                              {scene.sceneResolutionText.includes('---') && (
+                                <h4 className="text-sm font-medium text-gray-400 mb-2">
+                                  Exchange {idx + 1}
+                                </h4>
+                              )}
+                              <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                                {resolution}
+                              </p>
 
-                          {/* NPC Relationship Hints in Resolution */}
-                          {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
-                            <div className="mt-4">
-                              <NPCRelationshipHints
-                                hints={extractNPCHintsFromScene(
-                                  scene.sceneResolutionText,
-                                  campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
-                                )}
-                              />
+                              {/* NPC Relationship Hints in Resolution */}
+                              {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
+                                <div className="mt-4">
+                                  <NPCRelationshipHints
+                                    hints={extractNPCHintsFromScene(
+                                      resolution,
+                                      campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
+                                    )}
+                                  />
+                                </div>
+                              )}
                             </div>
-                          )}
+                          ))}
                         </div>
 
                         {/* AI Transparency Panel - Show world state changes */}
@@ -472,25 +518,37 @@ export default function StoryPage() {
                     </div>
                   )}
 
-                  {/* Manual Resolve Button (Admin Only) */}
+                  {/* GM Controls (Admin Only) */}
                   {scene.status === 'AWAITING_ACTIONS' && isAdmin && scene.playerActions && scene.playerActions.length > 0 && (
                     <div className="card bg-yellow-500/10 border-yellow-500/50">
                       <div className="flex items-start justify-between gap-4">
-                        <div>
+                        <div className="flex-1">
                           <p className="text-yellow-400 text-sm font-medium mb-1">
                             🎲 GM Controls
                           </p>
-                          <p className="text-gray-400 text-xs">
-                            {scene.playerActions.length} action(s) submitted. You can manually resolve this scene now.
+                          <p className="text-gray-400 text-xs mb-2">
+                            {scene.playerActions.length} action(s) submitted. Current exchange: {scene.currentExchange || 1}
+                          </p>
+                          <p className="text-gray-500 text-xs">
+                            Resolving will process actions and continue the scene. End the scene when the story concludes.
                           </p>
                         </div>
-                        <button
-                          onClick={() => handleResolveScene(scene.id)}
-                          disabled={resolving}
-                          className="btn-primary disabled:opacity-50 whitespace-nowrap"
-                        >
-                          {resolving ? 'Resolving...' : 'Resolve Scene'}
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleResolveScene(scene.id)}
+                            disabled={resolving}
+                            className="btn-primary disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {resolving ? 'Resolving...' : 'Resolve Exchange'}
+                          </button>
+                          <button
+                            onClick={() => handleEndScene(scene.id)}
+                            disabled={endingScene}
+                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {endingScene ? 'Ending...' : 'End Scene'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -507,8 +565,12 @@ export default function StoryPage() {
                   : 'Waiting for the GM to start a scene'}
               </p>
               {isAdmin && (
-                <button onClick={handleStartNewScene} className="btn-primary">
-                  🎬 Start First Scene
+                <button
+                  onClick={handleStartNewScene}
+                  disabled={startingScene}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  {startingScene ? 'Starting...' : '🎬 Start First Scene'}
                 </button>
               )}
             </div>

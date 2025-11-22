@@ -303,9 +303,6 @@ export default function StoryPage() {
     }
   }
 
-  const [startingScene, setStartingScene] = useState(false)
-  const [endingScene, setEndingScene] = useState(false)
-
   const handleStartNewScene = async () => {
     setError('')
     setSuccess('')

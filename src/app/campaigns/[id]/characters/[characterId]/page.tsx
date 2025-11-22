@@ -32,7 +32,7 @@ export default function CharacterPage() {
 
       // Load campaign info
       const campaignResponse = await authenticatedFetch(
-        \`/api/campaigns/\${campaignId}\`
+        `/api/campaigns/${campaignId}`
       )
       if (campaignResponse.ok) {
         const campaignData = await campaignResponse.json()
@@ -41,7 +41,7 @@ export default function CharacterPage() {
 
       // Load character info
       const characterResponse = await authenticatedFetch(
-        \`/api/campaigns/\${campaignId}/characters/\${characterId}\`
+        `/api/campaigns/${campaignId}/characters/${characterId}`
       )
       if (characterResponse.ok) {
         const characterData = await characterResponse.json()

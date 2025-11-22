@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
+import ChatPanel from '@/components/chat/ChatPanel'
 
 export default function StoryPage() {
   const router = useRouter()
@@ -459,6 +460,20 @@ export default function StoryPage() {
                     )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* In-Character Chat for Current Scene */}
+          {currentScene && user && (
+            <div className="card p-0">
+              <ChatPanel
+                campaignId={campaignId}
+                currentUserId={user.id}
+                currentUserName={user.email}
+                userCharacters={userCharacters}
+                sceneId={currentScene.id}
+                icOnly={true}
+              />
             </div>
           )}
 

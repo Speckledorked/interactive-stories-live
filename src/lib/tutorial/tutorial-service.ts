@@ -4,7 +4,7 @@
  * Manages tutorial progression, step tracking, and guided onboarding
  */
 
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { TutorialStatus } from '@prisma/client';
 
 export interface TutorialStepData {

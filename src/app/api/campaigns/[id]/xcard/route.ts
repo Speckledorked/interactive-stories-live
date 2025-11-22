@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SafetyService } from '@/lib/safety/safety-service';
 import { verifyAuth } from '@/lib/auth';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { XCardTrigger } from '@prisma/client';
 
 /**

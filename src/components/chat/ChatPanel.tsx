@@ -13,20 +13,22 @@ interface ChatPanelProps {
   currentUserName: string;
   userCharacters: Array<{ id: string; name: string; }>;
   sceneId?: string;
+  icOnly?: boolean; // If true, only show IC messages and force IC mode
 }
 
 type MessageType = 'OUT_OF_CHARACTER' | 'IN_CHARACTER' | 'WHISPER';
 
-export default function ChatPanel({ 
-  campaignId, 
-  currentUserId, 
+export default function ChatPanel({
+  campaignId,
+  currentUserId,
   currentUserName,
   userCharacters,
-  sceneId 
+  sceneId,
+  icOnly = false
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<RealtimeMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [messageType, setMessageType] = useState<MessageType>('OUT_OF_CHARACTER');
+  const [messageType, setMessageType] = useState<MessageType>(icOnly ? 'IN_CHARACTER' : 'OUT_OF_CHARACTER');
   const [selectedCharacter, setSelectedCharacter] = useState<string>('');
   const [whisperTarget, setWhisperTarget] = useState<string>('');
   const [isTyping, setIsTyping] = useState(false);
@@ -285,48 +287,53 @@ export default function ChatPanel({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map(formatMessage).filter(Boolean)}
+        {messages
+          .filter(msg => !icOnly || msg.type === 'IN_CHARACTER')
+          .map(formatMessage)
+          .filter(Boolean)}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input Area */}
       <div className="p-4 border-t border-gray-200">
-        {/* Message Type Controls */}
-        <div className="flex flex-wrap gap-2 mb-3">
-          <button
-            onClick={() => setMessageType('OUT_OF_CHARACTER')}
-            className={`px-3 py-1 text-sm rounded-md ${
-              messageType === 'OUT_OF_CHARACTER'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            OOC
-          </button>
-          <button
-            onClick={() => setMessageType('IN_CHARACTER')}
-            className={`px-3 py-1 text-sm rounded-md ${
-              messageType === 'IN_CHARACTER'
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            IC
-          </button>
-          <button
-            onClick={() => setMessageType('WHISPER')}
-            className={`px-3 py-1 text-sm rounded-md ${
-              messageType === 'WHISPER'
-                ? 'bg-purple-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            Whisper
-          </button>
-        </div>
+        {/* Message Type Controls - hide if IC only mode */}
+        {!icOnly && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button
+              onClick={() => setMessageType('OUT_OF_CHARACTER')}
+              className={`px-3 py-1 text-sm rounded-md ${
+                messageType === 'OUT_OF_CHARACTER'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              OOC
+            </button>
+            <button
+              onClick={() => setMessageType('IN_CHARACTER')}
+              className={`px-3 py-1 text-sm rounded-md ${
+                messageType === 'IN_CHARACTER'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              IC
+            </button>
+            <button
+              onClick={() => setMessageType('WHISPER')}
+              className={`px-3 py-1 text-sm rounded-md ${
+                messageType === 'WHISPER'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Whisper
+            </button>
+          </div>
+        )}
 
         {/* Character Selection for IC */}
-        {messageType === 'IN_CHARACTER' && (
+        {(messageType === 'IN_CHARACTER' || icOnly) && (
           <select
             value={selectedCharacter}
             onChange={(e) => setSelectedCharacter(e.target.value)}
@@ -341,7 +348,7 @@ export default function ChatPanel({
         )}
 
         {/* Whisper Target Selection */}
-        {messageType === 'WHISPER' && (
+        {messageType === 'WHISPER' && !icOnly && (
           <select
             value={whisperTarget}
             onChange={(e) => setWhisperTarget(e.target.value)}

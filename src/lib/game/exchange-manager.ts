@@ -149,6 +149,19 @@ export class ExchangeManager {
       return true
     }
 
+    // First fetch scene to get currentExchange
+    const sceneData = await prisma.scene.findUnique({
+      where: { id: this.sceneId },
+      select: {
+        currentExchange: true,
+      }
+    })
+
+    if (!sceneData) {
+      return false
+    }
+
+    // Then fetch full scene with filtered playerActions
     const scene = await prisma.scene.findUnique({
       where: { id: this.sceneId },
       include: {
@@ -164,7 +177,7 @@ export class ExchangeManager {
         playerActions: {
           where: {
             status: 'pending',
-            exchangeNumber: scene?.currentExchange || 0
+            exchangeNumber: sceneData.currentExchange || 0
           }
         }
       }

@@ -5,7 +5,7 @@
  * Supports JSON format for full data export
  */
 
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 
 export interface ExportOptions {
   includeCharacters?: boolean;
@@ -247,19 +247,7 @@ export class CampaignExporter {
   private static async exportSessions(campaignId: string) {
     const sessions = await prisma.session.findMany({
       where: {
-        participants: {
-          some: {
-            session: {
-              scenes: {
-                some: {
-                  scene: {
-                    campaignId,
-                  },
-                },
-              },
-            },
-          },
-        },
+        campaignId,
       },
       include: {
         participants: true,

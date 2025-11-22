@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { authenticatedFetch, getUser } from '@/lib/clientAuth'
 
 interface ShortcutGroup {
   title: string
@@ -29,6 +30,20 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShor
       return () => window.removeEventListener('keydown', handleKeyDown)
     }
   }, [isOpen, onClose])
+
+  // Trigger tutorial completion when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const user = getUser()
+      if (user?.id) {
+        // Trigger the 'shortcuts_viewed' event for tutorial tracking
+        authenticatedFetch('/api/tutorial/trigger', {
+          method: 'POST',
+          body: JSON.stringify({ trigger: 'shortcuts_viewed' })
+        }).catch(err => console.error('Failed to track tutorial event:', err))
+      }
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 

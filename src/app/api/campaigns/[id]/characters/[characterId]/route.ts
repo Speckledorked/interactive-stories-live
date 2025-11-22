@@ -4,6 +4,65 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { validateStats } from '@/lib/game/advancement'
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string; characterId: string } }
+) {
+  try {
+    const user = await getUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id: campaignId, characterId } = params
+
+    // Check membership
+    const membership = await prisma.campaignMembership.findUnique({
+      where: {
+        userId_campaignId: {
+          userId: user.userId,
+          campaignId,
+        },
+      },
+    })
+
+    if (!membership) {
+      return NextResponse.json(
+        { error: 'You are not a member of this campaign' },
+        { status: 403 }
+      )
+    }
+
+    // Get character
+    const character = await prisma.character.findUnique({
+      where: { id: characterId },
+    })
+
+    if (!character) {
+      return NextResponse.json(
+        { error: 'Character not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if user can view this character (own character or admin)
+    if (character.userId !== user.userId && membership.role !== 'ADMIN') {
+      return NextResponse.json(
+        { error: 'You can only view your own characters' },
+        { status: 403 }
+      )
+    }
+
+    return NextResponse.json(character)
+  } catch (error) {
+    console.error('Get character error:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch character' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string; characterId: string } }

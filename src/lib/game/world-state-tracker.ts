@@ -3,6 +3,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { WorldStateChange } from '@/components/scene/AITransparencyPanel'
+import { NotificationService } from '@/lib/notifications/notification-service'
 
 interface WorldStateSnapshot {
   npcs: Record<string, any>
@@ -307,29 +308,26 @@ export async function createCharacterProgressionNotifications(
 
   // Create a notification for the player
   for (const change of progressionChanges) {
-    let notificationType: string = 'AI_RESPONSE_READY'
     let priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT' = 'NORMAL'
 
     if (change.details.includes('stat') || change.details.includes('perk')) {
       priority = 'HIGH'
     }
 
-    await prisma.notification.create({
-      data: {
-        type: notificationType as any,
-        title: `${character.name} has grown!`,
-        message: `Your character has progressed: ${change.details}${sceneNumber ? ` (Scene ${sceneNumber})` : ''}`,
-        status: 'UNREAD',
-        priority,
-        userId: character.userId,
-        campaignId,
-        actionUrl: `/campaigns/${campaignId}/characters/${characterId}`,
-        metadata: {
-          characterId,
-          sceneNumber,
-          changes: change.details
-        }
-      }
+    await NotificationService.createNotification({
+      type: 'AI_RESPONSE_READY',
+      title: `${character.name} has grown!`,
+      message: `Your character has progressed: ${change.details}${sceneNumber ? ` (Scene ${sceneNumber})` : ''}`,
+      userId: character.userId,
+      campaignId,
+      priority,
+      actionUrl: `/campaigns/${campaignId}/characters/${characterId}`,
+      metadata: {
+        characterId,
+        sceneNumber,
+        changes: change.details
+      },
+      triggerSound: 'levelup'
     })
   }
 }

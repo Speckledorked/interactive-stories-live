@@ -99,7 +99,7 @@ export async function triggerNotificationUpdate(userId: string, notification: an
   const pusher = getPusherServer();
   if (!pusher) return; // Pusher not configured
 
-  await pusher.trigger(`user-${userId}`, 'notification-update', {
+  await pusher.trigger(`user-${userId}`, 'notification-received', {
     ...notification,
     timestamp: new Date().toISOString()
   });

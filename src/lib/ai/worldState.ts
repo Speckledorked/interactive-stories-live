@@ -4,11 +4,167 @@
 import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
+import { buildOptimizedContext } from './contextManager' // Phase 14.6: Context optimization
+
+/**
+ * Build optimized world summary using context manager
+ * Reduces token usage for large campaigns (10+ scenes)
+ *
+ * @param campaignId - Campaign ID
+ * @param currentSceneNumber - Current scene number
+ * @returns Optimized world summary with location-based filtering
+ */
+async function buildOptimizedWorldSummary(
+  campaignId: string,
+  currentSceneNumber: number
+): Promise<AIGMRequest['world_summary']> {
+  console.log('🎯 Building optimized world summary with location filtering')
+
+  // Get optimized context from context manager
+  const optimizedContext = await buildOptimizedContext(prisma, campaignId, currentSceneNumber)
+
+  // Get current data
+  const [worldMeta, characters, allNpcs, allFactions, clocks] = await Promise.all([
+    prisma.worldMeta.findUnique({ where: { campaignId } }),
+    prisma.character.findMany({
+      where: { campaignId, isAlive: true },
+      include: { user: { select: { email: true } } }
+    }),
+    prisma.nPC.findMany({ where: { campaignId } }),
+    prisma.faction.findMany({ where: { campaignId } }),
+    prisma.clock.findMany({
+      where: { campaignId, isHidden: false }
+    })
+  ])
+
+  if (!worldMeta) {
+    throw new Error('WorldMeta not found')
+  }
+
+  // Extract character locations for filtering
+  const characterLocations = new Set(
+    characters.map(c => c.currentLocation).filter(Boolean)
+  )
+
+  console.log('📍 Character locations:', Array.from(characterLocations))
+
+  // Filter NPCs: only include those at character locations OR with high importance (4+)
+  const relevantNpcs = allNpcs.filter(npc => {
+    const isHighImportance = npc.importance >= 4
+    const isNearby = characterLocations.size === 0 || // If no locations set, include all
+      Array.from(characterLocations).some(loc => {
+        if (!loc) return false
+        return npc.description?.toLowerCase().includes(loc.toLowerCase()) ||
+          npc.gmNotes?.toLowerCase().includes(loc.toLowerCase())
+      })
+    return isHighImportance || isNearby
+  })
+
+  // Filter factions: only include active threats (4-5/5) or those mentioned in character consequences
+  const characterConsequences = characters.flatMap(c => {
+    const cons = c.consequences as any
+    return [
+      ...(cons?.enemies || []),
+      ...(cons?.debts || []),
+      ...(cons?.longTermThreats || [])
+    ]
+  })
+
+  const relevantFactions = allFactions.filter(faction => {
+    const isActiveThreat = faction.threatLevel >= 4 // Threat level 4-5 are high/extreme threats
+    const isInConsequences = characterConsequences.some(cons =>
+      cons.toLowerCase().includes(faction.name.toLowerCase())
+    )
+    return isActiveThreat || isInConsequences
+  })
+
+  console.log(`🔍 Filtered entities: ${relevantNpcs.length}/${allNpcs.length} NPCs, ${relevantFactions.length}/${allFactions.length} factions`)
+
+  // Build compressed timeline from optimized context
+  const compressedTimeline = optimizedContext.importantMoments.map(moment => ({
+    title: moment.title,
+    summary: moment.summary,
+    turn_number: moment.sceneNumber
+  }))
+
+  // Add campaign summary as a high-level overview if available
+  let campaignSummaryText = ''
+  if (optimizedContext.campaignSummary) {
+    const summary = optimizedContext.campaignSummary
+    campaignSummaryText = `
+CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes):
+- Active Threats: ${summary.activeThreats.join(', ') || 'None'}
+- Completed Goals: ${summary.completedGoals.join(', ') || 'None'}
+    `.trim()
+  }
+
+  return {
+    turn_number: worldMeta.currentTurnNumber,
+    in_game_date: worldMeta.currentInGameDate || 'Day 1',
+
+    // Include campaign summary in a special field (we'll handle this in the prompt)
+    _campaignSummary: campaignSummaryText,
+
+    characters: characters.map(c => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      stats: c.stats,
+      backstory: c.backstory,
+      goals: c.goals,
+      location: c.currentLocation,
+      harm: c.harm,
+      conditions: c.conditions,
+      moves: c.moves,
+      experience: c.experience,
+      statUsage: c.statUsage,
+      perks: c.perks,
+      inventory: c.inventory,
+      equipment: c.equipment,
+      resources: c.resources,
+      relationships: c.relationships,
+      consequences: c.consequences
+    })),
+
+    // Only relevant NPCs
+    npcs: relevantNpcs.map(n => ({
+      id: n.id,
+      name: n.name,
+      description: n.description,
+      goals: n.goals,
+      relationship: n.relationship,
+      importance: n.importance
+    })),
+
+    // Only relevant factions
+    factions: relevantFactions.map(f => ({
+      id: f.id,
+      name: f.name,
+      goals: f.goals,
+      currentPlan: f.currentPlan,
+      threatLevel: f.threatLevel,
+      resources: f.resources,
+      influence: f.influence
+    })),
+
+    clocks: clocks.map(cl => ({
+      id: cl.id,
+      name: cl.name,
+      current_ticks: cl.currentTicks,
+      max_ticks: cl.maxTicks,
+      description: cl.description || '',
+      consequence: cl.consequence || ''
+    })),
+
+    // Use compressed timeline from context manager
+    recent_timeline_events: compressedTimeline
+  } as any
+}
 
 /**
  * Fetch and serialize all world state for a campaign
  * This creates a clean, AI-readable summary of the entire game world
- * 
+ *
  * @param campaignId - The campaign to summarize
  * @returns Formatted world state ready for AI
  */
@@ -114,7 +270,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
 
 /**
  * Build a complete AI GM request for scene resolution
- * 
+ *
  * @param campaignId - Campaign ID
  * @param sceneId - Current scene ID
  * @returns Complete request object ready to send to AI
@@ -124,7 +280,7 @@ export async function buildSceneResolutionRequest(
   sceneId: string
 ): Promise<AIGMRequest> {
   console.log('🎬 Building scene resolution request')
-  
+
   // Get campaign info
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId }
@@ -151,8 +307,17 @@ export async function buildSceneResolutionRequest(
     throw new Error('Scene not found')
   }
 
-  // Get world summary
-  const worldSummary = await buildWorldSummaryForAI(campaignId)
+  // Phase 14.6: Use optimized context for campaigns with 10+ scenes
+  const sceneCount = await prisma.scene.count({ where: { campaignId } })
+  let worldSummary: AIGMRequest['world_summary']
+
+  if (sceneCount >= 10) {
+    console.log('📉 Using optimized context (campaign has', sceneCount, 'scenes)')
+    worldSummary = await buildOptimizedWorldSummary(campaignId, scene.sceneNumber)
+  } else {
+    console.log('📊 Using full context (campaign has', sceneCount, 'scenes)')
+    worldSummary = await buildWorldSummaryForAI(campaignId)
+  }
 
   // Format player actions
   const playerActions = scene.playerActions.map(action => ({
@@ -224,8 +389,19 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
           name: true,
           pronouns: true,
           description: true,
+          appearance: true,
+          personality: true,
           goals: true,
-          backstory: true
+          backstory: true,
+          stats: true,
+          inventory: true,
+          equipment: true,
+          resources: true,
+          currentLocation: true,
+          moves: true,
+          perks: true,
+          relationships: true,
+          consequences: true
         }
       }
     }
@@ -248,12 +424,83 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
     throw new Error('OPENAI_API_KEY not configured')
   }
 
-  // Build character context
+  // Build comprehensive character context
   const characterContext = campaign.characters.length > 0
-    ? `\n\nPLAYER CHARACTERS:
-${campaign.characters.map(c => `- ${c.name} (${c.pronouns || 'they/them'}): ${c.description || 'A mysterious adventurer'}
-  Goals: ${c.goals || 'To be determined'}
-  Background: ${c.backstory || 'Unknown'}`).join('\n')}`
+    ? `\n\nPLAYER CHARACTERS (use these details to personalize the opening scene):\n${campaign.characters.map(c => {
+      const parts = [
+        `\n## ${c.name} (${c.pronouns || 'they/them'})`,
+        `Description: ${c.description || 'A mysterious adventurer'}`,
+      ]
+
+      if (c.appearance) {
+        parts.push(`Appearance: ${c.appearance}`)
+      }
+
+      if (c.personality) {
+        parts.push(`Personality: ${c.personality}`)
+      }
+
+      parts.push(`Background: ${c.backstory || 'Unknown'}`)
+      parts.push(`Goals: ${c.goals || 'To be determined'}`)
+
+      if (c.currentLocation) {
+        parts.push(`Current Location: ${c.currentLocation}`)
+      }
+
+      if (c.stats) {
+        const stats = c.stats as any
+        parts.push(`Stats: ${Object.entries(stats).map(([key, val]) => `${key} ${(val as number) >= 0 ? '+' : ''}${val}`).join(', ')}`)
+      }
+
+      if (c.equipment) {
+        const eq = c.equipment as any
+        const items = []
+        if (eq.weapon) items.push(`Weapon: ${eq.weapon.name || eq.weapon}`)
+        if (eq.armor) items.push(`Armor: ${eq.armor.name || eq.armor}`)
+        if (items.length > 0) parts.push(`Equipment: ${items.join(', ')}`)
+      }
+
+      if (c.inventory) {
+        const inv = c.inventory as any
+        if (inv.items && inv.items.length > 0) {
+          const itemList = inv.items.slice(0, 5).map((item: any) =>
+            typeof item === 'string' ? item : `${item.name}${item.quantity ? ` (x${item.quantity})` : ''}`
+          ).join(', ')
+          parts.push(`Carrying: ${itemList}${inv.items.length > 5 ? ', and more...' : ''}`)
+        }
+      }
+
+      if (c.resources) {
+        const res = c.resources as any
+        const resourceParts = []
+        if (res.gold !== undefined) resourceParts.push(`${res.gold} gold`)
+        if (res.contacts && res.contacts.length > 0) resourceParts.push(`contacts: ${res.contacts.join(', ')}`)
+        if (resourceParts.length > 0) parts.push(`Resources: ${resourceParts.join('; ')}`)
+      }
+
+      if (c.moves && c.moves.length > 0) {
+        parts.push(`Special Moves: ${c.moves.slice(0, 3).join(', ')}${c.moves.length > 3 ? '...' : ''}`)
+      }
+
+      if (c.perks) {
+        const perks = c.perks as any
+        if (Array.isArray(perks) && perks.length > 0) {
+          parts.push(`Abilities: ${perks.map((p: any) => p.name).slice(0, 3).join(', ')}`)
+        }
+      }
+
+      if (c.consequences) {
+        const cons = c.consequences as any
+        if (cons.enemies && cons.enemies.length > 0) {
+          parts.push(`⚠️ Enemies: ${cons.enemies.join(', ')}`)
+        }
+        if (cons.debts && cons.debts.length > 0) {
+          parts.push(`⚠️ Debts: ${cons.debts.join(', ')}`)
+        }
+      }
+
+      return parts.join('\n  ')
+    }).join('\n')}`
     : '\n\nNo player characters have been created yet.'
 
   const prompt = `You are the Game Master for a ${campaign.universe} campaign.
@@ -268,18 +515,25 @@ LAST SCENE RESOLUTION:
 ${lastScene?.sceneResolutionText || 'This is the first scene of the campaign.'}
 
 Generate a compelling, dynamic scene introduction that:
-1. Directly involves the player characters by name and references their goals or backstories
+1. PERSONALIZE to the characters - reference their specific equipment, inventory, location, backstory, goals, and abilities
 2. Creates IMMEDIATE stakes and tension - what's at risk right now?
 3. Provides vivid, immersive sensory details specific to the ${campaign.universe} setting
 4. Presents a clear dramatic question or choice the characters must face
 5. Sets the tone and atmosphere appropriate to the universe
-6. Advances active faction plans or clocks where appropriate
-7. Is 2-4 paragraphs long and ends with a clear moment of decision or action
+6. If characters have enemies, debts, or consequences listed - consider incorporating these into the opening tension
+7. If characters have specific locations listed, start them there rather than a generic gathering point
+8. Reference their equipment/inventory naturally (e.g., "As you check your sword..." or "The gold purse weighs heavy...")
+9. Is 2-4 paragraphs long and ends with a clear moment of decision or action
 
-For the first scene of a campaign:
-- Start with action or a compelling hook, not generic descriptions
-- Establish the world through specific details, not exposition
-- Create an immediate situation that demands character response
+CRITICAL - For the first scene of a campaign:
+- DO NOT use generic openings like "The heroes gather" or "Times are uncertain"
+- START with the characters already in a specific situation that relates to their backgrounds/goals
+- USE their equipment, resources, and abilities to make the scene feel tailored to THEM
+- REFERENCE their backstories, enemies, or debts to create personal stakes
+- If they have a current location, start there; otherwise, choose a location relevant to their goals
+- Establish the world through specific details that matter to THESE characters, not generic exposition
+
+Example approach: If a character has "seeking revenge" as a goal and a sword as equipment, start with them tracking their enemy. If they have contacts listed, maybe a contact brings them urgent news. Make it SPECIFIC to who they are.
 
 Write ONLY the scene introduction text. Do not include JSON, meta-commentary, or any other formatting.`
 
@@ -291,7 +545,7 @@ Write ONLY the scene introduction text. Do not include JSON, meta-commentary, or
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-4o-mini', // Cost optimization: mini model for scene intros
         messages: [
           { role: 'system', content: 'You are a creative game master.' },
           { role: 'user', content: prompt }

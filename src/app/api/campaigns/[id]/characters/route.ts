@@ -8,10 +8,44 @@ interface CreateCharacterBody {
   name: string
   pronouns?: string
   description?: string
+  appearance?: string
+  personality?: string
   stats?: any
   backstory?: string
   goals?: string
   currentLocation?: string
+  moves?: string[]
+  perks?: Array<{
+    id: string
+    name: string
+    description: string
+    tags?: string[]
+  }>
+  equipment?: {
+    weapon?: string
+    armor?: string
+    misc?: string
+  }
+  inventory?: {
+    items?: Array<{
+      id: string
+      name: string
+      quantity: number
+      tags: string[]
+    }>
+    slots?: number
+  }
+  resources?: {
+    gold?: number
+    contacts?: string[]
+    reputation?: Record<string, number>
+  }
+  consequences?: {
+    promises?: string[]
+    debts?: string[]
+    enemies?: string[]
+    longTermThreats?: string[]
+  }
 }
 
 export async function POST(
@@ -68,10 +102,18 @@ export async function POST(
         name: body.name,
         pronouns: body.pronouns,
         description: body.description,
+        appearance: body.appearance,
+        personality: body.personality,
         stats: body.stats,
         backstory: body.backstory,
         goals: body.goals,
         currentLocation: body.currentLocation,
+        moves: body.moves || [],
+        equipment: body.equipment || undefined,
+        inventory: body.inventory || undefined,
+        resources: body.resources || undefined,
+        perks: body.perks || undefined,
+        consequences: body.consequences || undefined,
       },
     })
 

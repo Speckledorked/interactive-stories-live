@@ -25,6 +25,7 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -46,6 +47,28 @@ export default function CampaignsPage() {
       setError(err instanceof Error ? err.message : 'Failed to load campaigns')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDeleteCampaign = async (campaignId: string) => {
+    if (!confirm('Are you sure you want to delete this campaign? This action cannot be undone.')) {
+      return
+    }
+
+    setDeletingCampaignId(campaignId)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) throw new Error('Failed to delete campaign')
+
+      // Remove from list
+      setCampaigns(campaigns.filter(c => c.id !== campaignId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete campaign')
+    } finally {
+      setDeletingCampaignId(null)
     }
   }
 
@@ -92,31 +115,59 @@ export default function CampaignsPage() {
           {campaigns.map((campaign) => (
             <div
               key={campaign.id}
-              onClick={() => router.push(`/campaigns/${campaign.id}`)}
-              className="card cursor-pointer hover:border-primary-500 transition-all"
+              className="card relative"
             >
-              <div className="flex items-start justify-between mb-3">
-                <h3 className="text-lg font-bold text-white">{campaign.title}</h3>
-                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                  campaign.userRole === 'ADMIN'
-                    ? 'bg-primary-500/20 text-primary-400'
-                    : 'bg-gray-700 text-gray-300'
-                }`}>
-                  {campaign.userRole}
-                </span>
-              </div>
+              <div
+                onClick={() => router.push(`/campaigns/${campaign.id}`)}
+                className="cursor-pointer"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <h3 className="text-lg font-bold text-white">{campaign.title}</h3>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    campaign.userRole === 'ADMIN'
+                      ? 'bg-primary-500/20 text-primary-400'
+                      : 'bg-gray-700 text-gray-300'
+                  }`}>
+                    {campaign.userRole}
+                  </span>
+                </div>
 
-              <p className="text-sm text-gray-400 mb-4 line-clamp-2">
-                {campaign.description}
-              </p>
+                <p className="text-sm text-gray-400 mb-4 line-clamp-2">
+                  {campaign.description}
+                </p>
 
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Universe: {campaign.universe}</span>
-                <div className="flex items-center space-x-3 text-gray-500">
-                  <span>👥 {campaign._count.characters}</span>
-                  <span>📜 {campaign._count.scenes}</span>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Universe: {campaign.universe}</span>
+                  <div className="flex items-center space-x-3 text-gray-500">
+                    <span>👥 {campaign._count.characters}</span>
+                    <span>📜 {campaign._count.scenes}</span>
+                  </div>
                 </div>
               </div>
+
+              {campaign.userRole === 'ADMIN' && (
+                <div className="mt-4 pt-4 border-t border-gray-700 flex gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      router.push(`/campaigns/${campaign.id}/admin?tab=settings`)
+                    }}
+                    className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors text-sm"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteCampaign(campaign.id)
+                    }}
+                    disabled={deletingCampaignId === campaign.id}
+                    className="flex-1 px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 text-sm"
+                  >
+                    {deletingCampaignId === campaign.id ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

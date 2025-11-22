@@ -71,13 +71,15 @@ export class AIVisualService {
 
       // Broadcast new map to players
       const pusher = PusherServer()
-      await pusher.trigger(`campaign-${campaignId}`, 'ai-map-generated', {
-        mapId: mapData.id,
-        mapName: mapData.name,
-        sceneDescription,
-        zones,
-        tokens
-      })
+      if (pusher) {
+        await pusher.trigger(`campaign-${campaignId}`, 'ai-map-generated', {
+          mapId: mapData.id,
+          mapName: mapData.name,
+          sceneDescription,
+          zones,
+          tokens
+        })
+      }
 
       return {
         mapId: mapData.id,
@@ -127,7 +129,7 @@ Return a JSON object with:
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'gpt-4',
+          model: 'gpt-4o-mini', // Cost optimization: mini model for map generation
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.3,
           max_tokens: 800
@@ -303,12 +305,14 @@ Return a JSON object with:
 
         // Broadcast movement
         const pusher = PusherServer()
-        await pusher.trigger(`campaign-${campaignId}`, 'ai-character-moved', {
-          characterName,
-          tokenId: characterToken.id,
-          newPosition,
-          actionDescription
-        })
+        if (pusher) {
+          await pusher.trigger(`campaign-${campaignId}`, 'ai-character-moved', {
+            characterName,
+            tokenId: characterToken.id,
+            newPosition,
+            actionDescription
+          })
+        }
       }
     } catch (error) {
       console.error('Error updating character position:', error)
@@ -371,12 +375,14 @@ Return a JSON object with:
 
       // Broadcast new element
       const pusher = PusherServer()
-      await pusher.trigger(`campaign-${campaignId}`, 'ai-element-added', {
-        elementName,
-        elementType,
-        description,
-        token
-      })
+      if (pusher) {
+        await pusher.trigger(`campaign-${campaignId}`, 'ai-element-added', {
+          elementName,
+          elementType,
+          description,
+          token
+        })
+      }
 
       return token
     } catch (error) {
@@ -402,10 +408,12 @@ Return a JSON object with:
         await MapService.deleteToken(token.id)
 
         const pusher = PusherServer()
-        await pusher.trigger(`campaign-${campaignId}`, 'ai-element-removed', {
-          elementName,
-          tokenId: token.id
-        })
+        if (pusher) {
+          await pusher.trigger(`campaign-${campaignId}`, 'ai-element-removed', {
+            elementName,
+            tokenId: token.id
+          })
+        }
       }
     } catch (error) {
       console.error('Error removing scene element:', error)

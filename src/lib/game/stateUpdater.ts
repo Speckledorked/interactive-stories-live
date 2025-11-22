@@ -293,6 +293,182 @@ export async function applyWorldUpdates(
               updateData.consequences = currentConsequences
             }
 
+            // Process appearance changes
+            if (pcChange.changes.appearance_changes) {
+              const appearanceChange = pcChange.changes.appearance_changes
+              if (appearanceChange.append) {
+                const currentAppearance = character.appearance || ''
+                updateData.appearance = currentAppearance
+                  ? `${currentAppearance} ${appearanceChange.description}`
+                  : appearanceChange.description
+              } else {
+                updateData.appearance = appearanceChange.description
+              }
+              console.log(`  👁️ ${character.name} appearance changed: ${appearanceChange.description}`)
+            }
+
+            // Process personality changes
+            if (pcChange.changes.personality_changes) {
+              const personalityChange = pcChange.changes.personality_changes
+              if (personalityChange.append) {
+                const currentPersonality = character.personality || ''
+                updateData.personality = currentPersonality
+                  ? `${currentPersonality} ${personalityChange.description}`
+                  : personalityChange.description
+              } else {
+                updateData.personality = personalityChange.description
+              }
+              console.log(`  🧠 ${character.name} personality changed: ${personalityChange.description}`)
+            }
+
+            // Process equipment changes
+            if (pcChange.changes.equipment_changes) {
+              const currentEquipment: any = (character.equipment as any) || {}
+              const equipChange = pcChange.changes.equipment_changes
+
+              if (equipChange.weapon) {
+                if (equipChange.weapon.action === 'add' || equipChange.weapon.action === 'replace') {
+                  currentEquipment.weapon = equipChange.weapon.value
+                  console.log(`  ⚔️ ${character.name} equipped weapon: ${equipChange.weapon.value}`)
+                } else if (equipChange.weapon.action === 'remove') {
+                  console.log(`  ⚔️ ${character.name} lost weapon: ${currentEquipment.weapon || equipChange.weapon.value}`)
+                  currentEquipment.weapon = ''
+                }
+              }
+
+              if (equipChange.armor) {
+                if (equipChange.armor.action === 'add' || equipChange.armor.action === 'replace') {
+                  currentEquipment.armor = equipChange.armor.value
+                  console.log(`  🛡️ ${character.name} equipped armor: ${equipChange.armor.value}`)
+                } else if (equipChange.armor.action === 'remove') {
+                  console.log(`  🛡️ ${character.name} lost armor: ${currentEquipment.armor || equipChange.armor.value}`)
+                  currentEquipment.armor = ''
+                }
+              }
+
+              if (equipChange.misc) {
+                if (equipChange.misc.action === 'add' || equipChange.misc.action === 'replace') {
+                  currentEquipment.misc = equipChange.misc.value
+                  console.log(`  🎒 ${character.name} equipped misc: ${equipChange.misc.value}`)
+                } else if (equipChange.misc.action === 'remove') {
+                  console.log(`  🎒 ${character.name} lost misc: ${currentEquipment.misc || equipChange.misc.value}`)
+                  currentEquipment.misc = ''
+                }
+              }
+
+              updateData.equipment = currentEquipment
+            }
+
+            // Process inventory changes
+            if (pcChange.changes.inventory_changes) {
+              const currentInventory: any = (character.inventory as any) || { items: [], slots: 10 }
+              const invChange = pcChange.changes.inventory_changes
+
+              // Ensure items array exists
+              if (!currentInventory.items) {
+                currentInventory.items = []
+              }
+
+              // Add items
+              if (invChange.items_add) {
+                for (const newItem of invChange.items_add) {
+                  // Check if item already exists, if so increase quantity
+                  const existingItem = currentInventory.items.find((item: any) => item.id === newItem.id)
+                  if (existingItem) {
+                    existingItem.quantity += newItem.quantity
+                    console.log(`  📦 ${character.name} gained ${newItem.quantity}x ${newItem.name} (now ${existingItem.quantity})`)
+                  } else {
+                    currentInventory.items.push(newItem)
+                    console.log(`  📦 ${character.name} gained ${newItem.quantity}x ${newItem.name}`)
+                  }
+                }
+              }
+
+              // Remove items
+              if (invChange.items_remove) {
+                for (const itemIdOrName of invChange.items_remove) {
+                  const indexToRemove = currentInventory.items.findIndex((item: any) =>
+                    item.id === itemIdOrName || item.name.toLowerCase() === itemIdOrName.toLowerCase()
+                  )
+                  if (indexToRemove !== -1) {
+                    const removedItem = currentInventory.items[indexToRemove]
+                    currentInventory.items.splice(indexToRemove, 1)
+                    console.log(`  📦 ${character.name} lost ${removedItem.name}`)
+                  }
+                }
+              }
+
+              // Modify item quantities
+              if (invChange.items_modify) {
+                for (const modify of invChange.items_modify) {
+                  const item = currentInventory.items.find((item: any) => item.id === modify.id)
+                  if (item) {
+                    item.quantity += modify.quantity_delta
+                    console.log(`  📦 ${character.name} ${modify.quantity_delta > 0 ? 'gained' : 'used'} ${Math.abs(modify.quantity_delta)}x ${item.name} (now ${item.quantity})`)
+
+                    // Remove item if quantity reaches 0 or below
+                    if (item.quantity <= 0) {
+                      const index = currentInventory.items.findIndex((i: any) => i.id === modify.id)
+                      currentInventory.items.splice(index, 1)
+                      console.log(`  📦 ${character.name} ran out of ${item.name}`)
+                    }
+                  }
+                }
+              }
+
+              // Adjust slots
+              if (invChange.slots_delta) {
+                currentInventory.slots = Math.max(0, (currentInventory.slots || 10) + invChange.slots_delta)
+                console.log(`  🎒 ${character.name} inventory slots: ${invChange.slots_delta > 0 ? '+' : ''}${invChange.slots_delta} (now ${currentInventory.slots})`)
+              }
+
+              updateData.inventory = currentInventory
+            }
+
+            // Process resource changes
+            if (pcChange.changes.resource_changes) {
+              const currentResources: any = (character.resources as any) || { gold: 0, contacts: [], reputation: {} }
+              const resChange = pcChange.changes.resource_changes
+
+              // Gold changes
+              if (resChange.gold_delta !== undefined) {
+                currentResources.gold = Math.max(0, (currentResources.gold || 0) + resChange.gold_delta)
+                console.log(`  💰 ${character.name} ${resChange.gold_delta > 0 ? 'gained' : 'spent'} ${Math.abs(resChange.gold_delta)} gold (now ${currentResources.gold})`)
+              }
+
+              // Contact changes
+              if (resChange.contacts_add) {
+                if (!currentResources.contacts) currentResources.contacts = []
+                for (const contact of resChange.contacts_add) {
+                  if (!currentResources.contacts.includes(contact)) {
+                    currentResources.contacts.push(contact)
+                    console.log(`  🤝 ${character.name} gained contact: ${contact}`)
+                  }
+                }
+              }
+
+              if (resChange.contacts_remove) {
+                if (currentResources.contacts) {
+                  for (const contact of resChange.contacts_remove) {
+                    currentResources.contacts = currentResources.contacts.filter((c: string) => c !== contact)
+                    console.log(`  🤝 ${character.name} lost contact: ${contact}`)
+                  }
+                }
+              }
+
+              // Reputation changes
+              if (resChange.reputation_changes) {
+                if (!currentResources.reputation) currentResources.reputation = {}
+                for (const repChange of resChange.reputation_changes) {
+                  const current = currentResources.reputation[repChange.faction] || 0
+                  currentResources.reputation[repChange.faction] = current + repChange.delta
+                  console.log(`  ⭐ ${character.name} reputation with ${repChange.faction}: ${repChange.delta > 0 ? '+' : ''}${repChange.delta} (now ${currentResources.reputation[repChange.faction]})`)
+                }
+              }
+
+              updateData.resources = currentResources
+            }
+
             if (Object.keys(updateData).length > 0) {
               await tx.character.update({
                 where: { id: character.id },
@@ -307,7 +483,77 @@ export async function applyWorldUpdates(
         }
       }
 
-      // 5. Update factions
+      // 5. Process organic character advancement
+      if (world_updates.organic_advancement) {
+        console.log(`📈 Processing ${world_updates.organic_advancement.length} character advancement(s)`)
+
+        for (const advancement of world_updates.organic_advancement) {
+          const character = await tx.character.findUnique({
+            where: { id: advancement.character_id }
+          })
+
+          if (character) {
+            const updateData: any = {}
+
+            // Process stat increases
+            if (advancement.stat_increases && advancement.stat_increases.length > 0) {
+              const currentStats: any = (character.stats as any) || {}
+
+              for (const statIncrease of advancement.stat_increases) {
+                const currentValue = currentStats[statIncrease.stat_key] || 0
+                const newValue = Math.min(3, currentValue + statIncrease.delta) // Cap at +3
+                currentStats[statIncrease.stat_key] = newValue
+                console.log(`  📊 ${character.name} ${statIncrease.stat_key}: ${currentValue} → ${newValue} (${statIncrease.reason})`)
+              }
+
+              updateData.stats = currentStats
+            }
+
+            // Process new perks
+            if (advancement.new_perks && advancement.new_perks.length > 0) {
+              const currentPerks: any[] = (character.perks as any) || []
+
+              for (const newPerk of advancement.new_perks) {
+                // Check if perk already exists
+                const exists = currentPerks.some((p: any) => p.id === newPerk.id)
+                if (!exists) {
+                  currentPerks.push(newPerk)
+                  console.log(`  ✨ ${character.name} gained perk: ${newPerk.name}`)
+                }
+              }
+
+              updateData.perks = currentPerks
+            }
+
+            // Process new moves
+            if (advancement.new_moves && advancement.new_moves.length > 0) {
+              const currentMoves: string[] = (character.moves as any) || []
+
+              for (const newMove of advancement.new_moves) {
+                if (!currentMoves.includes(newMove)) {
+                  currentMoves.push(newMove)
+                  console.log(`  🎯 ${character.name} learned move: ${newMove}`)
+                }
+              }
+
+              updateData.moves = currentMoves
+            }
+
+            if (Object.keys(updateData).length > 0) {
+              await tx.character.update({
+                where: { id: character.id },
+                data: updateData
+              })
+
+              console.log(`  📈 Advanced character: ${character.name}`)
+            }
+          } else {
+            console.warn(`  ⚠️ Character not found for advancement: ${advancement.character_id}`)
+          }
+        }
+      }
+
+      // 6. Update factions
       if (world_updates.faction_changes) {
         console.log(`🏛️ Updating ${world_updates.faction_changes.length} factions`)
         
@@ -363,7 +609,7 @@ export async function applyWorldUpdates(
         }
       }
 
-      // 6. Store GM notes in WorldMeta if provided
+      // 7. Store GM notes in WorldMeta if provided
       if (world_updates.notes_for_gm) {
         const worldMeta = await tx.worldMeta.findUnique({
           where: { campaignId }

@@ -22,6 +22,13 @@ import {
   type StatUsage,
   type AdvancementLog
 } from './advancement'
+import { AIVisualService } from '@/lib/ai/ai-visual-service'
+import {
+  captureWorldStateSnapshot,
+  detectWorldStateChanges,
+  storeWorldStateChanges,
+  createCharacterProgressionNotifications
+} from './world-state-tracker'
 
 /**
  * Resolve a scene using the AI GM
@@ -101,6 +108,10 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     console.log(`Scene text length: ${aiResponse.scene_text.length}`)
     console.log(`Updates: ${summarizeWorldUpdates(aiResponse)}`)
 
+    // 5.5. Capture world state before applying updates (for transparency)
+    console.log('📸 Capturing world state snapshot...')
+    const beforeSnapshot = await captureWorldStateSnapshot(campaignId)
+
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')
     await applyWorldUpdates(campaignId, aiResponse, currentTurn)
@@ -108,6 +119,33 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     // 6.5. Apply organic character growth
     console.log('🌱 Processing organic character growth...')
     await applyOrganicCharacterGrowth(campaignId, sceneId, aiResponse)
+
+    // 6.6. Detect and store world state changes for transparency
+    console.log('🔍 Detecting world state changes...')
+    const worldStateChanges = await detectWorldStateChanges(campaignId, beforeSnapshot)
+    await storeWorldStateChanges(sceneId, worldStateChanges)
+    console.log(`✅ Tracked ${worldStateChanges.length} world state changes`)
+
+    // 6.7. Create notifications for character progression
+    const characterChanges = worldStateChanges.filter(c => c.category === 'character')
+    for (const change of characterChanges) {
+      // Find the character ID from the name
+      const character = await prisma.character.findFirst({
+        where: {
+          campaignId,
+          name: change.entityName
+        }
+      })
+      if (character) {
+        await createCharacterProgressionNotifications(
+          campaignId,
+          character.id,
+          [change],
+          scene.sceneNumber
+        )
+      }
+    }
+    console.log(`✅ Created ${characterChanges.length} progression notifications`)
 
     // 7. Store scene resolution and mark as resolved
     await prisma.scene.update({
@@ -119,6 +157,31 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     })
 
     console.log('✅ Scene marked as RESOLVED')
+
+    // 7.5. Generate map visualization from scene description
+    try {
+      console.log('🗺️  Generating map visualization...')
+
+      // Get the active map for the campaign (if any)
+      const activeMap = await prisma.map.findFirst({
+        where: {
+          campaignId,
+          isActive: true
+        },
+        select: { id: true }
+      })
+
+      await AIVisualService.generateMapFromScene(
+        aiResponse.scene_text,
+        campaignId,
+        activeMap?.id
+      )
+
+      console.log('✅ Map visualization generated')
+    } catch (visualError) {
+      // Don't fail the entire scene resolution if map generation fails
+      console.error('⚠️  Map generation failed (non-critical):', visualError)
+    }
 
     // Phase 16: Complete the exchange
     await exchangeManager.completeExchange()
@@ -133,6 +196,16 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     })
 
     console.log(`✅ Turn incremented: ${currentTurn} → ${currentTurn + 1}`)
+
+    // 8.5. Generate campaign log entry
+    try {
+      console.log('📝 Generating campaign log entry...')
+      await generateCampaignLog(campaignId, sceneId, currentTurn + 1, aiResponse.scene_text)
+      console.log('✅ Campaign log entry created')
+    } catch (logError) {
+      // Don't fail the entire scene resolution if log generation fails
+      console.error('⚠️  Campaign log generation failed (non-critical):', logError)
+    }
 
     // Phase 15.4: Check campaign health periodically
     if (currentTurn % 5 === 0) { // Check every 5 scenes
@@ -520,4 +593,182 @@ function inferOutcomeFromAction(action: any): 'success' | 'mixed' | 'failure' | 
 
   // Default: assume mixed success if no roll data
   return 'mixed'
+}
+
+/**
+ * Generate a campaign log entry summarizing the scene
+ */
+async function generateCampaignLog(
+  campaignId: string,
+  sceneId: string,
+  turnNumber: number,
+  sceneText: string
+): Promise<void> {
+  // Create a simple summary by taking the first few sentences or using a simple format
+  // In a production system, you'd call an AI to generate a proper summary
+
+  const sentences = sceneText.split(/[.!?]+/).filter(s => s.trim().length > 0)
+  const summary = sentences.slice(0, 3).join('. ') + (sentences.length > 3 ? '...' : '')
+
+  // Extract key moments (looking for character actions, significant events)
+  const highlights: string[] = []
+  const actionKeywords = ['fought', 'discovered', 'found', 'defeated', 'rescued', 'escaped', 'learned', 'met', 'confronted']
+
+  sentences.forEach(sentence => {
+    const lowerSentence = sentence.toLowerCase()
+    if (actionKeywords.some(keyword => lowerSentence.includes(keyword))) {
+      highlights.push(sentence.trim())
+    }
+  })
+
+  // Get scene info for title
+  const scene = await prisma.scene.findUnique({
+    where: { id: sceneId },
+    select: { sceneNumber: true }
+  })
+
+  const title = scene ? `Scene ${scene.sceneNumber}` : `Turn ${turnNumber}`
+
+  await prisma.campaignLog.create({
+    data: {
+      campaignId,
+      sceneId,
+      turnNumber,
+      title,
+      summary,
+      highlights: highlights.slice(0, 5), // Limit to 5 highlights
+      entryType: 'scene'
+    }
+  })
+}
+
+/**
+ * Update wiki entries based on scene resolution
+ * This syncs NPCs, factions, and other entities mentioned in the AI response
+ */
+async function updateWikiEntries(
+  campaignId: string,
+  turnNumber: number,
+  aiResponse: any
+): Promise<void> {
+  // Get existing NPCs and Factions from database
+  const [npcs, factions] = await Promise.all([
+    prisma.nPC.findMany({ where: { campaignId } }),
+    prisma.faction.findMany({ where: { campaignId } })
+  ])
+
+  // Update or create NPC wiki entries
+  for (const npc of npcs) {
+    const existing = await prisma.wikiEntry.findFirst({
+      where: {
+        campaignId,
+        entryType: 'NPC',
+        name: npc.name
+      }
+    })
+
+    if (existing) {
+      // Update last seen turn
+      await prisma.wikiEntry.update({
+        where: { id: existing.id },
+        data: {
+          lastSeenTurn: turnNumber,
+          updatedAt: new Date()
+        }
+      })
+    } else {
+      // Create new entry
+      await prisma.wikiEntry.create({
+        data: {
+          campaignId,
+          entryType: 'NPC',
+          name: npc.name,
+          summary: npc.description || `A character in the story`,
+          description: npc.description || `${npc.name} is a character encountered during the adventure.`,
+          tags: [],
+          aliases: [],
+          importance: 'normal',
+          lastSeenTurn: turnNumber,
+          createdBy: 'ai'
+        }
+      })
+    }
+  }
+
+  // Update or create Faction wiki entries
+  for (const faction of factions) {
+    const existing = await prisma.wikiEntry.findFirst({
+      where: {
+        campaignId,
+        entryType: 'FACTION',
+        name: faction.name
+      }
+    })
+
+    if (existing) {
+      await prisma.wikiEntry.update({
+        where: { id: existing.id },
+        data: {
+          lastSeenTurn: turnNumber,
+          updatedAt: new Date()
+        }
+      })
+    } else {
+      await prisma.wikiEntry.create({
+        data: {
+          campaignId,
+          entryType: 'FACTION',
+          name: faction.name,
+          summary: faction.description || `A faction in the campaign`,
+          description: faction.description || `${faction.name} is a group or organization in the world.`,
+          tags: [],
+          aliases: [],
+          importance: 'normal',
+          lastSeenTurn: turnNumber,
+          createdBy: 'ai'
+        }
+      })
+    }
+  }
+
+  // Update clock entries
+  const clocks = await prisma.clock.findMany({ where: { campaignId } })
+  for (const clock of clocks) {
+    const existing = await prisma.wikiEntry.findFirst({
+      where: {
+        campaignId,
+        entryType: 'CLOCK',
+        name: clock.name
+      }
+    })
+
+    const progress = `${clock.currentTicks}/${clock.maxTicks}`
+    const clockDesc = `${clock.description}\n\nProgress: ${progress}`
+
+    if (existing) {
+      await prisma.wikiEntry.update({
+        where: { id: existing.id },
+        data: {
+          description: clockDesc,
+          lastSeenTurn: turnNumber,
+          updatedAt: new Date()
+        }
+      })
+    } else {
+      await prisma.wikiEntry.create({
+        data: {
+          campaignId,
+          entryType: 'CLOCK',
+          name: clock.name,
+          summary: clock.description || 'A countdown or progress tracker',
+          description: clockDesc,
+          tags: [],
+          aliases: [],
+          importance: 'major',
+          lastSeenTurn: turnNumber,
+          createdBy: 'ai'
+        }
+      })
+    }
+  }
 }

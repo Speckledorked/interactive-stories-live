@@ -171,6 +171,8 @@ model Character {
   name            String
   pronouns        String?
   description     String?
+  appearance      String?  // Physical appearance
+  personality     String?  // Personality traits and demeanor
   stats           Json? // For PbtA: {cool: 1, hard: 2, hot: -1, sharp: 1, weird: 0}
   backstory       String?
   goals           String?
@@ -1185,4 +1187,82 @@ model CampaignBan {
   @@unique([campaignId, userId])
   @@index([userId])
   @@map("campaign_bans")
+}
+
+//
+// CAMPAIGN LOG & PROGRESSION TRACKING
+//
+
+model CampaignLog {
+  id          String   @id @default(cuid())
+  campaignId  String
+  sceneId     String?  // Optional link to specific scene
+  turnNumber  Int
+
+  // Content
+  title       String
+  summary     String   @db.Text // AI-generated summary of what happened
+  highlights  String[] // Key events or important moments
+  entryType   String   @default("scene") // scene, downtime, world_event, milestone
+
+  // Timeline tracking
+  inGameDate  String?  // Optional in-game date/time
+  duration    String?  // How much in-game time passed (e.g., "2 hours", "3 days")
+
+  createdAt   DateTime @default(now())
+
+  @@index([campaignId, turnNumber])
+  @@index([sceneId])
+  @@map("campaign_logs")
+}
+
+//
+// CAMPAIGN WIKI & KNOWLEDGE BASE
+//
+
+enum WikiEntryType {
+  NPC
+  FACTION
+  LOCATION
+  CLOCK
+  ITEM
+  QUEST
+  LORE
+  CUSTOM
+}
+
+model WikiEntry {
+  id          String        @id @default(cuid())
+  campaignId  String
+  entryType   WikiEntryType
+
+  // Basic info
+  name        String
+  summary     String        @db.Text  // Short description
+  description String        @db.Text  // Full details
+
+  // Metadata
+  tags        String[]      // For filtering/searching
+  aliases     String[]      // Alternative names
+  imageUrl    String?       // Optional image
+
+  // Relationships
+  relatedEntries Json?       // Array of {id, type, relationship} to link entries
+
+  // Status tracking
+  isActive    Boolean       @default(true)
+  lastSeenTurn Int?         // Last turn this was mentioned/updated
+  importance  String        @default("normal") // minor, normal, major, critical
+
+  // History
+  changelog   Json?         // Array of {turn, change, summary} for tracking updates
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdBy   String        @default("ai") // ai or userId
+
+  @@index([campaignId, entryType])
+  @@index([campaignId, name])
+  @@index([campaignId, isActive])
+  @@map("wiki_entries")
 }

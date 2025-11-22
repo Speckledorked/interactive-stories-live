@@ -8,6 +8,15 @@ import { useRouter, useParams } from 'next/navigation'
 import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
 import ChatPanel from '@/components/chat/ChatPanel'
+import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
+import type { MapData } from '@/lib/maps/map-service'
+import AILoadingState from '@/components/scene/AILoadingState'
+import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
+import { CompactClock } from '@/components/clock/ClockProgress'
+import { CompactTimeline } from '@/components/scene/VisualTimeline'
+import AITransparencyPanel, { type WorldStateChange } from '@/components/scene/AITransparencyPanel'
+import CharacterSnapshotModal from '@/components/character/CharacterSnapshotModal'
+import NPCRelationshipHints, { extractNPCHintsFromScene } from '@/components/scene/NPCRelationshipHints'
 
 export default function StoryPage() {
   const router = useRouter()
@@ -26,6 +35,11 @@ export default function StoryPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [expandedActions, setExpandedActions] = useState<Record<string, boolean>>({})
+  const [activeMap, setActiveMap] = useState<MapData | null>(null)
+  const [showMap, setShowMap] = useState(true)
+  const [showCharacterSnapshot, setShowCharacterSnapshot] = useState(false)
+  const [sceneWorldStateChanges, setSceneWorldStateChanges] = useState<Record<string, WorldStateChange[]>>({})
+  const [expandedTransparency, setExpandedTransparency] = useState<Record<string, boolean>>({})
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
@@ -54,6 +68,15 @@ export default function StoryPage() {
       setCurrentScene(sceneData.scene)
       setActiveScenes(sceneData.scenes || [])
 
+      // Load world state changes for scenes
+      const changesMap: Record<string, WorldStateChange[]> = {}
+      for (const scene of sceneData.scenes || []) {
+        if (scene.consequences?.worldStateChanges) {
+          changesMap[scene.id] = scene.consequences.worldStateChanges
+        }
+      }
+      setSceneWorldStateChanges(changesMap)
+
       // Get user's characters
       const userChars = campData.campaign?.characters?.filter(
         (c: any) => c.userId === user?.id
@@ -61,6 +84,18 @@ export default function StoryPage() {
       setUserCharacters(userChars)
       if (userChars.length > 0 && !selectedCharacterId) {
         setSelectedCharacterId(userChars[0].id)
+      }
+
+      // Load active map
+      try {
+        const mapResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/maps/active`)
+        if (mapResponse.ok) {
+          const mapData = await mapResponse.json()
+          setActiveMap(mapData.map)
+        }
+      } catch (mapErr) {
+        // Map loading is optional, don't fail the whole page
+        console.error('Failed to load map:', mapErr)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
@@ -98,6 +133,28 @@ export default function StoryPage() {
     channel.bind('clock:ticked', (data: any) => {
       console.log('Clock ticked:', data)
       // Reload to update clock progress
+      loadData()
+    })
+
+    // Listen for map updates
+    channel.bind('ai-map-generated', (data: any) => {
+      console.log('Map generated:', data)
+      setActiveMap(data.map)
+    })
+
+    channel.bind('ai-character-moved', (data: any) => {
+      console.log('Character moved:', data)
+      // Reload map to get updated token positions
+      loadData()
+    })
+
+    channel.bind('ai-element-added', (data: any) => {
+      console.log('Element added to map:', data)
+      loadData()
+    })
+
+    channel.bind('ai-element-removed', (data: any) => {
+      console.log('Element removed from map:', data)
       loadData()
     })
 
@@ -196,7 +253,7 @@ export default function StoryPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <AILoadingState type="scene" />
       </div>
     )
   }
@@ -254,9 +311,17 @@ export default function StoryPage() {
                 <div key={scene.id} className="space-y-4">
                   <div className="card">
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-xl font-bold text-white">
-                        Scene {scene.sceneNumber}
-                      </h2>
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-xl font-bold text-white">
+                          Scene {scene.sceneNumber}
+                        </h2>
+                        {/* Scene mood indicators */}
+                        <div className="flex gap-2">
+                          {detectSceneMood(scene.sceneIntroText).map((mood, idx) => (
+                            <SceneMoodTag key={idx} mood={mood} />
+                          ))}
+                        </div>
+                      </div>
                       <div className="flex items-center gap-2">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           scene.status === 'AWAITING_ACTIONS'
@@ -268,10 +333,7 @@ export default function StoryPage() {
                           {scene.status.replace('_', ' ')}
                         </span>
                         {scene.status === 'RESOLVING' && (
-                          <span className="text-xs text-yellow-400 animate-pulse flex items-center gap-1">
-                            <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full animate-bounce"></span>
-                            AI GM processing...
-                          </span>
+                          <AILoadingState type="resolution" />
                         )}
                       </div>
                     </div>
@@ -282,16 +344,54 @@ export default function StoryPage() {
                       </p>
                     </div>
 
+                    {/* NPC Relationship Hints */}
+                    {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
+                      <div className="mt-4">
+                        <NPCRelationshipHints
+                          hints={extractNPCHintsFromScene(
+                            scene.sceneIntroText,
+                            campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
+                          )}
+                        />
+                      </div>
+                    )}
+
                     {/* Show resolution if resolved */}
                     {scene.sceneResolutionText && (
-                      <div className="mt-6 pt-6 border-t border-gray-700">
-                        <h3 className="text-lg font-bold text-primary-400 mb-3">
-                          Resolution
-                        </h3>
-                        <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
-                          {scene.sceneResolutionText}
-                        </p>
-                      </div>
+                      <>
+                        <div className="mt-6 pt-6 border-t border-gray-700">
+                          <h3 className="text-lg font-bold text-primary-400 mb-3">
+                            Resolution
+                          </h3>
+                          <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                            {scene.sceneResolutionText}
+                          </p>
+
+                          {/* NPC Relationship Hints in Resolution */}
+                          {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
+                            <div className="mt-4">
+                              <NPCRelationshipHints
+                                hints={extractNPCHintsFromScene(
+                                  scene.sceneResolutionText,
+                                  campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
+                                )}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* AI Transparency Panel - Show world state changes */}
+                        {sceneWorldStateChanges[scene.id] && sceneWorldStateChanges[scene.id].length > 0 && (
+                          <div className="mt-4">
+                            <AITransparencyPanel
+                              changes={sceneWorldStateChanges[scene.id]}
+                              sceneNumber={scene.sceneNumber}
+                              isOpen={expandedTransparency[scene.id] !== false}
+                              onClose={() => setExpandedTransparency(prev => ({ ...prev, [scene.id]: false }))}
+                            />
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -435,8 +535,19 @@ export default function StoryPage() {
               </select>
               {selectedCharacter && (
                 <div className="mt-4 space-y-2">
-                  <h4 className="font-bold text-white text-lg">{selectedCharacter.name}</h4>
-                  <p className="text-sm text-gray-400">{selectedCharacter.concept}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <h4 className="font-bold text-white text-lg">{selectedCharacter.name}</h4>
+                      <p className="text-sm text-gray-400">{selectedCharacter.concept}</p>
+                    </div>
+                    <button
+                      onClick={() => setShowCharacterSnapshot(true)}
+                      className="px-2 py-1 bg-primary-600 hover:bg-primary-700 text-white rounded text-xs font-medium transition-colors"
+                      title="Quick Reference"
+                    >
+                      👁️ View
+                    </button>
+                  </div>
                   {selectedCharacter.currentLocation && (
                     <p className="text-xs text-gray-500">
                       📍 {selectedCharacter.currentLocation}
@@ -463,6 +574,29 @@ export default function StoryPage() {
             </div>
           )}
 
+          {/* Map Viewer */}
+          {activeMap && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-gray-400">MAP</h3>
+                <button
+                  onClick={() => setShowMap(!showMap)}
+                  className="text-xs text-gray-500 hover:text-white transition-colors"
+                >
+                  {showMap ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {showMap && (
+                <div className="rounded-lg overflow-hidden border border-gray-700">
+                  <PlayerMapViewer
+                    map={activeMap}
+                    characterName={selectedCharacter?.name || ''}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {/* In-Character Chat for Current Scene */}
           {currentScene && user && (
             <div className="card p-0">
@@ -481,26 +615,17 @@ export default function StoryPage() {
           {campaign?.campaign?.clocks && campaign.campaign.clocks.length > 0 && (
             <div className="card">
               <h3 className="text-sm font-bold text-gray-400 mb-3">ACTIVE CLOCKS</h3>
-              <div className="space-y-3">
-                {campaign.campaign.clocks.map((clock: any) => (
-                  <div key={clock.id}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-white">{clock.name}</span>
-                      <span className="text-xs text-gray-500">
-                        {clock.currentTicks}/{clock.maxTicks}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2">
-                      <div
-                        className="bg-primary-500 h-2 rounded-full transition-all"
-                        style={{
-                          width: `${(clock.currentTicks / clock.maxTicks) * 100}%`
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">{clock.description}</p>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                {campaign.campaign.clocks
+                  .filter((clock: any) => !clock.isHidden)
+                  .map((clock: any) => (
+                    <CompactClock
+                      key={clock.id}
+                      name={clock.name}
+                      current={clock.currentTicks}
+                      max={clock.maxTicks}
+                    />
+                  ))}
               </div>
             </div>
           )}
@@ -508,20 +633,22 @@ export default function StoryPage() {
           {/* Recent Timeline */}
           {campaign?.campaign?.timeline &&
             campaign.campaign.timeline.length > 0 && (
-              <div className="card">
-                <h3 className="text-sm font-bold text-gray-400 mb-3">RECENT EVENTS</h3>
-                <div className="space-y-2">
-                  {campaign.campaign.timeline.slice(0, 5).map((event: any) => (
-                    <div key={event.id} className="text-sm">
-                      <p className="font-medium text-white">{event.title}</p>
-                      <p className="text-xs text-gray-500">Turn {event.turnNumber}</p>
-                    </div>
-                  ))}
-                </div>
+              <div className="card p-0">
+                <CompactTimeline events={campaign.campaign.timeline.slice(0, 5)} />
               </div>
             )}
         </div>
       </div>
+
+      {/* Character Snapshot Modal */}
+      {selectedCharacterId && (
+        <CharacterSnapshotModal
+          characterId={selectedCharacterId}
+          campaignId={campaignId}
+          isOpen={showCharacterSnapshot}
+          onClose={() => setShowCharacterSnapshot(false)}
+        />
+      )}
     </div>
   )
 }

@@ -137,9 +137,6 @@ export default function CommandPalette({
           category: 'actions'
         })
 
-        const user = getUser()
-        const isAdmin = user?.role === 'ADMIN' // This would need proper admin check
-
         cmds.push({
           id: 'action-resolve',
           name: 'Resolve Exchange',

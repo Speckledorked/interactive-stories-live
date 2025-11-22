@@ -9,12 +9,15 @@ import { usePathname, useRouter } from 'next/navigation'
 import { getUser, logout, isAuthenticated } from '@/lib/clientAuth'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import NotificationPanel from '@/components/notifications/NotificationPanel'
+import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal'
 
 export default function Header() {
   const [user, setUser] = useState<{ email: string; id: string } | null>(null)
   const [isAuth, setIsAuth] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [showHelpMenu, setShowHelpMenu] = useState(false)
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -104,6 +107,59 @@ export default function Header() {
                 )}
               </button>
 
+              {/* Help menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowHelpMenu(!showHelpMenu)}
+                  className="text-gray-300 hover:text-white transition-colors"
+                  title="Help & Tutorial"
+                >
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </button>
+
+                {showHelpMenu && (
+                  <div className="absolute right-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50">
+                    <div className="py-2">
+                      <Link
+                        href="/tutorial"
+                        className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                        onClick={() => setShowHelpMenu(false)}
+                      >
+                        📚 Tutorial & Onboarding
+                      </Link>
+                      <button
+                        onClick={() => {
+                          setShowKeyboardShortcuts(true)
+                          setShowHelpMenu(false)
+                        }}
+                        className="w-full text-left block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                      >
+                        ⌨️ Keyboard Shortcuts
+                      </button>
+                      <Link
+                        href="/help"
+                        className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                        onClick={() => setShowHelpMenu(false)}
+                      >
+                        ❓ Help & Documentation
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Settings link */}
               <Link
                 href="/settings"
@@ -160,6 +216,12 @@ export default function Header() {
           )}
         </div>
       </div>
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={showKeyboardShortcuts}
+        onClose={() => setShowKeyboardShortcuts(false)}
+      />
     </header>
   )
 }

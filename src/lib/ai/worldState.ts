@@ -550,7 +550,8 @@ Write ONLY the scene introduction text. Do not include JSON, meta-commentary, or
           { role: 'system', content: 'You are a creative game master.' },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.9 // High creativity for scene intros
+        temperature: 0.85, // High creativity for scene intros (balanced)
+        max_tokens: 800 // ~2-4 paragraphs (cost optimization)
       })
     })
 

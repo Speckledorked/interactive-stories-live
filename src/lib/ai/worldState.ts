@@ -4,11 +4,167 @@
 import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
+import { buildOptimizedContext } from './contextManager' // Phase 14.6: Context optimization
+
+/**
+ * Build optimized world summary using context manager
+ * Reduces token usage for large campaigns (10+ scenes)
+ *
+ * @param campaignId - Campaign ID
+ * @param currentSceneNumber - Current scene number
+ * @returns Optimized world summary with location-based filtering
+ */
+async function buildOptimizedWorldSummary(
+  campaignId: string,
+  currentSceneNumber: number
+): Promise<AIGMRequest['world_summary']> {
+  console.log('🎯 Building optimized world summary with location filtering')
+
+  // Get optimized context from context manager
+  const optimizedContext = await buildOptimizedContext(prisma, campaignId, currentSceneNumber)
+
+  // Get current data
+  const [worldMeta, characters, allNpcs, allFactions, clocks] = await Promise.all([
+    prisma.worldMeta.findUnique({ where: { campaignId } }),
+    prisma.character.findMany({
+      where: { campaignId, isAlive: true },
+      include: { user: { select: { email: true } } }
+    }),
+    prisma.nPC.findMany({ where: { campaignId } }),
+    prisma.faction.findMany({ where: { campaignId } }),
+    prisma.clock.findMany({
+      where: { campaignId, isHidden: false }
+    })
+  ])
+
+  if (!worldMeta) {
+    throw new Error('WorldMeta not found')
+  }
+
+  // Extract character locations for filtering
+  const characterLocations = new Set(
+    characters.map(c => c.currentLocation).filter(Boolean)
+  )
+
+  console.log('📍 Character locations:', Array.from(characterLocations))
+
+  // Filter NPCs: only include those at character locations OR with high importance (4+)
+  const relevantNpcs = allNpcs.filter(npc => {
+    const isHighImportance = npc.importance >= 4
+    const isNearby = characterLocations.size === 0 || // If no locations set, include all
+      Array.from(characterLocations).some(loc => {
+        if (!loc) return false
+        return npc.description?.toLowerCase().includes(loc.toLowerCase()) ||
+          npc.gmNotes?.toLowerCase().includes(loc.toLowerCase())
+      })
+    return isHighImportance || isNearby
+  })
+
+  // Filter factions: only include active threats (4-5/5) or those mentioned in character consequences
+  const characterConsequences = characters.flatMap(c => {
+    const cons = c.consequences as any
+    return [
+      ...(cons?.enemies || []),
+      ...(cons?.debts || []),
+      ...(cons?.longTermThreats || [])
+    ]
+  })
+
+  const relevantFactions = allFactions.filter(faction => {
+    const isActiveThreat = faction.threatLevel >= 4 // Threat level 4-5 are high/extreme threats
+    const isInConsequences = characterConsequences.some(cons =>
+      cons.toLowerCase().includes(faction.name.toLowerCase())
+    )
+    return isActiveThreat || isInConsequences
+  })
+
+  console.log(`🔍 Filtered entities: ${relevantNpcs.length}/${allNpcs.length} NPCs, ${relevantFactions.length}/${allFactions.length} factions`)
+
+  // Build compressed timeline from optimized context
+  const compressedTimeline = optimizedContext.importantMoments.map(moment => ({
+    title: moment.title,
+    summary: moment.summary,
+    turn_number: moment.sceneNumber
+  }))
+
+  // Add campaign summary as a high-level overview if available
+  let campaignSummaryText = ''
+  if (optimizedContext.campaignSummary) {
+    const summary = optimizedContext.campaignSummary
+    campaignSummaryText = `
+CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes):
+- Active Threats: ${summary.activeThreats.join(', ') || 'None'}
+- Completed Goals: ${summary.completedGoals.join(', ') || 'None'}
+    `.trim()
+  }
+
+  return {
+    turn_number: worldMeta.currentTurnNumber,
+    in_game_date: worldMeta.currentInGameDate || 'Day 1',
+
+    // Include campaign summary in a special field (we'll handle this in the prompt)
+    _campaignSummary: campaignSummaryText,
+
+    characters: characters.map(c => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      stats: c.stats,
+      backstory: c.backstory,
+      goals: c.goals,
+      location: c.currentLocation,
+      harm: c.harm,
+      conditions: c.conditions,
+      moves: c.moves,
+      experience: c.experience,
+      statUsage: c.statUsage,
+      perks: c.perks,
+      inventory: c.inventory,
+      equipment: c.equipment,
+      resources: c.resources,
+      relationships: c.relationships,
+      consequences: c.consequences
+    })),
+
+    // Only relevant NPCs
+    npcs: relevantNpcs.map(n => ({
+      id: n.id,
+      name: n.name,
+      description: n.description,
+      goals: n.goals,
+      relationship: n.relationship,
+      importance: n.importance
+    })),
+
+    // Only relevant factions
+    factions: relevantFactions.map(f => ({
+      id: f.id,
+      name: f.name,
+      goals: f.goals,
+      currentPlan: f.currentPlan,
+      threatLevel: f.threatLevel,
+      resources: f.resources,
+      influence: f.influence
+    })),
+
+    clocks: clocks.map(cl => ({
+      id: cl.id,
+      name: cl.name,
+      current_ticks: cl.currentTicks,
+      max_ticks: cl.maxTicks,
+      description: cl.description || '',
+      consequence: cl.consequence || ''
+    })),
+
+    // Use compressed timeline from context manager
+    recent_timeline_events: compressedTimeline
+  } as any
+}
 
 /**
  * Fetch and serialize all world state for a campaign
  * This creates a clean, AI-readable summary of the entire game world
- * 
+ *
  * @param campaignId - The campaign to summarize
  * @returns Formatted world state ready for AI
  */
@@ -114,7 +270,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
 
 /**
  * Build a complete AI GM request for scene resolution
- * 
+ *
  * @param campaignId - Campaign ID
  * @param sceneId - Current scene ID
  * @returns Complete request object ready to send to AI
@@ -124,7 +280,7 @@ export async function buildSceneResolutionRequest(
   sceneId: string
 ): Promise<AIGMRequest> {
   console.log('🎬 Building scene resolution request')
-  
+
   // Get campaign info
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId }
@@ -151,8 +307,17 @@ export async function buildSceneResolutionRequest(
     throw new Error('Scene not found')
   }
 
-  // Get world summary
-  const worldSummary = await buildWorldSummaryForAI(campaignId)
+  // Phase 14.6: Use optimized context for campaigns with 10+ scenes
+  const sceneCount = await prisma.scene.count({ where: { campaignId } })
+  let worldSummary: AIGMRequest['world_summary']
+
+  if (sceneCount >= 10) {
+    console.log('📉 Using optimized context (campaign has', sceneCount, 'scenes)')
+    worldSummary = await buildOptimizedWorldSummary(campaignId, scene.sceneNumber)
+  } else {
+    console.log('📊 Using full context (campaign has', sceneCount, 'scenes)')
+    worldSummary = await buildWorldSummaryForAI(campaignId)
+  }
 
   // Format player actions
   const playerActions = scene.playerActions.map(action => ({
@@ -380,7 +545,7 @@ Write ONLY the scene introduction text. Do not include JSON, meta-commentary, or
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-4o-mini', // Cost optimization: mini model for scene intros
         messages: [
           { role: 'system', content: 'You are a creative game master.' },
           { role: 'user', content: prompt }

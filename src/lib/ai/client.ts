@@ -723,7 +723,7 @@ Respond with JSON:
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o', // Latest GPT-4 Omni model
+        model: 'gpt-4o-mini', // Cost optimization: mini model for background world turns
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }

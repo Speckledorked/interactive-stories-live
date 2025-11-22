@@ -129,7 +129,7 @@ Return a JSON object with:
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'gpt-4',
+          model: 'gpt-4o-mini', // Cost optimization: mini model for map generation
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.3,
           max_tokens: 800

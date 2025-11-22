@@ -12,6 +12,23 @@ interface CreateCharacterBody {
   backstory?: string
   goals?: string
   currentLocation?: string
+  equipment?: {
+    weapon?: string
+    armor?: string
+    misc?: string
+  }
+  inventory?: {
+    items?: Array<{
+      id: string
+      name: string
+      quantity: number
+      tags: string[]
+    }>
+    slots?: number
+  }
+  resources?: {
+    gold?: number
+  }
 }
 
 export async function POST(
@@ -72,6 +89,9 @@ export async function POST(
         backstory: body.backstory,
         goals: body.goals,
         currentLocation: body.currentLocation,
+        equipment: body.equipment || undefined,
+        inventory: body.inventory || undefined,
+        resources: body.resources || undefined,
       },
     })
 

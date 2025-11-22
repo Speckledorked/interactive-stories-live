@@ -253,7 +253,16 @@ export default function StoryPage() {
         throw new Error(data.error || 'Failed to submit action')
       }
 
-      setSuccess('Action submitted! The AI GM will resolve when all participants submit.')
+      // Check if this scene has predefined participants for better success message
+      const scene = activeScenes.find(s => s.id === sceneId)
+      const participants = scene?.participants as any
+      const hasDefinedParticipants = participants?.characterIds && participants.characterIds.length > 0
+
+      setSuccess(
+        hasDefinedParticipants
+          ? '✓ Action submitted! The scene will auto-resolve when all participants submit.'
+          : '✓ Action submitted! Waiting for GM to resolve this exchange.'
+      )
       setActionText(prev => ({ ...prev, [sceneId]: '' }))
       await loadData() // Reload to show new action
     } catch (err) {
@@ -384,60 +393,64 @@ export default function StoryPage() {
   )
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
       {/* Navigation Bar */}
       <div className="mb-6">
         <Link
           href="/campaigns"
-          className="text-gray-400 hover:text-white transition-colors text-sm mb-3 inline-block"
+          className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-4 transition-colors group"
         >
-          ← Back to Campaigns
+          <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Campaigns
         </Link>
 
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-3xl font-bold text-white">{campaign?.campaign?.name}</h1>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">{campaign?.campaign?.name}</h1>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center justify-between gap-4 border-b border-gray-700 pb-2">
+        <div className="flex items-center justify-between gap-4 border-b border-dark-700/50 pb-2">
           <div className="flex gap-2 overflow-x-auto">
             <Link
               href={`/campaigns/${campaignId}`}
-              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
             >
               Overview
             </Link>
-            <span className="px-4 py-2 bg-primary-600 text-white rounded-t whitespace-nowrap">
+            <span className="relative py-2.5 px-4 font-semibold text-sm text-primary-400 bg-gradient-to-b from-primary-500/10 to-transparent rounded-t-xl whitespace-nowrap">
               Story
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-600 via-primary-500 to-primary-400 shadow-glow"></div>
             </span>
             <Link
               href={`/campaigns/${campaignId}/story-log`}
-              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
             >
               Story Log
             </Link>
             <Link
               href={`/campaigns/${campaignId}`}
-              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
             >
               Notes
             </Link>
             <Link
               href={`/campaigns/${campaignId}`}
-              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
             >
               Maps
             </Link>
             <Link
               href={`/campaigns/${campaignId}`}
-              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
             >
               Chat
             </Link>
             {isAdmin && (
               <Link
                 href={`/campaigns/${campaignId}/admin`}
-                className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+                className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
               >
                 ⚙️ Admin
               </Link>
@@ -447,7 +460,7 @@ export default function StoryPage() {
             <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
             <button
               onClick={() => setShowKeyboardShortcuts(true)}
-              className="flex items-center gap-2 px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors whitespace-nowrap"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all duration-200 whitespace-nowrap"
               title="Keyboard shortcuts"
             >
               <span>⌨️</span>
@@ -657,39 +670,63 @@ export default function StoryPage() {
                   )}
 
                   {/* GM Controls (Admin Only) */}
-                  {scene.status === 'AWAITING_ACTIONS' && isAdmin && scene.playerActions && scene.playerActions.length > 0 && (
-                    <div className="card bg-yellow-500/10 border-yellow-500/50">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <p className="text-yellow-400 text-sm font-medium mb-1">
-                            🎲 GM Controls
-                          </p>
-                          <p className="text-gray-400 text-xs mb-2">
-                            {scene.playerActions.length} action(s) submitted. Current exchange: {scene.currentExchange || 1}
-                          </p>
-                          <p className="text-gray-500 text-xs">
-                            Resolving will process actions and continue the scene. End the scene when the story concludes.
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleResolveScene(scene.id)}
-                            disabled={resolving}
-                            className="btn-primary disabled:opacity-50 whitespace-nowrap"
-                          >
-                            {resolving ? 'Resolving...' : 'Resolve Exchange'}
-                          </button>
-                          <button
-                            onClick={() => handleEndScene(scene.id)}
-                            disabled={endingScene}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
-                          >
-                            {endingScene ? 'Ending...' : 'End Scene'}
-                          </button>
+                  {scene.status === 'AWAITING_ACTIONS' && isAdmin && scene.playerActions && scene.playerActions.length > 0 && (() => {
+                    const participants = scene.participants as any
+                    const hasDefinedParticipants = participants?.characterIds && participants.characterIds.length > 0
+                    const submittedUserIds = new Set(scene.playerActions.map((a: any) => a.userId))
+                    const participantUserIds = participants?.userIds || []
+                    const allParticipantsSubmitted = participantUserIds.length > 0 && participantUserIds.every((uid: string) => submittedUserIds.has(uid))
+
+                    return (
+                      <div className={`card ${hasDefinedParticipants && allParticipantsSubmitted ? 'bg-green-500/10 border-green-500/50' : 'bg-yellow-500/10 border-yellow-500/50'}`}>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <p className={`text-sm font-medium mb-1 ${hasDefinedParticipants && allParticipantsSubmitted ? 'text-green-400' : 'text-yellow-400'}`}>
+                              🎲 GM Controls
+                            </p>
+                            <p className="text-gray-400 text-xs mb-2">
+                              {scene.playerActions.length} action(s) submitted. Current exchange: {scene.currentExchange || 1}
+                            </p>
+                            {hasDefinedParticipants ? (
+                              allParticipantsSubmitted ? (
+                                <p className="text-green-400 text-xs mb-1">
+                                  ✓ All participants have submitted! Auto-resolving now...
+                                </p>
+                              ) : (
+                                <p className="text-gray-500 text-xs">
+                                  ⏳ Waiting for {participantUserIds.length - submittedUserIds.size} more participant(s). Scene will auto-resolve when all submit.
+                                </p>
+                              )
+                            ) : (
+                              <p className="text-gray-500 text-xs">
+                                This is an open scene. Manually resolve when ready or end the scene when the story concludes.
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            {/* Only show manual resolve for open scenes or as "force early" for closed scenes */}
+                            {(!hasDefinedParticipants || !allParticipantsSubmitted) && (
+                              <button
+                                onClick={() => handleResolveScene(scene.id)}
+                                disabled={resolving}
+                                className="btn-primary disabled:opacity-50 whitespace-nowrap"
+                                title={hasDefinedParticipants ? "Force resolution before all participants submit" : "Manually resolve this exchange"}
+                              >
+                                {resolving ? 'Resolving...' : hasDefinedParticipants ? 'Force Resolve' : 'Resolve Exchange'}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleEndScene(scene.id)}
+                              disabled={endingScene}
+                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                            >
+                              {endingScene ? 'Ending...' : 'End Scene'}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
                 </div>
               )
             })

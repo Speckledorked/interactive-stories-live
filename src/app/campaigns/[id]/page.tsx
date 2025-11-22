@@ -28,7 +28,7 @@ export default function CampaignLobbyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreateCharacter, setShowCreateCharacter] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'notes' | 'maps'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'notes' | 'maps' | 'progression'>('overview')
   const [showNotifications, setShowNotifications] = useState(false)
   const [deletingCharacterId, setDeletingCharacterId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState('')
@@ -38,6 +38,8 @@ export default function CampaignLobbyPage() {
   const [newMapName, setNewMapName] = useState('')
   const [newMapDescription, setNewMapDescription] = useState('')
   const [creatingMap, setCreatingMap] = useState(false)
+  const [campaignLogs, setCampaignLogs] = useState<any[]>([])
+  const [logsLoading, setLogsLoading] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -102,8 +104,25 @@ export default function CampaignLobbyPage() {
   useEffect(() => {
     if (activeTab === 'maps') {
       loadMaps()
+    } else if (activeTab === 'progression') {
+      loadCampaignLogs()
     }
   }, [activeTab])
+
+  const loadCampaignLogs = async () => {
+    setLogsLoading(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/logs`)
+      if (response.ok) {
+        const data = await response.json()
+        setCampaignLogs(data.logs || [])
+      }
+    } catch (err) {
+      console.error('Failed to load campaign logs:', err)
+    } finally {
+      setLogsLoading(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -168,6 +187,7 @@ export default function CampaignLobbyPage() {
           <nav className="flex space-x-8">
             {[
               { key: 'overview', label: 'Overview' },
+              { key: 'progression', label: 'Story Log' },
               { key: 'chat', label: 'Chat' },
               { key: 'notes', label: 'Notes' },
               { key: 'maps', label: 'Maps' },
@@ -321,6 +341,7 @@ export default function CampaignLobbyPage() {
           {/* Quick Stats */}
           <div className="card">
             <h2 className="card-header">Campaign Stats</h2>
+            <p className="text-xs text-gray-500 mb-3">Click to view in wiki</p>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-400">Scenes:</span>
@@ -330,22 +351,147 @@ export default function CampaignLobbyPage() {
                 <span className="text-gray-400">Characters:</span>
                 <span className="text-white font-medium">{campaign.characters.length}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">NPCs:</span>
-                <span className="text-white font-medium">{campaign.npcs.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Factions:</span>
-                <span className="text-white font-medium">{campaign.factions.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Active Clocks:</span>
-                <span className="text-white font-medium">{campaign.clocks.length}</span>
-              </div>
+              <Link
+                href={`/campaigns/${campaignId}/wiki?type=NPC`}
+                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+              >
+                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                  NPCs:
+                </span>
+                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                  {campaign.npcs.length} →
+                </span>
+              </Link>
+              <Link
+                href={`/campaigns/${campaignId}/wiki?type=FACTION`}
+                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+              >
+                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                  Factions:
+                </span>
+                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                  {campaign.factions.length} →
+                </span>
+              </Link>
+              <Link
+                href={`/campaigns/${campaignId}/wiki?type=CLOCK`}
+                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+              >
+                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                  Active Clocks:
+                </span>
+                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                  {campaign.clocks.length} →
+                </span>
+              </Link>
             </div>
           </div>
         </div>
       </div>
+      )}
+
+      {/* Progression/Story Log Tab */}
+      {activeTab === 'progression' && data && (
+        <div className="max-w-6xl mx-auto">
+          <div className="card">
+            <h2 className="card-header mb-4">Campaign Story Log</h2>
+            <p className="text-gray-400 mb-6">
+              A chronicle of your adventure, updated after each scene
+            </p>
+
+            {logsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+              </div>
+            ) : campaignLogs.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">📜</div>
+                <p className="text-gray-400 mb-2">No story entries yet</p>
+                <p className="text-sm text-gray-500">
+                  The story log will be automatically updated as scenes are resolved
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Timeline Bar */}
+                <div className="mb-8 bg-gray-800 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-400">Campaign Progress</span>
+                    <span className="text-sm text-gray-500">
+                      Turn {campaignLogs[campaignLogs.length - 1]?.turnNumber || 0}
+                    </span>
+                  </div>
+                  <div className="relative h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className="absolute top-0 left-0 h-full bg-gradient-to-r from-primary-600 to-primary-400 transition-all"
+                      style={{ width: `${Math.min((campaignLogs.length / 20) * 100, 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-2 text-xs text-gray-500">
+                    <span>{campaignLogs.length} scenes completed</span>
+                    <span>Milestone at 20 scenes</span>
+                  </div>
+                </div>
+
+                {/* Log Entries */}
+                <div className="space-y-4">
+                  {campaignLogs.map((log: any, index: number) => (
+                    <div
+                      key={log.id}
+                      className="bg-gray-900 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors"
+                    >
+                      {/* Header */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-medium text-primary-400">
+                              Turn {log.turnNumber}
+                            </span>
+                            {log.entryType !== 'scene' && (
+                              <span className="text-xs px-2 py-0.5 bg-gray-700 text-gray-300 rounded">
+                                {log.entryType}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-lg font-bold text-white">{log.title}</h3>
+                          {log.inGameDate && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              📅 {log.inGameDate}
+                              {log.duration && ` • Duration: ${log.duration}`}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {new Date(log.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      {/* Summary */}
+                      <p className="text-gray-300 mb-3 whitespace-pre-wrap">{log.summary}</p>
+
+                      {/* Highlights */}
+                      {log.highlights && log.highlights.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-700">
+                          <h4 className="text-xs font-medium text-gray-400 mb-2">
+                            Key Moments:
+                          </h4>
+                          <ul className="space-y-1">
+                            {log.highlights.map((highlight: string, i: number) => (
+                              <li key={i} className="text-sm text-gray-400 flex items-start gap-2">
+                                <span className="text-primary-500 mt-1">•</span>
+                                <span>{highlight}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Chat Tab - Phase 8 Communication */}

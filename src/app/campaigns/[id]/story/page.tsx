@@ -20,6 +20,7 @@ import NPCRelationshipHints, { extractNPCHintsFromScene } from '@/components/sce
 import { useCommandPalette } from '@/contexts/CommandPaletteContext'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal'
+import SimpleXCard from '@/components/safety/SimpleXCard'
 
 export default function StoryPage() {
   const router = useRouter()
@@ -442,16 +443,19 @@ export default function StoryPage() {
               </Link>
             )}
           </div>
-          <button
-            onClick={() => setShowKeyboardShortcuts(true)}
-            className="flex items-center gap-2 px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors whitespace-nowrap"
-            title="Keyboard shortcuts"
-          >
-            <span>⌨️</span>
-            <kbd className="hidden sm:inline px-1.5 py-0.5 text-xs bg-gray-700 rounded border border-gray-600">
-              ?
-            </kbd>
-          </button>
+          <div className="flex items-center gap-3">
+            <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
+            <button
+              onClick={() => setShowKeyboardShortcuts(true)}
+              className="flex items-center gap-2 px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors whitespace-nowrap"
+              title="Keyboard shortcuts"
+            >
+              <span>⌨️</span>
+              <kbd className="hidden sm:inline px-1.5 py-0.5 text-xs bg-gray-700 rounded border border-gray-600">
+                ?
+              </kbd>
+            </button>
+          </div>
         </div>
       </div>
 

@@ -231,11 +231,13 @@ Respond in a narrative style that creates immersion.`
 
       // Real-time broadcast via Pusher
       const pusher = PusherServer()
-      await pusher.trigger(`campaign-${campaignId}`, 'scene-updated-with-visuals', {
-        sceneResolution,
-        visualData,
-        timestamp: new Date()
-      })
+      if (pusher) {
+        await pusher.trigger(`campaign-${campaignId}`, 'scene-updated-with-visuals', {
+          sceneResolution,
+          visualData,
+          timestamp: new Date()
+        })
+      }
     } catch (error) {
       console.error('Error broadcasting scene update:', error)
     }

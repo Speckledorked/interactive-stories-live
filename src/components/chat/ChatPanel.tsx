@@ -256,30 +256,30 @@ export default function ChatPanel({
 
     return (
       <div key={message.id} className={`p-3 rounded-lg ${
-        isOwnMessage ? 'bg-blue-100 ml-8' : 'bg-gray-100 mr-8'
+        isOwnMessage ? 'bg-blue-900/30 ml-8' : 'bg-gray-800 mr-8'
       } ${isWhisper ? 'border-l-4 border-purple-500' : ''}`}>
         <div className="flex items-center gap-2 mb-1">
           <span className={`text-sm font-semibold ${
-            isIC ? 'text-green-700' : isWhisper ? 'text-purple-700' : 'text-blue-700'
+            isIC ? 'text-green-400' : isWhisper ? 'text-purple-400' : 'text-blue-400'
           }`}>
             {prefix}{authorName}
           </span>
-          <span className="text-xs text-gray-700">
+          <span className="text-xs text-gray-500">
             {new Date(message.createdAt).toLocaleTimeString()}
           </span>
         </div>
-        <div className="text-gray-900 whitespace-pre-wrap">{message.content}</div>
+        <div className="text-gray-200 whitespace-pre-wrap">{message.content}</div>
       </div>
     );
   };
 
   return (
-    <div className="flex flex-col h-96 bg-white border border-gray-200 rounded-lg">
+    <div className="flex flex-col h-96 bg-gray-900 border border-gray-700 rounded-lg">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <h3 className="font-semibold text-gray-900">Campaign Chat</h3>
+      <div className="p-4 border-b border-gray-700">
+        <h3 className="font-semibold text-white">Campaign Chat</h3>
         {typingUsers.length > 0 && (
-          <p className="text-sm text-gray-700 italic">
+          <p className="text-sm text-gray-400 italic">
             {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
           </p>
         )}
@@ -295,7 +295,7 @@ export default function ChatPanel({
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="p-4 border-t border-gray-700">
         {/* Message Type Controls - hide if IC only mode */}
         {!icOnly && (
           <div className="flex flex-wrap gap-2 mb-3">
@@ -304,7 +304,7 @@ export default function ChatPanel({
               className={`px-3 py-1 text-sm rounded-md ${
                 messageType === 'OUT_OF_CHARACTER'
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
               OOC
@@ -314,7 +314,7 @@ export default function ChatPanel({
               className={`px-3 py-1 text-sm rounded-md ${
                 messageType === 'IN_CHARACTER'
                   ? 'bg-green-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
               IC
@@ -324,7 +324,7 @@ export default function ChatPanel({
               className={`px-3 py-1 text-sm rounded-md ${
                 messageType === 'WHISPER'
                   ? 'bg-purple-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
               Whisper
@@ -337,7 +337,7 @@ export default function ChatPanel({
           <select
             value={selectedCharacter}
             onChange={(e) => setSelectedCharacter(e.target.value)}
-            className="w-full p-2 mb-3 border border-gray-300 rounded-md text-sm"
+            className="w-full p-2 mb-3 border border-gray-600 rounded-md text-sm bg-gray-800 text-gray-200"
             required
           >
             <option value="">Select Character...</option>
@@ -352,7 +352,7 @@ export default function ChatPanel({
           <select
             value={whisperTarget}
             onChange={(e) => setWhisperTarget(e.target.value)}
-            className="w-full p-2 mb-3 border border-gray-300 rounded-md text-sm"
+            className="w-full p-2 mb-3 border border-gray-600 rounded-md text-sm bg-gray-800 text-gray-200"
             required
           >
             <option value="">Whisper to...</option>
@@ -373,7 +373,7 @@ export default function ChatPanel({
               messageType === 'IN_CHARACTER' ? 'Say something in character...' :
               'Type your message...'
             }
-            className="flex-1 p-2 border border-gray-300 rounded-md text-sm"
+            className="flex-1 p-2 border border-gray-600 rounded-md text-sm bg-gray-800 text-gray-200 placeholder-gray-500"
             disabled={loading}
           />
           <button

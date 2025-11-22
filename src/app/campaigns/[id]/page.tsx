@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
 import EnhancedCreateCharacterForm from "@/components/forms/EnhancedCreateCharacterForm"
 import ChatPanel from '@/components/chat/ChatPanel'
 import NotesPanel from '@/components/notes/NotesPanel'
@@ -299,17 +299,35 @@ export default function CampaignLobbyPage() {
           <div className="card">
             <h2 className="card-header">All Characters</h2>
             <div className="space-y-2">
-              {campaign.characters.map((character: any) => (
-                <div key={character.id} className="flex items-center justify-between py-2">
-                  <div>
-                    <span className="font-medium text-white">{character.name}</span>
-                    <span className="text-gray-500 text-sm ml-2">
-                      ({character.user.email})
-                    </span>
-                  </div>
-                  <span className="text-xs text-gray-500">{character.concept}</span>
-                </div>
-              ))}
+              {campaign.characters.map((character: any) => {
+                const currentUser = getUser()
+                const isMyCharacter = currentUser && character.userId === currentUser.id
+
+                return (
+                  <Link
+                    key={character.id}
+                    href={`/campaigns/${campaignId}/characters/${character.id}`}
+                    className={`flex items-center justify-between py-2 px-3 rounded transition-colors group ${
+                      isMyCharacter
+                        ? 'bg-primary-900/20 border border-primary-700 hover:bg-primary-900/30'
+                        : 'hover:bg-gray-800'
+                    }`}
+                  >
+                    <div>
+                      <span className={`font-medium ${isMyCharacter ? 'text-primary-300' : 'text-white'} group-hover:text-primary-400`}>
+                        {character.name}
+                        {isMyCharacter && (
+                          <span className="ml-2 text-xs bg-primary-600 text-white px-2 py-0.5 rounded">You</span>
+                        )}
+                      </span>
+                      <span className="text-gray-500 text-sm ml-2">
+                        ({character.user.email})
+                      </span>
+                    </div>
+                    <span className="text-gray-600 group-hover:text-primary-500">→</span>
+                  </Link>
+                )
+              })}
               {campaign.characters.length === 0 && (
                 <p className="text-gray-500 text-sm">No characters in this campaign yet</p>
               )}

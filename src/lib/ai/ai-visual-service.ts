@@ -212,6 +212,7 @@ Return a JSON object with:
         width: 150,
         height: 100,
         color: this.getZoneColor(area),
+        isVisible: true, // Ensure zone is visible
         triggerType: 'interaction',
         triggerData: {
           areaName: area,
@@ -236,10 +237,32 @@ Return a JSON object with:
         width: 120,
         height: 90,
         color: '#3B82F6',
+        isVisible: true, // Ensure zone is visible
         triggerType: 'discovery',
         triggerData: {
           elementName: element,
           description: `You notice the ${element.toLowerCase()}`
+        }
+      })
+      zones.push(zone)
+    }
+
+    // Fallback: Create at least one visible zone if none were created
+    if (zones.length === 0 && gridIndex < grid.length) {
+      const position = grid[gridIndex++]
+      const zone = await MapService.createZone(mapId, {
+        name: 'Center Area',
+        description: 'The main area of interest',
+        x: position.x,
+        y: position.y,
+        width: 150,
+        height: 120,
+        color: '#10B981',
+        isVisible: true,
+        triggerType: 'interaction',
+        triggerData: {
+          areaName: 'Center Area',
+          description: 'You examine the area'
         }
       })
       zones.push(zone)
@@ -271,7 +294,8 @@ Return a JSON object with:
         y: position.y,
         size: 1,
         color: this.getCharacterTokenColor(character),
-        isPC: false
+        isPC: false,
+        isVisible: true // Ensure token is visible
       })
       tokens.push(token)
     }
@@ -290,10 +314,26 @@ Return a JSON object with:
           y: position.y,
           size: 1,
           color: '#8B4513',
-          isPC: false
+          isPC: false,
+          isVisible: true // Ensure token is visible
         })
         tokens.push(token)
       }
+    }
+
+    // Fallback: Create at least one visible marker if no tokens were created
+    if (tokens.length === 0 && gridIndex < grid.length) {
+      const position = grid[gridIndex++]
+      const token = await MapService.createToken(mapId, {
+        name: 'Point of Interest',
+        x: position.x,
+        y: position.y,
+        size: 1,
+        color: '#F59E0B',
+        isPC: false,
+        isVisible: true
+      })
+      tokens.push(token)
     }
 
     return tokens

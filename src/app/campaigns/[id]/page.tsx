@@ -13,6 +13,7 @@ import ChatPanel from '@/components/chat/ChatPanel'
 import NotesPanel from '@/components/notes/NotesPanel'
 import NotificationPanel from '@/components/notifications/NotificationPanel'
 import TurnTracker from '@/components/turns/TurnTracker'
+import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
 
 interface CampaignData {
   campaign: any
@@ -144,8 +145,9 @@ export default function CampaignLobbyPage() {
   }
 
   const { campaign, userRole } = data
+  const currentUser = getUser()
   const userCharacters = campaign.characters.filter(
-    (c: any) => c.userId === campaign.memberships.find((m: any) => m.role === userRole)?.userId
+    (c: any) => c.userId === currentUser?.id
   )
 
   return (
@@ -655,55 +657,61 @@ export default function CampaignLobbyPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-4">
                 {maps.map((map: any) => (
-                  <div key={map.id} className="bg-gray-900 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors">
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-bold text-white">{map.name}</h3>
-                      {map.isActive && (
-                        <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">
-                          Active
-                        </span>
-                      )}
-                    </div>
-                    {map.description && (
-                      <p className="text-sm text-gray-400 mb-3">{map.description}</p>
-                    )}
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span>{map.tokens?.length || 0} tokens</span>
-                      <span>{map.zones?.length || 0} zones</span>
-                      <span>{map.width}×{map.height}</span>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <Link
-                        href={`/campaigns/${campaignId}/story`}
-                        className="text-xs text-primary-400 hover:text-primary-300"
-                      >
-                        View in Story
-                      </Link>
-                      {userRole === 'ADMIN' && !map.isActive && (
-                        <button
-                          onClick={async () => {
-                            try {
-                              const response = await authenticatedFetch(
-                                `/api/campaigns/${campaignId}/maps/active`,
-                                {
-                                  method: 'PUT',
-                                  body: JSON.stringify({ mapId: map.id })
+                  <div key={map.id} className="bg-gray-900 rounded-lg p-4 border border-gray-700">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-bold text-white">{map.name}</h3>
+                          {map.isActive && (
+                            <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        {map.description && (
+                          <p className="text-sm text-gray-400">{map.description}</p>
+                        )}
+                        <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
+                          <span>{map.tokens?.length || 0} tokens</span>
+                          <span>{map.zones?.length || 0} zones</span>
+                          <span>{map.width}×{map.height}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {userRole === 'ADMIN' && !map.isActive && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const response = await authenticatedFetch(
+                                  `/api/campaigns/${campaignId}/maps/active`,
+                                  {
+                                    method: 'PUT',
+                                    body: JSON.stringify({ mapId: map.id })
+                                  }
+                                )
+                                if (response.ok) {
+                                  loadMaps()
                                 }
-                              )
-                              if (response.ok) {
-                                loadMaps()
+                              } catch (err) {
+                                console.error('Failed to set active map:', err)
                               }
-                            } catch (err) {
-                              console.error('Failed to set active map:', err)
-                            }
-                          }}
-                          className="text-xs text-gray-400 hover:text-white"
-                        >
-                          Set Active
-                        </button>
-                      )}
+                            }}
+                            className="text-xs px-3 py-1 bg-primary-600 hover:bg-primary-700 text-white rounded"
+                          >
+                            Set Active
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Map Preview */}
+                    <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-800">
+                      <PlayerMapViewer
+                        map={map}
+                        characterName={userCharacters[0]?.name || ''}
+                      />
                     </div>
                   </div>
                 ))}

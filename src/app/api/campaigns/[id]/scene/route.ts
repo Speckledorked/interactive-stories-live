@@ -207,9 +207,14 @@ export async function POST(
                                    (scene.participants as any).characterIds.length > 0
 
     if (hasDefinedParticipants) {
+      // Get all actions for this scene including the one just created
+      const allActions = await prisma.playerAction.findMany({
+        where: { sceneId },
+        select: { userId: true }
+      })
+
       // Get all unique user IDs from submitted actions
-      const submittedUserIds = new Set(scene.playerActions.map(a => a.userId))
-      submittedUserIds.add(user.userId) // Include the current action
+      const submittedUserIds = new Set(allActions.map(a => a.userId))
 
       const participantUserIds = sceneParticipants.userIds || []
 

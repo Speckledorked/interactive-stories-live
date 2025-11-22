@@ -75,99 +75,153 @@ export default function CampaignsPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <div className="relative">
+          <div className="spinner h-16 w-16"></div>
+          <div className="absolute inset-0 h-16 w-16 rounded-full bg-primary-500/20 animate-ping"></div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Your Campaigns</h1>
-          <p className="text-gray-400 mt-2">Manage your AI-powered adventures</p>
+    <div className="max-w-7xl mx-auto animate-fade-in">
+      {/* Hero Header */}
+      <div className="relative mb-12">
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary-500/10 via-accent-500/5 to-transparent blur-3xl"></div>
+        <div className="flex items-end justify-between">
+          <div className="space-y-2">
+            <h1 className="text-5xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
+              Your Campaigns
+            </h1>
+            <p className="text-lg text-gray-400">Embark on AI-powered adventures</p>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary flex items-center gap-2 shadow-glow"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Create Campaign</span>
+          </button>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="btn-primary"
-        >
-          + Create Campaign
-        </button>
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-6">
-          {error}
+        <div className="bg-gradient-to-r from-danger-500/10 to-danger-600/5 border border-danger-500/30 text-danger-400 px-6 py-4 rounded-2xl mb-8 backdrop-blur-sm shadow-lg animate-slide-up">
+          <div className="flex items-center gap-3">
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span className="font-medium">{error}</span>
+          </div>
         </div>
       )}
 
       {campaigns.length === 0 ? (
-        <div className="card text-center py-12">
-          <div className="text-6xl mb-4">🎲</div>
-          <h2 className="text-xl font-bold text-white mb-2">No campaigns yet</h2>
-          <p className="text-gray-400 mb-6">Create your first campaign to get started</p>
-          <button onClick={() => setShowCreateModal(true)} className="btn-primary">
-            Create Campaign
+        <div className="card text-center py-16 max-w-2xl mx-auto animate-scale-in">
+          <div className="relative inline-block mb-6">
+            <div className="text-7xl animate-bounce">🎲</div>
+            <div className="absolute inset-0 bg-primary-500/20 blur-3xl"></div>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-3">No campaigns yet</h2>
+          <p className="text-gray-400 mb-8 text-lg">Create your first campaign to begin your adventure</p>
+          <button onClick={() => setShowCreateModal(true)} className="btn-primary shadow-glow">
+            <span className="flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create Your First Campaign
+            </span>
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {campaigns.map((campaign) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+          {campaigns.map((campaign, index) => (
             <div
               key={campaign.id}
-              className="card relative"
+              className="card group relative overflow-hidden cursor-pointer glow-on-hover"
+              style={{ animationDelay: `${index * 50}ms` }}
+              onClick={() => router.push(`/campaigns/${campaign.id}`)}
             >
-              <div
-                onClick={() => router.push(`/campaigns/${campaign.id}`)}
-                className="cursor-pointer"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-lg font-bold text-white">{campaign.title}</h3>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+              {/* Gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-primary-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+              <div className="relative">
+                <div className="flex items-start justify-between mb-4">
+                  <h3 className="text-xl font-bold text-white group-hover:text-primary-400 transition-colors line-clamp-1">
+                    {campaign.title}
+                  </h3>
+                  <span className={`badge flex-shrink-0 ml-2 ${
                     campaign.userRole === 'ADMIN'
-                      ? 'bg-primary-500/20 text-primary-400'
-                      : 'bg-gray-700 text-gray-300'
+                      ? 'badge-primary'
+                      : 'bg-dark-700/50 border-dark-600 text-gray-400'
                   }`}>
                     {campaign.userRole}
                   </span>
                 </div>
 
-                <p className="text-sm text-gray-400 mb-4 line-clamp-2">
+                <p className="text-sm text-gray-400 mb-6 line-clamp-2 leading-relaxed">
                   {campaign.description}
                 </p>
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Universe: {campaign.universe}</span>
-                  <div className="flex items-center space-x-3 text-gray-500">
-                    <span>👥 {campaign._count.characters}</span>
-                    <span>📜 {campaign._count.scenes}</span>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50 text-gray-400 font-medium">
+                      {campaign.universe}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-gray-500">
+                    <div className="flex items-center gap-1.5">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      <span className="font-medium">{campaign._count.characters}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span className="font-medium">{campaign._count.scenes}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {campaign.userRole === 'ADMIN' && (
-                <div className="mt-4 pt-4 border-t border-gray-700 flex gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      router.push(`/campaigns/${campaign.id}/admin?tab=settings`)
-                    }}
-                    className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors text-sm"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteCampaign(campaign.id)
-                    }}
-                    disabled={deletingCampaignId === campaign.id}
-                    className="flex-1 px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 text-sm"
-                  >
-                    {deletingCampaignId === campaign.id ? 'Deleting...' : 'Delete'}
-                  </button>
-                </div>
-              )}
+                {campaign.userRole === 'ADMIN' && (
+                  <div className="divider my-4"></div>
+                )}
+
+                {campaign.userRole === 'ADMIN' && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/campaigns/${campaign.id}/admin?tab=settings`)
+                      }}
+                      className="flex-1 px-4 py-2.5 bg-dark-800 hover:bg-dark-700 text-white rounded-xl border border-dark-700 hover:border-dark-600 font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteCampaign(campaign.id)
+                      }}
+                      disabled={deletingCampaignId === campaign.id}
+                      className="flex-1 px-4 py-2.5 bg-gradient-to-r from-danger-600 to-danger-500 hover:from-danger-500 hover:to-danger-400 text-white rounded-xl font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-danger-500/20"
+                    >
+                      {deletingCampaignId === campaign.id ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <div className="spinner h-4 w-4 border-white"></div>
+                          Deleting...
+                        </span>
+                      ) : (
+                        'Delete'
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -232,29 +286,36 @@ Make the story engaging, dramatic, and responsive to player choices.`,
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-white">Create Campaign</h2>
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <div className="p-8">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-3xl font-bold text-white tracking-tight">Create Campaign</h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"
             >
-              ✕
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg">
-                {error}
+              <div className="bg-gradient-to-r from-danger-500/10 to-danger-600/5 border border-danger-500/30 text-danger-400 px-6 py-4 rounded-2xl backdrop-blur-sm">
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span className="font-medium">{error}</span>
+                </div>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Campaign Title *
+              <label className="block text-sm font-semibold text-gray-300 mb-2.5">
+                Campaign Title <span className="text-danger-400">*</span>
               </label>
               <input
                 type="text"
@@ -267,21 +328,21 @@ Make the story engaging, dramatic, and responsive to player choices.`,
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Description *
+              <label className="block text-sm font-semibold text-gray-300 mb-2.5">
+                Description <span className="text-danger-400">*</span>
               </label>
               <textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="input-field min-h-[80px]"
+                className="input-field min-h-[100px] resize-none"
                 placeholder="Brief description of your campaign..."
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Universe *
+              <label className="block text-sm font-semibold text-gray-300 mb-2.5">
+                Universe <span className="text-danger-400">*</span>
               </label>
               <input
                 type="text"
@@ -294,34 +355,37 @@ Make the story engaging, dramatic, and responsive to player choices.`,
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                AI GM System Prompt *
+              <label className="block text-sm font-semibold text-gray-300 mb-2.5">
+                AI GM System Prompt <span className="text-danger-400">*</span>
               </label>
               <textarea
                 value={formData.aiSystemPrompt}
                 onChange={(e) => setFormData({ ...formData, aiSystemPrompt: e.target.value })}
-                className="input-field min-h-[120px] font-mono text-sm"
+                className="input-field min-h-[140px] font-mono text-sm resize-none"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-500 mt-2 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 Instructions for how the AI should run your game
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Initial World Seed *
+              <label className="block text-sm font-semibold text-gray-300 mb-2.5">
+                Initial World Seed <span className="text-danger-400">*</span>
               </label>
               <textarea
                 value={formData.initialWorldSeed}
                 onChange={(e) => setFormData({ ...formData, initialWorldSeed: e.target.value })}
-                className="input-field min-h-[80px]"
+                className="input-field min-h-[100px] resize-none"
                 placeholder="Starting situation of your campaign..."
                 required
               />
             </div>
 
-            <div className="flex space-x-3 pt-4">
+            <div className="flex gap-3 pt-4">
               <button
                 type="button"
                 onClick={onClose}
@@ -332,9 +396,16 @@ Make the story engaging, dramatic, and responsive to player choices.`,
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 btn-primary disabled:opacity-50"
+                className="flex-1 btn-primary"
               >
-                {loading ? 'Creating...' : 'Create Campaign'}
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="spinner h-5 w-5 border-white"></div>
+                    Creating...
+                  </span>
+                ) : (
+                  'Create Campaign'
+                )}
               </button>
             </div>
           </form>

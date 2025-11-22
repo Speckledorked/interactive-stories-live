@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { authenticatedFetch } from '@/lib/clientAuth'
 import WorldStateDashboard from '@/components/admin/WorldStateDashboard'
 import ClockProgress from '@/components/clock/ClockProgress'
 import AILoadingState from '@/components/scene/AILoadingState'
@@ -1205,6 +1206,84 @@ export default function AdminPage() {
                     >
                       {saving ? 'Saving...' : 'Save Campaign Information'}
                     </button>
+                  </div>
+                </div>
+
+                {/* Export & Backup Section */}
+                <div className="border-b pb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Export & Backup
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Download your campaign data for backup or to move to another platform.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const response = await authenticatedFetch(`/api/campaigns/${campaignId}/export`)
+                          if (response.ok) {
+                            const blob = await response.blob()
+                            const url = window.URL.createObjectURL(blob)
+                            const link = document.createElement('a')
+                            link.href = url
+                            link.download = `campaign-${campaignId}-${Date.now()}.json`
+                            document.body.appendChild(link)
+                            link.click()
+                            document.body.removeChild(link)
+                            window.URL.revokeObjectURL(url)
+                          } else {
+                            alert('Export failed. Please try again.')
+                          }
+                        } catch (error) {
+                          console.error('Export error:', error)
+                          alert('Export failed. Please try again.')
+                        }
+                      }}
+                      className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 flex items-center gap-2"
+                    >
+                      <span>📥</span>
+                      Export Campaign (JSON)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Safety Tools Section */}
+                <div className="border-b pb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Safety Tools
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Configure content warnings and safety settings for your campaign.
+                  </p>
+                  <div className="space-y-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h4 className="font-medium text-blue-900 mb-2">✋ X-Card</h4>
+                      <p className="text-sm text-blue-700">
+                        The X-Card is always available on the story page. Players can use it
+                        anonymously to pause or rewind uncomfortable content.
+                      </p>
+                    </div>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <h4 className="font-medium text-yellow-900 mb-2">⚠️ Content Warnings</h4>
+                      <p className="text-sm text-yellow-700 mb-3">
+                        Set content warnings to let players know what topics may appear in this campaign.
+                      </p>
+                      <p className="text-xs text-yellow-600">
+                        Note: Full safety settings panel will be added in a future update.
+                        For now, use the X-Card feature during gameplay.
+                      </p>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                      <h4 className="font-medium text-purple-900 mb-2">🛡️ Lines & Veils</h4>
+                      <p className="text-sm text-purple-700">
+                        <strong>Lines:</strong> Hard boundaries that won't appear in the story<br />
+                        <strong>Veils:</strong> Content that happens off-screen
+                      </p>
+                      <p className="text-xs text-purple-600 mt-2">
+                        Configure these in Session Zero with your group. Use the X-Card during play.
+                      </p>
+                    </div>
                   </div>
                 </div>
 

@@ -45,14 +45,8 @@ export async function GET(
       )
     }
 
-    // Check if user can view this character (own character or admin)
-    if (character.userId !== user.userId && membership.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'You can only view your own characters' },
-        { status: 403 }
-      )
-    }
-
+    // All campaign members can view any character in the campaign
+    // (Editing is still restricted to owner/admin - see PATCH handler)
     return NextResponse.json(character)
   } catch (error) {
     console.error('Get character error:', error)

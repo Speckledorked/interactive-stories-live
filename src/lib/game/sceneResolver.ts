@@ -147,16 +147,19 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     }
     console.log(`✅ Created ${characterChanges.length} progression notifications`)
 
-    // 7. Store scene resolution and mark as resolved
+    // 7. Store scene resolution (append to existing resolutions)
+    const existingResolutions = scene.sceneResolutionText ? [scene.sceneResolutionText] : []
+    const allResolutions = [...existingResolutions, aiResponse.scene_text].join('\n\n---\n\n')
+
     await prisma.scene.update({
       where: { id: sceneId },
       data: {
-        sceneResolutionText: aiResponse.scene_text,
-        status: 'RESOLVED' as SceneStatus
+        sceneResolutionText: allResolutions,
+        status: 'AWAITING_ACTIONS' as SceneStatus // Keep scene active for continuous play
       }
     })
 
-    console.log('✅ Scene marked as RESOLVED')
+    console.log('✅ Scene resolution stored, scene continues...')
 
     // 7.5. Generate map visualization from scene description
     try {
@@ -183,19 +186,43 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
       console.error('⚠️  Map generation failed (non-critical):', visualError)
     }
 
-    // Phase 16: Complete the exchange
+    // Phase 16: Complete the current exchange and start a new one
     await exchangeManager.completeExchange()
     console.log('🔄 Exchange completed')
 
-    // 8. Increment turn number
+    // Initialize next exchange for continuous play
+    await exchangeManager.initializeExchange()
+    console.log('🔄 Next exchange initialized')
+
+    // 8. Increment turn number and update in-game date based on AI time passage
+    const timePassage = aiResponse.time_passage || {}
+    let newInGameDate = worldMeta.currentInGameDate || 'Day 1'
+
+    // Calculate new date based on AI's determination
+    if (timePassage.new_date) {
+      newInGameDate = timePassage.new_date
+    } else if (timePassage.days || timePassage.hours) {
+      // Parse current date and add time
+      newInGameDate = calculateNewDate(
+        worldMeta.currentInGameDate || 'Day 1',
+        timePassage.days || 0,
+        timePassage.hours || 0
+      )
+    }
+
     await prisma.worldMeta.update({
       where: { id: worldMeta.id },
       data: {
-        currentTurnNumber: currentTurn + 1
+        currentTurnNumber: currentTurn + 1,
+        currentInGameDate: newInGameDate
       }
     })
 
     console.log(`✅ Turn incremented: ${currentTurn} → ${currentTurn + 1}`)
+    if (timePassage.days || timePassage.hours) {
+      console.log(`⏰ Time passed: ${timePassage.days || 0} days, ${timePassage.hours || 0} hours`)
+      console.log(`📅 New date: ${newInGameDate}`)
+    }
 
     // 8.5. Generate campaign log entry
     try {
@@ -640,6 +667,50 @@ async function generateCampaignLog(
       entryType: 'scene'
     }
   })
+}
+
+/**
+ * Calculate new in-game date based on time passage
+ * Handles simple date formats like "Day X" or more complex dates
+ */
+function calculateNewDate(currentDate: string, daysToAdd: number, hoursToAdd: number): string {
+  // Handle "Day X" format
+  const dayMatch = currentDate.match(/Day (\d+)/)
+  if (dayMatch) {
+    const currentDay = parseInt(dayMatch[1])
+    const totalDays = currentDay + daysToAdd + Math.floor(hoursToAdd / 24)
+    const remainingHours = hoursToAdd % 24
+
+    if (remainingHours > 0) {
+      return `Day ${totalDays}, ${remainingHours}:00`
+    }
+    return `Day ${totalDays}`
+  }
+
+  // Handle "Day X, HH:MM" format
+  const dayTimeMatch = currentDate.match(/Day (\d+), (\d+):(\d+)/)
+  if (dayTimeMatch) {
+    const currentDay = parseInt(dayTimeMatch[1])
+    const currentHour = parseInt(dayTimeMatch[2])
+    const currentMinute = parseInt(dayTimeMatch[3])
+
+    const totalHours = currentHour + hoursToAdd + (daysToAdd * 24)
+    const newDay = currentDay + Math.floor(totalHours / 24)
+    const newHour = totalHours % 24
+
+    return `Day ${newDay}, ${newHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`
+  }
+
+  // Fallback: just append time passage description
+  if (daysToAdd > 0 && hoursToAdd > 0) {
+    return `${currentDate} + ${daysToAdd}d ${hoursToAdd}h`
+  } else if (daysToAdd > 0) {
+    return `${currentDate} + ${daysToAdd} days`
+  } else if (hoursToAdd > 0) {
+    return `${currentDate} + ${hoursToAdd} hours`
+  }
+
+  return currentDate
 }
 
 /**

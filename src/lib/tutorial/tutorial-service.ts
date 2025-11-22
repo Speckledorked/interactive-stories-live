@@ -151,13 +151,39 @@ export class TutorialService {
         completionTrigger: 'scene_resolved',
       },
 
+      // Keyboard Shortcuts & Productivity
+      {
+        stepKey: 'keyboard_shortcuts',
+        title: 'Keyboard Shortcuts',
+        description: 'Speed up your workflow with keyboard shortcuts',
+        category: 'basics',
+        orderIndex: 7,
+        prerequisites: ['scene_resolution'],
+        contentBlocks: [
+          {
+            type: 'text',
+            content: 'Press Cmd+K (or Ctrl+K on Windows/Linux) to open the command palette - a quick way to navigate and take actions.',
+          },
+          {
+            type: 'tip',
+            content: 'Press ? anywhere to see all available keyboard shortcuts. Try G+H to go to overview, G+S for story, or Cmd+Enter to submit actions!',
+          },
+          {
+            type: 'text',
+            content: 'Look for the ⌨️ button in the navigation bar to view the complete shortcuts reference.',
+          },
+        ],
+        completionTrigger: 'shortcuts_viewed',
+        isOptional: true,
+      },
+
       // Chat & Communication
       {
         stepKey: 'chat_basics',
         title: 'Using Chat',
         description: 'Communicate with other players',
         category: 'social',
-        orderIndex: 7,
+        orderIndex: 8,
         prerequisites: ['scene_resolution'],
         targetElement: '#chat-panel',
         tooltipPosition: 'left',
@@ -175,7 +201,7 @@ export class TutorialService {
         title: 'Taking Notes',
         description: 'Keep track of important information',
         category: 'social',
-        orderIndex: 8,
+        orderIndex: 9,
         prerequisites: ['scene_resolution'],
         targetElement: '#notes-panel',
         tooltipPosition: 'left',
@@ -195,7 +221,7 @@ export class TutorialService {
         title: 'Combat Basics',
         description: 'Learn how combat works',
         category: 'combat',
-        orderIndex: 9,
+        orderIndex: 10,
         prerequisites: ['scene_resolution'],
         contentBlocks: [
           {
@@ -215,7 +241,7 @@ export class TutorialService {
         title: 'Zone Positioning',
         description: 'Understand tactical positioning',
         category: 'combat',
-        orderIndex: 10,
+        orderIndex: 11,
         prerequisites: ['combat_intro'],
         contentBlocks: [
           {
@@ -233,7 +259,7 @@ export class TutorialService {
         title: 'Character Moves',
         description: 'Learn about special moves',
         category: 'advanced',
-        orderIndex: 11,
+        orderIndex: 12,
         prerequisites: ['dice_roll'],
         contentBlocks: [
           {
@@ -249,7 +275,7 @@ export class TutorialService {
         title: 'Character Growth',
         description: 'Understand experience and advancement',
         category: 'advanced',
-        orderIndex: 12,
+        orderIndex: 13,
         prerequisites: ['scene_resolution'],
         contentBlocks: [
           {

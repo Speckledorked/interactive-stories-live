@@ -17,6 +17,10 @@ import { CompactTimeline } from '@/components/scene/VisualTimeline'
 import AITransparencyPanel, { type WorldStateChange } from '@/components/scene/AITransparencyPanel'
 import CharacterSnapshotModal from '@/components/character/CharacterSnapshotModal'
 import NPCRelationshipHints, { extractNPCHintsFromScene } from '@/components/scene/NPCRelationshipHints'
+import { useCommandPalette } from '@/contexts/CommandPaletteContext'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal'
+import SimpleXCard from '@/components/safety/SimpleXCard'
 
 export default function StoryPage() {
   const router = useRouter()
@@ -40,9 +44,15 @@ export default function StoryPage() {
   const [showCharacterSnapshot, setShowCharacterSnapshot] = useState(false)
   const [sceneWorldStateChanges, setSceneWorldStateChanges] = useState<Record<string, WorldStateChange[]>>({})
   const [expandedTransparency, setExpandedTransparency] = useState<Record<string, boolean>>({})
+  const [startingScene, setStartingScene] = useState(false)
+  const [endingScene, setEndingScene] = useState(false)
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
+
+  // Command palette context
+  const { setContext, registerAction } = useCommandPalette()
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -164,6 +174,62 @@ export default function StoryPage() {
     }
   }, [campaignId])
 
+  // Set command palette context
+  useEffect(() => {
+    setContext({ campaignId, sceneId: currentScene?.id })
+  }, [campaignId, currentScene?.id, setContext])
+
+  // Register command palette actions
+  useEffect(() => {
+    registerAction('submit-action', () => {
+      const firstScene = activeScenes[0]
+      if (firstScene) {
+        const formEvent = new Event('submit') as any
+        handleSubmitAction(formEvent, firstScene.id)
+      }
+    })
+
+    registerAction('resolve-exchange', () => {
+      if (currentScene) handleResolveScene(currentScene.id)
+    })
+
+    registerAction('end-scene', () => {
+      if (currentScene) handleEndScene(currentScene.id)
+    })
+
+    registerAction('create-character', () => {
+      router.push(`/campaigns/${campaignId}`)
+    })
+
+    registerAction('show-shortcuts', () => {
+      setShowKeyboardShortcuts(true)
+    })
+  }, [activeScenes, currentScene, registerAction, campaignId, router])
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    campaignId,
+    onSubmitAction: () => {
+      const firstScene = activeScenes[0]
+      if (firstScene && selectedCharacterId && actionText[firstScene.id]?.trim()) {
+        const formEvent = { preventDefault: () => {} } as React.FormEvent
+        handleSubmitAction(formEvent, firstScene.id)
+      }
+    },
+    onResolveExchange: () => {
+      if (currentScene && isAdmin) handleResolveScene(currentScene.id)
+    },
+    onEndScene: () => {
+      if (currentScene && isAdmin) handleEndScene(currentScene.id)
+    },
+    onStartScene: () => {
+      if (isAdmin) handleStartNewScene()
+    },
+    onShowShortcuts: () => {
+      setShowKeyboardShortcuts(true)
+    }
+  })
+
   const handleSubmitAction = async (e: React.FormEvent, sceneId: string) => {
     e.preventDefault()
     if (!sceneId || !selectedCharacterId || !actionText[sceneId]?.trim()) return
@@ -228,9 +294,13 @@ export default function StoryPage() {
     }
   }
 
+  const [startingScene, setStartingScene] = useState(false)
+  const [endingScene, setEndingScene] = useState(false)
+
   const handleStartNewScene = async () => {
     setError('')
     setSuccess('')
+    setStartingScene(true)
 
     try {
       const response = await authenticatedFetch(
@@ -247,6 +317,36 @@ export default function StoryPage() {
       await loadData()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start scene')
+    } finally {
+      setStartingScene(false)
+    }
+  }
+
+  const handleEndScene = async (sceneId: string) => {
+    setError('')
+    setSuccess('')
+    setEndingScene(true)
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/end-scene`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ sceneId })
+        }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to end scene')
+      }
+
+      setSuccess('Scene ended!')
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to end scene')
+    } finally {
+      setEndingScene(false)
     }
   }
 
@@ -284,7 +384,81 @@ export default function StoryPage() {
   )
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Navigation Bar */}
+      <div className="mb-6">
+        <Link
+          href="/campaigns"
+          className="text-gray-400 hover:text-white transition-colors text-sm mb-3 inline-block"
+        >
+          ← Back to Campaigns
+        </Link>
+
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-3xl font-bold text-white">{campaign?.campaign?.name}</h1>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex items-center justify-between gap-4 border-b border-gray-700 pb-2">
+          <div className="flex gap-2 overflow-x-auto">
+            <Link
+              href={`/campaigns/${campaignId}`}
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+            >
+              Overview
+            </Link>
+            <span className="px-4 py-2 bg-primary-600 text-white rounded-t whitespace-nowrap">
+              Story
+            </span>
+            <Link
+              href={`/campaigns/${campaignId}/story-log`}
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+            >
+              Story Log
+            </Link>
+            <Link
+              href={`/campaigns/${campaignId}`}
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+            >
+              Notes
+            </Link>
+            <Link
+              href={`/campaigns/${campaignId}`}
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+            >
+              Maps
+            </Link>
+            <Link
+              href={`/campaigns/${campaignId}`}
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+            >
+              Chat
+            </Link>
+            {isAdmin && (
+              <Link
+                href={`/campaigns/${campaignId}/admin`}
+                className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
+              >
+                ⚙️ Admin
+              </Link>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
+            <button
+              onClick={() => setShowKeyboardShortcuts(true)}
+              className="flex items-center gap-2 px-3 py-1 text-sm text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors whitespace-nowrap"
+              title="Keyboard shortcuts"
+            >
+              <span>⌨️</span>
+              <kbd className="hidden sm:inline px-1.5 py-0.5 text-xs bg-gray-700 rounded border border-gray-600">
+                ?
+              </kbd>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Story Column */}
         <div className="lg:col-span-3 space-y-6">
@@ -356,28 +530,38 @@ export default function StoryPage() {
                       </div>
                     )}
 
-                    {/* Show resolution if resolved */}
+                    {/* Show resolutions if any exist */}
                     {scene.sceneResolutionText && (
                       <>
                         <div className="mt-6 pt-6 border-t border-gray-700">
                           <h3 className="text-lg font-bold text-primary-400 mb-3">
-                            Resolution
+                            {scene.sceneResolutionText.includes('---') ? 'Resolutions' : 'Resolution'}
                           </h3>
-                          <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
-                            {scene.sceneResolutionText}
-                          </p>
+                          {/* Split multiple resolutions by separator */}
+                          {scene.sceneResolutionText.split('\n\n---\n\n').map((resolution: string, idx: number) => (
+                            <div key={idx} className={idx > 0 ? 'mt-6 pt-6 border-t border-gray-600' : ''}>
+                              {scene.sceneResolutionText.includes('---') && (
+                                <h4 className="text-sm font-medium text-gray-400 mb-2">
+                                  Exchange {idx + 1}
+                                </h4>
+                              )}
+                              <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                                {resolution}
+                              </p>
 
-                          {/* NPC Relationship Hints in Resolution */}
-                          {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
-                            <div className="mt-4">
-                              <NPCRelationshipHints
-                                hints={extractNPCHintsFromScene(
-                                  scene.sceneResolutionText,
-                                  campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
-                                )}
-                              />
+                              {/* NPC Relationship Hints in Resolution */}
+                              {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
+                                <div className="mt-4">
+                                  <NPCRelationshipHints
+                                    hints={extractNPCHintsFromScene(
+                                      resolution,
+                                      campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
+                                    )}
+                                  />
+                                </div>
+                              )}
                             </div>
-                          )}
+                          ))}
                         </div>
 
                         {/* AI Transparency Panel - Show world state changes */}
@@ -472,25 +656,37 @@ export default function StoryPage() {
                     </div>
                   )}
 
-                  {/* Manual Resolve Button (Admin Only) */}
+                  {/* GM Controls (Admin Only) */}
                   {scene.status === 'AWAITING_ACTIONS' && isAdmin && scene.playerActions && scene.playerActions.length > 0 && (
                     <div className="card bg-yellow-500/10 border-yellow-500/50">
                       <div className="flex items-start justify-between gap-4">
-                        <div>
+                        <div className="flex-1">
                           <p className="text-yellow-400 text-sm font-medium mb-1">
                             🎲 GM Controls
                           </p>
-                          <p className="text-gray-400 text-xs">
-                            {scene.playerActions.length} action(s) submitted. You can manually resolve this scene now.
+                          <p className="text-gray-400 text-xs mb-2">
+                            {scene.playerActions.length} action(s) submitted. Current exchange: {scene.currentExchange || 1}
+                          </p>
+                          <p className="text-gray-500 text-xs">
+                            Resolving will process actions and continue the scene. End the scene when the story concludes.
                           </p>
                         </div>
-                        <button
-                          onClick={() => handleResolveScene(scene.id)}
-                          disabled={resolving}
-                          className="btn-primary disabled:opacity-50 whitespace-nowrap"
-                        >
-                          {resolving ? 'Resolving...' : 'Resolve Scene'}
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleResolveScene(scene.id)}
+                            disabled={resolving}
+                            className="btn-primary disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {resolving ? 'Resolving...' : 'Resolve Exchange'}
+                          </button>
+                          <button
+                            onClick={() => handleEndScene(scene.id)}
+                            disabled={endingScene}
+                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {endingScene ? 'Ending...' : 'End Scene'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -507,8 +703,12 @@ export default function StoryPage() {
                   : 'Waiting for the GM to start a scene'}
               </p>
               {isAdmin && (
-                <button onClick={handleStartNewScene} className="btn-primary">
-                  🎬 Start First Scene
+                <button
+                  onClick={handleStartNewScene}
+                  disabled={startingScene}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  {startingScene ? 'Starting...' : '🎬 Start First Scene'}
                 </button>
               )}
             </div>
@@ -649,6 +849,12 @@ export default function StoryPage() {
           onClose={() => setShowCharacterSnapshot(false)}
         />
       )}
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={showKeyboardShortcuts}
+        onClose={() => setShowKeyboardShortcuts(false)}
+      />
     </div>
   )
 }

@@ -193,17 +193,26 @@ Return a JSON object with:
     const template = this.BACKGROUND_TEMPLATES[backgroundType] || this.BACKGROUND_TEMPLATES['dungeon']
     const zones = []
 
+    // Use grid-based placement to prevent overlap
+    const grid = this.createPlacementGrid(template.width, template.height, 200, 150)
+    let gridIndex = 0
+
     // Create zones for interactable areas
     for (let i = 0; i < analysis.interactableAreas.length; i++) {
+      if (gridIndex >= grid.length) break
+
       const area = analysis.interactableAreas[i]
+      const position = grid[gridIndex++]
+
       const zone = await MapService.createZone(mapId, {
         name: area,
         description: `Interactive area: ${area}`,
-        x: Math.random() * (template.width - 200) + 100,
-        y: Math.random() * (template.height - 200) + 100,
-        width: 150 + Math.random() * 100,
-        height: 100 + Math.random() * 100,
+        x: position.x,
+        y: position.y,
+        width: 150,
+        height: 100,
         color: this.getZoneColor(area),
+        isVisible: true, // Ensure zone is visible
         triggerType: 'interaction',
         triggerData: {
           areaName: area,
@@ -215,19 +224,45 @@ Return a JSON object with:
 
     // Create zones for key elements
     for (let i = 0; i < Math.min(analysis.keyElements.length, 3); i++) {
+      if (gridIndex >= grid.length) break
+
       const element = analysis.keyElements[i]
+      const position = grid[gridIndex++]
+
       const zone = await MapService.createZone(mapId, {
         name: element,
         description: `Important area: ${element}`,
-        x: Math.random() * (template.width - 150) + 75,
-        y: Math.random() * (template.height - 150) + 75,
-        width: 100 + Math.random() * 50,
-        height: 80 + Math.random() * 40,
+        x: position.x,
+        y: position.y,
+        width: 120,
+        height: 90,
         color: '#3B82F6',
+        isVisible: true, // Ensure zone is visible
         triggerType: 'discovery',
         triggerData: {
           elementName: element,
           description: `You notice the ${element.toLowerCase()}`
+        }
+      })
+      zones.push(zone)
+    }
+
+    // Fallback: Create at least one visible zone if none were created
+    if (zones.length === 0 && gridIndex < grid.length) {
+      const position = grid[gridIndex++]
+      const zone = await MapService.createZone(mapId, {
+        name: 'Center Area',
+        description: 'The main area of interest',
+        x: position.x,
+        y: position.y,
+        width: 150,
+        height: 120,
+        color: '#10B981',
+        isVisible: true,
+        triggerType: 'interaction',
+        triggerData: {
+          areaName: 'Center Area',
+          description: 'You examine the area'
         }
       })
       zones.push(zone)
@@ -242,34 +277,63 @@ Return a JSON object with:
     const template = this.BACKGROUND_TEMPLATES[backgroundType] || this.BACKGROUND_TEMPLATES['dungeon']
     const tokens = []
 
+    // Use grid-based placement for tokens (smaller grid)
+    const grid = this.createPlacementGrid(template.width, template.height, 80, 80)
+    let gridIndex = 0
+
     // Create tokens for NPCs and enemies
     for (let i = 0; i < analysis.characters.length; i++) {
+      if (gridIndex >= grid.length) break
+
       const character = analysis.characters[i]
+      const position = grid[gridIndex++]
+
       const token = await MapService.createToken(mapId, {
         name: character,
-        x: Math.random() * (template.width - 100) + 50,
-        y: Math.random() * (template.height - 100) + 50,
+        x: position.x,
+        y: position.y,
         size: 1,
         color: this.getCharacterTokenColor(character),
-        isPC: false
+        isPC: false,
+        isVisible: true // Ensure token is visible
       })
       tokens.push(token)
     }
 
     // Create tokens for important objects
     for (let i = 0; i < Math.min(analysis.keyElements.length, 2); i++) {
+      if (gridIndex >= grid.length) break
+
       const element = analysis.keyElements[i]
       if (this.shouldCreateTokenForElement(element)) {
+        const position = grid[gridIndex++]
+
         const token = await MapService.createToken(mapId, {
           name: element,
-          x: Math.random() * (template.width - 80) + 40,
-          y: Math.random() * (template.height - 80) + 40,
+          x: position.x,
+          y: position.y,
           size: 1,
           color: '#8B4513',
-          isPC: false
+          isPC: false,
+          isVisible: true // Ensure token is visible
         })
         tokens.push(token)
       }
+    }
+
+    // Fallback: Create at least one visible marker if no tokens were created
+    if (tokens.length === 0 && gridIndex < grid.length) {
+      const position = grid[gridIndex++]
+      const token = await MapService.createToken(mapId, {
+        name: 'Point of Interest',
+        x: position.x,
+        y: position.y,
+        size: 1,
+        color: '#F59E0B',
+        isPC: false,
+        isVisible: true
+      })
+      tokens.push(token)
     }
 
     return tokens
@@ -508,11 +572,42 @@ Return a JSON object with:
 
   private static extractKeyElements(description: string): string[] {
     const elementKeywords = [
-      'door', 'chest', 'table', 'chair', 'stairs', 'altar', 
+      'door', 'chest', 'table', 'chair', 'stairs', 'altar',
       'fountain', 'statue', 'throne', 'fireplace', 'window'
     ]
-    
+
     const lowerDesc = description.toLowerCase()
     return elementKeywords.filter(element => lowerDesc.includes(element))
+  }
+
+  /**
+   * Create a grid of positions to prevent overlap
+   * Returns array of {x, y} positions distributed evenly across the map
+   */
+  private static createPlacementGrid(
+    width: number,
+    height: number,
+    cellWidth: number,
+    cellHeight: number
+  ): Array<{ x: number; y: number }> {
+    const positions: Array<{ x: number; y: number }> = []
+    const margin = 50 // Margin from edges
+
+    // Calculate number of cells that fit
+    const cols = Math.floor((width - margin * 2) / cellWidth)
+    const rows = Math.floor((height - margin * 2) / cellHeight)
+
+    // Generate grid positions
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        positions.push({
+          x: margin + col * cellWidth + cellWidth / 4,
+          y: margin + row * cellHeight + cellHeight / 4
+        })
+      }
+    }
+
+    // Shuffle positions to add variety while maintaining no overlap
+    return positions.sort(() => Math.random() - 0.5)
   }
 }

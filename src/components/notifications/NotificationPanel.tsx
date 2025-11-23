@@ -3,7 +3,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { NotificationService } from '@/lib/notifications/notification-service';
 import { getPusherClient } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
 

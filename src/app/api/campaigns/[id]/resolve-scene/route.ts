@@ -8,6 +8,7 @@ import { ErrorResponse } from '@/types/api'
 import { resolveScene, getCurrentScene } from '@/lib/game/sceneResolver'
 import { runWorldTurn } from '@/lib/game/worldTurn'
 import { prisma } from '@/lib/prisma'
+import { checkBalance, deductFunds, COST_PER_RESOLUTION, formatCurrency } from '@/lib/payment/service'
 
 export async function POST(
   request: NextRequest,
@@ -90,15 +91,48 @@ export async function POST(
       `📝 Scene ${currentScene.sceneNumber} has ${sceneActions.length} action(s)`
     )
 
-    // 3. Resolve the scene (this calls AI and updates DB)
+    // 3. Check if user has sufficient balance
+    console.log('💰 Checking user balance...')
+    const balanceCheck = await checkBalance(user.userId, COST_PER_RESOLUTION)
+
+    if (!balanceCheck.sufficient) {
+      return NextResponse.json<ErrorResponse>(
+        {
+          error: 'Insufficient balance',
+          details: `You need ${formatCurrency(COST_PER_RESOLUTION)} to resolve a scene. Your current balance is ${formatCurrency(balanceCheck.currentBalance)}. Please add funds to your account.`
+        },
+        { status: 402 } // 402 Payment Required
+      )
+    }
+
+    // 4. Resolve the scene (this calls AI and updates DB)
     console.log('🤖 Calling scene resolver...')
     const resolutionResult = await resolveScene(campaignId, currentScene.id)
 
-    // 4. Run world turn (advance clocks, generate background events)
+    // 5. Deduct funds from user's balance
+    console.log('💳 Deducting funds...')
+    const deductResult = await deductFunds(
+      user.userId,
+      COST_PER_RESOLUTION,
+      `AI scene resolution for campaign ${campaignId}`,
+      {
+        campaignId,
+        sceneId: currentScene.id,
+        sceneNumber: currentScene.sceneNumber
+      }
+    )
+
+    if (!deductResult.success) {
+      console.error('⚠️ Failed to deduct funds (scene already resolved):', deductResult.error)
+      // Note: We don't fail the request if deduction fails after resolution,
+      // but we log it for manual review
+    }
+
+    // 6. Run world turn (advance clocks, generate background events)
     console.log('🌍 Running world turn...')
     const worldTurnResult = await runWorldTurn(campaignId)
 
-    // 5. Return success with results
+    // 7. Return success with results
     return NextResponse.json({
       success: true,
       message: 'Scene resolved successfully',
@@ -111,6 +145,10 @@ export async function POST(
       worldTurn: {
         clocksAdvanced: worldTurnResult.clocksAdvanced,
         clocksCompleted: worldTurnResult.clocksCompleted
+      },
+      payment: {
+        charged: formatCurrency(COST_PER_RESOLUTION),
+        newBalance: formatCurrency(deductResult.newBalance)
       }
     })
   } catch (error) {

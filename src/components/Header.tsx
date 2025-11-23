@@ -10,6 +10,7 @@ import { getUser, logout, isAuthenticated } from '@/lib/clientAuth'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import NotificationPanel from '@/components/notifications/NotificationPanel'
 import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal'
+import BalanceDisplay from '@/components/BalanceDisplay'
 
 export default function Header() {
   const [user, setUser] = useState<{ email: string; id: string } | null>(null)
@@ -106,6 +107,9 @@ export default function Header() {
                   </span>
                 )}
               </button>
+
+              {/* Balance Display */}
+              <BalanceDisplay userId={user.id} />
 
               {/* Help menu */}
               <div className="relative">

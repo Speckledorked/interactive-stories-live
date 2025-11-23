@@ -87,6 +87,9 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Payment system - balance stored in cents (e.g., 100 = $1.00)
+  balance   Int      @default(0)
+
   // Phase 9: Online status
   lastSeenAt DateTime?
   isOnline   Boolean  @default(false)
@@ -1187,6 +1190,32 @@ model CampaignBan {
   @@unique([campaignId, userId])
   @@index([userId])
   @@map("campaign_bans")
+}
+
+//
+// PAYMENT & TRANSACTION TRACKING
+//
+
+enum TransactionType {
+  CREDIT        // User added funds
+  DEBIT         // AI usage charge
+  REFUND        // Refund issued
+  ADJUSTMENT    // Manual adjustment
+}
+
+model Transaction {
+  id            String          @id @default(cuid())
+  userId        String
+  type          TransactionType
+  amount        Int             // In cents (positive for credit, negative for debit)
+  balanceBefore Int             // Balance before transaction
+  balanceAfter  Int             // Balance after transaction
+  description   String
+  metadata      Json?           // Additional info (e.g., sceneId, tokens used, etc.)
+  createdAt     DateTime        @default(now())
+
+  @@index([userId, createdAt])
+  @@map("transactions")
 }
 
 //

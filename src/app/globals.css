@@ -24,6 +24,39 @@
   background: linear-gradient(180deg, #6366f1 0%, #818cf8 100%);
 }
 
+/* Thin scrollbar for horizontal scrolling areas */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* Mobile-specific overrides */
+@media (max-width: 640px) {
+  /* Hide scrollbars on mobile for cleaner look, but keep scrolling */
+  .scrollbar-thin::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Enable smooth scrolling on mobile */
+  .scrollbar-thin {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+  }
+}
+
 /* Base styles */
 body {
   @apply bg-dark-950 text-gray-100;

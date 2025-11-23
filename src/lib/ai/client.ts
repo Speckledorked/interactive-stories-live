@@ -425,22 +425,23 @@ ${request.ai_system_prompt}
 </critical_instructions>
 
 <storytelling_principles>
-WRITE LIKE A NOVELIST:
-- Vivid, sensory, dramatic prose (sight, sound, smell, touch, taste)
-- Show don't tell - use action, dialogue, and description
-- Create tension through pacing - slow down for dramatic moments
-- Make every NPC memorable with distinct voice and personality
-- Use "rule of three" for dramatic structure
-- End scenes with hooks that make players eager for more
-- Weave character backstories and goals into the narrative
-- Make failures interesting and successes earned
-- Think "prestige TV drama" not "summary"
+WRITE WITH PURPOSE - NO FLUFF:
+- PRIORITIZE: Action, dialogue, and concrete events over description
+- Use sensory details ONLY when they serve the story (not decoration)
+- SHOW through what characters DO and SAY, not lengthy descriptions
+- Make NPCs memorable through DIALOGUE and ACTIONS, not paragraphs of description
+- Get to the point - players want to see what HAPPENS, not read purple prose
+- End with clear outcomes and forward momentum
+- Character moments should be BRIEF and IMPACTFUL
+- Think "action movie" or "fast-paced novel" not "literary fiction"
+- Every sentence should advance plot, reveal character, or create tension
+- CUT unnecessary adjectives and flowery language
 </storytelling_principles>
 
 <response_format>
 You MUST respond with a JSON object matching this structure:
 {
-  "scene_text": "Full narrated resolution (MINIMUM 800 words)...",
+  "scene_text": "Full narrated resolution (400-600 words, focus on ACTION and DIALOGUE)...",
   "time_passage": {"days": 0, "hours": 2, "description": "..."},
   "world_updates": {
     "pc_changes": [
@@ -588,16 +589,16 @@ ${player_actions.map(a => `${a.character_name}: "${a.action_text}"`).join('\n\n'
 </player_actions>
 
 <task>
-1. VIVID NARRATION (scene_text) - MINIMUM 800 words:
-   • Paint detailed sensory picture (sight, sound, smell, touch, taste)
-   • Reference each character BY NAME - show how their actions unfold
-   • Include dialogue - distinct NPC voices
-   • Create dramatic pacing - slow down for key moments
-   • Show consequences through description, not exposition
-   • Make the ${request.campaign_universe} setting come alive
-   • Use imagery, metaphors for impact
-   • End with a hook or compelling transition
-   • Think "prestige TV drama" not "summary"
+1. ACTION-FOCUSED NARRATION (scene_text) - 400-600 words:
+   • START with what HAPPENS - action first, description second
+   • DIALOGUE: NPCs should TALK - distinct voices, meaningful conversations
+   • Reference each character BY NAME as they ACT
+   • Be CONCRETE: "She drew her blade" not "A weapon gleamed in the shadows"
+   • PACE: Fast action = short sentences, Key moments = brief pause
+   • Show consequences through what characters DO and SAY
+   • Setting details only when relevant to action
+   • End with clear outcome and what happens next
+   • Think "action movie" or "fast-paced thriller" not "literary description"
 
 2. WORLD STATE CHANGES (world_updates):
    • Apply harm, conditions, location changes based on what happened
@@ -606,7 +607,7 @@ ${player_actions.map(a => `${a.character_name}: "${a.action_text}"`).join('\n\n'
    • Create timeline events for significant outcomes
    • Track all character changes (equipment, inventory, resources)
 
-CRITICAL: scene_text should read like a novel excerpt, NOT a summary. Show don't tell.
+CRITICAL: Players want to know WHAT HAPPENED and WHAT PEOPLE SAID. Cut the fluff.
 
 Respond with valid JSON matching the schema.
 </task>`

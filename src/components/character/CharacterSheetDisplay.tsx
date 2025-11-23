@@ -13,12 +13,44 @@ import ConsequenceBadge from './ConsequenceBadge'
 
 interface CharacterSheetDisplayProps {
   character: any
+  campaign?: any
 }
 
-export default function CharacterSheetDisplay({ character }: CharacterSheetDisplayProps) {
+// Helper function to get currency name based on universe
+function getCurrencyName(universe?: string): { singular: string; plural: string; icon: string } {
+  if (!universe) return { singular: 'gold', plural: 'gold', icon: '💰' }
+
+  const lowerUniverse = universe.toLowerCase()
+
+  // My Hero Academia / Modern settings
+  if (lowerUniverse.includes('hero') || lowerUniverse.includes('mha') || lowerUniverse.includes('modern')) {
+    if (lowerUniverse.includes('japan')) {
+      return { singular: 'yen', plural: 'yen', icon: '¥' }
+    }
+    return { singular: 'dollar', plural: 'dollars', icon: '$' }
+  }
+
+  // Sci-fi settings
+  if (lowerUniverse.includes('space') || lowerUniverse.includes('sci-fi') || lowerUniverse.includes('cyberpunk')) {
+    return { singular: 'credit', plural: 'credits', icon: '💳' }
+  }
+
+  // Post-apocalyptic
+  if (lowerUniverse.includes('apocalypse') || lowerUniverse.includes('wasteland')) {
+    return { singular: 'cap', plural: 'caps', icon: '🔘' }
+  }
+
+  // Default to gold for fantasy
+  return { singular: 'gold', plural: 'gold', icon: '💰' }
+}
+
+export default function CharacterSheetDisplay({ character, campaign }: CharacterSheetDisplayProps) {
   const params = useParams()
   const campaignId = params?.id as string
   const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'inventory' | 'relationships'>('overview')
+
+  // Get currency info from campaign universe
+  const currency = getCurrencyName(campaign?.universe)
 
   if (!character) {
     return (
@@ -101,8 +133,11 @@ export default function CharacterSheetDisplay({ character }: CharacterSheetDispl
               )}
               {statEntries.length > 0 && (
                 <div className="bg-black/20 rounded-lg p-3 border border-white/10">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stats</div>
-                  <div className="text-lg font-bold text-purple-400">{statEntries.length}</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stat Total</div>
+                  <div className="text-lg font-bold text-purple-400">
+                    {statEntries.reduce((sum, [_, val]) => sum + (val as number), 0) > 0 ? '+' : ''}
+                    {statEntries.reduce((sum, [_, val]) => sum + (val as number), 0)}
+                  </div>
                 </div>
               )}
             </div>
@@ -333,17 +368,35 @@ export default function CharacterSheetDisplay({ character }: CharacterSheetDispl
                 <div className="grid md:grid-cols-3 gap-3">
                   {resources.gold !== undefined && (
                     <div className="bg-gradient-to-r from-yellow-900/20 to-yellow-800/20 rounded-lg p-4 border border-yellow-700/30">
-                      <span className="text-gray-400 text-sm block mb-1">Gold</span>
-                      <span className="text-yellow-400 font-bold text-2xl">{resources.gold}</span>
+                      <span className="text-gray-400 text-sm block mb-1 capitalize">
+                        {resources.gold === 1 ? currency.singular : currency.plural}
+                      </span>
+                      <span className="text-yellow-400 font-bold text-2xl">
+                        {currency.icon} {resources.gold}
+                      </span>
                     </div>
                   )}
                   {Object.entries(resources)
                     .filter(([key]) => key !== 'gold' && key !== 'contacts')
                     .map(([key, value]) => (
                       <div key={key} className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-                        <span className="text-gray-400 text-sm block mb-1 capitalize">{key}</span>
+                        <span className="text-gray-400 text-sm block mb-1 capitalize">{key.replace(/_/g, ' ')}</span>
                         <span className="text-white font-bold text-xl">
-                          {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                          {typeof value === 'object' && value !== null ? (
+                            // Handle reputation objects specially
+                            key.toLowerCase().includes('reputation') ? (
+                              <div className="space-y-1 text-sm">
+                                {Object.entries(value as Record<string, number>).map(([faction, rep]) => (
+                                  <div key={faction} className="flex justify-between items-center">
+                                    <span className="text-gray-400">{faction}:</span>
+                                    <span className={rep > 0 ? 'text-green-400' : rep < 0 ? 'text-red-400' : 'text-gray-300'}>
+                                      {rep > 0 ? '+' : ''}{rep}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : String(value)
+                          ) : String(value)}
                         </span>
                       </div>
                     ))}

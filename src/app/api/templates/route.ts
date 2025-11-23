@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUser } from '@/lib/auth'
 import { CAMPAIGN_TEMPLATES, getTemplate, applyCampaignTemplate } from '@/lib/templates/campaign-templates'
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/templates
  * List all available campaign templates

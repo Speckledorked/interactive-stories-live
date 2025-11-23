@@ -126,7 +126,7 @@ export default function CharacterPage() {
 
       {/* Character Sheet */}
       <div className="card">
-        <CharacterSheetDisplay character={character} />
+        <CharacterSheetDisplay character={character} campaign={campaign?.campaign} />
       </div>
     </div>
   )

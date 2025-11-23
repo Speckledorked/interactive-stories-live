@@ -9,6 +9,7 @@ import { applyWorldUpdates, summarizeWorldUpdates } from './stateUpdater'
 import { SceneStatus } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
 import { ExchangeManager } from './exchange-manager' // Phase 16
+import PusherServer from '@/lib/realtime/pusher-server' // For real-time updates
 import {
   computeOrganicGrowth,
   applyOrganicGrowth,
@@ -82,6 +83,21 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
   })
 
   console.log('✅ Scene marked as RESOLVING')
+
+  // 2.5. Broadcast resolving status via Pusher so UI updates immediately
+  try {
+    const pusher = PusherServer()
+    if (pusher) {
+      await pusher.trigger(`campaign-${campaignId}`, 'scene:resolving', {
+        sceneId,
+        sceneNumber: scene.sceneNumber,
+        campaignId
+      })
+      console.log('📡 Broadcasted scene:resolving event via Pusher')
+    }
+  } catch (pusherError) {
+    console.error('⚠️ Failed to broadcast Pusher resolving event:', pusherError)
+  }
 
   try {
     // 3. Get world meta for turn number
@@ -224,6 +240,23 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
       console.log(`📅 New date: ${newInGameDate}`)
     }
 
+    // 8.4. Broadcast scene resolution via Pusher for real-time updates
+    try {
+      const pusher = PusherServer()
+      if (pusher) {
+        await pusher.trigger(`campaign-${campaignId}`, 'scene:resolved', {
+          sceneId,
+          sceneNumber: scene.sceneNumber,
+          campaignId,
+          resolutionPreview: aiResponse.scene_text.substring(0, 200) + '...'
+        })
+        console.log('📡 Broadcasted scene:resolved event via Pusher')
+      }
+    } catch (pusherError) {
+      // Don't fail the resolution if Pusher fails
+      console.error('⚠️ Failed to broadcast Pusher event:', pusherError)
+    }
+
     // 8.5. Generate campaign log entry
     try {
       console.log('📝 Generating campaign log entry...')
@@ -265,6 +298,21 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
       where: { id: sceneId },
       data: { status: 'AWAITING_ACTIONS' as SceneStatus }
     })
+
+    // Broadcast failure via Pusher so UI can show error
+    try {
+      const pusher = PusherServer()
+      if (pusher) {
+        await pusher.trigger(`campaign-${campaignId}`, 'scene:resolution-failed', {
+          sceneId,
+          campaignId,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        })
+        console.log('📡 Broadcasted scene:resolution-failed event via Pusher')
+      }
+    } catch (pusherError) {
+      console.error('⚠️ Failed to broadcast Pusher failure event:', pusherError)
+    }
 
     throw error
   }

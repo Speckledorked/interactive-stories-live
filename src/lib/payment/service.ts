@@ -120,7 +120,7 @@ export async function deductFunds(
   amountInCents: number,
   description: string,
   metadata?: Record<string, any>
-): Promise<{ success: boolean; newBalance: number; error?: string }> {
+): Promise<{ success: boolean; newBalance: number; transactionId?: string; error?: string }> {
   try {
     const result = await prisma.$transaction(async (tx) => {
       // Get current user balance
@@ -149,7 +149,7 @@ export async function deductFunds(
       })
 
       // Create transaction record
-      await tx.transaction.create({
+      const transaction = await tx.transaction.create({
         data: {
           userId,
           type: 'DEBIT',
@@ -161,12 +161,13 @@ export async function deductFunds(
         }
       })
 
-      return { newBalance: balanceAfter }
+      return { newBalance: balanceAfter, transactionId: transaction.id }
     })
 
     return {
       success: true,
-      newBalance: result.newBalance
+      newBalance: result.newBalance,
+      transactionId: result.transactionId
     }
   } catch (error) {
     console.error('Error deducting funds:', error)

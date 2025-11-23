@@ -7,6 +7,9 @@ import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import { getUserBalance, getTransactionHistory, formatCurrency } from '@/lib/payment/service'
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic'
+
 interface BalanceResponse {
   balance: number
   balanceFormatted: string

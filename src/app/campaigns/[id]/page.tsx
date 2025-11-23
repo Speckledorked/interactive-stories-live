@@ -158,44 +158,44 @@ export default function CampaignLobbyPage() {
   return (
     <div className="max-w-6xl mx-auto animate-fade-in">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6 sm:mb-8">
         <Link
           href="/campaigns"
-          className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6 transition-colors group"
+          className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-4 sm:mb-6 transition-colors group touch-manipulation"
         >
           <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           Back to Campaigns
         </Link>
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="relative mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="relative mb-2 sm:mb-3">
               <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary-500/10 via-accent-500/5 to-transparent blur-3xl"></div>
-              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent break-words">
                 {campaign.title}
               </h1>
             </div>
-            <p className="text-gray-300 leading-relaxed mb-4">{campaign.description}</p>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
+            <p className="text-sm sm:text-base text-gray-300 leading-relaxed mb-3 sm:mb-4">{campaign.description}</p>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm">
+              <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
                 <span className="text-gray-400">Universe:</span>
                 <span className="text-white font-medium">{campaign.universe}</span>
               </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
+              <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
                 <span className="text-gray-400">Turn:</span>
                 <span className="text-primary-400 font-medium">{campaign.worldMeta?.currentTurnNumber || 0}</span>
               </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
+              <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
                 <span className="text-gray-400">📅</span>
-                <span className="text-white font-medium">{campaign.worldMeta?.currentInGameDate || 'Day 1'}</span>
+                <span className="text-white font-medium truncate max-w-[150px] sm:max-w-none">{campaign.worldMeta?.currentInGameDate || 'Day 1'}</span>
               </div>
             </div>
           </div>
           {userRole === 'ADMIN' && (
             <Link
               href={`/campaigns/${campaignId}/admin`}
-              className="btn-secondary flex items-center gap-2"
+              className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto touch-manipulation min-h-[44px] flex-shrink-0"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -209,7 +209,7 @@ export default function CampaignLobbyPage() {
 
       {/* Navigation Tabs - Phase 8 Communication */}
       <div className="border-b border-dark-700/50 mb-8 sticky top-0 bg-dark-950/95 backdrop-blur-md z-10 -mx-4 px-4">
-        <nav className="flex space-x-2">
+        <nav className="flex space-x-2 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
           {[
             { key: 'overview', label: 'Overview', icon: '🏠' },
             { key: 'progression', label: 'Story Log', icon: '📜' },
@@ -220,14 +220,14 @@ export default function CampaignLobbyPage() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
-              className={`relative py-3 px-6 font-semibold text-sm transition-all duration-200 flex items-center gap-2 rounded-t-xl ${
+              className={`relative py-3 px-4 sm:px-6 font-semibold text-sm transition-all duration-200 flex items-center gap-2 rounded-t-xl whitespace-nowrap flex-shrink-0 touch-manipulation ${
                 activeTab === tab.key
                   ? 'text-primary-400 bg-gradient-to-b from-primary-500/10 to-transparent'
                   : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'
               }`}
             >
               <span className="text-base">{tab.icon}</span>
-              <span>{tab.label}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
               {activeTab === tab.key && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-600 via-primary-500 to-primary-400 shadow-glow"></div>
               )}
@@ -780,9 +780,9 @@ export default function CampaignLobbyPage() {
 
       {/* Character Creation Modal */}
       {showCreateCharacter && (
-        <div className="fixed inset-0 bg-gray-900/80 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-950 border border-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <h2 className="text-2xl font-bold mb-4 text-white">Create New Character</h2>
+        <div className="fixed inset-0 bg-gray-900/80 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-gray-950 border border-gray-800 rounded-lg max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 my-auto">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 text-white">Create New Character</h2>
             <EnhancedCreateCharacterForm
               campaignId={campaignId}
               onSuccess={() => {
@@ -799,30 +799,30 @@ export default function CampaignLobbyPage() {
       {/* Delete Character Confirmation Modal */}
       {deletingCharacterId && (
         <div className="fixed inset-0 bg-gray-900/80 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-950 border border-gray-800 rounded-lg max-w-md w-full p-6">
-            <h2 className="text-2xl font-bold mb-4 text-white">Delete Character?</h2>
-            <p className="text-gray-400 mb-6">
+          <div className="bg-gray-950 border border-gray-800 rounded-lg max-w-md w-full p-4 sm:p-6">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 text-white">Delete Character?</h2>
+            <p className="text-sm sm:text-base text-gray-400 mb-6">
               Are you sure you want to delete this character? This action cannot be undone.
               All associated actions and data will be permanently removed.
             </p>
             {deleteError && (
-              <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-4">
+              <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
                 {deleteError}
               </div>
             )}
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => {
                   setDeletingCharacterId(null)
                   setDeleteError('')
                 }}
-                className="btn-secondary flex-1"
+                className="btn-secondary flex-1 touch-manipulation min-h-[44px]"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDeleteCharacter(deletingCharacterId)}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors flex-1"
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors flex-1 touch-manipulation min-h-[44px]"
               >
                 Delete
               </button>

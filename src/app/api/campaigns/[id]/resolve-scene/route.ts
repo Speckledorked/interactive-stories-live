@@ -123,12 +123,8 @@ export async function POST(
       )
     }
 
-    // 4. Resolve the scene (this calls AI and updates DB)
-    console.log('🤖 Calling scene resolver...')
-    const resolutionResult = await resolveScene(campaignId, currentScene.id)
-
-    // 5. Deduct funds from user's balance
-    console.log('💳 Deducting funds...')
+    // 4. CRITICAL: Deduct funds BEFORE resolution to prevent free resolutions
+    console.log('💳 Deducting funds BEFORE resolution...')
     const deductResult = await deductFunds(
       user.userId,
       resolutionCost,
@@ -143,9 +139,48 @@ export async function POST(
     )
 
     if (!deductResult.success) {
-      console.error('⚠️ Failed to deduct funds (scene already resolved):', deductResult.error)
-      // Note: We don't fail the request if deduction fails after resolution,
-      // but we log it for manual review
+      console.error('❌ Failed to deduct funds:', deductResult.error)
+      return NextResponse.json<ErrorResponse>(
+        {
+          error: 'Payment failed',
+          details: deductResult.error || 'Unable to process payment. Please try again.'
+        },
+        { status: 402 }
+      )
+    }
+
+    // 5. Resolve the scene (this calls AI and updates DB)
+    console.log('🤖 Calling scene resolver...')
+    let resolutionResult
+    try {
+      resolutionResult = await resolveScene(campaignId, currentScene.id)
+    } catch (error) {
+      // If resolution fails, refund the user
+      console.error('❌ Scene resolution failed, refunding user:', error)
+      await prisma.transaction.create({
+        data: {
+          userId: user.userId,
+          type: 'REFUND',
+          amount: resolutionCost,
+          balanceBefore: deductResult.newBalance,
+          balanceAfter: deductResult.newBalance + resolutionCost,
+          description: `Refund for failed scene resolution (campaign ${campaignId})`,
+          metadata: {
+            campaignId,
+            sceneId: currentScene.id,
+            originalTransactionId: deductResult.transactionId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+        }
+      })
+
+      // Update user balance
+      await prisma.user.update({
+        where: { id: user.userId },
+        data: { balance: { increment: resolutionCost } }
+      })
+
+      throw error // Re-throw to be handled by outer catch block
     }
 
     // 6. Run world turn (advance clocks, generate background events)
@@ -169,7 +204,8 @@ export async function POST(
       payment: {
         charged: formatCurrency(resolutionCost),
         newBalance: formatCurrency(deductResult.newBalance),
-        playerCount
+        playerCount,
+        chargedBefore: true // Indicates payment was taken before resolution
       }
     })
   } catch (error) {

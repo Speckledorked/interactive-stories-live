@@ -2,7 +2,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import WorldStateDashboard from '@/components/admin/WorldStateDashboard'
 import ClockProgress from '@/components/clock/ClockProgress'
@@ -71,10 +71,14 @@ interface Member {
 export default function AdminPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const campaignId = params.id as string
 
+  // Read tab from URL parameter, default to 'dashboard'
+  const initialTab = searchParams?.get('tab') as 'dashboard' | 'ai' | 'npcs' | 'factions' | 'clocks' | 'invites' | 'members' | 'settings' || 'dashboard'
+
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'clocks' | 'invites' | 'members' | 'settings'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'clocks' | 'invites' | 'members' | 'settings'>(initialTab)
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [npcs, setNpcs] = useState<NPC[]>([])
   const [factions, setFactions] = useState<Faction[]>([])

@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
 import { pusherServer } from '@/lib/pusher'
+import { ExchangeManager } from '@/lib/game/exchange-manager'
 
 // GET active scenes
 export async function GET(
@@ -179,6 +180,22 @@ export async function POST(
         }
       }
     })
+
+    // Phase 16: Track the action in the exchange state so resolutions keep flowing
+    try {
+      const exchangeManager = new ExchangeManager(campaignId, sceneId)
+
+      // Ensure there's an active exchange for this scene
+      const sceneExchangeNumber = scene.currentExchange || 0
+      if (!sceneExchangeNumber) {
+        await exchangeManager.initializeExchange()
+      }
+
+      await exchangeManager.recordAction(characterId, action.id)
+    } catch (exchangeError) {
+      // Don't block action submission if exchange bookkeeping fails
+      console.error('Failed to record action in exchange state:', exchangeError)
+    }
 
     // Trigger Pusher event to notify all clients
     try {

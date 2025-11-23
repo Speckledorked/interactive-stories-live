@@ -483,56 +483,58 @@ export default function StoryPage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center justify-between gap-4 border-b border-dark-700/50 pb-2">
-          <div className="flex gap-2 overflow-x-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-dark-700/50 pb-2">
+          {/* Tabs - Horizontal scroll on mobile */}
+          <div className="flex gap-2 overflow-x-auto overflow-y-hidden -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
             <Link
               href={`/campaigns/${campaignId}`}
-              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
+              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
             >
               Overview
             </Link>
-            <span className="relative py-2.5 px-4 font-semibold text-sm text-primary-400 bg-gradient-to-b from-primary-500/10 to-transparent rounded-t-xl whitespace-nowrap">
+            <span className="relative py-2.5 px-4 font-semibold text-sm text-primary-400 bg-gradient-to-b from-primary-500/10 to-transparent rounded-t-xl whitespace-nowrap flex-shrink-0">
               Story
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-600 via-primary-500 to-primary-400 shadow-glow"></div>
             </span>
             <Link
               href={`/campaigns/${campaignId}/story-log`}
-              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
+              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
             >
               Story Log
             </Link>
             <Link
               href={`/campaigns/${campaignId}`}
-              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
+              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
             >
               Notes
             </Link>
             <Link
               href={`/campaigns/${campaignId}`}
-              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
+              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
             >
               Maps
             </Link>
             <Link
               href={`/campaigns/${campaignId}`}
-              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
+              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
             >
               Chat
             </Link>
             {isAdmin && (
               <Link
                 href={`/campaigns/${campaignId}/admin`}
-                className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap"
+                className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
               >
                 ⚙️ Admin
               </Link>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
             <button
               onClick={() => setShowKeyboardShortcuts(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all duration-200 whitespace-nowrap"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all duration-200 whitespace-nowrap touch-manipulation"
               title="Keyboard shortcuts"
             >
               <span>⌨️</span>
@@ -751,7 +753,7 @@ export default function StoryPage() {
 
                     return (
                       <div className={`card ${hasDefinedParticipants && allParticipantsSubmitted ? 'bg-green-500/10 border-green-500/50' : 'bg-yellow-500/10 border-yellow-500/50'}`}>
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                           <div className="flex-1">
                             <p className={`text-sm font-medium mb-1 ${hasDefinedParticipants && allParticipantsSubmitted ? 'text-green-400' : 'text-yellow-400'}`}>
                               🎲 GM Controls
@@ -775,13 +777,13 @@ export default function StoryPage() {
                               </p>
                             )}
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                             {/* Only show manual resolve for open scenes or as "force early" for closed scenes */}
                             {(!hasDefinedParticipants || !allParticipantsSubmitted) && (
                               <button
                                 onClick={() => handleResolveScene(scene.id)}
                                 disabled={resolving}
-                                className="btn-primary disabled:opacity-50 whitespace-nowrap"
+                                className="btn-primary disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
                                 title={hasDefinedParticipants ? "Force resolution before all participants submit" : "Manually resolve this exchange"}
                               >
                                 {resolving ? 'Resolving...' : hasDefinedParticipants ? 'Force Resolve' : 'Resolve Exchange'}
@@ -790,7 +792,7 @@ export default function StoryPage() {
                             <button
                               onClick={() => handleEndScene(scene.id)}
                               disabled={endingScene}
-                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
                             >
                               {endingScene ? 'Ending...' : 'End Scene'}
                             </button>

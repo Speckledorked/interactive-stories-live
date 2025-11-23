@@ -228,31 +228,20 @@ export async function POST(
       if (allParticipantsSubmitted && participantUserIds.length > 0) {
         console.log(`🎬 All participants submitted! Auto-resolving scene ${scene.sceneNumber}`)
 
-        // Update waitingOnUsers to empty and mark as RESOLVING
-        await prisma.scene.update({
-          where: { id: sceneId },
-          data: {
-            waitingOnUsers: [],
-            status: 'RESOLVING'
-          }
-        })
-
-        // Notify clients that resolution has started
-        await pusherServer.trigger(
-          `campaign-${campaignId}`,
-          'scene:resolving',
-          {
-            sceneId: sceneId,
-            sceneNumber: scene.sceneNumber,
-            timestamp: new Date()
-          }
-        )
-
         // Import and call resolveScene asynchronously (don't wait for it)
         const { resolveScene } = await import('@/lib/game/sceneResolver')
         const { runWorldTurn } = await import('@/lib/game/worldTurn')
 
         // Run in background - don't block the response
+        // Clear waitingOnUsers so the UI shows that everyone has acted,
+        // then let the resolver handle status transitions (it sets RESOLVING internally).
+        await prisma.scene.update({
+          where: { id: sceneId },
+          data: {
+            waitingOnUsers: []
+          }
+        })
+
         resolveScene(campaignId, sceneId)
           .then(async (result) => {
             console.log(`✅ Scene ${scene.sceneNumber} auto-resolved`)

@@ -33,9 +33,6 @@ export async function GET(request: NextRequest) {
 
     const requests = await prisma.friendRequest.findMany({
       where,
-      include: {
-        // We'll need to get user details manually since we don't have relations set up
-      },
       orderBy: {
         createdAt: 'desc',
       },

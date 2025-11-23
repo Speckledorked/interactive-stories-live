@@ -218,29 +218,29 @@ export default function NotificationPanel({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
-      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose} />
-      
-      <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+
+      <div className="absolute right-0 top-0 h-full w-full max-w-md bg-gradient-to-br from-dark-850 to-dark-900 shadow-elevated border-l border-dark-700">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-dark-700/50 bg-gradient-to-r from-primary-900/10 to-transparent">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Notifications</h2>
+            <h2 className="text-lg font-semibold text-white">Notifications</h2>
             {unreadCount > 0 && (
-              <span className="text-sm text-gray-500">{unreadCount} unread</span>
+              <span className="text-sm text-gray-400">{unreadCount} unread</span>
             )}
           </div>
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
               >
                 Mark all read
               </button>
             )}
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-white transition-colors text-xl"
             >
               ✕
             </button>
@@ -248,7 +248,7 @@ export default function NotificationPanel({
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-dark-700/50 bg-dark-800/30">
           {[
             { key: 'all', label: 'All' },
             { key: 'unread', label: 'Unread' },
@@ -258,10 +258,10 @@ export default function NotificationPanel({
             <button
               key={tab.key}
               onClick={() => setFilter(tab.key as any)}
-              className={`flex-1 py-2 px-1 text-sm font-medium border-b-2 ${
+              className={`flex-1 py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
                 filter === tab.key
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-primary-500 text-primary-400 bg-primary-900/20'
+                  : 'border-transparent text-gray-400 hover:text-gray-300'
               }`}
             >
               {tab.label}
@@ -270,10 +270,10 @@ export default function NotificationPanel({
         </div>
 
         {/* Notifications List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto max-h-[calc(100vh-140px)]">
           {loading ? (
             <div className="flex items-center justify-center p-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="spinner h-8 w-8"></div>
             </div>
           ) : notifications.length === 0 ? (
             <div className="text-center p-8 text-gray-500">
@@ -281,12 +281,12 @@ export default function NotificationPanel({
               <p>No notifications</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
+            <div className="divide-y divide-dark-700/30">
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`p-4 hover:bg-gray-50 cursor-pointer ${
-                    notification.status === 'UNREAD' ? 'bg-blue-50' : ''
+                  className={`p-4 hover:bg-white/5 cursor-pointer transition-colors ${
+                    notification.status === 'UNREAD' ? 'bg-primary-900/10 border-l-2 border-primary-500' : ''
                   }`}
                   onClick={() => handleNotificationClick(notification)}
                 >
@@ -297,7 +297,7 @@ export default function NotificationPanel({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <h4 className={`text-sm font-medium ${
-                          notification.status === 'UNREAD' ? 'text-gray-900' : 'text-gray-700'
+                          notification.status === 'UNREAD' ? 'text-white' : 'text-gray-300'
                         }`}>
                           {notification.title}
                         </h4>
@@ -308,13 +308,13 @@ export default function NotificationPanel({
                               e.stopPropagation();
                               dismissNotification(notification.id);
                             }}
-                            className="text-gray-400 hover:text-gray-600 text-xs"
+                            className="text-gray-500 hover:text-gray-300 text-xs transition-colors"
                           >
                             ✕
                           </button>
                         </div>
                       </div>
-                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                      <p className="text-sm text-gray-400 mt-1 line-clamp-2">
                         {notification.message}
                       </p>
                       <div className="flex items-center justify-between mt-2">
@@ -322,7 +322,7 @@ export default function NotificationPanel({
                           {getRelativeTime(notification.createdAt)}
                         </span>
                         {notification.campaign && (
-                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          <span className="text-xs text-gray-400 bg-dark-800/50 px-2 py-1 rounded border border-dark-700/50">
                             {notification.campaign.title}
                           </span>
                         )}

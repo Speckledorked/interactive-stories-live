@@ -4,6 +4,8 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import HarmTracker from './HarmTracker'
 import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
@@ -14,6 +16,8 @@ interface CharacterSheetDisplayProps {
 }
 
 export default function CharacterSheetDisplay({ character }: CharacterSheetDisplayProps) {
+  const params = useParams()
+  const campaignId = params?.id as string
   const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'inventory' | 'relationships'>('overview')
 
   if (!character) {
@@ -338,7 +342,9 @@ export default function CharacterSheetDisplay({ character }: CharacterSheetDispl
                     .map(([key, value]) => (
                       <div key={key} className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
                         <span className="text-gray-400 text-sm block mb-1 capitalize">{key}</span>
-                        <span className="text-white font-bold text-xl">{String(value)}</span>
+                        <span className="text-white font-bold text-xl">
+                          {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                        </span>
                       </div>
                     ))}
                   {resources.contacts && resources.contacts.length > 0 && (
@@ -346,9 +352,14 @@ export default function CharacterSheetDisplay({ character }: CharacterSheetDispl
                       <span className="text-gray-400 text-sm block mb-2">Contacts</span>
                       <div className="flex flex-wrap gap-2">
                         {resources.contacts.map((contact: string, idx: number) => (
-                          <span key={idx} className="text-xs bg-blue-900/30 text-blue-400 px-3 py-1 rounded-full border border-blue-700/30">
+                          <Link
+                            key={idx}
+                            href={`/campaigns/${campaignId}/wiki?type=NPC&search=${encodeURIComponent(contact)}`}
+                            className="text-xs bg-blue-900/30 text-blue-400 px-3 py-1 rounded-full border border-blue-700/30 hover:bg-blue-800/40 hover:border-blue-600/50 transition-colors cursor-pointer"
+                            title={`View ${contact} in wiki`}
+                          >
                             {contact}
-                          </span>
+                          </Link>
                         ))}
                       </div>
                     </div>

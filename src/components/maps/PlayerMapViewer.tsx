@@ -193,16 +193,17 @@ export function PlayerMapViewer({
 
   // Get atmospheric color based on scene description
   const getAtmosphericColor = (description?: string) => {
-    if (!description) return '#f3f4f6'
-    
+    if (!description) return '#1e293b' // Dark theme default
+
     const lower = description.toLowerCase()
-    if (lower.includes('dark') || lower.includes('dungeon')) return '#2d3748'
-    if (lower.includes('forest') || lower.includes('nature')) return '#38a169'
-    if (lower.includes('tavern') || lower.includes('warm')) return '#d69e2e'
-    if (lower.includes('castle') || lower.includes('stone')) return '#718096'
-    if (lower.includes('water') || lower.includes('ocean')) return '#3182ce'
-    
-    return '#f3f4f6'
+    if (lower.includes('dark') || lower.includes('dungeon')) return '#0f172a'
+    if (lower.includes('forest') || lower.includes('nature')) return '#064e3b'
+    if (lower.includes('tavern') || lower.includes('warm')) return '#78350f'
+    if (lower.includes('castle') || lower.includes('stone')) return '#334155'
+    if (lower.includes('water') || lower.includes('ocean')) return '#0c4a6e'
+    if (lower.includes('bright') || lower.includes('light') || lower.includes('outdoors')) return '#cbd5e1'
+
+    return '#1e293b' // Dark theme default
   }
 
   // Convert screen coordinates to map coordinates

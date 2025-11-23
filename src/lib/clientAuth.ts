@@ -10,7 +10,7 @@ const USER_KEY = 'ai_gm_user'
 /**
  * Store auth token and user info in localStorage
  */
-export function setAuth(token: string, user: { id: string; email: string }) {
+export function setAuth(token: string, user: { id: string; email: string; name?: string | null }) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(TOKEN_KEY, token)
     localStorage.setItem(USER_KEY, JSON.stringify(user))
@@ -30,7 +30,7 @@ export function getToken(): string | null {
 /**
  * Get stored user info
  */
-export function getUser(): { id: string; email: string } | null {
+export function getUser(): { id: string; email: string; name?: string | null } | null {
   if (typeof window !== 'undefined') {
     const userStr = localStorage.getItem(USER_KEY)
     if (userStr) {

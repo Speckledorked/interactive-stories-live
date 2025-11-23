@@ -416,6 +416,41 @@ export class NotificationService {
 
     return await prisma.notification.count({ where });
   }
+
+  // Helper: Send friend request notification
+  static async sendFriendRequest(receiverId: string, senderId: string, senderName: string) {
+    return await this.createNotification({
+      type: 'CAMPAIGN_INVITE', // We'll use this for now since FRIEND_REQUEST doesn't exist yet
+      title: 'New Friend Request',
+      message: `${senderName} sent you a friend request`,
+      userId: receiverId,
+      priority: 'NORMAL',
+      actionUrl: '/friends',
+      metadata: {
+        senderId,
+        senderName,
+        type: 'friend_request'
+      }
+    });
+  }
+
+  // Helper: Send friend request accepted notification
+  static async sendFriendRequestAccepted(userId: string, accepterId: string, accepterName: string) {
+    return await this.createNotification({
+      type: 'CAMPAIGN_INVITE', // We'll use this for now
+      title: 'Friend Request Accepted',
+      message: `${accepterName} accepted your friend request`,
+      userId,
+      priority: 'NORMAL',
+      actionUrl: '/friends',
+      metadata: {
+        accepterId,
+        accepterName,
+        type: 'friend_request_accepted'
+      }
+    });
+  }
 }
 
+export const notificationService = NotificationService;
 export default NotificationService;

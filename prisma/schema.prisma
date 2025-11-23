@@ -1295,3 +1295,42 @@ model WikiEntry {
   @@index([campaignId, isActive])
   @@map("wiki_entries")
 }
+
+//
+// FRIENDS SYSTEM
+//
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model FriendRequest {
+  id           String              @id @default(cuid())
+  senderId     String
+  receiverId   String
+  status       FriendRequestStatus @default(PENDING)
+  message      String?             @db.Text // Optional message with the request
+
+  createdAt    DateTime            @default(now())
+  respondedAt  DateTime?
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+  @@index([senderId])
+  @@map("friend_requests")
+}
+
+model Friendship {
+  id          String   @id @default(cuid())
+  user1Id     String   // Lower ID alphabetically for consistency
+  user2Id     String   // Higher ID alphabetically
+
+  createdAt   DateTime @default(now())
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+  @@map("friendships")
+}

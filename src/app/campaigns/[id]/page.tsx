@@ -14,6 +14,7 @@ import NotesPanel from '@/components/notes/NotesPanel'
 import NotificationPanel from '@/components/notifications/NotificationPanel'
 import TurnTracker from '@/components/turns/TurnTracker'
 import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
+import InviteModal from '@/components/campaigns/InviteModal'
 
 interface CampaignData {
   campaign: any
@@ -41,6 +42,7 @@ export default function CampaignLobbyPage() {
   const [creatingMap, setCreatingMap] = useState(false)
   const [campaignLogs, setCampaignLogs] = useState<any[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
+  const [showInviteModal, setShowInviteModal] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -365,11 +367,25 @@ export default function CampaignLobbyPage() {
         <div className="space-y-6">
           {/* Players */}
           <div className="card">
-            <h2 className="card-header">Players</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="card-header mb-0">Players ({campaign.memberships.length})</h2>
+              {userRole === 'ADMIN' && (
+                <button
+                  onClick={() => setShowInviteModal(true)}
+                  className="text-primary-400 hover:text-primary-300 text-sm"
+                  title="Invite players"
+                >
+                  + Invite
+                </button>
+              )}
+            </div>
             <div className="space-y-2">
               {campaign.memberships.map((member: any) => (
                 <div key={member.id} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-300">{member.user.email}</span>
+                  <div className="flex items-center gap-2">
+                    <div className={`h-2 w-2 rounded-full ${member.user.isOnline ? 'bg-green-500' : 'bg-gray-500'}`} />
+                    <span className="text-sm text-gray-300">{member.user.name || member.user.email}</span>
+                  </div>
                   <span className={`px-2 py-1 rounded text-xs ${
                     member.role === 'ADMIN'
                       ? 'bg-primary-500/20 text-primary-400'
@@ -814,6 +830,13 @@ export default function CampaignLobbyPage() {
           </div>
         </div>
       )}
+
+      {/* Invite Modal */}
+      <InviteModal
+        campaignId={campaignId}
+        isOpen={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+      />
     </div>
   )
 }

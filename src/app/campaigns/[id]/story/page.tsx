@@ -51,6 +51,8 @@ export default function StoryPage() {
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showSceneOptions, setShowSceneOptions] = useState(false)
   const [selectedSceneCharacters, setSelectedSceneCharacters] = useState<string[]>([])
+  const [showInsufficientFunds, setShowInsufficientFunds] = useState(false)
+  const [insufficientFundsDetails, setInsufficientFundsDetails] = useState('')
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
@@ -322,6 +324,14 @@ export default function StoryPage() {
 
       if (!response.ok) {
         const data = await response.json()
+
+        // Check if it's an insufficient funds error (402 Payment Required)
+        if (response.status === 402) {
+          setInsufficientFundsDetails(data.details || 'You need to add funds to resolve this scene.')
+          setShowInsufficientFunds(true)
+          return
+        }
+
         throw new Error(data.error || 'Failed to resolve scene')
       }
 
@@ -1125,6 +1135,78 @@ export default function StoryPage() {
         isOpen={showKeyboardShortcuts}
         onClose={() => setShowKeyboardShortcuts(false)}
       />
+
+      {/* Insufficient Funds Modal */}
+      {showInsufficientFunds && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/70 z-50"
+            onClick={() => setShowInsufficientFunds(false)}
+          />
+
+          {/* Modal */}
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg">
+            <div className="bg-gradient-to-br from-dark-850 to-dark-900 border border-danger-500/50 rounded-2xl shadow-elevated p-6 animate-scale-in">
+              <div className="flex items-start gap-4 mb-4">
+                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-danger-500/20 flex items-center justify-center">
+                  <svg
+                    className="w-6 h-6 text-danger-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-white mb-2">Insufficient Funds</h3>
+                  <p className="text-gray-300 text-sm leading-relaxed">
+                    {insufficientFundsDetails}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-dark-800/50 border border-dark-700 rounded-lg p-4 mb-6">
+                <p className="text-xs font-semibold text-gray-400 mb-2">Pricing Structure:</p>
+                <div className="text-xs text-gray-400 space-y-1">
+                  <p>• Solo play (1 player): $0.25 per scene</p>
+                  <p>• Small group (2-4 players): $0.50 per scene</p>
+                  <p>• Large group (5-6 players): $0.75 per scene</p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowInsufficientFunds(false)
+                    // The balance display in header should be clicked to add funds
+                    // For now, we'll just close and let user use the balance button
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white font-medium rounded-lg transition-all duration-200"
+                >
+                  Add Funds
+                </button>
+                <button
+                  onClick={() => setShowInsufficientFunds(false)}
+                  className="px-4 py-2.5 bg-dark-800 hover:bg-dark-700 text-gray-300 font-medium rounded-lg transition-all duration-200"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <p className="text-xs text-gray-500 mt-4 text-center">
+                Click &quot;Add Funds&quot; to add money to your account, or use the balance button in the header.
+              </p>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

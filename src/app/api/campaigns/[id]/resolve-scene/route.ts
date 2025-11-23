@@ -8,7 +8,7 @@ import { ErrorResponse } from '@/types/api'
 import { resolveScene, getCurrentScene } from '@/lib/game/sceneResolver'
 import { runWorldTurn } from '@/lib/game/worldTurn'
 import { prisma } from '@/lib/prisma'
-import { checkBalance, deductFunds, COST_PER_RESOLUTION, formatCurrency } from '@/lib/payment/service'
+import { checkBalance, deductFunds, calculateResolutionCost, formatCurrency } from '@/lib/payment/service'
 
 export async function POST(
   request: NextRequest,
@@ -25,22 +25,40 @@ export async function POST(
     console.log(`User: ${user.userId}`)
     console.log(`Requested scene: ${requestedSceneId || 'current'}`)
 
-    // 1. Verify user is admin of this campaign
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
+    // 1. Verify user is admin of this campaign AND get player count for pricing
+    const campaign = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      include: {
+        memberships: {
+          select: {
+            userId: true,
+            role: true
+          }
         }
       }
     })
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!campaign) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Campaign not found' },
+        { status: 404 }
+      )
+    }
+
+    const userMembership = campaign.memberships.find(m => m.userId === user.userId)
+    if (!userMembership || userMembership.role !== 'ADMIN') {
       return NextResponse.json<ErrorResponse>(
         { error: 'Only campaign admins can resolve scenes' },
         { status: 403 }
       )
     }
+
+    // Calculate player count and cost for this scene resolution
+    const playerCount = campaign.memberships.length
+    const resolutionCost = calculateResolutionCost(playerCount)
+
+    console.log(`👥 Player count: ${playerCount}`)
+    console.log(`💵 Resolution cost: ${formatCurrency(resolutionCost)}`)
 
     // 2. Get target scene (either requested scene or current scene)
     let currentScene
@@ -93,13 +111,13 @@ export async function POST(
 
     // 3. Check if user has sufficient balance
     console.log('💰 Checking user balance...')
-    const balanceCheck = await checkBalance(user.userId, COST_PER_RESOLUTION)
+    const balanceCheck = await checkBalance(user.userId, resolutionCost)
 
     if (!balanceCheck.sufficient) {
       return NextResponse.json<ErrorResponse>(
         {
           error: 'Insufficient balance',
-          details: `You need ${formatCurrency(COST_PER_RESOLUTION)} to resolve a scene. Your current balance is ${formatCurrency(balanceCheck.currentBalance)}. Please add funds to your account.`
+          details: `You need ${formatCurrency(resolutionCost)} to resolve a scene with ${playerCount} player${playerCount !== 1 ? 's' : ''}. Your current balance is ${formatCurrency(balanceCheck.currentBalance)}. Please add funds to your account.`
         },
         { status: 402 } // 402 Payment Required
       )
@@ -113,12 +131,14 @@ export async function POST(
     console.log('💳 Deducting funds...')
     const deductResult = await deductFunds(
       user.userId,
-      COST_PER_RESOLUTION,
-      `AI scene resolution for campaign ${campaignId}`,
+      resolutionCost,
+      `AI scene resolution for campaign ${campaignId} (${playerCount} player${playerCount !== 1 ? 's' : ''})`,
       {
         campaignId,
         sceneId: currentScene.id,
-        sceneNumber: currentScene.sceneNumber
+        sceneNumber: currentScene.sceneNumber,
+        playerCount,
+        costPerScene: resolutionCost
       }
     )
 
@@ -147,8 +167,9 @@ export async function POST(
         clocksCompleted: worldTurnResult.clocksCompleted
       },
       payment: {
-        charged: formatCurrency(COST_PER_RESOLUTION),
-        newBalance: formatCurrency(deductResult.newBalance)
+        charged: formatCurrency(resolutionCost),
+        newBalance: formatCurrency(deductResult.newBalance),
+        playerCount
       }
     })
   } catch (error) {

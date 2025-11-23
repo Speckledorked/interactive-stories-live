@@ -6,9 +6,36 @@ import { prisma } from '@/lib/prisma'
 // Minimum balance to add (50 cents)
 export const MINIMUM_ADD_AMOUNT = 50
 
-// Cost per AI resolution (in cents) - adjust as needed
-// For example: 5 cents per resolution
-export const COST_PER_RESOLUTION = 5
+// Player-based pricing for AI scene resolutions (in cents)
+// Pricing structure:
+// - Solo play (1 player): $0.25
+// - Small group (2-4 players): $0.50
+// - Large group (5-6 players): $0.75
+// - 7+ players: $1.00 (fallback for edge cases)
+export const PRICING = {
+  SOLO: 25,        // $0.25
+  SMALL_GROUP: 50, // $0.50
+  LARGE_GROUP: 75, // $0.75
+  EXTRA_LARGE: 100 // $1.00
+} as const
+
+/**
+ * Calculate the cost for an AI scene resolution based on player count
+ * @param playerCount - Number of players in the campaign
+ * @returns Cost in cents
+ */
+export function calculateResolutionCost(playerCount: number): number {
+  if (playerCount === 1) {
+    return PRICING.SOLO
+  } else if (playerCount >= 2 && playerCount <= 4) {
+    return PRICING.SMALL_GROUP
+  } else if (playerCount >= 5 && playerCount <= 6) {
+    return PRICING.LARGE_GROUP
+  } else {
+    // 7+ players or edge cases
+    return PRICING.EXTRA_LARGE
+  }
+}
 
 /**
  * Add funds to a user's account

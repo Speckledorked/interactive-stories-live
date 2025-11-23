@@ -81,9 +81,9 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
   }
 
   const getBalanceColorClass = () => {
-    if (balance < 10) return 'text-danger-400' // Less than $0.10
-    if (balance < 50) return 'text-warning-400' // Less than $0.50
-    return 'text-success-400'
+    if (balance < 25) return 'text-danger-400' // Less than $0.25 - can't afford even solo play
+    if (balance < 75) return 'text-warning-400' // Less than $0.75 - can afford solo/small but not large groups
+    return 'text-success-400' // Can afford any scene type
   }
 
   return (
@@ -133,9 +133,12 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
                     {balanceFormatted}
                   </span>
                 </p>
-                <p className="text-xs text-gray-500">
-                  AI scene resolutions cost $0.05 each
-                </p>
+                <div className="text-xs text-gray-500 space-y-1">
+                  <p className="font-semibold text-gray-400 mb-1">AI Scene Resolution Pricing:</p>
+                  <p>• Solo play (1 player): $0.25 per scene</p>
+                  <p>• Small group (2-4 players): $0.50 per scene</p>
+                  <p>• Large group (5-6 players): $0.75 per scene</p>
+                </div>
               </div>
 
               <div className="mb-4">

@@ -1,6 +1,6 @@
-// src/app/api/user/balance/add/route.ts
-// Create Stripe checkout session for adding funds
-// POST /api/user/balance/add
+// src/app/api/stripe/create-checkout-session/route.ts
+// Create a Stripe Checkout session for adding funds
+// POST /api/stripe/create-checkout-session
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
@@ -8,19 +8,19 @@ import { stripe } from '@/lib/stripe'
 import { ErrorResponse } from '@/types/api'
 import { MINIMUM_ADD_AMOUNT, formatCurrency } from '@/lib/payment/service'
 
-interface AddFundsRequest {
+interface CreateCheckoutSessionRequest {
   amountInCents: number
 }
 
-interface AddFundsResponse {
-  checkoutUrl: string
+interface CreateCheckoutSessionResponse {
   sessionId: string
+  url: string
 }
 
 export async function POST(request: NextRequest) {
   try {
     const user = requireAuth(request)
-    const body: AddFundsRequest = await request.json()
+    const body: CreateCheckoutSessionRequest = await request.json()
 
     // Validate amount
     if (!body.amountInCents || typeof body.amountInCents !== 'number') {
@@ -77,9 +77,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json<AddFundsResponse>({
-      checkoutUrl: session.url,
+    return NextResponse.json<CreateCheckoutSessionResponse>({
       sessionId: session.id,
+      url: session.url,
     })
   } catch (error) {
     console.error('Error creating checkout session:', error)

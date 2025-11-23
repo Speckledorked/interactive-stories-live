@@ -61,21 +61,15 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
 
       const data = await response.json()
 
-      if (response.ok) {
-        setSuccess(data.message)
-        setBalance(data.newBalance)
-        setBalanceFormatted(data.newBalanceFormatted)
-        setAddAmount('0.50')
-        setTimeout(() => {
-          setShowAddFunds(false)
-          setSuccess('')
-        }, 2000)
+      if (response.ok && data.checkoutUrl) {
+        // Redirect to Stripe Checkout
+        window.location.href = data.checkoutUrl
       } else {
-        setError(data.error || 'Failed to add funds')
+        setError(data.error || 'Failed to create checkout session')
+        setIsLoading(false)
       }
     } catch (err) {
-      setError('Failed to add funds. Please try again.')
-    } finally {
+      setError('Failed to create checkout session. Please try again.')
       setIsLoading(false)
     }
   }
@@ -205,8 +199,7 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
               </div>
 
               <p className="text-xs text-gray-500 mt-4 text-center">
-                Note: This is a demo implementation. In production, you would integrate
-                with a payment processor like Stripe.
+                Payments are securely processed by Stripe.
               </p>
             </div>
           </div>

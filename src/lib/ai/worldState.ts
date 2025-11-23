@@ -424,78 +424,41 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
     throw new Error('OPENAI_API_KEY not configured')
   }
 
-  // Build comprehensive character context
+  // Build focused character context - emphasize hooks, not stats
   const characterContext = campaign.characters.length > 0
-    ? `\n\nPLAYER CHARACTERS (use these details to personalize the opening scene):\n${campaign.characters.map(c => {
+    ? `\n\nPLAYER CHARACTERS:\n${campaign.characters.map(c => {
       const parts = [
-        `\n## ${c.name} (${c.pronouns || 'they/them'})`,
-        `Description: ${c.description || 'A mysterious adventurer'}`,
+        `\n## ${c.name}`,
+        `Concept: ${c.description || 'A mysterious adventurer'}`,
       ]
 
-      if (c.appearance) {
-        parts.push(`Appearance: ${c.appearance}`)
+      // Only include the most story-relevant details
+      if (c.backstory && c.backstory.length > 20) {
+        parts.push(`Background hint: ${c.backstory.substring(0, 80)}${c.backstory.length > 80 ? '...' : ''}`)
       }
 
-      if (c.personality) {
-        parts.push(`Personality: ${c.personality}`)
+      if (c.goals) {
+        parts.push(`Current drive: ${c.goals}`)
       }
 
-      parts.push(`Background: ${c.backstory || 'Unknown'}`)
-      parts.push(`Goals: ${c.goals || 'To be determined'}`)
-
+      // Location is important for scene setting
       if (c.currentLocation) {
-        parts.push(`Current Location: ${c.currentLocation}`)
+        parts.push(`Location: ${c.currentLocation}`)
       }
 
-      if (c.stats) {
-        const stats = c.stats as any
-        parts.push(`Stats: ${Object.entries(stats).map(([key, val]) => `${key} ${(val as number) >= 0 ? '+' : ''}${val}`).join(', ')}`)
-      }
-
+      // Only mention significant equipment or consequences
       if (c.equipment) {
         const eq = c.equipment as any
-        const items = []
-        if (eq.weapon) items.push(`Weapon: ${eq.weapon.name || eq.weapon}`)
-        if (eq.armor) items.push(`Armor: ${eq.armor.name || eq.armor}`)
-        if (items.length > 0) parts.push(`Equipment: ${items.join(', ')}`)
-      }
-
-      if (c.inventory) {
-        const inv = c.inventory as any
-        if (inv.items && inv.items.length > 0) {
-          const itemList = inv.items.slice(0, 5).map((item: any) =>
-            typeof item === 'string' ? item : `${item.name}${item.quantity ? ` (x${item.quantity})` : ''}`
-          ).join(', ')
-          parts.push(`Carrying: ${itemList}${inv.items.length > 5 ? ', and more...' : ''}`)
-        }
-      }
-
-      if (c.resources) {
-        const res = c.resources as any
-        const resourceParts = []
-        if (res.gold !== undefined) resourceParts.push(`${res.gold} gold`)
-        if (res.contacts && res.contacts.length > 0) resourceParts.push(`contacts: ${res.contacts.join(', ')}`)
-        if (resourceParts.length > 0) parts.push(`Resources: ${resourceParts.join('; ')}`)
-      }
-
-      if (c.moves && c.moves.length > 0) {
-        parts.push(`Special Moves: ${c.moves.slice(0, 3).join(', ')}${c.moves.length > 3 ? '...' : ''}`)
-      }
-
-      if (c.perks) {
-        const perks = c.perks as any
-        if (Array.isArray(perks) && perks.length > 0) {
-          parts.push(`Abilities: ${perks.map((p: any) => p.name).slice(0, 3).join(', ')}`)
-        }
+        if (eq.weapon) parts.push(`Notable: ${eq.weapon.name || eq.weapon}`)
       }
 
       if (c.consequences) {
         const cons = c.consequences as any
         if (cons.enemies && cons.enemies.length > 0) {
-          parts.push(`⚠️ Enemies: ${cons.enemies.join(', ')}`)
+          parts.push(`Threat: ${cons.enemies[0]}`) // Just the first enemy
         }
         if (cons.debts && cons.debts.length > 0) {
-          parts.push(`⚠️ Debts: ${cons.debts.join(', ')}`)
+          parts.push(`Complication: ${cons.debts[0]}`) // Just the first debt
         }
       }
 
@@ -514,28 +477,36 @@ ${characterContext}
 LAST SCENE RESOLUTION:
 ${lastScene?.sceneResolutionText || 'This is the first scene of the campaign.'}
 
-Generate a compelling, dynamic scene introduction that:
-1. PERSONALIZE to the characters - reference their specific equipment, inventory, location, backstory, goals, and abilities
-2. Creates IMMEDIATE stakes and tension - what's at risk right now?
-3. Provides vivid, immersive sensory details specific to the ${campaign.universe} setting
-4. Presents a clear dramatic question or choice the characters must face
-5. Sets the tone and atmosphere appropriate to the universe
-6. If characters have enemies, debts, or consequences listed - consider incorporating these into the opening tension
-7. If characters have specific locations listed, start them there rather than a generic gathering point
-8. Reference their equipment/inventory naturally (e.g., "As you check your sword..." or "The gold purse weighs heavy...")
-9. Is 2-4 paragraphs long and ends with a clear moment of decision or action
+Generate an engaging, atmospheric scene introduction that:
 
-CRITICAL - For the first scene of a campaign:
-- DO NOT use generic openings like "The heroes gather" or "Times are uncertain"
-- START with the characters already in a specific situation that relates to their backgrounds/goals
-- USE their equipment, resources, and abilities to make the scene feel tailored to THEM
-- REFERENCE their backstories, enemies, or debts to create personal stakes
-- If they have a current location, start there; otherwise, choose a location relevant to their goals
-- Establish the world through specific details that matter to THESE characters, not generic exposition
+**TONE & STYLE:**
+- Start with ACTION or ATMOSPHERE, not character introductions
+- Show, don't tell - use vivid sensory details
+- Create IMMEDIATE tension or intrigue
+- Be subtle - weave in character details naturally, don't list them
+- Match the tone of ${campaign.universe}
 
-Example approach: If a character has "seeking revenge" as a goal and a sword as equipment, start with them tracking their enemy. If they have contacts listed, maybe a contact brings them urgent news. Make it SPECIFIC to who they are.
+**WHAT TO INCLUDE:**
+- A specific, compelling situation already in progress
+- Clear stakes - something matters RIGHT NOW
+- Hints at the character's background/goals through context, not exposition
+- A dramatic question or choice that demands action
+- 2-3 paragraphs maximum
 
-Write ONLY the scene introduction text. Do not include JSON, meta-commentary, or any other formatting.`
+**WHAT TO AVOID:**
+- Generic openings ("The heroes gather...", "Times are uncertain...")
+- Character introductions or descriptions
+- Listing equipment, stats, or inventory
+- Explaining backstories or goals directly
+- Long exposition dumps
+- "Your character feels/thinks/remembers" - stay external and immersive
+
+**APPROACH:**
+If they have a location, start there mid-scene. If they have enemies, maybe hint at danger. If they have goals, drop them into a situation that challenges those goals. But do it all through ATMOSPHERE and ACTION, not explanation.
+
+Example: Instead of "You check your sword as you remember your oath of vengeance," write "The blade catches firelight from the distant campfires. Three days of tracking, and finally, smoke on the horizon."
+
+Write ONLY the scene introduction. No JSON, no meta-commentary, no character sheets.`
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -547,11 +518,11 @@ Write ONLY the scene introduction text. Do not include JSON, meta-commentary, or
       body: JSON.stringify({
         model: 'gpt-4o-mini', // Cost optimization: mini model for scene intros
         messages: [
-          { role: 'system', content: 'You are a creative game master.' },
+          { role: 'system', content: 'You are an evocative, atmospheric storyteller and game master. You show, don\'t tell. You create tension through imagery and implication, not explanation.' },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.85, // High creativity for scene intros (balanced)
-        max_tokens: 800 // ~2-4 paragraphs (cost optimization)
+        temperature: 0.9, // Higher creativity for more varied, atmospheric openings
+        max_tokens: 600 // Shorter, punchier scenes (2-3 paragraphs)
       })
     })
 

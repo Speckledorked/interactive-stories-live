@@ -8,6 +8,7 @@ import { ErrorResponse } from '@/types/api'
 import { resolveScene, getCurrentScene } from '@/lib/game/sceneResolver'
 import { runWorldTurn } from '@/lib/game/worldTurn'
 import { prisma } from '@/lib/prisma'
+import { checkBalance, deductFunds, calculateResolutionCost, formatCurrency } from '@/lib/payment/service'
 
 export async function POST(
   request: NextRequest,
@@ -24,22 +25,40 @@ export async function POST(
     console.log(`User: ${user.userId}`)
     console.log(`Requested scene: ${requestedSceneId || 'current'}`)
 
-    // 1. Verify user is admin of this campaign
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
+    // 1. Verify user is admin of this campaign AND get player count for pricing
+    const campaign = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      include: {
+        memberships: {
+          select: {
+            userId: true,
+            role: true
+          }
         }
       }
     })
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!campaign) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Campaign not found' },
+        { status: 404 }
+      )
+    }
+
+    const userMembership = campaign.memberships.find(m => m.userId === user.userId)
+    if (!userMembership || userMembership.role !== 'ADMIN') {
       return NextResponse.json<ErrorResponse>(
         { error: 'Only campaign admins can resolve scenes' },
         { status: 403 }
       )
     }
+
+    // Calculate player count and cost for this scene resolution
+    const playerCount = campaign.memberships.length
+    const resolutionCost = calculateResolutionCost(playerCount)
+
+    console.log(`👥 Player count: ${playerCount}`)
+    console.log(`💵 Resolution cost: ${formatCurrency(resolutionCost)}`)
 
     // 2. Get target scene (either requested scene or current scene)
     let currentScene
@@ -90,15 +109,50 @@ export async function POST(
       `📝 Scene ${currentScene.sceneNumber} has ${sceneActions.length} action(s)`
     )
 
-    // 3. Resolve the scene (this calls AI and updates DB)
+    // 3. Check if user has sufficient balance
+    console.log('💰 Checking user balance...')
+    const balanceCheck = await checkBalance(user.userId, resolutionCost)
+
+    if (!balanceCheck.sufficient) {
+      return NextResponse.json<ErrorResponse>(
+        {
+          error: 'Insufficient balance',
+          details: `You need ${formatCurrency(resolutionCost)} to resolve a scene with ${playerCount} player${playerCount !== 1 ? 's' : ''}. Your current balance is ${formatCurrency(balanceCheck.currentBalance)}. Please add funds to your account.`
+        },
+        { status: 402 } // 402 Payment Required
+      )
+    }
+
+    // 4. Resolve the scene (this calls AI and updates DB)
     console.log('🤖 Calling scene resolver...')
     const resolutionResult = await resolveScene(campaignId, currentScene.id)
 
-    // 4. Run world turn (advance clocks, generate background events)
+    // 5. Deduct funds from user's balance
+    console.log('💳 Deducting funds...')
+    const deductResult = await deductFunds(
+      user.userId,
+      resolutionCost,
+      `AI scene resolution for campaign ${campaignId} (${playerCount} player${playerCount !== 1 ? 's' : ''})`,
+      {
+        campaignId,
+        sceneId: currentScene.id,
+        sceneNumber: currentScene.sceneNumber,
+        playerCount,
+        costPerScene: resolutionCost
+      }
+    )
+
+    if (!deductResult.success) {
+      console.error('⚠️ Failed to deduct funds (scene already resolved):', deductResult.error)
+      // Note: We don't fail the request if deduction fails after resolution,
+      // but we log it for manual review
+    }
+
+    // 6. Run world turn (advance clocks, generate background events)
     console.log('🌍 Running world turn...')
     const worldTurnResult = await runWorldTurn(campaignId)
 
-    // 5. Return success with results
+    // 7. Return success with results
     return NextResponse.json({
       success: true,
       message: 'Scene resolved successfully',
@@ -111,6 +165,11 @@ export async function POST(
       worldTurn: {
         clocksAdvanced: worldTurnResult.clocksAdvanced,
         clocksCompleted: worldTurnResult.clocksCompleted
+      },
+      payment: {
+        charged: formatCurrency(resolutionCost),
+        newBalance: formatCurrency(deductResult.newBalance),
+        playerCount
       }
     })
   } catch (error) {

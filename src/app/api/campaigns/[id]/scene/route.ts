@@ -228,11 +228,25 @@ export async function POST(
       if (allParticipantsSubmitted && participantUserIds.length > 0) {
         console.log(`🎬 All participants submitted! Auto-resolving scene ${scene.sceneNumber}`)
 
-        // Update waitingOnUsers to empty
+        // Update waitingOnUsers to empty and mark as RESOLVING
         await prisma.scene.update({
           where: { id: sceneId },
-          data: { waitingOnUsers: [] }
+          data: {
+            waitingOnUsers: [],
+            status: 'RESOLVING'
+          }
         })
+
+        // Notify clients that resolution has started
+        await pusherServer.trigger(
+          `campaign-${campaignId}`,
+          'scene:resolving',
+          {
+            sceneId: sceneId,
+            sceneNumber: scene.sceneNumber,
+            timestamp: new Date()
+          }
+        )
 
         // Import and call resolveScene asynchronously (don't wait for it)
         const { resolveScene } = await import('@/lib/game/sceneResolver')
@@ -255,8 +269,25 @@ export async function POST(
               }
             )
           })
-          .catch((error) => {
+          .catch(async (error) => {
             console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`, error)
+
+            // Notify clients of failure and reset scene to AWAITING_ACTIONS
+            await prisma.scene.update({
+              where: { id: sceneId },
+              data: { status: 'AWAITING_ACTIONS' }
+            })
+
+            await pusherServer.trigger(
+              `campaign-${campaignId}`,
+              'scene:resolution-failed',
+              {
+                sceneId: sceneId,
+                sceneNumber: scene.sceneNumber,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                timestamp: new Date()
+              }
+            )
           })
       } else {
         // Update waitingOnUsers to track who hasn't submitted yet

@@ -464,6 +464,18 @@ export default function StoryPage() {
     selectedCharacterId && canParticipateInScene(scene, selectedCharacterId)
   )
 
+  const getCurrentStageText = (scene: any) => {
+    const resolutions = scene.sceneResolutionText
+      ?.split('\n\n---\n\n')
+      .filter((part: string) => part.trim().length > 0)
+
+    if (resolutions && resolutions.length > 0) {
+      return resolutions[resolutions.length - 1]
+    }
+
+    return scene.sceneIntroText
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
       {/* Navigation Bar */}
@@ -567,6 +579,7 @@ export default function StoryPage() {
               const userHasSubmitted = hasUserSubmitted(scene)
               const waitingOn = (scene.waitingOnUsers as any) || []
               const isWaitingOnUser = waitingOn.includes(user?.id)
+              const currentStageText = getCurrentStageText(scene)
 
               return (
                 <div key={scene.id} className="space-y-4">
@@ -578,7 +591,7 @@ export default function StoryPage() {
                         </h2>
                         {/* Scene mood indicators */}
                         <div className="flex gap-2">
-                          {detectSceneMood(scene.sceneIntroText).map((mood, idx) => (
+                          {detectSceneMood(currentStageText).map((mood, idx) => (
                             <SceneMoodTag key={idx} mood={mood} />
                           ))}
                         </div>
@@ -601,7 +614,7 @@ export default function StoryPage() {
 
                     <div className="prose prose-invert max-w-none">
                       <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
-                        {scene.sceneIntroText}
+                        {currentStageText}
                       </p>
                     </div>
 
@@ -610,7 +623,7 @@ export default function StoryPage() {
                       <div className="mt-4">
                         <NPCRelationshipHints
                           hints={extractNPCHintsFromScene(
-                            scene.sceneIntroText,
+                            currentStageText,
                             campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
                           )}
                         />

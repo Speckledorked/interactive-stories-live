@@ -3,14 +3,33 @@
 
 import Stripe from 'stripe'
 
-// Initialize Stripe with secret key (server-side only)
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set in environment variables')
+// Lazy initialization of Stripe to avoid build-time environment variable checks
+let stripeInstance: Stripe | null = null
+
+function getStripeInstance(): Stripe {
+  if (!stripeInstance) {
+    // Initialize Stripe with secret key (server-side only)
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not set in environment variables')
+    }
+
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-11-17.clover',
+      typescript: true,
+    })
+  }
+
+  return stripeInstance
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-11-17.clover',
-  typescript: true,
+// Export a proxy that lazily initializes Stripe on first access
+export const stripe = new Proxy({} as Stripe, {
+  get: (_target, prop) => {
+    const instance = getStripeInstance()
+    const value = instance[prop as keyof Stripe]
+    // Bind methods to the instance to maintain 'this' context
+    return typeof value === 'function' ? value.bind(instance) : value
+  }
 })
 
 // Publishable key for client-side

@@ -89,7 +89,11 @@ export default function StoryPage() {
         const allScenesResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/scenes`)
         if (allScenesResponse.ok) {
           const allScenesData = await allScenesResponse.json()
-          const resolved = allScenesData.scenes?.filter((s: any) => s.status === 'RESOLVED') || []
+          const resolved =
+            allScenesData.scenes?.filter((s: any) => s.status === 'RESOLVED') || []
+
+          // Always keep the latest resolved scene first so we show the freshest context
+          resolved.sort((a: any, b: any) => (b.sceneNumber || 0) - (a.sceneNumber || 0))
           setResolvedScenes(resolved)
         }
       } catch (err) {
@@ -440,6 +444,8 @@ export default function StoryPage() {
   }
 
   const selectedCharacter = userCharacters.find(c => c.id === selectedCharacterId)
+  const latestResolvedScene =
+    resolvedScenes.find(scene => scene.sceneResolutionText?.trim()) || resolvedScenes[0]
 
   // Helper to check if a character can participate in a scene
   const canParticipateInScene = (scene: any, characterId: string) => {
@@ -834,17 +840,17 @@ export default function StoryPage() {
               </div>
 
               {/* Show story context if there are resolved scenes */}
-              {resolvedScenes.length > 0 && (
-                <div className="max-w-2xl mx-auto mb-8">
+              {latestResolvedScene && (
+                <div className="max-w-3xl mx-auto mb-8 space-y-6">
                   <div className="bg-dark-800/50 rounded-lg p-4 border border-dark-700/50">
                     <div className="flex items-start gap-3 mb-3">
                       <span className="text-2xl">📖</span>
                       <div className="flex-1">
                         <h3 className="font-bold text-white mb-1">Last Scene Summary</h3>
                         <p className="text-sm text-gray-400 line-clamp-3">
-                          {resolvedScenes[0].sceneResolutionText
-                            ? resolvedScenes[0].sceneResolutionText.slice(0, 200) + '...'
-                            : 'Scene resolved'}
+                          {latestResolvedScene.sceneResolutionText
+                            ? latestResolvedScene.sceneResolutionText.slice(0, 200) + '...'
+                            : latestResolvedScene.sceneIntroText || 'Scene resolved'}
                         </p>
                       </div>
                     </div>
@@ -855,6 +861,36 @@ export default function StoryPage() {
                       View complete story log →
                     </Link>
                   </div>
+
+                  {latestResolvedScene.sceneResolutionText && (
+                    <div className="bg-dark-800/60 rounded-lg border border-dark-700/60 p-6">
+                      <div className="flex items-start gap-3 mb-4">
+                        <span className="text-2xl">🎬</span>
+                        <div>
+                          <h3 className="text-lg font-bold text-white">Most Recent Resolution</h3>
+                          <p className="text-sm text-gray-400">
+                            Revisit what just happened before starting the next exchange.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        {latestResolvedScene.sceneResolutionText
+                          .split('\n\n---\n\n')
+                          .filter((resolution: string) => resolution.trim().length > 0)
+                          .map((resolution: string, idx: number) => (
+                            <div key={idx} className={idx > 0 ? 'pt-4 border-t border-gray-700/70' : ''}>
+                              {latestResolvedScene.sceneResolutionText.includes('---') && (
+                                <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">
+                                  Exchange {idx + 1}
+                                </p>
+                              )}
+                              <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">{resolution}</p>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

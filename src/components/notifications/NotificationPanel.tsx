@@ -3,8 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { NotificationService } from '@/lib/notifications/notification-service';
-import { getPusherClient, isPusherConfigured } from '@/lib/realtime/pusher-client';
+import { getPusherClient } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
 
 interface Notification {
@@ -86,11 +85,6 @@ export default function NotificationPanel({
   };
 
   const setupRealtimeSubscription = () => {
-    if (!isPusherConfigured()) {
-      console.warn('Pusher is not configured. Realtime notifications disabled.');
-      return;
-    }
-
     const pusher = getPusherClient();
     const channel = pusher.subscribe(`user-${userId}`);
 
@@ -107,10 +101,6 @@ export default function NotificationPanel({
   };
 
   const cleanup = () => {
-    if (!isPusherConfigured()) {
-      return;
-    }
-
     const pusher = getPusherClient();
     pusher.unsubscribe(`user-${userId}`);
   };

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TutorialService } from '@/lib/tutorial/tutorial-service';
 import { verifyAuth } from '@/lib/auth';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/tutorial/progress
  * Get user's tutorial progress

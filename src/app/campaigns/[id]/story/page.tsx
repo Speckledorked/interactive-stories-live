@@ -31,6 +31,7 @@ export default function StoryPage() {
   const [campaign, setCampaign] = useState<any>(null)
   const [currentScene, setCurrentScene] = useState<any>(null)
   const [activeScenes, setActiveScenes] = useState<any[]>([])
+  const [resolvedScenes, setResolvedScenes] = useState<any[]>([])
   const [userCharacters, setUserCharacters] = useState<any[]>([])
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>('')
   const [actionText, setActionText] = useState<Record<string, string>>({})
@@ -48,6 +49,8 @@ export default function StoryPage() {
   const [startingScene, setStartingScene] = useState(false)
   const [endingScene, setEndingScene] = useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
+  const [showSceneOptions, setShowSceneOptions] = useState(false)
+  const [selectedSceneCharacters, setSelectedSceneCharacters] = useState<string[]>([])
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
@@ -78,6 +81,19 @@ export default function StoryPage() {
       const sceneData = await sceneResponse.json()
       setCurrentScene(sceneData.scene)
       setActiveScenes(sceneData.scenes || [])
+
+      // Load all scenes to find resolved ones
+      try {
+        const allScenesResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/scenes`)
+        if (allScenesResponse.ok) {
+          const allScenesData = await allScenesResponse.json()
+          const resolved = allScenesData.scenes?.filter((s: any) => s.status === 'RESOLVED') || []
+          setResolvedScenes(resolved)
+        }
+      } catch (err) {
+        console.error('Failed to load resolved scenes:', err)
+        // Not critical - continue without resolved scenes
+      }
 
       // Load world state changes for scenes
       const changesMap: Record<string, WorldStateChange[]> = {}
@@ -318,7 +334,7 @@ export default function StoryPage() {
     }
   }
 
-  const handleStartNewScene = async () => {
+  const handleStartNewScene = async (characterIds?: string[]) => {
     setError('')
     setSuccess('')
     setStartingScene(true)
@@ -326,7 +342,10 @@ export default function StoryPage() {
     try {
       const response = await authenticatedFetch(
         `/api/campaigns/${campaignId}/start-scene`,
-        { method: 'POST' }
+        {
+          method: 'POST',
+          body: JSON.stringify({ characterIds })
+        }
       )
 
       if (!response.ok) {
@@ -335,12 +354,43 @@ export default function StoryPage() {
       }
 
       setSuccess('New scene started!')
+      setShowSceneOptions(false)
+      setSelectedSceneCharacters([])
       await loadData()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start scene')
     } finally {
       setStartingScene(false)
     }
+  }
+
+  const handleContinueStory = () => {
+    handleStartNewScene() // No character IDs - AI chooses based on story flow
+  }
+
+  const handleCharacterFocusedScene = () => {
+    if (selectedSceneCharacters.length === 0) {
+      setError('Please select at least one character')
+      return
+    }
+    handleStartNewScene(selectedSceneCharacters)
+  }
+
+  const handleFullPartyScene = () => {
+    const allCharacterIds = campaign?.characters?.map((c: any) => c.id) || []
+    if (allCharacterIds.length === 0) {
+      setError('No characters available')
+      return
+    }
+    handleStartNewScene(allCharacterIds)
+  }
+
+  const toggleCharacterSelection = (characterId: string) => {
+    setSelectedSceneCharacters(prev =>
+      prev.includes(characterId)
+        ? prev.filter(id => id !== characterId)
+        : [...prev, characterId]
+    )
   }
 
   const handleEndScene = async (sceneId: string) => {
@@ -743,22 +793,193 @@ export default function StoryPage() {
               )
             })
           ) : (
-            <div className="card text-center py-12">
-              <div className="text-6xl mb-4">📜</div>
-              <h2 className="text-xl font-bold text-white mb-2">No Active Scene</h2>
-              <p className="text-gray-400 mb-6">
-                {isAdmin
-                  ? 'Start a new scene to begin the adventure'
-                  : 'Waiting for the GM to start a scene'}
-              </p>
+            <div className="card py-12">
+              <div className="text-center mb-8">
+                <div className="text-6xl mb-4">📜</div>
+                <h2 className="text-xl font-bold text-white mb-2">
+                  {resolvedScenes.length > 0 ? 'Scene Complete!' : 'No Active Scene'}
+                </h2>
+                <p className="text-gray-400 mb-6">
+                  {resolvedScenes.length > 0 ? (
+                    <>The adventure continues... What happens next?</>
+                  ) : (
+                    <>{isAdmin ? 'Start a new scene to begin the adventure' : 'Waiting for the GM to start a scene'}</>
+                  )}
+                </p>
+              </div>
+
+              {/* Show story context if there are resolved scenes */}
+              {resolvedScenes.length > 0 && (
+                <div className="max-w-2xl mx-auto mb-8">
+                  <div className="bg-dark-800/50 rounded-lg p-4 border border-dark-700/50">
+                    <div className="flex items-start gap-3 mb-3">
+                      <span className="text-2xl">📖</span>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-white mb-1">Last Scene Summary</h3>
+                        <p className="text-sm text-gray-400 line-clamp-3">
+                          {resolvedScenes[0].sceneResolutionText
+                            ? resolvedScenes[0].sceneResolutionText.slice(0, 200) + '...'
+                            : 'Scene resolved'}
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href={`/campaigns/${campaignId}/story-log`}
+                      className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+                    >
+                      View complete story log →
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
               {isAdmin && (
-                <button
-                  onClick={handleStartNewScene}
-                  disabled={startingScene}
-                  className="btn-primary disabled:opacity-50"
-                >
-                  {startingScene ? 'Starting...' : '🎬 Start First Scene'}
-                </button>
+                <div className="max-w-2xl mx-auto space-y-4">
+                  {!showSceneOptions ? (
+                    <>
+                      <button
+                        onClick={handleContinueStory}
+                        disabled={startingScene}
+                        className="btn-primary w-full disabled:opacity-50 text-lg py-4"
+                      >
+                        {startingScene ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <div className="spinner h-5 w-5"></div>
+                            Generating scene...
+                          </span>
+                        ) : (
+                          <span className="flex items-center justify-center gap-2">
+                            🎬 {resolvedScenes.length > 0 ? 'Continue Story' : 'Start First Scene'}
+                          </span>
+                        )}
+                      </button>
+
+                      {resolvedScenes.length > 0 && campaign?.characters?.length > 0 && (
+                        <button
+                          onClick={() => setShowSceneOptions(true)}
+                          className="w-full text-sm text-primary-400 hover:text-primary-300 transition-colors py-2"
+                        >
+                          ⚙️ More scene options...
+                        </button>
+                      )}
+
+                      {resolvedScenes.length > 0 && (
+                        <p className="text-xs text-gray-500 text-center">
+                          The AI will generate a scene that continues naturally from where you left off
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="bg-dark-800/50 rounded-lg border border-dark-700/50 p-6 space-y-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-white text-lg">Scene Creation Options</h3>
+                        <button
+                          onClick={() => {
+                            setShowSceneOptions(false)
+                            setSelectedSceneCharacters([])
+                          }}
+                          className="text-gray-400 hover:text-white"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Option 1: Continue Story */}
+                      <div className="space-y-2">
+                        <button
+                          onClick={handleContinueStory}
+                          disabled={startingScene}
+                          className="btn-primary w-full disabled:opacity-50"
+                        >
+                          {startingScene ? 'Generating...' : '📖 Continue Story Naturally'}
+                        </button>
+                        <p className="text-xs text-gray-500">
+                          AI chooses the next scene based on story flow and character goals
+                        </p>
+                      </div>
+
+                      <div className="border-t border-dark-700/50 my-4"></div>
+
+                      {/* Option 2: Full Party Scene */}
+                      {campaign?.characters?.length > 1 && (
+                        <>
+                          <div className="space-y-2">
+                            <button
+                              onClick={handleFullPartyScene}
+                              disabled={startingScene}
+                              className="btn-secondary w-full disabled:opacity-50"
+                            >
+                              {startingScene ? 'Generating...' : '👥 Full Party Scene'}
+                            </button>
+                            <p className="text-xs text-gray-500">
+                              Create a scene with all {campaign.characters.length} characters
+                            </p>
+                          </div>
+
+                          <div className="border-t border-dark-700/50 my-4"></div>
+                        </>
+                      )}
+
+                      {/* Option 3: Character-Focused Scene */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="font-bold text-white text-sm">
+                            🎭 Character-Focused Scene
+                          </label>
+                          <span className="text-xs text-gray-500">
+                            {selectedSceneCharacters.length} selected
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto">
+                          {campaign?.characters?.map((character: any) => (
+                            <label
+                              key={character.id}
+                              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                selectedSceneCharacters.includes(character.id)
+                                  ? 'bg-primary-900/20 border-primary-700/50'
+                                  : 'bg-dark-800/30 border-dark-700/50 hover:border-dark-600/50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedSceneCharacters.includes(character.id)}
+                                onChange={() => toggleCharacterSelection(character.id)}
+                                className="w-4 h-4 accent-primary-500"
+                              />
+                              <div className="flex-1">
+                                <div className="font-medium text-white">{character.name}</div>
+                                <div className="text-xs text-gray-400 truncate">
+                                  {character.concept || character.description}
+                                </div>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+
+                        <button
+                          onClick={handleCharacterFocusedScene}
+                          disabled={startingScene || selectedSceneCharacters.length === 0}
+                          className="btn-secondary w-full disabled:opacity-50"
+                        >
+                          {startingScene
+                            ? 'Generating...'
+                            : `Create Scene with ${selectedSceneCharacters.length || 0} Character${selectedSceneCharacters.length !== 1 ? 's' : ''}`}
+                        </button>
+                        <p className="text-xs text-gray-500">
+                          AI will create a scene focused on the selected character{selectedSceneCharacters.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!isAdmin && (
+                <p className="text-center text-gray-500 text-sm">
+                  Waiting for the GM to start the next scene...
+                </p>
               )}
             </div>
           )}

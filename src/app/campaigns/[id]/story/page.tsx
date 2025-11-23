@@ -127,10 +127,24 @@ export default function StoryPage() {
       loadData()
     })
 
+    // Listen for scene resolution starting
+    channel.bind('scene:resolving', (data: any) => {
+      console.log('Scene resolving:', data)
+      // Refresh to show RESOLVING status
+      loadData()
+    })
+
     // Listen for scene resolutions
     channel.bind('scene:resolved', (data: any) => {
       console.log('Scene resolved:', data)
       // Refresh data so scene resolution appears
+      loadData()
+    })
+
+    // Listen for resolution failures
+    channel.bind('scene:resolution-failed', (data: any) => {
+      console.error('Scene resolution failed:', data)
+      alert(`Scene resolution failed: ${data.error}\n\nPlease try manually resolving the scene or contact support.`)
       loadData()
     })
 

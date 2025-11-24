@@ -62,6 +62,11 @@ export default function ChatPanel({
       const campaignChannel = subscribeToCampaignMessages(campaignId);
       const whisperChannel = subscribeToUserWhispers(currentUserId);
 
+      if (!campaignChannel || !whisperChannel) {
+        console.warn('Could not subscribe to Pusher channels. Real-time chat features will be disabled.');
+        return;
+      }
+
       // Listen for new messages
       campaignChannel.bind('new-message', (message: RealtimeMessage) => {
         setMessages(prev => [...prev, message]);
@@ -88,8 +93,11 @@ export default function ChatPanel({
       return () => {
         campaignChannel.unbind_all();
         whisperChannel.unbind_all();
-        getPusherClient().unsubscribe(`campaign-${campaignId}`);
-        getPusherClient().unsubscribe(`user-${currentUserId}`);
+        const pusher = getPusherClient();
+        if (pusher) {
+          pusher.unsubscribe(`campaign-${campaignId}`);
+          pusher.unsubscribe(`user-${currentUserId}`);
+        }
       };
     } catch (error) {
       console.error('Failed to initialize Pusher:', error);

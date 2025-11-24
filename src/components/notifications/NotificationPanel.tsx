@@ -87,6 +87,11 @@ export default function NotificationPanel({
 
   const setupRealtimeSubscription = () => {
     const pusher = getPusherClient();
+    if (!pusher) {
+      console.warn('Pusher is not configured. Real-time notification updates will be disabled.');
+      return;
+    }
+
     const channel = pusher.subscribe(`user-${userId}`);
 
     channel.bind('notification-received', (notification: any) => {
@@ -103,6 +108,7 @@ export default function NotificationPanel({
 
   const cleanup = () => {
     const pusher = getPusherClient();
+    if (!pusher) return;
     pusher.unsubscribe(`user-${userId}`);
   };
 

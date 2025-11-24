@@ -88,6 +88,11 @@ export default function TurnTracker({
 
   const setupRealtimeSubscription = () => {
     const pusher = getPusherClient();
+    if (!pusher) {
+      console.warn('Pusher is not configured. Real-time turn updates will be disabled.');
+      return;
+    }
+
     const channel = pusher.subscribe(`campaign-${campaignId}`);
 
     channel.bind('turn-update', (data: any) => {
@@ -104,6 +109,7 @@ export default function TurnTracker({
 
   const cleanup = () => {
     const pusher = getPusherClient();
+    if (!pusher) return;
     pusher.unsubscribe(`campaign-${campaignId}`);
   };
 

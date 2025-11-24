@@ -8,13 +8,14 @@ export function isPusherConfigured(): boolean {
   return !!(process.env.NEXT_PUBLIC_PUSHER_KEY && process.env.NEXT_PUBLIC_PUSHER_CLUSTER);
 }
 
-export function getPusherClient(): Pusher {
+export function getPusherClient(): Pusher | null {
   if (!pusherInstance) {
     const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY;
     const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
 
     if (!pusherKey || !pusherCluster) {
-      throw new Error('Pusher is not configured. Please set NEXT_PUBLIC_PUSHER_KEY and NEXT_PUBLIC_PUSHER_CLUSTER environment variables.');
+      console.warn('Pusher is not configured. Real-time features will be disabled. Configure NEXT_PUBLIC_PUSHER_KEY and NEXT_PUBLIC_PUSHER_CLUSTER to enable real-time updates.');
+      return null;
     }
 
     pusherInstance = new Pusher(pusherKey, {
@@ -27,16 +28,19 @@ export function getPusherClient(): Pusher {
 
 export function subscribeToCampaignMessages(campaignId: string) {
   const pusher = getPusherClient();
+  if (!pusher) return null;
   return pusher.subscribe(`campaign-${campaignId}`);
 }
 
 export function subscribeToUserWhispers(userId: string) {
   const pusher = getPusherClient();
+  if (!pusher) return null;
   return pusher.subscribe(`user-${userId}`);
 }
 
 export function unsubscribeFromChannel(channelName: string) {
   const pusher = getPusherClient();
+  if (!pusher) return;
   pusher.unsubscribe(channelName);
 }
 

@@ -522,10 +522,13 @@ export default function StoryPage() {
     return participants.characterIds.includes(characterId)
   }
 
-  // Helper to check if user has already submitted action in a scene
+  // Helper to check if user has already submitted action in the current exchange
   const hasUserSubmitted = (scene: any) => {
+    const currentExchange = scene.currentExchange || 1
     return scene.playerActions?.some((action: any) =>
-      action.userId === user?.id && action.characterId === selectedCharacterId
+      action.userId === user?.id &&
+      action.characterId === selectedCharacterId &&
+      action.exchangeNumber === currentExchange
     )
   }
 
@@ -535,14 +538,7 @@ export default function StoryPage() {
   )
 
   const getCurrentStageText = (scene: any) => {
-    const resolutions = scene.sceneResolutionText
-      ?.split('\n\n---\n\n')
-      .filter((part: string) => part.trim().length > 0)
-
-    if (resolutions && resolutions.length > 0) {
-      return resolutions[resolutions.length - 1]
-    }
-
+    // Only show intro text here - resolutions are displayed in the dedicated resolutions section
     return scene.sceneIntroText
   }
 
@@ -693,22 +689,27 @@ export default function StoryPage() {
                       </div>
                     </div>
 
-                    <div className="prose prose-invert max-w-none">
-                      <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
-                        {currentStageText}
-                      </p>
-                    </div>
+                    {/* Show intro text only if no resolutions exist yet */}
+                    {!scene.sceneResolutionText && (
+                      <>
+                        <div className="prose prose-invert max-w-none">
+                          <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                            {currentStageText}
+                          </p>
+                        </div>
 
-                    {/* NPC Relationship Hints */}
-                    {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
-                      <div className="mt-4">
-                        <NPCRelationshipHints
-                          hints={extractNPCHintsFromScene(
-                            currentStageText,
-                            campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
-                          )}
-                        />
-                      </div>
+                        {/* NPC Relationship Hints */}
+                        {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
+                          <div className="mt-4">
+                            <NPCRelationshipHints
+                              hints={extractNPCHintsFromScene(
+                                currentStageText,
+                                campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
+                              )}
+                            />
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {/* Show resolutions if any exist */}

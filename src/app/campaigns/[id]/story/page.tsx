@@ -162,7 +162,11 @@ export default function StoryPage() {
     // Listen for resolution failures
     channel.bind('scene:resolution-failed', (data: any) => {
       console.error('Scene resolution failed:', data)
-      alert(`Scene resolution failed: ${data.error}\n\nPlease try manually resolving the scene or contact support.`)
+      const isTimeout = data.error?.includes('timeout') || data.errorType === 'TimeoutError'
+      const message = isTimeout
+        ? `The AI GM took too long to respond. This can happen during high load.\n\nThe scene is ready to try again. You can submit another action or wait a moment.`
+        : `Scene resolution encountered an issue: ${data.error}\n\nThe scene is ready to try again. If this persists, please contact support.`
+      alert(message)
       loadData()
     })
 

@@ -28,11 +28,14 @@ export default function AILoadingState({
       'Painting the world...'
     ],
     resolution: [
-      'The AI is resolving the scene...',
-      'Calculating consequences...',
-      'Determining outcomes...',
-      'Updating world state...',
-      'Crafting the resolution...'
+      'The dice have spoken. Let\'s see what happens...',
+      'NPCs are making their moves...',
+      'Consequences rippling through the world...',
+      'The GM is narrating what unfolds...',
+      'Your actions have set things in motion...',
+      'The story twists and turns...',
+      'Villains respond to your interference...',
+      'The world reacts to your choices...'
     ],
     general: [
       'Processing...',

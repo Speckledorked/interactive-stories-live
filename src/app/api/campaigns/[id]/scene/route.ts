@@ -294,10 +294,31 @@ export async function POST(
       const { resolveScene } = await import('@/lib/game/sceneResolver')
       const { runWorldTurn } = await import('@/lib/game/worldTurn')
 
-      // Run in background - don't block the response
+      // Run in background with timeout - don't block the response
+      const resolutionTimeout = setTimeout(() => {
+        console.error(`⏱️  Scene ${scene.sceneNumber} resolution timeout after 2 minutes`)
+        prisma.scene.update({
+          where: { id: sceneId },
+          data: { status: 'AWAITING_ACTIONS' }
+        }).then(() => {
+          pusherServer.trigger(
+            `campaign-${campaignId}`,
+            'scene:resolution-failed',
+            {
+              sceneId: sceneId,
+              sceneNumber: scene.sceneNumber,
+              error: 'Resolution timeout - please try again or contact support',
+              timestamp: new Date()
+            }
+          )
+        }).catch(e => console.error('Failed to broadcast timeout:', e))
+      }, 120000) // 2 minute timeout
+
       resolveScene(campaignId, sceneId)
         .then(async (result) => {
-          console.log(`✅ Scene ${scene.sceneNumber} auto-resolved`)
+          clearTimeout(resolutionTimeout)
+          console.log(`✅ Scene ${scene.sceneNumber} auto-resolved successfully`)
+          console.log(`📊 Resolution stats: ${JSON.stringify(result.updates)}`)
           await runWorldTurn(campaignId)
 
           // Trigger Pusher event for scene resolution
@@ -312,24 +333,39 @@ export async function POST(
           )
         })
         .catch(async (error) => {
-          console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`, error)
+          clearTimeout(resolutionTimeout)
+          console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`)
+          console.error(`Error name: ${error.name}`)
+          console.error(`Error message: ${error.message}`)
+          console.error(`Error stack: ${error.stack}`)
 
           // Notify clients of failure and reset scene to AWAITING_ACTIONS
-          await prisma.scene.update({
-            where: { id: sceneId },
-            data: { status: 'AWAITING_ACTIONS' }
-          })
+          try {
+            await prisma.scene.update({
+              where: { id: sceneId },
+              data: { status: 'AWAITING_ACTIONS' }
+            })
+            console.log(`✅ Scene ${scene.sceneNumber} status reset to AWAITING_ACTIONS`)
+          } catch (dbError) {
+            console.error(`❌ Failed to reset scene status:`, dbError)
+          }
 
-          await pusherServer.trigger(
-            `campaign-${campaignId}`,
-            'scene:resolution-failed',
-            {
-              sceneId: sceneId,
-              sceneNumber: scene.sceneNumber,
-              error: error instanceof Error ? error.message : 'Unknown error',
-              timestamp: new Date()
-            }
-          )
+          try {
+            await pusherServer.trigger(
+              `campaign-${campaignId}`,
+              'scene:resolution-failed',
+              {
+                sceneId: sceneId,
+                sceneNumber: scene.sceneNumber,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                errorType: error.name || 'Error',
+                timestamp: new Date()
+              }
+            )
+            console.log(`📡 Broadcasted resolution failure to clients`)
+          } catch (pusherError) {
+            console.error(`❌ Failed to broadcast resolution failure:`, pusherError)
+          }
         })
     }
 

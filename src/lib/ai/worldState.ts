@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
 import { buildOptimizedContext } from './contextManager' // Phase 14.6: Context optimization
+import { retrieveRelevantHistory } from './memoryRetrieval' // Campaign Memory RAG
 
 /**
  * Build optimized world summary using context manager
@@ -375,10 +376,65 @@ export async function buildSceneResolutionRequest(
     }
   }
 
+  // RAG Memory Retrieval: Get relevant campaign history
+  let relevantMemories: any[] = []
+  try {
+    console.log('🧠 Retrieving relevant campaign memories...')
+
+    // Get NPCs and factions from world summary for filtering
+    const npcs = await prisma.nPC.findMany({ where: { campaignId } })
+    const factions = await prisma.faction.findMany({ where: { campaignId } })
+    const characters = await prisma.character.findMany({
+      where: { campaignId, isAlive: true }
+    })
+
+    relevantMemories = await retrieveRelevantHistory(
+      campaignId,
+      {
+        currentScene: scene,
+        playerActions: scene.playerActions,
+        characters,
+        npcs,
+        factions,
+      },
+      {
+        maxMemories: 10,
+        recencyBias: 0.3, // 30% weight to recent events, 70% to semantic similarity
+        minSimilarity: 0.7, // Only include memories with 70%+ relevance
+        importanceBoost: true, // Boost CRITICAL and MAJOR memories
+      }
+    )
+
+    console.log(`✅ Retrieved ${relevantMemories.length} relevant memories`)
+  } catch (memoryError) {
+    console.error('⚠️ Memory retrieval failed (non-critical):', memoryError)
+    // Continue without memories - don't block scene resolution
+  }
+
+  // Add memories to world summary
+  const worldSummaryWithMemories = {
+    ...worldSummary,
+    relevant_campaign_history: relevantMemories.map(m => ({
+      turn: m.turnNumber,
+      title: m.title,
+      summary: m.summary,
+      type: m.memoryType,
+      importance: m.importance,
+      emotional_tone: m.emotionalTone,
+      relevance: Math.round(m.similarity * 100) + '%',
+    })),
+  }
+
+  // Enhance system prompt with memory instructions
+  const enhancedSystemPrompt = enhanceSystemPromptWithMemory(
+    campaign.aiSystemPrompt,
+    relevantMemories.length > 0
+  )
+
   return {
     campaign_universe: campaign.universe || 'Generic Fantasy',
-    ai_system_prompt: campaign.aiSystemPrompt + (fullGuidance ? `\n\n${fullGuidance}` : ''),
-    world_summary: worldSummary,
+    ai_system_prompt: enhancedSystemPrompt + (fullGuidance ? `\n\n${fullGuidance}` : ''),
+    world_summary: worldSummaryWithMemories,
     current_scene_intro: sceneContext,
     player_actions: playerActions
   }
@@ -610,4 +666,59 @@ export async function buildFullWorldState(campaignId: string) {
     clocks: allClocks,
     timeline: allEvents
   }
+}
+
+/**
+ * Enhance system prompt with campaign memory instructions
+ *
+ * Adds guidance to the AI about how to use retrieved campaign history
+ * for maintaining long-form continuity.
+ *
+ * @param basePrompt - Original system prompt
+ * @param hasMemories - Whether memories were retrieved
+ * @returns Enhanced system prompt with memory guidance
+ */
+function enhanceSystemPromptWithMemory(basePrompt: string, hasMemories: boolean): string {
+  if (!hasMemories) {
+    // No memories retrieved, return original prompt
+    return basePrompt
+  }
+
+  const memoryGuidance = `
+
+CAMPAIGN MEMORY & LONG-FORM CONTINUITY:
+You have access to semantically retrieved campaign history in the 'relevant_campaign_history'
+section of the world summary. These memories are automatically selected based on relevance to
+the current scene.
+
+USE THESE MEMORIES TO:
+- **Reference past events** when NPCs or factions appear ("Remember when...")
+- **Maintain character arc continuity** across dozens of scenes
+- **Honor promises, debts, and consequences** from earlier scenes
+- **Create callbacks** to important moments (even from Scene 1!)
+- **Build on established relationships** and conflicts
+- **Track long-running threats** and faction plans
+
+MEMORY IMPORTANCE LEVELS:
+- **CRITICAL**: Campaign-defining moments that should heavily influence your responses
+- **MAJOR**: Significant events that should be referenced when relevant
+- **NORMAL**: Standard events to consider for continuity
+- **MINOR**: Background context
+
+The **relevance** percentage shows how related each memory is to the current scene.
+Prioritize memories with:
+- Higher relevance (80%+ are very related)
+- Higher importance (CRITICAL > MAJOR > NORMAL > MINOR)
+- Recent turn numbers when breaking ties
+
+**IMPORTANT**: Weave memories naturally into the narrative. Don't just list them -
+have NPCs reference past events, show consequences of earlier choices, and create
+a sense of persistent world that remembers player actions.
+
+Example: Instead of "You see Marcus the merchant," write "Marcus the merchant eyes
+you warily, clearly still nursing a grudge from when you exposed his smuggling operation
+three weeks ago (Scene 12)."
+`
+
+  return basePrompt + memoryGuidance
 }

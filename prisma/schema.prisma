@@ -161,6 +161,9 @@ model Campaign {
   // Phase 9: Notifications
   notifications Notification[] @relation("CampaignNotifications")
   turnTracker   TurnTracker[]  @relation("CampaignTurnTracker")
+
+  // Campaign Memory (RAG System)
+  memories      CampaignMemory[]
 }
 
 //
@@ -1294,6 +1297,65 @@ model WikiEntry {
   @@index([campaignId, name])
   @@index([campaignId, isActive])
   @@map("wiki_entries")
+}
+
+//
+// CAMPAIGN MEMORY & RAG SYSTEM
+//
+
+enum MemoryType {
+  SCENE
+  NPC_INTERACTION
+  FACTION_EVENT
+  LOCATION_EVENT
+  CHARACTER_MOMENT
+  CLOCK_COMPLETION
+  WORLD_EVENT
+}
+
+enum MemoryImportance {
+  MINOR
+  NORMAL
+  MAJOR
+  CRITICAL
+}
+
+model CampaignMemory {
+  id            String           @id @default(cuid())
+  campaignId    String
+  campaign      Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  // What this memory is about
+  memoryType    MemoryType
+  sourceId      String           // ID of source (sceneId, npcId, factionId, etc.)
+  turnNumber    Int
+
+  // Searchable content
+  title         String
+  summary       String           @db.Text  // 2-3 sentence summary
+  fullContext   String           @db.Text  // Full scene resolution or event description
+
+  // Vector embedding (pgvector type)
+  // Using Unsupported because Prisma doesn't have built-in vector support yet
+  embedding     Unsupported("vector(1536)")?  // OpenAI ada-002 produces 1536 dimensions
+
+  // Entity tracking (for targeted retrieval)
+  involvedCharacterIds  String[]  @default([])
+  involvedNpcIds        String[]  @default([])
+  involvedFactionIds    String[]  @default([])
+  locationTags          String[]  @default([])
+
+  // Importance weighting
+  importance    MemoryImportance @default(NORMAL)
+  emotionalTone String?          // "tense", "triumphant", "tragic", etc.
+  tags          String[]         @default([])  // ["combat", "betrayal", "alliance", etc.]
+
+  createdAt     DateTime         @default(now())
+
+  @@index([campaignId, turnNumber])
+  @@index([campaignId, memoryType])
+  @@index([campaignId, importance])
+  @@map("campaign_memories")
 }
 
 //

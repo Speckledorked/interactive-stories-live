@@ -30,6 +30,7 @@ import {
   storeWorldStateChanges,
   createCharacterProgressionNotifications
 } from './world-state-tracker'
+import { createSceneMemory } from '@/lib/ai/memoryCreation'
 
 /**
  * Resolve a scene using the AI GM
@@ -351,6 +352,20 @@ async function performResolution(
     } catch (logError) {
       // Don't fail the entire scene resolution if log generation fails
       console.error('⚠️  Campaign log generation failed (non-critical):', logError)
+    }
+
+    // 8.6. Create campaign memory for RAG retrieval
+    try {
+      console.log('🧠 Creating campaign memory...')
+      await createSceneMemory(
+        { ...scene, sceneResolutionText: aiResponse.scene_text },
+        { turnNumber: currentTurn + 1 },
+        aiResponse
+      )
+      console.log('✅ Campaign memory created')
+    } catch (memoryError) {
+      // Don't fail the entire scene resolution if memory creation fails
+      console.error('⚠️  Campaign memory creation failed (non-critical):', memoryError)
     }
 
     // Phase 15.4: Check campaign health periodically

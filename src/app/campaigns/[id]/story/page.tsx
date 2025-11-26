@@ -53,6 +53,7 @@ export default function StoryPage() {
   const [selectedSceneCharacters, setSelectedSceneCharacters] = useState<string[]>([])
   const [showInsufficientFunds, setShowInsufficientFunds] = useState(false)
   const [insufficientFundsDetails, setInsufficientFundsDetails] = useState('')
+  const [resolvingMessage, setResolvingMessage] = useState('')
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
@@ -154,6 +155,8 @@ export default function StoryPage() {
     // Listen for scene resolution starting
     channel.bind('scene:resolving', (data: any) => {
       console.log('Scene resolving:', data)
+      setResolvingMessage(data.message || 'The AI GM is processing your actions...')
+      setError('') // Clear any previous errors
       // Refresh to show RESOLVING status
       loadData()
     })
@@ -161,6 +164,8 @@ export default function StoryPage() {
     // Listen for scene resolutions
     channel.bind('scene:resolved', (data: any) => {
       console.log('Scene resolved:', data)
+      setResolvingMessage('') // Clear resolving message
+      setSuccess('✓ Scene resolved! The story continues...')
       // Refresh data so scene resolution appears
       loadData()
     })
@@ -168,11 +173,12 @@ export default function StoryPage() {
     // Listen for resolution failures
     channel.bind('scene:resolution-failed', (data: any) => {
       console.error('Scene resolution failed:', data)
+      setResolvingMessage('') // Clear resolving message
       const isTimeout = data.error?.includes('timeout') || data.errorType === 'TimeoutError'
       const message = isTimeout
-        ? `The AI GM took too long to respond. This can happen during high load.\n\nThe scene is ready to try again. You can submit another action or wait a moment.`
-        : `Scene resolution encountered an issue: ${data.error}\n\nThe scene is ready to try again. If this persists, please contact support.`
-      alert(message)
+        ? `The AI GM took too long to respond. This can happen during high load. The scene is ready to try again.`
+        : `Scene resolution encountered an issue: ${data.error}. The scene is ready to try again.`
+      setError(message)
       loadData()
     })
 
@@ -636,6 +642,12 @@ export default function StoryPage() {
           {success && (
             <div className="bg-green-500/10 border border-green-500 text-green-400 px-4 py-3 rounded-lg">
               {success}
+            </div>
+          )}
+          {resolvingMessage && (
+            <div className="bg-blue-500/10 border border-blue-500 text-blue-400 px-4 py-3 rounded-lg flex items-center gap-3">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
+              <span>{resolvingMessage}</span>
             </div>
           )}
 

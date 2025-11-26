@@ -361,11 +361,19 @@ export async function buildSceneResolutionRequest(
   // Combine all guidance
   const fullGuidance = exchangeGuidance + additionalGuidance
 
+  // Build complete scene context including previous resolutions
+  // This ensures the AI sees what already happened in the scene
+  let sceneContext = scene.sceneIntroText
+  if (scene.sceneResolutionText) {
+    // If we have previous resolutions, include them so the AI continues the story
+    sceneContext += '\n\n## What Has Happened So Far:\n\n' + scene.sceneResolutionText
+  }
+
   return {
     campaign_universe: campaign.universe || 'Generic Fantasy',
     ai_system_prompt: campaign.aiSystemPrompt + (fullGuidance ? `\n\n${fullGuidance}` : ''),
     world_summary: worldSummary,
-    current_scene_intro: scene.sceneIntroText,
+    current_scene_intro: sceneContext,
     player_actions: playerActions
   }
 }
@@ -413,9 +421,15 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
 
   const worldSummary = await buildWorldSummaryForAI(campaignId)
 
-  // Get the last resolved scene for context
+  // Get the last scene for context (could be RESOLVED or AWAITING_ACTIONS with resolutions)
   const lastScene = await prisma.scene.findFirst({
-    where: { campaignId, status: 'RESOLVED' },
+    where: {
+      campaignId,
+      OR: [
+        { status: 'RESOLVED' },
+        { sceneResolutionText: { not: null } }
+      ]
+    },
     orderBy: { sceneNumber: 'desc' }
   })
 

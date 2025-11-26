@@ -22,11 +22,18 @@ The application requires several environment variables to function properly. Fol
    - Get an API key from https://platform.openai.com/api-keys
    - Set `OPENAI_API_KEY` in your `.env`
 
-5. **Configure Pusher (Optional - for real-time features):**
+5. **Configure Pusher (Required for real-time features):**
    - Sign up at https://pusher.com
-   - Create an app and get your credentials
-   - Update the Pusher variables in `.env`
-   - If not using Pusher, the build placeholders will work but real-time features won't function
+   - Create an app and get your credentials from the dashboard
+   - Set the following variables in your `.env` or `.env.local`:
+     - `PUSHER_APP_ID` - Your Pusher app ID
+     - `PUSHER_KEY` - Your Pusher key (for server-side)
+     - `PUSHER_SECRET` - Your Pusher secret (keep this secure!)
+     - `PUSHER_CLUSTER` - Your Pusher cluster (e.g., "mt1", "us2", "eu")
+     - `NEXT_PUBLIC_PUSHER_KEY` - Your Pusher key (for client-side)
+     - `NEXT_PUBLIC_PUSHER_CLUSTER` - Your Pusher cluster (for client-side)
+   - **Note:** After adding/updating `.env.local`, restart your dev server for changes to take effect
+   - Without Pusher, features like chat, notifications, and live scene updates won't work
 
 ## Database Setup
 

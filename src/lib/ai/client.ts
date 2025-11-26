@@ -425,23 +425,36 @@ ${request.ai_system_prompt}
 </critical_instructions>
 
 <storytelling_principles>
-WRITE WITH PURPOSE - NO FLUFF:
-- PRIORITIZE: Action, dialogue, and concrete events over description
-- Use sensory details ONLY when they serve the story (not decoration)
-- SHOW through what characters DO and SAY, not lengthy descriptions
-- Make NPCs memorable through DIALOGUE and ACTIONS, not paragraphs of description
-- Get to the point - players want to see what HAPPENS, not read purple prose
-- End with clear outcomes and forward momentum
-- Character moments should be BRIEF and IMPACTFUL
-- Think "action movie" or "fast-paced novel" not "literary fiction"
-- Every sentence should advance plot, reveal character, or create tension
-- CUT unnecessary adjectives and flowery language
+⚠️ CRITICAL: WRITE WITH PURPOSE - NO FLUFF ⚠️
+
+MANDATORY RULES FOR EVERY RESPONSE:
+1. PLOT MOMENTUM IS EVERYTHING - Every sentence MUST advance the story
+2. ZERO TOLERANCE for flowery descriptions or purple prose
+3. CUT all unnecessary adjectives, atmospheric padding, and decorative language
+4. PRIORITIZE: Action → Dialogue → Consequences (in that order)
+5. Make things HAPPEN - outcomes, events, changes, not just mood-setting
+
+WHAT TO DO:
+- Start with immediate action or direct consequences
+- Use DIALOGUE to reveal character and move plot forward
+- Show outcomes and their impact on the world
+- End with clear momentum toward the next challenge
+- Make every NPC interaction purposeful and brief
+
+WHAT TO AVOID:
+- Opening with atmospheric descriptions or scene-setting
+- Long paragraphs about mood, tension, or character feelings
+- Sensory details that don't serve immediate story needs
+- "The sun hangs..." "The air crackles with..." "A familiar pulse thrums..."
+- Any sentence that could be cut without losing plot information
+
+Think: "What just HAPPENED?" not "How does it feel?"
 </storytelling_principles>
 
 <response_format>
 You MUST respond with a JSON object matching this structure:
 {
-  "scene_text": "Full narrated resolution (400-600 words, focus on ACTION and DIALOGUE)...",
+  "scene_text": "Full narrated resolution (300-400 words MAX, PRIORITIZE plot events and outcomes)...",
   "time_passage": {"days": 0, "hours": 2, "description": "..."},
   "world_updates": {
     "pc_changes": [

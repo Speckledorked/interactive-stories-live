@@ -201,7 +201,6 @@ export async function POST(
     }
 
     // Check if all participants have submitted - auto-resolve if conditions met
-    // Only auto-resolve for scenes with pre-defined participants
     const hasDefinedParticipants = scene.participants &&
                                    (scene.participants as any).characterIds &&
                                    (scene.participants as any).characterIds.length > 0
@@ -287,9 +286,51 @@ export async function POST(
         })
       }
     } else {
-      // For open scenes (no predefined participants), don't auto-resolve
-      // Admin must manually resolve these scenes
-      console.log(`📝 Scene ${scene.sceneNumber} is an open scene - manual resolution required`)
+      // For open scenes (no predefined participants), auto-resolve immediately
+      // This allows the GM AI to respond to player actions in real-time
+      console.log(`🎬 Open scene ${scene.sceneNumber} - triggering auto-resolve`)
+
+      // Import and call resolveScene asynchronously (don't wait for it)
+      const { resolveScene } = await import('@/lib/game/sceneResolver')
+      const { runWorldTurn } = await import('@/lib/game/worldTurn')
+
+      // Run in background - don't block the response
+      resolveScene(campaignId, sceneId)
+        .then(async (result) => {
+          console.log(`✅ Scene ${scene.sceneNumber} auto-resolved`)
+          await runWorldTurn(campaignId)
+
+          // Trigger Pusher event for scene resolution
+          await pusherServer.trigger(
+            `campaign-${campaignId}`,
+            'scene:resolved',
+            {
+              sceneId: sceneId,
+              sceneNumber: scene.sceneNumber,
+              timestamp: new Date()
+            }
+          )
+        })
+        .catch(async (error) => {
+          console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`, error)
+
+          // Notify clients of failure and reset scene to AWAITING_ACTIONS
+          await prisma.scene.update({
+            where: { id: sceneId },
+            data: { status: 'AWAITING_ACTIONS' }
+          })
+
+          await pusherServer.trigger(
+            `campaign-${campaignId}`,
+            'scene:resolution-failed',
+            {
+              sceneId: sceneId,
+              sceneNumber: scene.sceneNumber,
+              error: error instanceof Error ? error.message : 'Unknown error',
+              timestamp: new Date()
+            }
+          )
+        })
     }
 
     return NextResponse.json({ action }, { status: 201 })

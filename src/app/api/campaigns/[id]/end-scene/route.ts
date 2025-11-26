@@ -43,7 +43,10 @@ export async function POST(
 
     // 2. Verify scene exists and belongs to campaign
     const scene = await prisma.scene.findUnique({
-      where: { id: sceneId }
+      where: { id: sceneId },
+      include: {
+        playerActions: true
+      }
     })
 
     if (!scene || scene.campaignId !== campaignId) {
@@ -53,7 +56,30 @@ export async function POST(
       )
     }
 
-    // 3. Mark scene as RESOLVED
+    // 3. If scene has actions and is not already resolved, trigger AI resolution first
+    if (scene.playerActions.length > 0 && scene.status !== 'RESOLVED') {
+      console.log('🎬 Triggering final resolution before ending scene')
+
+      try {
+        // Import resolution functions
+        const { resolveScene } = await import('@/lib/game/sceneResolver')
+        const { runWorldTurn } = await import('@/lib/game/worldTurn')
+
+        // Resolve the scene to generate final AI response
+        await resolveScene(campaignId, sceneId)
+        console.log('✅ Final resolution complete')
+
+        // Run world turn to process any final updates
+        await runWorldTurn(campaignId)
+        console.log('✅ World turn complete')
+      } catch (error) {
+        console.error('❌ Final resolution failed:', error)
+        // Continue to mark as RESOLVED even if resolution fails
+        // The admin explicitly wants to end this scene
+      }
+    }
+
+    // 4. Mark scene as RESOLVED
     await prisma.scene.update({
       where: { id: sceneId },
       data: {

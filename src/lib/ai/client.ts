@@ -193,6 +193,15 @@ export interface AIGMRequest {
       summary: string
       turn_number: number | null
     }>
+    relevant_campaign_history?: Array<{
+      turn: number
+      title: string
+      summary: string
+      type: string
+      importance: string
+      emotional_tone: string | null
+      relevance: string
+    }>
   }
   current_scene_intro: string
   player_actions: Array<{

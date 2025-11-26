@@ -30,6 +30,7 @@ import {
   storeWorldStateChanges,
   createCharacterProgressionNotifications
 } from './world-state-tracker'
+import { createSceneMemory } from '@/lib/ai/memoryCreation'
 
 /**
  * Resolve a scene using the AI GM
@@ -98,14 +99,14 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
   console.log('✅ Scene marked as RESOLVING')
 
   // Wrap everything after this point in try-catch to ensure status is always reverted on error
-  // Add timeout to prevent scenes from being stuck forever (1 minute)
-  const RESOLUTION_TIMEOUT_MS = 60 * 1000 // 1 minute
+  // Add timeout to prevent scenes from being stuck forever
+  const RESOLUTION_TIMEOUT_MS = 90 * 1000 // 90 seconds (increased from 60s to handle complex scenes)
 
   try {
     // Race between actual resolution and timeout
     const result = await Promise.race([
       performResolution(campaignId, sceneId, scene, exchangeManager),
-      createTimeout(RESOLUTION_TIMEOUT_MS, 'Scene resolution timed out after 1 minute')
+      createTimeout(RESOLUTION_TIMEOUT_MS, 'Scene resolution timed out after 90 seconds')
     ])
 
     return result
@@ -351,6 +352,20 @@ async function performResolution(
     } catch (logError) {
       // Don't fail the entire scene resolution if log generation fails
       console.error('⚠️  Campaign log generation failed (non-critical):', logError)
+    }
+
+    // 8.6. Create campaign memory for RAG retrieval
+    try {
+      console.log('🧠 Creating campaign memory...')
+      await createSceneMemory(
+        { ...scene, sceneResolutionText: aiResponse.scene_text },
+        { turnNumber: currentTurn + 1 },
+        aiResponse
+      )
+      console.log('✅ Campaign memory created')
+    } catch (memoryError) {
+      // Don't fail the entire scene resolution if memory creation fails
+      console.error('⚠️  Campaign memory creation failed (non-critical):', memoryError)
     }
 
     // Phase 15.4: Check campaign health periodically

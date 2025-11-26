@@ -365,8 +365,14 @@ export async function buildSceneResolutionRequest(
   // This ensures the AI sees what already happened in the scene
   let sceneContext = scene.sceneIntroText
   if (scene.sceneResolutionText) {
-    // If we have previous resolutions, include them so the AI continues the story
-    sceneContext += '\n\n## What Has Happened So Far:\n\n' + scene.sceneResolutionText
+    // OPTIMIZATION: Only include the last 2 exchanges to prevent prompt bloat
+    // Split by the separator used when appending resolutions
+    const allResolutions = scene.sceneResolutionText.split('\n\n---\n\n')
+    const recentResolutions = allResolutions.slice(-2) // Last 2 exchanges only
+
+    if (recentResolutions.length > 0) {
+      sceneContext += '\n\n## What Has Happened Recently:\n\n' + recentResolutions.join('\n\n---\n\n')
+    }
   }
 
   return {

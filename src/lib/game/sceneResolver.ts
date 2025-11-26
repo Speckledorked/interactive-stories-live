@@ -68,8 +68,8 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     throw new Error('Scene not found')
   }
 
-  if (scene.status !== 'AWAITING_ACTIONS') {
-    throw new Error(`Scene is not awaiting actions (status: ${scene.status})`)
+  if (scene.status !== 'AWAITING_ACTIONS' && scene.status !== 'RESOLVING') {
+    throw new Error(`Scene is not ready to resolve (status: ${scene.status})`)
   }
 
   if (scene.playerActions.length === 0) {

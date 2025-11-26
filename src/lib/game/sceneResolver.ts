@@ -77,7 +77,11 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     throw new Error('Scene not found')
   }
 
-  if (scene.status !== 'AWAITING_ACTIONS' && scene.status !== 'RESOLVING') {
+  // Allow re-resolving a stuck RESOLVING scene
+  if (scene.status === 'RESOLVING') {
+    console.warn(`⚠️ Scene is already RESOLVING - this might be a stuck scene from a previous failed resolution`)
+    // Continue anyway to allow recovery
+  } else if (scene.status !== 'AWAITING_ACTIONS') {
     throw new Error(`Scene is not ready to resolve (status: ${scene.status})`)
   }
 
@@ -107,12 +111,32 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     return result
   } catch (error) {
     console.error('❌ Scene resolution failed:', error)
-
-    // Revert scene status so it can be retried
-    await prisma.scene.update({
-      where: { id: sceneId },
-      data: { status: 'AWAITING_ACTIONS' as SceneStatus }
+    console.error('Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
     })
+
+    // CRITICAL: Always revert scene status so it can be retried
+    try {
+      await prisma.scene.update({
+        where: { id: sceneId },
+        data: { status: 'AWAITING_ACTIONS' as SceneStatus }
+      })
+      console.log('✅ Scene status reverted to AWAITING_ACTIONS')
+    } catch (dbError) {
+      console.error('❌ CRITICAL: Failed to revert scene status:', dbError)
+      // Try one more time with a fresh prisma client
+      try {
+        await prisma.scene.update({
+          where: { id: sceneId },
+          data: { status: 'AWAITING_ACTIONS' as SceneStatus }
+        })
+        console.log('✅ Scene status reverted on retry')
+      } catch (retryError) {
+        console.error('❌ CRITICAL: Failed to revert scene status after retry:', retryError)
+      }
+    }
 
     // Broadcast failure via Pusher so UI can show error
     try {

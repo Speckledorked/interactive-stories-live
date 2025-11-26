@@ -447,12 +447,12 @@ BANNED WRITING PATTERNS - NEVER USE:
 
 REQUIRED WRITING STYLE:
 ✓ Start with WHAT HAPPENED (the outcome)
-✓ Use CHARACTER DIALOGUE for 40%+ of your response
+✓ Use CHARACTER DIALOGUE for 30%+ of your response
 ✓ ACTIONS and their CONSEQUENCES, not descriptions
 ✓ NPCs SPEAK and ACT - they don't just exist
 ✓ End with a DECISION POINT or NEW PROBLEM
 ✓ Every sentence must advance the plot or reveal character through action
-✓ Cut all atmospheric padding - get straight to what matters
+✓ Minimize atmospheric padding - focus on what matters
 
 STRUCTURE EVERY RESPONSE:
 1. First sentence: Immediate outcome of player action (15 words max)
@@ -507,7 +507,7 @@ REMEMBER: Players want to make their own choices and speak their own words. Give
 <response_format>
 You MUST respond with a JSON object matching this structure:
 {
-  "scene_text": "Full narrated resolution (200-300 words MAX, mostly dialogue and action)...",
+  "scene_text": "Full narrated resolution (200-400 words MAX, mostly dialogue and action)...",
   "time_passage": {"days": 0, "hours": 2, "description": "..."},
   "world_updates": {
     "pc_changes": [
@@ -656,9 +656,9 @@ ${player_actions.map(a => `${a.character_name}: "${a.action_text}"`).join('\n\n'
 
 <task>
 1. ACTION-FOCUSED NARRATION (scene_text) - 200-400 words MAX:
-   • FIRST SENTENCE: State the immediate outcome/result (NO atmosphere!)
-   • DIALOGUE HEAVY: 50%+ should be NPCs speaking and reacting
-   • ZERO atmospheric description - cut all scene-setting fluff
+   • FIRST SENTENCE: State the immediate outcome/result
+   • DIALOGUE HEAVY: 30%+ should be NPCs speaking and reacting
+   • MINIMAL atmospheric description - focus on action and dialogue
    • Reference each character BY NAME as they ACT
    • Be CONCRETE: "She drew her blade" not "A weapon gleamed in the shadows"
    • PACE: Fast action = short sentences, Key moments = brief pause

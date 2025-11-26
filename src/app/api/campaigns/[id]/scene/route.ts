@@ -244,38 +244,15 @@ export async function POST(
         resolveScene(campaignId, sceneId)
           .then(async (result) => {
             console.log(`✅ Scene ${scene.sceneNumber} auto-resolved`)
+            // Run world turn after successful resolution
             await runWorldTurn(campaignId)
-
-            // Trigger Pusher event for scene resolution
-            await pusherServer.trigger(
-              `campaign-${campaignId}`,
-              'scene:resolved',
-              {
-                sceneId: sceneId,
-                sceneNumber: scene.sceneNumber,
-                timestamp: new Date()
-              }
-            )
+            // Note: Pusher events are already broadcast by sceneResolver.ts
           })
           .catch(async (error) => {
             console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`, error)
-
-            // Notify clients of failure and reset scene to AWAITING_ACTIONS
-            await prisma.scene.update({
-              where: { id: sceneId },
-              data: { status: 'AWAITING_ACTIONS' }
-            })
-
-            await pusherServer.trigger(
-              `campaign-${campaignId}`,
-              'scene:resolution-failed',
-              {
-                sceneId: sceneId,
-                sceneNumber: scene.sceneNumber,
-                error: error instanceof Error ? error.message : 'Unknown error',
-                timestamp: new Date()
-              }
-            )
+            console.error(`Error stack:`, error.stack)
+            // Note: Error handling and Pusher events are already handled by sceneResolver.ts
+            // Just log the error here for debugging
           })
       } else {
         // Update waitingOnUsers to track who hasn't submitted yet
@@ -319,18 +296,9 @@ export async function POST(
           clearTimeout(resolutionTimeout)
           console.log(`✅ Scene ${scene.sceneNumber} auto-resolved successfully`)
           console.log(`📊 Resolution stats: ${JSON.stringify(result.updates)}`)
+          // Run world turn after successful resolution
           await runWorldTurn(campaignId)
-
-          // Trigger Pusher event for scene resolution
-          await pusherServer.trigger(
-            `campaign-${campaignId}`,
-            'scene:resolved',
-            {
-              sceneId: sceneId,
-              sceneNumber: scene.sceneNumber,
-              timestamp: new Date()
-            }
-          )
+          // Note: Pusher events are already broadcast by sceneResolver.ts
         })
         .catch(async (error) => {
           clearTimeout(resolutionTimeout)
@@ -338,34 +306,8 @@ export async function POST(
           console.error(`Error name: ${error.name}`)
           console.error(`Error message: ${error.message}`)
           console.error(`Error stack: ${error.stack}`)
-
-          // Notify clients of failure and reset scene to AWAITING_ACTIONS
-          try {
-            await prisma.scene.update({
-              where: { id: sceneId },
-              data: { status: 'AWAITING_ACTIONS' }
-            })
-            console.log(`✅ Scene ${scene.sceneNumber} status reset to AWAITING_ACTIONS`)
-          } catch (dbError) {
-            console.error(`❌ Failed to reset scene status:`, dbError)
-          }
-
-          try {
-            await pusherServer.trigger(
-              `campaign-${campaignId}`,
-              'scene:resolution-failed',
-              {
-                sceneId: sceneId,
-                sceneNumber: scene.sceneNumber,
-                error: error instanceof Error ? error.message : 'Unknown error',
-                errorType: error.name || 'Error',
-                timestamp: new Date()
-              }
-            )
-            console.log(`📡 Broadcasted resolution failure to clients`)
-          } catch (pusherError) {
-            console.error(`❌ Failed to broadcast resolution failure:`, pusherError)
-          }
+          // Note: Error handling and Pusher events are already handled by sceneResolver.ts
+          // Just log the error here for debugging
         })
     }
 

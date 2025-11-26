@@ -3,7 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { authenticateRequest } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth'
 import PusherServer from '@/lib/realtime/pusher-server'
 import { SceneStatus } from '@prisma/client'
 
@@ -12,10 +12,7 @@ export async function POST(
   { params }: { params: { id: string; sceneId: string } }
 ) {
   try {
-    const user = await authenticateRequest(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const user = requireAuth(request)
 
     const campaignId = params.id
     const sceneId = params.sceneId
@@ -24,7 +21,7 @@ export async function POST(
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
-          userId: user.id,
+          userId: user.userId,
           campaignId
         }
       }

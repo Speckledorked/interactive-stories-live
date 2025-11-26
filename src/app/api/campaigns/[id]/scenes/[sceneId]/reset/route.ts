@@ -61,10 +61,25 @@ export async function POST(
       )
     }
 
-    // Reset the scene to AWAITING_ACTIONS
+    // Delete pending player actions from the current exchange
+    // This allows players to resubmit their actions
+    const deletedActions = await prisma.playerAction.deleteMany({
+      where: {
+        sceneId: sceneId,
+        status: 'pending'
+      }
+    })
+
+    console.log(`🗑️ Deleted ${deletedActions.count} pending player actions for scene ${sceneId}`)
+
+    // Reset the scene to AWAITING_ACTIONS and clear exchange state
     await prisma.scene.update({
       where: { id: sceneId },
-      data: { status: 'AWAITING_ACTIONS' as SceneStatus }
+      data: {
+        status: 'AWAITING_ACTIONS' as SceneStatus,
+        exchangeState: null,  // Clear exchange state to allow new actions
+        waitingOnUsers: null  // Clear waiting users list
+      }
     })
 
     console.log(`✅ Scene ${sceneId} manually reset from RESOLVING to AWAITING_ACTIONS by admin ${user.email}`)
@@ -88,10 +103,11 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: 'Scene has been reset to AWAITING_ACTIONS',
+      message: 'Scene has been reset to AWAITING_ACTIONS. All pending player actions have been cleared.',
       sceneId,
       previousStatus: 'RESOLVING',
-      newStatus: 'AWAITING_ACTIONS'
+      newStatus: 'AWAITING_ACTIONS',
+      actionsCleared: deletedActions.count
     })
   } catch (error) {
     console.error('Error resetting scene:', error)

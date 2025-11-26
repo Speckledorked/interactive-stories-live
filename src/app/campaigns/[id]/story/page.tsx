@@ -176,6 +176,12 @@ export default function StoryPage() {
       loadData()
     })
 
+    // Listen for scene resets
+    channel.bind('scene:reset', (data: any) => {
+      console.log('Scene reset:', data)
+      loadData()
+    })
+
     // Listen for clock updates
     channel.bind('clock:updated', (data: any) => {
       console.log('Clock updated:', data)
@@ -467,6 +473,34 @@ export default function StoryPage() {
     }
   }
 
+  const handleResetScene = async (sceneId: string) => {
+    if (!confirm('Are you sure you want to reset this stuck scene? This will set it back to AWAITING_ACTIONS state.')) {
+      return
+    }
+
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/scenes/${sceneId}/reset`,
+        {
+          method: 'POST'
+        }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to reset scene')
+      }
+
+      setSuccess('Scene has been reset! You can now try resolving again.')
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset scene')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
@@ -643,7 +677,18 @@ export default function StoryPage() {
                           {scene.status.replace('_', ' ')}
                         </span>
                         {scene.status === 'RESOLVING' && (
-                          <AILoadingState type="resolution" />
+                          <>
+                            <AILoadingState type="resolution" />
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleResetScene(scene.id)}
+                                className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                                title="Reset stuck scene"
+                              >
+                                Reset
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>

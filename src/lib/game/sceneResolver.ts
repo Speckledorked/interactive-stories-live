@@ -43,6 +43,15 @@ import {
  * @param sceneId - Scene to resolve
  * @returns Resolution results
  */
+/**
+ * Create a timeout promise that rejects after the specified duration
+ */
+function createTimeout(ms: number, message: string): Promise<never> {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(message)), ms)
+  })
+}
+
 export async function resolveScene(campaignId: string, sceneId: string, forceResolve: boolean = false) {
   console.log('🎬 Starting scene resolution...')
   console.log(`Campaign: ${campaignId}`)
@@ -84,22 +93,73 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
 
   console.log('✅ Scene marked as RESOLVING')
 
-  // 2.5. Broadcast resolving status via Pusher so UI updates immediately
-  try {
-    const pusher = PusherServer()
-    if (pusher) {
-      await pusher.trigger(`campaign-${campaignId}`, 'scene:resolving', {
-        sceneId,
-        sceneNumber: scene.sceneNumber,
-        campaignId
-      })
-      console.log('📡 Broadcasted scene:resolving event via Pusher')
-    }
-  } catch (pusherError) {
-    console.error('⚠️ Failed to broadcast Pusher resolving event:', pusherError)
-  }
+  // Wrap everything after this point in try-catch to ensure status is always reverted on error
+  // Add timeout to prevent scenes from being stuck forever (5 minutes)
+  const RESOLUTION_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
   try {
+    // Race between actual resolution and timeout
+    const result = await Promise.race([
+      performResolution(campaignId, sceneId, scene, exchangeManager),
+      createTimeout(RESOLUTION_TIMEOUT_MS, 'Scene resolution timed out after 5 minutes')
+    ])
+
+    return result
+  } catch (error) {
+    console.error('❌ Scene resolution failed:', error)
+
+    // Revert scene status so it can be retried
+    await prisma.scene.update({
+      where: { id: sceneId },
+      data: { status: 'AWAITING_ACTIONS' as SceneStatus }
+    })
+
+    // Broadcast failure via Pusher so UI can show error
+    try {
+      const pusher = PusherServer()
+      if (pusher) {
+        await pusher.trigger(`campaign-${campaignId}`, 'scene:resolution-failed', {
+          sceneId,
+          campaignId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          errorType: error instanceof Error && error.message.includes('timeout') ? 'TimeoutError' : 'Error'
+        })
+        console.log('📡 Broadcasted scene:resolution-failed event via Pusher')
+      }
+    } catch (pusherError) {
+      console.error('⚠️ Failed to broadcast Pusher failure event:', pusherError)
+    }
+
+    throw error
+  }
+}
+
+/**
+ * Perform the actual scene resolution work
+ * Separated into its own function for timeout handling
+ */
+async function performResolution(
+  campaignId: string,
+  sceneId: string,
+  scene: any,
+  exchangeManager: ExchangeManager
+) {
+  try {
+    // 2.5. Broadcast resolving status via Pusher so UI updates immediately
+    try {
+      const pusher = PusherServer()
+      if (pusher) {
+        await pusher.trigger(`campaign-${campaignId}`, 'scene:resolving', {
+          sceneId,
+          sceneNumber: scene.sceneNumber,
+          campaignId
+        })
+        console.log('📡 Broadcasted scene:resolving event via Pusher')
+      }
+    } catch (pusherError) {
+      console.error('⚠️ Failed to broadcast Pusher resolving event:', pusherError)
+    }
+
     // 3. Get world meta for turn number
     const worldMeta = await prisma.worldMeta.findUnique({
       where: { campaignId }
@@ -291,29 +351,8 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
       newTurnNumber: currentTurn + 1
     }
   } catch (error) {
-    console.error('❌ Scene resolution failed:', error)
-
-    // Revert scene status so it can be retried
-    await prisma.scene.update({
-      where: { id: sceneId },
-      data: { status: 'AWAITING_ACTIONS' as SceneStatus }
-    })
-
-    // Broadcast failure via Pusher so UI can show error
-    try {
-      const pusher = PusherServer()
-      if (pusher) {
-        await pusher.trigger(`campaign-${campaignId}`, 'scene:resolution-failed', {
-          sceneId,
-          campaignId,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        })
-        console.log('📡 Broadcasted scene:resolution-failed event via Pusher')
-      }
-    } catch (pusherError) {
-      console.error('⚠️ Failed to broadcast Pusher failure event:', pusherError)
-    }
-
+    // Just re-throw the error - it will be caught by the outer try-catch in resolveScene
+    // which will handle status reversion and Pusher notifications
     throw error
   }
 }

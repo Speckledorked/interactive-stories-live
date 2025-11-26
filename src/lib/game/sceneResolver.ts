@@ -237,6 +237,24 @@ async function performResolution(
 
     console.log('✅ Scene resolution stored, scene continues...')
 
+    // 7.1. Broadcast scene resolution via Pusher IMMEDIATELY after status update
+    // This ensures the frontend gets notified right away, before any heavyweight operations
+    try {
+      const pusher = PusherServer()
+      if (pusher) {
+        await pusher.trigger(`campaign-${campaignId}`, 'scene:resolved', {
+          sceneId,
+          sceneNumber: scene.sceneNumber,
+          campaignId,
+          resolutionPreview: aiResponse.scene_text.substring(0, 200) + '...'
+        })
+        console.log('📡 Broadcasted scene:resolved event via Pusher')
+      }
+    } catch (pusherError) {
+      // Don't fail the resolution if Pusher fails
+      console.error('⚠️ Failed to broadcast Pusher event:', pusherError)
+    }
+
     // 7.5. Generate map visualization from scene description
     try {
       console.log('🗺️  Generating map visualization...')
@@ -298,23 +316,6 @@ async function performResolution(
     if (timePassage.days || timePassage.hours) {
       console.log(`⏰ Time passed: ${timePassage.days || 0} days, ${timePassage.hours || 0} hours`)
       console.log(`📅 New date: ${newInGameDate}`)
-    }
-
-    // 8.4. Broadcast scene resolution via Pusher for real-time updates
-    try {
-      const pusher = PusherServer()
-      if (pusher) {
-        await pusher.trigger(`campaign-${campaignId}`, 'scene:resolved', {
-          sceneId,
-          sceneNumber: scene.sceneNumber,
-          campaignId,
-          resolutionPreview: aiResponse.scene_text.substring(0, 200) + '...'
-        })
-        console.log('📡 Broadcasted scene:resolved event via Pusher')
-      }
-    } catch (pusherError) {
-      // Don't fail the resolution if Pusher fails
-      console.error('⚠️ Failed to broadcast Pusher event:', pusherError)
     }
 
     // 8.5. Generate campaign log entry

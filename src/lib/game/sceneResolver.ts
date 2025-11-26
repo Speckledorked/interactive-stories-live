@@ -94,14 +94,14 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
   console.log('✅ Scene marked as RESOLVING')
 
   // Wrap everything after this point in try-catch to ensure status is always reverted on error
-  // Add timeout to prevent scenes from being stuck forever (5 minutes)
-  const RESOLUTION_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+  // Add timeout to prevent scenes from being stuck forever (1 minute)
+  const RESOLUTION_TIMEOUT_MS = 60 * 1000 // 1 minute
 
   try {
     // Race between actual resolution and timeout
     const result = await Promise.race([
       performResolution(campaignId, sceneId, scene, exchangeManager),
-      createTimeout(RESOLUTION_TIMEOUT_MS, 'Scene resolution timed out after 5 minutes')
+      createTimeout(RESOLUTION_TIMEOUT_MS, 'Scene resolution timed out after 1 minute')
     ])
 
     return result

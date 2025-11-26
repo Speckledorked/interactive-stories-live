@@ -240,7 +240,7 @@ export default function StoryPage() {
     const pollInterval = hasResolvingScene ? 3000 : 10000
 
     const pollTimer = setInterval(() => {
-      console.log(`Polling for updates (Pusher configured: ${!!pusherClient}, resolving: ${hasResolvingScene})`)
+      // Silently poll for updates
       loadData()
     }, pollInterval)
 

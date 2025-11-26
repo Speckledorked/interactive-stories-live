@@ -213,7 +213,9 @@ export default function StoryPage() {
 
     // Cleanup on unmount
     return () => {
-      pusherClient.unsubscribe(`campaign-${campaignId}`)
+      if (pusherClient) {
+        pusherClient.unsubscribe(`campaign-${campaignId}`)
+      }
     }
   }, [campaignId])
 

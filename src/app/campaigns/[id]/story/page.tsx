@@ -135,6 +135,12 @@ export default function StoryPage() {
 
   // Pusher realtime subscriptions
   useEffect(() => {
+    // Check if Pusher is configured
+    if (!pusherClient) {
+      console.warn('Pusher not configured - falling back to polling for updates.')
+      return
+    }
+
     // Subscribe to the campaign channel
     const channel = pusherClient.subscribe(`campaign-${campaignId}`)
 
@@ -210,6 +216,30 @@ export default function StoryPage() {
       pusherClient.unsubscribe(`campaign-${campaignId}`)
     }
   }, [campaignId])
+
+  // Fallback polling when Pusher is not configured or scene is resolving
+  useEffect(() => {
+    // Only poll if Pusher is not configured OR if there's a scene currently resolving
+    const hasResolvingScene = activeScenes.some(scene => scene.status === 'RESOLVING')
+    const shouldPoll = !pusherClient || hasResolvingScene
+
+    if (!shouldPoll) {
+      return
+    }
+
+    // Poll every 3 seconds when a scene is resolving
+    // Poll every 10 seconds otherwise (when Pusher is not configured)
+    const pollInterval = hasResolvingScene ? 3000 : 10000
+
+    const pollTimer = setInterval(() => {
+      console.log(`Polling for updates (Pusher configured: ${!!pusherClient}, resolving: ${hasResolvingScene})`)
+      loadData()
+    }, pollInterval)
+
+    return () => {
+      clearInterval(pollTimer)
+    }
+  }, [campaignId, activeScenes, pusherClient])
 
   // Set command palette context
   useEffect(() => {

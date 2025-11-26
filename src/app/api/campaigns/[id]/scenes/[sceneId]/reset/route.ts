@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import PusherServer from '@/lib/realtime/pusher-server'
-import { SceneStatus } from '@prisma/client'
+import { SceneStatus, Prisma } from '@prisma/client'
 
 export async function POST(
   request: NextRequest,
@@ -77,8 +77,8 @@ export async function POST(
       where: { id: sceneId },
       data: {
         status: 'AWAITING_ACTIONS' as SceneStatus,
-        exchangeState: null,  // Clear exchange state to allow new actions
-        waitingOnUsers: null  // Clear waiting users list
+        exchangeState: Prisma.JsonNull,  // Clear exchange state to allow new actions
+        waitingOnUsers: Prisma.JsonNull  // Clear waiting users list
       }
     })
 

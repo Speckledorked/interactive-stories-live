@@ -112,6 +112,7 @@ export function estimateTokens(text: string): number {
  * @returns Estimated cost in USD
  */
 export function estimateEmbeddingCost(textLength: number): number {
-  const tokens = estimateTokens(textLength);
+  // Rough estimate: ~4 characters per token
+  const tokens = Math.ceil(textLength / 4);
   return (tokens / 1000) * 0.0001;
 }

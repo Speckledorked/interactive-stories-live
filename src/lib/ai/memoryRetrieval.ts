@@ -84,6 +84,8 @@ export async function retrieveRelevantHistory(
 
     // Semantic search with pgvector
     // Uses cosine distance operator <=> (1 - cosine similarity)
+    // Handle empty entity arrays by providing empty arrays to PostgreSQL
+    // PostgreSQL's && operator returns false when one array is empty, which is what we want
     const memories = await prisma.$queryRaw<any[]>`
       SELECT
         id,
@@ -99,10 +101,12 @@ export async function retrieveRelevantHistory(
         campaign_id = ${campaignId}
         AND embedding IS NOT NULL
         -- Entity filtering: include memories involving current NPCs/factions/characters
+        -- When arrays are empty, use ARRAY[]::text[] which makes the overlap check return false
+        -- This ensures we only match general memories (with no entities) when no entities are provided
         AND (
-          involved_npc_ids && ${npcIds}::text[]
-          OR involved_faction_ids && ${factionIds}::text[]
-          OR involved_character_ids && ${characterIds}::text[]
+          (${npcIds.length > 0} AND involved_npc_ids && ${npcIds}::text[])
+          OR (${factionIds.length > 0} AND involved_faction_ids && ${factionIds}::text[])
+          OR (${characterIds.length > 0} AND involved_character_ids && ${characterIds}::text[])
           OR (
             cardinality(involved_npc_ids) = 0
             AND cardinality(involved_faction_ids) = 0

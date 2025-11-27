@@ -377,6 +377,7 @@ export async function buildSceneResolutionRequest(
   }
 
   // RAG Memory Retrieval: Get relevant campaign history
+  // Add timeout to prevent memory retrieval from blocking scene resolution
   let relevantMemories: any[] = []
   try {
     console.log('🧠 Retrieving relevant campaign memories...')
@@ -388,7 +389,9 @@ export async function buildSceneResolutionRequest(
       where: { campaignId, isAlive: true }
     })
 
-    relevantMemories = await retrieveRelevantHistory(
+    // Timeout memory retrieval after 20 seconds to prevent blocking
+    const MEMORY_TIMEOUT_MS = 20 * 1000
+    const memoryPromise = retrieveRelevantHistory(
       campaignId,
       {
         currentScene: scene,
@@ -405,9 +408,16 @@ export async function buildSceneResolutionRequest(
       }
     )
 
+    const timeoutPromise = new Promise<any[]>((_, reject) =>
+      setTimeout(() => reject(new Error('Memory retrieval timeout')), MEMORY_TIMEOUT_MS)
+    )
+
+    relevantMemories = await Promise.race([memoryPromise, timeoutPromise])
+
     console.log(`✅ Retrieved ${relevantMemories.length} relevant memories`)
   } catch (memoryError) {
-    console.error('⚠️ Memory retrieval failed (non-critical):', memoryError)
+    const errorMsg = memoryError instanceof Error ? memoryError.message : String(memoryError)
+    console.error('⚠️ Memory retrieval failed (non-critical):', errorMsg)
     // Continue without memories - don't block scene resolution
   }
 

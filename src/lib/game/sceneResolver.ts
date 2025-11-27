@@ -100,13 +100,13 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
 
   // Wrap everything after this point in try-catch to ensure status is always reverted on error
   // Add timeout to prevent scenes from being stuck forever
-  const RESOLUTION_TIMEOUT_MS = 90 * 1000 // 90 seconds (increased from 60s to handle complex scenes)
+  const RESOLUTION_TIMEOUT_MS = 150 * 1000 // 150 seconds (increased to handle RAG retrieval + AI calls)
 
   try {
     // Race between actual resolution and timeout
     const result = await Promise.race([
       performResolution(campaignId, sceneId, scene, exchangeManager),
-      createTimeout(RESOLUTION_TIMEOUT_MS, 'Scene resolution timed out after 90 seconds')
+      createTimeout(RESOLUTION_TIMEOUT_MS, 'Scene resolution timed out after 150 seconds')
     ])
 
     return result
@@ -282,6 +282,7 @@ async function performResolution(
     }
 
     // 7.5. Generate map visualization from scene description
+    // Add timeout to prevent map generation from blocking scene resolution
     try {
       console.log('🗺️  Generating map visualization...')
 
@@ -294,16 +295,25 @@ async function performResolution(
         select: { id: true }
       })
 
-      await AIVisualService.generateMapFromScene(
+      // Timeout map generation after 30 seconds
+      const MAP_TIMEOUT_MS = 30 * 1000
+      const mapPromise = AIVisualService.generateMapFromScene(
         aiResponse.scene_text,
         campaignId,
         activeMap?.id
       )
 
+      const mapTimeoutPromise = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('Map generation timeout')), MAP_TIMEOUT_MS)
+      )
+
+      await Promise.race([mapPromise, mapTimeoutPromise])
+
       console.log('✅ Map visualization generated')
     } catch (visualError) {
       // Don't fail the entire scene resolution if map generation fails
-      console.error('⚠️  Map generation failed (non-critical):', visualError)
+      const errorMsg = visualError instanceof Error ? visualError.message : String(visualError)
+      console.error('⚠️  Map generation failed (non-critical):', errorMsg)
     }
 
     // Phase 16: Complete the current exchange and start a new one
@@ -355,17 +365,29 @@ async function performResolution(
     }
 
     // 8.6. Create campaign memory for RAG retrieval
+    // Add timeout to prevent memory creation from blocking scene resolution
     try {
       console.log('🧠 Creating campaign memory...')
-      await createSceneMemory(
+
+      // Timeout memory creation after 20 seconds
+      const MEMORY_CREATE_TIMEOUT_MS = 20 * 1000
+      const memoryCreatePromise = createSceneMemory(
         { ...scene, sceneResolutionText: aiResponse.scene_text },
         { turnNumber: currentTurn + 1 },
         aiResponse
       )
+
+      const memoryCreateTimeoutPromise = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('Memory creation timeout')), MEMORY_CREATE_TIMEOUT_MS)
+      )
+
+      await Promise.race([memoryCreatePromise, memoryCreateTimeoutPromise])
+
       console.log('✅ Campaign memory created')
     } catch (memoryError) {
       // Don't fail the entire scene resolution if memory creation fails
-      console.error('⚠️  Campaign memory creation failed (non-critical):', memoryError)
+      const errorMsg = memoryError instanceof Error ? memoryError.message : String(memoryError)
+      console.error('⚠️  Campaign memory creation failed (non-critical):', errorMsg)
     }
 
     // Phase 15.4: Check campaign health periodically

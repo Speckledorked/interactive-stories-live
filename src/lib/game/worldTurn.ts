@@ -135,7 +135,7 @@ async function generateOffscreenEvents(
     }
 
     // Build world summary
-    const worldSummary = await buildWorldSummaryForAI(campaignId)
+    const { worldSummary } = await buildWorldSummaryForAI(campaignId)
 
     // Call AI to generate offscreen events
     const aiResult = await callAIForWorldTurn(

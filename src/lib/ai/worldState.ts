@@ -13,12 +13,12 @@ import { retrieveRelevantHistory } from './memoryRetrieval' // Campaign Memory R
  *
  * @param campaignId - Campaign ID
  * @param currentSceneNumber - Current scene number
- * @returns Optimized world summary with location-based filtering
+ * @returns Optimized world summary with location-based filtering and fetched entities
  */
 async function buildOptimizedWorldSummary(
   campaignId: string,
   currentSceneNumber: number
-): Promise<AIGMRequest['world_summary']> {
+): Promise<{ worldSummary: AIGMRequest['world_summary'], entities: { characters: any[], npcs: any[], factions: any[] } }> {
   console.log('🎯 Building optimized world summary with location filtering')
 
   // Get optimized context from context manager
@@ -99,7 +99,7 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
     `.trim()
   }
 
-  return {
+  const worldSummary = {
     turn_number: worldMeta.currentTurnNumber,
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
 
@@ -160,6 +160,16 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
     // Use compressed timeline from context manager
     recent_timeline_events: compressedTimeline
   } as any
+
+  // Return both world summary and entities for reuse in memory retrieval
+  return {
+    worldSummary,
+    entities: {
+      characters,
+      npcs: allNpcs, // Return ALL npcs, not filtered ones, for memory retrieval
+      factions: allFactions // Return ALL factions, not filtered ones, for memory retrieval
+    }
+  }
 }
 
 /**
@@ -167,9 +177,9 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
  * This creates a clean, AI-readable summary of the entire game world
  *
  * @param campaignId - The campaign to summarize
- * @returns Formatted world state ready for AI
+ * @returns Formatted world state ready for AI and fetched entities
  */
-export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRequest['world_summary']> {
+export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worldSummary: AIGMRequest['world_summary'], entities: { characters: any[], npcs: any[], factions: any[] } }> {
   console.log('📊 Building world summary for campaign:', campaignId)
 
   // Fetch all relevant data in parallel for speed
@@ -208,7 +218,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
   }
 
   // Format everything for the AI
-  return {
+  const worldSummary = {
     turn_number: worldMeta.currentTurnNumber,
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
 
@@ -267,6 +277,16 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<AIGMRe
       turn_number: e.turnNumber
     }))
   }
+
+  // Return both world summary and entities for reuse in memory retrieval
+  return {
+    worldSummary,
+    entities: {
+      characters,
+      npcs,
+      factions
+    }
+  }
 }
 
 /**
@@ -311,13 +331,18 @@ export async function buildSceneResolutionRequest(
   // Phase 14.6: Use optimized context for campaigns with 10+ scenes
   const sceneCount = await prisma.scene.count({ where: { campaignId } })
   let worldSummary: AIGMRequest['world_summary']
+  let entities: { characters: any[], npcs: any[], factions: any[] }
 
   if (sceneCount >= 10) {
     console.log('📉 Using optimized context (campaign has', sceneCount, 'scenes)')
-    worldSummary = await buildOptimizedWorldSummary(campaignId, scene.sceneNumber)
+    const result = await buildOptimizedWorldSummary(campaignId, scene.sceneNumber)
+    worldSummary = result.worldSummary
+    entities = result.entities
   } else {
     console.log('📊 Using full context (campaign has', sceneCount, 'scenes)')
-    worldSummary = await buildWorldSummaryForAI(campaignId)
+    const result = await buildWorldSummaryForAI(campaignId)
+    worldSummary = result.worldSummary
+    entities = result.entities
   }
 
   // Format player actions
@@ -377,21 +402,16 @@ export async function buildSceneResolutionRequest(
   }
 
   // RAG Memory Retrieval: Get relevant campaign history
-  // Add timeout to prevent memory retrieval from blocking scene resolution
+  // OPTIMIZATION: Reuse entities already fetched in world summary to avoid duplicate queries
   let relevantMemories: any[] = []
   try {
     console.log('🧠 Retrieving relevant campaign memories...')
 
-    // Get NPCs and factions from world summary for filtering
-    const npcs = await prisma.nPC.findMany({ where: { campaignId } })
-    const factions = await prisma.faction.findMany({ where: { campaignId } })
-    const characters = await prisma.character.findMany({
-      where: { campaignId, isAlive: true }
-    })
+    // Use already-fetched entities from world summary build (no duplicate DB queries!)
+    const { characters, npcs, factions } = entities
 
-    // Timeout memory retrieval after 20 seconds to prevent blocking
-    const MEMORY_TIMEOUT_MS = 20 * 1000
-    const memoryPromise = retrieveRelevantHistory(
+    // Retrieve memories with the pre-fetched entities
+    relevantMemories = await retrieveRelevantHistory(
       campaignId,
       {
         currentScene: scene,
@@ -408,17 +428,11 @@ export async function buildSceneResolutionRequest(
       }
     )
 
-    const timeoutPromise = new Promise<any[]>((_, reject) =>
-      setTimeout(() => reject(new Error('Memory retrieval timeout')), MEMORY_TIMEOUT_MS)
-    )
-
-    relevantMemories = await Promise.race([memoryPromise, timeoutPromise])
-
     console.log(`✅ Retrieved ${relevantMemories.length} relevant memories`)
   } catch (memoryError) {
     const errorMsg = memoryError instanceof Error ? memoryError.message : String(memoryError)
-    console.error('⚠️ Memory retrieval failed (non-critical):', errorMsg)
-    // Continue without memories - don't block scene resolution
+    console.error('⚠️ Memory retrieval failed:', errorMsg)
+    // Log but continue - scene resolution can work without memories if needed
   }
 
   // Add memories to world summary

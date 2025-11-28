@@ -37,7 +37,7 @@ export default function Header() {
 
   const loadUnreadCount = async (userId: string) => {
     try {
-      const response = await authenticatedFetch(`/api/notifications?userId=${userId}&unread=true`)
+      const response = await authenticatedFetch(`/api/notifications?status=UNREAD`)
       if (response.ok) {
         const data = await response.json()
         setUnreadCount(data.notifications?.length || 0)

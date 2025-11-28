@@ -228,6 +228,18 @@ export class ExchangeManager {
 
     currentState.isComplete = true
 
+    // Mark all pending actions for this exchange as resolved
+    await prisma.playerAction.updateMany({
+      where: {
+        sceneId: this.sceneId,
+        exchangeNumber: scene.currentExchange,
+        status: 'pending'
+      },
+      data: {
+        status: 'resolved'
+      }
+    })
+
     await prisma.scene.update({
       where: { id: this.sceneId },
       data: {

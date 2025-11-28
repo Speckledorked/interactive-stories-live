@@ -851,10 +851,10 @@ export default function StoryPage() {
                   )}
 
                   {/* GM Controls (Admin Only) */}
-                  {scene.status === 'AWAITING_ACTIONS' && isAdmin && scene.playerActions && scene.playerActions.length > 0 && (() => {
+                  {scene.status === 'AWAITING_ACTIONS' && isAdmin && (() => {
                     const participants = scene.participants as any
                     const hasDefinedParticipants = participants?.characterIds && participants.characterIds.length > 0
-                    const submittedUserIds = new Set(scene.playerActions.map((a: any) => a.userId))
+                    const submittedUserIds = new Set((scene.playerActions || []).map((a: any) => a.userId))
                     const participantUserIds = participants?.userIds || []
                     const allParticipantsSubmitted = participantUserIds.length > 0 && participantUserIds.every((uid: string) => submittedUserIds.has(uid))
 
@@ -866,7 +866,7 @@ export default function StoryPage() {
                               🎲 GM Controls
                             </p>
                             <p className="text-gray-400 text-xs mb-2">
-                              {scene.playerActions.length} action(s) submitted. Current exchange: {scene.currentExchange || 1}
+                              {(scene.playerActions || []).length} action(s) submitted. Current exchange: {scene.currentExchange || 1}
                             </p>
                             {hasDefinedParticipants ? (
                               allParticipantsSubmitted ? (

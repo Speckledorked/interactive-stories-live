@@ -45,6 +45,9 @@ export async function GET(
       },
       include: {
         playerActions: {
+          where: {
+            status: 'pending'
+          },
           include: {
             character: true,
             user: {
@@ -206,9 +209,13 @@ export async function POST(
                                    (scene.participants as any).characterIds.length > 0
 
     if (hasDefinedParticipants) {
-      // Get all actions for this scene including the one just created
+      // Get all actions for this scene's current exchange (not all exchanges)
       const allActions = await prisma.playerAction.findMany({
-        where: { sceneId },
+        where: {
+          sceneId,
+          exchangeNumber: scene.currentExchange,
+          status: 'pending'
+        },
         select: { userId: true }
       })
 

@@ -603,7 +603,7 @@ function CreateCampaignModal({
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
                       <div className="spinner h-5 w-5 border-white"></div>
-                      Creating...
+                      {selectedTemplate ? 'Building your world…' : 'Creating…'}
                     </span>
                   ) : (
                     'Create Campaign'

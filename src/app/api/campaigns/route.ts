@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { CreateCampaignRequest, ErrorResponse } from '@/types/api'
 import { getTemplate, applyCampaignTemplate } from '@/lib/templates/campaign-templates'
+import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
 
 // GET /api/campaigns - List user's campaigns
 export async function GET(request: NextRequest) {
@@ -84,11 +85,30 @@ export async function POST(request: NextRequest) {
     // Template fields take precedence unless the user explicitly overrode them
     const resolvedUniverse = universe || template?.universe || 'Original'
     const resolvedSystemPrompt = aiSystemPrompt || template?.systemPrompt || ''
-    const resolvedWorldSeed = initialWorldSeed || template?.initialWorldSeed || ''
+
+    // If a template is selected and the user hasn't provided a custom world seed,
+    // generate a unique world with AI before opening the transaction
+    let resolvedWorldSeed = initialWorldSeed || ''
+    let generatedFactions: Awaited<ReturnType<typeof generateWorldFromTemplate>>['factions'] | undefined
+
+    if (template && !initialWorldSeed) {
+      console.log('🌍 Generating unique world from template...')
+      const generated = await generateWorldFromTemplate(template.id, title, description || '')
+      if (generated) {
+        resolvedWorldSeed = generated.worldSeed
+        generatedFactions = generated.factions
+        console.log(`✅ World generated: ${generated.factions.length} unique factions`)
+      } else {
+        // AI failed — fall back to template defaults
+        resolvedWorldSeed = template.initialWorldSeed
+        console.log('⚠️ World generation failed, using template defaults')
+      }
+    } else if (!resolvedWorldSeed) {
+      resolvedWorldSeed = template?.initialWorldSeed || ''
+    }
 
     // Create campaign, world meta, membership, and template data in one transaction
     const campaign = await prisma.$transaction(async (tx) => {
-      // Create campaign
       const newCampaign = await tx.campaign.create({
         data: {
           title,
@@ -99,7 +119,6 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Create WorldMeta for this campaign
       await tx.worldMeta.create({
         data: {
           campaignId: newCampaign.id,
@@ -109,7 +128,6 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Make current user an admin member of the campaign
       await tx.campaignMembership.create({
         data: {
           userId: user.userId,
@@ -118,9 +136,9 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Apply template moves and factions if a template was selected
+      // Apply template moves + factions (AI-generated factions if available)
       if (template) {
-        await applyCampaignTemplate(newCampaign.id, template.id, tx)
+        await applyCampaignTemplate(newCampaign.id, template.id, tx, generatedFactions)
       }
 
       return newCampaign

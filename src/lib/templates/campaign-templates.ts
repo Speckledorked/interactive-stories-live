@@ -429,20 +429,33 @@ export function getTemplate(id: string): CampaignTemplate | undefined {
   return CAMPAIGN_TEMPLATES.find(t => t.id === id)
 }
 
+export interface GeneratedFactionOverride {
+  name: string
+  description: string
+  goals: string
+  currentPlan: string
+  threatLevel: number
+  resources: number
+  influence: number
+}
+
 /**
- * Apply template to a new campaign
+ * Apply template to a new campaign.
+ * If generatedFactions is provided, those are used instead of the template's
+ * hardcoded faction list (world seed is handled at the route level).
  */
 export async function applyCampaignTemplate(
   campaignId: string,
   templateId: string,
-  prisma: any
+  prisma: any,
+  generatedFactions?: GeneratedFactionOverride[]
 ): Promise<void> {
   const template = getTemplate(templateId)
   if (!template) {
     throw new Error(`Template ${templateId} not found`)
   }
 
-  // Create default moves
+  // Always create the system moves — these define the game mechanics
   for (const moveTemplate of template.defaultMoves) {
     await prisma.move.create({
       data: {
@@ -457,20 +470,31 @@ export async function applyCampaignTemplate(
     })
   }
 
-  // Create faction templates
-  for (const factionTemplate of template.factionTemplates) {
+  // Use AI-generated factions if available, otherwise fall back to template defaults
+  const factionsToCreate = generatedFactions ?? template.factionTemplates.map(f => ({
+    name: f.name,
+    description: f.description,
+    goals: f.goals,
+    currentPlan: undefined as string | undefined,
+    threatLevel: f.threatLevel,
+    resources: f.resources,
+    influence: f.influence,
+  }))
+
+  for (const faction of factionsToCreate) {
     await prisma.faction.create({
       data: {
         campaignId,
-        name: factionTemplate.name,
-        description: factionTemplate.description,
-        goals: factionTemplate.goals,
-        resources: factionTemplate.resources,
-        influence: factionTemplate.influence,
-        threatLevel: factionTemplate.threatLevel
+        name: faction.name,
+        description: faction.description,
+        goals: faction.goals,
+        currentPlan: faction.currentPlan ?? null,
+        resources: faction.resources,
+        influence: faction.influence,
+        threatLevel: faction.threatLevel
       }
     })
   }
 
-  console.log(`✅ Applied template: ${template.name}`)
+  console.log(`✅ Applied template: ${template.name} (${factionsToCreate.length} factions, ${generatedFactions ? 'AI-generated' : 'template defaults'})`)
 }

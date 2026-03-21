@@ -240,6 +240,40 @@ export default function CampaignsPage() {
   )
 }
 
+// Template definitions (mirrors campaign-templates.ts, kept here to avoid server imports in client component)
+const TEMPLATES = [
+  {
+    id: 'pbta-fantasy',
+    name: 'PbtA Fantasy',
+    description: 'Dungeon World-style adventure with ruins, monsters, and rival factions.',
+    universe: 'High Fantasy',
+    tags: ['Fantasy', 'Dungeon Crawl', 'Magic'],
+    moveCount: 6,
+    factionCount: 3,
+    emoji: '⚔️'
+  },
+  {
+    id: 'mha-ua-arc',
+    name: 'MHA: UA Arc',
+    description: 'Superhero academy under attack. Quirks, villains, and heroic growth.',
+    universe: 'Modern Superhero',
+    tags: ['Superhero', 'School', 'Anime'],
+    moveCount: 3,
+    factionCount: 2,
+    emoji: '🦸'
+  },
+  {
+    id: 'monster-of-the-week',
+    name: 'Monster of the Week',
+    description: 'Hunters investigating supernatural threats in the modern world.',
+    universe: 'Modern Horror',
+    tags: ['Horror', 'Investigation', 'Supernatural'],
+    moveCount: 3,
+    factionCount: 1,
+    emoji: '🔦'
+  }
+]
+
 // Create Campaign Modal Component
 function CreateCampaignModal({
   onClose,
@@ -248,18 +282,33 @@ function CreateCampaignModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null) // null = custom
+  const [step, setStep] = useState<'template' | 'details'>('template')
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    universe: 'Original',
-    aiSystemPrompt: `You are the SOLE Game Master for this campaign. There is NO human GM.
-You control ALL NPCs, villains, factions, and background events.
-Players control ONLY their own characters and their actions.
-Make the story engaging, dramatic, and responsive to player choices.`,
-    initialWorldSeed: 'The adventure begins in a time of change and uncertainty...'
+    universe: '',
+    aiSystemPrompt: '',
+    initialWorldSeed: ''
   })
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const handleTemplateSelect = (templateId: string | null) => {
+    setSelectedTemplate(templateId)
+    if (templateId === null) {
+      // Custom — clear pre-fills, show all fields
+      setFormData(f => ({ ...f, universe: '', aiSystemPrompt: '', initialWorldSeed: '' }))
+      setShowAdvanced(true)
+    } else {
+      // Template — pre-fill universe for display; server fills the rest
+      const tpl = TEMPLATES.find(t => t.id === templateId)
+      setFormData(f => ({ ...f, universe: tpl?.universe || '' }))
+      setShowAdvanced(false)
+    }
+    setStep('details')
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -267,9 +316,27 @@ Make the story engaging, dramatic, and responsive to player choices.`,
     setError('')
 
     try {
+      const payload: any = {
+        title: formData.title,
+        description: formData.description
+      }
+
+      if (selectedTemplate) {
+        payload.templateId = selectedTemplate
+        // Only pass overrides if user changed them in advanced
+        if (showAdvanced && formData.universe) payload.universe = formData.universe
+        if (showAdvanced && formData.aiSystemPrompt) payload.aiSystemPrompt = formData.aiSystemPrompt
+        if (showAdvanced && formData.initialWorldSeed) payload.initialWorldSeed = formData.initialWorldSeed
+      } else {
+        // Custom — send everything
+        payload.universe = formData.universe || 'Original'
+        payload.aiSystemPrompt = formData.aiSystemPrompt || 'You are the Game Master for this campaign.'
+        payload.initialWorldSeed = formData.initialWorldSeed || ''
+      }
+
       const response = await authenticatedFetch('/api/campaigns', {
         method: 'POST',
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       })
 
       if (!response.ok) {
@@ -285,12 +352,29 @@ Make the story engaging, dramatic, and responsive to player choices.`,
     }
   }
 
+  const selectedTpl = selectedTemplate ? TEMPLATES.find(t => t.id === selectedTemplate) : null
+
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
+      <div className="modal-content max-w-2xl">
         <div className="p-8">
+          {/* Header */}
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold text-white tracking-tight">Create Campaign</h2>
+            <div className="flex items-center gap-3">
+              {step === 'details' && (
+                <button
+                  onClick={() => setStep('template')}
+                  className="text-gray-400 hover:text-white transition-colors p-1.5 hover:bg-white/5 rounded-lg"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              )}
+              <h2 className="text-2xl font-bold text-white tracking-tight">
+                {step === 'template' ? 'Choose a Starting Point' : 'Campaign Details'}
+              </h2>
+            </div>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"
@@ -301,114 +385,233 @@ Make the story engaging, dramatic, and responsive to player choices.`,
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="bg-gradient-to-r from-danger-500/10 to-danger-600/5 border border-danger-500/30 text-danger-400 px-6 py-4 rounded-2xl backdrop-blur-sm">
-                <div className="flex items-center gap-3">
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <span className="font-medium">{error}</span>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2.5">
-                Campaign Title <span className="text-danger-400">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="input-field"
-                placeholder="e.g., Whisper - MHA Timeline"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2.5">
-                Description <span className="text-danger-400">*</span>
-              </label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="input-field min-h-[100px] resize-none"
-                placeholder="Brief description of your campaign..."
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2.5">
-                Universe <span className="text-danger-400">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.universe}
-                onChange={(e) => setFormData({ ...formData, universe: e.target.value })}
-                className="input-field"
-                placeholder="e.g., MHA, Cosmere, D&D, Original"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2.5">
-                AI GM System Prompt <span className="text-danger-400">*</span>
-              </label>
-              <textarea
-                value={formData.aiSystemPrompt}
-                onChange={(e) => setFormData({ ...formData, aiSystemPrompt: e.target.value })}
-                className="input-field min-h-[140px] font-mono text-sm resize-none"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-2 flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Instructions for how the AI should run your game
+          {/* Step 1: Template selection */}
+          {step === 'template' && (
+            <div className="space-y-3">
+              <p className="text-gray-400 text-sm mb-6">
+                Templates pre-configure the AI Game Master, world factions, and moves so you can start playing immediately.
               </p>
-            </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2.5">
-                Initial World Seed <span className="text-danger-400">*</span>
-              </label>
-              <textarea
-                value={formData.initialWorldSeed}
-                onChange={(e) => setFormData({ ...formData, initialWorldSeed: e.target.value })}
-                className="input-field min-h-[100px] resize-none"
-                placeholder="Starting situation of your campaign..."
-                required
-              />
-            </div>
+              {TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  onClick={() => handleTemplateSelect(tpl.id)}
+                  className="w-full text-left p-5 bg-dark-800/60 hover:bg-dark-700/60 border border-dark-700 hover:border-primary-500/50 rounded-2xl transition-all duration-200 group"
+                >
+                  <div className="flex items-start gap-4">
+                    <span className="text-3xl">{tpl.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-white group-hover:text-primary-400 transition-colors">{tpl.name}</span>
+                        <span className="text-xs text-gray-500 bg-dark-900/50 px-2 py-0.5 rounded-full">{tpl.universe}</span>
+                      </div>
+                      <p className="text-sm text-gray-400 mb-3">{tpl.description}</p>
+                      <div className="flex items-center gap-3 text-xs text-gray-500">
+                        <span>{tpl.moveCount} moves</span>
+                        <span>·</span>
+                        <span>{tpl.factionCount} factions</span>
+                        <span>·</span>
+                        <div className="flex gap-1.5">
+                          {tpl.tags.map(tag => (
+                            <span key={tag} className="bg-dark-900/80 px-2 py-0.5 rounded-full">{tag}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <svg className="w-5 h-5 text-gray-600 group-hover:text-primary-400 transition-colors flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+              ))}
 
-            <div className="flex gap-3 pt-4">
+              {/* Custom option */}
               <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 btn-secondary"
+                onClick={() => handleTemplateSelect(null)}
+                className="w-full text-left p-5 bg-dark-800/30 hover:bg-dark-700/40 border border-dark-700/50 hover:border-dark-600 rounded-2xl transition-all duration-200 group"
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 btn-primary"
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <div className="spinner h-5 w-5 border-white"></div>
-                    Creating...
-                  </span>
-                ) : (
-                  'Create Campaign'
-                )}
+                <div className="flex items-center gap-4">
+                  <span className="text-3xl">✏️</span>
+                  <div className="flex-1">
+                    <p className="font-bold text-gray-300 group-hover:text-white transition-colors">Custom</p>
+                    <p className="text-sm text-gray-500">Build your own world from scratch</p>
+                  </div>
+                  <svg className="w-5 h-5 text-gray-600 group-hover:text-gray-400 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
               </button>
             </div>
-          </form>
+          )}
+
+          {/* Step 2: Campaign details form */}
+          {step === 'details' && (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {error && (
+                <div className="bg-gradient-to-r from-danger-500/10 to-danger-600/5 border border-danger-500/30 text-danger-400 px-5 py-4 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span className="font-medium text-sm">{error}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Template badge */}
+              {selectedTpl && (
+                <div className="flex items-center gap-3 px-4 py-3 bg-primary-500/10 border border-primary-500/20 rounded-xl">
+                  <span className="text-xl">{selectedTpl.emoji}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-primary-300">{selectedTpl.name} template</p>
+                    <p className="text-xs text-gray-400">
+                      Includes {selectedTpl.moveCount} moves, {selectedTpl.factionCount} factions, AI system prompt, and world seed
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  Campaign Title <span className="text-danger-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="input-field"
+                  placeholder={selectedTpl ? `e.g., ${selectedTpl.name} - My Campaign` : 'e.g., The Shattered Realm'}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="input-field min-h-[80px] resize-none"
+                  placeholder="What's this campaign about?"
+                />
+              </div>
+
+              {/* Custom fields — always shown for custom, toggleable for templates */}
+              {selectedTemplate === null && (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                      Universe <span className="text-danger-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.universe}
+                      onChange={(e) => setFormData({ ...formData, universe: e.target.value })}
+                      className="input-field"
+                      placeholder="e.g., Original, Tolkien, Sci-Fi, Noir"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                      AI GM Instructions <span className="text-danger-400">*</span>
+                    </label>
+                    <textarea
+                      value={formData.aiSystemPrompt}
+                      onChange={(e) => setFormData({ ...formData, aiSystemPrompt: e.target.value })}
+                      className="input-field min-h-[120px] font-mono text-sm resize-none"
+                      placeholder={`You are the Game Master for a [universe] campaign.\n\nCore Principles:\n- Fiction first\n- Be a fan of the characters\n...`}
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1.5">Tells the AI how to run your world — tone, rules, GM moves</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                      World Seed
+                    </label>
+                    <textarea
+                      value={formData.initialWorldSeed}
+                      onChange={(e) => setFormData({ ...formData, initialWorldSeed: e.target.value })}
+                      className="input-field min-h-[80px] resize-none"
+                      placeholder="The current state of the world — what's happening when the story begins?"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Advanced overrides for template campaigns */}
+              {selectedTemplate !== null && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    <svg
+                      className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    Advanced — override template settings
+                  </button>
+
+                  {showAdvanced && (
+                    <div className="mt-4 space-y-4 pl-4 border-l border-dark-700">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-300 mb-2">Universe</label>
+                        <input
+                          type="text"
+                          value={formData.universe}
+                          onChange={(e) => setFormData({ ...formData, universe: e.target.value })}
+                          className="input-field"
+                          placeholder={selectedTpl?.universe}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-300 mb-2">AI GM Instructions</label>
+                        <textarea
+                          value={formData.aiSystemPrompt}
+                          onChange={(e) => setFormData({ ...formData, aiSystemPrompt: e.target.value })}
+                          className="input-field min-h-[100px] font-mono text-sm resize-none"
+                          placeholder="Leave blank to use template instructions"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-300 mb-2">World Seed</label>
+                        <textarea
+                          value={formData.initialWorldSeed}
+                          onChange={(e) => setFormData({ ...formData, initialWorldSeed: e.target.value })}
+                          className="input-field min-h-[80px] resize-none"
+                          placeholder="Leave blank to use template world seed"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={onClose} className="flex-1 btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" disabled={loading} className="flex-1 btn-primary">
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="spinner h-5 w-5 border-white"></div>
+                      Creating...
+                    </span>
+                  ) : (
+                    'Create Campaign'
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </div>

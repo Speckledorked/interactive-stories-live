@@ -337,6 +337,11 @@ export default function StoryPage() {
 
       if (!response.ok) {
         const data = await response.json()
+        if (response.status === 402) {
+          setInsufficientFundsDetails(data.details || 'You need to add funds to submit actions.')
+          setShowInsufficientFunds(true)
+          return
+        }
         throw new Error(data.error || 'Failed to submit action')
       }
 

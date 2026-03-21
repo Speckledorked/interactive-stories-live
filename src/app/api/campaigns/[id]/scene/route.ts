@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
 import { pusherServer } from '@/lib/pusher'
+import { getUserBalance, PRICING, formatCurrency } from '@/lib/payment/service'
 
 // GET active scenes
 export async function GET(
@@ -120,6 +121,18 @@ export async function POST(
       return NextResponse.json<ErrorResponse>(
         { error: 'Scene is not accepting actions' },
         { status: 400 }
+      )
+    }
+
+    // Check player has a positive balance (must have put money in to play)
+    const playerBalance = await getUserBalance(user.userId)
+    if (playerBalance <= 0) {
+      return NextResponse.json<ErrorResponse>(
+        {
+          error: 'Insufficient balance',
+          details: `You need at least ${formatCurrency(PRICING.SOLO)} in your account to submit actions. Please add funds to continue playing.`
+        },
+        { status: 402 }
       )
     }
 

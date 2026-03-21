@@ -647,7 +647,72 @@ export async function applyWorldUpdates(
         }
       }
 
-      // 7. Store GM notes in WorldMeta if provided
+      // 7. Upsert locations
+      if (world_updates.location_changes) {
+        console.log(`📍 Syncing ${world_updates.location_changes.length} location(s)`)
+
+        for (const locChange of world_updates.location_changes) {
+          const existing = await tx.location.findUnique({
+            where: { campaignId_name: { campaignId, name: locChange.name } }
+          })
+
+          if (existing) {
+            const updateData: any = {}
+            if (locChange.description && !existing.description) {
+              updateData.description = locChange.description
+            }
+            if (locChange.location_type && !existing.locationType) {
+              updateData.locationType = locChange.location_type
+            }
+            if (locChange.gm_notes_append) {
+              updateData.gmNotes = (existing.gmNotes || '') + '\n\n' + locChange.gm_notes_append
+            }
+            if (Object.keys(updateData).length > 0) {
+              await tx.location.update({
+                where: { id: existing.id },
+                data: updateData
+              })
+              console.log(`  📍 Updated location: ${locChange.name}`)
+            }
+          } else {
+            await tx.location.create({
+              data: {
+                campaignId,
+                name: locChange.name,
+                description: locChange.description || null,
+                locationType: locChange.location_type || null,
+                gmNotes: locChange.gm_notes_append || null,
+                isDiscovered: true
+              }
+            })
+            console.log(`  📍 Created location: ${locChange.name}`)
+          }
+        }
+      }
+
+      // 7b. Auto-register locations from character movement
+      if (world_updates.pc_changes) {
+        for (const pcChange of world_updates.pc_changes) {
+          if (pcChange.changes.location) {
+            const locationName = pcChange.changes.location
+            try {
+              await tx.location.upsert({
+                where: { campaignId_name: { campaignId, name: locationName } },
+                create: {
+                  campaignId,
+                  name: locationName,
+                  isDiscovered: true
+                },
+                update: {} // Already exists, no changes needed
+              })
+            } catch {
+              // Ignore if upsert fails (e.g., concurrent write) — non-critical
+            }
+          }
+        }
+      }
+
+      // 8. Store GM notes in WorldMeta if provided
       if (world_updates.notes_for_gm) {
         const worldMeta = await tx.worldMeta.findUnique({
           where: { campaignId }

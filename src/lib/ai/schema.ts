@@ -156,6 +156,15 @@ export const OrganicAdvancementSchema = z.object({
   new_moves: z.array(z.string()).optional()
 })
 
+// Location changes schema
+export const LocationChangesSchema = z.object({
+  name: z.string(),
+  is_new: z.boolean().optional(),       // true when registering a new location
+  description: z.string().optional(),   // what this place looks like / feels like
+  location_type: z.string().optional(), // town, dungeon, wilderness, inn, building, etc.
+  gm_notes_append: z.string().optional()
+})
+
 // World updates schema
 export const WorldUpdatesSchema = z.object({
   new_timeline_events: z.array(TimelineEventSchema).optional(),
@@ -163,6 +172,7 @@ export const WorldUpdatesSchema = z.object({
   npc_changes: z.array(NPCChangesSchema).optional(),
   pc_changes: z.array(PCChangesSchema).optional(),
   faction_changes: z.array(FactionChangesSchema).optional(),
+  location_changes: z.array(LocationChangesSchema).optional(),
   organic_advancement: z.array(OrganicAdvancementSchema).optional(),
   notes_for_gm: z.string().optional()
 })

@@ -128,6 +128,13 @@ export interface AIGMResponse {
         gm_notes_append?: string
       }
     }>
+    location_changes?: Array<{
+      name: string
+      is_new?: boolean       // true when registering a location for the first time
+      description?: string   // what this place looks, feels, smells like
+      location_type?: string // town, dungeon, wilderness, inn, building, etc.
+      gm_notes_append?: string
+    }>
     organic_advancement?: Array<{
       character_id: string
       stat_increases?: Array<{
@@ -184,6 +191,11 @@ export interface AIGMRequest {
       threatLevel: number
       resources: number
       influence: number
+    }>
+    locations?: Array<{
+      name: string
+      description: string
+      type: string
     }>
     clocks: Array<{
       id: string
@@ -548,6 +560,10 @@ You MUST respond with a JSON object matching this structure:
       {"npc_name_or_id": "New Character Name", "is_new": true, "changes": {"description": "Brief 1-sentence description of who they are", "notes_append": "Introduced as..."}}
     ],
     "faction_changes": [...],
+    "location_changes": [
+      {"name": "The Rusty Flagon", "is_new": true, "description": "A dimly-lit tavern reeking of pipe smoke and old ale.", "location_type": "inn"},
+      {"name": "Irongate Keep", "gm_notes_append": "The portcullis is now damaged after the siege."}
+    ],
     "organic_advancement": [...],
     "notes_for_gm": "..."
   }
@@ -605,6 +621,13 @@ REGISTER NEW NPCs: Whenever you introduce a named character who doesn't already 
 REGISTER NEW FACTIONS: Whenever a new organization, gang, guild, or group emerges mid-campaign (not in the starting world), add them to faction_changes with is_new: true.
 - Include a description (who they are), goals (what they want), and current_plan (what they're doing right now)
 - Example: A new criminal syndicate revealed mid-scene → register with is_new: true
+
+REGISTER LOCATIONS: Whenever the characters visit or you describe a named place, add it to location_changes.
+- is_new: true for the first time a location is named in the story
+- description: sensory details — what it looks, sounds, smells like
+- location_type: pick one of: town, city, dungeon, wilderness, inn, tavern, building, ruin, forest, road, sea, other
+- For already-known locations, use gm_notes_append to record how it changed (fire damage, new guards, etc.)
+- Good example: {"name": "The Hollow Bridge", "is_new": true, "description": "A crumbling stone arch over a black river. Moss covers every surface. Something moves in the water below.", "location_type": "wilderness"}
 </npc_tracking>
 
 <relationships>
@@ -664,6 +687,13 @@ FACTIONS:
 ${world_summary.factions.map(f =>
   `• ${f.name} (Threat ${f.threatLevel}/5) - ${f.goals || 'Unknown'} | Plan: ${f.currentPlan || 'Unknown'}`
 ).join('\n')}
+
+KNOWN LOCATIONS:
+${world_summary.locations && world_summary.locations.length > 0
+  ? world_summary.locations.map(l =>
+    `• ${l.name}${l.type !== 'unknown' ? ` [${l.type}]` : ''}${l.description ? ` - ${l.description}` : ''}`
+  ).join('\n')
+  : '(none discovered yet)'}
 
 CLOCKS:
 ${world_summary.clocks.map(cl =>

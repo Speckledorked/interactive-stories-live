@@ -33,10 +33,10 @@ export async function GET(
       prisma.session.findFirst({
         where: {
           campaignId,
-          scheduledDate: { gt: new Date() }
+          scheduledAt: { gt: new Date() }
         },
-        orderBy: { scheduledDate: 'asc' },
-        select: { scheduledDate: true }
+        orderBy: { scheduledAt: 'asc' },
+        select: { scheduledAt: true }
       })
     ])
 
@@ -45,7 +45,7 @@ export async function GET(
       activePlayers,
       currentTurn: lastScene?.sceneNumber ?? 0,
       lastSessionDate: lastScene?.updatedAt ?? null,
-      nextSessionDate: nextSession?.scheduledDate ?? null
+      nextSessionDate: nextSession?.scheduledAt ?? null
     })
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {

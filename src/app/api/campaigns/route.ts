@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     // If a template is selected and the user hasn't provided a custom world seed,
     // generate a unique world with AI before opening the transaction
     let resolvedWorldSeed = initialWorldSeed || ''
-    let generatedFactions: Awaited<ReturnType<typeof generateWorldFromTemplate>>['factions'] | undefined
+    let generatedFactions: NonNullable<Awaited<ReturnType<typeof generateWorldFromTemplate>>>['factions'] | undefined
 
     if (template && !initialWorldSeed) {
       console.log('🌍 Generating unique world from template...')

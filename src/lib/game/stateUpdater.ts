@@ -14,6 +14,7 @@ import {
   Condition,
   HarmLevel
 } from './harm'
+import { getArmorReduction } from './inventory'
 
 /**
  * Apply all world updates from an AI GM response to the database
@@ -173,12 +174,14 @@ export async function applyWorldUpdates(
             let currentConditions: Condition[] = (character.conditions as any)?.conditions || []
             let harmMessages: string[] = []
 
-            // Apply harm damage
+            // Apply harm damage (armor mitigates incoming damage)
             if (pcChange.changes.harm_damage && pcChange.changes.harm_damage > 0) {
+              const armorName = (character.equipment as any)?.armor || ''
+              const armorReduction = getArmorReduction(armorName)
               const harmResult = applyHarm(
                 currentHarm as HarmLevel,
                 pcChange.changes.harm_damage,
-                0 // TODO: Factor in armor when equipment system is integrated
+                armorReduction
               )
               currentHarm = harmResult.newHarm
               harmMessages.push(harmResult.message)
@@ -834,7 +837,84 @@ export function summarizeWorldUpdates(aiResponse: AIGMResponse): string {
     summary.push('GM notes recorded')
   }
 
-  return summary.length > 0 
+  return summary.length > 0
     ? summary.join(', ')
     : 'No world changes'
+}
+
+/**
+ * Enrich stub NPCs that were auto-created mid-scene with no description.
+ *
+ * After `applyWorldUpdates` commits, any NPC introduced by the AI without
+ * a description exists as a bare name in the DB.  This function makes a
+ * single lightweight AI call to flesh them out based on the resolved scene
+ * text, then persists the result.
+ *
+ * Silently skips if OpenAI is unconfigured or returns an error — it is
+ * intentionally non-critical.
+ */
+export async function enrichStubNPCs(
+  campaignId: string,
+  sceneText: string
+): Promise<void> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) return
+
+  // Find NPCs created in the last 2 minutes with no description
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000)
+  const stubs = await prisma.nPC.findMany({
+    where: {
+      campaignId,
+      description: null,
+      createdAt: { gte: cutoff }
+    },
+    select: { id: true, name: true }
+  })
+
+  if (stubs.length === 0) return
+
+  console.log(`🪄 Enriching ${stubs.length} stub NPC(s): ${stubs.map(n => n.name).join(', ')}`)
+
+  const nameList = stubs.map(n => `- ${n.name}`).join('\n')
+  const prompt = `You are a TTRPG game master. The following scene just resolved:\n\n${sceneText}\n\nThese NPCs were introduced for the first time:\n${nameList}\n\nFor each NPC, write a SHORT 1-2 sentence description (appearance, role, or personality) based on how they appear in the scene. If the scene doesn't mention them explicitly, invent something consistent with the fiction.\n\nRespond with valid JSON:\n{"npcs": [{"name": "...", "description": "..."}]}`
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 400,
+        response_format: { type: 'json_object' }
+      })
+    })
+
+    if (!response.ok) {
+      console.warn('⚠️ NPC enrichment API call failed:', response.status)
+      return
+    }
+
+    const data = await response.json()
+    const parsed = JSON.parse(data.choices[0].message.content) as {
+      npcs: Array<{ name: string; description: string }>
+    }
+
+    for (const enriched of parsed.npcs) {
+      const stub = stubs.find(s => s.name.toLowerCase() === enriched.name.toLowerCase())
+      if (stub && enriched.description) {
+        await prisma.nPC.update({
+          where: { id: stub.id },
+          data: { description: enriched.description }
+        })
+        console.log(`  ✅ Enriched NPC: ${stub.name}`)
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ NPC enrichment failed (non-critical):', err)
+  }
 }

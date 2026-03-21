@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
 import CharacterSheetDisplay from '@/components/character/CharacterSheetDisplay'
+import { DynamicDowntimeManager } from '@/components/downtime/DynamicDowntimeManager'
 import { pusherClient } from '@/lib/pusher'
 
 export default function CharacterPage() {
@@ -17,6 +18,8 @@ export default function CharacterPage() {
   const [campaign, setCampaign] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [downtimeActivities, setDowntimeActivities] = useState<any[]>([])
+  const [downtimeSuggestions, setDowntimeSuggestions] = useState<string[]>([])
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -67,11 +70,60 @@ export default function CharacterPage() {
       } else {
         setError('Character not found')
       }
+
+      // Load downtime activities and suggestions
+      const [activitiesRes, suggestionsRes] = await Promise.all([
+        authenticatedFetch(`/api/characters/${characterId}/dynamic-downtime`),
+        authenticatedFetch(`/api/characters/${characterId}/dynamic-downtime/suggestions`).catch(() => null)
+      ])
+      if (activitiesRes.ok) {
+        setDowntimeActivities(await activitiesRes.json())
+      }
+      if (suggestionsRes?.ok) {
+        const data = await suggestionsRes.json()
+        setDowntimeSuggestions(data.suggestions || [])
+      }
     } catch (err) {
       setError('Failed to load character')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCreateDowntimeActivity = async (description: string) => {
+    const response = await authenticatedFetch(`/api/characters/${characterId}/dynamic-downtime`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description })
+    })
+    if (response.ok) {
+      const data = await response.json()
+      setDowntimeActivities(prev => [data.activity, ...prev])
+    }
+  }
+
+  const handleAdvanceDowntimeTime = async (charId: string, days: number) => {
+    const response = await authenticatedFetch(`/api/characters/${charId}/dynamic-downtime`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ days })
+    })
+    if (response.ok) {
+      // Reload activities to reflect new state
+      const activitiesRes = await authenticatedFetch(`/api/characters/${charId}/dynamic-downtime`)
+      if (activitiesRes.ok) setDowntimeActivities(await activitiesRes.json())
+    }
+  }
+
+  const handleRespondToDowntimeEvent = async (eventId: string, responseText: string) => {
+    await authenticatedFetch(`/api/dynamic-downtime-events/${eventId}/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ response: responseText })
+    })
+    // Reload activities to reflect response
+    const activitiesRes = await authenticatedFetch(`/api/characters/${characterId}/dynamic-downtime`)
+    if (activitiesRes.ok) setDowntimeActivities(await activitiesRes.json())
   }
 
   if (loading) {
@@ -145,6 +197,20 @@ export default function CharacterPage() {
       {/* Character Sheet */}
       <div className="card">
         <CharacterSheetDisplay character={character} campaign={campaign?.campaign} />
+      </div>
+
+      {/* Downtime */}
+      <div className="mt-8">
+        <DynamicDowntimeManager
+          activities={downtimeActivities}
+          characterId={characterId}
+          characterGold={(character?.resources as any)?.gold || 0}
+          characterName={character?.name || ''}
+          onCreateActivity={handleCreateDowntimeActivity}
+          onAdvanceTime={handleAdvanceDowntimeTime}
+          onRespondToEvent={handleRespondToDowntimeEvent}
+          suggestions={downtimeSuggestions}
+        />
       </div>
     </div>
   )

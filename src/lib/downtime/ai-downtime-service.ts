@@ -1,8 +1,4 @@
-// PLACE IN: src/lib/downtime/ai-downtime-service.ts
-//
-// WARNING: This file is currently disabled due to Prisma schema mismatches.
-// The schema doesn't have the required fields like Character.gold, Character.level, etc.
-// All exports return mock data until the schema is updated.
+// src/lib/downtime/ai-downtime-service.ts
 
 import { PrismaClient } from '@prisma/client'
 import { NotificationService } from '@/lib/notifications/notification-service'
@@ -54,25 +50,6 @@ export class AIDrivenDowntimeService {
     playerDescription: string,
     campaignContext?: any
   ) {
-    // DISABLED: Schema mismatch - Character model missing required fields
-    console.warn('AIDrivenDowntimeService.interpretDowntimeActivity is disabled due to schema mismatches');
-    return {
-      success: true,
-      interpretation: {
-        summary: `Attempt to: ${playerDescription}`,
-        estimatedDuration: 7,
-        costs: { gold: 0, resources: [] },
-        requirements: ["Determine feasibility"],
-        skillsInvolved: ["General"],
-        riskLevel: 'medium' as const,
-        potentialOutcomes: ["Learn something new", "Make progress"],
-        potentialComplications: ["Unexpected challenges"],
-        isViable: true,
-        aiNotes: "Service disabled - using mock data"
-      }
-    };
-
-    /* ORIGINAL CODE - DISABLED DUE TO SCHEMA MISMATCHES
     try {
       const character = await prisma.character.findUnique({
         where: { id: characterId },
@@ -86,19 +63,22 @@ export class AIDrivenDowntimeService {
         throw new Error('Character not found')
       }
 
+      const resources = (character.resources as any) || {}
+      const gold = resources.gold || 0
+
       const prompt = `As an AI Game Master, interpret this player's downtime activity request:
 
 Player Description: "${playerDescription}"
 
 Character Context:
 - Name: ${character.name}
-- Level: ${character.level}
-- Background: ${character.background || 'Unknown'}
-- Current Location: ${campaignContext?.currentLocation || 'Campaign setting'}
-- Available Gold: ${character.gold || 0}
+- Experience: ${character.experience} XP
+- Background: ${character.backstory || 'Unknown'}
+- Current Location: ${character.currentLocation || campaignContext?.currentLocation || 'Campaign setting'}
+- Available Gold: ${gold}
 
 Campaign Context:
-- Setting: ${character.campaign.setting || 'Fantasy'}
+- Setting: ${character.campaign.universe || character.campaign.description?.slice(0, 100) || 'Fantasy'}
 - Current State: ${campaignContext?.currentState || 'Between adventures'}
 - Recent Events: ${campaignContext?.recentEvents || 'None specified'}
 
@@ -176,7 +156,6 @@ If the request seems impossible, suggest a viable alternative.`
         }
       }
     }
-    */
   }
 
   // Create a downtime activity from player description
@@ -603,10 +582,6 @@ Based on the player's original intent and what happened during the activity, gen
 
   // Get suggestions based on character and campaign context
   static async getPersonalizedSuggestions(characterId: string, campaignContext?: any) {
-    // DISABLED: Schema mismatch - but can return generic suggestions
-    console.warn('AIDrivenDowntimeService.getPersonalizedSuggestions is returning generic suggestions due to schema mismatches');
-
-    // Return generic suggestions without database access
     const suggestions = [
       "Investigate the mysterious artifact we found last session",
       "Visit the local library to research our current quest",

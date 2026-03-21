@@ -259,155 +259,23 @@ export async function POST(
         // Import necessary modules
         const { resolveScene } = await import('@/lib/game/sceneResolver')
         const { runWorldTurn } = await import('@/lib/game/worldTurn')
-        const { checkBalance, deductFunds, calculateResolutionCost } = await import('@/lib/payment/service')
 
-        // Run in background - don't block the response
-        // Clear waitingOnUsers so the UI shows that everyone has acted,
+        // Clear waitingOnUsers so the UI shows everyone has acted,
         // then let the resolver handle status transitions (it sets RESOLVING internally).
         await prisma.scene.update({
           where: { id: sceneId },
-          data: {
-            waitingOnUsers: []
-          }
+          data: { waitingOnUsers: [] }
         })
 
-        // Auto-resolve with payment processing
+        // Run in background - don't block the response
         ;(async () => {
           try {
-            // Get campaign admin for payment
-            const campaign = await prisma.campaign.findUnique({
-              where: { id: campaignId },
-              include: {
-                memberships: {
-                  where: { role: 'ADMIN' },
-                  select: { userId: true }
-                }
-              }
-            })
-
-            if (!campaign || campaign.memberships.length === 0) {
-              console.error(`❌ No admin found for campaign ${campaignId}`)
-              throw new Error('No admin found for campaign')
-            }
-
-            const adminUserId = campaign.memberships[0].userId
-            const playerCount = await prisma.campaignMembership.count({
-              where: { campaignId }
-            })
-            const resolutionCost = calculateResolutionCost(playerCount)
-
-            console.log(`💰 Auto-resolve payment check: ${resolutionCost} (${playerCount} players)`)
-
-            // Check admin balance
-            const balanceCheck = await checkBalance(adminUserId, resolutionCost)
-            if (!balanceCheck.sufficient) {
-              console.error(`❌ Insufficient balance for auto-resolve. Admin needs ${resolutionCost}, has ${balanceCheck.currentBalance}`)
-              // Broadcast error to admin via Pusher
-              await pusherServer.trigger(
-                `campaign-${campaignId}`,
-                'scene:auto-resolve-failed',
-                {
-                  sceneId: sceneId,
-                  sceneNumber: scene.sceneNumber,
-                  error: 'Insufficient balance for auto-resolution',
-                  requiredBalance: resolutionCost,
-                  currentBalance: balanceCheck.currentBalance
-                }
-              )
-              throw new Error('Insufficient balance')
-            }
-
-            // Deduct funds before resolution
-            const deductResult = await deductFunds(
-              adminUserId,
-              resolutionCost,
-              `Auto-resolve scene ${scene.sceneNumber} (${playerCount} players)`,
-              {
-                campaignId,
-                sceneId: sceneId,
-                sceneNumber: scene.sceneNumber,
-                playerCount,
-                costPerScene: resolutionCost,
-                autoResolve: true
-              }
-            )
-
-            if (!deductResult.success) {
-              console.error(`❌ Failed to deduct funds for auto-resolve:`, deductResult.error)
-              throw new Error('Payment failed')
-            }
-
-            console.log(`💳 Funds deducted for auto-resolve: ${resolutionCost}`)
-
-            // Resolve the scene
-            const result = await resolveScene(campaignId, sceneId)
+            await resolveScene(campaignId, sceneId)
             console.log(`✅ Scene ${scene.sceneNumber} auto-resolved`)
-
-            // Run world turn after successful resolution
             await runWorldTurn(campaignId)
           } catch (error) {
             console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`, error)
-            console.error(`Error stack:`, error instanceof Error ? error.stack : '')
-
-            // If payment was deducted, refund the admin
-            const campaign = await prisma.campaign.findUnique({
-              where: { id: campaignId },
-              include: {
-                memberships: {
-                  where: { role: 'ADMIN' },
-                  select: { userId: true }
-                }
-              }
-            })
-
-            if (campaign && campaign.memberships.length > 0) {
-              const adminUserId = campaign.memberships[0].userId
-              const playerCount = await prisma.campaignMembership.count({
-                where: { campaignId }
-              })
-              const resolutionCost = calculateResolutionCost(playerCount)
-
-              try {
-                // Get current balance
-                const currentUser = await prisma.user.findUnique({
-                  where: { id: adminUserId },
-                  select: { balance: true }
-                })
-
-                if (currentUser) {
-                  // Create refund transaction
-                  await prisma.transaction.create({
-                    data: {
-                      userId: adminUserId,
-                      type: 'REFUND',
-                      amount: resolutionCost,
-                      balanceBefore: currentUser.balance,
-                      balanceAfter: currentUser.balance + resolutionCost,
-                      description: `Refund for failed auto-resolve (scene ${scene.sceneNumber})`,
-                      metadata: {
-                        campaignId,
-                        sceneId: sceneId,
-                        sceneNumber: scene.sceneNumber,
-                        error: error instanceof Error ? error.message : 'Unknown error',
-                        autoResolve: true
-                      }
-                    }
-                  })
-
-                  // Update user balance
-                  await prisma.user.update({
-                    where: { id: adminUserId },
-                    data: { balance: { increment: resolutionCost } }
-                  })
-
-                  console.log(`💸 Refunded ${resolutionCost} to admin for failed auto-resolve`)
-                }
-              } catch (refundError) {
-                console.error(`❌ Failed to refund admin:`, refundError)
-              }
-            }
-
-            // Note: Error handling and Pusher events are already handled by sceneResolver.ts
+            // Note: Error handling and Pusher events are handled by sceneResolver.ts
           }
         })()
       } else {
@@ -423,12 +291,10 @@ export async function POST(
       // This allows the GM AI to respond to player actions in real-time
       console.log(`🎬 Open scene ${scene.sceneNumber} - triggering auto-resolve`)
 
-      // Import necessary modules
       const { resolveScene } = await import('@/lib/game/sceneResolver')
       const { runWorldTurn } = await import('@/lib/game/worldTurn')
-      const { checkBalance, deductFunds, calculateResolutionCost } = await import('@/lib/payment/service')
 
-      // Auto-resolve with payment processing
+      // Run in background - don't block the response
       ;(async () => {
         const resolutionTimeout = setTimeout(() => {
           console.error(`⏱️  Scene ${scene.sceneNumber} resolution timeout after 2 minutes`)
@@ -450,79 +316,10 @@ export async function POST(
         }, 120000) // 2 minute timeout
 
         try {
-          // Get campaign admin for payment
-          const campaign = await prisma.campaign.findUnique({
-            where: { id: campaignId },
-            include: {
-              memberships: {
-                where: { role: 'ADMIN' },
-                select: { userId: true }
-              }
-            }
-          })
-
-          if (!campaign || campaign.memberships.length === 0) {
-            console.error(`❌ No admin found for campaign ${campaignId}`)
-            throw new Error('No admin found for campaign')
-          }
-
-          const adminUserId = campaign.memberships[0].userId
-          const playerCount = await prisma.campaignMembership.count({
-            where: { campaignId }
-          })
-          const resolutionCost = calculateResolutionCost(playerCount)
-
-          console.log(`💰 Auto-resolve payment check (open scene): ${resolutionCost} (${playerCount} players)`)
-
-          // Check admin balance
-          const balanceCheck = await checkBalance(adminUserId, resolutionCost)
-          if (!balanceCheck.sufficient) {
-            console.error(`❌ Insufficient balance for auto-resolve. Admin needs ${resolutionCost}, has ${balanceCheck.currentBalance}`)
-            // Broadcast error to admin via Pusher
-            await pusherServer.trigger(
-              `campaign-${campaignId}`,
-              'scene:auto-resolve-failed',
-              {
-                sceneId: sceneId,
-                sceneNumber: scene.sceneNumber,
-                error: 'Insufficient balance for auto-resolution',
-                requiredBalance: resolutionCost,
-                currentBalance: balanceCheck.currentBalance
-              }
-            )
-            throw new Error('Insufficient balance')
-          }
-
-          // Deduct funds before resolution
-          const deductResult = await deductFunds(
-            adminUserId,
-            resolutionCost,
-            `Auto-resolve scene ${scene.sceneNumber} (${playerCount} players)`,
-            {
-              campaignId,
-              sceneId: sceneId,
-              sceneNumber: scene.sceneNumber,
-              playerCount,
-              costPerScene: resolutionCost,
-              autoResolve: true,
-              openScene: true
-            }
-          )
-
-          if (!deductResult.success) {
-            console.error(`❌ Failed to deduct funds for auto-resolve:`, deductResult.error)
-            throw new Error('Payment failed')
-          }
-
-          console.log(`💳 Funds deducted for auto-resolve (open scene): ${resolutionCost}`)
-
-          // Resolve the scene
           const result = await resolveScene(campaignId, sceneId)
           clearTimeout(resolutionTimeout)
           console.log(`✅ Scene ${scene.sceneNumber} auto-resolved successfully`)
           console.log(`📊 Resolution stats: ${JSON.stringify(result.updates)}`)
-
-          // Run world turn after successful resolution
           await runWorldTurn(campaignId)
         } catch (error) {
           clearTimeout(resolutionTimeout)
@@ -530,67 +327,7 @@ export async function POST(
           console.error(`Error name:`, error instanceof Error ? error.name : 'Unknown')
           console.error(`Error message:`, error instanceof Error ? error.message : String(error))
           console.error(`Error stack:`, error instanceof Error ? error.stack : '')
-
-          // If payment was deducted, refund the admin
-          const campaign = await prisma.campaign.findUnique({
-            where: { id: campaignId },
-            include: {
-              memberships: {
-                where: { role: 'ADMIN' },
-                select: { userId: true }
-              }
-            }
-          })
-
-          if (campaign && campaign.memberships.length > 0) {
-            const adminUserId = campaign.memberships[0].userId
-            const playerCount = await prisma.campaignMembership.count({
-              where: { campaignId }
-            })
-            const resolutionCost = calculateResolutionCost(playerCount)
-
-            try {
-              // Get current balance
-              const currentUser = await prisma.user.findUnique({
-                where: { id: adminUserId },
-                select: { balance: true }
-              })
-
-              if (currentUser) {
-                // Create refund transaction
-                await prisma.transaction.create({
-                  data: {
-                    userId: adminUserId,
-                    type: 'REFUND',
-                    amount: resolutionCost,
-                    balanceBefore: currentUser.balance,
-                    balanceAfter: currentUser.balance + resolutionCost,
-                    description: `Refund for failed auto-resolve (scene ${scene.sceneNumber})`,
-                    metadata: {
-                      campaignId,
-                      sceneId: sceneId,
-                      sceneNumber: scene.sceneNumber,
-                      error: error instanceof Error ? error.message : 'Unknown error',
-                      autoResolve: true,
-                      openScene: true
-                    }
-                  }
-                })
-
-                // Update user balance
-                await prisma.user.update({
-                  where: { id: adminUserId },
-                  data: { balance: { increment: resolutionCost } }
-                })
-
-                console.log(`💸 Refunded ${resolutionCost} to admin for failed auto-resolve`)
-              }
-            } catch (refundError) {
-              console.error(`❌ Failed to refund admin:`, refundError)
-            }
-          }
-
-          // Note: Error handling and Pusher events are already handled by sceneResolver.ts
+          // Note: Error handling and Pusher events are handled by sceneResolver.ts
         }
       })()
     }

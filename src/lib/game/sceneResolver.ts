@@ -316,6 +316,14 @@ async function performResolution(
       console.error('⚠️  Map generation failed (non-critical):', errorMsg)
     }
 
+    // 7.6. Sync wiki entries for NPCs, factions, and clocks (non-critical)
+    try {
+      await updateWikiEntries(campaignId, currentTurn, aiResponse)
+      console.log('📖 Wiki entries synced')
+    } catch (wikiError) {
+      console.error('⚠️  Wiki sync failed (non-critical):', wikiError)
+    }
+
     // Phase 16: Complete the current exchange and start a new one
     await exchangeManager.completeExchange()
     console.log('🔄 Exchange completed')

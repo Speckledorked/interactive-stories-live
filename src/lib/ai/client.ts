@@ -35,7 +35,9 @@ export interface AIGMResponse {
     }>
     npc_changes?: Array<{
       npc_name_or_id: string
+      is_new?: boolean // true when introducing a brand-new NPC mid-scene
       changes: {
+        description?: string // Short description for new NPCs
         notes_append?: string
         tags_add?: string[]
         tags_remove?: string[]
@@ -116,7 +118,10 @@ export interface AIGMResponse {
     }>
     faction_changes?: Array<{
       faction_name_or_id: string
+      is_new?: boolean // true when introducing a brand-new faction mid-campaign
       changes: {
+        description?: string // Short description for new factions
+        goals?: string       // Long-term goals for new factions
         current_plan?: string
         threat_level?: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
         resources?: Record<string, any>
@@ -538,7 +543,10 @@ You MUST respond with a JSON object matching this structure:
     ],
     "new_timeline_events": [...],
     "clock_changes": [...],
-    "npc_changes": [{"npc_name_or_id": "NPC_NAME", "changes": {"notes_append": "New development..."}}],
+    "npc_changes": [
+      {"npc_name_or_id": "EXISTING_NPC", "changes": {"notes_append": "New development..."}},
+      {"npc_name_or_id": "New Character Name", "is_new": true, "changes": {"description": "Brief 1-sentence description of who they are", "notes_append": "Introduced as..."}}
+    ],
     "faction_changes": [...],
     "organic_advancement": [...],
     "notes_for_gm": "..."
@@ -585,6 +593,19 @@ RESOURCES: gold_delta, contacts_add/remove, reputation_changes
 
 Make changes MATTER. Reference them in scene_text. Lost eye? Show how it affects vision. Equipment stolen? Show their reaction.
 </character_changes>
+
+<npc_tracking>
+REGISTER NEW NPCs: Whenever you introduce a named character who doesn't already exist in the world state, add them to npc_changes with is_new: true and a brief description.
+- This creates a persistent record so they can be referenced in future scenes
+- Only skip is_new for NPCs already listed in the campaign world context
+- Example: Guard captain you just named for the first time → register them
+- Example: A faction leader already in the world state → just use notes_append
+- Good description: "A grizzled dwarven blacksmith with a prosthetic left hand. Owns the Ember & Iron forge."
+
+REGISTER NEW FACTIONS: Whenever a new organization, gang, guild, or group emerges mid-campaign (not in the starting world), add them to faction_changes with is_new: true.
+- Include a description (who they are), goals (what they want), and current_plan (what they're doing right now)
+- Example: A new criminal syndicate revealed mid-scene → register with is_new: true
+</npc_tracking>
 
 <relationships>
 Characters have HIDDEN relationship tracking (trust, tension, respect, fear) with NPCs/factions.

@@ -112,7 +112,9 @@ export const ClockChangeSchema = z.object({
 // NPC changes schema
 export const NPCChangesSchema = z.object({
   npc_name_or_id: z.string(),
+  is_new: z.boolean().optional(), // true when introducing a brand-new NPC mid-scene
   changes: z.object({
+    description: z.string().optional(), // Short description for new NPCs
     notes_append: z.string().optional(),
     tags_add: z.array(z.string()).optional(),
     tags_remove: z.array(z.string()).optional()
@@ -122,7 +124,10 @@ export const NPCChangesSchema = z.object({
 // Faction changes schema
 export const FactionChangesSchema = z.object({
   faction_name_or_id: z.string(),
+  is_new: z.boolean().optional(), // true when introducing a brand-new faction mid-campaign
   changes: z.object({
+    description: z.string().optional(), // Short description for new factions
+    goals: z.string().optional(),       // Long-term goals for new factions
     current_plan: z.string().optional(),
     threat_level: z.enum(['LOW', 'MEDIUM', 'HIGH', 'EXTREME']).optional(),
     resources: z.record(z.any()).optional(),

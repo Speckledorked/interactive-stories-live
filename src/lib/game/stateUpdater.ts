@@ -110,6 +110,11 @@ export async function applyWorldUpdates(
               updateData.gmNotes = (npc.gmNotes || '') + '\n\n' + npcChange.changes.notes_append
             }
 
+            // Update description if AI provided one and NPC has none yet
+            if (npcChange.changes.description && !npc.description) {
+              updateData.description = npcChange.changes.description
+            }
+
             // Note: tags_add and tags_remove are not supported in the current schema
             // NPCs don't have a tags field
 
@@ -121,8 +126,21 @@ export async function applyWorldUpdates(
 
               console.log(`  👤 Updated NPC: ${npc.name}`)
             }
+          } else if (npcChange.is_new || npcChange.changes.description) {
+            // Auto-create a stub NPC when the AI introduces a new character mid-scene
+            const newNPC = await tx.nPC.create({
+              data: {
+                campaignId,
+                name: npcChange.npc_name_or_id,
+                description: npcChange.changes.description || null,
+                gmNotes: npcChange.changes.notes_append || null,
+                importance: 1,
+                isAlive: true
+              }
+            })
+            console.log(`  👤 Created new NPC: ${newNPC.name}`)
           } else {
-            console.warn(`  ⚠️ NPC not found: ${npcChange.npc_name_or_id}`)
+            console.warn(`  ⚠️ NPC not found and no stub info provided: ${npcChange.npc_name_or_id}`)
           }
         }
       }
@@ -603,8 +621,28 @@ export async function applyWorldUpdates(
 
               console.log(`  🏛️ Updated faction: ${faction.name}`)
             }
+          } else if (factionChange.is_new || factionChange.changes.description) {
+            // Auto-create a stub faction when the AI introduces a new group mid-campaign
+            const threatLevelMap: Record<string, number> = {
+              'LOW': 1, 'MEDIUM': 2, 'HIGH': 3, 'EXTREME': 4
+            }
+            const initialThreat = factionChange.changes.threat_level
+              ? (threatLevelMap[factionChange.changes.threat_level.toUpperCase()] || 1)
+              : 1
+            const newFaction = await tx.faction.create({
+              data: {
+                campaignId,
+                name: factionChange.faction_name_or_id,
+                description: factionChange.changes.description || '',
+                goals: factionChange.changes.goals || '',
+                currentPlan: factionChange.changes.current_plan || '',
+                threatLevel: initialThreat,
+                gmNotes: factionChange.changes.gm_notes_append || ''
+              }
+            })
+            console.log(`  🏛️ Created new faction: ${newFaction.name}`)
           } else {
-            console.warn(`  ⚠️ Faction not found: ${factionChange.faction_name_or_id}`)
+            console.warn(`  ⚠️ Faction not found and no stub info provided: ${factionChange.faction_name_or_id}`)
           }
         }
       }

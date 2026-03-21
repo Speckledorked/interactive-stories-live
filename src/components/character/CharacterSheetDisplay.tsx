@@ -47,7 +47,7 @@ function getCurrencyName(universe?: string): { singular: string; plural: string;
 export default function CharacterSheetDisplay({ character, campaign }: CharacterSheetDisplayProps) {
   const params = useParams()
   const campaignId = params?.id as string
-  const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'inventory' | 'relationships'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'inventory' | 'relationships' | 'advancement'>('overview')
 
   // Get currency info from campaign universe
   const currency = getCurrencyName(campaign?.universe)
@@ -151,7 +151,8 @@ export default function CharacterSheetDisplay({ character, campaign }: Character
           { key: 'overview', label: 'Overview', icon: '📋' },
           { key: 'stats', label: 'Stats & Status', icon: '📊' },
           { key: 'inventory', label: 'Inventory', icon: '🎒' },
-          { key: 'relationships', label: 'Relationships', icon: '💕' }
+          { key: 'relationships', label: 'Relationships', icon: '💕' },
+          { key: 'advancement', label: 'Advancement', icon: '⭐' }
         ].map(tab => (
           <button
             key={tab.key}
@@ -512,6 +513,90 @@ export default function CharacterSheetDisplay({ character, campaign }: Character
             )}
           </div>
         )}
+
+        {activeTab === 'advancement' && (() => {
+          const advLog = (character.advancementLog as any) || { entries: [], totalStatIncreases: 0, totalPerksGained: 0, totalMovesLearned: 0 }
+          const entries: any[] = advLog.entries || []
+
+          return (
+            <div className="space-y-6">
+              {/* Summary counters */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-black/20 rounded-lg p-4 border border-white/10 text-center">
+                  <div className="text-2xl font-bold text-blue-400">{advLog.totalStatIncreases || 0}</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">Stat Increases</div>
+                </div>
+                <div className="bg-black/20 rounded-lg p-4 border border-white/10 text-center">
+                  <div className="text-2xl font-bold text-green-400">{advLog.totalPerksGained || 0}</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">Perks Gained</div>
+                </div>
+                <div className="bg-black/20 rounded-lg p-4 border border-white/10 text-center">
+                  <div className="text-2xl font-bold text-purple-400">{advLog.totalMovesLearned || 0}</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">Moves Learned</div>
+                </div>
+              </div>
+
+              {/* XP bar */}
+              <div className="card">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Experience</h3>
+                  <span className="text-lg font-bold text-blue-400">{character.experience || 0} XP</span>
+                </div>
+                <div className="w-full bg-gray-800 rounded-full h-2">
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all"
+                    style={{ width: `${Math.min(((character.experience || 0) % 100), 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* History */}
+              <div className="card">
+                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Growth History</h3>
+                {entries.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <div className="text-4xl mb-3">🌱</div>
+                    <p>No advancements yet</p>
+                    <p className="text-sm mt-1">Keep playing — your character grows organically through action</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {[...entries].reverse().map((entry: any, idx: number) => {
+                      const date = new Date(entry.timestamp).toLocaleDateString()
+                      const turnInfo = entry.turnNumber ? ` · Turn ${entry.turnNumber}` : ''
+                      let icon = '⭐'
+                      let color = 'text-yellow-400'
+                      let label = ''
+                      if (entry.type === 'stat_increase') {
+                        icon = '📈'
+                        color = 'text-blue-400'
+                        label = `${entry.details.statKey} ${entry.details.oldValue} → ${entry.details.newValue}`
+                      } else if (entry.type === 'perk_gained') {
+                        icon = '✨'
+                        color = 'text-green-400'
+                        label = entry.details.perkName || entry.details.perkId
+                      } else if (entry.type === 'move_learned') {
+                        icon = '🎯'
+                        color = 'text-purple-400'
+                        label = entry.details.moveId
+                      }
+                      return (
+                        <div key={idx} className="flex items-start gap-3 bg-black/20 rounded-lg p-3 border border-white/5">
+                          <span className="text-lg">{icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium text-sm ${color}`}>{label}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">{entry.details.reason}</div>
+                          </div>
+                          <div className="text-xs text-gray-600 whitespace-nowrap">{date}{turnInfo}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

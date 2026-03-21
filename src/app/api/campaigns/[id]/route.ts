@@ -47,6 +47,10 @@ export async function GET(
         },
         npcs: true,
         factions: true,
+        locations: {
+          where: { isDiscovered: true },
+          orderBy: { name: 'asc' }
+        },
         clocks: {
           where: membership.role === 'ADMIN'
             ? {} // Admin sees all clocks

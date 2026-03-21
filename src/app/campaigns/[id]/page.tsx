@@ -441,6 +441,17 @@ export default function CampaignLobbyPage() {
                 </span>
               </Link>
               <Link
+                href={`/campaigns/${campaignId}/wiki?type=LOCATION`}
+                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+              >
+                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                  Locations:
+                </span>
+                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                  {campaign.locations?.length ?? 0} →
+                </span>
+              </Link>
+              <Link
                 href={`/campaigns/${campaignId}/wiki?type=CLOCK`}
                 className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
               >

@@ -1000,4 +1000,39 @@ async function updateWikiEntries(
       })
     }
   }
+
+  // Sync Location records to wiki entries
+  const locations = await prisma.location.findMany({ where: { campaignId, isDiscovered: true } })
+  for (const location of locations) {
+    const existing = await prisma.wikiEntry.findFirst({
+      where: { campaignId, entryType: 'LOCATION', name: location.name }
+    })
+
+    const locDesc = [
+      location.description,
+      location.locationType ? `Type: ${location.locationType}` : null
+    ].filter(Boolean).join('\n\n') || `${location.name} is a location in the world.`
+
+    if (existing) {
+      await prisma.wikiEntry.update({
+        where: { id: existing.id },
+        data: { description: locDesc, lastSeenTurn: turnNumber, updatedAt: new Date() }
+      })
+    } else {
+      await prisma.wikiEntry.create({
+        data: {
+          campaignId,
+          entryType: 'LOCATION',
+          name: location.name,
+          summary: location.description || `A location in the world`,
+          description: locDesc,
+          tags: location.locationType ? [location.locationType] : [],
+          aliases: [],
+          importance: 'normal',
+          lastSeenTurn: turnNumber,
+          createdBy: 'ai'
+        }
+      })
+    }
+  }
 }

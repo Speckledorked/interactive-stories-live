@@ -538,7 +538,7 @@ You MUST respond with a JSON object matching this structure:
     ],
     "new_timeline_events": [...],
     "clock_changes": [...],
-    "npc_changes": [...],
+    "npc_changes": [{"npc_name_or_id": "NPC_NAME", "changes": {"notes_append": "New development..."}}],
     "faction_changes": [...],
     "organic_advancement": [...],
     "notes_for_gm": "..."

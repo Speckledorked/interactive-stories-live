@@ -505,7 +505,7 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
     throw new Error('Campaign not found')
   }
 
-  const worldSummary = await buildWorldSummaryForAI(campaignId)
+  const { worldSummary: worldSummaryData } = await buildWorldSummaryForAI(campaignId)
 
   // Get the last scene for context (could be RESOLVED or AWAITING_ACTIONS with resolutions)
   const lastScene = await prisma.scene.findFirst({
@@ -571,7 +571,7 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
 ${campaign.aiSystemPrompt}
 
 WORLD STATE:
-${JSON.stringify(worldSummary, null, 2)}
+${JSON.stringify(worldSummaryData, null, 2)}
 ${characterContext}
 
 LAST SCENE RESOLUTION:
@@ -616,7 +616,7 @@ Write ONLY the scene introduction. No JSON, no meta-commentary, no character she
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini', // Cost optimization: mini model for scene intros
+        model: 'gpt-4.1', // Full model for scene intros - first impression shapes the whole session
         messages: [
           { role: 'system', content: 'You are an evocative, atmospheric storyteller and game master. You show, don\'t tell. You create tension through imagery and implication, not explanation.' },
           { role: 'user', content: prompt }

@@ -51,7 +51,13 @@ export async function generateCampaignSummary(
 ): Promise<CampaignSummary> {
   const [scenes, worldMeta, timeline, characters] = await Promise.all([
     prisma.scene.findMany({
-      where: { campaignId, status: 'RESOLVED' },
+      where: {
+        campaignId,
+        OR: [
+          { status: 'RESOLVED' },
+          { sceneResolutionText: { not: null } }
+        ]
+      },
       orderBy: { sceneNumber: 'asc' }
     }),
     prisma.worldMeta.findUnique({ where: { campaignId } }),
@@ -192,20 +198,30 @@ export async function buildOptimizedContext(
   campaignId: string,
   currentSceneNumber: number
 ): Promise<ContextStrategy> {
-  // Get recent scenes (full detail)
+  // Get recent scenes (full detail) - include scenes that have been resolved at least once,
+  // regardless of status (scenes stay AWAITING_ACTIONS between exchanges)
   const recentScenes = await prisma.scene.findMany({
     where: {
       campaignId,
-      status: 'RESOLVED',
+      OR: [
+        { status: 'RESOLVED' },
+        { sceneResolutionText: { not: null } }
+      ],
       sceneNumber: { lt: currentSceneNumber }
     },
     orderBy: { sceneNumber: 'desc' },
     take: 3 // Last 3 resolved scenes
   });
 
-  // Get all resolved scenes for important moment extraction
+  // Get all scenes that have been narrated at least once
   const allScenes = await prisma.scene.findMany({
-    where: { campaignId, status: 'RESOLVED' },
+    where: {
+      campaignId,
+      OR: [
+        { status: 'RESOLVED' },
+        { sceneResolutionText: { not: null } }
+      ]
+    },
     orderBy: { sceneNumber: 'asc' }
   });
 

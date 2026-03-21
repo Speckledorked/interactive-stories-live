@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
 import CharacterSheetDisplay from '@/components/character/CharacterSheetDisplay'
+import { pusherClient } from '@/lib/pusher'
 
 export default function CharacterPage() {
   const router = useRouter()
@@ -25,6 +26,23 @@ export default function CharacterPage() {
 
     loadData()
   }, [campaignId, characterId])
+
+  // Live-update character sheet when a scene resolves
+  useEffect(() => {
+    if (!pusherClient) return
+
+    const channel = pusherClient.subscribe(`campaign-${campaignId}`)
+
+    channel.bind('scene:resolved', () => {
+      loadData()
+    })
+
+    return () => {
+      if (pusherClient) {
+        pusherClient.unsubscribe(`campaign-${campaignId}`)
+      }
+    }
+  }, [campaignId])
 
   const loadData = async () => {
     try {

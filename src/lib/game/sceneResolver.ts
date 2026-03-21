@@ -5,7 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { callAIGM } from '@/lib/ai/client'
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
-import { applyWorldUpdates, summarizeWorldUpdates } from './stateUpdater'
+import { applyWorldUpdates, summarizeWorldUpdates, enrichStubNPCs, enrichStubFactions } from './stateUpdater'
 import { SceneStatus } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
 import { ExchangeManager } from './exchange-manager' // Phase 16
@@ -218,6 +218,14 @@ async function performResolution(
     console.log('💾 Applying world updates...')
     await applyWorldUpdates(campaignId, aiResponse, currentTurn)
 
+    // 6.1. Enrich any stub NPCs/factions auto-created mid-scene (non-blocking, best-effort)
+    enrichStubNPCs(campaignId, aiResponse.scene_text).catch(err =>
+      console.warn('NPC enrichment error (ignored):', err)
+    )
+    enrichStubFactions(campaignId, aiResponse.scene_text).catch(err =>
+      console.warn('Faction enrichment error (ignored):', err)
+    )
+
     // 6.5. Apply organic character growth
     console.log('🌱 Processing organic character growth...')
     await applyOrganicCharacterGrowth(campaignId, sceneId, aiResponse)
@@ -314,6 +322,14 @@ async function performResolution(
       // Don't fail the entire scene resolution if map generation fails
       const errorMsg = visualError instanceof Error ? visualError.message : String(visualError)
       console.error('⚠️  Map generation failed (non-critical):', errorMsg)
+    }
+
+    // 7.6. Sync wiki entries for NPCs, factions, and clocks (non-critical)
+    try {
+      await updateWikiEntries(campaignId, currentTurn, aiResponse)
+      console.log('📖 Wiki entries synced')
+    } catch (wikiError) {
+      console.error('⚠️  Wiki sync failed (non-critical):', wikiError)
     }
 
     // Phase 16: Complete the current exchange and start a new one
@@ -595,7 +611,7 @@ async function applyOrganicCharacterGrowth(
     const recentActions: RecentAction[] = actions.map(action => ({
       actionId: action.id,
       tags: extractTagsFromAction(action.actionText),
-      statUsed: null, // TODO: extract from rollResult if available
+      statUsed: (action.rollResult as any)?.stat ?? null,
       outcome: inferOutcomeFromAction(action)
     }))
 
@@ -986,6 +1002,41 @@ async function updateWikiEntries(
           tags: [],
           aliases: [],
           importance: 'major',
+          lastSeenTurn: turnNumber,
+          createdBy: 'ai'
+        }
+      })
+    }
+  }
+
+  // Sync Location records to wiki entries
+  const locations = await prisma.location.findMany({ where: { campaignId, isDiscovered: true } })
+  for (const location of locations) {
+    const existing = await prisma.wikiEntry.findFirst({
+      where: { campaignId, entryType: 'LOCATION', name: location.name }
+    })
+
+    const locDesc = [
+      location.description,
+      location.locationType ? `Type: ${location.locationType}` : null
+    ].filter(Boolean).join('\n\n') || `${location.name} is a location in the world.`
+
+    if (existing) {
+      await prisma.wikiEntry.update({
+        where: { id: existing.id },
+        data: { description: locDesc, lastSeenTurn: turnNumber, updatedAt: new Date() }
+      })
+    } else {
+      await prisma.wikiEntry.create({
+        data: {
+          campaignId,
+          entryType: 'LOCATION',
+          name: location.name,
+          summary: location.description || `A location in the world`,
+          description: locDesc,
+          tags: location.locationType ? [location.locationType] : [],
+          aliases: [],
+          importance: 'normal',
           lastSeenTurn: turnNumber,
           createdBy: 'ai'
         }

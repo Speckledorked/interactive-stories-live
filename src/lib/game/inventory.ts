@@ -105,3 +105,33 @@ export function hasInventorySpace(
   const currentItemCount = inv.items.length
   return currentItemCount + additionalItems <= inv.slots
 }
+
+/**
+ * Derive a PbtA-style armor reduction value (0–3) from an armor name string.
+ *
+ * Checks for an explicit "(X armor)" pattern first, then falls back to
+ * keyword matching:
+ *   0 – no armor / unrecognised
+ *   1 – light armor  (leather, padded, hide, gambeson, …)
+ *   2 – medium armor (chain mail, scale, brigandine, breastplate, …)
+ *   3 – heavy armor  (plate, splint, full plate, …)
+ */
+export function getArmorReduction(armorName: string | null | undefined): number {
+  if (!armorName) return 0
+  const lower = armorName.toLowerCase()
+
+  // Explicit "(X armor)" description pattern takes priority
+  const explicit = lower.match(/\((\d+)\s*armor\)/)
+  if (explicit) return Math.min(3, parseInt(explicit[1], 10))
+
+  // Heavy
+  if (/\b(plate|full[\s-]plate|heavy|splint|banded|Gothic|field\s*plate)\b/.test(lower)) return 3
+  // Medium
+  if (/\b(chain|chainmail|chain[\s-]mail|ring[\s-]mail|scale|brigandine|breastplate|medium)\b/.test(lower)) return 2
+  // Light
+  if (/\b(leather|padded|hide|studded|light|gambeson|jack[\s-]of[\s-]plates)\b/.test(lower)) return 1
+  // Bare keyword "armor" with no modifier → light by default
+  if (/\barmor\b/.test(lower)) return 1
+
+  return 0
+}

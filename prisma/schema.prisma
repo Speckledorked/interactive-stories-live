@@ -146,6 +146,7 @@ model Campaign {
   characters  Character[]
   npcs        NPC[]
   factions    Faction[]
+  locations   Location[]
   clocks      Clock[]
   scenes      Scene[]
   timeline    TimelineEvent[]
@@ -281,6 +282,27 @@ model Faction {
   // Phase 8: Communication
   notes PlayerNote[] @relation("FactionNotes")
 
+  @@index([campaignId])
+}
+
+//
+// LOCATIONS
+//
+
+model Location {
+  id           String   @id @default(cuid())
+  campaignId   String
+  name         String
+  description  String?
+  locationType String?  // town, dungeon, wilderness, building, inn, etc.
+  isDiscovered Boolean  @default(true) // false = exists in world but players haven't found it
+  gmNotes      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, name])
   @@index([campaignId])
 }
 
@@ -1395,4 +1417,18 @@ model Friendship {
   @@index([user1Id])
   @@index([user2Id])
   @@map("friendships")
+}
+
+model AIValidationFailure {
+  id           String   @id @default(cuid())
+  campaignId   String
+  sceneId      String?
+  errorSummary String   // Short description of what failed
+  rawResponse  Json?    // The AI output that failed validation
+  zodErrors    Json     // Serialised ZodError.errors array
+  createdAt    DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([createdAt])
+  @@map("ai_validation_failures")
 }

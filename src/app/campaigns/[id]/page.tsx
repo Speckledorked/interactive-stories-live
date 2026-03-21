@@ -441,6 +441,17 @@ export default function CampaignLobbyPage() {
                 </span>
               </Link>
               <Link
+                href={`/campaigns/${campaignId}/wiki?type=LOCATION`}
+                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+              >
+                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                  Locations:
+                </span>
+                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                  {campaign.locations?.length ?? 0} →
+                </span>
+              </Link>
+              <Link
                 href={`/campaigns/${campaignId}/wiki?type=CLOCK`}
                 className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
               >
@@ -566,8 +577,8 @@ export default function CampaignLobbyPage() {
         <div className="max-w-6xl mx-auto">
           <ChatPanel
             campaignId={campaignId}
-            currentUserId={data.campaign.memberships[0]?.userId || ''}
-            currentUserName={data.campaign.memberships[0]?.user?.email || 'Unknown'}
+            currentUserId={getUser()?.id || ''}
+            currentUserName={getUser()?.email || 'Unknown'}
             userCharacters={data.campaign.characters}
             sceneId={''}
           />
@@ -579,7 +590,7 @@ export default function CampaignLobbyPage() {
         <div className="max-w-6xl mx-auto">
           <NotesPanel
             campaignId={campaignId}
-            currentUserId={data.campaign.memberships[0]?.userId || ''}
+            currentUserId={getUser()?.id || ''}
             characters={data.campaign.characters}
             npcs={data.campaign.npcs || []}
             factions={data.campaign.factions || []}
@@ -771,7 +782,7 @@ export default function CampaignLobbyPage() {
       {/* Notification Panel - Phase 8/9 Communication */}
       {data && (
         <NotificationPanel
-          userId={data.campaign.memberships[0]?.userId || ''}
+          userId={getUser()?.id || ''}
           campaignId={campaignId}
           isOpen={showNotifications}
           onClose={() => setShowNotifications(false)}

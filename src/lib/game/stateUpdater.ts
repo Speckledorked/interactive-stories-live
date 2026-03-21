@@ -14,6 +14,7 @@ import {
   Condition,
   HarmLevel
 } from './harm'
+import { getArmorReduction } from './inventory'
 
 /**
  * Apply all world updates from an AI GM response to the database
@@ -110,6 +111,11 @@ export async function applyWorldUpdates(
               updateData.gmNotes = (npc.gmNotes || '') + '\n\n' + npcChange.changes.notes_append
             }
 
+            // Update description if AI provided one and NPC has none yet
+            if (npcChange.changes.description && !npc.description) {
+              updateData.description = npcChange.changes.description
+            }
+
             // Note: tags_add and tags_remove are not supported in the current schema
             // NPCs don't have a tags field
 
@@ -121,8 +127,21 @@ export async function applyWorldUpdates(
 
               console.log(`  👤 Updated NPC: ${npc.name}`)
             }
+          } else if (npcChange.is_new || npcChange.changes.description) {
+            // Auto-create a stub NPC when the AI introduces a new character mid-scene
+            const newNPC = await tx.nPC.create({
+              data: {
+                campaignId,
+                name: npcChange.npc_name_or_id,
+                description: npcChange.changes.description || null,
+                gmNotes: npcChange.changes.notes_append || null,
+                importance: 1,
+                isAlive: true
+              }
+            })
+            console.log(`  👤 Created new NPC: ${newNPC.name}`)
           } else {
-            console.warn(`  ⚠️ NPC not found: ${npcChange.npc_name_or_id}`)
+            console.warn(`  ⚠️ NPC not found and no stub info provided: ${npcChange.npc_name_or_id}`)
           }
         }
       }
@@ -155,12 +174,14 @@ export async function applyWorldUpdates(
             let currentConditions: Condition[] = (character.conditions as any)?.conditions || []
             let harmMessages: string[] = []
 
-            // Apply harm damage
+            // Apply harm damage (armor mitigates incoming damage)
             if (pcChange.changes.harm_damage && pcChange.changes.harm_damage > 0) {
+              const armorName = (character.equipment as any)?.armor || ''
+              const armorReduction = getArmorReduction(armorName)
               const harmResult = applyHarm(
                 currentHarm as HarmLevel,
                 pcChange.changes.harm_damage,
-                0 // TODO: Factor in armor when equipment system is integrated
+                armorReduction
               )
               currentHarm = harmResult.newHarm
               harmMessages.push(harmResult.message)
@@ -603,13 +624,98 @@ export async function applyWorldUpdates(
 
               console.log(`  🏛️ Updated faction: ${faction.name}`)
             }
+          } else if (factionChange.is_new || factionChange.changes.description) {
+            // Auto-create a stub faction when the AI introduces a new group mid-campaign
+            const threatLevelMap: Record<string, number> = {
+              'LOW': 1, 'MEDIUM': 2, 'HIGH': 3, 'EXTREME': 4
+            }
+            const initialThreat = factionChange.changes.threat_level
+              ? (threatLevelMap[factionChange.changes.threat_level.toUpperCase()] || 1)
+              : 1
+            const newFaction = await tx.faction.create({
+              data: {
+                campaignId,
+                name: factionChange.faction_name_or_id,
+                description: factionChange.changes.description || '',
+                goals: factionChange.changes.goals || '',
+                currentPlan: factionChange.changes.current_plan || '',
+                threatLevel: initialThreat,
+                gmNotes: factionChange.changes.gm_notes_append || ''
+              }
+            })
+            console.log(`  🏛️ Created new faction: ${newFaction.name}`)
           } else {
-            console.warn(`  ⚠️ Faction not found: ${factionChange.faction_name_or_id}`)
+            console.warn(`  ⚠️ Faction not found and no stub info provided: ${factionChange.faction_name_or_id}`)
           }
         }
       }
 
-      // 7. Store GM notes in WorldMeta if provided
+      // 7. Upsert locations
+      if (world_updates.location_changes) {
+        console.log(`📍 Syncing ${world_updates.location_changes.length} location(s)`)
+
+        for (const locChange of world_updates.location_changes) {
+          const existing = await tx.location.findUnique({
+            where: { campaignId_name: { campaignId, name: locChange.name } }
+          })
+
+          if (existing) {
+            const updateData: any = {}
+            if (locChange.description && !existing.description) {
+              updateData.description = locChange.description
+            }
+            if (locChange.location_type && !existing.locationType) {
+              updateData.locationType = locChange.location_type
+            }
+            if (locChange.gm_notes_append) {
+              updateData.gmNotes = (existing.gmNotes || '') + '\n\n' + locChange.gm_notes_append
+            }
+            if (Object.keys(updateData).length > 0) {
+              await tx.location.update({
+                where: { id: existing.id },
+                data: updateData
+              })
+              console.log(`  📍 Updated location: ${locChange.name}`)
+            }
+          } else {
+            await tx.location.create({
+              data: {
+                campaignId,
+                name: locChange.name,
+                description: locChange.description || null,
+                locationType: locChange.location_type || null,
+                gmNotes: locChange.gm_notes_append || null,
+                isDiscovered: true
+              }
+            })
+            console.log(`  📍 Created location: ${locChange.name}`)
+          }
+        }
+      }
+
+      // 7b. Auto-register locations from character movement
+      if (world_updates.pc_changes) {
+        for (const pcChange of world_updates.pc_changes) {
+          if (pcChange.changes.location) {
+            const locationName = pcChange.changes.location
+            try {
+              await tx.location.upsert({
+                where: { campaignId_name: { campaignId, name: locationName } },
+                create: {
+                  campaignId,
+                  name: locationName,
+                  isDiscovered: true
+                },
+                update: {} // Already exists, no changes needed
+              })
+            } catch {
+              // Ignore if upsert fails (e.g., concurrent write) — non-critical
+            }
+          }
+        }
+      }
+
+      // 8. Store GM notes in WorldMeta if provided
       if (world_updates.notes_for_gm) {
         const worldMeta = await tx.worldMeta.findUnique({
           where: { campaignId }
@@ -731,7 +837,156 @@ export function summarizeWorldUpdates(aiResponse: AIGMResponse): string {
     summary.push('GM notes recorded')
   }
 
-  return summary.length > 0 
+  return summary.length > 0
     ? summary.join(', ')
     : 'No world changes'
+}
+
+/**
+ * Enrich stub factions auto-created mid-campaign with no description.
+ * Mirror of enrichStubNPCs — same pattern, same non-critical fire-and-forget usage.
+ */
+export async function enrichStubFactions(
+  campaignId: string,
+  sceneText: string
+): Promise<void> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) return
+
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000)
+  const stubs = await prisma.faction.findMany({
+    where: {
+      campaignId,
+      description: '',
+      createdAt: { gte: cutoff }
+    },
+    select: { id: true, name: true }
+  })
+
+  if (stubs.length === 0) return
+
+  console.log(`🪄 Enriching ${stubs.length} stub faction(s): ${stubs.map(f => f.name).join(', ')}`)
+
+  const nameList = stubs.map(f => `- ${f.name}`).join('\n')
+  const prompt = `You are a TTRPG game master. The following scene just resolved:\n\n${sceneText}\n\nThese factions or groups were introduced for the first time:\n${nameList}\n\nFor each faction, write a SHORT 1-2 sentence description (what they are, their role or agenda) based on context from the scene. Invent something consistent with the fiction if they aren't explicitly described.\n\nRespond with valid JSON:\n{"factions": [{"name": "...", "description": "...", "goals": "..."}]}`
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 400,
+        response_format: { type: 'json_object' }
+      })
+    })
+
+    if (!response.ok) {
+      console.warn('⚠️ Faction enrichment API call failed:', response.status)
+      return
+    }
+
+    const data = await response.json()
+    const parsed = JSON.parse(data.choices[0].message.content) as {
+      factions: Array<{ name: string; description: string; goals?: string }>
+    }
+
+    for (const enriched of parsed.factions) {
+      const stub = stubs.find(f => f.name.toLowerCase() === enriched.name.toLowerCase())
+      if (stub && enriched.description) {
+        await prisma.faction.update({
+          where: { id: stub.id },
+          data: {
+            description: enriched.description,
+            ...(enriched.goals ? { goals: enriched.goals } : {})
+          }
+        })
+        console.log(`  ✅ Enriched faction: ${stub.name}`)
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Faction enrichment failed (non-critical):', err)
+  }
+}
+
+/**
+ * Enrich stub NPCs that were auto-created mid-scene with no description.
+ *
+ * After `applyWorldUpdates` commits, any NPC introduced by the AI without
+ * a description exists as a bare name in the DB.  This function makes a
+ * single lightweight AI call to flesh them out based on the resolved scene
+ * text, then persists the result.
+ *
+ * Silently skips if OpenAI is unconfigured or returns an error — it is
+ * intentionally non-critical.
+ */
+export async function enrichStubNPCs(
+  campaignId: string,
+  sceneText: string
+): Promise<void> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) return
+
+  // Find NPCs created in the last 2 minutes with no description
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000)
+  const stubs = await prisma.nPC.findMany({
+    where: {
+      campaignId,
+      description: null,
+      createdAt: { gte: cutoff }
+    },
+    select: { id: true, name: true }
+  })
+
+  if (stubs.length === 0) return
+
+  console.log(`🪄 Enriching ${stubs.length} stub NPC(s): ${stubs.map(n => n.name).join(', ')}`)
+
+  const nameList = stubs.map(n => `- ${n.name}`).join('\n')
+  const prompt = `You are a TTRPG game master. The following scene just resolved:\n\n${sceneText}\n\nThese NPCs were introduced for the first time:\n${nameList}\n\nFor each NPC, write a SHORT 1-2 sentence description (appearance, role, or personality) based on how they appear in the scene. If the scene doesn't mention them explicitly, invent something consistent with the fiction.\n\nRespond with valid JSON:\n{"npcs": [{"name": "...", "description": "..."}]}`
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 400,
+        response_format: { type: 'json_object' }
+      })
+    })
+
+    if (!response.ok) {
+      console.warn('⚠️ NPC enrichment API call failed:', response.status)
+      return
+    }
+
+    const data = await response.json()
+    const parsed = JSON.parse(data.choices[0].message.content) as {
+      npcs: Array<{ name: string; description: string }>
+    }
+
+    for (const enriched of parsed.npcs) {
+      const stub = stubs.find(s => s.name.toLowerCase() === enriched.name.toLowerCase())
+      if (stub && enriched.description) {
+        await prisma.nPC.update({
+          where: { id: stub.id },
+          data: { description: enriched.description }
+        })
+        console.log(`  ✅ Enriched NPC: ${stub.name}`)
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ NPC enrichment failed (non-critical):', err)
+  }
 }

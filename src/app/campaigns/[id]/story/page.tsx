@@ -54,6 +54,8 @@ export default function StoryPage() {
   const [showInsufficientFunds, setShowInsufficientFunds] = useState(false)
   const [insufficientFundsDetails, setInsufficientFundsDetails] = useState('')
   const [resolvingMessage, setResolvingMessage] = useState('')
+  // Tracks which scenes the user has explicitly chosen to continue (vs. stop & read later)
+  const [sceneContinued, setSceneContinued] = useState<Record<string, boolean>>({})
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
@@ -165,7 +167,11 @@ export default function StoryPage() {
     channel.bind('scene:resolved', (data: any) => {
       console.log('Scene resolved:', data)
       setResolvingMessage('') // Clear resolving message
-      setSuccess('✓ Scene resolved! The story continues...')
+      setSuccess('')
+      // Reset continue choice so the "what next?" panel shows after each resolution
+      if (data.sceneId) {
+        setSceneContinued(prev => ({ ...prev, [data.sceneId]: false }))
+      }
       // Refresh data so scene resolution appears
       loadData()
     })
@@ -331,6 +337,11 @@ export default function StoryPage() {
 
       if (!response.ok) {
         const data = await response.json()
+        if (response.status === 402) {
+          setInsufficientFundsDetails(data.details || 'You need to add funds to submit actions.')
+          setShowInsufficientFunds(true)
+          return
+        }
         throw new Error(data.error || 'Failed to submit action')
       }
 
@@ -807,8 +818,32 @@ export default function StoryPage() {
                     </div>
                   )}
 
-                  {/* Action Form (if scene is awaiting actions and user hasn't submitted) */}
-                  {scene.status === 'AWAITING_ACTIONS' && !userHasSubmitted && selectedCharacterId && (
+                  {/* Post-resolution choice: continue now or save and stop */}
+                  {scene.status === 'AWAITING_ACTIONS' && !userHasSubmitted && selectedCharacterId && scene.sceneResolutionText && !sceneContinued[scene.id] && (
+                    <div className="card border border-primary-500/30 bg-dark-800/60">
+                      <h3 className="text-base font-bold text-white mb-1">What would you like to do?</h3>
+                      <p className="text-sm text-gray-400 mb-4">Your progress is saved — you can always come back.</p>
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                          onClick={() => setSceneContinued(prev => ({ ...prev, [scene.id]: true }))}
+                          className="btn-primary flex-1 flex items-center justify-center gap-2"
+                        >
+                          <span>Continue the scene</span>
+                          <span className="text-sm opacity-70">→</span>
+                        </button>
+                        <a
+                          href={`/campaigns/${campaignId}/story-log`}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors text-sm font-medium"
+                        >
+                          <span>Save &amp; read later</span>
+                          <span className="text-sm opacity-70">📖</span>
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Form (shown after user chooses to continue, or on first action before any resolution) */}
+                  {scene.status === 'AWAITING_ACTIONS' && !userHasSubmitted && selectedCharacterId && (!scene.sceneResolutionText || sceneContinued[scene.id]) && (
                     <div className="card">
                       <h3 className="text-lg font-bold text-white mb-4">Your Action</h3>
                       {isWaitingOnUser && (

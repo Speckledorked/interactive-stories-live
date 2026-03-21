@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import { pusherClient } from '@/lib/pusher'
 
 type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
 
@@ -32,6 +33,23 @@ export default function WikiPage() {
     }
 
     loadEntries()
+  }, [campaignId, selectedType])
+
+  // Live-update wiki when a scene resolves (new NPCs, locations, etc. get registered)
+  useEffect(() => {
+    if (!pusherClient) return
+
+    const channel = pusherClient.subscribe(`campaign-${campaignId}`)
+
+    channel.bind('scene:resolved', () => {
+      loadEntries()
+    })
+
+    return () => {
+      if (pusherClient) {
+        pusherClient.unsubscribe(`campaign-${campaignId}`)
+      }
+    }
   }, [campaignId, selectedType])
 
   const loadEntries = async () => {

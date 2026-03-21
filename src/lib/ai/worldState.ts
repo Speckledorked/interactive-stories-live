@@ -25,7 +25,7 @@ async function buildOptimizedWorldSummary(
   const optimizedContext = await buildOptimizedContext(prisma, campaignId, currentSceneNumber)
 
   // Get current data
-  const [worldMeta, characters, allNpcs, allFactions, clocks] = await Promise.all([
+  const [worldMeta, characters, allNpcs, allFactions, locations, clocks] = await Promise.all([
     prisma.worldMeta.findUnique({ where: { campaignId } }),
     prisma.character.findMany({
       where: { campaignId, isAlive: true },
@@ -33,6 +33,7 @@ async function buildOptimizedWorldSummary(
     }),
     prisma.nPC.findMany({ where: { campaignId } }),
     prisma.faction.findMany({ where: { campaignId } }),
+    prisma.location.findMany({ where: { campaignId, isDiscovered: true } }),
     prisma.clock.findMany({
       where: { campaignId, isHidden: false }
     })
@@ -148,6 +149,12 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       influence: f.influence
     })),
 
+    locations: locations.map(l => ({
+      name: l.name,
+      description: l.description || '',
+      type: l.locationType || 'unknown'
+    })),
+
     clocks: clocks.map(cl => ({
       id: cl.id,
       name: cl.name,
@@ -189,6 +196,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
     characters,
     npcs,
     factions,
+    locations,
     clocks,
     recentEvents
   ] = await Promise.all([
@@ -200,11 +208,12 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
     }),
     prisma.nPC.findMany({ where: { campaignId } }),
     prisma.faction.findMany({ where: { campaignId } }),
-    prisma.clock.findMany({ 
+    prisma.location.findMany({ where: { campaignId, isDiscovered: true } }),
+    prisma.clock.findMany({
       where: { campaignId, isHidden: false } // Only visible clocks for players
     }),
     prisma.timelineEvent.findMany({
-      where: { 
+      where: {
         campaignId,
         visibility: { in: ['PUBLIC', 'MIXED'] } // Only events players can see
       },
@@ -269,6 +278,12 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       max_ticks: cl.maxTicks,
       description: cl.description || '',
       consequence: cl.consequence || ''
+    })),
+
+    locations: locations.map(l => ({
+      name: l.name,
+      description: l.description || '',
+      type: l.locationType || 'unknown'
     })),
 
     recent_timeline_events: recentEvents.map(e => ({
@@ -505,7 +520,7 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
     throw new Error('Campaign not found')
   }
 
-  const worldSummary = await buildWorldSummaryForAI(campaignId)
+  const { worldSummary: worldSummaryData } = await buildWorldSummaryForAI(campaignId)
 
   // Get the last scene for context (could be RESOLVED or AWAITING_ACTIONS with resolutions)
   const lastScene = await prisma.scene.findFirst({
@@ -571,7 +586,7 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
 ${campaign.aiSystemPrompt}
 
 WORLD STATE:
-${JSON.stringify(worldSummary, null, 2)}
+${JSON.stringify(worldSummaryData, null, 2)}
 ${characterContext}
 
 LAST SCENE RESOLUTION:
@@ -616,7 +631,7 @@ Write ONLY the scene introduction. No JSON, no meta-commentary, no character she
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Cost optimization: mini model for scene intros
+        model: 'gpt-4.1', // Full model for scene intros - first impression shapes the whole session
         messages: [
           { role: 'system', content: 'You are an evocative, atmospheric storyteller and game master. You show, don\'t tell. You create tension through imagery and implication, not explanation.' },
           { role: 'user', content: prompt }

@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
 import { pusherServer } from '@/lib/pusher'
-import { checkBalance, deductFunds, PRICING, formatCurrency } from '@/lib/payment/service'
+import { checkBalance, deductFunds, formatCurrency } from '@/lib/payment/service'
 
 // GET active scenes
 export async function GET(

@@ -1418,3 +1418,17 @@ model Friendship {
   @@index([user2Id])
   @@map("friendships")
 }
+
+model AIValidationFailure {
+  id           String   @id @default(cuid())
+  campaignId   String
+  sceneId      String?
+  errorSummary String   // Short description of what failed
+  rawResponse  Json?    // The AI output that failed validation
+  zodErrors    Json     // Serialised ZodError.errors array
+  createdAt    DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([createdAt])
+  @@map("ai_validation_failures")
+}

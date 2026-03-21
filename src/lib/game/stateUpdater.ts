@@ -843,6 +843,78 @@ export function summarizeWorldUpdates(aiResponse: AIGMResponse): string {
 }
 
 /**
+ * Enrich stub factions auto-created mid-campaign with no description.
+ * Mirror of enrichStubNPCs — same pattern, same non-critical fire-and-forget usage.
+ */
+export async function enrichStubFactions(
+  campaignId: string,
+  sceneText: string
+): Promise<void> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) return
+
+  const cutoff = new Date(Date.now() - 2 * 60 * 1000)
+  const stubs = await prisma.faction.findMany({
+    where: {
+      campaignId,
+      description: '',
+      createdAt: { gte: cutoff }
+    },
+    select: { id: true, name: true }
+  })
+
+  if (stubs.length === 0) return
+
+  console.log(`🪄 Enriching ${stubs.length} stub faction(s): ${stubs.map(f => f.name).join(', ')}`)
+
+  const nameList = stubs.map(f => `- ${f.name}`).join('\n')
+  const prompt = `You are a TTRPG game master. The following scene just resolved:\n\n${sceneText}\n\nThese factions or groups were introduced for the first time:\n${nameList}\n\nFor each faction, write a SHORT 1-2 sentence description (what they are, their role or agenda) based on context from the scene. Invent something consistent with the fiction if they aren't explicitly described.\n\nRespond with valid JSON:\n{"factions": [{"name": "...", "description": "...", "goals": "..."}]}`
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 400,
+        response_format: { type: 'json_object' }
+      })
+    })
+
+    if (!response.ok) {
+      console.warn('⚠️ Faction enrichment API call failed:', response.status)
+      return
+    }
+
+    const data = await response.json()
+    const parsed = JSON.parse(data.choices[0].message.content) as {
+      factions: Array<{ name: string; description: string; goals?: string }>
+    }
+
+    for (const enriched of parsed.factions) {
+      const stub = stubs.find(f => f.name.toLowerCase() === enriched.name.toLowerCase())
+      if (stub && enriched.description) {
+        await prisma.faction.update({
+          where: { id: stub.id },
+          data: {
+            description: enriched.description,
+            ...(enriched.goals ? { goals: enriched.goals } : {})
+          }
+        })
+        console.log(`  ✅ Enriched faction: ${stub.name}`)
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Faction enrichment failed (non-critical):', err)
+  }
+}
+
+/**
  * Enrich stub NPCs that were auto-created mid-scene with no description.
  *
  * After `applyWorldUpdates` commits, any NPC introduced by the AI without

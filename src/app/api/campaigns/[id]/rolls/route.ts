@@ -141,7 +141,13 @@ export async function POST(
           where: { id: latestAction.id },
           data: {
             rollMade: roll.id,
-            moveUsed: body.moveId
+            moveUsed: body.moveId,
+            rollResult: {
+              outcome,
+              stat: body.stat || null,
+              total,
+              dice
+            }
           }
         })
       }

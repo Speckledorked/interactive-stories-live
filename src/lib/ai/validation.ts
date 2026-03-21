@@ -4,6 +4,7 @@
 import { z } from 'zod'
 import { AIGMResponseSchema, MinimalAIResponseSchema, type AIGMResponseValidated } from './schema'
 import type { AIGMResponse } from './client'
+import { prisma } from '@/lib/prisma'
 
 /**
  * Validation Result Types
@@ -237,17 +238,28 @@ export async function logValidationFailure(
   validationError: z.ZodError
 ): Promise<void> {
   try {
-    // Store validation failures for later analysis
+    const summary = validationError.errors
+      .slice(0, 3)
+      .map(e => `${e.path.join('.')}: ${e.message}`)
+      .join('; ')
+
     console.error('Validation failure details:', {
       campaignId,
       sceneId,
-      errors: validationError.errors,
+      summary,
       rawResponseKeys: Object.keys(rawResponse || {}),
       timestamp: new Date().toISOString()
     })
 
-    // TODO: Store in database for analytics
-    // This could help identify patterns in AI failures
+    await prisma.aIValidationFailure.create({
+      data: {
+        campaignId,
+        sceneId: sceneId || null,
+        errorSummary: summary,
+        rawResponse: rawResponse ?? undefined,
+        zodErrors: validationError.errors as any
+      }
+    })
   } catch (error) {
     console.error('Failed to log validation failure:', error)
   }

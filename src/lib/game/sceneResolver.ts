@@ -5,7 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { callAIGM } from '@/lib/ai/client'
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
-import { applyWorldUpdates, summarizeWorldUpdates, enrichStubNPCs } from './stateUpdater'
+import { applyWorldUpdates, summarizeWorldUpdates, enrichStubNPCs, enrichStubFactions } from './stateUpdater'
 import { SceneStatus } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
 import { ExchangeManager } from './exchange-manager' // Phase 16
@@ -218,9 +218,12 @@ async function performResolution(
     console.log('💾 Applying world updates...')
     await applyWorldUpdates(campaignId, aiResponse, currentTurn)
 
-    // 6.1. Enrich any stub NPCs auto-created mid-scene (non-blocking, best-effort)
+    // 6.1. Enrich any stub NPCs/factions auto-created mid-scene (non-blocking, best-effort)
     enrichStubNPCs(campaignId, aiResponse.scene_text).catch(err =>
       console.warn('NPC enrichment error (ignored):', err)
+    )
+    enrichStubFactions(campaignId, aiResponse.scene_text).catch(err =>
+      console.warn('Faction enrichment error (ignored):', err)
     )
 
     // 6.5. Apply organic character growth
@@ -608,7 +611,7 @@ async function applyOrganicCharacterGrowth(
     const recentActions: RecentAction[] = actions.map(action => ({
       actionId: action.id,
       tags: extractTagsFromAction(action.actionText),
-      statUsed: null, // TODO: extract from rollResult if available
+      statUsed: (action.rollResult as any)?.stat ?? null,
       outcome: inferOutcomeFromAction(action)
     }))
 

@@ -285,7 +285,7 @@ export async function callAIGM(
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o', // Latest GPT-4 Omni model (auto-updates to latest snapshot)
+        model: 'gpt-4.1', // GPT-4.1: better instruction following and narrative quality than gpt-4o
         messages: [
           {
             role: 'system',
@@ -754,7 +754,7 @@ Respond with JSON:
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Cost optimization: mini model for background world turns
+        model: 'gpt-4.1-mini', // Cost optimization: mini model for background world turns
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }

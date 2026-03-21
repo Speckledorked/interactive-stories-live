@@ -34,6 +34,20 @@ export const ConditionSchema = z.object({
   mechanicalEffect: z.string().optional()
 })
 
+// Equipment change schema
+export const EquipmentChangeSchema = z.object({
+  action: z.enum(['add', 'remove', 'replace']),
+  value: z.string()
+})
+
+// Inventory item schema
+export const InventoryItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  quantity: z.number(),
+  tags: z.array(z.string())
+})
+
 // PC changes schema
 export const PCChangesSchema = z.object({
   character_name_or_id: z.string(),
@@ -45,7 +59,38 @@ export const PCChangesSchema = z.object({
     location: z.string().optional(),
     relationship_changes: z.array(RelationshipChangeSchema).optional(),
     consequences_add: z.array(ConsequenceAddSchema).optional(),
-    consequences_remove: z.array(z.string()).optional()
+    consequences_remove: z.array(z.string()).optional(),
+    appearance_changes: z.object({
+      description: z.string(),
+      append: z.boolean().optional()
+    }).optional(),
+    personality_changes: z.object({
+      description: z.string(),
+      append: z.boolean().optional()
+    }).optional(),
+    equipment_changes: z.object({
+      weapon: EquipmentChangeSchema.optional(),
+      armor: EquipmentChangeSchema.optional(),
+      misc: EquipmentChangeSchema.optional()
+    }).optional(),
+    inventory_changes: z.object({
+      items_add: z.array(InventoryItemSchema).optional(),
+      items_remove: z.array(z.string()).optional(),
+      items_modify: z.array(z.object({
+        id: z.string(),
+        quantity_delta: z.number()
+      })).optional(),
+      slots_delta: z.number().optional()
+    }).optional(),
+    resource_changes: z.object({
+      gold_delta: z.number().optional(),
+      contacts_add: z.array(z.string()).optional(),
+      contacts_remove: z.array(z.string()).optional(),
+      reputation_changes: z.array(z.object({
+        faction: z.string(),
+        delta: z.number()
+      })).optional()
+    }).optional()
   })
 })
 
@@ -117,9 +162,18 @@ export const WorldUpdatesSchema = z.object({
   notes_for_gm: z.string().optional()
 })
 
+// Time passage schema
+export const TimePassageSchema = z.object({
+  days: z.number().optional(),
+  hours: z.number().optional(),
+  new_date: z.string().optional(),
+  description: z.string().optional()
+})
+
 // Full AI GM response schema
 export const AIGMResponseSchema = z.object({
   scene_text: z.string().min(50, "Scene text must be at least 50 characters"),
+  time_passage: TimePassageSchema.optional(),
   world_updates: WorldUpdatesSchema
 })
 

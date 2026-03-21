@@ -207,7 +207,7 @@ export class SceneResolutionHook {
       autoGeneration: process.env.AUTO_MAP_GENERATION === 'true',
       autoTokens: process.env.AUTO_TOKEN_PLACEMENT === 'true',
       autoZones: process.env.AUTO_ZONE_CREATION === 'true',
-      model: process.env.AI_VISUAL_MODEL || 'gpt-4'
+      model: process.env.AI_VISUAL_MODEL || 'gpt-4.1-mini'
     }
   }
 }

@@ -616,7 +616,7 @@ Write ONLY the scene introduction. No JSON, no meta-commentary, no character she
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Cost optimization: mini model for scene intros
+        model: 'gpt-4.1-mini', // Cost optimization: mini model for scene intros
         messages: [
           { role: 'system', content: 'You are an evocative, atmospheric storyteller and game master. You show, don\'t tell. You create tension through imagery and implication, not explanation.' },
           { role: 'user', content: prompt }

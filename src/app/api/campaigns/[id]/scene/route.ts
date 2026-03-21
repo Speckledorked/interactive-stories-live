@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
 import { pusherServer } from '@/lib/pusher'
-import { getUserBalance, PRICING, formatCurrency } from '@/lib/payment/service'
+import { checkBalance, deductFunds, PRICING, formatCurrency } from '@/lib/payment/service'
 
 // GET active scenes
 export async function GET(
@@ -124,13 +124,14 @@ export async function POST(
       )
     }
 
-    // Check player has a positive balance (must have put money in to play)
-    const playerBalance = await getUserBalance(user.userId)
-    if (playerBalance <= 0) {
+    // Check player has enough balance to submit an action
+    const ACTION_COST = PRICING.SOLO // $0.25 per action submitted
+    const balanceCheck = await checkBalance(user.userId, ACTION_COST)
+    if (!balanceCheck.sufficient) {
       return NextResponse.json<ErrorResponse>(
         {
           error: 'Insufficient balance',
-          details: `You need at least ${formatCurrency(PRICING.SOLO)} in your account to submit actions. Please add funds to continue playing.`
+          details: `You need ${formatCurrency(ACTION_COST)} to submit an action. Your current balance is ${formatCurrency(balanceCheck.currentBalance)}. Please add funds to continue playing.`
         },
         { status: 402 }
       )
@@ -195,6 +196,14 @@ export async function POST(
         }
       }
     })
+
+    // Deduct the action cost from the player's balance
+    await deductFunds(
+      user.userId,
+      ACTION_COST,
+      `Action submitted for scene #${scene.sceneNumber ?? sceneId}`,
+      { sceneId, actionId: action.id, campaignId }
+    )
 
     // Trigger Pusher event to notify all clients
     try {

@@ -125,7 +125,7 @@ export async function POST(
     }
 
     // Check player has enough balance to submit an action
-    const ACTION_COST = PRICING.SOLO // $0.25 per action submitted
+    const ACTION_COST = 1 // $0.01 per action submitted
     const balanceCheck = await checkBalance(user.userId, ACTION_COST)
     if (!balanceCheck.sufficient) {
       return NextResponse.json<ErrorResponse>(

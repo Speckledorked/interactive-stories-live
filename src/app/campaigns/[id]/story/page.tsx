@@ -241,16 +241,16 @@ export default function StoryPage() {
 
   // Fallback polling when Pusher is not configured or scene is resolving
   useEffect(() => {
-    // Only poll if Pusher is not configured OR if there's a scene currently resolving
     const hasResolvingScene = activeScenes.some(scene => scene.status === 'RESOLVING')
-    const shouldPoll = !pusherClient || hasResolvingScene
+    const hasActiveScene = activeScenes.some(scene => scene.status === 'AWAITING_ACTIONS' || scene.status === 'RESOLVING')
+    // Always poll when resolving; poll every 10s as a safety net when Pusher may miss events
+    const shouldPoll = hasResolvingScene || !pusherClient || hasActiveScene
 
     if (!shouldPoll) {
       return
     }
 
-    // Poll every 3 seconds when a scene is resolving
-    // Poll every 10 seconds otherwise (when Pusher is not configured)
+    // Poll every 3 seconds when a scene is resolving, 10 seconds otherwise
     const pollInterval = hasResolvingScene ? 3000 : 10000
 
     const pollTimer = setInterval(() => {

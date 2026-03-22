@@ -159,13 +159,14 @@ export async function POST(
       })
     }
 
-    // Create action
+    // Create action - stamp with current exchange number so auto-resolve queries work correctly
     const action = await prisma.playerAction.create({
       data: {
         sceneId,
         characterId,
         userId: user.userId,
-        actionText
+        actionText,
+        exchangeNumber: scene.currentExchange ?? 0
       },
       include: {
         character: {
@@ -182,6 +183,15 @@ export async function POST(
         }
       }
     })
+
+    // Update exchange state to track who has acted
+    try {
+      const { ExchangeManager } = await import('@/lib/game/exchange-manager')
+      const exchangeManager = new ExchangeManager(campaignId, sceneId)
+      await exchangeManager.recordAction(characterId, action.id)
+    } catch (exchangeError) {
+      console.error('Failed to record exchange action (non-critical):', exchangeError)
+    }
 
     // Trigger Pusher event to notify all clients
     try {

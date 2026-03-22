@@ -53,6 +53,8 @@ export default function StoryPage() {
   const [selectedSceneCharacters, setSelectedSceneCharacters] = useState<string[]>([])
   const [showInsufficientFunds, setShowInsufficientFunds] = useState(false)
   const [insufficientFundsDetails, setInsufficientFundsDetails] = useState('')
+  const [addFundsLoading, setAddFundsLoading] = useState(false)
+  const [addFundsError, setAddFundsError] = useState('')
   const [resolvingMessage, setResolvingMessage] = useState('')
   // Tracks which scenes the user has explicitly chosen to continue (vs. stop & read later)
   const [sceneContinued, setSceneContinued] = useState<Record<string, boolean>>({})
@@ -239,16 +241,16 @@ export default function StoryPage() {
 
   // Fallback polling when Pusher is not configured or scene is resolving
   useEffect(() => {
-    // Only poll if Pusher is not configured OR if there's a scene currently resolving
     const hasResolvingScene = activeScenes.some(scene => scene.status === 'RESOLVING')
-    const shouldPoll = !pusherClient || hasResolvingScene
+    const hasActiveScene = activeScenes.some(scene => scene.status === 'AWAITING_ACTIONS' || scene.status === 'RESOLVING')
+    // Always poll when resolving; poll every 10s as a safety net when Pusher may miss events
+    const shouldPoll = hasResolvingScene || !pusherClient || hasActiveScene
 
     if (!shouldPoll) {
       return
     }
 
-    // Poll every 3 seconds when a scene is resolving
-    // Poll every 10 seconds otherwise (when Pusher is not configured)
+    // Poll every 3 seconds when a scene is resolving, 10 seconds otherwise
     const pollInterval = hasResolvingScene ? 3000 : 10000
 
     const pollTimer = setInterval(() => {
@@ -430,6 +432,28 @@ export default function StoryPage() {
       setError(err instanceof Error ? err.message : 'Failed to start scene')
     } finally {
       setStartingScene(false)
+    }
+  }
+
+  const handleAddFundsFromModal = async () => {
+    setAddFundsLoading(true)
+    setAddFundsError('')
+    try {
+      const response = await authenticatedFetch('/api/user/balance/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amountInCents: 100 }), // default $1.00
+      })
+      const data = await response.json()
+      if (response.ok && data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+      } else {
+        setAddFundsError(data.error || 'Failed to start checkout')
+        setAddFundsLoading(false)
+      }
+    } catch {
+      setAddFundsError('Failed to start checkout. Please try again.')
+      setAddFundsLoading(false)
     }
   }
 
@@ -1325,19 +1349,23 @@ export default function StoryPage() {
                 </div>
               </div>
 
+              {addFundsError && (
+                <div className="mb-4 p-3 bg-danger-500/10 border border-danger-500/50 rounded-lg">
+                  <p className="text-sm text-danger-400">{addFundsError}</p>
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <button
-                  onClick={() => {
-                    setShowInsufficientFunds(false)
-                    // The balance display in header should be clicked to add funds
-                    // For now, we'll just close and let user use the balance button
-                  }}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white font-medium rounded-lg transition-all duration-200"
+                  onClick={handleAddFundsFromModal}
+                  disabled={addFundsLoading}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Add Funds
+                  {addFundsLoading ? 'Redirecting...' : 'Add Funds ($1.00)'}
                 </button>
                 <button
-                  onClick={() => setShowInsufficientFunds(false)}
+                  onClick={() => { setShowInsufficientFunds(false); setAddFundsError('') }}
+                  disabled={addFundsLoading}
                   className="px-4 py-2.5 bg-dark-800 hover:bg-dark-700 text-gray-300 font-medium rounded-lg transition-all duration-200"
                 >
                   Cancel
@@ -1345,7 +1373,7 @@ export default function StoryPage() {
               </div>
 
               <p className="text-xs text-gray-500 mt-4 text-center">
-                Click &quot;Add Funds&quot; to add money to your account, or use the balance button in the header.
+                You will be redirected to Stripe to complete your payment securely.
               </p>
             </div>
           </div>

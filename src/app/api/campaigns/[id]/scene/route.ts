@@ -8,7 +8,6 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
 import { pusherServer } from '@/lib/pusher'
-import { checkBalance, deductFunds, formatCurrency } from '@/lib/payment/service'
 
 // GET active scenes
 export async function GET(
@@ -124,19 +123,6 @@ export async function POST(
       )
     }
 
-    // Check player has enough balance to submit an action
-    const ACTION_COST = 1 // $0.01 per action submitted
-    const balanceCheck = await checkBalance(user.userId, ACTION_COST)
-    if (!balanceCheck.sufficient) {
-      return NextResponse.json<ErrorResponse>(
-        {
-          error: 'Insufficient balance',
-          details: `You need ${formatCurrency(ACTION_COST)} to submit an action. Your current balance is ${formatCurrency(balanceCheck.currentBalance)}. Please add funds to continue playing.`
-        },
-        { status: 402 }
-      )
-    }
-
     // Check if character is already in another active scene
     const otherActiveScenes = await prisma.scene.findMany({
       where: {
@@ -173,13 +159,14 @@ export async function POST(
       })
     }
 
-    // Create action
+    // Create action - stamp with current exchange number so auto-resolve queries work correctly
     const action = await prisma.playerAction.create({
       data: {
         sceneId,
         characterId,
         userId: user.userId,
-        actionText
+        actionText,
+        exchangeNumber: scene.currentExchange ?? 0
       },
       include: {
         character: {
@@ -197,13 +184,14 @@ export async function POST(
       }
     })
 
-    // Deduct the action cost from the player's balance
-    await deductFunds(
-      user.userId,
-      ACTION_COST,
-      `Action submitted for scene #${scene.sceneNumber ?? sceneId}`,
-      { sceneId, actionId: action.id, campaignId }
-    )
+    // Update exchange state to track who has acted
+    try {
+      const { ExchangeManager } = await import('@/lib/game/exchange-manager')
+      const exchangeManager = new ExchangeManager(campaignId, sceneId)
+      await exchangeManager.recordAction(characterId, action.id)
+    } catch (exchangeError) {
+      console.error('Failed to record exchange action (non-critical):', exchangeError)
+    }
 
     // Trigger Pusher event to notify all clients
     try {

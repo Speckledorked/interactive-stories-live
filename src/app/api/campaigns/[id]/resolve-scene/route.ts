@@ -117,15 +117,26 @@ export async function POST(
     console.log(`💰 Charging ${playerCount} player(s) ${formatCurrency(costPerPlayer)} each`)
 
     // Check all participants have sufficient balance before charging anyone
+    const participantUsers = await prisma.user.findMany({
+      where: { id: { in: participantUserIds } },
+      select: { id: true, name: true, email: true }
+    })
+
     const balanceChecks = await Promise.all(
-      participantUserIds.map(uid => checkBalance(uid, costPerPlayer))
+      participantUserIds.map(async uid => {
+        const check = await checkBalance(uid, costPerPlayer)
+        const userInfo = participantUsers.find(u => u.id === uid)
+        return { ...check, uid, displayName: userInfo?.name || userInfo?.email || uid }
+      })
     )
-    const shortfall = balanceChecks.find(b => !b.sufficient)
-    if (shortfall) {
+
+    const skint = balanceChecks.filter(b => !b.sufficient)
+    if (skint.length > 0) {
+      const names = skint.map(b => `${b.displayName} (has ${formatCurrency(b.currentBalance)}, needs ${formatCurrency(costPerPlayer)})`).join(', ')
       return NextResponse.json<ErrorResponse>(
         {
           error: 'Insufficient balance',
-          details: `One or more players do not have enough balance to resolve this scene. Each player needs ${formatCurrency(costPerPlayer)} (${playerCount} player${playerCount !== 1 ? 's' : ''} in scene).`
+          details: `Cannot resolve: ${names}. Ask them to add funds before retrying.`
         },
         { status: 402 }
       )

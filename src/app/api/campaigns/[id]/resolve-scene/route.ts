@@ -8,6 +8,14 @@ import { ErrorResponse } from '@/types/api'
 import { resolveScene, getCurrentScene } from '@/lib/game/sceneResolver'
 import { runWorldTurn } from '@/lib/game/worldTurn'
 import { prisma } from '@/lib/prisma'
+import { checkBalance, deductFunds, formatCurrency } from '@/lib/payment/service'
+
+// Per-player cost in cents based on number of players in the scene
+function getSceneCostPerPlayer(playerCount: number): number {
+  if (playerCount <= 1) return 25  // $0.25 solo
+  if (playerCount <= 4) return 50  // $0.50 small group
+  return 75                         // $0.75 large group
+}
 
 export async function POST(
   request: NextRequest,
@@ -100,15 +108,48 @@ export async function POST(
       `📝 Scene ${currentScene.sceneNumber} has ${sceneActions.length} action(s)`
     )
 
-    // 3. Resolve the scene (this calls AI and updates DB)
+    // 3. Charge each participating player based on group size
+    const participants = (currentScene.participants as any) || {}
+    const participantUserIds: string[] = participants.userIds || []
+    const playerCount = participantUserIds.length
+    const costPerPlayer = getSceneCostPerPlayer(playerCount)
+
+    console.log(`💰 Charging ${playerCount} player(s) ${formatCurrency(costPerPlayer)} each`)
+
+    // Check all participants have sufficient balance before charging anyone
+    const balanceChecks = await Promise.all(
+      participantUserIds.map(uid => checkBalance(uid, costPerPlayer))
+    )
+    const shortfall = balanceChecks.find(b => !b.sufficient)
+    if (shortfall) {
+      return NextResponse.json<ErrorResponse>(
+        {
+          error: 'Insufficient balance',
+          details: `One or more players do not have enough balance to resolve this scene. Each player needs ${formatCurrency(costPerPlayer)} (${playerCount} player${playerCount !== 1 ? 's' : ''} in scene).`
+        },
+        { status: 402 }
+      )
+    }
+
+    // Deduct from each participant
+    for (const uid of participantUserIds) {
+      await deductFunds(
+        uid,
+        costPerPlayer,
+        `Scene #${currentScene.sceneNumber} resolution (${playerCount} player${playerCount !== 1 ? 's' : ''})`,
+        { sceneId: currentScene.id, campaignId }
+      )
+    }
+
+    // 5. Resolve the scene (this calls AI and updates DB)
     console.log('🤖 Calling scene resolver...')
     const resolutionResult = await resolveScene(campaignId, currentScene.id)
 
-    // 4. Run world turn (advance clocks, generate background events)
+    // 6. Run world turn (advance clocks, generate background events)
     console.log('🌍 Running world turn...')
     const worldTurnResult = await runWorldTurn(campaignId)
 
-    // 5. Return success
+    // 7. Return success
     return NextResponse.json({
       success: true,
       message: 'Scene resolved successfully',

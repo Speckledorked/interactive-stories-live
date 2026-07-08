@@ -1,11 +1,26 @@
 // src/app/campaigns/page.tsx
-// Campaign list page
+// Campaign list page — "Tavern" theme pilot (see reference mockup).
+// Scoped to this one page only: new color tokens (ember/tavern/wine in
+// tailwind.config.js), its own top bar + bottom nav (global Header is
+// hidden on this exact route), decorative serif type. No background art —
+// no image-generation tool available, so the "candlelit tavern" mood is a
+// CSS gradient/vignette approximation, not the literal painted scene.
 
 'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { Cinzel, Cormorant_Garamond } from 'next/font/google'
+import {
+  Menu, Bell, UserCircle, Plus, ChevronRight, Users, BookOpen,
+  Beer, Compass, Swords, Scroll, Settings as SettingsIcon,
+  Sword, TreeDeciduous, Castle, Flame, Skull, Feather, Moon, Mountain, Shield,
+} from 'lucide-react'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+
+const displayFont = Cinzel({ subsets: ['latin'], weight: ['400', '600'] })
+const bodyFont = Cormorant_Garamond({ subsets: ['latin'], weight: ['400', '500', '600', '700'] })
 
 interface Campaign {
   id: string
@@ -13,11 +28,55 @@ interface Campaign {
   description: string
   universe: string
   userRole: 'ADMIN' | 'PLAYER'
+  updatedAt: string
+  createdAt: string
   _count: {
     characters: number
     scenes: number
   }
 }
+
+// Deterministic banner icon per campaign — the reference mockup hand-picks
+// an icon per campaign's theme (sword for a fight story, tree for a nature
+// coming-of-age story, compass for an exploration story). We don't know a
+// campaign's theme programmatically, so this picks a stable icon from a
+// small thematic set based on the campaign id, instead of everyone getting
+// the same icon or a random one that changes on every reload.
+const BANNER_ICONS = [Sword, TreeDeciduous, Compass, Scroll, Castle, Flame, Skull, Feather, Moon, Mountain, Shield, Swords]
+function bannerIconFor(id: string) {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0
+  return BANNER_ICONS[Math.abs(hash) % BANNER_ICONS.length]
+}
+
+function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  const now = Date.now()
+  const diffMs = now - then
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return diffHr === 1 ? 'Updated 1 hour ago' : `Updated ${diffHr} hours ago`
+  const diffDay = Math.floor(diffHr / 24)
+  if (diffDay === 1) return 'Updated yesterday'
+  if (diffDay < 7) return `Updated ${diffDay}d ago`
+  const diffWeek = Math.floor(diffDay / 7)
+  if (diffWeek < 5) return `Updated ${diffWeek}w ago`
+  return `Updated ${new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+}
+
+// Bottom nav: only "Tavern" (this page) and "Settings" have a real
+// top-level destination in the app today — Map/Characters/Quests only
+// exist inside a specific campaign, so they're shown but inert here
+// rather than linking somewhere misleading.
+const NAV_ITEMS = [
+  { key: 'tavern', label: 'Tavern', icon: Beer, href: '/campaigns' },
+  { key: 'map', label: 'Map', icon: Compass, href: null },
+  { key: 'characters', label: 'Characters', icon: Users, href: null },
+  { key: 'quests', label: 'Quests', icon: Scroll, href: null },
+  { key: 'settings', label: 'Settings', icon: SettingsIcon, href: '/settings' },
+] as const
 
 export default function CampaignsPage() {
   const router = useRouter()
@@ -63,7 +122,6 @@ export default function CampaignsPage() {
 
       if (!response.ok) throw new Error('Failed to delete campaign')
 
-      // Remove from list
       setCampaigns(campaigns.filter(c => c.id !== campaignId))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete campaign')
@@ -72,160 +130,218 @@ export default function CampaignsPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="relative">
-          <div className="spinner h-16 w-16"></div>
-          <div className="absolute inset-0 h-16 w-16 rounded-full bg-primary-500/20 animate-ping"></div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="max-w-7xl mx-auto animate-fade-in">
-      {/* Hero Header */}
-      <div className="relative mb-12">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary-500/10 via-accent-500/5 to-transparent blur-3xl"></div>
-        <div className="flex items-end justify-between">
-          <div className="space-y-2">
-            <h1 className="text-5xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
-              Your Campaigns
-            </h1>
-            <p className="text-lg text-gray-400">Embark on AI-powered adventures</p>
-          </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="btn-primary flex items-center gap-2 shadow-glow"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span>Create Campaign</span>
-          </button>
-        </div>
+    <div className={`${bodyFont.className} -mx-4 -my-8 min-h-screen`}>
+      {/* Full-bleed background — CSS-only candlelit mood, no image asset */}
+      <div className="fixed inset-0 -z-10 bg-tavern-950">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(220,174,71,0.08),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_100%,rgba(139,58,58,0.10),transparent_55%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-tavern-900/40 via-tavern-950 to-black" />
       </div>
 
-      {error && (
-        <div className="bg-gradient-to-r from-danger-500/10 to-danger-600/5 border border-danger-500/30 text-danger-400 px-6 py-4 rounded-2xl mb-8 backdrop-blur-sm shadow-lg animate-slide-up">
-          <div className="flex items-center gap-3">
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <span className="font-medium">{error}</span>
-          </div>
-        </div>
-      )}
-
-      {campaigns.length === 0 ? (
-        <div className="card text-center py-16 max-w-2xl mx-auto animate-scale-in">
-          <div className="relative inline-block mb-6">
-            <div className="text-7xl animate-bounce">🎲</div>
-            <div className="absolute inset-0 bg-primary-500/20 blur-3xl"></div>
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-3">No campaigns yet</h2>
-          <p className="text-gray-400 mb-8 text-lg">Create your first campaign to begin your adventure</p>
-          <button onClick={() => setShowCreateModal(true)} className="btn-primary shadow-glow">
-            <span className="flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Create Your First Campaign
-            </span>
+      {/* Top bar */}
+      <header className="fixed top-0 inset-x-0 z-30 bg-black/60 backdrop-blur-md border-b border-ember-900/40">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+          <button
+            className="p-2 text-ember-300/80 hover:text-ember-200 transition-colors"
+            aria-label="Menu"
+            title="Menu (not wired up yet in this pilot)"
+          >
+            <Menu className="w-5 h-5" />
           </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-          {campaigns.map((campaign, index) => (
-            <div
-              key={campaign.id}
-              className="card group relative overflow-hidden cursor-pointer glow-on-hover"
-              style={{ animationDelay: `${index * 50}ms` }}
-              onClick={() => router.push(`/campaigns/${campaign.id}`)}
+
+          <div className="flex flex-col items-center">
+            <div className="flex items-center gap-3">
+              <span className="text-ember-700/60 text-xs tracking-widest">◈──</span>
+              <h1 className={`${displayFont.className} text-2xl tracking-[0.15em] bg-gradient-to-b from-ember-200 to-ember-500 bg-clip-text text-transparent`}>
+                AI GM
+              </h1>
+              <span className="text-ember-700/60 text-xs tracking-widest">──◈</span>
+            </div>
+            <p className="text-[11px] tracking-[0.2em] text-ember-300/50 -mt-0.5">YOUR STORY. THE WORLD.</p>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              className="p-2 text-ember-300/80 hover:text-ember-200 transition-colors"
+              aria-label="Notifications"
+              title="Notifications (not wired up yet in this pilot)"
             >
-              {/* Gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-br from-primary-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <Bell className="w-5 h-5" />
+            </button>
+            <Link
+              href="/settings"
+              className="p-2 text-ember-300/80 hover:text-ember-200 transition-colors"
+              aria-label="Profile"
+            >
+              <UserCircle className="w-5 h-5" />
+            </Link>
+          </div>
+        </div>
 
-              <div className="relative">
-                <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-xl font-bold text-white group-hover:text-primary-400 transition-colors line-clamp-1">
-                    {campaign.title}
-                  </h3>
-                  <span className={`badge flex-shrink-0 ml-2 ${
-                    campaign.userRole === 'ADMIN'
-                      ? 'badge-primary'
-                      : 'bg-dark-700/50 border-dark-600 text-gray-400'
-                  }`}>
-                    {campaign.userRole}
-                  </span>
-                </div>
-
-                <p className="text-sm text-gray-400 mb-6 line-clamp-2 leading-relaxed">
-                  {campaign.description}
-                </p>
-
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50 text-gray-400 font-medium">
-                      {campaign.universe}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-gray-500">
-                    <div className="flex items-center gap-1.5">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                      <span className="font-medium">{campaign._count.characters}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <span className="font-medium">{campaign._count.scenes}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {campaign.userRole === 'ADMIN' && (
-                  <div className="divider my-4"></div>
-                )}
-
-                {campaign.userRole === 'ADMIN' && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        router.push(`/campaigns/${campaign.id}/admin?tab=settings`)
-                      }}
-                      className="flex-1 px-4 py-2.5 bg-dark-800 hover:bg-dark-700 text-white rounded-xl border border-dark-700 hover:border-dark-600 font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeleteCampaign(campaign.id)
-                      }}
-                      disabled={deletingCampaignId === campaign.id}
-                      className="flex-1 px-4 py-2.5 bg-gradient-to-r from-danger-600 to-danger-500 hover:from-danger-500 hover:to-danger-400 text-white rounded-xl font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-danger-500/20"
-                    >
-                      {deletingCampaignId === campaign.id ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <div className="spinner h-4 w-4 border-white"></div>
-                          Deleting...
-                        </span>
-                      ) : (
-                        'Delete'
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
+        {/* Section tabs (visual only in this pilot — Campaigns is the only
+            one of these four that maps to a real page today) */}
+        <div className="max-w-2xl mx-auto px-4 flex items-center gap-6 text-sm border-t border-ember-900/20 pt-2 pb-0">
+          {[
+            { label: 'Campaigns', icon: BookOpen, active: true },
+            { label: 'World', icon: Compass, active: false },
+            { label: 'Journal', icon: Feather, active: false },
+            { label: 'Lore', icon: BookOpen, active: false },
+          ].map((tab) => (
+            <div
+              key={tab.label}
+              className={`flex items-center gap-1.5 pb-2 border-b-2 ${
+                tab.active
+                  ? 'border-ember-400 text-ember-200'
+                  : 'border-transparent text-ember-300/40'
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
             </div>
           ))}
         </div>
-      )}
+      </header>
+
+      {/* Content */}
+      <main className="max-w-2xl mx-auto px-4 pt-32 pb-28">
+        <div className="flex items-end justify-between mb-6">
+          <div>
+            <h2 className={`${displayFont.className} text-2xl text-ember-100`}>Your Campaigns</h2>
+            <div className="h-px w-24 bg-gradient-to-r from-ember-600 to-transparent mt-2" />
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 rounded-lg border border-ember-900/50 shadow-lg shadow-black/40 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-sm font-medium">New Campaign</span>
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-6 px-4 py-3 rounded-lg bg-wine-800/30 border border-wine-600/40 text-ember-100 text-sm">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <div className="spinner h-10 w-10" />
+          </div>
+        ) : campaigns.length === 0 ? (
+          <div className="text-center py-16 rounded-2xl border border-ember-900/30 bg-black/30">
+            <Scroll className="w-12 h-12 mx-auto text-ember-600/60 mb-4" />
+            <p className={`${displayFont.className} text-lg text-ember-200 mb-2`}>No campaigns yet</p>
+            <p className="text-ember-300/50 mb-6">Create your first campaign to begin your adventure</p>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-5 py-2.5 bg-gradient-to-b from-wine-500 to-wine-700 text-ember-100 rounded-lg border border-ember-900/50"
+            >
+              Create Your First Campaign
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {campaigns.map((campaign) => {
+              const BannerIcon = bannerIconFor(campaign.id)
+              return (
+                <div
+                  key={campaign.id}
+                  onClick={() => router.push(`/campaigns/${campaign.id}`)}
+                  className="group flex gap-4 p-4 rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 hover:border-ember-700/50 shadow-lg shadow-black/30 cursor-pointer transition-colors"
+                >
+                  {/* Banner icon */}
+                  <div className="flex-shrink-0 w-16 h-20 rounded-sm bg-gradient-to-b from-tavern-700 to-tavern-900 border border-ember-800/40 flex items-center justify-center shadow-inner"
+                       style={{ clipPath: 'polygon(0 0, 100% 0, 100% 85%, 50% 100%, 0 85%)' }}>
+                    <BannerIcon className="w-7 h-7 text-ember-300/80" />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className={`${displayFont.className} text-lg text-ember-100 leading-snug`}>
+                        {campaign.title}
+                      </h3>
+                      <ChevronRight className="w-4 h-4 text-ember-600 flex-shrink-0 mt-1 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+
+                    <p className="text-sm text-ember-300/60 mt-1 line-clamp-2 leading-relaxed">
+                      {campaign.description || 'No description yet.'}
+                    </p>
+
+                    <div className="flex items-center gap-4 mt-3 text-xs text-ember-400/60">
+                      <span className="flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5" />
+                        {campaign._count.characters} Player{campaign._count.characters !== 1 ? 's' : ''}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <BookOpen className="w-3.5 h-3.5" />
+                        {campaign._count.scenes} Session{campaign._count.scenes !== 1 ? 's' : ''}
+                      </span>
+                      <span>{formatRelativeTime(campaign.updatedAt)}</span>
+                    </div>
+
+                    {campaign.userRole === 'ADMIN' && (
+                      <div className="flex gap-2 mt-3 pt-3 border-t border-ember-900/20">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            router.push(`/campaigns/${campaign.id}/admin?tab=settings`)
+                          }}
+                          className="px-3 py-1.5 text-xs rounded-md bg-tavern-700/60 hover:bg-tavern-600/60 text-ember-200 border border-ember-900/30 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteCampaign(campaign.id)
+                          }}
+                          disabled={deletingCampaignId === campaign.id}
+                          className="px-3 py-1.5 text-xs rounded-md bg-wine-700/50 hover:bg-wine-600/60 text-ember-100 border border-wine-600/30 transition-colors disabled:opacity-50"
+                        >
+                          {deletingCampaignId === campaign.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Decorative parchment quote banner */}
+        <div className="mt-8 flex items-center gap-4 px-5 py-4 rounded-lg bg-ember-100/[0.06] border border-ember-800/30">
+          <p className={`${displayFont.className} flex-1 text-sm text-ember-200/70 italic leading-relaxed`}>
+            &ldquo;The greatest stories aren&rsquo;t written&hellip; They&rsquo;re lived.&rdquo;
+          </p>
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-wine-500 to-wine-800 border border-ember-700/40 flex items-center justify-center">
+            <Compass className="w-4 h-4 text-ember-300/70" />
+          </div>
+        </div>
+      </main>
+
+      {/* Bottom nav */}
+      <nav className="fixed bottom-0 inset-x-0 z-30 bg-black/70 backdrop-blur-md border-t border-ember-900/40">
+        <div className="max-w-2xl mx-auto grid grid-cols-5">
+          {NAV_ITEMS.map((item) => {
+            const content = (
+              <div className={`flex flex-col items-center gap-1 py-3 text-[11px] transition-colors ${
+                item.key === 'tavern' ? 'text-ember-300' : 'text-ember-500/40'
+              } ${item.href ? 'hover:text-ember-200' : 'cursor-default'}`}>
+                <item.icon className="w-5 h-5" />
+                <span>{item.label}</span>
+              </div>
+            )
+            return item.href ? (
+              <Link key={item.key} href={item.href}>{content}</Link>
+            ) : (
+              <div key={item.key} title="Only available inside a campaign">{content}</div>
+            )
+          })}
+        </div>
+      </nav>
 
       {showCreateModal && (
         <CreateCampaignModal
@@ -355,8 +471,8 @@ function CreateCampaignModal({
   const selectedTpl = selectedTemplate ? TEMPLATES.find(t => t.id === selectedTemplate) : null
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content max-w-2xl">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-gradient-to-br from-tavern-800 to-tavern-950 border border-ember-800/40 shadow-2xl">
         <div className="p-8">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
@@ -364,20 +480,18 @@ function CreateCampaignModal({
               {step === 'details' && (
                 <button
                   onClick={() => setStep('template')}
-                  className="text-gray-400 hover:text-white transition-colors p-1.5 hover:bg-white/5 rounded-lg"
+                  className="text-ember-400/70 hover:text-ember-200 transition-colors p-1.5 hover:bg-white/5 rounded-lg"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
+                  <ChevronRight className="w-5 h-5 rotate-180" />
                 </button>
               )}
-              <h2 className="text-2xl font-bold text-white tracking-tight">
+              <h2 className="text-2xl font-bold text-ember-100 tracking-tight">
                 {step === 'template' ? 'Choose a Starting Point' : 'Campaign Details'}
               </h2>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"
+              className="text-ember-400/70 hover:text-ember-200 transition-colors p-2 hover:bg-white/5 rounded-lg"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -388,7 +502,7 @@ function CreateCampaignModal({
           {/* Step 1: Template selection */}
           {step === 'template' && (
             <div className="space-y-3">
-              <p className="text-gray-400 text-sm mb-6">
+              <p className="text-ember-300/50 text-sm mb-6">
                 Templates pre-configure the AI Game Master, world factions, and moves so you can start playing immediately.
               </p>
 
@@ -396,31 +510,29 @@ function CreateCampaignModal({
                 <button
                   key={tpl.id}
                   onClick={() => handleTemplateSelect(tpl.id)}
-                  className="w-full text-left p-5 bg-dark-800/60 hover:bg-dark-700/60 border border-dark-700 hover:border-primary-500/50 rounded-2xl transition-all duration-200 group"
+                  className="w-full text-left p-5 bg-black/20 hover:bg-black/30 border border-ember-900/30 hover:border-ember-600/50 rounded-2xl transition-all duration-200 group"
                 >
                   <div className="flex items-start gap-4">
                     <span className="text-3xl">{tpl.emoji}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-white group-hover:text-primary-400 transition-colors">{tpl.name}</span>
-                        <span className="text-xs text-gray-500 bg-dark-900/50 px-2 py-0.5 rounded-full">{tpl.universe}</span>
+                        <span className="font-bold text-ember-100 group-hover:text-ember-300 transition-colors">{tpl.name}</span>
+                        <span className="text-xs text-ember-400/50 bg-black/30 px-2 py-0.5 rounded-full">{tpl.universe}</span>
                       </div>
-                      <p className="text-sm text-gray-400 mb-3">{tpl.description}</p>
-                      <div className="flex items-center gap-3 text-xs text-gray-500">
+                      <p className="text-sm text-ember-300/50 mb-3">{tpl.description}</p>
+                      <div className="flex items-center gap-3 text-xs text-ember-400/40">
                         <span>{tpl.moveCount} moves</span>
                         <span>·</span>
                         <span>{tpl.factionCount} factions</span>
                         <span>·</span>
                         <div className="flex gap-1.5">
                           {tpl.tags.map(tag => (
-                            <span key={tag} className="bg-dark-900/80 px-2 py-0.5 rounded-full">{tag}</span>
+                            <span key={tag} className="bg-black/40 px-2 py-0.5 rounded-full">{tag}</span>
                           ))}
                         </div>
                       </div>
                     </div>
-                    <svg className="w-5 h-5 text-gray-600 group-hover:text-primary-400 transition-colors flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                    <ChevronRight className="w-5 h-5 text-ember-700 group-hover:text-ember-400 transition-colors flex-shrink-0 mt-1" />
                   </div>
                 </button>
               ))}
@@ -428,17 +540,15 @@ function CreateCampaignModal({
               {/* Custom option */}
               <button
                 onClick={() => handleTemplateSelect(null)}
-                className="w-full text-left p-5 bg-dark-800/30 hover:bg-dark-700/40 border border-dark-700/50 hover:border-dark-600 rounded-2xl transition-all duration-200 group"
+                className="w-full text-left p-5 bg-black/10 hover:bg-black/20 border border-ember-900/20 hover:border-ember-800/40 rounded-2xl transition-all duration-200 group"
               >
                 <div className="flex items-center gap-4">
                   <span className="text-3xl">✏️</span>
                   <div className="flex-1">
-                    <p className="font-bold text-gray-300 group-hover:text-white transition-colors">Custom</p>
-                    <p className="text-sm text-gray-500">Build your own world from scratch</p>
+                    <p className="font-bold text-ember-300/70 group-hover:text-ember-100 transition-colors">Custom</p>
+                    <p className="text-sm text-ember-400/40">Build your own world from scratch</p>
                   </div>
-                  <svg className="w-5 h-5 text-gray-600 group-hover:text-gray-400 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
+                  <ChevronRight className="w-5 h-5 text-ember-700 group-hover:text-ember-500 transition-colors flex-shrink-0" />
                 </div>
               </button>
             </div>
@@ -448,23 +558,18 @@ function CreateCampaignModal({
           {step === 'details' && (
             <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
-                <div className="bg-gradient-to-r from-danger-500/10 to-danger-600/5 border border-danger-500/30 text-danger-400 px-5 py-4 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <span className="font-medium text-sm">{error}</span>
-                  </div>
+                <div className="bg-wine-800/30 border border-wine-600/40 text-ember-100 px-5 py-4 rounded-xl text-sm font-medium">
+                  {error}
                 </div>
               )}
 
               {/* Template badge */}
               {selectedTpl && (
-                <div className="flex items-center gap-3 px-4 py-3 bg-primary-500/10 border border-primary-500/20 rounded-xl">
+                <div className="flex items-center gap-3 px-4 py-3 bg-ember-900/20 border border-ember-700/30 rounded-xl">
                   <span className="text-xl">{selectedTpl.emoji}</span>
                   <div>
-                    <p className="text-sm font-semibold text-primary-300">{selectedTpl.name} template</p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-sm font-semibold text-ember-200">{selectedTpl.name} template</p>
+                    <p className="text-xs text-ember-400/50">
                       Includes {selectedTpl.moveCount} moves, {selectedTpl.factionCount} factions, AI system prompt, and world seed
                     </p>
                   </div>
@@ -472,14 +577,14 @@ function CreateCampaignModal({
               )}
 
               <div>
-                <label className="block text-sm font-semibold text-gray-300 mb-2">
-                  Campaign Title <span className="text-danger-400">*</span>
+                <label className="block text-sm font-semibold text-ember-300/70 mb-2">
+                  Campaign Title <span className="text-wine-400">*</span>
                 </label>
                 <input
                   type="text"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="input-field"
+                  className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60"
                   placeholder={selectedTpl ? `e.g., ${selectedTpl.name} - My Campaign` : 'e.g., The Shattered Realm'}
                   required
                   autoFocus
@@ -487,13 +592,13 @@ function CreateCampaignModal({
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-300 mb-2">
+                <label className="block text-sm font-semibold text-ember-300/70 mb-2">
                   Description
                 </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="input-field min-h-[80px] resize-none"
+                  className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 min-h-[80px] resize-none"
                   placeholder="What's this campaign about?"
                 />
               </div>
@@ -502,41 +607,41 @@ function CreateCampaignModal({
               {selectedTemplate === null && (
                 <>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-2">
-                      Universe <span className="text-danger-400">*</span>
+                    <label className="block text-sm font-semibold text-ember-300/70 mb-2">
+                      Universe <span className="text-wine-400">*</span>
                     </label>
                     <input
                       type="text"
                       value={formData.universe}
                       onChange={(e) => setFormData({ ...formData, universe: e.target.value })}
-                      className="input-field"
+                      className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60"
                       placeholder="e.g., Original, Tolkien, Sci-Fi, Noir"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-2">
-                      AI GM Instructions <span className="text-danger-400">*</span>
+                    <label className="block text-sm font-semibold text-ember-300/70 mb-2">
+                      AI GM Instructions <span className="text-wine-400">*</span>
                     </label>
                     <textarea
                       value={formData.aiSystemPrompt}
                       onChange={(e) => setFormData({ ...formData, aiSystemPrompt: e.target.value })}
-                      className="input-field min-h-[120px] font-mono text-sm resize-none"
+                      className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 min-h-[120px] font-mono text-sm resize-none"
                       placeholder={`You are the Game Master for a [universe] campaign.\n\nCore Principles:\n- Fiction first\n- Be a fan of the characters\n...`}
                       required
                     />
-                    <p className="text-xs text-gray-500 mt-1.5">Tells the AI how to run your world — tone, rules, GM moves</p>
+                    <p className="text-xs text-ember-400/40 mt-1.5">Tells the AI how to run your world — tone, rules, GM moves</p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                    <label className="block text-sm font-semibold text-ember-300/70 mb-2">
                       World Seed
                     </label>
                     <textarea
                       value={formData.initialWorldSeed}
                       onChange={(e) => setFormData({ ...formData, initialWorldSeed: e.target.value })}
-                      className="input-field min-h-[80px] resize-none"
+                      className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 min-h-[80px] resize-none"
                       placeholder="The current state of the world — what's happening when the story begins?"
                     />
                   </div>
@@ -549,44 +654,39 @@ function CreateCampaignModal({
                   <button
                     type="button"
                     onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-300 transition-colors"
+                    className="flex items-center gap-2 text-sm text-ember-400/50 hover:text-ember-200 transition-colors"
                   >
-                    <svg
-                      className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
-                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                    <ChevronRight className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
                     Advanced — override template settings
                   </button>
 
                   {showAdvanced && (
-                    <div className="mt-4 space-y-4 pl-4 border-l border-dark-700">
+                    <div className="mt-4 space-y-4 pl-4 border-l border-ember-900/30">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-300 mb-2">Universe</label>
+                        <label className="block text-sm font-semibold text-ember-300/70 mb-2">Universe</label>
                         <input
                           type="text"
                           value={formData.universe}
                           onChange={(e) => setFormData({ ...formData, universe: e.target.value })}
-                          className="input-field"
+                          className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60"
                           placeholder={selectedTpl?.universe}
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-gray-300 mb-2">AI GM Instructions</label>
+                        <label className="block text-sm font-semibold text-ember-300/70 mb-2">AI GM Instructions</label>
                         <textarea
                           value={formData.aiSystemPrompt}
                           onChange={(e) => setFormData({ ...formData, aiSystemPrompt: e.target.value })}
-                          className="input-field min-h-[100px] font-mono text-sm resize-none"
+                          className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 min-h-[100px] font-mono text-sm resize-none"
                           placeholder="Leave blank to use template instructions"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-gray-300 mb-2">World Seed</label>
+                        <label className="block text-sm font-semibold text-ember-300/70 mb-2">World Seed</label>
                         <textarea
                           value={formData.initialWorldSeed}
                           onChange={(e) => setFormData({ ...formData, initialWorldSeed: e.target.value })}
-                          className="input-field min-h-[80px] resize-none"
+                          className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 min-h-[80px] resize-none"
                           placeholder="Leave blank to use template world seed"
                         />
                       </div>
@@ -596,13 +696,21 @@ function CreateCampaignModal({
               )}
 
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={onClose} className="flex-1 btn-secondary">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors"
+                >
                   Cancel
                 </button>
-                <button type="submit" disabled={loading} className="flex-1 btn-primary">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 border border-ember-900/50 text-ember-100 font-medium transition-all disabled:opacity-50"
+                >
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
-                      <div className="spinner h-5 w-5 border-white"></div>
+                      <div className="spinner h-5 w-5 border-white" />
                       {selectedTemplate ? 'Building your world…' : 'Creating…'}
                     </span>
                   ) : (

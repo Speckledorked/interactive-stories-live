@@ -7,6 +7,11 @@ import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
 import CharacterSheetDisplay from '@/components/character/CharacterSheetDisplay'
 import { DynamicDowntimeManager } from '@/components/downtime/DynamicDowntimeManager'
 import { pusherClient } from '@/lib/pusher'
+import { Home, Scroll, User } from 'lucide-react'
+import { TavernPage } from '@/components/tavern/TavernPage'
+import { TavernHeader } from '@/components/tavern/TavernHeader'
+import { TavernNav } from '@/components/tavern/TavernNav'
+import { TavernCard, TavernSpinner } from '@/components/tavern/ui'
 
 export default function CharacterPage() {
   const router = useRouter()
@@ -128,90 +133,83 @@ export default function CharacterPage() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-center items-center min-h-[60vh]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
-            <p className="text-gray-400">Loading character...</p>
-          </div>
-        </div>
-      </div>
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" />
+        <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
+          <TavernSpinner className="h-16 w-16" />
+        </main>
+      </TavernPage>
     )
   }
 
   if (error || !character) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-red-400 mb-4">Error</h2>
-          <p className="text-gray-400 mb-4">{error || 'Character not found'}</p>
-          <Link
-            href={`/campaigns/${campaignId}`}
-            className="text-primary-400 hover:text-primary-300"
-          >
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Character" />
+        <main className="max-w-6xl mx-auto px-4 pt-28 pb-16 text-center">
+          <h2 className="text-2xl font-bold text-wine-400 mb-4">Error</h2>
+          <p className="text-ember-300/60 mb-4">{error || 'Character not found'}</p>
+          <Link href={`/campaigns/${campaignId}`} className="text-ember-300 hover:text-ember-200">
             ← Back to Campaign
           </Link>
-        </div>
-      </div>
+        </main>
+      </TavernPage>
     )
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Navigation */}
-      <div className="mb-6">
-        <Link
-          href={`/campaigns/${campaignId}`}
-          className="text-gray-400 hover:text-white transition-colors text-sm mb-3 inline-block"
-        >
-          ← Back to Campaign
-        </Link>
+    <TavernPage>
+      <TavernHeader
+        backHref={`/campaigns/${campaignId}`}
+        title={character.name}
+        subrow={
+          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-ember-900/20 pt-2 pb-0">
+            <Link
+              href={`/campaigns/${campaignId}`}
+              className="flex items-center gap-1.5 px-2.5 pb-2 border-b-2 border-transparent text-ember-300/40 hover:text-ember-300/70 transition-colors"
+            >
+              <Home className="w-3.5 h-3.5" />
+              Overview
+            </Link>
+            <Link
+              href={`/campaigns/${campaignId}/story`}
+              className="flex items-center gap-1.5 px-2.5 pb-2 border-b-2 border-transparent text-ember-300/40 hover:text-ember-300/70 transition-colors"
+            >
+              <Scroll className="w-3.5 h-3.5" />
+              Story
+            </Link>
+            <span className="flex items-center gap-1.5 px-2.5 pb-2 border-b-2 border-ember-400 text-ember-200">
+              <User className="w-3.5 h-3.5" />
+              Character
+            </span>
+          </nav>
+        }
+      />
 
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-white">{character.name}</h1>
-            <p className="text-gray-400 text-sm">{campaign?.campaign?.name}</p>
-          </div>
+      <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
+        <p className="text-ember-300/50 text-sm mb-4">{campaign?.campaign?.name}</p>
+
+        {/* Character Sheet */}
+        <TavernCard className="p-5">
+          <CharacterSheetDisplay character={character} campaign={campaign?.campaign} />
+        </TavernCard>
+
+        {/* Downtime */}
+        <div className="mt-8">
+          <DynamicDowntimeManager
+            activities={downtimeActivities}
+            characterId={characterId}
+            characterGold={(character?.resources as any)?.gold || 0}
+            characterName={character?.name || ''}
+            onCreateActivity={handleCreateDowntimeActivity}
+            onAdvanceTime={handleAdvanceDowntimeTime}
+            onRespondToEvent={handleRespondToDowntimeEvent}
+            suggestions={downtimeSuggestions}
+          />
         </div>
+      </main>
 
-        {/* Tab Navigation */}
-        <div className="flex gap-2 border-b border-gray-700 pb-2 overflow-x-auto">
-          <Link
-            href={`/campaigns/${campaignId}`}
-            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
-          >
-            Overview
-          </Link>
-          <Link
-            href={`/campaigns/${campaignId}/story`}
-            className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-t transition-colors whitespace-nowrap"
-          >
-            Story
-          </Link>
-          <span className="px-4 py-2 bg-primary-600 text-white rounded-t whitespace-nowrap">
-            Character
-          </span>
-        </div>
-      </div>
-
-      {/* Character Sheet */}
-      <div className="card">
-        <CharacterSheetDisplay character={character} campaign={campaign?.campaign} />
-      </div>
-
-      {/* Downtime */}
-      <div className="mt-8">
-        <DynamicDowntimeManager
-          activities={downtimeActivities}
-          characterId={characterId}
-          characterGold={(character?.resources as any)?.gold || 0}
-          characterName={character?.name || ''}
-          onCreateActivity={handleCreateDowntimeActivity}
-          onAdvanceTime={handleAdvanceDowntimeTime}
-          onRespondToEvent={handleRespondToDowntimeEvent}
-          suggestions={downtimeSuggestions}
-        />
-      </div>
-    </div>
+      <TavernNav active="characters" campaignId={campaignId} />
+    </TavernPage>
   )
 }

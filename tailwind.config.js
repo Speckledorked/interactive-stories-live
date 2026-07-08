@@ -83,6 +83,42 @@ module.exports = {
           900: '#0f172a',
           950: '#020617',
         },
+        // Tavern theme (pilot: src/app/campaigns/page.tsx only, not used
+        // elsewhere yet) — warm gold accent + near-black brown background,
+        // separate from primary/dark above so the rest of the app is
+        // unaffected while this is scoped to one page.
+        ember: {
+          50: '#fdf8ec',
+          100: '#faeecc',
+          200: '#f3dd9b',
+          300: '#e9c66a',
+          400: '#dcae47',
+          500: '#c99a3a',
+          600: '#a87b2c',
+          700: '#855f24',
+          800: '#5c421c',
+          900: '#3d2c15',
+        },
+        tavern: {
+          50: '#f6f3ef',
+          100: '#e8e0d5',
+          200: '#c9b8a0',
+          300: '#9c8468',
+          400: '#6b5640',
+          500: '#453626',
+          600: '#332818',
+          700: '#241b10',
+          800: '#160f09',
+          900: '#0c0705',
+          950: '#050302',
+        },
+        wine: {
+          400: '#8a3a3a',
+          500: '#6b2828',
+          600: '#551f1f',
+          700: '#3f1717',
+          800: '#2b0f0f',
+        },
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',

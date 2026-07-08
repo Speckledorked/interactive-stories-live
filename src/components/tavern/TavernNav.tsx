@@ -7,7 +7,7 @@ import { Beer, Compass, Users, Scroll, Settings as SettingsIcon } from 'lucide-r
 
 export type TavernNavKey = 'tavern' | 'map' | 'characters' | 'quests' | 'settings'
 
-export function TavernNav({ active, campaignId }: { active: TavernNavKey; campaignId?: string }) {
+export function TavernNav({ active, campaignId }: { active?: TavernNavKey; campaignId?: string }) {
   const items = [
     { key: 'tavern' as const, label: 'Tavern', icon: Beer, href: '/campaigns' },
     { key: 'map' as const, label: 'Map', icon: Compass, href: null },

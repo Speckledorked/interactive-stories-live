@@ -53,8 +53,9 @@ export default function Header() {
   }
 
   // Don't show header on pages that render their own themed chrome
-  // (tavern UI redesign, rolling out page by page).
-  if (pathname === '/login' || pathname === '/signup' || pathname === '/campaigns' || pathname === '/') {
+  // (tavern UI redesign — covers the campaigns list and every page nested
+  // under a campaign, since they all now render their own TavernHeader).
+  if (pathname === '/login' || pathname === '/signup' || pathname === '/' || pathname?.startsWith('/campaigns')) {
     return null
   }
 

@@ -22,6 +22,10 @@ import { useCommandPalette } from '@/contexts/CommandPaletteContext'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal'
 import SimpleXCard from '@/components/safety/SimpleXCard'
+import { Home, Scroll, StickyNote, Map as MapIcon, MessageSquare, Settings as SettingsIcon, Keyboard, Eye } from 'lucide-react'
+import { TavernPage } from '@/components/tavern/TavernPage'
+import { TavernHeader } from '@/components/tavern/TavernHeader'
+import { TavernNav } from '@/components/tavern/TavernNav'
 
 export default function StoryPage() {
   const router = useRouter()
@@ -544,9 +548,12 @@ export default function StoryPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <AILoadingState type="scene" />
-      </div>
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" />
+        <main className="max-w-7xl mx-auto px-4 pt-28 pb-16 flex justify-center items-center min-h-[60vh]">
+          <AILoadingState type="scene" />
+        </main>
+      </TavernPage>
     )
   }
 
@@ -583,105 +590,75 @@ export default function StoryPage() {
     return scene.sceneIntroText
   }
 
+  const storyTabs = [
+    { key: 'overview', label: 'Overview', icon: Home, href: `/campaigns/${campaignId}` },
+    { key: 'story', label: 'Story', icon: Scroll, href: null },
+    { key: 'story-log', label: 'Story Log', icon: Scroll, href: `/campaigns/${campaignId}/story-log` },
+    { key: 'notes', label: 'Notes', icon: StickyNote, href: `/campaigns/${campaignId}` },
+    { key: 'maps', label: 'Maps', icon: MapIcon, href: `/campaigns/${campaignId}` },
+    { key: 'chat', label: 'Chat', icon: MessageSquare, href: `/campaigns/${campaignId}` },
+    ...(isAdmin ? [{ key: 'admin', label: 'Admin', icon: SettingsIcon, href: `/campaigns/${campaignId}/admin` }] : []),
+  ]
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-      {/* Navigation Bar */}
-      <div className="mb-6">
-        <Link
-          href="/campaigns"
-          className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-4 transition-colors group"
-        >
-          <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Campaigns
-        </Link>
-
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">{campaign?.campaign?.name}</h1>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-dark-700/50 pb-2">
-          {/* Tabs - Horizontal scroll on mobile */}
-          <div className="flex gap-2 overflow-x-auto overflow-y-hidden -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-            <Link
-              href={`/campaigns/${campaignId}`}
-              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
-            >
-              Overview
-            </Link>
-            <span className="relative py-2.5 px-4 font-semibold text-sm text-primary-400 bg-gradient-to-b from-primary-500/10 to-transparent rounded-t-xl whitespace-nowrap flex-shrink-0">
-              Story
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-600 via-primary-500 to-primary-400 shadow-glow"></div>
-            </span>
-            <Link
-              href={`/campaigns/${campaignId}/story-log`}
-              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
-            >
-              Story Log
-            </Link>
-            <Link
-              href={`/campaigns/${campaignId}`}
-              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
-            >
-              Notes
-            </Link>
-            <Link
-              href={`/campaigns/${campaignId}`}
-              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
-            >
-              Maps
-            </Link>
-            <Link
-              href={`/campaigns/${campaignId}`}
-              className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
-            >
-              Chat
-            </Link>
-            {isAdmin && (
-              <Link
-                href={`/campaigns/${campaignId}/admin`}
-                className="relative py-2.5 px-4 font-semibold text-sm transition-all duration-200 text-gray-400 hover:text-gray-300 hover:bg-white/5 rounded-t-xl whitespace-nowrap flex-shrink-0"
+    <TavernPage>
+      <TavernHeader
+        backHref={`/campaigns/${campaignId}`}
+        title={campaign?.campaign?.name || 'Story'}
+        subrow={
+          <div className="max-w-7xl mx-auto px-4 flex items-center justify-between gap-3 border-t border-ember-900/20 pt-2 pb-0">
+            <nav className="flex items-center gap-1 overflow-x-auto text-sm">
+              {storyTabs.map((tab) => {
+                const isActive = tab.key === 'story'
+                const content = (
+                  <span
+                    className={`flex items-center gap-1.5 px-2.5 pb-2 border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
+                      isActive ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
+                    }`}
+                  >
+                    <tab.icon className="w-3.5 h-3.5" />
+                    <span>{tab.label}</span>
+                  </span>
+                )
+                return tab.href ? (
+                  <Link key={tab.key} href={tab.href}>{content}</Link>
+                ) : (
+                  <span key={tab.key}>{content}</span>
+                )
+              })}
+            </nav>
+            <div className="flex items-center gap-1 flex-shrink-0 pb-1.5">
+              <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
+              <button
+                onClick={() => setShowKeyboardShortcuts(true)}
+                className="p-1.5 text-ember-300/60 hover:text-ember-100 transition-colors"
+                title="Keyboard shortcuts"
               >
-                ⚙️ Admin
-              </Link>
-            )}
+                <Keyboard className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
-            <button
-              onClick={() => setShowKeyboardShortcuts(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all duration-200 whitespace-nowrap touch-manipulation"
-              title="Keyboard shortcuts"
-            >
-              <span>⌨️</span>
-              <kbd className="hidden sm:inline px-1.5 py-0.5 text-xs bg-gray-700 rounded border border-gray-600">
-                ?
-              </kbd>
-            </button>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
+      <main className="max-w-7xl mx-auto px-4 pt-28 pb-28">
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Story Column */}
         <div className="lg:col-span-3 space-y-6">
           {/* Status Messages */}
           {error && (
-            <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg">
+            <div className="bg-wine-800/20 border border-wine-600/40 text-wine-400 px-4 py-3 rounded-lg">
               {error}
             </div>
           )}
           {success && (
-            <div className="bg-green-500/10 border border-green-500 text-green-400 px-4 py-3 rounded-lg">
+            <div className="bg-success-500/10 border border-success-500/60 text-success-400 px-4 py-3 rounded-lg">
               {success}
             </div>
           )}
           {resolvingMessage && (
-            <div className="bg-blue-500/10 border border-blue-500 text-blue-400 px-4 py-3 rounded-lg flex items-center gap-3">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
+            <div className="bg-ember-900/20 border border-ember-700/40 text-ember-300 px-4 py-3 rounded-lg flex items-center gap-3">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-ember-600/40"></div>
               <span>{resolvingMessage}</span>
             </div>
           )}
@@ -696,10 +673,10 @@ export default function StoryPage() {
 
               return (
                 <div key={scene.id} className="space-y-4">
-                  <div className="card">
+                  <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-bold text-white">
+                        <h2 className="text-xl font-bold text-ember-100">
                           Scene {scene.sceneNumber}
                         </h2>
                         {/* Scene mood indicators */}
@@ -712,10 +689,10 @@ export default function StoryPage() {
                       <div className="flex items-center gap-2">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           scene.status === 'AWAITING_ACTIONS'
-                            ? 'bg-green-500/20 text-green-400'
+                            ? 'bg-success-500/20 text-success-400'
                             : scene.status === 'RESOLVING'
-                            ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-gray-700 text-gray-400'
+                            ? 'bg-ember-900/30 text-ember-300'
+                            : 'bg-black/30 text-ember-300/60'
                         }`}>
                           {scene.status.replace('_', ' ')}
                         </span>
@@ -725,7 +702,7 @@ export default function StoryPage() {
                             {isAdmin && (
                               <button
                                 onClick={() => handleResetScene(scene.id)}
-                                className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                                className="text-xs px-2 py-1 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded transition-colors"
                                 title="Reset stuck scene"
                               >
                                 Reset
@@ -740,7 +717,7 @@ export default function StoryPage() {
                     {!scene.sceneResolutionText && (
                       <>
                         <div className="prose prose-invert max-w-none">
-                          <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                          <p className="text-ember-200/80 whitespace-pre-wrap leading-relaxed">
                             {currentStageText}
                           </p>
                         </div>
@@ -762,19 +739,19 @@ export default function StoryPage() {
                     {/* Show resolutions if any exist */}
                     {scene.sceneResolutionText && (
                       <>
-                        <div className="mt-6 pt-6 border-t border-gray-700">
-                          <h3 className="text-lg font-bold text-primary-400 mb-3">
+                        <div className="mt-6 pt-6 border-t border-ember-900/30">
+                          <h3 className="text-lg font-bold text-ember-300 mb-3">
                             {scene.sceneResolutionText.includes('---') ? 'Resolutions' : 'Resolution'}
                           </h3>
                           {/* Split multiple resolutions by separator */}
                           {scene.sceneResolutionText.split('\n\n---\n\n').map((resolution: string, idx: number) => (
-                            <div key={idx} className={idx > 0 ? 'mt-6 pt-6 border-t border-gray-600' : ''}>
+                            <div key={idx} className={idx > 0 ? 'mt-6 pt-6 border-t border-ember-900/40' : ''}>
                               {scene.sceneResolutionText.includes('---') && (
-                                <h4 className="text-sm font-medium text-gray-400 mb-2">
+                                <h4 className="text-sm font-medium text-ember-300/60 mb-2">
                                   Exchange {idx + 1}
                                 </h4>
                               )}
-                              <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                              <p className="text-ember-200/80 whitespace-pre-wrap leading-relaxed">
                                 {resolution}
                               </p>
 
@@ -810,31 +787,31 @@ export default function StoryPage() {
 
                   {/* Player Actions - Collapsible */}
                   {scene.playerActions && scene.playerActions.length > 0 && (
-                    <div className="card">
+                    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
                       <button
                         onClick={() => setExpandedActions(prev => ({ ...prev, [scene.id]: !prev[scene.id] }))}
                         className="w-full flex items-center justify-between text-left"
                       >
-                        <h3 className="text-lg font-bold text-white">
+                        <h3 className="text-lg font-bold text-ember-100">
                           Player Actions ({scene.playerActions.length})
                         </h3>
-                        <span className="text-gray-400">
+                        <span className="text-ember-300/60">
                           {expandedActions[scene.id] ? '▼' : '▶'}
                         </span>
                       </button>
                       {expandedActions[scene.id] && (
                         <div className="space-y-3 mt-4">
                           {scene.playerActions.map((action: any) => (
-                            <div key={action.id} className="bg-gray-900 rounded-lg p-4">
+                            <div key={action.id} className="bg-black/30 rounded-lg p-4">
                               <div className="flex items-start justify-between mb-2">
-                                <span className="font-medium text-primary-400">
+                                <span className="font-medium text-ember-300">
                                   {action.character.name}
                                 </span>
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-ember-400/50">
                                   {new Date(action.createdAt).toLocaleTimeString()}
                                 </span>
                               </div>
-                              <p className="text-gray-300 text-sm">{action.actionText}</p>
+                              <p className="text-ember-200/80 text-sm">{action.actionText}</p>
                             </div>
                           ))}
                         </div>
@@ -844,20 +821,20 @@ export default function StoryPage() {
 
                   {/* Post-resolution choice: continue now or save and stop */}
                   {scene.status === 'AWAITING_ACTIONS' && !userHasSubmitted && selectedCharacterId && scene.sceneResolutionText && !sceneContinued[scene.id] && (
-                    <div className="card border border-primary-500/30 bg-dark-800/60">
-                      <h3 className="text-base font-bold text-white mb-1">What would you like to do?</h3>
-                      <p className="text-sm text-gray-400 mb-4">Your progress is saved — you can always come back.</p>
+                    <div className="rounded-xl bg-black/30 border border-ember-700/30 shadow-lg shadow-black/30 p-5">
+                      <h3 className="text-base font-bold text-ember-100 mb-1">What would you like to do?</h3>
+                      <p className="text-sm text-ember-300/60 mb-4">Your progress is saved — you can always come back.</p>
                       <div className="flex flex-col sm:flex-row gap-3">
                         <button
                           onClick={() => setSceneContinued(prev => ({ ...prev, [scene.id]: true }))}
-                          className="btn-primary flex-1 flex items-center justify-center gap-2"
+                          className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center flex-1 flex items-center justify-center gap-2"
                         >
                           <span>Continue the scene</span>
                           <span className="text-sm opacity-70">→</span>
                         </button>
                         <a
                           href={`/campaigns/${campaignId}/story-log`}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors text-sm font-medium"
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-ember-900/40 text-ember-200/80 hover:text-ember-100 hover:border-ember-700/50 transition-colors text-sm font-medium"
                         >
                           <span>Save &amp; read later</span>
                           <span className="text-sm opacity-70">📖</span>
@@ -868,22 +845,22 @@ export default function StoryPage() {
 
                   {/* Action Form (shown after user chooses to continue, or on first action before any resolution) */}
                   {scene.status === 'AWAITING_ACTIONS' && !userHasSubmitted && selectedCharacterId && (!scene.sceneResolutionText || sceneContinued[scene.id]) && (
-                    <div className="card">
-                      <h3 className="text-lg font-bold text-white mb-4">Your Action</h3>
+                    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+                      <h3 className="text-lg font-bold text-ember-100 mb-4">Your Action</h3>
                       {isWaitingOnUser && (
-                        <div className="bg-blue-500/10 border border-blue-500 text-blue-400 px-3 py-2 rounded-lg mb-4 text-sm">
+                        <div className="bg-ember-900/20 border border-ember-700/40 text-ember-300 px-3 py-2 rounded-lg mb-4 text-sm">
                           ⏳ Waiting for your action...
                         </div>
                       )}
                       <form onSubmit={(e) => handleSubmitAction(e, scene.id)} className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                          <label className="block text-sm font-medium text-ember-200/80 mb-2">
                             What do you do?
                           </label>
                           <textarea
                             value={actionText[scene.id] || ''}
                             onChange={(e) => setActionText(prev => ({ ...prev, [scene.id]: e.target.value }))}
-                            className="input-field min-h-[100px]"
+                            className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 min-h-[100px]"
                             placeholder={`What does ${selectedCharacter?.name || 'your character'} do? Be specific about their actions, intentions, and approach...`}
                             required
                           />
@@ -892,7 +869,7 @@ export default function StoryPage() {
                         <button
                           type="submit"
                           disabled={submitting[scene.id]}
-                          className="btn-primary w-full disabled:opacity-50"
+                          className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center w-full disabled:opacity-50"
                         >
                           {submitting[scene.id] ? 'Submitting...' : 'Submit Action'}
                         </button>
@@ -902,8 +879,8 @@ export default function StoryPage() {
 
                   {/* User already submitted */}
                   {scene.status === 'AWAITING_ACTIONS' && userHasSubmitted && (
-                    <div className="card bg-green-500/10 border-green-500/50">
-                      <p className="text-green-400 text-sm">
+                    <div className="rounded-xl bg-success-500/10 border border-success-500/40 shadow-lg shadow-black/30 p-5">
+                      <p className="text-success-400 text-sm">
                         ✓ You've submitted your action. Waiting for other participants...
                       </p>
                     </div>
@@ -918,27 +895,27 @@ export default function StoryPage() {
                     const allParticipantsSubmitted = participantUserIds.length > 0 && participantUserIds.every((uid: string) => submittedUserIds.has(uid))
 
                     return (
-                      <div className={`card ${hasDefinedParticipants && allParticipantsSubmitted ? 'bg-green-500/10 border-green-500/50' : 'bg-yellow-500/10 border-yellow-500/50'}`}>
+                      <div className={`rounded-xl border shadow-lg shadow-black/30 p-5 ${hasDefinedParticipants && allParticipantsSubmitted ? 'bg-success-500/10 border-success-500/40' : 'bg-ember-900/20 border-ember-700/40'}`}>
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                           <div className="flex-1">
-                            <p className={`text-sm font-medium mb-1 ${hasDefinedParticipants && allParticipantsSubmitted ? 'text-green-400' : 'text-yellow-400'}`}>
+                            <p className={`text-sm font-medium mb-1 ${hasDefinedParticipants && allParticipantsSubmitted ? 'text-success-400' : 'text-ember-300'}`}>
                               🎲 GM Controls
                             </p>
-                            <p className="text-gray-400 text-xs mb-2">
+                            <p className="text-ember-300/60 text-xs mb-2">
                               {(scene.playerActions || []).length} action(s) submitted. Current exchange: {scene.currentExchange || 1}
                             </p>
                             {hasDefinedParticipants ? (
                               allParticipantsSubmitted ? (
-                                <p className="text-green-400 text-xs mb-1">
+                                <p className="text-success-400 text-xs mb-1">
                                   ✓ All participants have submitted! Auto-resolving now...
                                 </p>
                               ) : (
-                                <p className="text-gray-500 text-xs">
+                                <p className="text-ember-400/50 text-xs">
                                   ⏳ Waiting for {participantUserIds.length - submittedUserIds.size} more participant(s). Scene will auto-resolve when all submit.
                                 </p>
                               )
                             ) : (
-                              <p className="text-gray-500 text-xs">
+                              <p className="text-ember-400/50 text-xs">
                                 This is an open scene. Manually resolve when ready or end the scene when the story concludes.
                               </p>
                             )}
@@ -949,7 +926,7 @@ export default function StoryPage() {
                               <button
                                 onClick={() => handleResolveScene(scene.id)}
                                 disabled={resolving}
-                                className="btn-primary disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
+                                className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
                                 title={hasDefinedParticipants ? "Force resolution before all participants submit" : "Manually resolve this exchange"}
                               >
                                 {resolving ? 'Resolving...' : hasDefinedParticipants ? 'Force Resolve' : 'Resolve Exchange'}
@@ -958,7 +935,7 @@ export default function StoryPage() {
                             <button
                               onClick={() => handleEndScene(scene.id)}
                               disabled={endingScene}
-                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
+                              className="bg-wine-600 hover:bg-wine-500 text-ember-100 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
                             >
                               {endingScene ? 'Ending...' : 'End Scene'}
                             </button>
@@ -971,13 +948,13 @@ export default function StoryPage() {
               )
             })
           ) : (
-            <div className="card py-12">
+            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 px-5 py-12">
               <div className="text-center mb-8">
                 <div className="text-6xl mb-4">📜</div>
-                <h2 className="text-xl font-bold text-white mb-2">
+                <h2 className="text-xl font-bold text-ember-100 mb-2">
                   {resolvedScenes.length > 0 ? 'Scene Complete!' : 'No Active Scene'}
                 </h2>
-                <p className="text-gray-400 mb-6">
+                <p className="text-ember-300/60 mb-6">
                   {resolvedScenes.length > 0 ? (
                     <>The adventure continues... What happens next?</>
                   ) : (
@@ -989,12 +966,12 @@ export default function StoryPage() {
               {/* Show story context if there are resolved scenes */}
               {resolvedScenes.length > 0 && (
                 <div className="max-w-2xl mx-auto mb-8">
-                  <div className="bg-dark-800/50 rounded-lg p-4 border border-dark-700/50">
+                  <div className="bg-black/25 rounded-lg p-4 border border-ember-900/30">
                     <div className="flex items-start gap-3 mb-3">
                       <span className="text-2xl">📖</span>
                       <div className="flex-1">
-                        <h3 className="font-bold text-white mb-1">Last Scene Summary</h3>
-                        <p className="text-sm text-gray-400 line-clamp-3">
+                        <h3 className="font-bold text-ember-100 mb-1">Last Scene Summary</h3>
+                        <p className="text-sm text-ember-300/60 line-clamp-3">
                           {resolvedScenes[0].sceneResolutionText
                             ? resolvedScenes[0].sceneResolutionText.slice(0, 200) + '...'
                             : 'Scene resolved'}
@@ -1003,7 +980,7 @@ export default function StoryPage() {
                     </div>
                     <Link
                       href={`/campaigns/${campaignId}/story-log`}
-                      className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+                      className="text-xs text-ember-300 hover:text-ember-200 transition-colors"
                     >
                       View complete story log →
                     </Link>
@@ -1019,7 +996,7 @@ export default function StoryPage() {
                       <button
                         onClick={handleContinueStory}
                         disabled={startingScene}
-                        className="btn-primary w-full disabled:opacity-50 text-lg py-4"
+                        className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center w-full disabled:opacity-50 text-lg py-4"
                       >
                         {startingScene ? (
                           <span className="flex items-center justify-center gap-2">
@@ -1036,28 +1013,28 @@ export default function StoryPage() {
                       {resolvedScenes.length > 0 && campaign?.characters?.length > 0 && (
                         <button
                           onClick={() => setShowSceneOptions(true)}
-                          className="w-full text-sm text-primary-400 hover:text-primary-300 transition-colors py-2"
+                          className="w-full text-sm text-ember-300 hover:text-ember-200 transition-colors py-2"
                         >
                           ⚙️ More scene options...
                         </button>
                       )}
 
                       {resolvedScenes.length > 0 && (
-                        <p className="text-xs text-gray-500 text-center">
+                        <p className="text-xs text-ember-400/50 text-center">
                           The AI will generate a scene that continues naturally from where you left off
                         </p>
                       )}
                     </>
                   ) : (
-                    <div className="bg-dark-800/50 rounded-lg border border-dark-700/50 p-6 space-y-4">
+                    <div className="bg-black/25 rounded-lg border border-ember-900/30 p-6 space-y-4">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-bold text-white text-lg">Scene Creation Options</h3>
+                        <h3 className="font-bold text-ember-100 text-lg">Scene Creation Options</h3>
                         <button
                           onClick={() => {
                             setShowSceneOptions(false)
                             setSelectedSceneCharacters([])
                           }}
-                          className="text-gray-400 hover:text-white"
+                          className="text-ember-300/60 hover:text-ember-100"
                         >
                           ✕
                         </button>
@@ -1068,16 +1045,16 @@ export default function StoryPage() {
                         <button
                           onClick={handleContinueStory}
                           disabled={startingScene}
-                          className="btn-primary w-full disabled:opacity-50"
+                          className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center w-full disabled:opacity-50"
                         >
                           {startingScene ? 'Generating...' : '📖 Continue Story Naturally'}
                         </button>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-ember-400/50">
                           AI chooses the next scene based on story flow and character goals
                         </p>
                       </div>
 
-                      <div className="border-t border-dark-700/50 my-4"></div>
+                      <div className="border-t border-ember-900/30 my-4"></div>
 
                       {/* Option 2: Full Party Scene */}
                       {campaign?.characters?.length > 1 && (
@@ -1086,26 +1063,26 @@ export default function StoryPage() {
                             <button
                               onClick={handleFullPartyScene}
                               disabled={startingScene}
-                              className="btn-secondary w-full disabled:opacity-50"
+                              className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center w-full disabled:opacity-50"
                             >
                               {startingScene ? 'Generating...' : '👥 Full Party Scene'}
                             </button>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-ember-400/50">
                               Create a scene with all {campaign.characters.length} characters
                             </p>
                           </div>
 
-                          <div className="border-t border-dark-700/50 my-4"></div>
+                          <div className="border-t border-ember-900/30 my-4"></div>
                         </>
                       )}
 
                       {/* Option 3: Character-Focused Scene */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <label className="font-bold text-white text-sm">
+                          <label className="font-bold text-ember-100 text-sm">
                             🎭 Character-Focused Scene
                           </label>
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-ember-400/50">
                             {selectedSceneCharacters.length} selected
                           </span>
                         </div>
@@ -1116,19 +1093,19 @@ export default function StoryPage() {
                               key={character.id}
                               className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
                                 selectedSceneCharacters.includes(character.id)
-                                  ? 'bg-primary-900/20 border-primary-700/50'
-                                  : 'bg-dark-800/30 border-dark-700/50 hover:border-dark-600/50'
+                                  ? 'bg-wine-800/20 border-wine-600/40'
+                                  : 'bg-black/20 border-ember-900/30 hover:border-ember-700/40'
                               }`}
                             >
                               <input
                                 type="checkbox"
                                 checked={selectedSceneCharacters.includes(character.id)}
                                 onChange={() => toggleCharacterSelection(character.id)}
-                                className="w-4 h-4 accent-primary-500"
+                                className="w-4 h-4 accent-wine-500"
                               />
                               <div className="flex-1">
-                                <div className="font-medium text-white">{character.name}</div>
-                                <div className="text-xs text-gray-400 truncate">
+                                <div className="font-medium text-ember-100">{character.name}</div>
+                                <div className="text-xs text-ember-300/60 truncate">
                                   {character.concept || character.description}
                                 </div>
                               </div>
@@ -1139,13 +1116,13 @@ export default function StoryPage() {
                         <button
                           onClick={handleCharacterFocusedScene}
                           disabled={startingScene || selectedSceneCharacters.length === 0}
-                          className="btn-secondary w-full disabled:opacity-50"
+                          className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center w-full disabled:opacity-50"
                         >
                           {startingScene
                             ? 'Generating...'
                             : `Create Scene with ${selectedSceneCharacters.length || 0} Character${selectedSceneCharacters.length !== 1 ? 's' : ''}`}
                         </button>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-ember-400/50">
                           AI will create a scene focused on the selected character{selectedSceneCharacters.length !== 1 ? 's' : ''}
                         </p>
                       </div>
@@ -1155,7 +1132,7 @@ export default function StoryPage() {
               )}
 
               {!isAdmin && (
-                <p className="text-center text-gray-500 text-sm">
+                <p className="text-center text-ember-400/50 text-sm">
                   Waiting for the GM to start the next scene...
                 </p>
               )}
@@ -1167,12 +1144,12 @@ export default function StoryPage() {
         <div className="space-y-6">
           {/* Character Selector */}
           {userCharacters.length > 0 && (
-            <div className="card">
-              <h3 className="text-sm font-bold text-gray-400 mb-3">SELECT CHARACTER</h3>
+            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+              <h3 className="text-sm font-bold text-ember-300/60 mb-3">SELECT CHARACTER</h3>
               <select
                 value={selectedCharacterId}
                 onChange={(e) => setSelectedCharacterId(e.target.value)}
-                className="input-field w-full"
+                className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full"
               >
                 <option value="">Choose a character...</option>
                 {userCharacters.map(char => (
@@ -1185,31 +1162,31 @@ export default function StoryPage() {
                 <div className="mt-4 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
-                      <h4 className="font-bold text-white text-lg">{selectedCharacter.name}</h4>
-                      <p className="text-sm text-gray-400">{selectedCharacter.concept}</p>
+                      <h4 className="font-bold text-ember-100 text-lg">{selectedCharacter.name}</h4>
+                      <p className="text-sm text-ember-300/60">{selectedCharacter.concept}</p>
                     </div>
                     <button
                       onClick={() => setShowCharacterSnapshot(true)}
-                      className="px-2 py-1 bg-primary-600 hover:bg-primary-700 text-white rounded text-xs font-medium transition-colors"
+                      className="px-2 py-1 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded text-xs font-medium transition-colors"
                       title="Quick Reference"
                     >
                       👁️ View
                     </button>
                   </div>
                   {selectedCharacter.currentLocation && (
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-ember-400/50">
                       📍 {selectedCharacter.currentLocation}
                     </p>
                   )}
                   {Array.isArray(selectedCharacter.conditions) &&
                     selectedCharacter.conditions.length > 0 && (
                       <div className="mt-3">
-                        <p className="text-xs text-gray-500 mb-1">Conditions:</p>
+                        <p className="text-xs text-ember-400/50 mb-1">Conditions:</p>
                         <div className="flex flex-wrap gap-1">
                           {selectedCharacter.conditions.map((cond: string, i: number) => (
                             <span
                               key={i}
-                              className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs"
+                              className="px-2 py-1 bg-wine-800/30 text-wine-400 rounded text-xs"
                             >
                               {cond}
                             </span>
@@ -1224,18 +1201,18 @@ export default function StoryPage() {
 
           {/* Map Viewer */}
           {activeMap && (
-            <div className="card">
+            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-gray-400">MAP</h3>
+                <h3 className="text-sm font-bold text-ember-300/60">MAP</h3>
                 <button
                   onClick={() => setShowMap(!showMap)}
-                  className="text-xs text-gray-500 hover:text-white transition-colors"
+                  className="text-xs text-ember-400/50 hover:text-ember-100 transition-colors"
                 >
                   {showMap ? 'Hide' : 'Show'}
                 </button>
               </div>
               {showMap && (
-                <div className="rounded-lg overflow-hidden border border-gray-700">
+                <div className="rounded-lg overflow-hidden border border-ember-900/30">
                   <PlayerMapViewer
                     map={activeMap}
                     characterName={selectedCharacter?.name || ''}
@@ -1247,7 +1224,7 @@ export default function StoryPage() {
 
           {/* In-Character Chat for Current Scene */}
           {currentScene && user && (
-            <div className="card p-0">
+            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-0">
               <ChatPanel
                 campaignId={campaignId}
                 currentUserId={user.id}
@@ -1261,8 +1238,8 @@ export default function StoryPage() {
 
           {/* Active Clocks */}
           {campaign?.campaign?.clocks && campaign.campaign.clocks.length > 0 && (
-            <div className="card">
-              <h3 className="text-sm font-bold text-gray-400 mb-3">ACTIVE CLOCKS</h3>
+            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+              <h3 className="text-sm font-bold text-ember-300/60 mb-3">ACTIVE CLOCKS</h3>
               <div className="space-y-2">
                 {campaign.campaign.clocks
                   .filter((clock: any) => !clock.isHidden)
@@ -1281,12 +1258,15 @@ export default function StoryPage() {
           {/* Recent Timeline */}
           {campaign?.campaign?.timeline &&
             campaign.campaign.timeline.length > 0 && (
-              <div className="card p-0">
+              <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-0">
                 <CompactTimeline events={campaign.campaign.timeline.slice(0, 5)} />
               </div>
             )}
         </div>
       </div>
+      </main>
+
+      <TavernNav campaignId={campaignId} />
 
       {/* Character Snapshot Modal */}
       {selectedCharacterId && (
@@ -1315,11 +1295,11 @@ export default function StoryPage() {
 
           {/* Modal */}
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg">
-            <div className="bg-gradient-to-br from-dark-850 to-dark-900 border border-danger-500/50 rounded-2xl shadow-elevated p-6 animate-scale-in">
+            <div className="bg-gradient-to-br from-tavern-800 to-tavern-900 border border-wine-600/40 rounded-2xl shadow-2xl shadow-black/50 p-6 animate-scale-in">
               <div className="flex items-start gap-4 mb-4">
-                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-danger-500/20 flex items-center justify-center">
+                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-wine-800/30 flex items-center justify-center">
                   <svg
-                    className="w-6 h-6 text-danger-400"
+                    className="w-6 h-6 text-wine-400"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -1333,16 +1313,16 @@ export default function StoryPage() {
                   </svg>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-xl font-bold text-white mb-2">Insufficient Funds</h3>
-                  <p className="text-gray-300 text-sm leading-relaxed">
+                  <h3 className="text-xl font-bold text-ember-100 mb-2">Insufficient Funds</h3>
+                  <p className="text-ember-200/80 text-sm leading-relaxed">
                     {insufficientFundsDetails}
                   </p>
                 </div>
               </div>
 
-              <div className="bg-dark-800/50 border border-dark-700 rounded-lg p-4 mb-6">
-                <p className="text-xs font-semibold text-gray-400 mb-2">Pricing Structure:</p>
-                <div className="text-xs text-gray-400 space-y-1">
+              <div className="bg-black/25 border border-ember-900/40 rounded-lg p-4 mb-6">
+                <p className="text-xs font-semibold text-ember-300/60 mb-2">Pricing Structure:</p>
+                <div className="text-xs text-ember-300/60 space-y-1">
                   <p>• Solo play (1 player): $0.25 per scene</p>
                   <p>• Small group (2-4 players): $0.50 per scene</p>
                   <p>• Large group (5-6 players): $0.75 per scene</p>
@@ -1350,8 +1330,8 @@ export default function StoryPage() {
               </div>
 
               {addFundsError && (
-                <div className="mb-4 p-3 bg-danger-500/10 border border-danger-500/50 rounded-lg">
-                  <p className="text-sm text-danger-400">{addFundsError}</p>
+                <div className="mb-4 p-3 bg-wine-800/20 border border-wine-600/40 rounded-lg">
+                  <p className="text-sm text-wine-400">{addFundsError}</p>
                 </div>
               )}
 
@@ -1359,26 +1339,26 @@ export default function StoryPage() {
                 <button
                   onClick={handleAddFundsFromModal}
                   disabled={addFundsLoading}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-ember-600 to-ember-500 hover:from-ember-500 hover:to-ember-400 text-ember-100 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {addFundsLoading ? 'Redirecting...' : 'Add Funds ($1.00)'}
                 </button>
                 <button
                   onClick={() => { setShowInsufficientFunds(false); setAddFundsError('') }}
                   disabled={addFundsLoading}
-                  className="px-4 py-2.5 bg-dark-800 hover:bg-dark-700 text-gray-300 font-medium rounded-lg transition-all duration-200"
+                  className="px-4 py-2.5 bg-black/25 hover:bg-black/30 text-ember-200/80 font-medium rounded-lg transition-all duration-200"
                 >
                   Cancel
                 </button>
               </div>
 
-              <p className="text-xs text-gray-500 mt-4 text-center">
+              <p className="text-xs text-ember-400/50 mt-4 text-center">
                 You will be redirected to Stripe to complete your payment securely.
               </p>
             </div>
           </div>
         </>
       )}
-    </div>
+    </TavernPage>
   )
 }

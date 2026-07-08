@@ -15,6 +15,12 @@ import NotificationPanel from '@/components/notifications/NotificationPanel'
 import TurnTracker from '@/components/turns/TurnTracker'
 import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
 import InviteModal from '@/components/campaigns/InviteModal'
+import { Home, Scroll, MessageSquare, StickyNote, Map as MapIcon, Settings as SettingsIcon, Plus, MapPin, UserPlus } from 'lucide-react'
+import { displayFont } from '@/lib/tavernTheme'
+import { TavernPage } from '@/components/tavern/TavernPage'
+import { TavernHeader } from '@/components/tavern/TavernHeader'
+import { TavernNav } from '@/components/tavern/TavernNav'
+import { TavernCard, TavernButton, TavernSpinner } from '@/components/tavern/ui'
 
 interface CampaignData {
   campaign: any
@@ -129,23 +135,28 @@ export default function CampaignLobbyPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="relative">
-          <div className="spinner h-16 w-16"></div>
-          <div className="absolute inset-0 h-16 w-16 rounded-full bg-primary-500/20 animate-ping"></div>
-        </div>
-      </div>
+      <TavernPage>
+        <TavernHeader backHref="/campaigns" title="Loading…" />
+        <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
+          <TavernSpinner className="h-16 w-16" />
+        </main>
+      </TavernPage>
     )
   }
 
   if (error || !data) {
     return (
-      <div className="card max-w-2xl mx-auto">
-        <p className="text-red-400">{error || 'Campaign not found'}</p>
-        <Link href="/campaigns" className="text-primary-400 hover:underline mt-4 inline-block">
-          ← Back to campaigns
-        </Link>
-      </div>
+      <TavernPage>
+        <TavernHeader backHref="/campaigns" title="Campaign" />
+        <main className="max-w-2xl mx-auto px-4 pt-28 pb-16">
+          <TavernCard className="p-6">
+            <p className="text-wine-400">{error || 'Campaign not found'}</p>
+            <Link href="/campaigns" className="text-ember-300 hover:text-ember-200 hover:underline mt-4 inline-block">
+              ← Back to campaigns
+            </Link>
+          </TavernCard>
+        </main>
+      </TavernPage>
     )
   }
 
@@ -155,86 +166,68 @@ export default function CampaignLobbyPage() {
     (c: any) => c.userId === currentUser?.id
   )
 
-  return (
-    <div className="max-w-6xl mx-auto animate-fade-in">
-      {/* Header */}
-      <div className="mb-6 sm:mb-8">
-        <Link
-          href="/campaigns"
-          className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-4 sm:mb-6 transition-colors group touch-manipulation"
-        >
-          <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Campaigns
-        </Link>
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="relative mb-2 sm:mb-3">
-              <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary-500/10 via-accent-500/5 to-transparent blur-3xl"></div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent break-words">
-                {campaign.title}
-              </h1>
-            </div>
-            <p className="text-sm sm:text-base text-gray-300 leading-relaxed mb-3 sm:mb-4">{campaign.description}</p>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm">
-              <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
-                <span className="text-gray-400">Universe:</span>
-                <span className="text-white font-medium">{campaign.universe}</span>
-              </div>
-              <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
-                <span className="text-gray-400">Turn:</span>
-                <span className="text-primary-400 font-medium">{campaign.worldMeta?.currentTurnNumber || 0}</span>
-              </div>
-              <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50">
-                <span className="text-gray-400">📅</span>
-                <span className="text-white font-medium truncate max-w-[150px] sm:max-w-none">{campaign.worldMeta?.currentInGameDate || 'Day 1'}</span>
-              </div>
-            </div>
-          </div>
-          {userRole === 'ADMIN' && (
-            <Link
-              href={`/campaigns/${campaignId}/admin`}
-              className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto touch-manipulation min-h-[44px] flex-shrink-0"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Settings
-            </Link>
-          )}
-        </div>
-      </div>
+  const tabIcons = { overview: Home, progression: Scroll, chat: MessageSquare, notes: StickyNote, maps: MapIcon } as const
 
-      {/* Navigation Tabs - Phase 8 Communication */}
-      <div className="border-b border-dark-700/50 mb-8 sticky top-0 bg-dark-950/95 backdrop-blur-md z-10 -mx-4 px-4">
-        <nav className="flex space-x-2 overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-          {[
-            { key: 'overview', label: 'Overview', icon: '🏠' },
-            { key: 'progression', label: 'Story Log', icon: '📜' },
-            { key: 'chat', label: 'Chat', icon: '💬' },
-            { key: 'notes', label: 'Notes', icon: '📝' },
-            { key: 'maps', label: 'Maps', icon: '🗺️' },
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key as any)}
-              className={`relative py-3 px-4 sm:px-6 font-semibold text-sm transition-all duration-200 flex items-center gap-2 rounded-t-xl whitespace-nowrap flex-shrink-0 touch-manipulation ${
-                activeTab === tab.key
-                  ? 'text-primary-400 bg-gradient-to-b from-primary-500/10 to-transparent'
-                  : 'text-gray-400 hover:text-gray-300 hover:bg-white/5'
-              }`}
-            >
-              <span className="text-base">{tab.icon}</span>
-              <span className="hidden sm:inline">{tab.label}</span>
-              {activeTab === tab.key && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-600 via-primary-500 to-primary-400 shadow-glow"></div>
-              )}
-            </button>
-          ))}
-        </nav>
-      </div>
+  return (
+    <TavernPage>
+      <TavernHeader
+        backHref="/campaigns"
+        title={campaign.title}
+        subrow={
+          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
+            {[
+              { key: 'overview', label: 'Overview' },
+              { key: 'progression', label: 'Story Log' },
+              { key: 'chat', label: 'Chat' },
+              { key: 'notes', label: 'Notes' },
+              { key: 'maps', label: 'Maps' },
+            ].map((tab) => {
+              const TabIcon = tabIcons[tab.key as keyof typeof tabIcons]
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key as any)}
+                  className={`flex items-center gap-1.5 px-3 pb-2 border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
+                    activeTab === tab.key ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
+                  }`}
+                >
+                  <TabIcon className="w-3.5 h-3.5" />
+                  <span>{tab.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+        }
+      />
+
+      <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
+        {/* Campaign summary */}
+        <div className="mb-8">
+          <p className="text-sm sm:text-base text-ember-300/60 leading-relaxed mb-3">{campaign.description}</p>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-black/30 rounded-lg border border-ember-900/30">
+              <span className="text-ember-400/50">Universe:</span>
+              <span className="text-ember-100 font-medium">{campaign.universe}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-black/30 rounded-lg border border-ember-900/30">
+              <span className="text-ember-400/50">Turn:</span>
+              <span className="text-ember-300 font-medium">{campaign.worldMeta?.currentTurnNumber || 0}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-black/30 rounded-lg border border-ember-900/30">
+              <span className="text-ember-400/50">Date:</span>
+              <span className="text-ember-100 font-medium truncate max-w-[150px] sm:max-w-none">{campaign.worldMeta?.currentInGameDate || 'Day 1'}</span>
+            </div>
+            {userRole === 'ADMIN' && (
+              <Link
+                href={`/campaigns/${campaignId}/admin`}
+                className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-300 hover:text-ember-200 hover:border-ember-700/50 transition-colors"
+              >
+                <SettingsIcon className="w-4 h-4" />
+                Settings
+              </Link>
+            )}
+          </div>
+        </div>
 
       {/* Overview Tab - Existing Content */}
       {activeTab === 'overview' && (
@@ -242,16 +235,16 @@ export default function CampaignLobbyPage() {
         {/* Main Column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Enter Story Button */}
-          <div className="card">
-            <h2 className="card-header">Ready to Play?</h2>
-            <p className="text-gray-400 mb-4">
+          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+            <h2 className="text-lg font-bold text-ember-100">Ready to Play?</h2>
+            <p className="text-ember-300/60 mb-4">
               {userCharacters.length === 0
                 ? 'Create a character first to enter the story'
                 : 'Jump into the adventure!'}
             </p>
             <Link
               href={`/campaigns/${campaignId}/story`}
-              className={`btn-primary inline-block ${
+              className={`px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center inline-block ${
                 userCharacters.length === 0 ? 'opacity-50 pointer-events-none' : ''
               }`}
             >
@@ -260,30 +253,30 @@ export default function CampaignLobbyPage() {
           </div>
 
           {/* Your Characters */}
-          <div className="card">
+          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="card-header mb-0">Your Characters</h2>
+              <h2 className="text-lg font-bold text-ember-100 mb-0">Your Characters</h2>
               <button
                 type="button"
                 onClick={() => setShowCreateCharacter(true)}
-                className="text-primary-400 hover:text-primary-300 text-sm"
+                className="text-ember-300 hover:text-ember-200 text-sm"
               >
                 + Create Character
               </button>
             </div>
 
             {userCharacters.length === 0 ? (
-              <p className="text-gray-500 text-sm">No characters yet. Create one to play!</p>
+              <p className="text-ember-400/50 text-sm">No characters yet. Create one to play!</p>
             ) : (
               <div className="space-y-3">
                 {userCharacters.map((character: any) => (
-                  <div key={character.id} className="bg-gray-900 rounded-lg p-4">
+                  <div key={character.id} className="bg-black/30 rounded-lg p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h3 className="font-bold text-white">{character.name}</h3>
-                        <p className="text-sm text-gray-400">{character.concept}</p>
+                        <h3 className="font-bold text-ember-100">{character.name}</h3>
+                        <p className="text-sm text-ember-300/60">{character.concept}</p>
                         {character.currentLocation && (
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-ember-400/50 mt-1">
                             📍 {character.currentLocation}
                           </p>
                         )}
@@ -292,13 +285,13 @@ export default function CampaignLobbyPage() {
                         <span className={`px-2 py-1 rounded text-xs ${
                           character.isAlive
                             ? 'bg-green-500/20 text-green-400'
-                            : 'bg-gray-700 text-gray-400'
+                            : 'bg-black/30 text-ember-300/60'
                         }`}>
                           {character.isAlive ? 'Alive' : 'Dead'}
                         </span>
                         <button
                           onClick={() => setDeletingCharacterId(character.id)}
-                          className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded hover:bg-red-500/10"
+                          className="text-wine-400 hover:text-wine-300 text-xs px-2 py-1 rounded hover:bg-wine-800/20"
                           title="Delete character"
                         >
                           Delete
@@ -310,7 +303,7 @@ export default function CampaignLobbyPage() {
                         {character.conditions.map((condition: string, i: number) => (
                           <span
                             key={i}
-                            className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs"
+                            className="px-2 py-1 bg-wine-800/30 text-wine-400 rounded text-xs"
                           >
                             {condition}
                           </span>
@@ -324,8 +317,8 @@ export default function CampaignLobbyPage() {
           </div>
 
           {/* All Characters in Campaign */}
-          <div className="card">
-            <h2 className="card-header">All Characters</h2>
+          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+            <h2 className="text-lg font-bold text-ember-100">All Characters</h2>
             <div className="space-y-2">
               {campaign.characters.map((character: any) => {
                 const currentUser = getUser()
@@ -337,27 +330,27 @@ export default function CampaignLobbyPage() {
                     href={`/campaigns/${campaignId}/characters/${character.id}`}
                     className={`flex items-center justify-between py-2 px-3 rounded transition-colors group ${
                       isMyCharacter
-                        ? 'bg-primary-900/20 border border-primary-700 hover:bg-primary-900/30'
-                        : 'hover:bg-gray-800'
+                        ? 'bg-wine-800/20 border border-wine-600/40 hover:bg-wine-800/30'
+                        : 'hover:bg-black/30'
                     }`}
                   >
                     <div>
-                      <span className={`font-medium ${isMyCharacter ? 'text-primary-300' : 'text-white'} group-hover:text-primary-400`}>
+                      <span className={`font-medium ${isMyCharacter ? 'text-ember-200' : 'text-ember-100'} group-hover:text-ember-200`}>
                         {character.name}
                         {isMyCharacter && (
-                          <span className="ml-2 text-xs bg-primary-600 text-white px-2 py-0.5 rounded">You</span>
+                          <span className="ml-2 text-xs bg-wine-600 text-ember-100 px-2 py-0.5 rounded">You</span>
                         )}
                       </span>
-                      <span className="text-gray-500 text-sm ml-2">
+                      <span className="text-ember-400/50 text-sm ml-2">
                         ({character.user.email})
                       </span>
                     </div>
-                    <span className="text-gray-600 group-hover:text-primary-500">→</span>
+                    <span className="text-ember-500/40 group-hover:text-ember-300">→</span>
                   </Link>
                 )
               })}
               {campaign.characters.length === 0 && (
-                <p className="text-gray-500 text-sm">No characters in this campaign yet</p>
+                <p className="text-ember-400/50 text-sm">No characters in this campaign yet</p>
               )}
             </div>
           </div>
@@ -366,13 +359,13 @@ export default function CampaignLobbyPage() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Players */}
-          <div className="card">
+          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="card-header mb-0">Players ({campaign.memberships.length})</h2>
+              <h2 className="text-lg font-bold text-ember-100 mb-0">Players ({campaign.memberships.length})</h2>
               {userRole === 'ADMIN' && (
                 <button
                   onClick={() => setShowInviteModal(true)}
-                  className="text-primary-400 hover:text-primary-300 text-sm"
+                  className="text-ember-300 hover:text-ember-200 text-sm"
                   title="Invite players"
                 >
                   + Invite
@@ -383,13 +376,13 @@ export default function CampaignLobbyPage() {
               {campaign.memberships.map((member: any) => (
                 <div key={member.id} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className={`h-2 w-2 rounded-full ${member.user.isOnline ? 'bg-green-500' : 'bg-gray-500'}`} />
-                    <span className="text-sm text-gray-300">{member.user.name || member.user.email}</span>
+                    <div className={`h-2 w-2 rounded-full ${member.user.isOnline ? 'bg-green-500' : 'bg-ember-900/60'}`} />
+                    <span className="text-sm text-ember-200/80">{member.user.name || member.user.email}</span>
                   </div>
                   <span className={`px-2 py-1 rounded text-xs ${
                     member.role === 'ADMIN'
-                      ? 'bg-primary-500/20 text-primary-400'
-                      : 'bg-gray-700 text-gray-300'
+                      ? 'bg-ember-900/30 text-ember-300'
+                      : 'bg-black/30 text-ember-200/80'
                   }`}>
                     {member.role}
                   </span>
@@ -399,66 +392,66 @@ export default function CampaignLobbyPage() {
           </div>
 
           {/* Quick Stats */}
-          <div className="card">
-            <h2 className="card-header">Campaign Stats</h2>
-            <p className="text-xs text-gray-500 mb-3">Click to view in wiki</p>
+          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+            <h2 className="text-lg font-bold text-ember-100">Campaign Stats</h2>
+            <p className="text-xs text-ember-400/50 mb-3">Click to view in wiki</p>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-400">Scenes:</span>
-                <span className="text-white font-medium">{campaign.scenes.length}</span>
+                <span className="text-ember-300/60">Scenes:</span>
+                <span className="text-ember-100 font-medium">{campaign.scenes.length}</span>
               </div>
               <Link
                 href={`/campaigns/${campaignId}/characters`}
-                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
               >
-                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
                   Characters:
                 </span>
-                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
                   {campaign.characters.length} →
                 </span>
               </Link>
               <Link
                 href={`/campaigns/${campaignId}/wiki?type=NPC`}
-                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
               >
-                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
                   NPCs:
                 </span>
-                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
                   {campaign.npcs.length} →
                 </span>
               </Link>
               <Link
                 href={`/campaigns/${campaignId}/wiki?type=FACTION`}
-                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
               >
-                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
                   Factions:
                 </span>
-                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
                   {campaign.factions.length} →
                 </span>
               </Link>
               <Link
                 href={`/campaigns/${campaignId}/wiki?type=LOCATION`}
-                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
               >
-                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
                   Locations:
                 </span>
-                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
                   {campaign.locations?.length ?? 0} →
                 </span>
               </Link>
               <Link
                 href={`/campaigns/${campaignId}/wiki?type=CLOCK`}
-                className="flex justify-between hover:bg-gray-800 p-2 -m-2 rounded transition-colors group"
+                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
               >
-                <span className="text-gray-400 group-hover:text-primary-400 transition-colors">
+                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
                   Active Clocks:
                 </span>
-                <span className="text-white font-medium group-hover:text-primary-400 transition-colors">
+                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
                   {campaign.clocks.length} →
                 </span>
               </Link>
@@ -471,41 +464,41 @@ export default function CampaignLobbyPage() {
       {/* Progression/Story Log Tab */}
       {activeTab === 'progression' && data && (
         <div className="max-w-6xl mx-auto">
-          <div className="card">
-            <h2 className="card-header mb-4">Campaign Story Log</h2>
-            <p className="text-gray-400 mb-6">
+          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+            <h2 className="text-lg font-bold text-ember-100 mb-4">Campaign Story Log</h2>
+            <p className="text-ember-300/60 mb-6">
               A chronicle of your adventure, updated after each scene
             </p>
 
             {logsLoading ? (
               <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ember-400"></div>
               </div>
             ) : campaignLogs.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4">📜</div>
-                <p className="text-gray-400 mb-2">No story entries yet</p>
-                <p className="text-sm text-gray-500">
+                <p className="text-ember-300/60 mb-2">No story entries yet</p>
+                <p className="text-sm text-ember-400/50">
                   The story log will be automatically updated as scenes are resolved
                 </p>
               </div>
             ) : (
               <>
                 {/* Timeline Bar */}
-                <div className="mb-8 bg-gray-800 rounded-lg p-4">
+                <div className="mb-8 bg-black/20 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-400">Campaign Progress</span>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm font-medium text-ember-300/60">Campaign Progress</span>
+                    <span className="text-sm text-ember-400/50">
                       Turn {campaignLogs[campaignLogs.length - 1]?.turnNumber || 0}
                     </span>
                   </div>
-                  <div className="relative h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="relative h-2 bg-black/30 rounded-full overflow-hidden">
                     <div
-                      className="absolute top-0 left-0 h-full bg-gradient-to-r from-primary-600 to-primary-400 transition-all"
+                      className="absolute top-0 left-0 h-full bg-gradient-to-r from-ember-600 to-ember-400 transition-all"
                       style={{ width: `${Math.min((campaignLogs.length / 20) * 100, 100)}%` }}
                     />
                   </div>
-                  <div className="flex justify-between mt-2 text-xs text-gray-500">
+                  <div className="flex justify-between mt-2 text-xs text-ember-400/50">
                     <span>{campaignLogs.length} scenes completed</span>
                     <span>Milestone at 20 scenes</span>
                   </div>
@@ -516,47 +509,47 @@ export default function CampaignLobbyPage() {
                   {campaignLogs.map((log: any, index: number) => (
                     <div
                       key={log.id}
-                      className="bg-gray-900 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-colors"
+                      className="bg-black/30 rounded-lg p-4 border border-ember-900/30 hover:border-ember-700/40 transition-colors"
                     >
                       {/* Header */}
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-medium text-primary-400">
+                            <span className="text-xs font-medium text-ember-300">
                               Turn {log.turnNumber}
                             </span>
                             {log.entryType !== 'scene' && (
-                              <span className="text-xs px-2 py-0.5 bg-gray-700 text-gray-300 rounded">
+                              <span className="text-xs px-2 py-0.5 bg-black/30 text-ember-200/80 rounded">
                                 {log.entryType}
                               </span>
                             )}
                           </div>
-                          <h3 className="text-lg font-bold text-white">{log.title}</h3>
+                          <h3 className="text-lg font-bold text-ember-100">{log.title}</h3>
                           {log.inGameDate && (
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-ember-400/50 mt-1">
                               📅 {log.inGameDate}
                               {log.duration && ` • Duration: ${log.duration}`}
                             </p>
                           )}
                         </div>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-ember-400/50">
                           {new Date(log.createdAt).toLocaleDateString()}
                         </span>
                       </div>
 
                       {/* Summary */}
-                      <p className="text-gray-300 mb-3 whitespace-pre-wrap">{log.summary}</p>
+                      <p className="text-ember-200/80 mb-3 whitespace-pre-wrap">{log.summary}</p>
 
                       {/* Highlights */}
                       {log.highlights && log.highlights.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-gray-700">
-                          <h4 className="text-xs font-medium text-gray-400 mb-2">
+                        <div className="mt-3 pt-3 border-t border-ember-900/30">
+                          <h4 className="text-xs font-medium text-ember-300/60 mb-2">
                             Key Moments:
                           </h4>
                           <ul className="space-y-1">
                             {log.highlights.map((highlight: string, i: number) => (
-                              <li key={i} className="text-sm text-gray-400 flex items-start gap-2">
-                                <span className="text-primary-500 mt-1">•</span>
+                              <li key={i} className="text-sm text-ember-300/60 flex items-start gap-2">
+                                <span className="text-ember-400 mt-1">•</span>
                                 <span>{highlight}</span>
                               </li>
                             ))}
@@ -602,13 +595,13 @@ export default function CampaignLobbyPage() {
       {/* Maps Tab */}
       {activeTab === 'maps' && data && (
         <div className="max-w-6xl mx-auto">
-          <div className="card">
+          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="card-header mb-0">Campaign Maps</h2>
+              <h2 className="text-lg font-bold text-ember-100 mb-0">Campaign Maps</h2>
               {userRole === 'ADMIN' && (
                 <button
                   onClick={() => setShowCreateMap(true)}
-                  className="text-primary-400 hover:text-primary-300 text-sm"
+                  className="text-ember-300 hover:text-ember-200 text-sm"
                 >
                   + Create Map
                 </button>
@@ -617,8 +610,8 @@ export default function CampaignLobbyPage() {
 
             {/* Create Map Form */}
             {showCreateMap && userRole === 'ADMIN' && (
-              <div className="bg-gray-900 rounded-lg p-4 mb-4 border border-gray-700">
-                <h3 className="text-white font-bold mb-3">Create New Map</h3>
+              <div className="bg-black/30 rounded-lg p-4 mb-4 border border-ember-900/30">
+                <h3 className="text-ember-100 font-bold mb-3">Create New Map</h3>
                 <form onSubmit={async (e) => {
                   e.preventDefault()
                   if (!newMapName.trim()) return
@@ -654,22 +647,22 @@ export default function CampaignLobbyPage() {
                 }}>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Map Name</label>
+                      <label className="block text-sm text-ember-300/60 mb-1">Map Name</label>
                       <input
                         type="text"
                         value={newMapName}
                         onChange={(e) => setNewMapName(e.target.value)}
-                        className="input-field w-full"
+                        className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full"
                         placeholder="e.g., Tavern Floor Plan, Dungeon Level 1"
                         required
                       />
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-400 mb-1">Description</label>
+                      <label className="block text-sm text-ember-300/60 mb-1">Description</label>
                       <textarea
                         value={newMapDescription}
                         onChange={(e) => setNewMapDescription(e.target.value)}
-                        className="input-field w-full"
+                        className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full"
                         rows={2}
                         placeholder="Optional description"
                       />
@@ -678,7 +671,7 @@ export default function CampaignLobbyPage() {
                       <button
                         type="submit"
                         disabled={creatingMap || !newMapName.trim()}
-                        className="btn-primary"
+                        className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center"
                       >
                         {creatingMap ? 'Creating...' : 'Create Map'}
                       </button>
@@ -689,7 +682,7 @@ export default function CampaignLobbyPage() {
                           setNewMapName('')
                           setNewMapDescription('')
                         }}
-                        className="btn-secondary"
+                        className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center"
                       >
                         Cancel
                       </button>
@@ -702,13 +695,13 @@ export default function CampaignLobbyPage() {
             {/* Maps List */}
             {mapsLoading ? (
               <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ember-400"></div>
               </div>
             ) : maps.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4">🗺️</div>
-                <p className="text-gray-400 mb-2">No maps yet</p>
-                <p className="text-sm text-gray-500">
+                <p className="text-ember-300/60 mb-2">No maps yet</p>
+                <p className="text-sm text-ember-400/50">
                   {userRole === 'ADMIN'
                     ? 'Create a map to visualize locations and track character positions'
                     : 'The GM will create maps as the adventure unfolds'}
@@ -717,11 +710,11 @@ export default function CampaignLobbyPage() {
             ) : (
               <div className="space-y-4">
                 {maps.map((map: any) => (
-                  <div key={map.id} className="bg-gray-900 rounded-lg p-4 border border-gray-700">
+                  <div key={map.id} className="bg-black/30 rounded-lg p-4 border border-ember-900/30">
                     <div className="flex items-start justify-between mb-4">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-bold text-white">{map.name}</h3>
+                          <h3 className="font-bold text-ember-100">{map.name}</h3>
                           {map.isActive && (
                             <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">
                               Active
@@ -729,9 +722,9 @@ export default function CampaignLobbyPage() {
                           )}
                         </div>
                         {map.description && (
-                          <p className="text-sm text-gray-400">{map.description}</p>
+                          <p className="text-sm text-ember-300/60">{map.description}</p>
                         )}
-                        <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
+                        <div className="flex items-center gap-4 text-xs text-ember-400/50 mt-2">
                           <span>{map.tokens?.length || 0} tokens</span>
                           <span>{map.zones?.length || 0} zones</span>
                           <span>{map.width}×{map.height}</span>
@@ -756,7 +749,7 @@ export default function CampaignLobbyPage() {
                                 console.error('Failed to set active map:', err)
                               }
                             }}
-                            className="text-xs px-3 py-1 bg-primary-600 hover:bg-primary-700 text-white rounded"
+                            className="text-xs px-3 py-1 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded"
                           >
                             Set Active
                           </button>
@@ -765,7 +758,7 @@ export default function CampaignLobbyPage() {
                     </div>
 
                     {/* Map Preview */}
-                    <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-800">
+                    <div className="rounded-lg overflow-hidden border border-ember-900/30 bg-black/20">
                       <PlayerMapViewer
                         map={map}
                         characterName={userCharacters[0]?.name || ''}
@@ -778,6 +771,9 @@ export default function CampaignLobbyPage() {
           </div>
         </div>
       )}
+      </main>
+
+      <TavernNav campaignId={campaignId} />
 
       {/* Notification Panel - Phase 8/9 Communication */}
       {data && (
@@ -791,9 +787,9 @@ export default function CampaignLobbyPage() {
 
       {/* Character Creation Modal */}
       {showCreateCharacter && (
-        <div className="fixed inset-0 bg-gray-900/80 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
-          <div className="bg-gray-950 border border-gray-800 rounded-lg max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 my-auto">
-            <h2 className="text-xl sm:text-2xl font-bold mb-4 text-white">Create New Character</h2>
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-tavern-900 border border-ember-900/40 rounded-lg max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 my-auto">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 text-ember-100">Create New Character</h2>
             <EnhancedCreateCharacterForm
               campaignId={campaignId}
               onSuccess={() => {
@@ -809,15 +805,15 @@ export default function CampaignLobbyPage() {
 
       {/* Delete Character Confirmation Modal */}
       {deletingCharacterId && (
-        <div className="fixed inset-0 bg-gray-900/80 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-950 border border-gray-800 rounded-lg max-w-md w-full p-4 sm:p-6">
-            <h2 className="text-xl sm:text-2xl font-bold mb-4 text-white">Delete Character?</h2>
-            <p className="text-sm sm:text-base text-gray-400 mb-6">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-tavern-900 border border-ember-900/40 rounded-lg max-w-md w-full p-4 sm:p-6">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 text-ember-100">Delete Character?</h2>
+            <p className="text-sm sm:text-base text-ember-300/60 mb-6">
               Are you sure you want to delete this character? This action cannot be undone.
               All associated actions and data will be permanently removed.
             </p>
             {deleteError && (
-              <div className="bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
+              <div className="bg-wine-800/20 border border-wine-600/40 text-wine-400 px-4 py-3 rounded-lg mb-4 text-sm">
                 {deleteError}
               </div>
             )}
@@ -827,13 +823,13 @@ export default function CampaignLobbyPage() {
                   setDeletingCharacterId(null)
                   setDeleteError('')
                 }}
-                className="btn-secondary flex-1 touch-manipulation min-h-[44px]"
+                className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center flex-1 touch-manipulation min-h-[44px]"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDeleteCharacter(deletingCharacterId)}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors flex-1 touch-manipulation min-h-[44px]"
+                className="bg-wine-600 hover:bg-wine-500 text-ember-100 px-4 py-2 rounded-lg transition-colors flex-1 touch-manipulation min-h-[44px]"
               >
                 Delete
               </button>
@@ -848,6 +844,6 @@ export default function CampaignLobbyPage() {
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
       />
-    </div>
+    </TavernPage>
   )
 }

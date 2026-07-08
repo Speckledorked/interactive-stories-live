@@ -255,17 +255,22 @@ export async function POST(
           data: { waitingOnUsers: [] }
         })
 
-        // Run in background - don't block the response
-        ;(async () => {
-          try {
-            await resolveScene(campaignId, sceneId)
-            console.log(`✅ Scene ${scene.sceneNumber} auto-resolved`)
-            await runWorldTurn(campaignId)
-          } catch (error) {
-            console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`, error)
-            // Note: Error handling and Pusher events are handled by sceneResolver.ts
-          }
-        })()
+        // Awaited, not fire-and-forget: on Vercel's serverless runtime an
+        // un-awaited promise after the response is sent has no guarantee of
+        // completing (no maxDuration/waitUntil is configured on this route),
+        // and resolveScene can legitimately take up to ~150s for the AI
+        // call. Firing this in the background silently dropped resolutions
+        // — the scene would sit in AWAITING_ACTIONS forever with no error.
+        try {
+          await resolveScene(campaignId, sceneId)
+          console.log(`✅ Scene ${scene.sceneNumber} auto-resolved`)
+          await runWorldTurn(campaignId)
+        } catch (error) {
+          console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`, error)
+          // Don't fail this response — the action itself already saved
+          // successfully. resolveScene reverts scene status back to
+          // AWAITING_ACTIONS internally on failure, so the player can retry.
+        }
       } else {
         // Update waitingOnUsers to track who hasn't submitted yet
         const stillWaiting = participantUserIds.filter((uid: string) => !submittedUserIds.has(uid))
@@ -282,42 +287,44 @@ export async function POST(
       const { resolveScene } = await import('@/lib/game/sceneResolver')
       const { runWorldTurn } = await import('@/lib/game/worldTurn')
 
-      // Run in background - don't block the response
-      ;(async () => {
-        const resolutionTimeout = setTimeout(() => {
-          console.error(`⏱️  Scene ${scene.sceneNumber} resolution timeout after 2 minutes`)
-          prisma.scene.update({
-            where: { id: sceneId },
-            data: { status: 'AWAITING_ACTIONS' }
-          }).then(() => {
-            pusherServer.trigger(
-              `campaign-${campaignId}`,
-              'scene:resolution-failed',
-              {
-                sceneId: sceneId,
-                sceneNumber: scene.sceneNumber,
-                error: 'Resolution timeout - please try again or contact support',
-                timestamp: new Date()
-              }
-            )
-          }).catch(e => console.error('Failed to broadcast timeout:', e))
-        }, 120000) // 2 minute timeout
+      // Awaited, not fire-and-forget — see the comment on the other
+      // auto-resolve branch above for why: un-awaited work here isn't
+      // guaranteed to survive past the HTTP response on Vercel.
+      const resolutionTimeout = setTimeout(() => {
+        console.error(`⏱️  Scene ${scene.sceneNumber} resolution timeout after 2 minutes`)
+        prisma.scene.update({
+          where: { id: sceneId },
+          data: { status: 'AWAITING_ACTIONS' }
+        }).then(() => {
+          pusherServer.trigger(
+            `campaign-${campaignId}`,
+            'scene:resolution-failed',
+            {
+              sceneId: sceneId,
+              sceneNumber: scene.sceneNumber,
+              error: 'Resolution timeout - please try again or contact support',
+              timestamp: new Date()
+            }
+          )
+        }).catch(e => console.error('Failed to broadcast timeout:', e))
+      }, 120000) // 2 minute timeout
 
-        try {
-          const result = await resolveScene(campaignId, sceneId)
-          clearTimeout(resolutionTimeout)
-          console.log(`✅ Scene ${scene.sceneNumber} auto-resolved successfully`)
-          console.log(`📊 Resolution stats: ${JSON.stringify(result.updates)}`)
-          await runWorldTurn(campaignId)
-        } catch (error) {
-          clearTimeout(resolutionTimeout)
-          console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`)
-          console.error(`Error name:`, error instanceof Error ? error.name : 'Unknown')
-          console.error(`Error message:`, error instanceof Error ? error.message : String(error))
-          console.error(`Error stack:`, error instanceof Error ? error.stack : '')
-          // Note: Error handling and Pusher events are handled by sceneResolver.ts
-        }
-      })()
+      try {
+        const result = await resolveScene(campaignId, sceneId)
+        clearTimeout(resolutionTimeout)
+        console.log(`✅ Scene ${scene.sceneNumber} auto-resolved successfully`)
+        console.log(`📊 Resolution stats: ${JSON.stringify(result.updates)}`)
+        await runWorldTurn(campaignId)
+      } catch (error) {
+        clearTimeout(resolutionTimeout)
+        console.error(`❌ Auto-resolve failed for scene ${scene.sceneNumber}:`)
+        console.error(`Error name:`, error instanceof Error ? error.name : 'Unknown')
+        console.error(`Error message:`, error instanceof Error ? error.message : String(error))
+        console.error(`Error stack:`, error instanceof Error ? error.stack : '')
+        // Don't fail this response — the action itself already saved
+        // successfully. resolveScene reverts scene status back to
+        // AWAITING_ACTIONS internally on failure, so the player can retry.
+      }
     }
 
     return NextResponse.json({ action }, { status: 201 })

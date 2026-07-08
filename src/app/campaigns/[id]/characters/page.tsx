@@ -34,11 +34,11 @@ export default function CharactersListPage() {
       )
       if (campaignResponse.ok) {
         const campaignData = await campaignResponse.json()
-        setCampaign(campaignData)
+        setCampaign(campaignData.campaign)
 
         // Extract characters from campaign data
-        if (campaignData.characters) {
-          setCharacters(campaignData.characters)
+        if (campaignData.campaign?.characters) {
+          setCharacters(campaignData.campaign.characters)
         }
       } else {
         setError('Campaign not found')

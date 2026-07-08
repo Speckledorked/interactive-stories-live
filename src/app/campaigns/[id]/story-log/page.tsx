@@ -3,7 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { ChevronRight, BookOpen } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import { displayFont } from '@/lib/tavernTheme'
+import { TavernPage } from '@/components/tavern/TavernPage'
+import { TavernHeader } from '@/components/tavern/TavernHeader'
+import { TavernNav } from '@/components/tavern/TavernNav'
+import { TavernCard, TavernEmptyState, TavernSpinner } from '@/components/tavern/ui'
 
 interface CampaignLogEntry {
   id: string
@@ -47,18 +53,12 @@ export default function StoryLogPage() {
 
   const loadStoryLog = async () => {
     try {
-      // Load campaign info
       const campaignResponse = await authenticatedFetch(`/api/campaigns/${campaignId}`)
       if (campaignResponse.ok) {
         const campaignData = await campaignResponse.json()
         setCampaign(campaignData.campaign)
       }
 
-      // Load the actual story log — a chronicle entry gets written per scene
-      // resolution (see generateCampaignLog in sceneResolver.ts), each with
-      // its own title/summary/highlights. This used to fetch raw scenes and
-      // truncate their resolution text instead, which is why this page
-      // never showed a real recap.
       const logsResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/logs`)
       if (logsResponse.ok) {
         const logsData = await logsResponse.json()
@@ -75,155 +75,125 @@ export default function StoryLogPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="relative">
-          <div className="spinner h-16 w-16"></div>
-          <div className="absolute inset-0 h-16 w-16 rounded-full bg-primary-500/20 animate-ping"></div>
-        </div>
-      </div>
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" />
+        <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
+          <TavernSpinner className="h-16 w-16" />
+        </main>
+      </TavernPage>
     )
   }
 
   if (error) {
     return (
-      <div className="max-w-6xl mx-auto">
-        <div className="card bg-gradient-to-br from-danger-900/20 to-danger-800/10 border-danger-700/30">
-          <p className="text-danger-400">{error}</p>
-        </div>
-      </div>
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" />
+        <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
+          <TavernCard className="p-6 bg-wine-800/20 border-wine-600/40">
+            <p className="text-wine-400">{error}</p>
+          </TavernCard>
+        </main>
+      </TavernPage>
     )
   }
 
   return (
-    <div className="max-w-7xl mx-auto animate-fade-in">
-      <div className="mb-12">
-        <Link
-          href={`/campaigns/${campaignId}`}
-          className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6 transition-colors group"
-        >
-          <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Campaign
-        </Link>
+    <TavernPage>
+      <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" />
 
-        <div className="relative">
-          <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary-500/10 via-accent-500/5 to-transparent blur-3xl"></div>
-          <h1 className="text-5xl font-bold tracking-tight bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent mb-3">
-            Story Log
-          </h1>
-          <p className="text-lg text-gray-400">
-            {campaign?.name || 'Campaign'} - A chronicle of your adventure, updated after each scene
-          </p>
-        </div>
-      </div>
+      <main className="max-w-4xl mx-auto px-4 pt-28 pb-28">
+        <p className="text-ember-300/50 text-sm mb-6">
+          {campaign?.name || 'Campaign'} — a chronicle of your adventure, updated after each scene
+        </p>
 
-      {/* Stats Card */}
-      <div className="card mb-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-primary-500/10 to-transparent blur-3xl"></div>
-        <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="text-center">
-            <div className="text-4xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent mb-2">
-              {logs.length}
+        {/* Stats */}
+        <TavernCard className="p-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="text-center">
+              <div className={`${displayFont.className} text-3xl text-ember-300 mb-1`}>{logs.length}</div>
+              <div className="text-sm text-ember-400/50">Chronicle Entries</div>
             </div>
-            <div className="text-sm text-gray-400">Chronicle Entries</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold bg-gradient-to-r from-success-400 to-success-600 bg-clip-text text-transparent mb-2">
-              {logs.reduce((sum, l) => sum + (l.highlights?.length || 0), 0)}
-            </div>
-            <div className="text-sm text-gray-400">Key Moments</div>
-          </div>
-          <div className="text-center">
-            <div className="text-4xl font-bold bg-gradient-to-r from-warning-400 to-warning-600 bg-clip-text text-transparent mb-2">
-              {logs[0]?.turnNumber || 0}
-            </div>
-            <div className="text-sm text-gray-400">Current Turn</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Log Entries */}
-      <div className="space-y-4">
-        {logs.length === 0 ? (
-          <div className="card text-center py-12">
-            <div className="text-6xl mb-4">📖</div>
-            <p className="text-xl text-gray-400 mb-2">No story entries yet</p>
-            <p className="text-sm text-gray-500">The story log will be automatically updated as scenes are resolved</p>
-          </div>
-        ) : (
-          logs.map((log, index) => (
-            <Link
-              key={log.id}
-              href={`/campaigns/${campaignId}/story`}
-              className="block"
-            >
-              <div
-                className="card group hover:border-primary-700/50 hover:shadow-glow transition-all duration-200 cursor-pointer"
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                <div className="flex items-start justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-medium text-primary-400 bg-primary-900/30 border border-primary-700/50 rounded px-2 py-1">
-                      Turn {log.turnNumber}
-                    </span>
-                    {log.entryType !== 'scene' && (
-                      <span className="badge bg-gray-700/30 border-gray-600/50 text-gray-400">
-                        {log.entryType}
-                      </span>
-                    )}
-                    <h3 className="text-xl font-bold text-white">{log.title}</h3>
-                  </div>
-                  <div className="text-xs text-gray-500 whitespace-nowrap">
-                    {new Date(log.createdAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </div>
-                </div>
-
-                {log.inGameDate && (
-                  <p className="text-xs text-gray-500 mb-3">
-                    📅 {log.inGameDate}
-                    {log.duration && ` • Duration: ${log.duration}`}
-                  </p>
-                )}
-
-                {/* Summary — the actual recap, not truncated raw scene text */}
-                <p className="text-gray-300 leading-relaxed mb-4 whitespace-pre-wrap">
-                  {log.summary}
-                </p>
-
-                {/* Highlights */}
-                {log.highlights && log.highlights.length > 0 && (
-                  <div className="pt-4 border-t border-dark-700/50">
-                    <h4 className="text-xs font-medium text-gray-400 mb-2">Key Moments</h4>
-                    <ul className="space-y-1">
-                      {log.highlights.map((highlight, i) => (
-                        <li key={i} className="text-sm text-gray-400 flex items-start gap-2">
-                          <span className="text-primary-500 mt-1">•</span>
-                          <span>{highlight}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* View link indicator */}
-                <div className="mt-4 flex items-center gap-2 text-sm text-primary-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span>View in Story</span>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
+            <div className="text-center">
+              <div className={`${displayFont.className} text-3xl text-success-400 mb-1`}>
+                {logs.reduce((sum, l) => sum + (l.highlights?.length || 0), 0)}
               </div>
-            </Link>
-          ))
-        )}
-      </div>
-    </div>
+              <div className="text-sm text-ember-400/50">Key Moments</div>
+            </div>
+            <div className="text-center">
+              <div className={`${displayFont.className} text-3xl text-ember-300 mb-1`}>{logs[0]?.turnNumber || 0}</div>
+              <div className="text-sm text-ember-400/50">Current Turn</div>
+            </div>
+          </div>
+        </TavernCard>
+
+        {/* Log Entries */}
+        <div className="space-y-4">
+          {logs.length === 0 ? (
+            <TavernEmptyState
+              icon={BookOpen}
+              title="No story entries yet"
+              description="The story log will be automatically updated as scenes are resolved"
+            />
+          ) : (
+            logs.map((log) => (
+              <Link key={log.id} href={`/campaigns/${campaignId}/story`} className="block">
+                <TavernCard className="p-5 group hover:border-ember-700/50 transition-colors cursor-pointer">
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-xs font-medium text-ember-300 bg-ember-900/30 border border-ember-800/40 rounded px-2 py-1">
+                        Turn {log.turnNumber}
+                      </span>
+                      {log.entryType !== 'scene' && (
+                        <span className="text-xs px-2 py-1 rounded bg-black/30 border border-ember-900/30 text-ember-400/60">
+                          {log.entryType}
+                        </span>
+                      )}
+                      <h3 className={`${displayFont.className} text-lg text-ember-100`}>{log.title}</h3>
+                    </div>
+                    <div className="text-xs text-ember-400/40 whitespace-nowrap">
+                      {new Date(log.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </div>
+                  </div>
+
+                  {log.inGameDate && (
+                    <p className="text-xs text-ember-400/50 mb-3">
+                      {log.inGameDate}
+                      {log.duration && ` • Duration: ${log.duration}`}
+                    </p>
+                  )}
+
+                  <p className="text-ember-200/70 leading-relaxed mb-4 whitespace-pre-wrap text-sm">{log.summary}</p>
+
+                  {log.highlights && log.highlights.length > 0 && (
+                    <div className="pt-4 border-t border-ember-900/30">
+                      <h4 className="text-xs font-medium text-ember-400/60 mb-2">Key Moments</h4>
+                      <ul className="space-y-1">
+                        {log.highlights.map((highlight, i) => (
+                          <li key={i} className="text-sm text-ember-300/60 flex items-start gap-2">
+                            <span className="text-ember-500 mt-1">•</span>
+                            <span>{highlight}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex items-center gap-1 text-sm text-ember-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span>View in Story</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </div>
+                </TavernCard>
+              </Link>
+            ))
+          )}
+        </div>
+      </main>
+
+      <TavernNav active="quests" campaignId={campaignId} />
+    </TavernPage>
   )
 }

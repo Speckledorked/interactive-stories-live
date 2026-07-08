@@ -7,6 +7,9 @@ import { authenticatedFetch } from '@/lib/clientAuth'
 import WorldStateDashboard from '@/components/admin/WorldStateDashboard'
 import ClockProgress from '@/components/clock/ClockProgress'
 import AILoadingState from '@/components/scene/AILoadingState'
+import { TavernPage } from '@/components/tavern/TavernPage'
+import { TavernHeader } from '@/components/tavern/TavernHeader'
+import { TavernNav } from '@/components/tavern/TavernNav'
 
 interface Campaign {
   id: string
@@ -428,46 +431,43 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <AILoadingState />
-      </div>
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Admin" />
+        <main className="max-w-7xl mx-auto px-4 pt-28 pb-16 flex items-center justify-center">
+          <AILoadingState />
+        </main>
+      </TavernPage>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-6">
-              Campaign Admin Settings
-            </h1>
+    <TavernPage>
+      <TavernHeader
+        backHref={`/campaigns/${campaignId}`}
+        title="Campaign Admin"
+        subrow={
+          <nav className="max-w-7xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
+            {(['dashboard', 'ai', 'npcs', 'factions', 'clocks', 'invites', 'members', 'settings'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-2.5 pb-2 border-b-2 whitespace-nowrap flex-shrink-0 capitalize transition-colors ${
+                  activeTab === tab ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
+                }`}
+              >
+                {tab === 'ai' ? 'AI Settings' : tab}
+              </button>
+            ))}
+          </nav>
+        }
+      />
 
-            {error && (
-              <div className="mb-4 bg-red-50 text-red-900 p-4 rounded-md">
-                {error}
-              </div>
-            )}
-
-            {/* Tab Navigation */}
-            <div className="border-b border-gray-200 mb-6">
-              <nav className="-mb-px flex space-x-8">
-                {(['dashboard', 'ai', 'npcs', 'factions', 'clocks', 'invites', 'members', 'settings'] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`
-                      py-2 px-1 border-b-2 font-medium text-sm capitalize
-                      ${activeTab === tab
-                        ? 'border-indigo-500 text-indigo-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
-                    `}
-                  >
-                    {tab === 'ai' ? 'AI Settings' : tab}
-                  </button>
-                ))}
-              </nav>
-            </div>
+      <main className="max-w-7xl mx-auto px-4 pt-28 pb-28">
+        {error && (
+          <div className="mb-4 bg-wine-800/20 text-wine-300 p-4 rounded-md">
+            {error}
+          </div>
+        )}
 
             {/* Dashboard Tab */}
             {activeTab === 'dashboard' && (
@@ -501,33 +501,33 @@ export default function AdminPage() {
             {activeTab === 'ai' && campaign && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-ember-200/80">
                     AI System Prompt
                   </label>
                   <textarea
                     value={campaign.aiSystemPrompt}
                     onChange={(e) => setCampaign({ ...campaign, aiSystemPrompt: e.target.value })}
                     rows={10}
-                    className="mt-1 block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-ember-200/80">
                     Initial World Seed
                   </label>
                   <textarea
                     value={campaign.initialWorldSeed}
                     onChange={(e) => setCampaign({ ...campaign, initialWorldSeed: e.target.value })}
                     rows={6}
-                    className="mt-1 block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                   />
                 </div>
 
                 <button
                   onClick={handleSaveAISettings}
                   disabled={saving}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : 'Save AI Settings'}
                 </button>
@@ -539,13 +539,13 @@ export default function AdminPage() {
               <div className="space-y-4">
                 <button
                   onClick={() => setCreatingNpc(true)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                  className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500"
                 >
                   + Create NPC
                 </button>
 
                 {creatingNpc && (
-                  <div className="border rounded-lg p-4 bg-gray-50">
+                  <div className="border border-ember-900/30 rounded-lg p-4 bg-black/25">
                     <h3 className="font-semibold mb-3">Create New NPC</h3>
                     <form
                       onSubmit={(e) => {
@@ -564,79 +564,79 @@ export default function AdminPage() {
                       className="space-y-3"
                     >
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Name *</label>
                         <input
                           type="text"
                           name="name"
                           required
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Description</label>
                         <textarea
                           name="description"
                           rows={2}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Location</label>
                           <input
                             type="text"
                             name="currentLocation"
-                            className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Importance (1-5)</label>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Importance (1-5)</label>
                           <input
                             type="number"
                             name="importance"
                             min="1"
                             max="5"
                             defaultValue="1"
-                            className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                           />
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Goals</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Goals</label>
                         <textarea
                           name="goals"
                           rows={2}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Relationship to Party</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Relationship to Party</label>
                         <input
                           type="text"
                           name="relationship"
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">GM Notes</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">GM Notes</label>
                         <textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex space-x-2">
                         <button
                           type="submit"
                           disabled={saving}
-                          className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                          className="px-3 py-2 bg-success-600 text-white rounded-md hover:bg-success-500 disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setCreatingNpc(false)}
-                          className="px-3 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                          className="px-3 py-2 bg-black/40 text-white rounded-md hover:bg-black/50"
                         >
                           Cancel
                         </button>
@@ -646,18 +646,18 @@ export default function AdminPage() {
                 )}
 
                 {npcs.map((npc) => (
-                  <div key={npc.id} className="border rounded-lg p-4">
+                  <div key={npc.id} className="border border-ember-900/30 rounded-lg p-4">
                     {editingNpc === npc.id ? (
                       <div className="space-y-2">
                         <input
                           value={npc.name}
                           onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, name: e.target.value } : n))}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                         />
                         <textarea
                           value={npc.description || ''}
                           onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, description: e.target.value } : n))}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                           rows={2}
                         />
                         <input
@@ -666,19 +666,19 @@ export default function AdminPage() {
                           max="5"
                           value={npc.importance}
                           onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, importance: parseInt(e.target.value) } : n))}
-                          className="block w-32 border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          className="block w-32 border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                         />
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleUpdateNPC(npc)}
                             disabled={saving}
-                            className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                            className="px-3 py-1 bg-success-600 text-white rounded-md hover:bg-success-500 disabled:opacity-50"
                           >
                             Save
                           </button>
                           <button
                             onClick={() => setEditingNpc(null)}
-                            className="px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                            className="px-3 py-1 bg-black/40 text-white rounded-md hover:bg-black/50"
                           >
                             Cancel
                           </button>
@@ -689,12 +689,12 @@ export default function AdminPage() {
                         <div className="flex justify-between items-start">
                           <div>
                             <h3 className="font-semibold">{npc.name}</h3>
-                            <p className="text-sm text-gray-600">{npc.description}</p>
-                            <p className="text-xs text-gray-500">Importance: {npc.importance}/5</p>
+                            <p className="text-sm text-ember-300/60">{npc.description}</p>
+                            <p className="text-xs text-ember-400/50">Importance: {npc.importance}/5</p>
                           </div>
                           <button
                             onClick={() => setEditingNpc(npc.id)}
-                            className="px-3 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                            className="px-3 py-1 bg-wine-600 text-white rounded-md hover:bg-wine-500"
                           >
                             Edit
                           </button>
@@ -711,13 +711,13 @@ export default function AdminPage() {
               <div className="space-y-4">
                 <button
                   onClick={() => setCreatingFaction(true)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                  className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500"
                 >
                   + Create Faction
                 </button>
 
                 {creatingFaction && (
-                  <div className="border rounded-lg p-4 bg-gray-50">
+                  <div className="border border-ember-900/30 rounded-lg p-4 bg-black/25">
                     <h3 className="font-semibold mb-3">Create New Faction</h3>
                     <form
                       onSubmit={(e) => {
@@ -736,82 +736,82 @@ export default function AdminPage() {
                       className="space-y-3"
                     >
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Name *</label>
                         <input
                           type="text"
                           name="name"
                           required
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Description</label>
                         <textarea
                           name="description"
                           rows={2}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Goals</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Goals</label>
                         <textarea
                           name="goals"
                           rows={2}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Current Plan</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Current Plan</label>
                         <textarea
                           name="currentPlan"
                           rows={2}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Threat Level (1-5)</label>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Threat Level (1-5)</label>
                           <input
                             type="number"
                             name="threatLevel"
                             min="1"
                             max="5"
                             defaultValue="1"
-                            className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Resources (0-100)</label>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Resources (0-100)</label>
                           <input
                             type="number"
                             name="resources"
                             min="0"
                             max="100"
                             defaultValue="50"
-                            className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                           />
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">GM Notes</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">GM Notes</label>
                         <textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex space-x-2">
                         <button
                           type="submit"
                           disabled={saving}
-                          className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                          className="px-3 py-2 bg-success-600 text-white rounded-md hover:bg-success-500 disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setCreatingFaction(false)}
-                          className="px-3 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                          className="px-3 py-2 bg-black/40 text-white rounded-md hover:bg-black/50"
                         >
                           Cancel
                         </button>
@@ -821,19 +821,19 @@ export default function AdminPage() {
                 )}
 
                 {factions.map((faction) => (
-                  <div key={faction.id} className="border rounded-lg p-4">
+                  <div key={faction.id} className="border border-ember-900/30 rounded-lg p-4">
                     {editingFaction === faction.id ? (
                       <div className="space-y-2">
                         <input
                           value={faction.name}
                           onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, name: e.target.value } : f))}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                         />
                         <textarea
                           value={faction.currentPlan || ''}
                           onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, currentPlan: e.target.value } : f))}
                           placeholder="Current Plan"
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                           rows={2}
                         />
                         <div className="flex space-x-4">
@@ -845,7 +845,7 @@ export default function AdminPage() {
                               max="5"
                               value={faction.threatLevel}
                               onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, threatLevel: parseInt(e.target.value) } : f))}
-                              className="block w-20 border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              className="block w-20 border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                             />
                           </div>
                           <div>
@@ -856,7 +856,7 @@ export default function AdminPage() {
                               max="100"
                               value={faction.resources}
                               onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, resources: parseInt(e.target.value) } : f))}
-                              className="block w-20 border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              className="block w-20 border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                             />
                           </div>
                         </div>
@@ -864,13 +864,13 @@ export default function AdminPage() {
                           <button
                             onClick={() => handleUpdateFaction(faction)}
                             disabled={saving}
-                            className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                            className="px-3 py-1 bg-success-600 text-white rounded-md hover:bg-success-500 disabled:opacity-50"
                           >
                             Save
                           </button>
                           <button
                             onClick={() => setEditingFaction(null)}
-                            className="px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                            className="px-3 py-1 bg-black/40 text-white rounded-md hover:bg-black/50"
                           >
                             Cancel
                           </button>
@@ -881,14 +881,14 @@ export default function AdminPage() {
                         <div className="flex justify-between items-start">
                           <div>
                             <h3 className="font-semibold">{faction.name}</h3>
-                            <p className="text-sm text-gray-600">{faction.currentPlan}</p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-sm text-ember-300/60">{faction.currentPlan}</p>
+                            <p className="text-xs text-ember-400/50">
                               Threat: {faction.threatLevel}/5 | Resources: {faction.resources}/100
                             </p>
                           </div>
                           <button
                             onClick={() => setEditingFaction(faction.id)}
-                            className="px-3 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                            className="px-3 py-1 bg-wine-600 text-white rounded-md hover:bg-wine-500"
                           >
                             Edit
                           </button>
@@ -905,13 +905,13 @@ export default function AdminPage() {
               <div className="space-y-4">
                 <button
                   onClick={() => setCreatingClock(true)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                  className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500"
                 >
                   + Create Clock
                 </button>
 
                 {creatingClock && (
-                  <div className="border rounded-lg p-4 bg-gray-50">
+                  <div className="border border-ember-900/30 rounded-lg p-4 bg-black/25">
                     <h3 className="font-semibold mb-3">Create New Clock</h3>
                     <form
                       onSubmit={(e) => {
@@ -931,59 +931,59 @@ export default function AdminPage() {
                       className="space-y-3"
                     >
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Name *</label>
                         <input
                           type="text"
                           name="name"
                           required
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Description</label>
                         <textarea
                           name="description"
                           rows={2}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Max Segments</label>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Max Segments</label>
                           <input
                             type="number"
                             name="maxTicks"
                             min="1"
                             max="12"
                             defaultValue="4"
-                            className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Category</label>
                           <input
                             type="text"
                             name="category"
                             placeholder="e.g., Threat, Progress"
-                            className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                           />
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Consequence (when filled)</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Consequence (when filled)</label>
                         <textarea
                           name="consequence"
                           rows={2}
                           placeholder="What happens when this clock fills..."
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">GM Notes</label>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">GM Notes</label>
                         <textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex items-center">
@@ -991,9 +991,9 @@ export default function AdminPage() {
                           type="checkbox"
                           name="isHidden"
                           id="isHidden"
-                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          className="h-4 w-4 text-ember-300 focus:ring-ember-500/40 border-ember-900/40 rounded"
                         />
-                        <label htmlFor="isHidden" className="ml-2 block text-sm text-gray-700">
+                        <label htmlFor="isHidden" className="ml-2 block text-sm text-ember-200/80">
                           Hide from players
                         </label>
                       </div>
@@ -1001,14 +1001,14 @@ export default function AdminPage() {
                         <button
                           type="submit"
                           disabled={saving}
-                          className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                          className="px-3 py-2 bg-success-600 text-white rounded-md hover:bg-success-500 disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setCreatingClock(false)}
-                          className="px-3 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                          className="px-3 py-2 bg-black/40 text-white rounded-md hover:bg-black/50"
                         >
                           Cancel
                         </button>
@@ -1038,7 +1038,7 @@ export default function AdminPage() {
                         <button
                           onClick={() => handleTickClock(clock.id, 'untick')}
                           disabled={clock.currentTicks <= 0}
-                          className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 text-sm flex-1"
+                          className="px-3 py-1 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50 text-sm flex-1"
                         >
                           - Remove Tick
                         </button>
@@ -1046,8 +1046,8 @@ export default function AdminPage() {
                           onClick={() => handleToggleClockVisibility(clock)}
                           className={`px-3 py-1 rounded-md text-sm flex-1 ${
                             clock.isHidden
-                              ? 'bg-gray-600 text-white hover:bg-gray-700'
-                              : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                              ? 'bg-black/40 text-white hover:bg-black/50'
+                              : 'bg-wine-600 text-white hover:bg-wine-500'
                           }`}
                         >
                           {clock.isHidden ? '👁️ Show' : '🔒 Hide'}
@@ -1064,18 +1064,18 @@ export default function AdminPage() {
               <div className="space-y-4">
                 <button
                   onClick={handleCreateInvite}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                  className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500"
                 >
                   Create New Invite
                 </button>
 
                 <div className="space-y-2">
                   {invites.map((invite) => (
-                    <div key={invite.id} className="border rounded-lg p-4">
+                    <div key={invite.id} className="border border-ember-900/30 rounded-lg p-4">
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-sm font-mono">{invite.joinUrl}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-ember-400/50">
                             Uses: {invite.uses}/{invite.maxUses === 0 ? '∞' : invite.maxUses}
                             {invite.isExpired && ' (Expired)'}
                             {invite.isExhausted && ' (Exhausted)'}
@@ -1086,7 +1086,7 @@ export default function AdminPage() {
                             navigator.clipboard.writeText(invite.joinUrl)
                             alert('Invite link copied!')
                           }}
-                          className="px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                          className="px-3 py-1 bg-black/40 text-white rounded-md hover:bg-black/50"
                         >
                           Copy
                         </button>
@@ -1100,13 +1100,13 @@ export default function AdminPage() {
             {/* Members Tab */}
             {activeTab === 'members' && (
               <div className="space-y-4">
-                <div className="text-sm text-gray-600 mb-4">
+                <div className="text-sm text-ember-300/60 mb-4">
                   Total Members: {members.length}
                 </div>
 
                 <div className="space-y-2">
                   {members.map((member) => (
-                    <div key={member.id} className="border rounded-lg p-4">
+                    <div key={member.id} className="border border-ember-900/30 rounded-lg p-4">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
@@ -1115,14 +1115,14 @@ export default function AdminPage() {
                             </h3>
                             <span className={`px-2 py-1 rounded text-xs font-medium ${
                               member.role === 'ADMIN'
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-blue-100 text-blue-800'
+                                ? 'bg-wine-800/25 text-ember-300'
+                                : 'bg-ember-900/25 text-ember-300'
                             }`}>
                               {member.role}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-600">{member.user.email}</p>
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-sm text-ember-300/60">{member.user.email}</p>
+                          <p className="text-xs text-ember-400/50 mt-1">
                             Joined: {new Date(member.joinedAt).toLocaleDateString()} •
                             Characters: {member._count.characters}
                           </p>
@@ -1132,7 +1132,7 @@ export default function AdminPage() {
                             value={member.role}
                             onChange={(e) => handleChangeRole(member.user.id, e.target.value as 'ADMIN' | 'PLAYER')}
                             disabled={saving}
-                            className="px-3 py-1 border rounded-md text-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50"
+                            className="px-3 py-1 border rounded-md text-sm focus:border-ember-400 focus:ring-ember-500/40 disabled:opacity-50"
                           >
                             <option value="PLAYER">Player</option>
                             <option value="ADMIN">Admin</option>
@@ -1140,7 +1140,7 @@ export default function AdminPage() {
                           <button
                             onClick={() => handleRemoveMember(member.user.id)}
                             disabled={saving}
-                            className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 text-sm"
+                            className="px-3 py-1 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50 text-sm"
                           >
                             Remove
                           </button>
@@ -1156,57 +1156,57 @@ export default function AdminPage() {
             {activeTab === 'settings' && campaign && (
               <div className="space-y-6">
                 <div className="border-b pb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  <h3 className="text-lg font-semibold text-ember-100 mb-4">
                     Campaign Information
                   </h3>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-ember-200/80">
                         Campaign ID (Read-only)
                       </label>
-                      <p className="mt-1 text-sm text-gray-600 font-mono">{campaignId}</p>
+                      <p className="mt-1 text-sm text-ember-300/60 font-mono">{campaignId}</p>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-ember-200/80">
                         Title
                       </label>
                       <input
                         type="text"
                         value={campaign.title}
                         onChange={(e) => setCampaign({ ...campaign, title: e.target.value })}
-                        className="mt-1 block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                        className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-ember-200/80">
                         Description
                       </label>
                       <textarea
                         value={campaign.description || ''}
                         onChange={(e) => setCampaign({ ...campaign, description: e.target.value })}
                         rows={3}
-                        className="mt-1 block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                        className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label className="block text-sm font-medium text-ember-200/80">
                         Universe
                       </label>
                       <input
                         type="text"
                         value={campaign.universe || ''}
                         onChange={(e) => setCampaign({ ...campaign, universe: e.target.value })}
-                        className="mt-1 block w-full border rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                        className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                       />
                     </div>
 
                     <button
                       onClick={handleSaveCampaignInfo}
                       disabled={saving}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                      className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
                     >
                       {saving ? 'Saving...' : 'Save Campaign Information'}
                     </button>
@@ -1215,10 +1215,10 @@ export default function AdminPage() {
 
                 {/* Export & Backup Section */}
                 <div className="border-b pb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  <h3 className="text-lg font-semibold text-ember-100 mb-4">
                     Export & Backup
                   </h3>
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-sm text-ember-300/60 mb-4">
                     Download your campaign data for backup or to move to another platform.
                   </p>
                   <div className="flex gap-3">
@@ -1244,7 +1244,7 @@ export default function AdminPage() {
                           alert('Export failed. Please try again.')
                         }
                       }}
-                      className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 flex items-center gap-2"
+                      className="px-4 py-2 bg-black/40 text-white rounded-md hover:bg-black/50 flex items-center gap-2"
                     >
                       <span>📥</span>
                       Export Campaign (JSON)
@@ -1254,48 +1254,48 @@ export default function AdminPage() {
 
                 {/* Safety Tools Section */}
                 <div className="border-b pb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  <h3 className="text-lg font-semibold text-ember-100 mb-4">
                     Safety Tools
                   </h3>
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-sm text-ember-300/60 mb-4">
                     Configure content warnings and safety settings for your campaign.
                   </p>
                   <div className="space-y-4">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <h4 className="font-medium text-blue-900 mb-2">✋ X-Card</h4>
-                      <p className="text-sm text-blue-700">
+                    <div className="bg-ember-900/15 border border-ember-800/30 rounded-lg p-4">
+                      <h4 className="font-medium text-ember-200 mb-2">✋ X-Card</h4>
+                      <p className="text-sm text-ember-300/80">
                         The X-Card is always available on the story page. Players can use it
                         anonymously to pause or rewind uncomfortable content.
                       </p>
                     </div>
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <h4 className="font-medium text-yellow-900 mb-2">⚠️ Content Warnings</h4>
-                      <p className="text-sm text-yellow-700 mb-3">
+                    <div className="bg-ember-900/20 border border-ember-700/40 rounded-lg p-4">
+                      <h4 className="font-medium text-ember-200 mb-2">⚠️ Content Warnings</h4>
+                      <p className="text-sm text-ember-300 mb-3">
                         Set content warnings to let players know what topics may appear in this campaign.
                       </p>
-                      <p className="text-xs text-yellow-600">
+                      <p className="text-xs text-ember-400">
                         Note: Full safety settings panel will be added in a future update.
                         For now, use the X-Card feature during gameplay.
                       </p>
                     </div>
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                      <h4 className="font-medium text-purple-900 mb-2">🛡️ Lines & Veils</h4>
-                      <p className="text-sm text-purple-700">
+                    <div className="bg-wine-800/15 border border-wine-700/30 rounded-lg p-4">
+                      <h4 className="font-medium text-ember-200 mb-2">🛡️ Lines & Veils</h4>
+                      <p className="text-sm text-ember-300/80">
                         <strong>Lines:</strong> Hard boundaries that won't appear in the story<br />
                         <strong>Veils:</strong> Content that happens off-screen
                       </p>
-                      <p className="text-xs text-purple-600 mt-2">
+                      <p className="text-xs text-ember-400 mt-2">
                         Configure these in Session Zero with your group. Use the X-Card during play.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="border border-red-200 rounded-lg p-6 bg-red-50">
-                  <h3 className="text-lg font-semibold text-red-900 mb-2">
+                <div className="border border-wine-600/40 rounded-lg p-6 bg-wine-800/20">
+                  <h3 className="text-lg font-semibold text-wine-300 mb-2">
                     Danger Zone
                   </h3>
-                  <p className="text-sm text-red-700 mb-4">
+                  <p className="text-sm text-wine-400 mb-4">
                     Once you delete a campaign, there is no going back. This will permanently delete
                     all campaign data including characters, scenes, NPCs, factions, clocks, and timeline events.
                   </p>
@@ -1303,27 +1303,27 @@ export default function AdminPage() {
                   {!showDeleteConfirm ? (
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                      className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500"
                     >
                       Delete Campaign
                     </button>
                   ) : (
                     <div className="space-y-3">
-                      <p className="text-sm font-semibold text-red-900">
+                      <p className="text-sm font-semibold text-wine-300">
                         Are you absolutely sure? This action cannot be undone.
                       </p>
                       <div className="flex gap-2">
                         <button
                           onClick={handleDeleteCampaign}
                           disabled={saving}
-                          className="px-4 py-2 bg-red-700 text-white rounded-md hover:bg-red-800 disabled:opacity-50"
+                          className="px-4 py-2 bg-wine-500 text-white rounded-md hover:bg-wine-600 disabled:opacity-50"
                         >
                           {saving ? 'Deleting...' : 'Yes, Delete Campaign'}
                         </button>
                         <button
                           onClick={() => setShowDeleteConfirm(false)}
                           disabled={saving}
-                          className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50"
+                          className="px-4 py-2 bg-black/40 text-white rounded-md hover:bg-black/50 disabled:opacity-50"
                         >
                           Cancel
                         </button>
@@ -1333,9 +1333,9 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      </div>
-    </div>
+      </main>
+
+      <TavernNav campaignId={campaignId} />
+    </TavernPage>
   )
 }

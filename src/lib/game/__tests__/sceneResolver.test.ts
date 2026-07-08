@@ -97,7 +97,7 @@ describe('Scene Resolver', () => {
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
-      vi.mocked(applyWorldUpdates).mockResolvedValue(undefined);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [] });
 
       // Execute
       const result = await resolveScene(mockCampaignId, mockSceneId);
@@ -176,7 +176,7 @@ describe('Scene Resolver', () => {
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue(mockAIRequest as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
-      vi.mocked(applyWorldUpdates).mockResolvedValue(undefined);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [] });
 
       await resolveScene(mockCampaignId, mockSceneId);
 

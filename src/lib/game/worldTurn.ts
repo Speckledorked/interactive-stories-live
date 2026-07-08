@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { callAIForWorldTurn } from '@/lib/ai/client'
 import { buildWorldSummaryForAI } from '@/lib/ai/worldState'
 import { checkAndResolveCompletedClocks } from './stateUpdater'
+import { runWorldTick } from './worldTick'
 import { EventVisibility } from '@prisma/client'
 
 /**
@@ -28,6 +29,13 @@ export async function runWorldTurn(campaignId: string) {
   const currentTurn = worldMeta.currentTurnNumber
 
   try {
+    // 0. World Sim Phase 1: deterministic tick — NPCs, factions, weather.
+    // Pure and AI-free by design; it decides what changed and why. Only the
+    // narration below (and the AI GM prompt builder) turns that into prose.
+    console.log('🧭 Running world tick (NPCs, factions, weather)...')
+    const worldTick = await runWorldTick(campaignId, currentTurn)
+    console.log(`  🧭 World tick: ${worldTick.changes.length} change(s), ${worldTick.historyEntriesCreated} logged to history`)
+
     // 1. Advance clocks based on faction tags
     console.log('⏰ Advancing clocks...')
     const advancedClocks = await advanceClocks(campaignId)
@@ -52,7 +60,9 @@ export async function runWorldTurn(campaignId: string) {
     return {
       success: true,
       clocksAdvanced: advancedClocks.length,
-      clocksCompleted: completedClocks.length
+      clocksCompleted: completedClocks.length,
+      worldTickChanges: worldTick.changes.length,
+      worldTickHistoryEntries: worldTick.historyEntriesCreated
     }
   } catch (error) {
     console.error('❌ World turn failed:', error)

@@ -7,9 +7,18 @@
 
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazily constructed so importing this module (even transitively, e.g. via
+// createCampaignMemory) doesn't crash in environments without
+// OPENAI_API_KEY set — matches the call-time key check every other AI
+// integration in this codebase already uses (worldGenerator.ts,
+// enrichStubNPCs, consequenceExtraction.ts, etc).
+let openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openai) {
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openai;
+}
 
 const EMBEDDING_MODEL = 'text-embedding-ada-002';
 const MAX_TEXT_LENGTH = 8000; // Safe token limit for ada-002
@@ -25,7 +34,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     // Truncate text to avoid token limits
     const truncatedText = text.slice(0, MAX_TEXT_LENGTH);
 
-    const response = await openai.embeddings.create({
+    const response = await getOpenAI().embeddings.create({
       model: EMBEDDING_MODEL,
       input: truncatedText,
     });
@@ -47,7 +56,7 @@ export async function generateEmbeddingsBatch(texts: string[]): Promise<number[]
   try {
     const truncatedTexts = texts.map(t => t.slice(0, MAX_TEXT_LENGTH));
 
-    const response = await openai.embeddings.create({
+    const response = await getOpenAI().embeddings.create({
       model: EMBEDDING_MODEL,
       input: truncatedTexts,
     });

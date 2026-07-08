@@ -97,11 +97,16 @@ export async function createCampaignMemory(data: MemoryData): Promise<void> {
  * @param scene - The resolved scene
  * @param worldMeta - World metadata (for turn number)
  * @param aiResponse - AI response containing world_updates
+ * @param involvedEntities - NPC/Faction IDs actually resolved while applying
+ *   this scene's world_updates (from applyWorldUpdates's return value) — the
+ *   only reliable source of "which entities did this scene touch", since
+ *   npc_changes/faction_changes reference entities by free-text name-or-id.
  */
 export async function createSceneMemory(
   scene: Scene & { sceneResolutionText: string | null },
   worldMeta: { turnNumber: number },
-  aiResponse: any
+  aiResponse: any,
+  involvedEntities?: { npcIds: string[]; factionIds: string[] }
 ): Promise<void> {
   if (!scene.sceneResolutionText) {
     console.log('Scene has no resolution text, skipping memory creation');
@@ -115,8 +120,10 @@ export async function createSceneMemory(
     // Determine importance based on scene type and stakes
     const importance = determineImportance(scene, aiResponse);
 
-    // Extract involved entities
-    const involvedEntities = extractInvolvedEntities(scene, aiResponse);
+    // Involved characters still come from scene.participants (set correctly
+    // at scene creation). NPC/faction involvement is passed in explicitly now
+    // — see the involvedEntities param doc above.
+    const characterIds = ((scene.participants as any) || {}).characterIds || [];
 
     // Determine emotional tone
     const emotionalTone = detectEmotionalTone(scene.sceneResolutionText);
@@ -132,9 +139,9 @@ export async function createSceneMemory(
       title: `Scene ${scene.sceneNumber}: ${extractTitle(scene)}`,
       summary,
       fullContext: scene.sceneResolutionText,
-      involvedCharacterIds: involvedEntities.characterIds,
-      involvedNpcIds: involvedEntities.npcIds,
-      involvedFactionIds: involvedEntities.factionIds,
+      involvedCharacterIds: characterIds,
+      involvedNpcIds: involvedEntities?.npcIds || [],
+      involvedFactionIds: involvedEntities?.factionIds || [],
       locationTags: scene.location ? [scene.location] : [],
       importance,
       emotionalTone,
@@ -212,35 +219,6 @@ function determineImportance(scene: Scene, aiResponse: any): MemoryImportance {
   }
 
   return 'NORMAL';
-}
-
-/**
- * Extract IDs of entities involved in the scene
- */
-function extractInvolvedEntities(scene: Scene, aiResponse: any): {
-  characterIds: string[];
-  npcIds: string[];
-  factionIds: string[];
-} {
-  const participants = (scene.participants as any) || {};
-  const updates = aiResponse?.world_updates || {};
-
-  // Get unique NPC IDs from participants and updates
-  const npcIds = new Set<string>([
-    ...(participants.npcIds || []),
-    ...(updates.npc_updates?.map((u: any) => u.npc_id) || []),
-  ]);
-
-  // Get unique faction IDs from updates
-  const factionIds = new Set<string>(
-    updates.faction_updates?.map((u: any) => u.faction_id) || []
-  );
-
-  return {
-    characterIds: participants.characterIds || [],
-    npcIds: Array.from(npcIds),
-    factionIds: Array.from(factionIds),
-  };
 }
 
 /**

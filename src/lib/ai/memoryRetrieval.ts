@@ -7,6 +7,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { generateEmbedding, embeddingToPostgresVector } from './embeddingService';
+import { recordAICost, estimateTokenCount } from './cost-tracker';
 import type { Scene, PlayerAction, Character, NPC, Faction } from '@prisma/client';
 
 export interface RetrievalContext {
@@ -74,8 +75,19 @@ export async function retrieveRelevantHistory(
     }
 
     // Generate embedding for current context
+    const embeddingStartTime = Date.now();
     const queryEmbedding = await generateEmbedding(query);
     const embeddingString = embeddingToPostgresVector(queryEmbedding);
+
+    await recordAICost({
+      campaignId,
+      model: 'text-embedding-ada-002',
+      requestType: 'memory_retrieval_embedding',
+      inputTokens: estimateTokenCount(query),
+      outputTokens: 0,
+      responseTimeMs: Date.now() - embeddingStartTime,
+      success: true
+    }).catch(console.error);
 
     // Get entity IDs for filtering
     const npcIds = context.npcs.map(n => n.id);

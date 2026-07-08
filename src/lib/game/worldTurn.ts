@@ -152,7 +152,8 @@ async function generateOffscreenEvents(
       campaign.universe || 'Generic Fantasy',
       campaign.aiSystemPrompt,
       worldSummary,
-      [...advancedClocks, ...completedClocks]
+      [...advancedClocks, ...completedClocks],
+      campaignId
     )
 
     // Create timeline events for each offscreen event

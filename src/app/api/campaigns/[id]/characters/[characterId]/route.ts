@@ -4,6 +4,24 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { validateStats } from '@/lib/game/advancement'
 
+// Fields the owning player can edit directly — cosmetic/narrative only.
+// Everything mechanical (stats, harm, equipment, inventory, resources,
+// perks, moves, experience, conditions, isAlive, currentLocation) is
+// intentionally excluded: those only change through scene resolution
+// (applyWorldUpdates), the world tick / consequence system, or a campaign
+// admin. This is what stops a player from e.g. PATCHing their own harm to 0
+// or inventing equipment via a raw API call — see the game-integrity
+// discussion this was added for.
+const PLAYER_EDITABLE_FIELDS = [
+  'name',
+  'pronouns',
+  'description',
+  'appearance',
+  'personality',
+  'backstory',
+  'goals',
+] as const
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string; characterId: string } }
@@ -99,14 +117,35 @@ export async function PATCH(
       )
     }
 
-    if (character.userId !== user.userId && membership.role !== 'ADMIN') {
+    const isAdmin = membership.role === 'ADMIN'
+
+    if (character.userId !== user.userId && !isAdmin) {
       return NextResponse.json(
         { error: 'You can only update your own characters' },
         { status: 403 }
       )
     }
 
-    // Validate stats if being updated
+    // Identity fields are never client-writable, admin or not.
+    delete body.id
+    delete body.campaignId
+    delete body.userId
+
+    if (!isAdmin) {
+      const disallowedFields = Object.keys(body).filter(
+        (key) => !PLAYER_EDITABLE_FIELDS.includes(key as (typeof PLAYER_EDITABLE_FIELDS)[number])
+      )
+      if (disallowedFields.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Players can't edit these fields directly: ${disallowedFields.join(', ')}. Mechanical stats/equipment/inventory change through play (scene resolution) or a campaign admin.`,
+          },
+          { status: 403 }
+        )
+      }
+    }
+
+    // Validate stats if being updated (admin path only, given the check above)
     if (body.stats) {
       const validation = validateStats(body.stats as Record<string, number>)
       if (!validation.valid) {

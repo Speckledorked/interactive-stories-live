@@ -15,6 +15,8 @@ import {
   HarmLevel
 } from './harm'
 import { getArmorReduction } from './inventory'
+import { AI_MODELS } from '@/lib/ai/models'
+import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
 
 /**
  * Apply all world updates from an AI GM response to the database
@@ -893,6 +895,7 @@ export async function enrichStubFactions(
   const nameList = stubs.map(f => `- ${f.name}`).join('\n')
   const prompt = `You are a TTRPG game master. The following scene just resolved:\n\n${sceneText}\n\nThese factions or groups were introduced for the first time:\n${nameList}\n\nFor each faction, write a SHORT 1-2 sentence description (what they are, their role or agenda) based on context from the scene. Invent something consistent with the fiction if they aren't explicitly described.\n\nRespond with valid JSON:\n{"factions": [{"name": "...", "description": "...", "goals": "..."}]}`
 
+  const startTime = Date.now()
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -901,7 +904,7 @@ export async function enrichStubFactions(
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini',
+        model: AI_MODELS.EFFICIENT,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: 400,
@@ -915,9 +918,21 @@ export async function enrichStubFactions(
     }
 
     const data = await response.json()
-    const parsed = JSON.parse(data.choices[0].message.content) as {
+    const rawContent = data.choices[0].message.content
+    const parsed = JSON.parse(rawContent) as {
       factions: Array<{ name: string; description: string; goals?: string }>
     }
+
+    const usage = data.usage || {}
+    await recordAICost({
+      campaignId,
+      model: AI_MODELS.EFFICIENT,
+      requestType: 'faction_enrichment',
+      inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
+      outputTokens: usage.completion_tokens || estimateTokenCount(rawContent),
+      responseTimeMs: Date.now() - startTime,
+      success: true
+    }).catch(console.error)
 
     for (const enriched of parsed.factions) {
       const stub = stubs.find(f => f.name.toLowerCase() === enriched.name.toLowerCase())
@@ -973,6 +988,7 @@ export async function enrichStubNPCs(
   const nameList = stubs.map(n => `- ${n.name}`).join('\n')
   const prompt = `You are a TTRPG game master. The following scene just resolved:\n\n${sceneText}\n\nThese NPCs were introduced for the first time:\n${nameList}\n\nFor each NPC, write a SHORT 1-2 sentence description (appearance, role, or personality) based on how they appear in the scene. If the scene doesn't mention them explicitly, invent something consistent with the fiction.\n\nRespond with valid JSON:\n{"npcs": [{"name": "...", "description": "..."}]}`
 
+  const startTime = Date.now()
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -981,7 +997,7 @@ export async function enrichStubNPCs(
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini',
+        model: AI_MODELS.EFFICIENT,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: 400,
@@ -995,9 +1011,21 @@ export async function enrichStubNPCs(
     }
 
     const data = await response.json()
-    const parsed = JSON.parse(data.choices[0].message.content) as {
+    const rawContent = data.choices[0].message.content
+    const parsed = JSON.parse(rawContent) as {
       npcs: Array<{ name: string; description: string }>
     }
+
+    const usage = data.usage || {}
+    await recordAICost({
+      campaignId,
+      model: AI_MODELS.EFFICIENT,
+      requestType: 'npc_enrichment',
+      inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
+      outputTokens: usage.completion_tokens || estimateTokenCount(rawContent),
+      responseTimeMs: Date.now() - startTime,
+      success: true
+    }).catch(console.error)
 
     for (const enriched of parsed.npcs) {
       const stub = stubs.find(s => s.name.toLowerCase() === enriched.name.toLowerCase())

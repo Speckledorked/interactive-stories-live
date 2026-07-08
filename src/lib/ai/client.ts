@@ -5,8 +5,9 @@
 
 import { validateAIResponse, type ValidationResult } from './validation'
 import { circuitBreakerManager } from './circuit-breaker'
-import { AICostTracker, estimateTokenCount } from './cost-tracker'
+import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
 import { aiResponseCache } from './response-cache'
+import { AI_MODELS } from './models'
 
 /**
  * AI GM Response Structure
@@ -271,14 +272,15 @@ export async function callAIGM(
     if (cachedResponse) {
       // Record cache hit in cost tracker
       if (campaignId) {
-        const costTracker = new AICostTracker(campaignId)
+        const costTracker = new AICostTracker(campaignId, AI_MODELS.FLAGSHIP)
         await costTracker.recordRequest({
           inputTokens: 0,
           outputTokens: 0,
           responseTimeMs: Date.now() - startTime,
           success: true,
           cacheHit: true,
-          sceneId
+          sceneId,
+          requestType: 'scene_resolution'
         })
       }
       return cachedResponse
@@ -304,7 +306,7 @@ export async function callAIGM(
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4.1', // GPT-4.1: better instruction following and narrative quality than gpt-4o
+        model: AI_MODELS.FLAGSHIP, // Flagship model: best instruction following and narrative quality
         messages: [
           {
             role: 'system',
@@ -394,14 +396,15 @@ export async function callAIGM(
 
     // Phase 15.5.1: Track costs
     if (campaignId) {
-      const costTracker = new AICostTracker(campaignId)
+      const costTracker = new AICostTracker(campaignId, AI_MODELS.FLAGSHIP)
       await costTracker.recordRequest({
         inputTokens: usage.prompt_tokens || estimatedInputTokens,
         outputTokens: usage.completion_tokens || estimateTokenCount(content),
         responseTimeMs: Date.now() - startTime,
         success: true,
         cacheHit: false,
-        sceneId
+        sceneId,
+        requestType: 'scene_resolution'
       })
     }
 
@@ -413,14 +416,15 @@ export async function callAIGM(
 
     // Record failure in cost tracker
     if (campaignId) {
-      const costTracker = new AICostTracker(campaignId)
+      const costTracker = new AICostTracker(campaignId, AI_MODELS.FLAGSHIP)
       await costTracker.recordRequest({
         inputTokens: estimatedInputTokens,
         outputTokens: 0,
         responseTimeMs,
         success: false,
         cacheHit: false,
-        sceneId
+        sceneId,
+        requestType: 'scene_resolution'
       }).catch(console.error)
     }
 
@@ -758,7 +762,8 @@ export async function callAIForWorldTurn(
   campaignUniverse: string,
   aiSystemPrompt: string,
   worldSummary: any,
-  clocksAboutToComplete: any[]
+  clocksAboutToComplete: any[],
+  campaignId?: string
 ): Promise<{
   offscreen_events: Array<{
     title: string
@@ -768,6 +773,7 @@ export async function callAIForWorldTurn(
   gm_notes: string
 }> {
   const apiKey = process.env.OPENAI_API_KEY
+  const startTime = Date.now()
 
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY is not configured')
@@ -807,7 +813,7 @@ Respond with JSON:
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini', // Cost optimization: mini model for background world turns
+        model: AI_MODELS.EFFICIENT, // Cost optimization: efficient model for background world turns
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -823,7 +829,22 @@ Respond with JSON:
     }
 
     const data = await response.json()
-    return JSON.parse(data.choices[0].message.content)
+    const content = data.choices[0].message.content
+
+    if (campaignId) {
+      const usage = data.usage || {}
+      await recordAICost({
+        campaignId,
+        model: AI_MODELS.EFFICIENT,
+        requestType: 'offscreen_events',
+        inputTokens: usage.prompt_tokens || estimateTokenCount(systemPrompt + userPrompt),
+        outputTokens: usage.completion_tokens || estimateTokenCount(content),
+        responseTimeMs: Date.now() - startTime,
+        success: true
+      }).catch(console.error)
+    }
+
+    return JSON.parse(content)
   } catch (error) {
     console.error('World turn AI call failed:', error)
     // Return empty result rather than crashing

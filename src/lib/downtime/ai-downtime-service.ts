@@ -3,6 +3,7 @@
 import { PrismaClient } from '@prisma/client'
 import { NotificationService } from '@/lib/notifications/notification-service'
 import { PusherServer } from '@/lib/realtime/pusher-server'
+import { AI_MODELS } from '@/lib/ai/models'
 
 const prisma = new PrismaClient()
 
@@ -114,7 +115,7 @@ If the request seems impossible, suggest a viable alternative.`
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-mini',
+          model: AI_MODELS.EFFICIENT,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.6,
           max_tokens: 800
@@ -264,7 +265,7 @@ Return a JSON object:
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-mini',
+          model: AI_MODELS.EFFICIENT,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.7,
           max_tokens: 600
@@ -350,7 +351,7 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-mini',
+          model: AI_MODELS.EFFICIENT,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.7,
           max_tokens: 400
@@ -518,7 +519,7 @@ Based on the player's original intent and what happened during the activity, gen
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-mini',
+          model: AI_MODELS.EFFICIENT,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.6,
           max_tokens: 600

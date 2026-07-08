@@ -13,16 +13,47 @@ export interface AIUsageMetrics {
   cacheHitRate: number
   totalRequests: number
   failedRequests: number
+  costByType: Record<string, { cost: number; requests: number }>
 }
 
 /**
- * AI Pricing (GPT-4 pricing as of implementation)
- * Update these values based on actual provider pricing
+ * AI Pricing, $ per 1K tokens. Update whenever the models in
+ * src/lib/ai/models.ts change generation — this table needs to match
+ * whatever is actually being called, or the numbers here are fiction.
+ * Verified against https://developers.openai.com/api/docs/pricing on
+ * 2026-07-08.
  */
-const AI_PRICING = {
+const AI_PRICING: Record<string, { inputTokenPrice: number; outputTokenPrice: number }> = {
+  // Current generation (see src/lib/ai/models.ts)
+  'gpt-5.4': {
+    inputTokenPrice: 2.5 / 1000,
+    outputTokenPrice: 15.0 / 1000
+  },
+  'gpt-5.4-mini': {
+    inputTokenPrice: 0.75 / 1000,
+    outputTokenPrice: 4.5 / 1000
+  },
+  // Embeddings have no output tokens — outputTokenPrice stays 0 and callers
+  // always pass outputTokens: 0.
+  'text-embedding-ada-002': {
+    inputTokenPrice: 0.0001 / 1000,
+    outputTokenPrice: 0
+  },
+
+  // Legacy — kept so historical requestHistory entries recorded under these
+  // model names still resolve to a real price instead of falling through to
+  // the unknown-model fallback below.
+  'gpt-4.1': {
+    inputTokenPrice: 2.0 / 1000,
+    outputTokenPrice: 8.0 / 1000
+  },
+  'gpt-4.1-mini': {
+    inputTokenPrice: 0.4 / 1000,
+    outputTokenPrice: 1.6 / 1000
+  },
   'gpt-4-turbo-preview': {
-    inputTokenPrice: 0.01 / 1000,  // $0.01 per 1K input tokens
-    outputTokenPrice: 0.03 / 1000   // $0.03 per 1K output tokens
+    inputTokenPrice: 0.01 / 1000,
+    outputTokenPrice: 0.03 / 1000
   },
   'gpt-4': {
     inputTokenPrice: 0.03 / 1000,
@@ -34,17 +65,31 @@ const AI_PRICING = {
   }
 }
 
+// Used when a model string isn't in the table above (e.g. pricing wasn't
+// updated after a model swap) — better to record an approximate cost with a
+// loud warning than to silently record $0 and hide a real expense.
+const FALLBACK_PRICING = AI_PRICING['gpt-5.4']
+
 /**
  * AI Cost Tracker
  * Tracks token usage and costs per campaign
  */
 export class AICostTracker {
   private campaignId: string
-  private model: keyof typeof AI_PRICING
+  private model: string
 
-  constructor(campaignId: string, model: keyof typeof AI_PRICING = 'gpt-4-turbo-preview') {
+  constructor(campaignId: string, model: string = 'gpt-5.4') {
     this.campaignId = campaignId
     this.model = model
+  }
+
+  private getPricing() {
+    const pricing = AI_PRICING[this.model]
+    if (!pricing) {
+      console.warn(`⚠️ No pricing entry for model "${this.model}" — using gpt-5.4 pricing as an approximation. Update AI_PRICING in cost-tracker.ts.`)
+      return FALLBACK_PRICING
+    }
+    return pricing
   }
 
   /**
@@ -57,10 +102,13 @@ export class AICostTracker {
     success: boolean
     cacheHit?: boolean
     sceneId?: string
+    /** Which call this was — "scene_resolution", "map_generation", "consequence_extraction", etc. Powers the per-type cost breakdown. */
+    requestType?: string
   }): Promise<void> {
-    const pricing = AI_PRICING[this.model]
+    const pricing = this.getPricing()
     const cost = (params.inputTokens * pricing.inputTokenPrice) +
                  (params.outputTokens * pricing.outputTokenPrice)
+    const requestType = params.requestType || 'unknown'
 
     try {
       // Get or create AI metrics for campaign
@@ -74,6 +122,8 @@ export class AICostTracker {
       }
 
       const currentMetrics = (worldMeta.aiMetrics as any) || this.createEmptyMetrics()
+      const currentCostByType = currentMetrics.costByType || {}
+      const existingTypeEntry = currentCostByType[requestType] || { cost: 0, requests: 0 }
 
       // Update metrics
       const updatedMetrics = {
@@ -94,12 +144,24 @@ export class AICostTracker {
           ? ((currentMetrics.cacheHits + 1) / (currentMetrics.totalRequests + 1))
           : (currentMetrics.cacheHits / (currentMetrics.totalRequests + 1)),
 
+        // Cost broken down by which call made it — this is what actually
+        // answers "how much is each part costing", not just one lump sum.
+        costByType: {
+          ...currentCostByType,
+          [requestType]: {
+            cost: existingTypeEntry.cost + cost,
+            requests: existingTypeEntry.requests + 1
+          }
+        },
+
         // Track per-scene costs
         requestHistory: [
           ...(currentMetrics.requestHistory || []).slice(-50), // Keep last 50 requests
           {
             timestamp: new Date().toISOString(),
             sceneId: params.sceneId,
+            requestType,
+            model: this.model,
             inputTokens: params.inputTokens,
             outputTokens: params.outputTokens,
             cost,
@@ -121,11 +183,7 @@ export class AICostTracker {
       })
 
       // Log cost information
-      console.log(`💰 AI Cost Tracking:`)
-      console.log(`   Tokens: ${params.inputTokens} in + ${params.outputTokens} out`)
-      console.log(`   Cost: $${cost.toFixed(4)}`)
-      console.log(`   Total campaign cost: $${updatedMetrics.totalCost.toFixed(4)}`)
-      console.log(`   Cache hit: ${params.cacheHit ? 'YES' : 'NO'}`)
+      console.log(`💰 AI Cost Tracking [${requestType}, ${this.model}]: $${cost.toFixed(5)} (${params.inputTokens} in + ${params.outputTokens} out) — campaign total $${updatedMetrics.totalCost.toFixed(4)}`)
 
     } catch (error) {
       console.error('Failed to record AI cost metrics:', error)
@@ -153,7 +211,8 @@ export class AICostTracker {
         averageResponseTime: metrics.averageResponseTime || 0,
         cacheHitRate: metrics.cacheHitRate || 0,
         totalRequests: metrics.totalRequests || 0,
-        failedRequests: metrics.failedRequests || 0
+        failedRequests: metrics.failedRequests || 0,
+        costByType: metrics.costByType || {}
       }
     } catch (error) {
       console.error('Failed to get AI metrics:', error)
@@ -195,7 +254,7 @@ export class AICostTracker {
    * Estimate cost for a request before making it
    */
   estimateCost(estimatedInputTokens: number, estimatedOutputTokens: number): number {
-    const pricing = AI_PRICING[this.model]
+    const pricing = this.getPricing()
     return (estimatedInputTokens * pricing.inputTokenPrice) +
            (estimatedOutputTokens * pricing.outputTokenPrice)
   }
@@ -261,10 +320,39 @@ export class AICostTracker {
       averageResponseTime: 0,
       cacheHits: 0,
       cacheHitRate: 0,
+      costByType: {},
       requestHistory: [],
       lastUpdated: new Date().toISOString()
     }
   }
+}
+
+/**
+ * Convenience wrapper around `new AICostTracker(campaignId, model).recordRequest(...)`
+ * for call sites that just need to log one request and move on — every AI
+ * call site outside client.ts's callAIGM (which already manages its own
+ * tracker instance for cache-hit/failure paths) should use this instead of
+ * silently going untracked.
+ */
+export async function recordAICost(params: {
+  campaignId: string
+  model: string
+  requestType: string
+  inputTokens: number
+  outputTokens: number
+  responseTimeMs: number
+  success: boolean
+  sceneId?: string
+}): Promise<void> {
+  const tracker = new AICostTracker(params.campaignId, params.model)
+  await tracker.recordRequest({
+    inputTokens: params.inputTokens,
+    outputTokens: params.outputTokens,
+    responseTimeMs: params.responseTimeMs,
+    success: params.success,
+    sceneId: params.sceneId,
+    requestType: params.requestType
+  })
 }
 
 /**

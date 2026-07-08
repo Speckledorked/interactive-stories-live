@@ -6,6 +6,8 @@ import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
 import { buildOptimizedContext } from './contextManager' // Phase 14.6: Context optimization
 import { retrieveRelevantHistory } from './memoryRetrieval' // Campaign Memory RAG
+import { AI_MODELS } from './models'
+import { recordAICost, estimateTokenCount } from './cost-tracker'
 
 /**
  * Build optimized world summary using context manager
@@ -543,6 +545,7 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
   })
 
   const apiKey = process.env.OPENAI_API_KEY
+  const startTime = Date.now()
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY not configured')
   }
@@ -639,7 +642,7 @@ Write ONLY the scene introduction. No JSON, no meta-commentary, no character she
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4.1', // Full model for scene intros - first impression shapes the whole session
+        model: AI_MODELS.FLAGSHIP, // Flagship model for scene intros - first impression shapes the whole session
         messages: [
           { role: 'system', content: 'You are an evocative, atmospheric storyteller and game master. You show, don\'t tell. You create tension through imagery and implication, not explanation.' },
           { role: 'user', content: prompt }
@@ -655,6 +658,17 @@ Write ONLY the scene introduction. No JSON, no meta-commentary, no character she
 
     const data = await response.json()
     const sceneIntro = data.choices[0].message.content.trim()
+
+    const usage = data.usage || {}
+    await recordAICost({
+      campaignId,
+      model: AI_MODELS.FLAGSHIP,
+      requestType: 'scene_intro',
+      inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
+      outputTokens: usage.completion_tokens || estimateTokenCount(sceneIntro),
+      responseTimeMs: Date.now() - startTime,
+      success: true
+    }).catch(console.error)
 
     console.log('✅ Scene intro generated:', sceneIntro.substring(0, 100) + '...')
 

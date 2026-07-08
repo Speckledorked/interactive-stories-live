@@ -228,7 +228,7 @@ export async function extractAndApplyConsequences(
     prisma.faction.findMany({ where: { campaignId }, select: { name: true } }),
   ])
 
-  const consequences = await extractConsequences(sceneText, npcs, factions)
+  const consequences = await extractConsequences(sceneText, npcs, factions, campaignId)
   if (consequences.length === 0) {
     return { consequencesFound: 0, changes: [], historyEntriesCreated: 0 }
   }

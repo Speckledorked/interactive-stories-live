@@ -3,6 +3,8 @@
 import { MapService } from '@/lib/maps/map-service'
 import PusherServer from '@/lib/realtime/pusher-server'
 import { NotificationService } from '@/lib/notifications/notification-service'
+import { AI_MODELS } from './models'
+import { recordAICost, estimateTokenCount } from './cost-tracker'
 
 export interface SceneVisualData {
   mapId: string
@@ -54,7 +56,7 @@ export class AIVisualService {
   ): Promise<SceneVisualData> {
     try {
       // Analyze scene description to extract visual elements
-      const visualAnalysis = await this.analyzeSceneDescription(sceneDescription)
+      const visualAnalysis = await this.analyzeSceneDescription(sceneDescription, campaignId)
       
       // Create or update map
       const mapData = await this.createOrUpdateMap(
@@ -97,7 +99,8 @@ export class AIVisualService {
   }
 
   // Analyze scene description using OpenAI to extract visual elements
-  private static async analyzeSceneDescription(description: string) {
+  private static async analyzeSceneDescription(description: string, campaignId?: string) {
+    const startTime = Date.now()
     const prompt = `Analyze this D&D scene description and extract visual layout information:
 
 "${description}"
@@ -129,7 +132,7 @@ Return a JSON object with:
           'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-mini', // Cost optimization: mini model for map generation
+          model: AI_MODELS.EFFICIENT, // Cost optimization: efficient model for map generation
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.3,
           max_tokens: 800
@@ -137,8 +140,22 @@ Return a JSON object with:
       })
 
       const data = await response.json()
-      const analysis = JSON.parse(data.choices[0].message.content)
-      
+      const rawContent = data.choices[0].message.content
+      const analysis = JSON.parse(rawContent)
+
+      if (campaignId) {
+        const usage = data.usage || {}
+        await recordAICost({
+          campaignId,
+          model: AI_MODELS.EFFICIENT,
+          requestType: 'map_generation',
+          inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
+          outputTokens: usage.completion_tokens || estimateTokenCount(rawContent),
+          responseTimeMs: Date.now() - startTime,
+          success: true
+        }).catch(console.error)
+      }
+
       return {
         backgroundType: analysis.backgroundType || 'dungeon',
         mapName: analysis.mapName || 'Unknown Location',

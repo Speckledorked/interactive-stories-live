@@ -7,6 +7,8 @@
  * plans — nothing is reused verbatim between campaigns.
  */
 
+import { AI_MODELS } from './models'
+
 interface GeneratedFaction {
   name: string
   description: string
@@ -83,7 +85,7 @@ Rules:
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini',
+        model: AI_MODELS.EFFICIENT,
         messages: [
           {
             role: 'system',

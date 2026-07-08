@@ -6,6 +6,9 @@
 // response_format: json_object + manual validation/normalization) rather
 // than inventing a new prompting approach or a Zod schema.
 
+import { AI_MODELS } from './models'
+import { recordAICost, estimateTokenCount } from './cost-tracker'
+
 export const CONSEQUENCE_ACTIONS = [
   'SPARED',
   'KILLED',
@@ -54,10 +57,12 @@ interface KnownEntity {
 export async function extractConsequences(
   sceneText: string,
   knownNpcs: KnownEntity[],
-  knownFactions: KnownEntity[]
+  knownFactions: KnownEntity[],
+  campaignId?: string
 ): Promise<ExtractedConsequence[]> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return []
+  const startTime = Date.now()
 
   // Nothing to ground against — skip the call rather than let the LLM invent entities.
   if (knownNpcs.length === 0 && knownFactions.length === 0) return []
@@ -109,7 +114,7 @@ Rules:
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini',
+        model: AI_MODELS.EFFICIENT,
         messages: [
           {
             role: 'system',
@@ -129,7 +134,22 @@ Rules:
     }
 
     const data = await response.json()
-    const raw = JSON.parse(data.choices[0].message.content)
+    const rawContent = data.choices[0].message.content
+
+    if (campaignId) {
+      const usage = data.usage || {}
+      await recordAICost({
+        campaignId,
+        model: AI_MODELS.EFFICIENT,
+        requestType: 'consequence_extraction',
+        inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
+        outputTokens: usage.completion_tokens || estimateTokenCount(rawContent),
+        responseTimeMs: Date.now() - startTime,
+        success: true
+      }).catch(console.error)
+    }
+
+    const raw = JSON.parse(rawContent)
 
     if (!Array.isArray(raw.consequences)) {
       return []

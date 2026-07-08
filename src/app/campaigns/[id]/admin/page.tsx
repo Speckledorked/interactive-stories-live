@@ -102,7 +102,7 @@ export default function AdminPage() {
   const fetchData = async () => {
     try {
       // Fetch campaign data
-      const campResponse = await fetch(`/api/campaigns/${campaignId}`)
+      const campResponse = await authenticatedFetch(`/api/campaigns/${campaignId}`)
       if (!campResponse.ok) {
         router.push(`/campaigns/${campaignId}`)
         return
@@ -118,35 +118,35 @@ export default function AdminPage() {
       setCampaign(campData.campaign)
 
       // Fetch NPCs
-      const npcsResponse = await fetch(`/api/campaigns/${campaignId}/npcs`)
+      const npcsResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/npcs`)
       if (npcsResponse.ok) {
         const npcsData = await npcsResponse.json()
         setNpcs(npcsData.npcs || [])
       }
 
       // Fetch Factions
-      const factionsResponse = await fetch(`/api/campaigns/${campaignId}/factions`)
+      const factionsResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/factions`)
       if (factionsResponse.ok) {
         const factionsData = await factionsResponse.json()
         setFactions(factionsData.factions || [])
       }
 
       // Fetch Clocks
-      const clocksResponse = await fetch(`/api/campaigns/${campaignId}/clocks`)
+      const clocksResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/clocks`)
       if (clocksResponse.ok) {
         const clocksData = await clocksResponse.json()
         setClocks(clocksData.clocks || [])
       }
 
       // Fetch Invites
-      const invitesResponse = await fetch(`/api/campaigns/${campaignId}/invites`)
+      const invitesResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/invites`)
       if (invitesResponse.ok) {
         const invitesData = await invitesResponse.json()
         setInvites(invitesData.invites || [])
       }
 
       // Fetch Members
-      const membersResponse = await fetch(`/api/campaigns/${campaignId}/members`)
+      const membersResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/members`)
       if (membersResponse.ok) {
         const membersData = await membersResponse.json()
         setMembers(membersData.members || [])
@@ -163,7 +163,7 @@ export default function AdminPage() {
     setSaving(true)
     
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/settings/ai`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/settings/ai`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -187,7 +187,7 @@ export default function AdminPage() {
     setSaving(true)
     
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/npcs/${npc.id}`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/npcs/${npc.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(npc),
@@ -208,7 +208,7 @@ export default function AdminPage() {
     setSaving(true)
     
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/factions/${faction.id}`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/factions/${faction.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(faction),
@@ -227,7 +227,7 @@ export default function AdminPage() {
 
   const handleTickClock = async (clockId: string, action: 'tick' | 'untick') => {
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/clocks/${clockId}`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/clocks/${clockId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
@@ -243,7 +243,7 @@ export default function AdminPage() {
 
   const handleToggleClockVisibility = async (clock: Clock) => {
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/clocks/${clock.id}`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/clocks/${clock.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...clock, isHidden: !clock.isHidden }),
@@ -259,7 +259,7 @@ export default function AdminPage() {
 
   const handleCreateInvite = async () => {
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/invites`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/invites`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -282,7 +282,7 @@ export default function AdminPage() {
 
     setSaving(true)
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/members/${userId}`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/members/${userId}`, {
         method: 'DELETE',
       })
 
@@ -302,7 +302,7 @@ export default function AdminPage() {
   const handleChangeRole = async (userId: string, newRole: 'ADMIN' | 'PLAYER') => {
     setSaving(true)
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/members/${userId}`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/members/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole }),
@@ -326,7 +326,7 @@ export default function AdminPage() {
     setSaving(true)
 
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -351,7 +351,7 @@ export default function AdminPage() {
     setSaving(true)
 
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/npcs`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/npcs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(npcData),
@@ -372,7 +372,7 @@ export default function AdminPage() {
     setSaving(true)
 
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/factions`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/factions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(factionData),
@@ -393,7 +393,7 @@ export default function AdminPage() {
     setSaving(true)
 
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/clocks`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/clocks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(clockData),
@@ -413,7 +413,7 @@ export default function AdminPage() {
   const handleDeleteCampaign = async () => {
     setSaving(true)
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}`, {
         method: 'DELETE',
       })
 

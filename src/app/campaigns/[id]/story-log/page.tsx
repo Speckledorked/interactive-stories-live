@@ -5,21 +5,17 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
 
-interface Scene {
+interface CampaignLogEntry {
   id: string
-  sceneNumber: number
-  status: string
-  sceneResolutionText: string | null
+  sceneId: string | null
+  turnNumber: number
+  title: string
+  summary: string
+  highlights: string[]
+  entryType: string
+  inGameDate: string | null
+  duration: string | null
   createdAt: string
-  playerActions: Array<{
-    id: string
-    actionText: string
-    user: {
-      id: string
-      email: string
-      name: string | null
-    }
-  }>
 }
 
 interface Campaign {
@@ -34,7 +30,7 @@ export default function StoryLogPage() {
   const campaignId = params?.id as string
 
   const [campaign, setCampaign] = useState<Campaign | null>(null)
-  const [scenes, setScenes] = useState<Scene[]>([])
+  const [logs, setLogs] = useState<CampaignLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -45,11 +41,11 @@ export default function StoryLogPage() {
     }
 
     if (campaignId) {
-      loadScenes()
+      loadStoryLog()
     }
   }, [campaignId])
 
-  const loadScenes = async () => {
+  const loadStoryLog = async () => {
     try {
       // Load campaign info
       const campaignResponse = await authenticatedFetch(`/api/campaigns/${campaignId}`)
@@ -58,38 +54,23 @@ export default function StoryLogPage() {
         setCampaign(campaignData.campaign)
       }
 
-      // Load all scenes
-      const scenesResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/scenes`)
-      if (scenesResponse.ok) {
-        const scenesData = await scenesResponse.json()
-        setScenes(scenesData.scenes || [])
+      // Load the actual story log — a chronicle entry gets written per scene
+      // resolution (see generateCampaignLog in sceneResolver.ts), each with
+      // its own title/summary/highlights. This used to fetch raw scenes and
+      // truncate their resolution text instead, which is why this page
+      // never showed a real recap.
+      const logsResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/logs`)
+      if (logsResponse.ok) {
+        const logsData = await logsResponse.json()
+        setLogs((logsData.logs || []).slice().reverse()) // newest first
       } else {
-        setError('Failed to load scenes')
+        setError('Failed to load story log')
       }
     } catch (err) {
       setError('Failed to load story log')
     } finally {
       setLoading(false)
     }
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'AWAITING_ACTIONS':
-        return <span className="badge bg-primary-900/30 border-primary-700/50 text-primary-400">Active</span>
-      case 'RESOLVING':
-        return <span className="badge bg-warning-900/30 border-warning-700/50 text-warning-400">Resolving</span>
-      case 'RESOLVED':
-        return <span className="badge bg-success-900/30 border-success-700/50 text-success-400">Resolved</span>
-      default:
-        return <span className="badge bg-gray-700/30 border-gray-600/50 text-gray-400">{status}</span>
-    }
-  }
-
-  const truncateText = (text: string | null, maxLength: number = 150) => {
-    if (!text) return 'No resolution yet...'
-    if (text.length <= maxLength) return text
-    return text.slice(0, maxLength) + '...'
   }
 
   if (loading) {
@@ -132,7 +113,7 @@ export default function StoryLogPage() {
             Story Log
           </h1>
           <p className="text-lg text-gray-400">
-            {campaign?.name || 'Campaign'} - Complete history of all scenes
+            {campaign?.name || 'Campaign'} - A chronicle of your adventure, updated after each scene
           </p>
         </div>
       </div>
@@ -143,109 +124,104 @@ export default function StoryLogPage() {
         <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="text-center">
             <div className="text-4xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent mb-2">
-              {scenes.length}
+              {logs.length}
             </div>
-            <div className="text-sm text-gray-400">Total Scenes</div>
+            <div className="text-sm text-gray-400">Chronicle Entries</div>
           </div>
           <div className="text-center">
             <div className="text-4xl font-bold bg-gradient-to-r from-success-400 to-success-600 bg-clip-text text-transparent mb-2">
-              {scenes.filter(s => s.sceneResolutionText).length}
+              {logs.reduce((sum, l) => sum + (l.highlights?.length || 0), 0)}
             </div>
-            <div className="text-sm text-gray-400">Resolved Scenes</div>
+            <div className="text-sm text-gray-400">Key Moments</div>
           </div>
           <div className="text-center">
             <div className="text-4xl font-bold bg-gradient-to-r from-warning-400 to-warning-600 bg-clip-text text-transparent mb-2">
-              {scenes.filter(s => s.status === 'AWAITING_ACTIONS').length}
+              {logs[0]?.turnNumber || 0}
             </div>
-            <div className="text-sm text-gray-400">Active Scenes</div>
+            <div className="text-sm text-gray-400">Current Turn</div>
           </div>
         </div>
       </div>
 
-      {/* Scenes List */}
+      {/* Log Entries */}
       <div className="space-y-4">
-        {scenes.length === 0 ? (
+        {logs.length === 0 ? (
           <div className="card text-center py-12">
             <div className="text-6xl mb-4">📖</div>
-            <p className="text-xl text-gray-400 mb-2">No scenes yet</p>
-            <p className="text-sm text-gray-500">Scenes will appear here as your adventure unfolds</p>
+            <p className="text-xl text-gray-400 mb-2">No story entries yet</p>
+            <p className="text-sm text-gray-500">The story log will be automatically updated as scenes are resolved</p>
           </div>
         ) : (
-          scenes
-            .sort((a, b) => b.sceneNumber - a.sceneNumber)
-            .map((scene, index) => (
-              <Link
-                key={scene.id}
-                href={`/campaigns/${campaignId}/story`}
-                className="block"
+          logs.map((log, index) => (
+            <Link
+              key={log.id}
+              href={`/campaigns/${campaignId}/story`}
+              className="block"
+            >
+              <div
+                className="card group hover:border-primary-700/50 hover:shadow-glow transition-all duration-200 cursor-pointer"
+                style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div
-                  className="card group hover:border-primary-700/50 hover:shadow-glow transition-all duration-200 cursor-pointer"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  <div className="flex items-start justify-between gap-4 mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="text-3xl font-bold bg-gradient-to-r from-primary-400 to-accent-400 bg-clip-text text-transparent">
-                        #{scene.sceneNumber}
-                      </div>
-                      {getStatusBadge(scene.status)}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {new Date(scene.createdAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </div>
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-primary-400 bg-primary-900/30 border border-primary-700/50 rounded px-2 py-1">
+                      Turn {log.turnNumber}
+                    </span>
+                    {log.entryType !== 'scene' && (
+                      <span className="badge bg-gray-700/30 border-gray-600/50 text-gray-400">
+                        {log.entryType}
+                      </span>
+                    )}
+                    <h3 className="text-xl font-bold text-white">{log.title}</h3>
                   </div>
-
-                  {/* Scene Summary */}
-                  <div className="mb-4">
-                    <p className="text-gray-300 leading-relaxed">
-                      {truncateText(scene.sceneResolutionText)}
-                    </p>
-                  </div>
-
-                  {/* Participants */}
-                  {scene.playerActions.length > 0 && (
-                    <div className="pt-4 border-t border-dark-700/50">
-                      <div className="flex items-center gap-2 text-sm">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                        </svg>
-                        <span className="text-gray-500">Participants:</span>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {Array.from(new Set(scene.playerActions.map(a => a.user.id))).map(userId => {
-                            const user = scene.playerActions.find(a => a.user.id === userId)?.user
-                            return (
-                              <span
-                                key={userId}
-                                className="text-xs bg-dark-800/50 text-gray-400 px-2 py-1 rounded border border-dark-700/50"
-                              >
-                                {user?.name || user?.email || 'Unknown'}
-                              </span>
-                            )
-                          })}
-                        </div>
-                      </div>
-                      <div className="mt-2 text-xs text-gray-500">
-                        {scene.playerActions.length} action{scene.playerActions.length !== 1 ? 's' : ''} submitted
-                      </div>
-                    </div>
-                  )}
-
-                  {/* View link indicator */}
-                  <div className="mt-4 flex items-center gap-2 text-sm text-primary-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span>View in Story</span>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                  <div className="text-xs text-gray-500 whitespace-nowrap">
+                    {new Date(log.createdAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
                   </div>
                 </div>
-              </Link>
-            ))
+
+                {log.inGameDate && (
+                  <p className="text-xs text-gray-500 mb-3">
+                    📅 {log.inGameDate}
+                    {log.duration && ` • Duration: ${log.duration}`}
+                  </p>
+                )}
+
+                {/* Summary — the actual recap, not truncated raw scene text */}
+                <p className="text-gray-300 leading-relaxed mb-4 whitespace-pre-wrap">
+                  {log.summary}
+                </p>
+
+                {/* Highlights */}
+                {log.highlights && log.highlights.length > 0 && (
+                  <div className="pt-4 border-t border-dark-700/50">
+                    <h4 className="text-xs font-medium text-gray-400 mb-2">Key Moments</h4>
+                    <ul className="space-y-1">
+                      {log.highlights.map((highlight, i) => (
+                        <li key={i} className="text-sm text-gray-400 flex items-start gap-2">
+                          <span className="text-primary-500 mt-1">•</span>
+                          <span>{highlight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* View link indicator */}
+                <div className="mt-4 flex items-center gap-2 text-sm text-primary-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span>View in Story</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </div>
+            </Link>
+          ))
         )}
       </div>
     </div>

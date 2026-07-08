@@ -31,6 +31,7 @@ import {
   createCharacterProgressionNotifications
 } from './world-state-tracker'
 import { createSceneMemory } from '@/lib/ai/memoryCreation'
+import { extractAndApplyConsequences } from './consequences'
 
 /**
  * Resolve a scene using the AI GM
@@ -216,7 +217,7 @@ async function performResolution(
 
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')
-    await applyWorldUpdates(campaignId, aiResponse, currentTurn)
+    const { involvedNpcIds, involvedFactionIds } = await applyWorldUpdates(campaignId, aiResponse, currentTurn)
 
     // 6.1. Enrich any stub NPCs/factions auto-created mid-scene (non-blocking, best-effort)
     enrichStubNPCs(campaignId, aiResponse.scene_text).catch(err =>
@@ -225,6 +226,29 @@ async function performResolution(
     enrichStubFactions(campaignId, aiResponse.scene_text).catch(err =>
       console.warn('Faction enrichment error (ignored):', err)
     )
+
+    // 6.2. Extract and apply player-action consequences to NPCs/Factions
+    // Add timeout to prevent this from blocking scene resolution
+    try {
+      console.log('⚖️  Extracting player-action consequences...')
+
+      const CONSEQUENCE_TIMEOUT_MS = 20 * 1000
+      const consequencePromise = extractAndApplyConsequences(
+        campaignId,
+        currentTurn + 1,
+        aiResponse.scene_text
+      )
+      const consequenceTimeoutPromise = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('Consequence extraction timeout')), CONSEQUENCE_TIMEOUT_MS)
+      )
+
+      await Promise.race([consequencePromise, consequenceTimeoutPromise])
+
+      console.log('✅ Consequences applied')
+    } catch (consequenceError) {
+      const errorMsg = consequenceError instanceof Error ? consequenceError.message : String(consequenceError)
+      console.error('⚠️  Consequence extraction failed (non-critical):', errorMsg)
+    }
 
     // 6.5. Apply organic character growth
     console.log('🌱 Processing organic character growth...')
@@ -390,7 +414,8 @@ async function performResolution(
       const memoryCreatePromise = createSceneMemory(
         { ...scene, sceneResolutionText: aiResponse.scene_text },
         { turnNumber: currentTurn + 1 },
-        aiResponse
+        aiResponse,
+        { npcIds: involvedNpcIds, factionIds: involvedFactionIds }
       )
 
       const memoryCreateTimeoutPromise = new Promise<void>((_, reject) =>

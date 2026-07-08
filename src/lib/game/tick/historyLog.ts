@@ -15,8 +15,18 @@ const MEMORY_TYPE_BY_ENTITY: Record<TickEntityType, 'WORLD_EVENT' | 'FACTION_EVE
   LOCATION_WEATHER: 'LOCATION_EVENT',
 }
 
+function memoryTypeFor(change: WorldChange): 'WORLD_EVENT' | 'FACTION_EVENT' | 'LOCATION_EVENT' | 'NPC_INTERACTION' {
+  // Player-caused NPC consequences are interactions, not background world
+  // events — same significance gate as ticks, just a more precise label.
+  if (change.entityType === 'NPC' && change.origin === 'consequence') {
+    return 'NPC_INTERACTION'
+  }
+  return MEMORY_TYPE_BY_ENTITY[change.entityType]
+}
+
 /**
- * Log the significant changes from a world tick as campaign memories.
+ * Log the significant changes from a world tick (or player-action
+ * consequences — see src/lib/game/consequences.ts) as campaign memories.
  * Non-significant changes (routine numeric nudges, unchanged plan text,
  * etc.) are intentionally skipped by callers before reaching here — this
  * function assumes everything it's given is worth recording.
@@ -31,7 +41,7 @@ export async function logSignificantChanges(
   for (const change of significant) {
     await createCampaignMemory({
       campaignId,
-      memoryType: MEMORY_TYPE_BY_ENTITY[change.entityType],
+      memoryType: memoryTypeFor(change),
       sourceId: change.entityId,
       turnNumber,
       title: `${change.entityName}: ${change.field} changed`,
@@ -42,7 +52,7 @@ export async function logSignificantChanges(
       involvedFactionIds: change.entityType === 'FACTION' ? [change.entityId] : [],
       locationTags: change.entityType === 'LOCATION_WEATHER' ? [change.entityName] : [],
       importance: change.importance,
-      tags: ['world_tick', change.entityType.toLowerCase()],
+      tags: [change.origin === 'consequence' ? 'player_consequence' : 'world_tick', change.entityType.toLowerCase()],
     })
   }
 

@@ -24,14 +24,28 @@ import { getArmorReduction } from './inventory'
  * @param aiResponse - AI GM's response with world_updates
  * @param currentTurnNumber - The turn number being resolved
  */
+export interface AppliedWorldUpdates {
+  /** NPC IDs actually resolved/created while applying npc_changes — the scene's real entity linkage. */
+  involvedNpcIds: string[]
+  /** Faction IDs actually resolved/created while applying faction_changes. */
+  involvedFactionIds: string[]
+}
+
 export async function applyWorldUpdates(
   campaignId: string,
   aiResponse: AIGMResponse,
   currentTurnNumber: number
-): Promise<void> {
+): Promise<AppliedWorldUpdates> {
   console.log('💾 Applying world updates to database...')
 
   const { world_updates } = aiResponse
+
+  // Populated as NPC/Faction records are resolved below — this is the only
+  // reliable record of which entities this scene actually touched (npc_changes/
+  // faction_changes reference entities by free-text npc_name_or_id/faction_name_or_id,
+  // resolved to real IDs here and nowhere else).
+  const involvedNpcIds = new Set<string>()
+  const involvedFactionIds = new Set<string>()
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -104,6 +118,7 @@ export async function applyWorldUpdates(
           })
 
           if (npc) {
+            involvedNpcIds.add(npc.id)
             const updateData: any = {}
 
             // Append to GM notes if provided
@@ -139,6 +154,7 @@ export async function applyWorldUpdates(
                 isAlive: true
               }
             })
+            involvedNpcIds.add(newNPC.id)
             console.log(`  👤 Created new NPC: ${newNPC.name}`)
           } else {
             console.warn(`  ⚠️ NPC not found and no stub info provided: ${npcChange.npc_name_or_id}`)
@@ -590,6 +606,7 @@ export async function applyWorldUpdates(
           })
 
           if (faction) {
+            involvedFactionIds.add(faction.id)
             const updateData: any = {}
 
             if (factionChange.changes.current_plan) {
@@ -643,6 +660,7 @@ export async function applyWorldUpdates(
                 gmNotes: factionChange.changes.gm_notes_append || ''
               }
             })
+            involvedFactionIds.add(newFaction.id)
             console.log(`  🏛️ Created new faction: ${newFaction.name}`)
           } else {
             console.warn(`  ⚠️ Faction not found and no stub info provided: ${factionChange.faction_name_or_id}`)
@@ -752,6 +770,11 @@ export async function applyWorldUpdates(
     })
 
     console.log('✅ All world updates applied successfully')
+
+    return {
+      involvedNpcIds: [...involvedNpcIds],
+      involvedFactionIds: [...involvedFactionIds]
+    }
   } catch (error) {
     console.error('❌ Failed to apply world updates:', error)
     throw new Error(`Failed to apply world updates: ${error}`)

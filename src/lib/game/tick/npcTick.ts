@@ -18,7 +18,10 @@ import { prisma } from '@/lib/prisma'
 import type { NPC } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, stableHash } from './types'
 
-const MAJOR_IMPORTANCE_THRESHOLD = 4
+// Exported so other systems that touch NPC.importance (e.g. consequence-driven
+// escalation in src/lib/game/consequences.ts) use the exact same cutoff for
+// "major" rather than redefining it.
+export const MAJOR_IMPORTANCE_THRESHOLD = 4
 const NPC_CAP = 20
 
 const TIME_OF_DAY = ['morning', 'afternoon', 'evening', 'night'] as const

@@ -23,6 +23,14 @@ export interface WorldChange {
   significant: boolean
   /** Importance to use if this change is logged to campaign history. */
   importance: 'NORMAL' | 'MAJOR'
+  /**
+   * Where this change came from. Defaults to the autonomous world tick when
+   * omitted. 'consequence' changes are player-caused (see src/lib/game/consequences.ts)
+   * and get tagged with a more precise memory type (NPC_INTERACTION instead
+   * of WORLD_EVENT) — same significance gating either way, just a more
+   * accurate label once it's already past that gate.
+   */
+  origin?: 'tick' | 'consequence'
 }
 
 export interface TickContext {

@@ -17,6 +17,7 @@ import { tickWeather } from './tick/weatherTick'
 import { tickFactions } from './tick/factionTick'
 import { tickNpcs } from './tick/npcTick'
 import { logSignificantChanges } from './tick/historyLog'
+import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { TickContext, TickHandler, WorldChange, WorldTickResult } from './tick/types'
 
 const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactions, tickNpcs]
@@ -39,6 +40,7 @@ export async function runWorldTick(campaignId: string, turnNumber: number): Prom
   }
 
   const historyEntriesCreated = await logSignificantChanges(campaignId, turnNumber, changes)
+  await syncWikiEntriesForChanges(campaignId, turnNumber, changes)
 
   return {
     campaignId,

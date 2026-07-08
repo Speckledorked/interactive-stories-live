@@ -3,7 +3,11 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { AlertTriangle, Dices } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import { displayFont, bodyFont } from '@/lib/tavernTheme'
+import { TavernBackground } from '@/components/tavern/TavernBackground'
+import { TavernButton } from '@/components/tavern/ui'
 
 interface CampaignInfo {
   id: string
@@ -27,7 +31,6 @@ export default function JoinCampaignPage() {
 
   useEffect(() => {
     if (!isAuthenticated()) {
-      // Redirect to login with return URL
       router.push(`/login?returnTo=/join/${token}`)
       return
     }
@@ -71,8 +74,6 @@ export default function JoinCampaignPage() {
       }
 
       const data = await response.json()
-
-      // Redirect to campaign page
       router.push(`/campaigns/${data.campaignId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join campaign')
@@ -82,12 +83,13 @@ export default function JoinCampaignPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-lg shadow-2xl p-8 max-w-md w-full">
+      <div className={`${bodyFont.className} -mx-4 -my-8 min-h-screen flex items-center justify-center p-4`}>
+        <TavernBackground />
+        <div className="rounded-2xl bg-gradient-to-br from-tavern-800/80 to-tavern-900/80 border border-ember-900/40 shadow-2xl shadow-black/50 p-8 max-w-md w-full">
           <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-gray-700 rounded w-3/4"></div>
-            <div className="h-4 bg-gray-700 rounded w-full"></div>
-            <div className="h-4 bg-gray-700 rounded w-5/6"></div>
+            <div className="h-8 bg-black/30 rounded w-3/4" />
+            <div className="h-4 bg-black/30 rounded w-full" />
+            <div className="h-4 bg-black/30 rounded w-5/6" />
           </div>
         </div>
       </div>
@@ -96,95 +98,72 @@ export default function JoinCampaignPage() {
 
   if (error && !campaign) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-lg shadow-2xl p-8 max-w-md w-full">
-          <div className="text-center">
-            <div className="text-red-500 text-5xl mb-4">⚠️</div>
-            <h1 className="text-2xl font-bold text-white mb-4">Invalid Invite</h1>
-            <p className="text-gray-300 mb-6">{error}</p>
-            <button
-              onClick={() => router.push('/campaigns')}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition"
-            >
-              Go to My Campaigns
-            </button>
-          </div>
+      <div className={`${bodyFont.className} -mx-4 -my-8 min-h-screen flex items-center justify-center p-4`}>
+        <TavernBackground />
+        <div className="rounded-2xl bg-gradient-to-br from-tavern-800/80 to-tavern-900/80 border border-ember-900/40 shadow-2xl shadow-black/50 p-8 max-w-md w-full text-center">
+          <AlertTriangle className="w-12 h-12 mx-auto text-wine-400 mb-4" />
+          <h1 className={`${displayFont.className} text-2xl text-ember-100 mb-4`}>Invalid Invite</h1>
+          <p className="text-ember-300/60 mb-6">{error}</p>
+          <TavernButton onClick={() => router.push('/campaigns')}>Go to My Campaigns</TavernButton>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-lg shadow-2xl p-8 max-w-md w-full">
+    <div className={`${bodyFont.className} -mx-4 -my-8 min-h-screen flex items-center justify-center p-4`}>
+      <TavernBackground />
+      <div className="rounded-2xl bg-gradient-to-br from-tavern-800/80 to-tavern-900/80 border border-ember-900/40 shadow-2xl shadow-black/50 p-8 max-w-md w-full">
         <div className="text-center mb-6">
-          <div className="text-blue-500 text-5xl mb-4">🎲</div>
-          <h1 className="text-2xl font-bold text-white mb-2">Join Campaign</h1>
+          <Dices className="w-10 h-10 mx-auto text-ember-400 mb-4" />
+          <h1 className={`${displayFont.className} text-2xl text-ember-100 mb-2`}>Join Campaign</h1>
         </div>
 
         {campaign && (
           <div className="space-y-4">
-            <div className="bg-gray-700 rounded-lg p-4">
-              <h2 className="text-xl font-semibold text-white mb-2">
-                {campaign.title}
-              </h2>
+            <div className="bg-black/25 border border-ember-900/30 rounded-lg p-4">
+              <h2 className="text-xl font-semibold text-ember-100 mb-2">{campaign.title}</h2>
               {campaign.description && (
-                <p className="text-gray-300 text-sm mb-2">
-                  {campaign.description}
-                </p>
+                <p className="text-ember-200/70 text-sm mb-2">{campaign.description}</p>
               )}
               {campaign.universe && (
-                <p className="text-gray-400 text-xs">
+                <p className="text-ember-400/50 text-xs">
                   <span className="font-semibold">Universe:</span> {campaign.universe}
                 </p>
               )}
             </div>
 
             {error && (
-              <div className="bg-red-900/50 border border-red-700 rounded-lg p-3">
-                <p className="text-red-300 text-sm">{error}</p>
+              <div className="bg-wine-800/20 border border-wine-600/40 rounded-lg p-3">
+                <p className="text-wine-400 text-sm">{error}</p>
               </div>
             )}
 
             {isExpired && (
-              <div className="bg-yellow-900/50 border border-yellow-700 rounded-lg p-3">
-                <p className="text-yellow-300 text-sm">
-                  ⚠️ This invite link has expired
-                </p>
+              <div className="bg-ember-900/20 border border-ember-700/40 rounded-lg p-3">
+                <p className="text-ember-300 text-sm">This invite link has expired</p>
               </div>
             )}
 
             {isExhausted && (
-              <div className="bg-yellow-900/50 border border-yellow-700 rounded-lg p-3">
-                <p className="text-yellow-300 text-sm">
-                  ⚠️ This invite link has reached its maximum uses
-                </p>
+              <div className="bg-ember-900/20 border border-ember-700/40 rounded-lg p-3">
+                <p className="text-ember-300 text-sm">This invite link has reached its maximum uses</p>
               </div>
             )}
 
             {canJoin ? (
-              <button
-                onClick={handleJoinCampaign}
-                disabled={joining}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition"
-              >
-                {joining ? 'Joining...' : 'Join Campaign'}
-              </button>
+              <TavernButton onClick={handleJoinCampaign} disabled={joining} className="w-full">
+                {joining ? 'Joining…' : 'Join Campaign'}
+              </TavernButton>
             ) : (
-              <button
-                disabled
-                className="w-full bg-gray-600 cursor-not-allowed text-gray-400 font-semibold py-3 px-6 rounded-lg"
-              >
+              <button disabled className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/30 text-ember-500/40 font-medium cursor-not-allowed">
                 Cannot Join
               </button>
             )}
 
-            <button
-              onClick={() => router.push('/campaigns')}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-6 rounded-lg transition"
-            >
+            <TavernButton variant="secondary" onClick={() => router.push('/campaigns')} className="w-full">
               Cancel
-            </button>
+            </TavernButton>
           </div>
         )}
       </div>

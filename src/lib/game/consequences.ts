@@ -15,6 +15,7 @@ import type { NPC, Faction } from '@prisma/client'
 import { extractConsequences, ExtractedConsequence, ConsequenceAction } from '@/lib/ai/consequenceExtraction'
 import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
+import { persistWorldEvents } from './tick/worldEventLog'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './tick/npcTick'
 import { WorldChange, clamp } from './tick/types'
 
@@ -233,6 +234,7 @@ export async function extractAndApplyConsequences(
   }
 
   const changes = await applyConsequences(campaignId, consequences)
+  await persistWorldEvents(campaignId, turnNumber, changes)
   const historyEntriesCreated = await logSignificantChanges(campaignId, turnNumber, changes)
   await syncWikiEntriesForChanges(campaignId, turnNumber, changes)
 

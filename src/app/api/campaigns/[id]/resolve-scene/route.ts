@@ -10,6 +10,10 @@ import { runWorldTurn } from '@/lib/game/worldTurn'
 import { prisma } from '@/lib/prisma'
 import { checkBalance, deductFunds, formatCurrency } from '@/lib/payment/service'
 
+// 60s = Vercel Hobby-tier ceiling, safe on every plan. See scene/route.ts for
+// the full rationale — this route awaits the same resolveScene() call.
+export const maxDuration = 60
+
 // Per-player cost in cents based on number of players in the scene
 function getSceneCostPerPlayer(playerCount: number): number {
   if (playerCount <= 1) return 25  // $0.25 solo

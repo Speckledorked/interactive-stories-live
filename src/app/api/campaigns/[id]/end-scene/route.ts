@@ -9,6 +9,10 @@ import { prisma } from '@/lib/prisma'
 import { SceneStatus } from '@prisma/client'
 import PusherServer from '@/lib/realtime/pusher-server'
 
+// 60s = Vercel Hobby-tier ceiling, safe on every plan. See scene/route.ts for
+// the full rationale — this route awaits the same resolveScene() call.
+export const maxDuration = 60
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }

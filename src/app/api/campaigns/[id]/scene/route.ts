@@ -9,6 +9,13 @@ import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
 import { pusherServer } from '@/lib/pusher'
 
+// POST can trigger a full scene resolution (AI GM call + world tick) inline
+// before responding. 60s is the Vercel Hobby-tier ceiling — safe on every
+// plan — and well above the typical resolution time; it's not a guarantee
+// against a pathologically slow AI response, just a large improvement over
+// the platform's unconfigured default.
+export const maxDuration = 60
+
 // GET active scenes
 export async function GET(
   request: NextRequest,

@@ -93,6 +93,17 @@ enum WeatherCondition {
   FOG
 }
 
+enum WorldEventActorType {
+  SYSTEM // autonomous world tick — nobody "did" this, the world just changed
+  PLAYER // caused by a player action (consequence extraction)
+}
+
+enum WorldEventTargetType {
+  NPC
+  FACTION
+  LOCATION_WEATHER
+}
+
 //
 // USER & MEMBERSHIP
 //
@@ -183,6 +194,9 @@ model Campaign {
 
   // Campaign Memory (RAG System)
   memories      CampaignMemory[]
+
+  // World Sim: persisted event stream
+  worldEvents   WorldEvent[]
 }
 
 //
@@ -1414,6 +1428,54 @@ model CampaignMemory {
   @@index([campaignId, memoryType])
   @@index([campaignId, importance])
   @@map("campaign_memories")
+}
+
+//
+// WORLD SIM — PERSISTED EVENT STREAM
+//
+// Every deterministic tick change and player-action consequence gets written
+// here, not just the "significant" ones (those additionally get written to
+// CampaignMemory for RAG, and trigger a WikiEntry refresh — this table is
+// the durable, structured record all of that already derives from). Future
+// systems (rumors, economy, analytics, recaps) read from this table instead
+// of coupling directly to the simulation systems that produced the events.
+
+model WorldEvent {
+  id         String   @id @default(cuid())
+  campaignId String
+  turnNumber Int
+  createdAt  DateTime @default(now())
+
+  // A short, filterable key: "<targetType>.<field>", e.g. "faction.resources",
+  // "npc.currentPlan", "location_weather.weather"
+  type   String
+  origin String // "tick" | "consequence" — mirrors WorldChange.origin
+
+  actorType WorldEventActorType @default(SYSTEM)
+  // No per-character attribution yet — consequence extraction operates on
+  // scene text as a whole, not per-player-action, so PLAYER events can't be
+  // pinned to a specific user/character today. actorId stays null until
+  // that's threaded through.
+  actorId   String?
+
+  targetType WorldEventTargetType
+  targetId   String
+  targetName String
+
+  field         String
+  previousValue String?
+  newValue      String?
+
+  reason      String  @db.Text
+  significant Boolean @default(false)
+  importance  String  @default("NORMAL") // "NORMAL" | "MAJOR"
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, turnNumber])
+  @@index([campaignId, targetType, targetId])
+  @@index([campaignId, type])
+  @@map("world_events")
 }
 
 //

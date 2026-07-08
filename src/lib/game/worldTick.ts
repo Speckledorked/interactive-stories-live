@@ -18,6 +18,7 @@ import { tickFactions } from './tick/factionTick'
 import { tickNpcs } from './tick/npcTick'
 import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
+import { persistWorldEvents } from './tick/worldEventLog'
 import { TickContext, TickHandler, WorldChange, WorldTickResult } from './tick/types'
 
 const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactions, tickNpcs]
@@ -39,6 +40,9 @@ export async function runWorldTick(campaignId: string, turnNumber: number): Prom
     changes.push(...result.changes)
   }
 
+  // All three consumers fan out from the same changes array — the event-bus
+  // shape, at the current scale, without a literal pub/sub mechanism.
+  await persistWorldEvents(campaignId, turnNumber, changes)
   const historyEntriesCreated = await logSignificantChanges(campaignId, turnNumber, changes)
   await syncWikiEntriesForChanges(campaignId, turnNumber, changes)
 

@@ -51,10 +51,12 @@ export async function PATCH(
       )
     }
 
-    // Only owner or admin can modify inventory
-    if (character.userId !== user.userId && membership.role !== 'ADMIN') {
+    // Inventory is a mechanical field — admin (GM) only, same as
+    // stats/harm/equipment. Players get items through scene resolution
+    // (applyWorldUpdates), not a direct API call to their own character.
+    if (membership.role !== 'ADMIN') {
       return NextResponse.json(
-        { error: 'You can only modify your own character inventory' },
+        { error: 'Only a campaign admin can directly edit inventory. Items are granted through play.' },
         { status: 403 }
       )
     }

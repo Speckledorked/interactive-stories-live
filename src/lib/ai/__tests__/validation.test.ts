@@ -30,7 +30,7 @@ describe('AI Response Validation (Phase 15)', () => {
 
       const result = validateAIResponse(validResponse)
 
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('full')
       if (result.success) {
         expect(result.data.scene_text).toBe(validResponse.scene_text)
@@ -62,7 +62,7 @@ describe('AI Response Validation (Phase 15)', () => {
 
       const result = validateAIResponse(validResponse)
 
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('full')
     })
 
@@ -88,7 +88,7 @@ describe('AI Response Validation (Phase 15)', () => {
 
       const result = validateAIResponse(validResponse)
 
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('full')
     })
   })
@@ -102,7 +102,7 @@ describe('AI Response Validation (Phase 15)', () => {
 
       const result = validateAIResponse(partialResponse)
 
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('partial')
       if (result.success) {
         expect(result.data.scene_text).toBe(partialResponse.scene_text)
@@ -117,7 +117,7 @@ describe('AI Response Validation (Phase 15)', () => {
 
       const result = validateAIResponse(partialResponse)
 
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('partial')
     })
   })
@@ -131,7 +131,7 @@ describe('AI Response Validation (Phase 15)', () => {
 
       const result = validateAIResponse(invalidResponse)
 
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('emergency')
       if (result.success) {
         expect(result.data.scene_text.length).toBeGreaterThan(50)
@@ -147,7 +147,7 @@ describe('AI Response Validation (Phase 15)', () => {
 
       const result = validateAIResponse(invalidResponse)
 
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('emergency')
     })
 
@@ -155,17 +155,17 @@ describe('AI Response Validation (Phase 15)', () => {
       const invalidResponse = {}
 
       const combatResult = validateAIResponse(invalidResponse, 'The party attacks the dragon in combat')
-      expect(combatResult.success).toBe(true)
+      if (!combatResult.success) throw new Error('Expected validation to succeed')
       expect(combatResult.level).toBe('emergency')
       if (combatResult.success) {
         expect(combatResult.data.scene_text.toLowerCase()).toContain('battle')
       }
 
       const socialResult = validateAIResponse(invalidResponse, 'The player tries to talk and persuade the guard')
-      expect(socialResult.success).toBe(true)
+      if (!socialResult.success) throw new Error('Expected validation to succeed')
       expect(socialResult.level).toBe('emergency')
       if (socialResult.success) {
-        expect(combatResult.data.scene_text.toLowerCase()).toMatch(/conversation|talk/)
+        expect(socialResult.data.scene_text.toLowerCase()).toMatch(/conversation|talk/)
       }
     })
   })
@@ -180,7 +180,7 @@ describe('AI Response Validation (Phase 15)', () => {
 
       variants.forEach(variant => {
         const result = validateAIResponse(variant)
-        expect(result.success).toBe(true)
+        if (!result.success) throw new Error('Expected validation to succeed')
         expect(result.level).toBe('partial')
       })
     })
@@ -190,7 +190,7 @@ describe('AI Response Validation (Phase 15)', () => {
 
       const result = validateAIResponse(plainString)
 
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('partial')
     })
   })
@@ -199,14 +199,14 @@ describe('AI Response Validation (Phase 15)', () => {
     it('should handle null response', () => {
       const result = validateAIResponse(null)
 
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('emergency')
     })
 
     it('should handle empty object', () => {
       const result = validateAIResponse({})
 
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('emergency')
     })
 
@@ -226,7 +226,7 @@ describe('AI Response Validation (Phase 15)', () => {
       }
 
       const result = validateAIResponse(validHarm)
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('full')
     })
 
@@ -248,7 +248,7 @@ describe('AI Response Validation (Phase 15)', () => {
       const result = validateAIResponse(invalidHarm)
 
       // Should fall back to partial (scene_text only)
-      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('partial')
     })
   })

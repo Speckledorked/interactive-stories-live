@@ -37,6 +37,64 @@ vi.mock('@/lib/ai/worldState', () => ({
 vi.mock('../stateUpdater', () => ({
   applyWorldUpdates: vi.fn(),
   summarizeWorldUpdates: vi.fn(() => 'test summary'),
+  enrichStubNPCs: vi.fn().mockResolvedValue(undefined),
+  enrichStubFactions: vi.fn().mockResolvedValue(undefined),
+}));
+
+// resolveScene's orchestration is what this file tests — everything below
+// is a supporting subsystem performResolution calls into, mocked as a black
+// box rather than fed enough prisma mocks to satisfy its internals. This
+// mirrors the existing stateUpdater mock above rather than trying to
+// individually mock every prisma call ~10 different subsystems make.
+vi.mock('../exchange-manager', () => ({
+  // Regular function, not an arrow function — arrow functions have no
+  // [[Construct]] internal slot, so `new ExchangeManager()` throws
+  // "is not a constructor" if the mock implementation is an arrow fn.
+  ExchangeManager: vi.fn().mockImplementation(function () {
+    return {
+      canResolveExchange: vi.fn().mockResolvedValue(true),
+      getExchangeSummary: vi.fn().mockResolvedValue({
+        exchangeNumber: 1,
+        playersActed: 1,
+        totalPlayers: 1,
+        complexity: 'simple',
+        canResolve: true,
+      }),
+      completeExchange: vi.fn().mockResolvedValue(undefined),
+      initializeExchange: vi.fn().mockResolvedValue({}),
+      recordAction: vi.fn().mockResolvedValue({}),
+    }
+  }),
+}));
+
+vi.mock('../campaign-health', () => ({
+  CampaignHealthMonitor: vi.fn().mockImplementation(function () {
+    return {
+      calculateHealth: vi.fn().mockResolvedValue({ isHealthy: true, score: 100, issues: [], recommendations: [] }),
+      recordHealthCheck: vi.fn().mockResolvedValue(undefined),
+    }
+  }),
+}));
+
+vi.mock('../world-state-tracker', () => ({
+  captureWorldStateSnapshot: vi.fn().mockResolvedValue({}),
+  detectWorldStateChanges: vi.fn().mockResolvedValue([]),
+  storeWorldStateChanges: vi.fn().mockResolvedValue(undefined),
+  createCharacterProgressionNotifications: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@/lib/ai/ai-visual-service', () => ({
+  AIVisualService: {
+    generateMapFromScene: vi.fn().mockResolvedValue({}),
+  },
+}));
+
+vi.mock('@/lib/ai/memoryCreation', () => ({
+  createSceneMemory: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../consequences', () => ({
+  extractAndApplyConsequences: vi.fn().mockResolvedValue({ consequencesFound: 0, changes: [], historyEntriesCreated: 0 }),
 }));
 
 // Import mocked modules
@@ -67,6 +125,19 @@ describe('Scene Resolver', () => {
           characterId: 'char-1',
           actionText: 'I attack the enemy',
           rollResult: null,
+          // applyOrganicCharacterGrowth re-fetches the scene with
+          // playerActions.character included and reads fields off it
+          // directly (character.statUsage, etc.) — needs a real object here,
+          // not just a characterId.
+          character: {
+            id: 'char-1',
+            name: 'Test Character',
+            statUsage: null,
+            perks: null,
+            moves: [],
+            stats: {},
+            advancementLog: null,
+          },
         },
       ],
     };
@@ -91,7 +162,12 @@ describe('Scene Resolver', () => {
 
     it('should successfully resolve a scene', async () => {
       // Setup mocks
-      vi.mocked(prisma.scene.findUnique).mockResolvedValueOnce(mockScene as any);
+      // resolveScene's Phase 16 ExchangeManager check calls scene.findUnique
+      // internally before resolveScene reaches its own lookup, so this needs
+      // to be a persistent mock (not Once) or the later calls fall through
+      // to an unconfigured default and the exchange check throws "Scene not
+      // found" before the actual test logic ever runs.
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
       vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
       vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
@@ -113,40 +189,44 @@ describe('Scene Resolver', () => {
         data: { status: 'RESOLVING' },
       });
 
-      // Verify scene was marked as RESOLVED
+      // Scene stays AWAITING_ACTIONS (not RESOLVED) so it remains active for
+      // continuous play — see the "Keep scene active for continuous play"
+      // comment in sceneResolver.ts.
       expect(prisma.scene.update).toHaveBeenCalledWith({
         where: { id: mockSceneId },
         data: {
           sceneResolutionText: mockAIResponse.scene_text,
-          status: 'RESOLVED',
+          status: 'AWAITING_ACTIONS',
         },
       });
 
-      // Verify turn was incremented
+      // Verify turn was incremented (currentInGameDate is always included
+      // too — it defaults to 'Day 1' when the AI response has no time_passage
+      // data and worldMeta.currentInGameDate isn't set on the fixture)
       expect(prisma.worldMeta.update).toHaveBeenCalledWith({
         where: { id: mockWorldMeta.id },
-        data: { currentTurnNumber: 6 },
+        data: { currentTurnNumber: 6, currentInGameDate: 'Day 1' },
       });
     });
 
     it('should throw error if scene not found', async () => {
-      vi.mocked(prisma.scene.findUnique).mockResolvedValueOnce(null);
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(null);
 
       await expect(resolveScene(mockCampaignId, mockSceneId)).rejects.toThrow('Scene not found');
     });
 
     it('should throw error if scene is not awaiting actions', async () => {
       const resolvedScene = { ...mockScene, status: 'RESOLVED' };
-      vi.mocked(prisma.scene.findUnique).mockResolvedValueOnce(resolvedScene as any);
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(resolvedScene as any);
 
       await expect(resolveScene(mockCampaignId, mockSceneId)).rejects.toThrow(
-        'Scene is not awaiting actions'
+        'Scene is not ready to resolve'
       );
     });
 
     it('should throw error if no player actions submitted', async () => {
       const sceneWithoutActions = { ...mockScene, playerActions: [] };
-      vi.mocked(prisma.scene.findUnique).mockResolvedValueOnce(sceneWithoutActions as any);
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(sceneWithoutActions as any);
 
       await expect(resolveScene(mockCampaignId, mockSceneId)).rejects.toThrow(
         'No player actions submitted yet'
@@ -154,8 +234,8 @@ describe('Scene Resolver', () => {
     });
 
     it('should revert scene status on error', async () => {
-      vi.mocked(prisma.scene.findUnique).mockResolvedValueOnce(mockScene as any);
-      vi.mocked(prisma.scene.update).mockResolvedValueOnce(mockScene as any);
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
       vi.mocked(prisma.worldMeta.findUnique).mockRejectedValueOnce(new Error('Database error'));
 
       await expect(resolveScene(mockCampaignId, mockSceneId)).rejects.toThrow('Database error');
@@ -170,7 +250,7 @@ describe('Scene Resolver', () => {
     it('should call AI GM with correct parameters', async () => {
       const mockAIRequest = { campaign_id: mockCampaignId, scene_id: mockSceneId };
 
-      vi.mocked(prisma.scene.findUnique).mockResolvedValueOnce(mockScene as any);
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
       vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
       vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
@@ -181,7 +261,9 @@ describe('Scene Resolver', () => {
       await resolveScene(mockCampaignId, mockSceneId);
 
       expect(buildSceneResolutionRequest).toHaveBeenCalledWith(mockCampaignId, mockSceneId);
-      expect(callAIGM).toHaveBeenCalledWith(mockAIRequest);
+      // Phase 15: callAIGM also takes campaignId/sceneId (for cost tracking
+      // and the circuit breaker) and a debug-mode flag, not just the request.
+      expect(callAIGM).toHaveBeenCalledWith(mockAIRequest, mockCampaignId, mockSceneId, { debugMode: false });
     });
   });
 

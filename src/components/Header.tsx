@@ -52,9 +52,9 @@ export default function Header() {
     router.push('/login')
   }
 
-  // Don't show header on login/signup pages, or on the campaigns list —
-  // that page renders its own themed chrome (tavern UI pilot).
-  if (pathname === '/login' || pathname === '/signup' || pathname === '/campaigns') {
+  // Don't show header on pages that render their own themed chrome
+  // (tavern UI redesign, rolling out page by page).
+  if (pathname === '/login' || pathname === '/signup' || pathname === '/campaigns' || pathname === '/') {
     return null
   }
 

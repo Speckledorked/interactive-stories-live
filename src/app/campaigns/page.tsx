@@ -10,17 +10,14 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Cinzel, Cormorant_Garamond } from 'next/font/google'
-import {
-  Menu, Bell, UserCircle, Plus, ChevronRight, Users, BookOpen,
-  Beer, Compass, Swords, Scroll, Settings as SettingsIcon,
-  Sword, TreeDeciduous, Castle, Flame, Skull, Feather, Moon, Mountain, Shield,
-} from 'lucide-react'
+import { Plus, ChevronRight, Users, BookOpen, Compass, Scroll, Feather } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
-
-const displayFont = Cinzel({ subsets: ['latin'], weight: ['400', '600'] })
-const bodyFont = Cormorant_Garamond({ subsets: ['latin'], weight: ['400', '500', '600', '700'] })
+import { displayFont } from '@/lib/tavernTheme'
+import { bannerIconFor, formatRelativeTime } from '@/lib/tavernUtils'
+import { TavernPage } from '@/components/tavern/TavernPage'
+import { TavernHeader } from '@/components/tavern/TavernHeader'
+import { TavernNav } from '@/components/tavern/TavernNav'
+import { TavernButton, TavernCard, TavernErrorBanner, TavernEmptyState, TavernSpinner } from '@/components/tavern/ui'
 
 interface Campaign {
   id: string
@@ -35,48 +32,6 @@ interface Campaign {
     scenes: number
   }
 }
-
-// Deterministic banner icon per campaign — the reference mockup hand-picks
-// an icon per campaign's theme (sword for a fight story, tree for a nature
-// coming-of-age story, compass for an exploration story). We don't know a
-// campaign's theme programmatically, so this picks a stable icon from a
-// small thematic set based on the campaign id, instead of everyone getting
-// the same icon or a random one that changes on every reload.
-const BANNER_ICONS = [Sword, TreeDeciduous, Compass, Scroll, Castle, Flame, Skull, Feather, Moon, Mountain, Shield, Swords]
-function bannerIconFor(id: string) {
-  let hash = 0
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0
-  return BANNER_ICONS[Math.abs(hash) % BANNER_ICONS.length]
-}
-
-function formatRelativeTime(iso: string): string {
-  const then = new Date(iso).getTime()
-  const now = Date.now()
-  const diffMs = now - then
-  const diffMin = Math.floor(diffMs / 60000)
-  if (diffMin < 1) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return diffHr === 1 ? 'Updated 1 hour ago' : `Updated ${diffHr} hours ago`
-  const diffDay = Math.floor(diffHr / 24)
-  if (diffDay === 1) return 'Updated yesterday'
-  if (diffDay < 7) return `Updated ${diffDay}d ago`
-  const diffWeek = Math.floor(diffDay / 7)
-  if (diffWeek < 5) return `Updated ${diffWeek}w ago`
-  return `Updated ${new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-}
-
-// Bottom nav: only "Tavern" (this page) and "Settings" have a real
-// top-level destination in the app today — Map/Characters/Quests only
-// exist inside a specific campaign, so they're shown but inert here
-// rather than linking somewhere misleading.
-const NAV_ITEMS = [
-  { key: 'tavern', label: 'Tavern', icon: Beer, href: '/campaigns' },
-  { key: 'map', label: 'Map', icon: Compass, href: null },
-  { key: 'characters', label: 'Characters', icon: Users, href: null },
-  { key: 'quests', label: 'Quests', icon: Scroll, href: null },
-  { key: 'settings', label: 'Settings', icon: SettingsIcon, href: '/settings' },
-] as const
 
 export default function CampaignsPage() {
   const router = useRouter()
@@ -131,77 +86,30 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div className={`${bodyFont.className} -mx-4 -my-8 min-h-screen`}>
-      {/* Full-bleed background — CSS-only candlelit mood, no image asset */}
-      <div className="fixed inset-0 -z-10 bg-tavern-950">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(220,174,71,0.08),transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_100%,rgba(139,58,58,0.10),transparent_55%)]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-tavern-900/40 via-tavern-950 to-black" />
-      </div>
-
-      {/* Top bar */}
-      <header className="fixed top-0 inset-x-0 z-30 bg-black/60 backdrop-blur-md border-b border-ember-900/40">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <button
-            className="p-2 text-ember-300/80 hover:text-ember-200 transition-colors"
-            aria-label="Menu"
-            title="Menu (not wired up yet in this pilot)"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-
-          <div className="flex flex-col items-center">
-            <div className="flex items-center gap-3">
-              <span className="text-ember-700/60 text-xs tracking-widest">◈──</span>
-              <h1 className={`${displayFont.className} text-2xl tracking-[0.15em] bg-gradient-to-b from-ember-200 to-ember-500 bg-clip-text text-transparent`}>
-                AI GM
-              </h1>
-              <span className="text-ember-700/60 text-xs tracking-widest">──◈</span>
-            </div>
-            <p className="text-[11px] tracking-[0.2em] text-ember-300/50 -mt-0.5">YOUR STORY. THE WORLD.</p>
+    <TavernPage>
+      <TavernHeader
+        wordmark
+        subrow={
+          <div className="max-w-2xl mx-auto px-4 flex items-center gap-6 text-sm border-t border-ember-900/20 pt-2 pb-0">
+            {[
+              { label: 'Campaigns', icon: BookOpen, active: true },
+              { label: 'World', icon: Compass, active: false },
+              { label: 'Journal', icon: Feather, active: false },
+              { label: 'Lore', icon: BookOpen, active: false },
+            ].map((tab) => (
+              <div
+                key={tab.label}
+                className={`flex items-center gap-1.5 pb-2 border-b-2 ${
+                  tab.active ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40'
+                }`}
+              >
+                <tab.icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </div>
+            ))}
           </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              className="p-2 text-ember-300/80 hover:text-ember-200 transition-colors"
-              aria-label="Notifications"
-              title="Notifications (not wired up yet in this pilot)"
-            >
-              <Bell className="w-5 h-5" />
-            </button>
-            <Link
-              href="/settings"
-              className="p-2 text-ember-300/80 hover:text-ember-200 transition-colors"
-              aria-label="Profile"
-            >
-              <UserCircle className="w-5 h-5" />
-            </Link>
-          </div>
-        </div>
-
-        {/* Section tabs (visual only in this pilot — Campaigns is the only
-            one of these four that maps to a real page today) */}
-        <div className="max-w-2xl mx-auto px-4 flex items-center gap-6 text-sm border-t border-ember-900/20 pt-2 pb-0">
-          {[
-            { label: 'Campaigns', icon: BookOpen, active: true },
-            { label: 'World', icon: Compass, active: false },
-            { label: 'Journal', icon: Feather, active: false },
-            { label: 'Lore', icon: BookOpen, active: false },
-          ].map((tab) => (
-            <div
-              key={tab.label}
-              className={`flex items-center gap-1.5 pb-2 border-b-2 ${
-                tab.active
-                  ? 'border-ember-400 text-ember-200'
-                  : 'border-transparent text-ember-300/40'
-              }`}
-            >
-              <tab.icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
-            </div>
-          ))}
-        </div>
-      </header>
+        }
+      />
 
       {/* Content */}
       <main className="max-w-2xl mx-auto px-4 pt-32 pb-28">
@@ -219,37 +127,28 @@ export default function CampaignsPage() {
           </button>
         </div>
 
-        {error && (
-          <div className="mb-6 px-4 py-3 rounded-lg bg-wine-800/30 border border-wine-600/40 text-ember-100 text-sm">
-            {error}
-          </div>
-        )}
+        {error && <TavernErrorBanner>{error}</TavernErrorBanner>}
 
         {loading ? (
-          <div className="flex justify-center py-16">
-            <div className="spinner h-10 w-10" />
-          </div>
+          <TavernSpinner />
         ) : campaigns.length === 0 ? (
-          <div className="text-center py-16 rounded-2xl border border-ember-900/30 bg-black/30">
-            <Scroll className="w-12 h-12 mx-auto text-ember-600/60 mb-4" />
-            <p className={`${displayFont.className} text-lg text-ember-200 mb-2`}>No campaigns yet</p>
-            <p className="text-ember-300/50 mb-6">Create your first campaign to begin your adventure</p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-5 py-2.5 bg-gradient-to-b from-wine-500 to-wine-700 text-ember-100 rounded-lg border border-ember-900/50"
-            >
-              Create Your First Campaign
-            </button>
-          </div>
+          <TavernEmptyState
+            icon={Scroll}
+            title="No campaigns yet"
+            description="Create your first campaign to begin your adventure"
+            action={
+              <TavernButton onClick={() => setShowCreateModal(true)}>Create Your First Campaign</TavernButton>
+            }
+          />
         ) : (
           <div className="space-y-4">
             {campaigns.map((campaign) => {
               const BannerIcon = bannerIconFor(campaign.id)
               return (
-                <div
+                <TavernCard
                   key={campaign.id}
                   onClick={() => router.push(`/campaigns/${campaign.id}`)}
-                  className="group flex gap-4 p-4 rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 hover:border-ember-700/50 shadow-lg shadow-black/30 cursor-pointer transition-colors"
+                  className="group flex gap-4 p-4"
                 >
                   {/* Banner icon */}
                   <div className="flex-shrink-0 w-16 h-20 rounded-sm bg-gradient-to-b from-tavern-700 to-tavern-900 border border-ember-800/40 flex items-center justify-center shadow-inner"
@@ -305,7 +204,7 @@ export default function CampaignsPage() {
                       </div>
                     )}
                   </div>
-                </div>
+                </TavernCard>
               )
             })}
           </div>
@@ -322,26 +221,7 @@ export default function CampaignsPage() {
         </div>
       </main>
 
-      {/* Bottom nav */}
-      <nav className="fixed bottom-0 inset-x-0 z-30 bg-black/70 backdrop-blur-md border-t border-ember-900/40">
-        <div className="max-w-2xl mx-auto grid grid-cols-5">
-          {NAV_ITEMS.map((item) => {
-            const content = (
-              <div className={`flex flex-col items-center gap-1 py-3 text-[11px] transition-colors ${
-                item.key === 'tavern' ? 'text-ember-300' : 'text-ember-500/40'
-              } ${item.href ? 'hover:text-ember-200' : 'cursor-default'}`}>
-                <item.icon className="w-5 h-5" />
-                <span>{item.label}</span>
-              </div>
-            )
-            return item.href ? (
-              <Link key={item.key} href={item.href}>{content}</Link>
-            ) : (
-              <div key={item.key} title="Only available inside a campaign">{content}</div>
-            )
-          })}
-        </div>
-      </nav>
+      <TavernNav active="tavern" />
 
       {showCreateModal && (
         <CreateCampaignModal
@@ -352,7 +232,7 @@ export default function CampaignsPage() {
           }}
         />
       )}
-    </div>
+    </TavernPage>
   )
 }
 

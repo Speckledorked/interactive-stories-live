@@ -75,6 +75,24 @@ enum NotificationPriority {
   URGENT
 }
 
+// World Sim Phase 1: deterministic tick-driven state
+enum FactionGoal {
+  EXPAND
+  DEFEND
+  ENRICH
+  DESTABILIZE_RIVAL
+  CONSOLIDATE
+}
+
+enum WeatherCondition {
+  CLEAR
+  CLOUDY
+  RAIN
+  STORM
+  SNOW
+  FOG
+}
+
 //
 // USER & MEMBERSHIP
 //
@@ -246,6 +264,9 @@ model NPC {
   importance      Int      @default(1)
   gmNotes         String?
 
+  // World Sim Phase 1: deterministic tick behavior for major NPCs (importance >= 4)
+  currentPlan     String?
+
   // PbtA fields for significant NPCs
   threat          String?  // Type of threat (warlord, grotesque, landscape, etc)
   impulses        String[] // What drives this NPC
@@ -277,6 +298,14 @@ model Faction {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // World Sim Phase 1: the 4 tracked simulation fields tick logic reads/writes.
+  // Added alongside the legacy fields above rather than renaming them (decided
+  // 2026-07-08) - influence/threatLevel/currentPlan stay as-is for existing
+  // narration code; `goals` (plural) also stays as flavor text.
+  stability     Int         @default(50)
+  military      Int         @default(50)
+  goal          FactionGoal @default(CONSOLIDATE)
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   // Phase 8: Communication
@@ -299,6 +328,13 @@ model Location {
   gmNotes      String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // World Sim Phase 1: persistent weather, updated by the world tick and
+  // surfaced to the AI prompt builder so narration references it instead of
+  // reinventing it. Not a climate model - one condition + a severity scalar.
+  weather          WeatherCondition @default(CLEAR)
+  weatherSeverity  Int              @default(1) // 1 (mild) - 5 (extreme)
+  weatherUpdatedAt DateTime?        // last tick that changed the condition
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 

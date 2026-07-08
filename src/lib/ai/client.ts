@@ -196,6 +196,8 @@ export interface AIGMRequest {
       name: string
       description: string
       type: string
+      weather?: string
+      weather_severity?: number
     }>
     clocks: Array<{
       id: string
@@ -691,7 +693,7 @@ ${world_summary.factions.map(f =>
 KNOWN LOCATIONS:
 ${world_summary.locations && world_summary.locations.length > 0
   ? world_summary.locations.map(l =>
-    `• ${l.name}${l.type !== 'unknown' ? ` [${l.type}]` : ''}${l.description ? ` - ${l.description}` : ''}`
+    `• ${l.name}${l.type !== 'unknown' ? ` [${l.type}]` : ''}${l.description ? ` - ${l.description}` : ''}${l.weather ? ` | Weather: ${l.weather}${l.weather_severity ? ` (severity ${l.weather_severity}/5)` : ''} — reference this, don't invent different weather` : ''}`
   ).join('\n')
   : '(none discovered yet)'}
 

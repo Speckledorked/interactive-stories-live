@@ -152,7 +152,11 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
     locations: locations.map(l => ({
       name: l.name,
       description: l.description || '',
-      type: l.locationType || 'unknown'
+      type: l.locationType || 'unknown',
+      // World Sim Phase 1: persistent weather, ticked independently of the
+      // player. Reference this in narration instead of inventing weather.
+      weather: l.weather,
+      weather_severity: l.weatherSeverity
     })),
 
     clocks: clocks.map(cl => ({
@@ -283,7 +287,11 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
     locations: locations.map(l => ({
       name: l.name,
       description: l.description || '',
-      type: l.locationType || 'unknown'
+      type: l.locationType || 'unknown',
+      // World Sim Phase 1: persistent weather, ticked independently of the
+      // player. Reference this in narration instead of inventing weather.
+      weather: l.weather,
+      weather_severity: l.weatherSeverity
     })),
 
     recent_timeline_events: recentEvents.map(e => ({

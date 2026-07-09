@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from '@/lib/clientAuth'
 import EnhancedCreateCharacterForm from "@/components/forms/EnhancedCreateCharacterForm"
 import ChatPanel from '@/components/chat/ChatPanel'
 import NotesPanel from '@/components/notes/NotesPanel'
@@ -79,6 +79,7 @@ export default function CampaignLobbyPage() {
 
       const campaignData = await response.json()
       setData(campaignData)
+      setLastCampaignId(campaignId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load campaign')
     } finally {

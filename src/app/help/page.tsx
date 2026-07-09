@@ -1,11 +1,19 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
+import { getLastCampaignId } from '@/lib/clientAuth'
 
 export default function HelpPage() {
+  const [lastCampaignId, setLastCampaignId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLastCampaignId(getLastCampaignId())
+  }, [])
+
   return (
     <TavernPage>
       <TavernHeader backHref="/campaigns" title="Help & Documentation" />
@@ -244,7 +252,7 @@ export default function HelpPage() {
       </div>
       </main>
 
-      <TavernNav />
+      <TavernNav campaignId={lastCampaignId || undefined} />
     </TavernPage>
   )
 }

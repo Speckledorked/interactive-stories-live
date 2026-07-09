@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronRight, BookOpen } from 'lucide-react'
-import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import { displayFont } from '@/lib/tavernTheme'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
@@ -57,6 +57,7 @@ export default function StoryLogPage() {
       if (campaignResponse.ok) {
         const campaignData = await campaignResponse.json()
         setCampaign(campaignData.campaign)
+        setLastCampaignId(campaignId)
       }
 
       const logsResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/logs`)

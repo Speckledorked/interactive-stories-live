@@ -127,11 +127,11 @@ module.exports = {
         'shimmer': 'linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)',
       },
       boxShadow: {
-        'glow': '0 0 20px rgba(99, 102, 241, 0.3)',
-        'glow-lg': '0 0 30px rgba(99, 102, 241, 0.4)',
-        'inner-glow': 'inset 0 0 20px rgba(99, 102, 241, 0.1)',
+        'glow': '0 0 20px rgba(220, 174, 71, 0.3)',
+        'glow-lg': '0 0 30px rgba(220, 174, 71, 0.4)',
+        'inner-glow': 'inset 0 0 20px rgba(220, 174, 71, 0.1)',
         'card': '0 1px 3px rgba(0, 0, 0, 0.3), 0 10px 20px rgba(0, 0, 0, 0.2)',
-        'card-hover': '0 4px 6px rgba(0, 0, 0, 0.3), 0 15px 30px rgba(99, 102, 241, 0.15)',
+        'card-hover': '0 4px 6px rgba(0, 0, 0, 0.3), 0 15px 30px rgba(220, 174, 71, 0.15)',
         'elevated': '0 20px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05)',
       },
       animation: {
@@ -147,8 +147,8 @@ module.exports = {
           '100%': { transform: 'translateX(100%)' },
         },
         'glow-pulse': {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(99, 102, 241, 0.3)' },
-          '50%': { boxShadow: '0 0 30px rgba(99, 102, 241, 0.6)' },
+          '0%, 100%': { boxShadow: '0 0 20px rgba(220, 174, 71, 0.3)' },
+          '50%': { boxShadow: '0 0 30px rgba(220, 174, 71, 0.6)' },
         },
         'fade-in': {
           '0%': { opacity: '0' },

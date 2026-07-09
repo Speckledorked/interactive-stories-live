@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId, updateStoredUser } from '@/lib/clientAuth'
 import NotificationSettings from '@/components/settings/NotificationSettings'
 import BalanceDisplay from '@/components/BalanceDisplay'
 import { Bell, User, Lock, X } from 'lucide-react'
@@ -71,11 +71,7 @@ export default function SettingsPage() {
 
       if (response.ok) {
         setUser(data.user)
-        // Update local storage
-        const currentUser = getUser()
-        if (currentUser) {
-          localStorage.setItem('user', JSON.stringify({ ...currentUser, name: displayName }))
-        }
+        updateStoredUser({ name: displayName })
         setProfileMessage('✓ Profile updated successfully!')
         setTimeout(() => setProfileMessage(''), 3000)
       } else {

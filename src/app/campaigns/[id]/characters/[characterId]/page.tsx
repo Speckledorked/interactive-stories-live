@@ -103,8 +103,11 @@ export default function CharacterPage() {
       body: JSON.stringify({ description })
     })
     if (response.ok) {
-      const data = await response.json()
-      setDowntimeActivities(prev => [data.activity, ...prev])
+      // Re-fetch rather than trust the POST response shape: it returns the
+      // raw activity record, not the transformed shape (with `events`,
+      // lowercase `status`, etc.) that DynamicDowntimeManager expects.
+      const activitiesRes = await authenticatedFetch(`/api/characters/${characterId}/dynamic-downtime`)
+      if (activitiesRes.ok) setDowntimeActivities(await activitiesRes.json())
     }
   }
 

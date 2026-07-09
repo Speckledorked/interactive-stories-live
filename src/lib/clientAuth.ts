@@ -46,6 +46,19 @@ export function getUser(): { id: string; email: string; name?: string | null } |
 }
 
 /**
+ * Merge updates into the stored user object (e.g. after a profile edit),
+ * so cached reads like getUser() reflect the change without a re-login.
+ */
+export function updateStoredUser(updates: Partial<{ id: string; email: string; name?: string | null }>) {
+  if (typeof window !== 'undefined') {
+    const current = getUser()
+    if (current) {
+      localStorage.setItem(USER_KEY, JSON.stringify({ ...current, ...updates }))
+    }
+  }
+}
+
+/**
  * Check if user is authenticated
  */
 export function isAuthenticated(): boolean {

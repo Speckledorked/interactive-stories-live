@@ -358,7 +358,7 @@ export default function CampaignLobbyPage() {
                         )}
                       </span>
                       <span className="text-ember-400/50 text-sm ml-2">
-                        ({character.user.email})
+                        ({character.user.name || character.user.email})
                       </span>
                     </div>
                     <span className="text-ember-500/40 group-hover:text-ember-300">→</span>

@@ -163,7 +163,7 @@ export default function CharactersListPage() {
                   <div className="mt-4 pt-4 border-t border-ember-900/30">
                     <p className="text-xs text-ember-400/50 flex items-center gap-1">
                       <User className="w-3 h-3" />
-                      {character.user.email || character.user.name || 'Unknown'}
+                      {character.user.name || character.user.email || 'Unknown'}
                     </p>
                   </div>
                 )}

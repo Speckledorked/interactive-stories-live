@@ -212,25 +212,25 @@ export default function NotesPanel({
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg">
+    <div className="bg-black/25 border border-ember-900/30 rounded-lg">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-        <h3 className="font-semibold text-gray-100">Player Notes</h3>
+      <div className="p-4 border-b border-ember-900/30 flex justify-between items-center">
+        <h3 className="font-semibold text-ember-100">Player Notes</h3>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
+          className="px-3 py-1 bg-success-600 text-tavern-950 rounded-md text-sm hover:bg-success-500"
         >
           {showForm ? 'Cancel' : 'New Note'}
         </button>
       </div>
 
       {/* Filters */}
-      <div className="p-4 border-b border-gray-700">
+      <div className="p-4 border-b border-ember-900/30">
         <div className="flex flex-wrap gap-2">
           <select
             value={filter.visibility || ''}
             onChange={(e) => setFilter(prev => ({ ...prev, visibility: e.target.value || undefined }))}
-            className="px-3 py-1 bg-gray-900 border border-gray-600 text-gray-200 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            className="px-3 py-1 bg-black/30 border border-ember-900/40 text-ember-100 rounded-md text-sm focus:border-ember-600/60 focus:ring-1 focus:ring-ember-500/40"
           >
             <option value="">All Visibility</option>
             <option value="PRIVATE">Private Only</option>
@@ -240,7 +240,7 @@ export default function NotesPanel({
           <select
             value={filter.entityType || ''}
             onChange={(e) => setFilter(prev => ({ ...prev, entityType: e.target.value || undefined }))}
-            className="px-3 py-1 bg-gray-900 border border-gray-600 text-gray-200 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            className="px-3 py-1 bg-black/30 border border-ember-900/40 text-ember-100 rounded-md text-sm focus:border-ember-600/60 focus:ring-1 focus:ring-ember-500/40"
           >
             <option value="">All Types</option>
             <option value="character">Characters</option>
@@ -253,7 +253,7 @@ export default function NotesPanel({
 
       {/* Note Form */}
       {showForm && (
-        <div className="p-4 border-b border-gray-700 bg-gray-900">
+        <div className="p-4 border-b border-ember-900/30 bg-black/20">
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <input
@@ -261,7 +261,7 @@ export default function NotesPanel({
                 value={formData.title}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                 placeholder="Note title..."
-                className="w-full p-2 bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                className="w-full p-2 bg-black/30 border border-ember-900/40 text-ember-100 placeholder-ember-500/40 rounded-md text-sm focus:border-ember-600/60 focus:ring-1 focus:ring-ember-500/40"
                 required
               />
             </div>
@@ -272,7 +272,7 @@ export default function NotesPanel({
                 onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
                 placeholder="Note content..."
                 rows={4}
-                className="w-full p-2 bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                className="w-full p-2 bg-black/30 border border-ember-900/40 text-ember-100 placeholder-ember-500/40 rounded-md text-sm focus:border-ember-600/60 focus:ring-1 focus:ring-ember-500/40"
                 required
               />
             </div>
@@ -281,7 +281,7 @@ export default function NotesPanel({
               <select
                 value={formData.visibility}
                 onChange={(e) => setFormData(prev => ({ ...prev, visibility: e.target.value as NoteVisibility }))}
-                className="p-2 bg-gray-800 border border-gray-600 text-gray-100 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                className="p-2 bg-black/30 border border-ember-900/40 text-ember-100 rounded-md text-sm focus:border-ember-600/60 focus:ring-1 focus:ring-ember-500/40"
               >
                 <option value="PRIVATE">Private</option>
                 <option value="SHARED">Shared with Campaign</option>
@@ -290,7 +290,7 @@ export default function NotesPanel({
               <select
                 value={formData.entityType}
                 onChange={(e) => setFormData(prev => ({ ...prev, entityType: e.target.value, entityId: '' }))}
-                className="p-2 bg-gray-800 border border-gray-600 text-gray-100 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                className="p-2 bg-black/30 border border-ember-900/40 text-ember-100 rounded-md text-sm focus:border-ember-600/60 focus:ring-1 focus:ring-ember-500/40"
               >
                 <option value="">General Note</option>
                 <option value="character">About Character</option>
@@ -303,7 +303,7 @@ export default function NotesPanel({
                 <select
                   value={formData.entityId}
                   onChange={(e) => setFormData(prev => ({ ...prev, entityId: e.target.value }))}
-                  className="p-2 bg-gray-800 border border-gray-600 text-gray-100 rounded-md text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                  className="p-2 bg-black/30 border border-ember-900/40 text-ember-100 rounded-md text-sm focus:border-ember-600/60 focus:ring-1 focus:ring-ember-500/40"
                 >
                   <option value="">Select {formData.entityType}...</option>
                   {getEntityOptions().map(option => (
@@ -317,14 +317,14 @@ export default function NotesPanel({
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm hover:bg-primary-700 disabled:opacity-50"
+                className="px-4 py-2 bg-wine-600 text-ember-100 rounded-md text-sm hover:bg-wine-500 disabled:opacity-50"
               >
                 {editingNote ? 'Update Note' : 'Save Note'}
               </button>
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-4 py-2 bg-gray-700 text-gray-200 rounded-md text-sm hover:bg-gray-600"
+                className="px-4 py-2 bg-black/30 text-ember-200/80 rounded-md text-sm hover:bg-black/40"
               >
                 Cancel
               </button>
@@ -336,17 +336,17 @@ export default function NotesPanel({
       {/* Notes List */}
       <div className="max-h-96 overflow-y-auto">
         {notes.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">
+          <div className="p-8 text-center text-ember-300/50">
             No notes found. Create your first note!
           </div>
         ) : (
-          <div className="divide-y divide-gray-700">
+          <div className="divide-y divide-ember-900/30">
             {notes.map((note) => (
-              <div key={note.id} className="p-4 hover:bg-gray-900">
+              <div key={note.id} className="p-4 hover:bg-black/20">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <h4 className="font-medium text-gray-100">{note.title}</h4>
-                    <p className="text-xs text-gray-400">
+                    <h4 className="font-medium text-ember-100">{note.title}</h4>
+                    <p className="text-xs text-ember-400/50">
                       {getEntityDisplay(note)} •
                       {note.visibility === 'PRIVATE' ? ' Private' : ' Shared'} •
                       by {note.author.name || note.author.email} •
@@ -357,20 +357,20 @@ export default function NotesPanel({
                     <div className="flex gap-1">
                       <button
                         onClick={() => startEdit(note)}
-                        className="px-2 py-1 text-xs bg-blue-600 text-blue-100 rounded hover:bg-blue-700"
+                        className="px-2 py-1 text-xs bg-ember-800/50 text-ember-200 rounded hover:bg-ember-800/70"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => deleteNote(note.id, note.authorId)}
-                        className="px-2 py-1 text-xs bg-red-600 text-red-100 rounded hover:bg-red-700"
+                        className="px-2 py-1 text-xs bg-wine-700 text-ember-100 rounded hover:bg-wine-600"
                       >
                         Delete
                       </button>
                     </div>
                   )}
                 </div>
-                <div className="text-sm text-gray-200 whitespace-pre-wrap">
+                <div className="text-sm text-ember-100/90 whitespace-pre-wrap">
                   {note.content}
                 </div>
               </div>

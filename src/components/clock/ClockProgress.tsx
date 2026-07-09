@@ -32,10 +32,10 @@ export default function ClockProgress({
 
   // Get color based on progress
   const getColor = () => {
-    if (percentage >= 90) return { stroke: '#ef4444', glow: 'shadow-red-500/50', bg: 'from-red-900/30 to-red-800/20' }
-    if (percentage >= 75) return { stroke: '#f97316', glow: 'shadow-orange-500/50', bg: 'from-orange-900/30 to-orange-800/20' }
-    if (percentage >= 50) return { stroke: '#eab308', glow: 'shadow-yellow-500/50', bg: 'from-yellow-900/30 to-yellow-800/20' }
-    return { stroke: '#3b82f6', glow: 'shadow-blue-500/50', bg: 'from-blue-900/30 to-blue-800/20' }
+    if (percentage >= 90) return { stroke: '#ef4444', glow: 'shadow-danger-500/50', bg: 'from-wine-800/30 to-wine-800/20' }
+    if (percentage >= 75) return { stroke: '#f59e0b', glow: 'shadow-warning-500/50', bg: 'from-ember-900/30 to-ember-800/20' }
+    if (percentage >= 50) return { stroke: '#c99a3a', glow: 'shadow-ember-500/40', bg: 'from-ember-900/20 to-ember-900/10' }
+    return { stroke: '#855f24', glow: 'shadow-black/30', bg: 'from-tavern-800/40 to-tavern-900/30' }
   }
 
   const sizeClasses = {
@@ -49,18 +49,18 @@ export default function ClockProgress({
   const colors = getColor()
 
   return (
-    <div className={`card bg-gradient-to-br ${colors.bg} border-gray-700 hover:border-gray-600 transition-all`}>
+    <div className={`rounded-xl bg-gradient-to-br ${colors.bg} border border-ember-900/30 hover:border-ember-700/40 shadow-lg shadow-black/30 p-5 transition-all`}>
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <h3 className={`font-bold text-white ${size === 'sm' ? 'text-sm' : 'text-lg'} flex items-center gap-2`}>
+          <h3 className={`font-bold text-ember-100 ${size === 'sm' ? 'text-sm' : 'text-lg'} flex items-center gap-2`}>
             ⏰ {name}
             {isHidden && (
-              <span className="text-xs bg-gray-700 text-gray-400 px-2 py-0.5 rounded">Hidden</span>
+              <span className="text-xs bg-black/30 text-ember-400/60 px-2 py-0.5 rounded">Hidden</span>
             )}
           </h3>
           {description && (
-            <p className="text-xs text-gray-400 mt-1">{description}</p>
+            <p className="text-xs text-ember-300/50 mt-1">{description}</p>
           )}
         </div>
       </div>
@@ -74,7 +74,7 @@ export default function ClockProgress({
               cx={config.circle / 2}
               cy={config.circle / 2}
               r="45"
-              stroke="#374151"
+              stroke="#3d2c15"
               strokeWidth="8"
               fill="none"
             />
@@ -96,10 +96,10 @@ export default function ClockProgress({
 
           {/* Center content */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className={`font-bold text-white ${config.text}`}>
+            <div className={`font-bold text-ember-100 ${config.text}`}>
               {current}/{max}
             </div>
-            <div className="text-xs text-gray-400">ticks</div>
+            <div className="text-xs text-ember-400/50">ticks</div>
           </div>
 
           {/* Pulsing effect when near completion */}
@@ -118,7 +118,7 @@ export default function ClockProgress({
               h-2 flex-1 rounded-full transition-all duration-300
               ${i < current
                 ? 'bg-gradient-to-r from-current to-current'
-                : 'bg-gray-700'
+                : 'bg-black/30'
               }
             `}
             style={{ color: i < current ? colors.stroke : undefined }}
@@ -130,11 +130,11 @@ export default function ClockProgress({
       {consequence && (
         <div className={`p-3 rounded-lg border ${
           percentage >= 90
-            ? 'bg-red-900/20 border-red-700/50'
-            : 'bg-gray-800/50 border-gray-700'
+            ? 'bg-wine-800/20 border-wine-700/40'
+            : 'bg-black/25 border-ember-900/30'
         }`}>
-          <p className="text-xs font-semibold text-gray-400 mb-1">When Complete:</p>
-          <p className={`text-sm ${percentage >= 90 ? 'text-red-300' : 'text-gray-300'}`}>
+          <p className="text-xs font-semibold text-ember-400/60 mb-1">When Complete:</p>
+          <p className={`text-sm ${percentage >= 90 ? 'text-wine-300' : 'text-ember-200/70'}`}>
             {consequence}
           </p>
         </div>
@@ -144,7 +144,7 @@ export default function ClockProgress({
       {onTick && current < max && (
         <button
           onClick={onTick}
-          className="w-full mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium text-sm"
+          className="w-full mt-4 px-4 py-2 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded-lg transition-colors font-medium text-sm"
         >
           + Advance Clock
         </button>
@@ -153,7 +153,7 @@ export default function ClockProgress({
       {/* Completion badge */}
       {current >= max && (
         <div className="mt-4 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/20 border border-red-500 rounded-lg text-red-400 font-bold">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-wine-800/30 border border-wine-600/50 rounded-lg text-wine-400 font-bold">
             ⚠️ COMPLETE
           </div>
         </div>
@@ -167,15 +167,15 @@ export function CompactClock({ name, current, max }: { name: string, current: nu
   const percentage = (current / max) * 100
 
   return (
-    <div className="flex items-center gap-3 p-2 rounded hover:bg-gray-800 transition-colors">
+    <div className="flex items-center gap-3 p-2 rounded hover:bg-black/25 transition-colors">
       <div className="relative w-12 h-12 flex-shrink-0">
         <svg className="transform -rotate-90" width="48" height="48">
-          <circle cx="24" cy="24" r="20" stroke="#374151" strokeWidth="4" fill="none" />
+          <circle cx="24" cy="24" r="20" stroke="#3d2c15" strokeWidth="4" fill="none" />
           <circle
             cx="24"
             cy="24"
             r="20"
-            stroke={percentage >= 75 ? '#ef4444' : '#3b82f6'}
+            stroke={percentage >= 75 ? '#ef4444' : '#c99a3a'}
             strokeWidth="4"
             fill="none"
             strokeDasharray={2 * Math.PI * 20}
@@ -183,13 +183,13 @@ export function CompactClock({ name, current, max }: { name: string, current: nu
             strokeLinecap="round"
           />
         </svg>
-        <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
+        <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-ember-100">
           {current}/{max}
         </div>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white truncate">{name}</p>
-        <p className="text-xs text-gray-500">{percentage.toFixed(0)}% complete</p>
+        <p className="text-sm font-medium text-ember-100 truncate">{name}</p>
+        <p className="text-xs text-ember-400/50">{percentage.toFixed(0)}% complete</p>
       </div>
     </div>
   )

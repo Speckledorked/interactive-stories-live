@@ -85,11 +85,11 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
       {/* Balance Display */}
       <button
         onClick={() => setShowAddFunds(!showAddFunds)}
-        className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg border border-dark-700/50 hover:bg-dark-800 transition-all duration-200"
+        className="flex items-center gap-2 px-3 py-1.5 bg-black/25 rounded-lg border border-ember-900/30 hover:bg-black/35 transition-all duration-200"
         title="Click to add funds"
       >
         <svg
-          className="w-4 h-4 text-gray-400"
+          className="w-4 h-4 text-ember-300/60"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -111,24 +111,24 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 bg-black/50 z-40"
+            className="fixed inset-0 bg-black/70 z-40"
             onClick={() => setShowAddFunds(false)}
           />
 
           {/* Modal */}
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md">
-            <div className="bg-gradient-to-br from-dark-850 to-dark-900 border border-dark-700/50 rounded-2xl shadow-elevated p-6 animate-scale-in">
-              <h3 className="text-xl font-bold text-white mb-4">Add Funds</h3>
+            <div className="bg-gradient-to-br from-tavern-800 to-tavern-950 border border-ember-900/40 rounded-2xl shadow-2xl shadow-black/50 p-6 animate-scale-in">
+              <h3 className="text-xl font-bold text-ember-100 mb-4">Add Funds</h3>
 
               <div className="mb-4">
-                <p className="text-sm text-gray-400 mb-2">
+                <p className="text-sm text-ember-300/60 mb-2">
                   Current Balance:{' '}
                   <span className={`font-bold ${getBalanceColorClass()}`}>
                     {balanceFormatted}
                   </span>
                 </p>
-                <div className="text-xs text-gray-500 space-y-1">
-                  <p className="font-semibold text-gray-400 mb-1">AI Scene Resolution Pricing:</p>
+                <div className="text-xs text-ember-400/50 space-y-1">
+                  <p className="font-semibold text-ember-300/60 mb-1">AI Scene Resolution Pricing:</p>
                   <p>• Solo play (1 player): $0.25 per scene</p>
                   <p>• Small group (2-4 players): $0.50 per scene</p>
                   <p>• Large group (5-6 players): $0.75 per scene</p>
@@ -136,12 +136,12 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-ember-200/80 mb-2">
                   Amount to Add (minimum $0.50)
                 </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ember-400/50">
                       $
                     </span>
                     <input
@@ -150,7 +150,7 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
                       step="0.50"
                       value={addAmount}
                       onChange={(e) => setAddAmount(e.target.value)}
-                      className="w-full pl-7 pr-4 py-2 bg-dark-800 border border-dark-700 rounded-lg text-white focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none transition-all"
+                      className="w-full pl-7 pr-4 py-2 bg-black/30 border border-ember-900/40 rounded-lg text-ember-100 focus:border-ember-600/60 focus:ring-1 focus:ring-ember-500/40 outline-none transition-all"
                       disabled={isLoading}
                     />
                   </div>
@@ -160,7 +160,7 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
                     <button
                       key={amount}
                       onClick={() => setAddAmount(amount)}
-                      className="px-3 py-1 text-xs bg-dark-800 hover:bg-dark-700 text-gray-300 rounded-lg transition-all"
+                      className="px-3 py-1 text-xs bg-black/30 hover:bg-black/40 text-ember-200/70 rounded-lg transition-all"
                       disabled={isLoading}
                     >
                       ${amount}
@@ -185,20 +185,20 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
                 <button
                   onClick={handleAddFunds}
                   disabled={isLoading}
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2 bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? 'Processing...' : 'Add Funds'}
                 </button>
                 <button
                   onClick={() => setShowAddFunds(false)}
                   disabled={isLoading}
-                  className="px-4 py-2 bg-dark-800 hover:bg-dark-700 text-gray-300 font-medium rounded-lg transition-all duration-200"
+                  className="px-4 py-2 bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-200 font-medium rounded-lg transition-all duration-200"
                 >
                   Cancel
                 </button>
               </div>
 
-              <p className="text-xs text-gray-500 mt-4 text-center">
+              <p className="text-xs text-ember-400/40 mt-4 text-center">
                 Payments are securely processed by Stripe.
               </p>
             </div>

@@ -68,11 +68,11 @@ export default function AILoadingState({
       {/* Animated Icon */}
       <div className="relative mb-6">
         {/* Outer ring */}
-        <div className="absolute inset-0 rounded-full border-4 border-primary-500/20" />
+        <div className="absolute inset-0 rounded-full border-4 border-ember-700/30" />
 
         {/* Spinning ring */}
         <div className="relative">
-          <div className="w-20 h-20 rounded-full border-4 border-transparent border-t-primary-500 border-r-primary-500 animate-spin" />
+          <div className="w-20 h-20 rounded-full border-4 border-transparent border-t-ember-400 border-r-ember-400 animate-spin" />
         </div>
 
         {/* Center icon */}
@@ -83,16 +83,16 @@ export default function AILoadingState({
         </div>
 
         {/* Pulsing glow */}
-        <div className="absolute inset-0 rounded-full bg-primary-500/10 animate-ping" style={{ animationDuration: '2s' }} />
+        <div className="absolute inset-0 rounded-full bg-ember-500/10 animate-ping" style={{ animationDuration: '2s' }} />
       </div>
 
       {/* Message */}
       <div className="text-center">
-        <p className="text-lg font-medium text-white mb-2 min-h-[2rem]">
+        <p className="text-lg font-medium text-ember-100 mb-2 min-h-[2rem]">
           {message || currentMessages[messageIndex]}
           <span className="inline-block w-8 text-left">{dots}</span>
         </p>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-ember-300/50">
           This may take a few moments
         </p>
       </div>
@@ -100,8 +100,8 @@ export default function AILoadingState({
       {/* Progress bar (optional) */}
       {showProgress && (
         <div className="w-full max-w-md mt-6">
-          <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-primary-500 to-primary-600 animate-pulse" style={{ width: '60%' }} />
+          <div className="h-2 bg-black/30 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-ember-500 to-ember-600 animate-pulse" style={{ width: '60%' }} />
           </div>
         </div>
       )}
@@ -111,7 +111,7 @@ export default function AILoadingState({
         {[...Array(5)].map((_, i) => (
           <div
             key={i}
-            className="absolute w-2 h-2 bg-primary-500/30 rounded-full animate-float"
+            className="absolute w-2 h-2 bg-ember-500/30 rounded-full animate-float"
             style={{
               left: `${20 + i * 15}%`,
               animationDelay: `${i * 0.5}s`,
@@ -155,8 +155,8 @@ export function AIInlineLoader({ text = 'Loading' }: { text?: string }) {
   }, [])
 
   return (
-    <div className="inline-flex items-center gap-2 text-primary-400">
-      <div className="w-4 h-4 border-2 border-transparent border-t-primary-500 border-r-primary-500 rounded-full animate-spin" />
+    <div className="inline-flex items-center gap-2 text-ember-300">
+      <div className="w-4 h-4 border-2 border-transparent border-t-ember-400 border-r-ember-400 rounded-full animate-spin" />
       <span>{text}<span className="inline-block w-6 text-left">{dots}</span></span>
     </div>
   )

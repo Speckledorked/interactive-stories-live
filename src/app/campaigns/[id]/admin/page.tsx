@@ -432,7 +432,7 @@ export default function AdminPage() {
   if (loading) {
     return (
       <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Admin" />
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Admin" campaignId={campaignId} isAdmin />
         <main className="max-w-7xl mx-auto px-4 pt-28 pb-16 flex items-center justify-center">
           <AILoadingState />
         </main>
@@ -445,6 +445,8 @@ export default function AdminPage() {
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title="Campaign Admin"
+        campaignId={campaignId}
+        isAdmin
         subrow={
           <nav className="max-w-7xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
             {(['dashboard', 'ai', 'npcs', 'factions', 'clocks', 'invites', 'members', 'settings'] as const).map((tab) => (

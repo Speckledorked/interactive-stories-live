@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
 import NotificationSettings from '@/components/settings/NotificationSettings'
+import BalanceDisplay from '@/components/BalanceDisplay'
 import { Bell, User, Lock, X } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
@@ -306,6 +307,20 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Balance - Separate Card */}
+        {activeTab === 'profile' && (
+          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="text-3xl">💰</div>
+              <h2 className="text-2xl font-bold text-ember-100">Balance & Billing</h2>
+            </div>
+            <p className="text-sm text-ember-300/60 mb-4">
+              Your current balance covers AI scene resolution costs. Click your balance below to add funds.
+            </p>
+            <BalanceDisplay userId={user.id} />
           </div>
         )}
 

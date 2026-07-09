@@ -17,6 +17,7 @@ export default function CharactersListPage() {
 
   const [characters, setCharacters] = useState<any[]>([])
   const [campaign, setCampaign] = useState<any>(null)
+  const [userRole, setUserRole] = useState<'ADMIN' | 'PLAYER' | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -39,6 +40,7 @@ export default function CharactersListPage() {
       if (campaignResponse.ok) {
         const campaignData = await campaignResponse.json()
         setCampaign(campaignData.campaign)
+        setUserRole(campaignData.userRole)
 
         if (campaignData.campaign?.characters) {
           setCharacters(campaignData.campaign.characters)
@@ -56,7 +58,7 @@ export default function CharactersListPage() {
   if (loading) {
     return (
       <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Characters" />
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Characters" campaignId={campaignId} />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
           <TavernSpinner className="h-16 w-16" />
         </main>
@@ -67,7 +69,7 @@ export default function CharactersListPage() {
   if (error || !campaign) {
     return (
       <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Characters" />
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Characters" campaignId={campaignId} />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16 text-center">
           <h2 className="text-2xl font-bold text-wine-400 mb-4">Error</h2>
           <p className="text-ember-300/60 mb-4">{error || 'Campaign not found'}</p>
@@ -84,6 +86,8 @@ export default function CharactersListPage() {
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title="Characters"
+        campaignId={campaignId}
+        isAdmin={userRole === 'ADMIN'}
         subrow={
           <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-ember-900/20 pt-2 pb-0">
             <Link

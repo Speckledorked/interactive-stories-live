@@ -5,7 +5,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
 import EnhancedCreateCharacterForm from "@/components/forms/EnhancedCreateCharacterForm"
@@ -27,16 +27,29 @@ interface CampaignData {
   userRole: 'ADMIN' | 'PLAYER'
 }
 
+const VALID_TABS = ['overview', 'chat', 'notes', 'maps', 'progression'] as const
+type LobbyTab = (typeof VALID_TABS)[number]
+
 export default function CampaignLobbyPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const campaignId = params.id as string
+
+  const initialTab = (VALID_TABS as readonly string[]).includes(searchParams.get('tab') || '')
+    ? (searchParams.get('tab') as LobbyTab)
+    : 'overview'
 
   const [data, setData] = useState<CampaignData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreateCharacter, setShowCreateCharacter] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'notes' | 'maps' | 'progression'>('overview')
+  const [activeTab, setActiveTabState] = useState<LobbyTab>(initialTab)
+
+  const setActiveTab = (tab: LobbyTab) => {
+    setActiveTabState(tab)
+    router.replace(`/campaigns/${campaignId}${tab === 'overview' ? '' : `?tab=${tab}`}`, { scroll: false })
+  }
   const [showNotifications, setShowNotifications] = useState(false)
   const [deletingCharacterId, setDeletingCharacterId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState('')
@@ -136,7 +149,7 @@ export default function CampaignLobbyPage() {
   if (loading) {
     return (
       <TavernPage>
-        <TavernHeader backHref="/campaigns" title="Loading…" />
+        <TavernHeader backHref="/campaigns" title="Loading…" campaignId={campaignId} />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
           <TavernSpinner className="h-16 w-16" />
         </main>
@@ -147,7 +160,7 @@ export default function CampaignLobbyPage() {
   if (error || !data) {
     return (
       <TavernPage>
-        <TavernHeader backHref="/campaigns" title="Campaign" />
+        <TavernHeader backHref="/campaigns" title="Campaign" campaignId={campaignId} />
         <main className="max-w-2xl mx-auto px-4 pt-28 pb-16">
           <TavernCard className="p-6">
             <p className="text-wine-400">{error || 'Campaign not found'}</p>
@@ -173,6 +186,8 @@ export default function CampaignLobbyPage() {
       <TavernHeader
         backHref="/campaigns"
         title={campaign.title}
+        campaignId={campaignId}
+        isAdmin={userRole === 'ADMIN'}
         subrow={
           <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
             {[

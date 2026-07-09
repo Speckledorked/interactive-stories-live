@@ -103,6 +103,7 @@ export default function WikiPage() {
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title="Campaign Wiki"
+        campaignId={campaignId}
         subrow={
           <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
             {tabs.map((tab) => (

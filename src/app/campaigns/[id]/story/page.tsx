@@ -549,7 +549,7 @@ export default function StoryPage() {
   if (loading) {
     return (
       <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" />
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} />
         <main className="max-w-7xl mx-auto px-4 pt-28 pb-16 flex justify-center items-center min-h-[60vh]">
           <AILoadingState type="scene" />
         </main>
@@ -594,9 +594,9 @@ export default function StoryPage() {
     { key: 'overview', label: 'Overview', icon: Home, href: `/campaigns/${campaignId}` },
     { key: 'story', label: 'Story', icon: Scroll, href: null },
     { key: 'story-log', label: 'Story Log', icon: Scroll, href: `/campaigns/${campaignId}/story-log` },
-    { key: 'notes', label: 'Notes', icon: StickyNote, href: `/campaigns/${campaignId}` },
-    { key: 'maps', label: 'Maps', icon: MapIcon, href: `/campaigns/${campaignId}` },
-    { key: 'chat', label: 'Chat', icon: MessageSquare, href: `/campaigns/${campaignId}` },
+    { key: 'notes', label: 'Notes', icon: StickyNote, href: `/campaigns/${campaignId}?tab=notes` },
+    { key: 'maps', label: 'Maps', icon: MapIcon, href: `/campaigns/${campaignId}?tab=maps` },
+    { key: 'chat', label: 'Chat', icon: MessageSquare, href: `/campaigns/${campaignId}?tab=chat` },
     ...(isAdmin ? [{ key: 'admin', label: 'Admin', icon: SettingsIcon, href: `/campaigns/${campaignId}/admin` }] : []),
   ]
 
@@ -605,6 +605,8 @@ export default function StoryPage() {
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title={campaign?.campaign?.name || 'Story'}
+        campaignId={campaignId}
+        isAdmin={isAdmin}
         subrow={
           <div className="max-w-7xl mx-auto px-4 flex items-center justify-between gap-3 border-t border-ember-900/20 pt-2 pb-0">
             <nav className="flex items-center gap-1 overflow-x-auto text-sm">

@@ -614,7 +614,7 @@ export default function StoryPage() {
                 const isActive = tab.key === 'story'
                 const content = (
                   <span
-                    className={`flex items-center gap-1.5 px-2.5 pb-2 border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
+                    className={`flex items-center gap-1.5 px-2.5 py-2 border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
                       isActive ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
                     }`}
                   >

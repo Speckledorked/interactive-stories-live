@@ -32,12 +32,12 @@ export function TavernNav({ active, campaignId }: { active?: TavernNavKey; campa
   ]
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-30 bg-black/70 backdrop-blur-md border-t border-ember-900/40">
+    <nav className="fixed bottom-0 inset-x-0 z-30 bg-black/70 backdrop-blur-md border-t border-ember-900/40 pb-[env(safe-area-inset-bottom)]">
       <div className="max-w-2xl mx-auto grid grid-cols-5">
         {items.map((item) => {
           const content = (
             <div
-              className={`flex flex-col items-center gap-1 py-3 text-[11px] transition-colors ${
+              className={`flex flex-col items-center gap-1 py-3 text-[11px] transition-colors touch-manipulation ${
                 item.key === active ? 'text-ember-300' : 'text-ember-500/40'
               } ${item.href ? 'hover:text-ember-200' : 'cursor-default'}`}
             >

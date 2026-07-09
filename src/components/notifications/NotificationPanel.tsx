@@ -225,7 +225,7 @@ export default function NotificationPanel({
     <div className="fixed inset-0 z-50 overflow-hidden">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="absolute right-0 top-0 h-full w-full max-w-md bg-gradient-to-br from-tavern-800 to-tavern-950 shadow-2xl shadow-black/50 border-l border-ember-900/40">
+      <div className="absolute right-0 top-0 h-full w-full max-w-[85vw] sm:max-w-md bg-gradient-to-br from-tavern-800 to-tavern-950 shadow-2xl shadow-black/50 border-l border-ember-900/40">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-ember-900/30 bg-gradient-to-r from-ember-900/15 to-transparent">
           <div>

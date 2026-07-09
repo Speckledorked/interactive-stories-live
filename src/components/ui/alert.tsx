@@ -7,8 +7,8 @@ export interface AlertProps extends React.HTMLAttributes<HTMLDivElement> {
 export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
   ({ className = '', variant = 'default', ...props }, ref) => {
     const variantStyles = {
-      default: 'bg-blue-50 border-blue-200 text-blue-900',
-      destructive: 'bg-red-50 border-red-200 text-red-900'
+      default: 'bg-ember-900/15 border-ember-800/30 text-ember-200',
+      destructive: 'bg-wine-800/20 border-wine-700/40 text-wine-200'
     }
 
     return (

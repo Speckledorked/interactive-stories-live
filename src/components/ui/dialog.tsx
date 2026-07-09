@@ -52,12 +52,12 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div
-          className="fixed inset-0 bg-black/50"
+          className="fixed inset-0 bg-black/70"
           onClick={() => onOpenChange?.(false)}
         />
         <div
           ref={ref}
-          className={`relative z-50 bg-white rounded-lg shadow-lg p-6 max-w-lg w-full mx-4 ${className}`}
+          className={`relative z-50 bg-gradient-to-br from-tavern-800 to-tavern-950 border border-ember-900/40 rounded-lg shadow-2xl shadow-black/50 p-6 max-w-lg w-full mx-4 text-ember-100 ${className}`}
           {...props}
         >
           {children}
@@ -102,7 +102,7 @@ export const DialogDescription = React.forwardRef<HTMLParagraphElement, React.HT
     return (
       <p
         ref={ref}
-        className={`text-sm text-gray-600 ${className}`}
+        className={`text-sm text-ember-300/60 ${className}`}
         {...props}
       />
     )

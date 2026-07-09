@@ -167,10 +167,10 @@ export function DynamicDowntimeManager({
   // Get risk level color
   const getRiskColor = (riskLevel: string) => {
     switch (riskLevel) {
-      case 'low': return 'text-green-600 bg-green-100'
-      case 'medium': return 'text-yellow-600 bg-yellow-100'
-      case 'high': return 'text-red-600 bg-red-100'
-      default: return 'text-gray-600 bg-gray-100'
+      case 'low': return 'text-success-400 bg-success-500/10'
+      case 'medium': return 'text-ember-300 bg-ember-900/20'
+      case 'high': return 'text-wine-400 bg-wine-800/20'
+      default: return 'text-ember-400/60 bg-black/25'
     }
   }
 
@@ -200,18 +200,18 @@ export function DynamicDowntimeManager({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <Brain className="w-7 h-7 text-purple-600" />
+          <h2 className="text-2xl font-bold flex items-center gap-2 text-ember-100">
+            <Brain className="w-7 h-7 text-wine-400" />
             AI-Powered Downtime
           </h2>
-          <p className="text-gray-600">
+          <p className="text-ember-300/60">
             Describe any downtime activity - the AI will make it happen!
           </p>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <Coins className="w-4 h-4 text-yellow-600" />
+            <Coins className="w-4 h-4 text-ember-400" />
             <span className="font-medium">{characterGold} gold</span>
           </div>
 
@@ -227,7 +227,7 @@ export function DynamicDowntimeManager({
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-purple-600" />
+                  <Sparkles className="w-5 h-5 text-wine-400" />
                   What do you want to do?
                 </DialogTitle>
               </DialogHeader>
@@ -260,9 +260,9 @@ export function DynamicDowntimeManager({
                 </div>
 
                 {createModal.interpretation && (
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <h4 className="font-semibold mb-2 flex items-center gap-2">
-                      <Brain className="w-4 h-4 text-blue-600" />
+                  <div className="bg-ember-900/15 p-4 rounded-lg border border-ember-800/30">
+                    <h4 className="font-semibold mb-2 flex items-center gap-2 text-ember-100">
+                      <Brain className="w-4 h-4 text-ember-400" />
                       AI Interpretation
                     </h4>
                     <div className="space-y-2 text-sm">
@@ -312,14 +312,14 @@ export function DynamicDowntimeManager({
 
       {/* Time Advancement */}
       {activeActivities.length > 0 && (
-        <Card className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
+        <Card className="p-4 bg-gradient-to-r from-ember-900/20 to-wine-800/10 border-ember-800/30">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-semibold flex items-center gap-2">
-                <Clock className="w-5 h-5 text-blue-600" />
+              <h3 className="font-semibold flex items-center gap-2 text-ember-100">
+                <Clock className="w-5 h-5 text-ember-400" />
                 Advance Time
               </h3>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-ember-300/60">
                 Progress your activities and see what happens next
               </p>
             </div>
@@ -327,7 +327,7 @@ export function DynamicDowntimeManager({
               <select
                 value={advanceDays}
                 onChange={(e) => setAdvanceDays(e.target.value)}
-                className="px-3 py-2 border rounded-md"
+                className="px-3 py-2 border border-ember-900/40 bg-black/30 text-ember-100 rounded-md"
               >
                 <option value="1">1 day</option>
                 <option value="3">3 days</option>
@@ -346,14 +346,14 @@ export function DynamicDowntimeManager({
 
       {/* Pending Events */}
       {pendingEvents.length > 0 && (
-        <Card className="p-4 border-amber-200 bg-amber-50">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-amber-600" />
+        <Card className="p-4 border-ember-800/30 bg-ember-900/15">
+          <h3 className="font-semibold mb-4 flex items-center gap-2 text-ember-100">
+            <MessageSquare className="w-5 h-5 text-ember-400" />
             Events Requiring Your Response ({pendingEvents.length})
           </h3>
           <div className="space-y-3">
             {pendingEvents.map(event => (
-              <div key={event.id} className="bg-white p-4 rounded border">
+              <div key={event.id} className="bg-black/25 p-4 rounded border border-ember-900/30">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
@@ -363,17 +363,17 @@ export function DynamicDowntimeManager({
                         Day {event.day}
                       </Badge>
                     </div>
-                    <p className="text-sm text-gray-700 mb-3">{event.description}</p>
+                    <p className="text-sm text-ember-200/70 mb-3">{event.description}</p>
                     
                     {event.choices && (
                       <div className="space-y-2">
                         <p className="text-sm font-medium">Your options:</p>
                         {event.choices.map((choice, index) => (
-                          <div key={index} className="bg-gray-50 p-2 rounded text-sm">
-                            <p className="font-medium">{choice.option}</p>
-                            <p className="text-gray-600">{choice.description}</p>
+                          <div key={index} className="bg-black/25 p-2 rounded text-sm">
+                            <p className="font-medium text-ember-100">{choice.option}</p>
+                            <p className="text-ember-300/60">{choice.description}</p>
                             {choice.consequences && (
-                              <p className="text-xs text-blue-600 mt-1">→ {choice.consequences}</p>
+                              <p className="text-xs text-ember-300 mt-1">→ {choice.consequences}</p>
                             )}
                           </div>
                         ))}
@@ -397,15 +397,15 @@ export function DynamicDowntimeManager({
       {/* AI Suggestions */}
       {suggestions.length > 0 && (
         <Card className="p-4">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <Lightbulb className="w-5 h-5 text-yellow-600" />
+          <h3 className="font-semibold mb-4 flex items-center gap-2 text-ember-100">
+            <Lightbulb className="w-5 h-5 text-ember-400" />
             AI Suggestions for {characterName}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {suggestions.map((suggestion, index) => (
               <div 
                 key={index}
-                className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors group"
+                className="p-3 border border-ember-900/30 rounded-lg hover:bg-black/25 cursor-pointer transition-colors group"
                 onClick={() => useSuggestion(suggestion)}
               >
                 <div className="flex items-start justify-between">
@@ -423,7 +423,7 @@ export function DynamicDowntimeManager({
       {/* Active Activities */}
       {activeActivities.length > 0 && (
         <div>
-          <h3 className="font-semibold mb-4">Active Activities</h3>
+          <h3 className="font-semibold mb-4 text-ember-100">Active Activities</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {activeActivities.map(activity => (
               <Card key={activity.id} className="p-4">
@@ -431,12 +431,12 @@ export function DynamicDowntimeManager({
                   {/* Header */}
                   <div>
                     <div className="flex items-start justify-between mb-2">
-                      <h4 className="font-semibold text-sm">What you're doing:</h4>
+                      <h4 className="font-semibold text-sm text-ember-100">What you're doing:</h4>
                       <Badge className={getRiskColor(activity.aiInterpretation.riskLevel)}>
                         {activity.aiInterpretation.riskLevel} risk
                       </Badge>
                     </div>
-                    <p className="text-sm text-gray-700 italic mb-2">
+                    <p className="text-sm text-ember-200/70 italic mb-2">
                       "{activity.playerDescription}"
                     </p>
                     <p className="text-sm font-medium">
@@ -461,7 +461,7 @@ export function DynamicDowntimeManager({
                     <div className="text-xs space-y-1">
                       {activity.aiInterpretation.costs?.gold && activity.aiInterpretation.costs.gold > 0 && (
                         <div className="flex items-center gap-1">
-                          <Coins className="w-3 h-3 text-yellow-600" />
+                          <Coins className="w-3 h-3 text-ember-400" />
                           <span>Cost: {activity.aiInterpretation.costs.gold} gold</span>
                         </div>
                       )}
@@ -477,23 +477,23 @@ export function DynamicDowntimeManager({
                   {/* Recent Events */}
                   {activity.events.length > 0 && (
                     <div>
-                      <h5 className="text-sm font-medium mb-2">Recent Events:</h5>
+                      <h5 className="text-sm font-medium mb-2 text-ember-200">Recent Events:</h5>
                       <div className="space-y-2 max-h-32 overflow-y-auto">
                         {activity.events.slice(-2).map(event => (
-                          <div key={event.id} className="text-xs bg-gray-50 p-2 rounded">
+                          <div key={event.id} className="text-xs bg-black/25 p-2 rounded">
                             <div className="flex items-center gap-1 mb-1">
                               {getEventIcon('progress')}
-                              <span className="font-medium">{event.title}</span>
-                              <span className="text-gray-500">Day {event.day}</span>
+                              <span className="font-medium text-ember-100">{event.title}</span>
+                              <span className="text-ember-400/50">Day {event.day}</span>
                             </div>
-                            <p className="text-gray-600">{event.description}</p>
+                            <p className="text-ember-300/60">{event.description}</p>
                             {event.choices && !event.resolvedAt && (
                               <Badge variant="secondary" className="text-xs mt-1">
                                 Awaiting Your Response
                               </Badge>
                             )}
                             {event.aiResponse && (
-                              <p className="text-blue-600 mt-1 italic">{event.aiResponse}</p>
+                              <p className="text-ember-300 mt-1 italic">{event.aiResponse}</p>
                             )}
                           </div>
                         ))}
@@ -510,27 +510,27 @@ export function DynamicDowntimeManager({
       {/* Completed Activities */}
       {completedActivities.length > 0 && (
         <div>
-          <h3 className="font-semibold mb-4">Recently Completed</h3>
+          <h3 className="font-semibold mb-4 text-ember-100">Recently Completed</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {completedActivities.slice(0, 6).map(activity => (
               <Card key={activity.id} className="p-3">
                 <div className="space-y-2">
                   <div>
-                    <p className="text-xs text-gray-500 italic">
+                    <p className="text-xs text-ember-400/50 italic">
                       "{activity.playerDescription}"
                     </p>
-                    <h4 className="font-medium text-sm">{activity.aiInterpretation.summary}</h4>
-                    <p className="text-xs text-gray-500">
+                    <h4 className="font-medium text-sm text-ember-100">{activity.aiInterpretation.summary}</h4>
+                    <p className="text-xs text-ember-400/50">
                       Completed {activity.completedAt ? new Date(activity.completedAt).toLocaleDateString() : 'recently'}
                     </p>
                   </div>
                   
                   {activity.outcomes && (
-                    <div className="text-xs text-gray-600 bg-green-50 p-2 rounded">
+                    <div className="text-xs text-ember-200/70 bg-success-500/10 p-2 rounded">
                       <p className="font-medium">Results:</p>
                       <p>{activity.outcomes.primaryOutcome}</p>
                       {activity.outcomes.skillProgress?.experienceGained > 0 && (
-                        <p className="text-green-600">+{activity.outcomes.skillProgress.experienceGained} XP</p>
+                        <p className="text-success-400">+{activity.outcomes.skillProgress.experienceGained} XP</p>
                       )}
                     </div>
                   )}
@@ -544,9 +544,9 @@ export function DynamicDowntimeManager({
       {/* Empty State */}
       {activities.length === 0 && (
         <Card className="p-8 text-center">
-          <Brain className="w-16 h-16 mx-auto text-purple-400 mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No Activities Yet</h3>
-          <p className="text-gray-600 mb-6">
+          <Brain className="w-16 h-16 mx-auto text-wine-400/60 mb-4" />
+          <h3 className="text-lg font-semibold mb-2 text-ember-100">No Activities Yet</h3>
+          <p className="text-ember-300/60 mb-6">
             Describe any downtime activity you can imagine - the AI will make it happen! 
             Whether it's learning new skills, starting a business, or investigating mysteries.
           </p>
@@ -568,9 +568,9 @@ export function DynamicDowntimeManager({
           
           {eventResponse.event && (
             <div className="space-y-4">
-              <div className="bg-gray-50 p-3 rounded">
-                <h4 className="font-medium mb-1">{eventResponse.event.title}</h4>
-                <p className="text-sm text-gray-600">{eventResponse.event.description}</p>
+              <div className="bg-black/25 p-3 rounded">
+                <h4 className="font-medium text-ember-100 mb-1">{eventResponse.event.title}</h4>
+                <p className="text-sm text-ember-300/60">{eventResponse.event.description}</p>
               </div>
 
               <div>

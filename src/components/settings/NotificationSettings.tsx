@@ -146,7 +146,7 @@ export default function NotificationSettings() {
   if (loading) {
     return (
       <div className="max-w-2xl mx-auto p-6">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ember-400 mx-auto"></div>
       </div>
     );
   }
@@ -154,7 +154,7 @@ export default function NotificationSettings() {
   if (!settings) {
     return (
       <div className="max-w-2xl mx-auto p-6">
-        <p className="text-red-600">Failed to load notification settings</p>
+        <p className="text-wine-400">Failed to load notification settings</p>
       </div>
     );
   }
@@ -172,19 +172,19 @@ export default function NotificationSettings() {
   }) => (
     <div className="flex items-center justify-between py-2">
       <div className="flex-1">
-        <div className="font-medium text-gray-900">{label}</div>
+        <div className="font-medium text-ember-100">{label}</div>
         {description && (
-          <div className="text-sm text-gray-500">{description}</div>
+          <div className="text-sm text-ember-300/60">{description}</div>
         )}
       </div>
       <button
         onClick={onChange}
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-          enabled ? 'bg-blue-600' : 'bg-gray-200'
+          enabled ? 'bg-wine-600' : 'bg-black/30'
         }`}
       >
         <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+          className={`inline-block h-4 w-4 transform rounded-full bg-ember-100 transition-transform ${
             enabled ? 'translate-x-6' : 'translate-x-1'
           }`}
         />
@@ -195,13 +195,13 @@ export default function NotificationSettings() {
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Notification Settings</h1>
-        <p className="text-gray-600">Customize how you receive notifications from your AI Game Master.</p>
+        <h1 className="text-2xl font-bold text-ember-100 mb-2">Notification Settings</h1>
+        <p className="text-ember-300/60">Customize how you receive notifications from your AI Game Master.</p>
       </div>
 
       {/* Email Notifications */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">📧 Email Notifications</h2>
+      <div className="bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 rounded-lg border border-ember-900/30 p-6">
+        <h2 className="text-lg font-semibold text-ember-100 mb-4">📧 Email Notifications</h2>
         
         <ToggleSwitch
           enabled={settings.emailEnabled}
@@ -211,7 +211,7 @@ export default function NotificationSettings() {
         />
 
         {settings.emailEnabled && (
-          <div className="ml-4 border-l-2 border-gray-200 pl-4 space-y-2">
+          <div className="ml-4 border-l-2 border-ember-900/30 pl-4 space-y-2">
             <ToggleSwitch
               enabled={settings.emailTurnReminders}
               onChange={() => handleToggle('emailTurnReminders')}
@@ -253,8 +253,8 @@ export default function NotificationSettings() {
       </div>
 
       {/* Push Notifications */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">🔔 Browser Notifications</h2>
+      <div className="bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 rounded-lg border border-ember-900/30 p-6">
+        <h2 className="text-lg font-semibold text-ember-100 mb-4">🔔 Browser Notifications</h2>
         
         <ToggleSwitch
           enabled={settings.pushEnabled}
@@ -264,7 +264,7 @@ export default function NotificationSettings() {
         />
 
         {settings.pushEnabled && (
-          <div className="ml-4 border-l-2 border-gray-200 pl-4 space-y-2">
+          <div className="ml-4 border-l-2 border-ember-900/30 pl-4 space-y-2">
             <ToggleSwitch
               enabled={settings.pushTurnReminders}
               onChange={() => handleToggle('pushTurnReminders')}
@@ -295,8 +295,8 @@ export default function NotificationSettings() {
       </div>
 
       {/* Sound Notifications */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">🔊 Sound Effects</h2>
+      <div className="bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 rounded-lg border border-ember-900/30 p-6">
+        <h2 className="text-lg font-semibold text-ember-100 mb-4">🔊 Sound Effects</h2>
         
         <ToggleSwitch
           enabled={settings.soundEnabled}
@@ -306,27 +306,27 @@ export default function NotificationSettings() {
         />
 
         {settings.soundEnabled && (
-          <div className="ml-4 border-l-2 border-gray-200 pl-4 space-y-2">
+          <div className="ml-4 border-l-2 border-ember-900/30 pl-4 space-y-2">
             <div className="flex items-center justify-between py-2">
               <div className="flex-1">
-                <div className="font-medium text-gray-900">Turn Reminders</div>
+                <div className="font-medium text-ember-100">Turn Reminders</div>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => testSound('turn-reminder')}
                   disabled={testingSounds === 'turn-reminder'}
-                  className="text-blue-600 hover:text-blue-800 text-sm"
+                  className="text-ember-300 hover:text-ember-200 text-sm"
                 >
                   {testingSounds === 'turn-reminder' ? '♪' : 'Test'}
                 </button>
                 <button
                   onClick={() => handleToggle('soundTurnReminders')}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    settings.soundTurnReminders ? 'bg-blue-600' : 'bg-gray-200'
+                    settings.soundTurnReminders ? 'bg-wine-600' : 'bg-black/30'
                   }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    className={`inline-block h-4 w-4 transform rounded-full bg-ember-100 transition-transform ${
                       settings.soundTurnReminders ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
@@ -336,24 +336,24 @@ export default function NotificationSettings() {
 
             <div className="flex items-center justify-between py-2">
               <div className="flex-1">
-                <div className="font-medium text-gray-900">Scene Changes</div>
+                <div className="font-medium text-ember-100">Scene Changes</div>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => testSound('scene-change')}
                   disabled={testingSounds === 'scene-change'}
-                  className="text-blue-600 hover:text-blue-800 text-sm"
+                  className="text-ember-300 hover:text-ember-200 text-sm"
                 >
                   {testingSounds === 'scene-change' ? '♪' : 'Test'}
                 </button>
                 <button
                   onClick={() => handleToggle('soundSceneChanges')}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    settings.soundSceneChanges ? 'bg-blue-600' : 'bg-gray-200'
+                    settings.soundSceneChanges ? 'bg-wine-600' : 'bg-black/30'
                   }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    className={`inline-block h-4 w-4 transform rounded-full bg-ember-100 transition-transform ${
                       settings.soundSceneChanges ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
@@ -363,24 +363,24 @@ export default function NotificationSettings() {
 
             <div className="flex items-center justify-between py-2">
               <div className="flex-1">
-                <div className="font-medium text-gray-900">Mentions</div>
+                <div className="font-medium text-ember-100">Mentions</div>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => testSound('mention')}
                   disabled={testingSounds === 'mention'}
-                  className="text-blue-600 hover:text-blue-800 text-sm"
+                  className="text-ember-300 hover:text-ember-200 text-sm"
                 >
                   {testingSounds === 'mention' ? '♪' : 'Test'}
                 </button>
                 <button
                   onClick={() => handleToggle('soundMentions')}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    settings.soundMentions ? 'bg-blue-600' : 'bg-gray-200'
+                    settings.soundMentions ? 'bg-wine-600' : 'bg-black/30'
                   }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    className={`inline-block h-4 w-4 transform rounded-full bg-ember-100 transition-transform ${
                       settings.soundMentions ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
@@ -412,8 +412,8 @@ export default function NotificationSettings() {
       </div>
 
       {/* Quiet Hours */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">🌙 Quiet Hours</h2>
+      <div className="bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 rounded-lg border border-ember-900/30 p-6">
+        <h2 className="text-lg font-semibold text-ember-100 mb-4">🌙 Quiet Hours</h2>
         
         <ToggleSwitch
           enabled={settings.quietHoursEnabled}
@@ -425,25 +425,25 @@ export default function NotificationSettings() {
         {settings.quietHoursEnabled && (
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ember-200/80 mb-1">
                 Start Time
               </label>
               <input
                 type="time"
                 value={settings.quietHoursStart || '22:00'}
                 onChange={(e) => handleTimeChange('quietHoursStart', e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-md"
+                className="w-full p-2 bg-black/30 border border-ember-900/40 rounded-md text-ember-100"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ember-200/80 mb-1">
                 End Time
               </label>
               <input
                 type="time"
                 value={settings.quietHoursEnd || '08:00'}
                 onChange={(e) => handleTimeChange('quietHoursEnd', e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-md"
+                className="w-full p-2 bg-black/30 border border-ember-900/40 rounded-md text-ember-100"
               />
             </div>
           </div>
@@ -451,8 +451,8 @@ export default function NotificationSettings() {
       </div>
 
       {/* Digest Preferences */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 Digest Emails</h2>
+      <div className="bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 rounded-lg border border-ember-900/30 p-6">
+        <h2 className="text-lg font-semibold text-ember-100 mb-4">📊 Digest Emails</h2>
         
         <ToggleSwitch
           enabled={settings.dailyDigestEnabled}
@@ -471,7 +471,7 @@ export default function NotificationSettings() {
 
       {/* Status */}
       {saving && (
-        <div className="fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg">
+        <div className="fixed bottom-4 right-4 bg-wine-600 text-ember-100 px-4 py-2 rounded-lg shadow-lg">
           Saving settings...
         </div>
       )}

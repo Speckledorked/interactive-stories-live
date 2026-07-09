@@ -15,34 +15,34 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
       case 'promise':
         return {
           label: '🤝 Promise',
-          bgColor: 'bg-blue-900/30',
-          borderColor: 'border-blue-700',
-          textColor: 'text-blue-200',
-          iconColor: 'text-blue-400'
+          bgColor: 'bg-ember-900/20',
+          borderColor: 'border-ember-700/40',
+          textColor: 'text-ember-200',
+          iconColor: 'text-ember-300'
         }
       case 'debt':
         return {
           label: '⚖️ Debt',
-          bgColor: 'bg-yellow-900/30',
-          borderColor: 'border-yellow-700',
-          textColor: 'text-yellow-200',
-          iconColor: 'text-yellow-400'
+          bgColor: 'bg-ember-900/15',
+          borderColor: 'border-ember-800/30',
+          textColor: 'text-ember-200',
+          iconColor: 'text-ember-400'
         }
       case 'enemy':
         return {
           label: '⚔️ Enemy',
-          bgColor: 'bg-red-900/30',
-          borderColor: 'border-red-700',
-          textColor: 'text-red-200',
-          iconColor: 'text-red-400'
+          bgColor: 'bg-wine-800/25',
+          borderColor: 'border-wine-700/40',
+          textColor: 'text-wine-200',
+          iconColor: 'text-wine-400'
         }
       case 'longTermThreat':
         return {
           label: '☠️ Threat',
-          bgColor: 'bg-purple-900/30',
-          borderColor: 'border-purple-700',
-          textColor: 'text-purple-200',
-          iconColor: 'text-purple-400'
+          bgColor: 'bg-wine-800/15',
+          borderColor: 'border-wine-800/30',
+          textColor: 'text-wine-100',
+          iconColor: 'text-wine-300'
         }
     }
   }
@@ -70,7 +70,7 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
         {onRemove && (
           <button
             onClick={onRemove}
-            className="text-gray-500 hover:text-gray-300 transition-colors"
+            className="text-ember-400/50 hover:text-ember-200 transition-colors"
             title="Remove"
           >
             ✕

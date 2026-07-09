@@ -275,13 +275,13 @@ export default function EnhancedCreateCharacterForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="bg-red-900/20 border border-red-500 text-red-400 p-4 rounded-md">
+        <div className="bg-wine-800/20 border border-wine-600/50 text-wine-400 p-4 rounded-md">
           {error}
         </div>
       )}
 
       {/* Tabs */}
-      <div className="border-b border-gray-700">
+      <div className="border-b border-ember-900/30">
         <nav className="flex space-x-4 overflow-x-auto">
           {tabs.map(tab => (
             <button
@@ -290,8 +290,8 @@ export default function EnhancedCreateCharacterForm({
               onClick={() => setActiveTab(tab.key)}
               className={`py-3 px-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap flex items-center gap-2 ${
                 activeTab === tab.key
-                  ? 'border-primary-500 text-primary-400'
-                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+                  ? 'border-ember-400 text-ember-300'
+                  : 'border-transparent text-ember-300/60 hover:text-ember-200/80 hover:border-ember-900/40'
               }`}
             >
               <span>{tab.icon}</span>
@@ -307,8 +307,8 @@ export default function EnhancedCreateCharacterForm({
         {activeTab === 'basics' && (
           <div className="space-y-4">
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-200 mb-1">
-                Character Name <span className="text-red-400">*</span>
+              <label htmlFor="name" className="block text-sm font-medium text-ember-100 mb-1">
+                Character Name <span className="text-wine-400">*</span>
               </label>
               <input
                 type="text"
@@ -322,7 +322,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="pronouns" className="block text-sm font-medium text-gray-200 mb-1">
+              <label htmlFor="pronouns" className="block text-sm font-medium text-ember-100 mb-1">
                 Pronouns
               </label>
               <input
@@ -336,7 +336,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="appearance" className="block text-sm font-medium text-gray-200 mb-1">
+              <label htmlFor="appearance" className="block text-sm font-medium text-ember-100 mb-1">
                 Physical Appearance
               </label>
               <textarea
@@ -350,7 +350,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-200 mb-1">
+              <label htmlFor="description" className="block text-sm font-medium text-ember-100 mb-1">
                 General Description
               </label>
               <textarea
@@ -364,7 +364,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="currentLocation" className="block text-sm font-medium text-gray-200 mb-1">
+              <label htmlFor="currentLocation" className="block text-sm font-medium text-ember-100 mb-1">
                 Starting Location
               </label>
               <input
@@ -375,7 +375,7 @@ export default function EnhancedCreateCharacterForm({
                 className="input-field"
                 placeholder="Where does your character begin their journey?"
               />
-              <p className="text-xs text-gray-400 mt-1">This will be used to personalize the opening scene.</p>
+              <p className="text-xs text-ember-300/60 mt-1">This will be used to personalize the opening scene.</p>
             </div>
           </div>
         )}
@@ -384,7 +384,7 @@ export default function EnhancedCreateCharacterForm({
         {activeTab === 'character' && (
           <div className="space-y-4">
             <div>
-              <label htmlFor="personality" className="block text-sm font-medium text-gray-200 mb-1">
+              <label htmlFor="personality" className="block text-sm font-medium text-ember-100 mb-1">
                 Personality Traits
               </label>
               <textarea
@@ -398,7 +398,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="backstory" className="block text-sm font-medium text-gray-200 mb-1">
+              <label htmlFor="backstory" className="block text-sm font-medium text-ember-100 mb-1">
                 Backstory
               </label>
               <textarea
@@ -412,7 +412,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="goals" className="block text-sm font-medium text-gray-200 mb-1">
+              <label htmlFor="goals" className="block text-sm font-medium text-ember-100 mb-1">
                 Goals & Motivations
               </label>
               <textarea
@@ -431,15 +431,15 @@ export default function EnhancedCreateCharacterForm({
         {activeTab === 'stats' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-200 mb-2">
+              <label className="block text-sm font-medium text-ember-100 mb-2">
                 Character Stats (Powered by the Apocalypse)
               </label>
-              <p className="text-xs text-gray-400 mb-4">
+              <p className="text-xs text-ember-300/60 mb-4">
                 Range: -1 (weak) to +2 (strong). Most stats start at 0 or +1.
               </p>
               <div className="space-y-3">
                 {Object.entries(formData.stats).map(([stat, value]) => (
-                  <div key={stat} className="bg-gray-800 rounded-md p-3 border border-gray-700">
+                  <div key={stat} className="bg-black/25 rounded-md p-3 border border-ember-900/30">
                     <div className="flex items-center justify-between mb-1">
                       <label htmlFor={stat} className="text-sm font-medium capitalize text-white">
                         {stat}
@@ -451,10 +451,10 @@ export default function EnhancedCreateCharacterForm({
                         max="2"
                         value={value}
                         onChange={(e) => handleStatChange(stat, parseInt(e.target.value) || 0)}
-                        className="w-16 text-center rounded-md bg-gray-900 border-gray-600 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm font-bold"
+                        className="w-16 text-center rounded-md bg-black/30 border-ember-900/40 text-white shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm font-bold"
                       />
                     </div>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-ember-300/60">
                       {PBTA_STATS[stat as keyof typeof PBTA_STATS]}
                     </p>
                   </div>
@@ -462,8 +462,8 @@ export default function EnhancedCreateCharacterForm({
               </div>
             </div>
 
-            <div className="bg-blue-900/20 border border-blue-700 rounded-md p-4">
-              <p className="text-sm text-blue-300">
+            <div className="bg-ember-900/20 border border-ember-700/40 rounded-md p-4">
+              <p className="text-sm text-ember-300">
                 💡 <strong>Tip:</strong> Special moves and perks are earned during gameplay through character advancement and story progression.
               </p>
             </div>
@@ -475,10 +475,10 @@ export default function EnhancedCreateCharacterForm({
           <div className="space-y-6">
             {/* Equipment Section */}
             <div>
-              <h3 className="text-lg font-medium text-gray-200 mb-4">Equipment</h3>
+              <h3 className="text-lg font-medium text-ember-100 mb-4">Equipment</h3>
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="weapon" className="block text-sm font-medium text-gray-200 mb-1">
+                  <label htmlFor="weapon" className="block text-sm font-medium text-ember-100 mb-1">
                     Primary Weapon
                   </label>
                   <input
@@ -492,7 +492,7 @@ export default function EnhancedCreateCharacterForm({
                 </div>
 
                 <div>
-                  <label htmlFor="armor" className="block text-sm font-medium text-gray-200 mb-1">
+                  <label htmlFor="armor" className="block text-sm font-medium text-ember-100 mb-1">
                     Armor / Protection
                   </label>
                   <input
@@ -506,7 +506,7 @@ export default function EnhancedCreateCharacterForm({
                 </div>
 
                 <div>
-                  <label htmlFor="misc" className="block text-sm font-medium text-gray-200 mb-1">
+                  <label htmlFor="misc" className="block text-sm font-medium text-ember-100 mb-1">
                     Accessory / Misc. Equipment
                   </label>
                   <input
@@ -522,15 +522,15 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             {/* Inventory Section */}
-            <div className="border-t border-gray-700 pt-6">
-              <h3 className="text-lg font-medium text-gray-200 mb-2">Starting Inventory</h3>
-              <p className="text-xs text-gray-400 mb-4">
+            <div className="border-t border-ember-900/30 pt-6">
+              <h3 className="text-lg font-medium text-ember-100 mb-2">Starting Inventory</h3>
+              <p className="text-xs text-ember-300/60 mb-4">
                 Add items your character starts with. Inventory slots: {formData.inventory.slots}
               </p>
 
               {/* Quick Add Buttons */}
               <div className="mb-4">
-                <p className="text-xs font-medium text-gray-300 mb-2">Quick Add Common Items:</p>
+                <p className="text-xs font-medium text-ember-200/80 mb-2">Quick Add Common Items:</p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -573,18 +573,18 @@ export default function EnhancedCreateCharacterForm({
               {/* Current Items List */}
               {formData.inventory.items.length > 0 && (
                 <div className="mb-4 space-y-2">
-                  <p className="text-xs font-medium text-gray-300">Current Items:</p>
+                  <p className="text-xs font-medium text-ember-200/80">Current Items:</p>
                   {formData.inventory.items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between bg-gray-800 p-2 rounded border border-gray-700">
+                    <div key={item.id} className="flex items-center justify-between bg-black/25 p-2 rounded border border-ember-900/30">
                       <div>
                         <span className="text-sm text-white">{item.name}</span>
                         {item.quantity > 1 && (
-                          <span className="text-xs text-gray-400 ml-2">x{item.quantity}</span>
+                          <span className="text-xs text-ember-300/60 ml-2">x{item.quantity}</span>
                         )}
                         {item.tags.length > 0 && (
                           <div className="flex gap-1 mt-1">
                             {item.tags.map((tag, idx) => (
-                              <span key={idx} className="text-xs px-1.5 py-0.5 bg-gray-700 text-gray-300 rounded">
+                              <span key={idx} className="text-xs px-1.5 py-0.5 bg-black/30 text-ember-200/80 rounded">
                                 {tag}
                               </span>
                             ))}
@@ -594,7 +594,7 @@ export default function EnhancedCreateCharacterForm({
                       <button
                         type="button"
                         onClick={() => handleRemoveItem(item.id)}
-                        className="text-red-400 hover:text-red-300 text-sm"
+                        className="text-wine-400 hover:text-wine-300 text-sm"
                       >
                         Remove
                       </button>
@@ -604,8 +604,8 @@ export default function EnhancedCreateCharacterForm({
               )}
 
               {/* Custom Item Form */}
-              <div className="bg-gray-800 p-4 rounded border border-gray-700 space-y-3">
-                <p className="text-sm font-medium text-gray-200">Add Custom Item:</p>
+              <div className="bg-black/25 p-4 rounded border border-ember-900/30 space-y-3">
+                <p className="text-sm font-medium text-ember-100">Add Custom Item:</p>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="col-span-2">
                     <input
@@ -646,7 +646,7 @@ export default function EnhancedCreateCharacterForm({
               </div>
 
               <div className="mt-4">
-                <label htmlFor="inventorySlots" className="block text-sm font-medium text-gray-200 mb-1">
+                <label htmlFor="inventorySlots" className="block text-sm font-medium text-ember-100 mb-1">
                   Inventory Capacity (Slots)
                 </label>
                 <input
@@ -658,7 +658,7 @@ export default function EnhancedCreateCharacterForm({
                   onChange={(e) => setFormData({ ...formData, inventory: { ...formData.inventory, slots: parseInt(e.target.value) || 10 } })}
                   className="input-field w-32"
                 />
-                <p className="text-xs text-gray-400 mt-1">Maximum number of items you can carry.</p>
+                <p className="text-xs text-ember-300/60 mt-1">Maximum number of items you can carry.</p>
               </div>
             </div>
           </div>
@@ -668,7 +668,7 @@ export default function EnhancedCreateCharacterForm({
         {activeTab === 'resources' && (
           <div className="space-y-6">
             <div>
-              <label htmlFor="gold" className="block text-sm font-medium text-gray-200 mb-1">
+              <label htmlFor="gold" className="block text-sm font-medium text-ember-100 mb-1">
                 Starting Gold / Currency
               </label>
               <input
@@ -679,24 +679,24 @@ export default function EnhancedCreateCharacterForm({
                 onChange={(e) => setFormData({ ...formData, resources: { ...formData.resources, gold: parseInt(e.target.value) || 0 } })}
                 className="input-field w-48"
               />
-              <p className="text-xs text-gray-400 mt-1">Starting wealth for your character.</p>
+              <p className="text-xs text-ember-300/60 mt-1">Starting wealth for your character.</p>
             </div>
 
-            <div className="border-t border-gray-700 pt-6">
-              <h3 className="text-lg font-medium text-gray-200 mb-2">Contacts & Allies</h3>
-              <p className="text-xs text-gray-400 mb-4">
+            <div className="border-t border-ember-900/30 pt-6">
+              <h3 className="text-lg font-medium text-ember-100 mb-2">Contacts & Allies</h3>
+              <p className="text-xs text-ember-300/60 mb-4">
                 People your character knows and can call upon for help, information, or favors.
               </p>
 
               {formData.resources.contacts.length > 0 && (
                 <div className="mb-4 space-y-2">
                   {formData.resources.contacts.map((contact, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-800 p-2 rounded border border-gray-700">
+                    <div key={index} className="flex items-center justify-between bg-black/25 p-2 rounded border border-ember-900/30">
                       <span className="text-sm text-white">{contact}</span>
                       <button
                         type="button"
                         onClick={() => removeContact(index)}
-                        className="text-red-400 hover:text-red-300 text-sm"
+                        className="text-wine-400 hover:text-wine-300 text-sm"
                       >
                         Remove
                       </button>
@@ -729,28 +729,28 @@ export default function EnhancedCreateCharacterForm({
         {/* Debts & Enemies Tab */}
         {activeTab === 'consequences' && (
           <div className="space-y-6">
-            <div className="bg-yellow-900/20 border border-yellow-700 rounded-md p-4">
-              <p className="text-sm text-yellow-300">
+            <div className="bg-ember-900/15 border border-ember-700/40 rounded-md p-4">
+              <p className="text-sm text-ember-300">
                 ⚠️ <strong>Note:</strong> These elements create personal stakes and drama. The AI GM will incorporate them into your story to create compelling narrative tension.
               </p>
             </div>
 
             {/* Promises */}
             <div>
-              <h3 className="text-lg font-medium text-gray-200 mb-2">Promises & Oaths</h3>
-              <p className="text-xs text-gray-400 mb-4">
+              <h3 className="text-lg font-medium text-ember-100 mb-2">Promises & Oaths</h3>
+              <p className="text-xs text-ember-300/60 mb-4">
                 Commitments your character has made that they must honor.
               </p>
 
               {formData.consequences.promises.length > 0 && (
                 <div className="mb-4 space-y-2">
                   {formData.consequences.promises.map((promise, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-800 p-2 rounded border border-gray-700">
+                    <div key={index} className="flex items-center justify-between bg-black/25 p-2 rounded border border-ember-900/30">
                       <span className="text-sm text-white">{promise}</span>
                       <button
                         type="button"
                         onClick={() => removePromise(index)}
-                        className="text-red-400 hover:text-red-300 text-sm"
+                        className="text-wine-400 hover:text-wine-300 text-sm"
                       >
                         Remove
                       </button>
@@ -779,21 +779,21 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             {/* Debts */}
-            <div className="border-t border-gray-700 pt-6">
-              <h3 className="text-lg font-medium text-gray-200 mb-2">Debts & Favors Owed</h3>
-              <p className="text-xs text-gray-400 mb-4">
+            <div className="border-t border-ember-900/30 pt-6">
+              <h3 className="text-lg font-medium text-ember-100 mb-2">Debts & Favors Owed</h3>
+              <p className="text-xs text-ember-300/60 mb-4">
                 What does your character owe to others? Money, favors, life debts?
               </p>
 
               {formData.consequences.debts.length > 0 && (
                 <div className="mb-4 space-y-2">
                   {formData.consequences.debts.map((debt, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-800 p-2 rounded border border-gray-700">
+                    <div key={index} className="flex items-center justify-between bg-black/25 p-2 rounded border border-ember-900/30">
                       <span className="text-sm text-white">{debt}</span>
                       <button
                         type="button"
                         onClick={() => removeDebt(index)}
-                        className="text-red-400 hover:text-red-300 text-sm"
+                        className="text-wine-400 hover:text-wine-300 text-sm"
                       >
                         Remove
                       </button>
@@ -822,21 +822,21 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             {/* Enemies */}
-            <div className="border-t border-gray-700 pt-6">
-              <h3 className="text-lg font-medium text-gray-200 mb-2">Enemies & Rivals</h3>
-              <p className="text-xs text-gray-400 mb-4">
+            <div className="border-t border-ember-900/30 pt-6">
+              <h3 className="text-lg font-medium text-ember-100 mb-2">Enemies & Rivals</h3>
+              <p className="text-xs text-ember-300/60 mb-4">
                 Who wants to see your character fail or suffer? Past conflicts that may resurface?
               </p>
 
               {formData.consequences.enemies.length > 0 && (
                 <div className="mb-4 space-y-2">
                   {formData.consequences.enemies.map((enemy, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-800 p-2 rounded border border-gray-700">
+                    <div key={index} className="flex items-center justify-between bg-black/25 p-2 rounded border border-ember-900/30">
                       <span className="text-sm text-white">{enemy}</span>
                       <button
                         type="button"
                         onClick={() => removeEnemy(index)}
-                        className="text-red-400 hover:text-red-300 text-sm"
+                        className="text-wine-400 hover:text-wine-300 text-sm"
                       >
                         Remove
                       </button>
@@ -868,8 +868,8 @@ export default function EnhancedCreateCharacterForm({
       </div>
 
       {/* Form Actions */}
-      <div className="flex justify-between items-center pt-6 border-t border-gray-700">
-        <div className="text-sm text-gray-400">
+      <div className="flex justify-between items-center pt-6 border-t border-ember-900/30">
+        <div className="text-sm text-ember-300/60">
           {activeTab !== 'basics' && (
             <button
               type="button"
@@ -877,7 +877,7 @@ export default function EnhancedCreateCharacterForm({
                 const currentIndex = tabs.findIndex(t => t.key === activeTab)
                 if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].key)
               }}
-              className="text-primary-400 hover:text-primary-300"
+              className="text-ember-300 hover:text-ember-200"
             >
               ← Previous
             </button>

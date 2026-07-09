@@ -353,9 +353,9 @@ export function PlayerMapViewer({
   if (!map) {
     return (
       <Card className={`p-8 text-center ${className}`}>
-        <MapPin className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-        <h3 className="text-lg font-semibold mb-2">No Map Available</h3>
-        <p className="text-gray-600">
+        <MapPin className="w-16 h-16 mx-auto text-ember-400/50 mb-4" />
+        <h3 className="text-lg font-semibold mb-2 text-ember-100">No Map Available</h3>
+        <p className="text-ember-300/60">
           The AI GM will generate a map when the scene begins.
         </p>
       </Card>
@@ -363,7 +363,7 @@ export function PlayerMapViewer({
   }
 
   return (
-    <div className={`relative bg-gray-100 rounded-lg overflow-hidden ${className}`} ref={containerRef}>
+    <div className={`relative bg-tavern-900 rounded-lg overflow-hidden ${className}`} ref={containerRef}>
       {/* Map Canvas */}
       <canvas
         ref={canvasRef}
@@ -406,11 +406,11 @@ export function PlayerMapViewer({
       {/* Map Info */}
       <div className="absolute top-4 right-4">
         <Card className="p-3 max-w-xs">
-          <h3 className="font-semibold text-sm mb-2">{map.name}</h3>
+          <h3 className="font-semibold text-sm mb-2 text-ember-100">{map.name}</h3>
           {map.description && (
-            <p className="text-xs text-gray-600 mb-2 line-clamp-3">{map.description}</p>
+            <p className="text-xs text-ember-300/60 mb-2 line-clamp-3">{map.description}</p>
           )}
-          <div className="space-y-1 text-xs">
+          <div className="space-y-1 text-xs text-ember-200/70">
             <div>Players: {map.tokens.filter(t => t.isPC).length}</div>
             <div>NPCs: {map.tokens.filter(t => !t.isPC).length}</div>
             <div>Interactive Areas: {map.zones.filter(z => z.triggerType).length}</div>
@@ -429,24 +429,24 @@ export function PlayerMapViewer({
                     {'isPC' in hoveredElement.data && hoveredElement.data.isPC ? 'Player' : 'Character'}
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="bg-blue-50">
+                  <Badge variant="outline" className="bg-ember-900/20">
                     {'triggerType' in hoveredElement.data && hoveredElement.data.triggerType ? 'Interactive' : 'Area'}
                   </Badge>
                 )}
                 {hoveredElement.data.name}
               </div>
               {'description' in hoveredElement.data && hoveredElement.data.description && (
-                <div className="text-xs text-gray-600 mb-1">
+                <div className="text-xs text-ember-300/60 mb-1">
                   {hoveredElement.data.description}
                 </div>
               )}
               {hoveredElement.type === 'zone' && 'triggerType' in hoveredElement.data && hoveredElement.data.triggerType && (
-                <div className="text-xs text-blue-600 font-medium">
+                <div className="text-xs text-ember-300 font-medium">
                   Click to interact
                 </div>
               )}
               {hoveredElement.type === 'token' && 'character' in hoveredElement.data && hoveredElement.data.character?.name === characterName && (
-                <div className="text-xs text-amber-600 font-medium">
+                <div className="text-xs text-ember-400 font-medium">
                   This is your character
                 </div>
               )}

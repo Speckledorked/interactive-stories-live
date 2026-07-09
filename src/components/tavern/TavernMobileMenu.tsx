@@ -68,7 +68,7 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false 
           ))}
         </nav>
 
-        <div className="border-t border-ember-900/30 p-2">
+        <div className="border-t border-ember-900/30 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 text-wine-400 hover:text-wine-300 hover:bg-wine-900/10 transition-colors rounded-lg"

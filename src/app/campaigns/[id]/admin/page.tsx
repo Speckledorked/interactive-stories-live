@@ -453,7 +453,7 @@ export default function AdminPage() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-2.5 pb-2 border-b-2 whitespace-nowrap flex-shrink-0 capitalize transition-colors ${
+                className={`px-2.5 py-2 border-b-2 whitespace-nowrap flex-shrink-0 capitalize transition-colors ${
                   activeTab === tab ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
                 }`}
               >

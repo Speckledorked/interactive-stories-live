@@ -37,7 +37,7 @@ export function TavernHeader({
         {backHref ? (
           <Link
             href={backHref}
-            className="p-2 -ml-2 text-ember-300/80 hover:text-ember-200 transition-colors flex-shrink-0"
+            className="p-2.5 -ml-2.5 text-ember-300/80 hover:text-ember-200 transition-colors flex-shrink-0 touch-manipulation"
             aria-label="Back"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -65,22 +65,22 @@ export function TavernHeader({
           </h1>
         )}
 
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <button
             onClick={() => setNotifOpen(true)}
-            className="p-2 text-ember-300/80 hover:text-ember-200 transition-colors"
+            className="p-2.5 -m-0.5 text-ember-300/80 hover:text-ember-200 transition-colors touch-manipulation"
             aria-label="Notifications"
           >
             <Bell className="w-5 h-5" />
           </button>
           <button
             onClick={() => setMenuOpen(true)}
-            className="p-2 text-ember-300/80 hover:text-ember-200 transition-colors"
+            className="p-2.5 -m-0.5 text-ember-300/80 hover:text-ember-200 transition-colors touch-manipulation"
             aria-label="Menu"
           >
             <Menu className="w-5 h-5" />
           </button>
-          <Link href="/settings" className="p-2 text-ember-300/80 hover:text-ember-200 transition-colors" aria-label="Profile">
+          <Link href="/settings" className="p-2.5 -m-0.5 text-ember-300/80 hover:text-ember-200 transition-colors touch-manipulation" aria-label="Profile">
             <UserCircle className="w-5 h-5" />
           </Link>
         </div>

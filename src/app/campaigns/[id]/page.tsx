@@ -202,7 +202,7 @@ export default function CampaignLobbyPage() {
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key as any)}
-                  className={`flex items-center gap-1.5 px-3 pb-2 border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-2 border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
                     activeTab === tab.key ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
                   }`}
                 >

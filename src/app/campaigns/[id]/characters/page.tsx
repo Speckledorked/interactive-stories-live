@@ -92,19 +92,19 @@ export default function CharactersListPage() {
           <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-ember-900/20 pt-2 pb-0">
             <Link
               href={`/campaigns/${campaignId}`}
-              className="flex items-center gap-1.5 px-2.5 pb-2 border-b-2 border-transparent text-ember-300/40 hover:text-ember-300/70 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-2 border-b-2 border-transparent text-ember-300/40 hover:text-ember-300/70 transition-colors"
             >
               <Home className="w-3.5 h-3.5" />
               Overview
             </Link>
             <Link
               href={`/campaigns/${campaignId}/story`}
-              className="flex items-center gap-1.5 px-2.5 pb-2 border-b-2 border-transparent text-ember-300/40 hover:text-ember-300/70 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-2 border-b-2 border-transparent text-ember-300/40 hover:text-ember-300/70 transition-colors"
             >
               <Scroll className="w-3.5 h-3.5" />
               Story
             </Link>
-            <span className="flex items-center gap-1.5 px-2.5 pb-2 border-b-2 border-ember-400 text-ember-200">
+            <span className="flex items-center gap-1.5 px-2.5 py-2 border-b-2 border-ember-400 text-ember-200">
               <User className="w-3.5 h-3.5" />
               Characters
             </span>

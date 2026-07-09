@@ -99,7 +99,7 @@ export default function CampaignsPage() {
             ].map((tab) => (
               <div
                 key={tab.label}
-                className={`flex items-center gap-1.5 pb-2 border-b-2 ${
+                className={`flex items-center gap-1.5 py-2 border-b-2 ${
                   tab.active ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40'
                 }`}
               >

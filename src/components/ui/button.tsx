@@ -11,10 +11,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const baseStyles = 'inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50'
 
     const variantStyles = {
-      default: 'bg-blue-600 text-white hover:bg-blue-700',
-      outline: 'border border-gray-300 bg-white hover:bg-gray-100',
-      ghost: 'hover:bg-gray-100',
-      secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300'
+      default: 'bg-gradient-to-b from-wine-500 to-wine-700 text-ember-100 hover:from-wine-400 hover:to-wine-600',
+      outline: 'border border-ember-900/40 bg-black/20 text-ember-200/80 hover:bg-black/30',
+      ghost: 'text-ember-200/80 hover:bg-white/5',
+      secondary: 'bg-black/30 text-ember-200/80 hover:bg-black/40'
     }
 
     const sizeStyles = {

@@ -95,17 +95,17 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShor
   ]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-4xl mx-4 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl max-h-[85vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="w-full max-w-4xl mx-4 bg-gradient-to-br from-tavern-800 to-tavern-950 border border-ember-900/40 rounded-lg shadow-2xl shadow-black/50 max-h-[85vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-ember-900/30 flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-white">Keyboard Shortcuts</h2>
-            <p className="text-sm text-gray-400 mt-1">Speed up your workflow with these shortcuts</p>
+            <h2 className="text-2xl font-bold text-ember-100">Keyboard Shortcuts</h2>
+            <p className="text-sm text-ember-300/60 mt-1">Speed up your workflow with these shortcuts</p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white p-2 hover:bg-gray-800 rounded transition-colors"
+            className="text-ember-300/60 hover:text-ember-100 p-2 hover:bg-black/30 rounded transition-colors"
             aria-label="Close"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,21 +119,21 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShor
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {shortcutGroups.map((group, idx) => (
               <div key={idx}>
-                <h3 className="text-sm font-semibold text-primary-400 uppercase tracking-wider mb-4">
+                <h3 className="text-sm font-semibold text-ember-300 uppercase tracking-wider mb-4">
                   {group.title}
                 </h3>
                 <div className="space-y-3">
                   {group.shortcuts.map((shortcut, sIdx) => (
                     <div key={sIdx} className="flex items-center justify-between gap-4">
-                      <span className="text-gray-300 text-sm flex-1">{shortcut.description}</span>
+                      <span className="text-ember-200/70 text-sm flex-1">{shortcut.description}</span>
                       <div className="flex items-center gap-1">
                         {shortcut.keys.map((key, kIdx) => (
                           <span key={kIdx} className="inline-flex items-center">
-                            <kbd className="px-2.5 py-1.5 text-xs font-semibold bg-gray-800 border border-gray-600 rounded shadow-sm text-gray-200 min-w-[32px] text-center">
+                            <kbd className="px-2.5 py-1.5 text-xs font-semibold bg-black/30 border border-ember-900/40 rounded shadow-sm text-ember-100 min-w-[32px] text-center">
                               {key}
                             </kbd>
                             {kIdx < shortcut.keys.length - 1 && (
-                              <span className="mx-1 text-gray-600">+</span>
+                              <span className="mx-1 text-ember-500/40">+</span>
                             )}
                           </span>
                         ))}
@@ -147,19 +147,19 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShor
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-gray-800/50 border-t border-gray-700">
-          <div className="flex items-center justify-between text-xs text-gray-400">
+        <div className="px-6 py-4 bg-black/20 border-t border-ember-900/30">
+          <div className="flex items-center justify-between text-xs text-ember-300/50">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                <span className="w-2 h-2 bg-success-500 rounded-full"></span>
                 All shortcuts work globally
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                <span className="w-2 h-2 bg-ember-500 rounded-full"></span>
                 Some are context-specific
               </span>
             </div>
-            <span>Press <kbd className="px-1.5 py-0.5 bg-gray-700 rounded">ESC</kbd> to close</span>
+            <span>Press <kbd className="px-1.5 py-0.5 bg-black/30 rounded">ESC</kbd> to close</span>
           </div>
         </div>
       </div>

@@ -7,7 +7,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     return (
       <div
         ref={ref}
-        className={`rounded-lg border border-gray-200 bg-white shadow-sm ${className}`}
+        className={`rounded-lg border border-ember-900/30 bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 shadow-lg shadow-black/30 ${className}`}
         {...props}
       />
     )
@@ -35,7 +35,7 @@ export const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttribut
     return (
       <h3
         ref={ref}
-        className={`text-2xl font-semibold leading-none tracking-tight ${className}`}
+        className={`text-2xl font-semibold leading-none tracking-tight text-ember-100 ${className}`}
         {...props}
       />
     )
@@ -49,7 +49,7 @@ export const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTML
     return (
       <p
         ref={ref}
-        className={`text-sm text-gray-600 ${className}`}
+        className={`text-sm text-ember-300/60 ${className}`}
         {...props}
       />
     )

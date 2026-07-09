@@ -264,30 +264,30 @@ export default function ChatPanel({
 
     return (
       <div key={message.id} className={`p-3 rounded-lg ${
-        isOwnMessage ? 'bg-blue-900/30 ml-8' : 'bg-gray-800 mr-8'
-      } ${isWhisper ? 'border-l-4 border-purple-500' : ''}`}>
+        isOwnMessage ? 'bg-wine-800/20 ml-8' : 'bg-black/25 mr-8'
+      } ${isWhisper ? 'border-l-4 border-wine-500' : ''}`}>
         <div className="flex items-center gap-2 mb-1">
           <span className={`text-sm font-semibold ${
-            isIC ? 'text-green-400' : isWhisper ? 'text-purple-400' : 'text-blue-400'
+            isIC ? 'text-success-400' : isWhisper ? 'text-wine-400' : 'text-ember-300'
           }`}>
             {prefix}{authorName}
           </span>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-ember-400/50">
             {new Date(message.createdAt).toLocaleTimeString()}
           </span>
         </div>
-        <div className="text-gray-200 whitespace-pre-wrap">{message.content}</div>
+        <div className="text-ember-100/90 whitespace-pre-wrap">{message.content}</div>
       </div>
     );
   };
 
   return (
-    <div className="flex flex-col h-96 bg-gray-900 border border-gray-700 rounded-lg">
+    <div className="flex flex-col h-96 bg-black/25 border border-ember-900/30 rounded-lg">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700">
-        <h3 className="font-semibold text-white">Campaign Chat</h3>
+      <div className="p-4 border-b border-ember-900/30">
+        <h3 className="font-semibold text-ember-100">Campaign Chat</h3>
         {typingUsers.length > 0 && (
-          <p className="text-sm text-gray-400 italic">
+          <p className="text-sm text-ember-300/50 italic">
             {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
           </p>
         )}
@@ -303,7 +303,7 @@ export default function ChatPanel({
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-gray-700">
+      <div className="p-4 border-t border-ember-900/30">
         {/* Message Type Controls - hide if IC only mode */}
         {!icOnly && (
           <div className="flex flex-wrap gap-2 mb-3">
@@ -311,8 +311,8 @@ export default function ChatPanel({
               onClick={() => setMessageType('OUT_OF_CHARACTER')}
               className={`px-3 py-1 text-sm rounded-md ${
                 messageType === 'OUT_OF_CHARACTER'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  ? 'bg-ember-600 text-tavern-950'
+                  : 'bg-black/30 text-ember-300/70 hover:bg-black/40'
               }`}
             >
               OOC
@@ -321,8 +321,8 @@ export default function ChatPanel({
               onClick={() => setMessageType('IN_CHARACTER')}
               className={`px-3 py-1 text-sm rounded-md ${
                 messageType === 'IN_CHARACTER'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  ? 'bg-success-600 text-tavern-950'
+                  : 'bg-black/30 text-ember-300/70 hover:bg-black/40'
               }`}
             >
               IC
@@ -331,8 +331,8 @@ export default function ChatPanel({
               onClick={() => setMessageType('WHISPER')}
               className={`px-3 py-1 text-sm rounded-md ${
                 messageType === 'WHISPER'
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  ? 'bg-wine-600 text-ember-100'
+                  : 'bg-black/30 text-ember-300/70 hover:bg-black/40'
               }`}
             >
               Whisper
@@ -345,7 +345,7 @@ export default function ChatPanel({
           <select
             value={selectedCharacter}
             onChange={(e) => setSelectedCharacter(e.target.value)}
-            className="w-full p-2 mb-3 border border-gray-600 rounded-md text-sm bg-gray-800 text-gray-200"
+            className="w-full p-2 mb-3 border border-ember-900/40 rounded-md text-sm bg-black/30 text-ember-100"
             required
           >
             <option value="">Select Character...</option>
@@ -360,7 +360,7 @@ export default function ChatPanel({
           <select
             value={whisperTarget}
             onChange={(e) => setWhisperTarget(e.target.value)}
-            className="w-full p-2 mb-3 border border-gray-600 rounded-md text-sm bg-gray-800 text-gray-200"
+            className="w-full p-2 mb-3 border border-ember-900/40 rounded-md text-sm bg-black/30 text-ember-100"
             required
           >
             <option value="">Whisper to...</option>
@@ -381,13 +381,13 @@ export default function ChatPanel({
               messageType === 'IN_CHARACTER' ? 'Say something in character...' :
               'Type your message...'
             }
-            className="flex-1 p-2 border border-gray-600 rounded-md text-sm bg-gray-800 text-gray-200 placeholder-gray-500"
+            className="flex-1 p-2 border border-ember-900/40 rounded-md text-sm bg-black/30 text-ember-100 placeholder-ember-500/40"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !newMessage.trim()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-wine-600 text-ember-100 rounded-md text-sm hover:bg-wine-500 disabled:opacity-50"
           >
             Send
           </button>

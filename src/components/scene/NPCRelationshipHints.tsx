@@ -85,7 +85,7 @@ export default function NPCRelationshipHints({
 
   return (
     <div className="space-y-2">
-      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+      <h4 className="text-xs font-semibold text-ember-400/50 uppercase tracking-wide">
         NPC Reactions
       </h4>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -100,23 +100,23 @@ export default function NPCRelationshipHints({
                 <span className="text-xl flex-shrink-0">{config.icon}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2 mb-1">
-                    <h5 className="font-semibold text-white text-sm truncate">
+                    <h5 className="font-semibold text-ember-100 text-sm truncate">
                       {hint.npcName}
                     </h5>
                     <span className={`text-xs ${config.color}`}>
                       {config.label}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-400 leading-relaxed">
+                  <p className="text-xs text-ember-300/60 leading-relaxed">
                     {config.description}
                   </p>
                   {hint.signalPhrase && (
-                    <p className="text-xs text-gray-500 italic mt-1 border-l-2 border-gray-700 pl-2">
+                    <p className="text-xs text-ember-400/50 italic mt-1 border-l-2 border-ember-800/40 pl-2">
                       "{hint.signalPhrase}"
                     </p>
                   )}
                   {hint.recentInteraction && (
-                    <p className="text-xs text-gray-600 mt-1">
+                    <p className="text-xs text-ember-500/40 mt-1">
                       Last: {hint.recentInteraction}
                     </p>
                   )}

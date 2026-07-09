@@ -10,7 +10,12 @@ export type TavernNavKey = 'tavern' | 'map' | 'characters' | 'quests' | 'setting
 export function TavernNav({ active, campaignId }: { active?: TavernNavKey; campaignId?: string }) {
   const items = [
     { key: 'tavern' as const, label: 'Tavern', icon: Beer, href: '/campaigns' },
-    { key: 'map' as const, label: 'Map', icon: Compass, href: null },
+    {
+      key: 'map' as const,
+      label: 'Map',
+      icon: Compass,
+      href: campaignId ? `/campaigns/${campaignId}?tab=maps` : null,
+    },
     {
       key: 'characters' as const,
       label: 'Characters',

@@ -76,7 +76,7 @@ export default function StoryLogPage() {
   if (loading) {
     return (
       <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" />
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" campaignId={campaignId} />
         <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
           <TavernSpinner className="h-16 w-16" />
         </main>
@@ -87,7 +87,7 @@ export default function StoryLogPage() {
   if (error) {
     return (
       <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" />
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" campaignId={campaignId} />
         <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
           <TavernCard className="p-6 bg-wine-800/20 border-wine-600/40">
             <p className="text-wine-400">{error}</p>
@@ -99,7 +99,7 @@ export default function StoryLogPage() {
 
   return (
     <TavernPage>
-      <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" />
+      <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" campaignId={campaignId} />
 
       <main className="max-w-4xl mx-auto px-4 pt-28 pb-28">
         <p className="text-ember-300/50 text-sm mb-6">

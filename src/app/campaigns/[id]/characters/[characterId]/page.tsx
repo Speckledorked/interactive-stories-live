@@ -134,7 +134,7 @@ export default function CharacterPage() {
   if (loading) {
     return (
       <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" />
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
           <TavernSpinner className="h-16 w-16" />
         </main>
@@ -145,7 +145,7 @@ export default function CharacterPage() {
   if (error || !character) {
     return (
       <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Character" />
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Character" campaignId={campaignId} />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16 text-center">
           <h2 className="text-2xl font-bold text-wine-400 mb-4">Error</h2>
           <p className="text-ember-300/60 mb-4">{error || 'Character not found'}</p>
@@ -162,6 +162,8 @@ export default function CharacterPage() {
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title={character.name}
+        campaignId={campaignId}
+        isAdmin={campaign?.userRole === 'ADMIN'}
         subrow={
           <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-ember-900/20 pt-2 pb-0">
             <Link

@@ -24,19 +24,19 @@ export default function HarmTracker({
 
     if (segmentPosition > remaining) {
       // This segment is filled (harm taken)
-      return 'bg-red-500/30 border-red-500/50'
+      return 'bg-wine-600/30 border-wine-600/50'
     }
 
     // Remaining health - gradient from green to yellow
-    if (remaining >= 5) return 'bg-green-500 border-green-400'
-    if (remaining >= 3) return 'bg-yellow-500 border-yellow-400'
-    return 'bg-orange-500 border-orange-400'
+    if (remaining >= 5) return 'bg-success-500 border-success-400'
+    if (remaining >= 3) return 'bg-ember-500 border-ember-400'
+    return 'bg-wine-500 border-wine-400'
   }
 
   const getStatusText = (): { text: string; color: string } => {
-    if (current >= 6) return { text: 'Taken Out', color: 'text-red-400' }
-    if (current >= 4) return { text: 'Impaired', color: 'text-orange-400' }
-    return { text: 'Healthy', color: 'text-green-400' }
+    if (current >= 6) return { text: 'Taken Out', color: 'text-wine-400' }
+    if (current >= 4) return { text: 'Impaired', color: 'text-ember-400' }
+    return { text: 'Healthy', color: 'text-success-400' }
   }
 
   const sizeClasses = {
@@ -51,7 +51,7 @@ export default function HarmTracker({
     <div className="space-y-2">
       {showLabel && (
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-400">
+          <span className="text-ember-300/60">
             Health: {remaining}/{max}
           </span>
           <span className={`font-medium ${status.color}`}>
@@ -75,7 +75,7 @@ export default function HarmTracker({
       </div>
 
       {current >= 4 && (
-        <div className="text-xs text-orange-400 bg-orange-500/10 border border-orange-500/30 rounded px-2 py-1">
+        <div className="text-xs text-ember-400 bg-ember-900/15 border border-ember-700/30 rounded px-2 py-1">
           {current >= 6 ? (
             '⚠️ Character is unconscious, captured, or dying'
           ) : (

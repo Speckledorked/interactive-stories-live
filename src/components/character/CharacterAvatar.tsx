@@ -27,16 +27,14 @@ export default function CharacterAvatar({ name, size = 'md', className = '' }: C
     }
 
     const colors = [
-      'from-blue-500 to-blue-600',
-      'from-purple-500 to-purple-600',
-      'from-pink-500 to-pink-600',
-      'from-red-500 to-red-600',
-      'from-orange-500 to-orange-600',
-      'from-yellow-500 to-yellow-600',
-      'from-green-500 to-green-600',
-      'from-teal-500 to-teal-600',
-      'from-cyan-500 to-cyan-600',
-      'from-indigo-500 to-indigo-600',
+      'from-ember-500 to-ember-600',
+      'from-wine-500 to-wine-700',
+      'from-amber-500 to-amber-600',
+      'from-emerald-600 to-emerald-700',
+      'from-orange-600 to-orange-700',
+      'from-rose-600 to-rose-700',
+      'from-yellow-600 to-yellow-700',
+      'from-slate-500 to-slate-600',
     ]
 
     return colors[Math.abs(hash) % colors.length]
@@ -61,7 +59,7 @@ export default function CharacterAvatar({ name, size = 'md', className = '' }: C
         flex items-center justify-center
         font-bold text-white
         shadow-lg
-        ring-2 ring-gray-700
+        ring-2 ring-ember-900/40
         ${className}
       `}
     >

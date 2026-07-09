@@ -17,19 +17,19 @@ export default function StatBar({ name, value, description }: StatBarProps) {
   }
 
   const getColor = (val: number): string => {
-    if (val >= 2) return 'from-green-500 to-green-600'
-    if (val >= 1) return 'from-blue-500 to-blue-600'
-    if (val >= 0) return 'from-gray-500 to-gray-600'
-    if (val >= -1) return 'from-orange-500 to-orange-600'
-    return 'from-red-500 to-red-600'
+    if (val >= 2) return 'from-success-500 to-success-600'
+    if (val >= 1) return 'from-ember-400 to-ember-500'
+    if (val >= 0) return 'from-ember-700 to-ember-800'
+    if (val >= -1) return 'from-wine-500 to-wine-600'
+    return 'from-wine-700 to-wine-800'
   }
 
   const getTextColor = (val: number): string => {
-    if (val >= 2) return 'text-green-400'
-    if (val >= 1) return 'text-blue-400'
-    if (val >= 0) return 'text-gray-300'
-    if (val >= -1) return 'text-orange-400'
-    return 'text-red-400'
+    if (val >= 2) return 'text-success-400'
+    if (val >= 1) return 'text-ember-300'
+    if (val >= 0) return 'text-ember-200/70'
+    if (val >= -1) return 'text-wine-400'
+    return 'text-wine-300'
   }
 
   const percentage = getPercentage(value)
@@ -40,11 +40,11 @@ export default function StatBar({ name, value, description }: StatBarProps) {
     <div className="space-y-1">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium capitalize text-gray-300">
+          <span className="text-sm font-medium capitalize text-ember-200/70">
             {name}
           </span>
           {description && (
-            <span className="text-xs text-gray-500" title={description}>
+            <span className="text-xs text-ember-400/50" title={description}>
               ⓘ
             </span>
           )}
@@ -54,7 +54,7 @@ export default function StatBar({ name, value, description }: StatBarProps) {
         </span>
       </div>
 
-      <div className="relative h-2 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
+      <div className="relative h-2 bg-black/30 rounded-full overflow-hidden border border-ember-900/30">
         <div
           className={`h-full bg-gradient-to-r ${gradientColor} transition-all duration-500 shadow-lg`}
           style={{ width: `${percentage}%` }}

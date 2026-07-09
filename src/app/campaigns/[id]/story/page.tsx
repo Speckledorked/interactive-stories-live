@@ -1231,7 +1231,7 @@ export default function StoryPage() {
               <ChatPanel
                 campaignId={campaignId}
                 currentUserId={user.id}
-                currentUserName={user.email}
+                currentUserName={user.name || user.email}
                 userCharacters={userCharacters}
                 sceneId={currentScene.id}
                 icOnly={true}

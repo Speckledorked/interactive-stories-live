@@ -97,9 +97,9 @@ export default function AITransparencyPanel({
     if (!impact) return null
 
     const config = {
-      minor: { text: 'Minor', color: 'text-gray-400', bg: 'bg-gray-700/50' },
-      moderate: { text: 'Moderate', color: 'text-yellow-400', bg: 'bg-yellow-900/30' },
-      major: { text: 'Major', color: 'text-red-400', bg: 'bg-red-900/30' }
+      minor: { text: 'Minor', color: 'text-ember-400/60', bg: 'bg-black/30' },
+      moderate: { text: 'Moderate', color: 'text-ember-300', bg: 'bg-ember-900/30' },
+      major: { text: 'Major', color: 'text-wine-400', bg: 'bg-wine-800/30' }
     }[impact]
 
     return (
@@ -110,23 +110,23 @@ export default function AITransparencyPanel({
   }
 
   return (
-    <div className="card bg-gradient-to-br from-indigo-900/20 to-indigo-800/10 border-indigo-700/50">
+    <div className="rounded-xl bg-gradient-to-br from-ember-900/20 to-wine-800/10 border border-ember-800/40 shadow-lg shadow-black/30 p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+        <h3 className="text-lg font-bold text-ember-100 flex items-center gap-2">
           <span className="text-xl">🔍</span>
           AI Changes {sceneNumber ? `(Scene ${sceneNumber})` : ''}
         </h3>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="text-ember-300/60 hover:text-ember-100 transition-colors"
           >
             ✕
           </button>
         )}
       </div>
 
-      <p className="text-sm text-gray-400 mb-4">
+      <p className="text-sm text-ember-300/60 mb-4">
         The AI GM made the following changes to the world state during this scene:
       </p>
 
@@ -142,14 +142,14 @@ export default function AITransparencyPanel({
             >
               <div className="flex items-center gap-2">
                 <span className="text-lg">{getCategoryIcon(category)}</span>
-                <span className="font-semibold text-white capitalize">
+                <span className="font-semibold text-ember-100 capitalize">
                   {category}
                 </span>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-ember-400/50">
                   ({categoryChanges.length})
                 </span>
               </div>
-              <span className="text-gray-400">
+              <span className="text-ember-400/50">
                 {expandedCategories[category] ? '▼' : '▶'}
               </span>
             </button>
@@ -159,18 +159,18 @@ export default function AITransparencyPanel({
                 {categoryChanges.map((change, idx) => (
                   <div
                     key={idx}
-                    className="bg-black/20 rounded-lg p-3 border border-white/10"
+                    className="bg-black/25 rounded-lg p-3 border border-ember-900/20"
                   >
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm">{getChangeIcon(change.type)}</span>
-                        <span className="font-medium text-white text-sm">
+                        <span className="font-medium text-ember-100 text-sm">
                           {change.entityName}
                         </span>
                       </div>
                       {getImpactBadge(change.impact)}
                     </div>
-                    <p className="text-sm text-gray-300 pl-6">
+                    <p className="text-sm text-ember-200/70 pl-6">
                       {change.details}
                     </p>
                   </div>
@@ -182,7 +182,7 @@ export default function AITransparencyPanel({
       </div>
 
       {changes.length === 0 && (
-        <div className="text-center py-8 text-gray-500">
+        <div className="text-center py-8 text-ember-400/50">
           <div className="text-4xl mb-2">✨</div>
           <p className="text-sm">No world state changes this scene</p>
         </div>

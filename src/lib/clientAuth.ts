@@ -6,6 +6,7 @@ import { AuthResponse } from '@/types/api'
 
 const TOKEN_KEY = 'ai_gm_token'
 const USER_KEY = 'ai_gm_user'
+const LAST_CAMPAIGN_KEY = 'ai_gm_last_campaign'
 
 /**
  * Store auth token and user info in localStorage
@@ -58,7 +59,26 @@ export function clearAuth() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    localStorage.removeItem(LAST_CAMPAIGN_KEY)
   }
+}
+
+/**
+ * Remember the campaign the user was last viewing, so pages without their
+ * own campaign context (Settings, Help, Tutorial) can still link the bottom
+ * nav's Map/Characters/Quests items back to it instead of going inert.
+ */
+export function setLastCampaignId(campaignId: string) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(LAST_CAMPAIGN_KEY, campaignId)
+  }
+}
+
+export function getLastCampaignId(): string | null {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem(LAST_CAMPAIGN_KEY)
+  }
+  return null
 }
 
 /**

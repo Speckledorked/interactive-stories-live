@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import CharacterSheetDisplay from '@/components/character/CharacterSheetDisplay'
 import { DynamicDowntimeManager } from '@/components/downtime/DynamicDowntimeManager'
 import { pusherClient } from '@/lib/pusher'
@@ -63,6 +63,7 @@ export default function CharacterPage() {
       if (campaignResponse.ok) {
         const campaignData = await campaignResponse.json()
         setCampaign(campaignData)
+        setLastCampaignId(campaignId)
       }
 
       // Load character info

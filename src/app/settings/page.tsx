@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId } from '@/lib/clientAuth'
 import NotificationSettings from '@/components/settings/NotificationSettings'
 import BalanceDisplay from '@/components/BalanceDisplay'
 import { Bell, User, Lock, X } from 'lucide-react'
@@ -40,6 +40,7 @@ export default function SettingsPage() {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [deleteMessage, setDeleteMessage] = useState('')
+  const [lastCampaignId, setLastCampaignIdState] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -50,6 +51,7 @@ export default function SettingsPage() {
     const currentUser = getUser()
     setUser(currentUser)
     setDisplayName(currentUser?.name || '')
+    setLastCampaignIdState(getLastCampaignId())
     setLoading(false)
   }, [])
 
@@ -591,7 +593,7 @@ export default function SettingsPage() {
       )}
       </main>
 
-      <TavernNav active="settings" />
+      <TavernNav active="settings" campaignId={lastCampaignId || undefined} />
     </TavernPage>
   )
 }

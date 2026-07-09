@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
-import { authenticatedFetch } from '@/lib/clientAuth'
+import { authenticatedFetch, setLastCampaignId } from '@/lib/clientAuth'
 import WorldStateDashboard from '@/components/admin/WorldStateDashboard'
 import ClockProgress from '@/components/clock/ClockProgress'
 import AILoadingState from '@/components/scene/AILoadingState'
@@ -119,6 +119,7 @@ export default function AdminPage() {
       }
 
       setCampaign(campData.campaign)
+      setLastCampaignId(campaignId)
 
       // Fetch NPCs
       const npcsResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/npcs`)

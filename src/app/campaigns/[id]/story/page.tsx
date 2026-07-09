@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
 import ChatPanel from '@/components/chat/ChatPanel'
 import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
@@ -85,6 +85,7 @@ export default function StoryPage() {
       if (!campResponse.ok) throw new Error('Failed to load campaign')
       const campData = await campResponse.json()
       setCampaign(campData)
+      setLastCampaignId(campaignId)
 
       // Load active scenes
       const sceneResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/scene`)

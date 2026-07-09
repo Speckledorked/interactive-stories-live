@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { User, Home, Scroll } from 'lucide-react'
-import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
@@ -41,6 +41,7 @@ export default function CharactersListPage() {
         const campaignData = await campaignResponse.json()
         setCampaign(campaignData.campaign)
         setUserRole(campaignData.userRole)
+        setLastCampaignId(campaignId)
 
         if (campaignData.campaign?.characters) {
           setCharacters(campaignData.campaign.characters)

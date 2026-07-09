@@ -10,8 +10,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, ChevronRight, Users, BookOpen, Compass, Scroll, Feather } from 'lucide-react'
-import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import { Plus, ChevronRight, Users, BookOpen, Compass, Scroll } from 'lucide-react'
+import { authenticatedFetch, isAuthenticated, getLastCampaignId } from '@/lib/clientAuth'
 import { displayFont } from '@/lib/tavernTheme'
 import { bannerIconFor, formatRelativeTime } from '@/lib/tavernUtils'
 import { TavernPage } from '@/components/tavern/TavernPage'
@@ -40,6 +40,7 @@ export default function CampaignsPage() {
   const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [deletingCampaignId, setDeletingCampaignId] = useState<string | null>(null)
+  const [lastCampaignId, setLastCampaignId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -47,6 +48,7 @@ export default function CampaignsPage() {
       return
     }
 
+    setLastCampaignId(getLastCampaignId())
     loadCampaigns()
   }, [router])
 
@@ -87,32 +89,10 @@ export default function CampaignsPage() {
 
   return (
     <TavernPage>
-      <TavernHeader
-        wordmark
-        subrow={
-          <div className="max-w-2xl mx-auto px-4 flex items-center gap-6 text-sm border-t border-ember-900/20 pt-2 pb-0">
-            {[
-              { label: 'Campaigns', icon: BookOpen, active: true },
-              { label: 'World', icon: Compass, active: false },
-              { label: 'Journal', icon: Feather, active: false },
-              { label: 'Lore', icon: BookOpen, active: false },
-            ].map((tab) => (
-              <div
-                key={tab.label}
-                className={`flex items-center gap-1.5 py-2 border-b-2 ${
-                  tab.active ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40'
-                }`}
-              >
-                <tab.icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-              </div>
-            ))}
-          </div>
-        }
-      />
+      <TavernHeader wordmark />
 
       {/* Content */}
-      <main className="max-w-2xl mx-auto px-4 pt-32 pb-28">
+      <main className="max-w-2xl mx-auto px-4 pt-28 pb-28">
         <div className="flex items-end justify-between mb-6">
           <div>
             <h2 className={`${displayFont.className} text-2xl text-ember-100`}>Your Campaigns</h2>
@@ -221,7 +201,7 @@ export default function CampaignsPage() {
         </div>
       </main>
 
-      <TavernNav active="tavern" />
+      <TavernNav active="tavern" campaignId={lastCampaignId || undefined} />
 
       {showCreateModal && (
         <CreateCampaignModal

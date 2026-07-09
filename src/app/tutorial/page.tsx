@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId } from '@/lib/clientAuth'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
@@ -29,6 +29,7 @@ export default function TutorialPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [completionPercentage, setCompletionPercentage] = useState(0)
+  const [lastCampaignId, setLastCampaignId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -36,6 +37,7 @@ export default function TutorialPage() {
       return
     }
 
+    setLastCampaignId(getLastCampaignId())
     loadTutorialProgress()
   }, [])
 
@@ -284,7 +286,7 @@ export default function TutorialPage() {
       </div>
       </main>
 
-      <TavernNav />
+      <TavernNav campaignId={lastCampaignId || undefined} />
     </TavernPage>
   )
 }

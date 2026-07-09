@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
 import { Search, BookOpen } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
@@ -67,6 +67,7 @@ export default function WikiPage() {
 
       const data = await response.json()
       setEntries(data.entries || [])
+      setLastCampaignId(campaignId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load wiki')
     } finally {

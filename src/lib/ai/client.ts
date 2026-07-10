@@ -42,6 +42,10 @@ export interface AIGMResponse {
         notes_append?: string
         tags_add?: string[]
         tags_remove?: string[]
+        // New or updated long-term goal — a new NPC's starting goal, or a
+        // fresh direction for an existing major NPC whose previous goal
+        // just completed.
+        goals?: string
       }
     }>
     pc_changes?: Array<{
@@ -800,7 +804,8 @@ export async function callAIForWorldTurn(
   aiSystemPrompt: string,
   worldSummary: any,
   clocksAboutToComplete: any[],
-  campaignId?: string
+  campaignId?: string,
+  completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = []
 ): Promise<{
   offscreen_events: Array<{
     title: string
@@ -808,6 +813,17 @@ export async function callAIForWorldTurn(
     summary_gm: string
   }>
   gm_notes: string
+  // Structured consequences of the offscreen events above, applied through
+  // the same path scene resolution uses (applyWorldUpdates) — so e.g. a
+  // tournament winner becomes a real, queryable NPC record instead of
+  // existing only as a sentence in an event summary. Deliberately a subset
+  // of AIGMResponse['world_updates']: no pc_changes (offscreen events don't
+  // touch player characters) and no clock_changes (clock advancement is
+  // handled separately in worldTurn.ts, not by this call).
+  world_updates?: {
+    npc_changes?: AIGMResponse['world_updates']['npc_changes']
+    faction_changes?: AIGMResponse['world_updates']['faction_changes']
+  }
 }> {
   const apiKey = process.env.OPENAI_API_KEY
   const startTime = Date.now()
@@ -822,13 +838,34 @@ You are generating OFFSCREEN events - things happening in the background while p
 Focus on villain plans, faction moves, and clock consequences.
 Keep it brief and impactful.`
 
+  const goalCompletionNote = completedGoalNpcs.length > 0
+    ? `\n\nThese major NPCs just achieved their goal and need a new direction:
+${completedGoalNpcs.map(n => `- ${n.npcName} (id: ${n.npcId}) completed: ${n.completedGoal}`).join('\n')}
+
+For each one, include an offscreen event narrating the outcome of what they
+achieved, AND a npc_changes entry with npc_name_or_id set to their id above
+and changes.goals set to their new long-term goal — someone who just won a
+tournament or completed a scheme doesn't stop existing, they move on to
+something else. Don't leave any of them without a new goals value.`
+    : ''
+
   const userPrompt = `World State Summary:
 ${JSON.stringify(worldSummary, null, 2)}
 
 Clocks about to complete or recently advanced:
 ${JSON.stringify(clocksAboutToComplete, null, 2)}
+${goalCompletionNote}
 
 Generate 1-3 brief offscreen events that show villains/factions making moves.
+
+If an event produces a lasting outcome — a named winner, a new rival, a
+faction gaining or losing ground — record it in world_updates so it becomes
+a real, persistent part of the world instead of only existing in this
+summary text. Use npc_changes with is_new: true to introduce anyone the
+event produces (a tournament winner, a new claimant, a survivor) so they
+can be found and questioned later and will remember what happened to them.
+Only include world_updates when an event actually warrants it — most minor
+flavor events don't need any.
 
 Respond with JSON:
 {
@@ -839,6 +876,14 @@ Respond with JSON:
       "summary_gm": "Full details including villain intentions..."
     }
   ],
+  "world_updates": {
+    "npc_changes": [
+      {"npc_name_or_id": "New Character Name", "is_new": true, "changes": {"description": "Brief description, including what they just did or won", "notes_append": "..."}}
+    ],
+    "faction_changes": [
+      {"faction_name_or_id": "EXISTING_FACTION", "changes": {"gm_notes_append": "..."}}
+    ]
+  },
   "gm_notes": "Strategic notes about what's developing..."
 }`
 

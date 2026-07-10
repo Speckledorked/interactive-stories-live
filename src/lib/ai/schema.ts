@@ -133,7 +133,11 @@ export const NPCChangesSchema = z.object({
     description: z.string().optional(), // Short description for new NPCs
     notes_append: z.string().optional(),
     tags_add: z.array(z.string()).optional(),
-    tags_remove: z.array(z.string()).optional()
+    tags_remove: z.array(z.string()).optional(),
+    // New or updated long-term goal. Set this for a new NPC's starting goal,
+    // or to give an existing major NPC a fresh direction after their
+    // previous goal completed (see the "goalCompleted" world event).
+    goals: z.string().optional()
   })
 })
 

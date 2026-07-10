@@ -139,6 +139,13 @@ export async function applyWorldUpdates(
               updateData.description = npcChange.changes.description
             }
 
+            // New/updated goal — a fresh goal starts its progress over,
+            // regardless of what was left on the previous one.
+            if (npcChange.changes.goals) {
+              updateData.goals = npcChange.changes.goals
+              updateData.goalProgress = 0
+            }
+
             // Note: tags_add and tags_remove are not supported in the current schema
             // NPCs don't have a tags field
 
@@ -158,6 +165,7 @@ export async function applyWorldUpdates(
                 name: npcChange.npc_name_or_id,
                 description: npcChange.changes.description || null,
                 gmNotes: npcChange.changes.notes_append || null,
+                goals: npcChange.changes.goals || null,
                 importance: 1,
                 isAlive: true
               }

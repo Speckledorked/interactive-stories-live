@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { decideFactionTick } from '../factionTick'
+import { decideAmbitionTick } from '../ambitionTick'
 import { decideNpcTick, deriveTimeOfDay } from '../npcTick'
 import { decideNextWeather } from '../weatherTick'
 
@@ -25,7 +26,7 @@ describe('decideFactionTick', () => {
 })
 
 describe('decideNpcTick', () => {
-  const npc = { id: 'npc-1', goals: 'find the artifact', relationship: null, currentLocation: 'Harborview' }
+  const npc = { id: 'npc-1', goals: 'find the artifact', relationship: null, currentLocation: 'Harborview', goalProgress: 0 }
 
   it('is deterministic for the same turn number', () => {
     const a = decideNpcTick(npc, 5, ['Harborview', 'Old Quarter'])
@@ -45,6 +46,58 @@ describe('decideNpcTick', () => {
     expect(deriveTimeOfDay(0)).toBe('morning')
     expect(deriveTimeOfDay(3)).toBe('night')
     expect(morning.nextLocation).not.toBe(night.nextLocation ?? npc.currentLocation)
+  })
+
+  it('advances goal progress deterministically while a goal is set', () => {
+    const decision = decideNpcTick(npc, 5, ['Harborview'])
+    expect(decision.newGoalProgress).toBe(4)
+    expect(decision.goalCompleted).toBe(false)
+  })
+
+  it('does not advance progress for a goalless NPC', () => {
+    const goalless = { ...npc, goals: null }
+    const decision = decideNpcTick(goalless, 5, ['Harborview'])
+    expect(decision.newGoalProgress).toBe(0)
+    expect(decision.goalCompleted).toBe(false)
+  })
+
+  it('completes the goal and resets progress once it crosses 100', () => {
+    const almostDone = { ...npc, goalProgress: 98 }
+    const decision = decideNpcTick(almostDone, 5, ['Harborview'])
+    expect(decision.goalCompleted).toBe(true)
+    expect(decision.newGoalProgress).toBe(0)
+  })
+})
+
+describe('decideAmbitionTick', () => {
+  const base = { name: 'Thornburg Guild', resources: 80, hasActiveSpawnedClock: false }
+
+  it('spawns a tournament clock for a high-resource ENRICH faction', () => {
+    const decision = decideAmbitionTick({ ...base, goal: 'ENRICH' })
+    expect(decision.shouldSpawn).toBe(true)
+    expect(decision.clockName).toBe('Thornburg Guild Grand Tournament')
+  })
+
+  it('spawns a campaign clock for a high-resource EXPAND faction', () => {
+    const decision = decideAmbitionTick({ ...base, goal: 'EXPAND' })
+    expect(decision.shouldSpawn).toBe(true)
+    expect(decision.clockName).toBe('Thornburg Guild Territorial Campaign')
+  })
+
+  it('does not spawn below the resource threshold', () => {
+    const decision = decideAmbitionTick({ ...base, goal: 'ENRICH', resources: 40 })
+    expect(decision.shouldSpawn).toBe(false)
+  })
+
+  it('does not spawn a second clock while one is already active', () => {
+    const decision = decideAmbitionTick({ ...base, goal: 'ENRICH', hasActiveSpawnedClock: true })
+    expect(decision.shouldSpawn).toBe(false)
+  })
+
+  it('does not spawn for inward-facing goals', () => {
+    expect(decideAmbitionTick({ ...base, goal: 'DEFEND' }).shouldSpawn).toBe(false)
+    expect(decideAmbitionTick({ ...base, goal: 'CONSOLIDATE' }).shouldSpawn).toBe(false)
+    expect(decideAmbitionTick({ ...base, goal: 'DESTABILIZE_RIVAL' }).shouldSpawn).toBe(false)
   })
 })
 

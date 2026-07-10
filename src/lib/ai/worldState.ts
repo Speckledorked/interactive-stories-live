@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
 import { buildOptimizedContext } from './contextManager' // Phase 14.6: Context optimization
-import { retrieveRelevantHistory } from './memoryRetrieval' // Campaign Memory RAG
+import { retrieveRelevantHistory, retrieveNpcHistory } from './memoryRetrieval' // Campaign Memory RAG
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 
@@ -458,6 +458,32 @@ export async function buildSceneResolutionRequest(
     const errorMsg = memoryError instanceof Error ? memoryError.message : String(memoryError)
     console.error('⚠️ Memory retrieval failed:', errorMsg)
     // Log but continue - scene resolution can work without memories if needed
+  }
+
+  // Guaranteed recall: if the player's action text names an NPC directly,
+  // pull that NPC's own history instead of hoping semantic search surfaces
+  // it. entities.npcs is the campaign's full NPC list (not the "nearby or
+  // important" filtered set used elsewhere) so this works regardless of
+  // whether the named NPC is currently on-screen or minor.
+  try {
+    const actionText = scene.playerActions.map(a => a.actionText).join(' ').toLowerCase()
+    const mentionedNpcIds = entities.npcs
+      .filter(n => n.name && actionText.includes(n.name.toLowerCase()))
+      .map(n => n.id)
+
+    if (mentionedNpcIds.length > 0) {
+      const existingIds = new Set(relevantMemories.map((m: any) => m.id))
+      const namedMemories = (
+        await Promise.all(mentionedNpcIds.map(id => retrieveNpcHistory(campaignId, id, 5)))
+      ).flat().filter(m => !existingIds.has(m.id))
+
+      if (namedMemories.length > 0) {
+        console.log(`🎯 Named-NPC recall: added ${namedMemories.length} memor(ies) for explicitly mentioned NPC(s)`)
+        relevantMemories = [...relevantMemories, ...namedMemories]
+      }
+    }
+  } catch (namedRecallError) {
+    console.error('⚠️ Named NPC recall failed:', namedRecallError)
   }
 
   // Add memories to world summary

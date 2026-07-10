@@ -280,6 +280,11 @@ model NPC {
 
   // World Sim Phase 1: deterministic tick behavior for major NPCs (importance >= 4)
   currentPlan     String?
+  // World Sim Phase 2: how far a major NPC has progressed toward their
+  // current `goals` text (0-100). Advances deterministically each tick;
+  // reaching 100 completes the goal, emits a MAJOR world event, and clears
+  // back to 0 awaiting a new goal (set by the AI via world_updates).
+  goalProgress    Int      @default(0)
 
   // PbtA fields for significant NPCs
   threat          String?  // Type of threat (warlord, grotesque, landscape, etc)
@@ -324,6 +329,10 @@ model Faction {
 
   // Phase 8: Communication
   notes PlayerNote[] @relation("FactionNotes")
+
+  // World Sim Phase 2: clocks this faction autonomously spawned while
+  // pursuing an ambitious goal (e.g. a tournament, a campaign of conquest).
+  spawnedClocks Clock[] @relation("FactionSpawnedClocks")
 
   @@index([campaignId])
 }
@@ -374,9 +383,15 @@ model Clock {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // World Sim Phase 2: set when a faction autonomously spawned this clock
+  // while pursuing an ambitious goal, rather than a GM creating it by hand.
+  sourceFactionId String?
+  sourceFaction   Faction? @relation("FactionSpawnedClocks", fields: [sourceFactionId], references: [id], onDelete: SetNull)
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
+  @@index([sourceFactionId])
 }
 
 //

@@ -218,8 +218,14 @@ function buildSearchQuery(context: RetrievalContext): string {
 /**
  * Retrieve NPC-specific history
  *
- * Gets the most recent and important memories involving a specific NPC.
- * Useful for enriching NPC context when they appear in a scene.
+ * Gets the most recent memories involving a specific NPC, regardless of
+ * importance — a casually-spared minor NPC still needs to be reliably
+ * recallable by name, not just NPCs whose moment got flagged MAJOR/CRITICAL.
+ * Used both to enrich NPC context when they appear in a scene, and for
+ * guaranteed recall when a player explicitly names an NPC in their action
+ * (see buildSceneResolutionRequest) — semantic search alone can rank a
+ * specific, deliberately-asked-about NPC below whatever's topically louder
+ * this turn, so this direct lookup doesn't depend on embedding luck.
  *
  * @param campaignId - Campaign ID
  * @param npcId - NPC ID
@@ -245,7 +251,6 @@ export async function retrieveNpcHistory(
       WHERE
         campaign_id = ${campaignId}
         AND ${npcId} = ANY(involved_npc_ids)
-        AND importance IN ('MAJOR', 'CRITICAL')
       ORDER BY turn_number DESC
       LIMIT ${limit}
     `;

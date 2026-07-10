@@ -90,6 +90,22 @@ export const PCChangesSchema = z.object({
         faction: z.string(),
         delta: z.number()
       })).optional()
+    }).optional(),
+    // Only meaningful once a character is Taken Out (harm 6) — see the
+    // dying-state note in the prompt. Someone treating their wounds.
+    medical_attention: z.object({
+      skill: z.enum(['basic', 'trained', 'expert']),
+      has_supplies: z.boolean()
+    }).optional(),
+    // Only meaningful while a character is in the critical "dying" state
+    // (Taken Out with no stabilizing treatment yet). Narrate whether they
+    // cling to life or slip further this turn.
+    death_save_result: z.enum(['success', 'failure']).optional(),
+    // A character's deliberate choice to die for something that matters.
+    // Player-driven, not something to impose unprompted.
+    heroic_sacrifice: z.object({
+      circumstances: z.string(),
+      effect: z.string()
     }).optional()
   })
 })

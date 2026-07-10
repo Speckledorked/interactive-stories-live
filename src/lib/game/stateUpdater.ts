@@ -10,9 +10,15 @@ import {
   healHarm,
   markCondition,
   clearCondition,
+  performRecoveryRoll,
+  makeDeathSave,
+  applyMedicalAttention,
+  performHeroicSacrifice,
+  isDying,
   HarmState,
   Condition,
-  HarmLevel
+  HarmLevel,
+  PermanentInjury
 } from './harm'
 import { getArmorReduction } from './inventory'
 import { AI_MODELS } from '@/lib/ai/models'
@@ -188,8 +194,12 @@ export async function applyWorldUpdates(
             }
 
             // Process harm and conditions
-            let currentHarm = (character.harm as number) || 0
+            const previousHarm = (character.harm as number) || 0
+            let currentHarm = previousHarm
             let currentConditions: Condition[] = (character.conditions as any)?.conditions || []
+            let permanentInjuries: PermanentInjury[] = (character.conditions as any)?.permanentInjuries || []
+            let deathSaves: number = (character.conditions as any)?.deathSaves || 0
+            let newIsAlive: boolean | undefined
             let harmMessages: string[] = []
 
             // Apply harm damage (armor mitigates incoming damage)
@@ -255,11 +265,128 @@ export async function applyWorldUpdates(
               }
             }
 
+            // Taken Out for the first time this turn (was under 6, now at 6):
+            // resolve the outcome server-side, the same way a GM would roll
+            // behind the screen — stabilized, a lasting injury, captured, or
+            // critical. Not something the AI decides.
+            if (previousHarm < 6 && currentHarm === 6) {
+              const roll = (Math.floor(Math.random() * 6) + 1) + (Math.floor(Math.random() * 6) + 1)
+              const recovery = performRecoveryRoll(roll, harmMessages.join('; ') || 'Taken Out', currentTurnNumber)
+              currentHarm = recovery.newHarm
+
+              // The generic "Taken Out" condition from applyHarm's auto-add is
+              // superseded by whichever specific outcome the recovery roll gives.
+              currentConditions = currentConditions.filter(c => c.name !== 'Taken Out')
+
+              if (recovery.outcome === 'permanent_injury' && recovery.permanentInjury) {
+                permanentInjuries = [...permanentInjuries, recovery.permanentInjury]
+                currentConditions = markCondition(currentConditions, {
+                  id: recovery.permanentInjury.id,
+                  name: recovery.permanentInjury.name,
+                  category: 'Physical',
+                  description: recovery.permanentInjury.description,
+                  mechanicalEffect: recovery.permanentInjury.mechanicalEffect,
+                  appliedAt: currentTurnNumber
+                }).updatedConditions
+              } else if (recovery.outcome === 'captured') {
+                currentConditions = markCondition(currentConditions, {
+                  id: `captured_${Date.now()}`,
+                  name: 'Captured',
+                  category: 'Physical',
+                  description: 'Taken prisoner while unconscious.',
+                  mechanicalEffect: 'Cannot act until freed',
+                  appliedAt: currentTurnNumber
+                }).updatedConditions
+              } else if (recovery.outcome === 'dead') {
+                // performRecoveryRoll's worst outcome is critical, not final —
+                // it still takes intervention or repeated death saves.
+                deathSaves = 2
+                currentConditions = markCondition(currentConditions, {
+                  id: `dying_${Date.now()}`,
+                  name: 'Critically Dying',
+                  category: 'Physical',
+                  description: 'Unconscious and fading fast. Someone must intervene.',
+                  mechanicalEffect: 'Cannot act',
+                  appliedAt: currentTurnNumber
+                }).updatedConditions
+              }
+
+              harmMessages.push(recovery.message)
+            }
+
+            // Skill-scaled treatment, usable any time a character is hurt.
+            // applyMedicalAttention itself refuses to touch someone still at
+            // harm 6 (unconscious/dying) — they need to be stabilized via a
+            // death save first, same as the harm.ts module's own design.
+            if (pcChange.changes.medical_attention) {
+              const { skill, has_supplies } = pcChange.changes.medical_attention
+              const treatment = applyMedicalAttention(currentHarm as HarmLevel, skill, has_supplies)
+              currentHarm = treatment.newHarm
+              harmMessages.push(treatment.message)
+              if (treatment.success && currentHarm < 6) {
+                currentConditions = currentConditions.filter(
+                  c => !['Taken Out', 'Captured', 'Critically Dying', 'Stabilized'].includes(c.name)
+                )
+                deathSaves = 0
+              }
+            }
+
+            // Already critically dying: apply whatever the AI narrated this turn.
+            const wasDying = isDying(currentHarm as HarmLevel, currentConditions)
+            if (wasDying && pcChange.changes.death_save_result) {
+              const save = makeDeathSave(deathSaves, pcChange.changes.death_save_result === 'success')
+              deathSaves = save.newDeathSaves
+              harmMessages.push(save.message)
+
+              if (save.status === 'stable') {
+                currentConditions = currentConditions.filter(c => c.name !== 'Critically Dying')
+                currentConditions = markCondition(currentConditions, {
+                  id: `stabilized_${Date.now()}`,
+                  name: 'Stabilized',
+                  category: 'Physical',
+                  description: 'No longer dying, but still critically injured.',
+                  mechanicalEffect: 'Cannot act until harm reduced below 6',
+                  appliedAt: currentTurnNumber
+                }).updatedConditions
+              } else if (save.status === 'dead') {
+                newIsAlive = false
+                currentConditions = currentConditions.filter(c => c.name !== 'Critically Dying')
+                currentConditions = markCondition(currentConditions, {
+                  id: `deceased_${Date.now()}`,
+                  name: 'Deceased',
+                  category: 'Physical',
+                  description: 'Died from their wounds.',
+                  mechanicalEffect: 'Cannot act',
+                  appliedAt: currentTurnNumber
+                }).updatedConditions
+              }
+            }
+
+            if (pcChange.changes.heroic_sacrifice) {
+              const { circumstances, effect } = pcChange.changes.heroic_sacrifice
+              const sacrifice = performHeroicSacrifice(character.id, character.name, circumstances, effect, currentTurnNumber)
+              newIsAlive = false
+              currentConditions = markCondition(currentConditions, {
+                id: `sacrifice_${Date.now()}`,
+                name: 'Fallen',
+                category: 'Physical',
+                description: sacrifice.legacy || `${character.name} gave their life.`,
+                mechanicalEffect: 'Cannot act',
+                appliedAt: currentTurnNumber
+              }).updatedConditions
+              harmMessages.push(sacrifice.legacy || `${character.name} makes the ultimate sacrifice.`)
+            }
+
             // Update harm and conditions if changed
             if (harmMessages.length > 0) {
               updateData.harm = currentHarm
               updateData.conditions = {
-                conditions: currentConditions
+                conditions: currentConditions,
+                permanentInjuries,
+                deathSaves
+              }
+              if (newIsAlive !== undefined) {
+                updateData.isAlive = newIsAlive
               }
               console.log(`  💔 ${character.name}: ${harmMessages.join(', ')}`)
             }

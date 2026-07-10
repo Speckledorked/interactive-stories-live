@@ -7,8 +7,19 @@ import { CommandPaletteProvider } from '@/contexts/CommandPaletteContext'
 import { ErrorHandlerInit } from './ErrorHandlerInit'
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
   title: 'MythOS - Automated Game Master',
-  description: 'Play tabletop RPGs with an AI Game Master',
+  description: 'The world remembers. Play tabletop RPGs with an AI Game Master.',
+  openGraph: {
+    title: 'MythOS',
+    description: 'The world remembers.',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'MythOS',
+    description: 'The world remembers.',
+  },
 }
 
 export const viewport: Viewport = {

@@ -61,7 +61,7 @@ export default function SignupPage() {
             </h1>
             <span className="text-ember-700/60 text-xs tracking-widest">──◈</span>
           </div>
-          <p className="text-[11px] tracking-[0.2em] text-ember-300/50 mt-1">YOUR STORY. THE WORLD.</p>
+          <p className="text-[11px] tracking-[0.2em] text-ember-300/50 mt-1">THE WORLD REMEMBERS.</p>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-tavern-800/80 to-tavern-900/80 border border-ember-900/40 shadow-2xl shadow-black/50 p-8">

@@ -57,7 +57,7 @@ export function TavernHeader({
               </h1>
               <span className="text-ember-700/60 text-xs tracking-widest">──◈</span>
             </div>
-            <p className="text-[11px] tracking-[0.2em] text-ember-300/50 -mt-0.5">YOUR STORY. THE WORLD.</p>
+            <p className="text-[11px] tracking-[0.2em] text-ember-300/50 -mt-0.5">THE WORLD REMEMBERS.</p>
           </div>
         ) : (
           <h1 className={`${displayFont.className} text-base sm:text-lg tracking-wide text-ember-100 truncate text-center flex-1`}>

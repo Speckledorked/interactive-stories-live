@@ -866,19 +866,6 @@ model Token {
   @@map("tokens")
 }
 
-model CampaignImage {
-  id         String   @id @default(cuid())
-  campaignId String
-  url        String
-  prompt     String?  @db.Text
-  tags       String[]
-  metadata   Json?
-  createdAt  DateTime @default(now())
-
-  @@index([campaignId])
-  @@map("campaign_images")
-}
-
 //
 // PHASE 11: SESSION & DOWNTIME MODELS
 //

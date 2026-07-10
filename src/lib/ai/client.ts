@@ -115,6 +115,18 @@ export interface AIGMResponse {
             delta: number
           }>
         }
+        // Someone treats a Taken Out (harm 6) character's wounds
+        medical_attention?: {
+          skill: 'basic' | 'trained' | 'expert'
+          has_supplies: boolean
+        }
+        // Only while the character is in the critical dying state
+        death_save_result?: 'success' | 'failure'
+        // Player-driven choice to die for something that matters
+        heroic_sacrifice?: {
+          circumstances: string
+          effect: string
+        }
       }
     }>
     faction_changes?: Array<{
@@ -582,6 +594,31 @@ HARM SYSTEM:
 - Apply harm_damage when hurt in combat/danger, harm_healing when resting/treated
 - Add conditions: Physical (Bleeding, Stunned), Emotional (Terrified), Special (Cursed)
 - Remove conditions when narratively appropriate
+
+MEDICAL TREATMENT: When someone (PC or NPC) tends a hurt character's
+wounds — bandaging, healing magic, a field medic, anything more deliberate
+than "they rest" — use medical_attention instead of guessing a
+harm_healing number. Set skill to match who's treating them and
+has_supplies to whether they have the means (bandages, potions, etc.) on
+hand. It has no effect on a character who is unconscious/dying at 6 harm
+— they need to be stabilized first (see below).
+
+DYING STATE (only relevant once a character's conditions show them
+critically dying — check the world state you were given, don't invent
+this): a character who reaches 6 harm is automatically resolved by the
+game system the moment it happens (stabilizes, gets a lasting injury, is
+captured, or ends up critically dying) — you don't decide that outcome,
+you'll just see the result reflected in their state on the next turn. If
+a character's conditions show them critically dying, you have two more
+narrative levers:
+  - death_save_result: someone attempts to save them, or no one
+    intervenes in time — narrate whether they cling to life ('success')
+    or slip further ('failure') this turn.
+  - heroic_sacrifice: the PLAYER chooses for their character to die
+    meaningfully (never impose this — only use it if the player's own
+    action clearly asked for it).
+  Don't use either of these two fields for a character who isn't already
+  critically dying.
 
 ORGANIC CHARACTER GROWTH:
 - Stats grow from -2 to +3 based on consistent use (keep total at +2, max one stat ≥ +2)

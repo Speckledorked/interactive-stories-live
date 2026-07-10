@@ -7,7 +7,7 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { X, Beer, Settings as SettingsIcon, HelpCircle, BookOpen, ScrollText, ShieldCheck, LogOut } from 'lucide-react'
+import { X, Beer, Settings as SettingsIcon, HelpCircle, BookOpen, ScrollText, ShieldCheck, LogOut, Users } from 'lucide-react'
 import { displayFont } from '@/lib/tavernTheme'
 import { logout } from '@/lib/clientAuth'
 
@@ -38,6 +38,7 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false 
     { href: '/campaigns', label: 'Tavern', icon: Beer },
     ...(campaignId ? [{ href: `/campaigns/${campaignId}/wiki`, label: 'Wiki', icon: BookOpen }] : []),
     ...(campaignId && isAdmin ? [{ href: `/campaigns/${campaignId}/admin`, label: 'Admin', icon: ShieldCheck }] : []),
+    { href: '/friends', label: 'Friends', icon: Users },
     { href: '/settings', label: 'Settings', icon: SettingsIcon },
     { href: '/tutorial', label: 'Tutorial', icon: ScrollText },
     { href: '/help', label: 'Help & Documentation', icon: HelpCircle },

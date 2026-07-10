@@ -35,7 +35,7 @@ export class TutorialService {
       // Basics
       {
         stepKey: 'welcome',
-        title: 'Welcome to Interactive Stories',
+        title: 'Welcome to MythOS',
         description: 'Learn the basics of playing AI-powered tabletop RPG adventures',
         category: 'basics',
         orderIndex: 1,

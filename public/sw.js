@@ -92,7 +92,7 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Interactive Stories', options)
+    self.registration.showNotification(data.title || 'MythOS', options)
   );
 });
 

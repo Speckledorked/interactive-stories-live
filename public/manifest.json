@@ -1,6 +1,6 @@
 {
-  "name": "Interactive Stories - AI Game Master",
-  "short_name": "Interactive Stories",
+  "name": "MythOS - AI Game Master",
+  "short_name": "MythOS",
   "description": "AI-powered tabletop RPG adventures with dynamic storytelling",
   "start_url": "/",
   "display": "standalone",

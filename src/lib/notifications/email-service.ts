@@ -124,7 +124,7 @@ export class EmailService {
       }>;
     }
   ) {
-    const subject = '📊 Your Daily AI GM Digest';
+    const subject = '📊 Your Daily MythOS Digest';
     const html = this.buildDigestEmailTemplate(userName, digestData);
 
     return await this.sendEmail({
@@ -136,7 +136,7 @@ export class EmailService {
 
   // Send password reset email
   static async sendPasswordResetEmail(userEmail: string, resetToken: string) {
-    const subject = '🔒 Reset Your AI GM Password';
+    const subject = '🔒 Reset Your MythOS Password';
     const html = this.buildPasswordResetTemplate(resetToken);
 
     return await this.sendEmail({
@@ -256,7 +256,7 @@ export class EmailService {
         <div style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
           <h1 style="color: #1e40af; margin: 0 0 20px 0; font-size: 24px;">📊 Daily Digest</h1>
           
-          <p style="color: #374151; margin-bottom: 25px;">Hi ${userName}, here's your AI GM activity summary:</p>
+          <p style="color: #374151; margin-bottom: 25px;">Hi ${userName}, here's your MythOS activity summary:</p>
 
           <div style="display: grid; gap: 15px; margin-bottom: 25px;">
             <div style="background: #eff6ff; border-radius: 6px; padding: 15px;">

@@ -1,4 +1,4 @@
-// Top bar shared by every redesigned page — either the full "AI GM"
+// Top bar shared by every redesigned page — either the full "MythOS"
 // wordmark (top-level pages) or a back arrow + page title (sub-pages).
 
 'use client'
@@ -53,7 +53,7 @@ export function TavernHeader({
               <h1
                 className={`${displayFont.className} text-2xl tracking-[0.15em] bg-gradient-to-b from-ember-200 to-ember-500 bg-clip-text text-transparent`}
               >
-                AI GM
+                MythOS
               </h1>
               <span className="text-ember-700/60 text-xs tracking-widest">──◈</span>
             </div>

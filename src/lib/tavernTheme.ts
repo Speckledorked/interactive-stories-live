@@ -1,4 +1,4 @@
-// Shared "tavern" theme primitives — dark-fantasy AI GM redesign.
+// Shared "tavern" theme primitives — dark-fantasy MythOS redesign.
 // Fonts live in one module so every page shares the same font instances
 // instead of each page re-importing next/font/google separately.
 

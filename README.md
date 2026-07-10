@@ -1,4 +1,4 @@
-# Interactive Stories Live
+# MythOS
 
 An AI-powered collaborative storytelling platform for running interactive narrative campaigns with AI Game Master capabilities.
 

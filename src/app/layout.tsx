@@ -7,7 +7,7 @@ import { CommandPaletteProvider } from '@/contexts/CommandPaletteContext'
 import { ErrorHandlerInit } from './ErrorHandlerInit'
 
 export const metadata: Metadata = {
-  title: 'AI GM - Automated Game Master',
+  title: 'MythOS - Automated Game Master',
   description: 'Play tabletop RPGs with an AI Game Master',
 }
 

@@ -5,8 +5,9 @@
 import { prisma } from '@/lib/prisma'
 import { callAIForWorldTurn } from '@/lib/ai/client'
 import { buildWorldSummaryForAI } from '@/lib/ai/worldState'
-import { checkAndResolveCompletedClocks } from './stateUpdater'
+import { applyWorldUpdates, checkAndResolveCompletedClocks } from './stateUpdater'
 import { runWorldTick } from './worldTick'
+import { createCampaignMemory } from '@/lib/ai/memoryCreation'
 import { EventVisibility } from '@prisma/client'
 
 /**
@@ -44,12 +45,19 @@ export async function runWorldTurn(campaignId: string) {
     console.log('🔍 Checking completed clocks...')
     const completedClocks = await checkAndResolveCompletedClocks(campaignId, currentTurn)
 
-    // 3. Generate offscreen events with AI (if there's interesting clock activity)
-    if (advancedClocks.length > 0 || completedClocks.length > 0) {
+    // 2b. Major NPCs whose goal just completed this tick — these need AI
+    // narration of the outcome and a new goal (see NPC_GOAL_COMPLETED
+    // handling in generateOffscreenEvents), same trigger shape as clocks.
+    const completedGoalNpcs = worldTick.changes
+      .filter((c) => c.entityType === 'NPC' && c.field === 'goalCompleted')
+      .map((c) => ({ npcId: c.entityId, npcName: c.entityName, completedGoal: c.previousValue }))
+
+    // 3. Generate offscreen events with AI (if there's interesting clock or NPC activity)
+    if (advancedClocks.length > 0 || completedClocks.length > 0 || completedGoalNpcs.length > 0) {
       console.log('🤖 Generating offscreen events...')
-      await generateOffscreenEvents(campaignId, currentTurn, advancedClocks, completedClocks)
+      await generateOffscreenEvents(campaignId, currentTurn, advancedClocks, completedClocks, completedGoalNpcs)
     } else {
-      console.log('  No significant clock activity - skipping offscreen events')
+      console.log('  No significant clock or NPC activity - skipping offscreen events')
     }
 
     // 4. Update in-game date (simple progression)
@@ -133,7 +141,8 @@ async function generateOffscreenEvents(
   campaignId: string,
   currentTurn: number,
   advancedClocks: any[],
-  completedClocks: any[]
+  completedClocks: any[],
+  completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = []
 ) {
   try {
     const campaign = await prisma.campaign.findUnique({
@@ -153,12 +162,14 @@ async function generateOffscreenEvents(
       campaign.aiSystemPrompt,
       worldSummary,
       [...advancedClocks, ...completedClocks],
-      campaignId
+      campaignId,
+      completedGoalNpcs
     )
 
     // Create timeline events for each offscreen event
+    const createdEvents: { id: string; title: string; summary_gm: string }[] = []
     for (const event of aiResult.offscreen_events) {
-      await prisma.timelineEvent.create({
+      const created = await prisma.timelineEvent.create({
         data: {
           campaignId,
           turnNumber: currentTurn,
@@ -169,8 +180,59 @@ async function generateOffscreenEvents(
           visibility: 'MIXED' as EventVisibility // Players see public, GM sees full
         }
       })
+      createdEvents.push({ id: created.id, title: event.title, summary_gm: event.summary_gm })
 
       console.log(`  📰 Created offscreen event: ${event.title}`)
+    }
+
+    // Apply any structured consequences (new/updated NPCs, faction changes)
+    // through the same path scene resolution uses, so a named outcome (a
+    // tournament winner, a new rival) becomes a real, queryable entity —
+    // not just a sentence in the event summary above.
+    let involvedNpcIds: string[] = []
+    let involvedFactionIds: string[] = []
+    const hasWorldUpdates =
+      (aiResult.world_updates?.npc_changes?.length || 0) > 0 ||
+      (aiResult.world_updates?.faction_changes?.length || 0) > 0
+
+    if (hasWorldUpdates) {
+      const applied = await applyWorldUpdates(
+        campaignId,
+        {
+          scene_text: '',
+          world_updates: {
+            npc_changes: aiResult.world_updates?.npc_changes,
+            faction_changes: aiResult.world_updates?.faction_changes,
+          },
+        },
+        currentTurn
+      )
+      involvedNpcIds = applied.involvedNpcIds
+      involvedFactionIds = applied.involvedFactionIds
+      console.log(`  🌍 Applied offscreen world updates: ${involvedNpcIds.length} NPC(s), ${involvedFactionIds.length} faction(s) touched`)
+    }
+
+    // Embed each offscreen event into campaign memory so it's retrievable
+    // by semantic search indefinitely, not just while it's within the last
+    // ~10-20 timeline events the prompt builder includes directly. This is
+    // what lets a player ask "who won the tournament?" turns later and get
+    // the real answer instead of the AI improvising a fresh one.
+    for (const event of createdEvents) {
+      await createCampaignMemory({
+        campaignId,
+        memoryType: 'WORLD_EVENT',
+        sourceId: event.id,
+        turnNumber: currentTurn,
+        title: event.title,
+        summary: event.summary_gm,
+        fullContext: event.summary_gm,
+        involvedCharacterIds: [],
+        involvedNpcIds,
+        involvedFactionIds,
+        locationTags: [],
+        importance: 'NORMAL',
+        tags: ['offscreen_event', 'world_turn'],
+      }).catch(err => console.error(`  ⚠️ Failed to embed memory for offscreen event "${event.title}":`, err))
     }
 
     // Store GM notes

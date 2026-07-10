@@ -15,13 +15,14 @@
 
 import { tickWeather } from './tick/weatherTick'
 import { tickFactions } from './tick/factionTick'
+import { tickFactionAmbitions } from './tick/ambitionTick'
 import { tickNpcs } from './tick/npcTick'
 import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { TickContext, TickHandler, WorldChange, WorldTickResult } from './tick/types'
 
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactions, tickNpcs]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactions, tickFactionAmbitions, tickNpcs]
 
 /**
  * Run one deterministic world tick for a campaign.

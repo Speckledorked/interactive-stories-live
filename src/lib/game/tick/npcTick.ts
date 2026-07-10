@@ -45,17 +45,25 @@ function phaseIndexAt(npcId: string, turnNumber: number): number {
   return Math.floor(turnNumber / tempo) % PLAN_PHASES.length
 }
 
+// Deterministic pace: a goal takes 25 ticks of active pursuit to complete.
+// Long enough that background arcs feel like they're actually unfolding
+// over the campaign, short enough that a major NPC's goal completes within
+// a realistic playthrough instead of never.
+const PROGRESS_PER_TICK = 4
+
 export interface NpcTickDecision {
   phase: PlanPhase
   timeOfDay: TimeOfDay
   planPhaseChanged: boolean
   currentPlan: string
   nextLocation: string | null // null = no change
+  newGoalProgress: number
+  goalCompleted: boolean
 }
 
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideNpcTick(
-  npc: { id: string; goals: string | null; relationship: string | null; currentLocation: string | null },
+  npc: { id: string; goals: string | null; relationship: string | null; currentLocation: string | null; goalProgress: number },
   turnNumber: number,
   discoveredLocationNames: string[]
 ): NpcTickDecision {
@@ -83,12 +91,22 @@ export function decideNpcTick(
     }
   }
 
+  // Goalless NPCs (goals cleared, awaiting AI narration to assign a new
+  // one — see goalCompleted handling below) don't accrue progress toward
+  // nothing.
+  const hasGoal = !!npc.goals?.trim()
+  const rawProgress = hasGoal ? npc.goalProgress + PROGRESS_PER_TICK : npc.goalProgress
+  const goalCompleted = rawProgress >= 100
+  const newGoalProgress = goalCompleted ? 0 : rawProgress
+
   return {
     phase,
     timeOfDay,
     planPhaseChanged: phaseIndex !== prevPhaseIndex,
     currentPlan,
     nextLocation,
+    newGoalProgress,
+    goalCompleted,
   }
 }
 
@@ -111,8 +129,9 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
   for (const npc of npcs) {
     const decision = decideNpcTick(npc, ctx.turnNumber, discoveredLocationNames)
 
-    const updateData: { currentPlan: string; currentLocation?: string } = {
+    const updateData: { currentPlan: string; currentLocation?: string; goalProgress: number } = {
       currentPlan: decision.currentPlan,
+      goalProgress: decision.newGoalProgress,
     }
     if (decision.nextLocation) {
       updateData.currentLocation = decision.nextLocation
@@ -159,6 +178,24 @@ function buildNpcChanges(campaignId: string, npc: NPC, decision: NpcTickDecision
       reason: `${npc.name} moved from ${npc.currentLocation || 'an unknown location'} to ${decision.nextLocation} following their ${decision.timeOfDay} schedule`,
       significant: true,
       importance: npc.importance >= 5 ? 'MAJOR' : 'NORMAL',
+    })
+  }
+
+  // Goal completed: always MAJOR, regardless of NPC importance tier — this
+  // is the signal that picks the NPC up for AI narration + a new goal in
+  // worldTurn.ts's generateOffscreenEvents, so it has to be unmissable.
+  if (decision.goalCompleted) {
+    changes.push({
+      entityType: 'NPC',
+      entityId: npc.id,
+      entityName: npc.name,
+      campaignId,
+      field: 'goalCompleted',
+      previousValue: npc.goals || '(no goal)',
+      newValue: '(awaiting new direction)',
+      reason: `${npc.name} has achieved their goal: ${npc.goals || 'an unstated goal'}`,
+      significant: true,
+      importance: 'MAJOR',
     })
   }
 

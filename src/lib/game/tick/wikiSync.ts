@@ -12,6 +12,7 @@
 import { prisma } from '@/lib/prisma'
 import { WorldChange } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
+import { describeStat } from '@/lib/ai/qualitativeStats'
 
 /**
  * Regenerate WikiEntry summary/description for every NPC/Faction that had a
@@ -37,11 +38,16 @@ export async function syncWikiEntriesForChanges(
 
     if (entityType === 'NPC') {
       const npc = await prisma.nPC.findUnique({ where: { id: entityId } })
-      if (!npc) continue
+      // Fog of war: an undiscovered NPC gets no wiki entry — the wiki is
+      // readable by every campaign member, not just admins.
+      if (!npc || !npc.isDiscovered) continue
       await syncNpcWikiEntry(campaignId, turnNumber, npc)
     } else {
-      const faction = await prisma.faction.findUnique({ where: { id: entityId } })
-      if (!faction) continue
+      const faction = await prisma.faction.findUnique({
+        where: { id: entityId },
+        include: { territories: { where: { isDiscovered: true } } },
+      })
+      if (!faction || !faction.isDiscovered) continue
       await syncFactionWikiEntry(campaignId, turnNumber, faction)
     }
     synced++
@@ -94,13 +100,28 @@ async function syncNpcWikiEntry(
 async function syncFactionWikiEntry(
   campaignId: string,
   turnNumber: number,
-  faction: { name: string; description: string | null; goals: string | null; currentPlan: string | null; resources: number; stability: number; military: number; goal: string }
+  faction: {
+    name: string
+    description: string | null
+    goals: string | null
+    currentPlan: string | null
+    resources: number
+    stability: number
+    military: number
+    goal: string
+    territories: { name: string }[]
+  }
 ): Promise<void> {
   const description = [
     faction.description || `${faction.name} is a group or organization in the world.`,
     faction.goals ? `Long-term goal: ${faction.goals}` : null,
     faction.currentPlan ? `Current plan: ${faction.currentPlan}` : null,
-    `Status: resources ${faction.resources}/100, stability ${faction.stability}/100, military ${faction.military}/100 — pursuing ${faction.goal}`,
+    // Fog of war: qualitative bands, not the exact numbers the simulation
+    // uses internally — same treatment as the AI-facing prompt (see
+    // qualitativeStats.ts), so the wiki can't hand players a precision the
+    // AI itself is never allowed to narrate with.
+    `Status: ${describeStat(faction.resources)} resources, ${describeStat(faction.stability)} stability, ${describeStat(faction.military)} military — pursuing ${faction.goal}`,
+    faction.territories.length > 0 ? `Controls: ${faction.territories.map((t) => t.name).join(', ')}` : null,
   ].filter(Boolean).join('\n\n')
 
   const wikiImportance = faction.stability < 20 || faction.military > 80 ? 'major' : 'normal'

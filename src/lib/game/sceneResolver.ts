@@ -913,10 +913,17 @@ async function updateWikiEntries(
   turnNumber: number,
   aiResponse: any
 ): Promise<void> {
-  // Get existing NPCs and Factions from database
+  // Get existing NPCs and Factions from database. Fog of war: only
+  // discovered ones get a wiki entry — the wiki is readable by every
+  // campaign member (not just admins), so syncing an undiscovered entity
+  // here would leak its existence regardless of what the AI's own prompt
+  // filtering already does.
   const [npcs, factions] = await Promise.all([
-    prisma.nPC.findMany({ where: { campaignId } }),
-    prisma.faction.findMany({ where: { campaignId } })
+    prisma.nPC.findMany({ where: { campaignId, isDiscovered: true } }),
+    prisma.faction.findMany({
+      where: { campaignId, isDiscovered: true },
+      include: { territories: { where: { isDiscovered: true } } },
+    })
   ])
 
   // Update or create NPC wiki entries
@@ -976,13 +983,17 @@ async function updateWikiEntries(
         }
       })
     } else {
+      const baseDescription = faction.description || `${faction.name} is a group or organization in the world.`
+      const territoryLine = faction.territories.length > 0
+        ? `Controls: ${faction.territories.map((t) => t.name).join(', ')}`
+        : null
       await prisma.wikiEntry.create({
         data: {
           campaignId,
           entryType: 'FACTION',
           name: faction.name,
           summary: faction.description || `A faction in the campaign`,
-          description: faction.description || `${faction.name} is a group or organization in the world.`,
+          description: [baseDescription, territoryLine].filter(Boolean).join('\n\n'),
           tags: [],
           aliases: [],
           importance: 'normal',
@@ -1035,7 +1046,10 @@ async function updateWikiEntries(
   }
 
   // Sync Location records to wiki entries
-  const locations = await prisma.location.findMany({ where: { campaignId, isDiscovered: true } })
+  const locations = await prisma.location.findMany({
+    where: { campaignId, isDiscovered: true },
+    include: { ownerFaction: true },
+  })
   for (const location of locations) {
     const existing = await prisma.wikiEntry.findFirst({
       where: { campaignId, entryType: 'LOCATION', name: location.name }
@@ -1043,7 +1057,11 @@ async function updateWikiEntries(
 
     const locDesc = [
       location.description,
-      location.locationType ? `Type: ${location.locationType}` : null
+      location.locationType ? `Type: ${location.locationType}` : null,
+      // Fog of war: only name the controlling faction if that faction is
+      // itself discovered — territory shouldn't out a hidden faction's
+      // existence any more than the AI's own prompt is allowed to.
+      location.ownerFaction?.isDiscovered ? `Controlled by: ${location.ownerFaction.name}` : null,
     ].filter(Boolean).join('\n\n') || `${location.name} is a location in the world.`
 
     if (existing) {

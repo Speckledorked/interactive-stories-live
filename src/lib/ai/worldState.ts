@@ -41,8 +41,14 @@ async function buildOptimizedWorldSummary(
       where: { campaignId, isHidden: false }
     }),
     // World Sim Phase 5: sustained conflicts — narrate from real momentum
-    // and duration, don't invent how a war is going.
-    prisma.war.findMany({ where: { campaignId, status: 'ESCALATING' } })
+    // and duration, don't invent how a war is going. Coalitions: pull
+    // participants so ally counts can be surfaced too (see wars mapping
+    // below) — isDiscovered on the faction so an undiscovered ally's
+    // existence isn't leaked just because it joined a known war.
+    prisma.war.findMany({
+      where: { campaignId, status: 'ESCALATING' },
+      include: { participants: { include: { faction: { select: { id: true, isDiscovered: true } } } } }
+    })
   ])
 
   if (!worldMeta) {
@@ -205,16 +211,25 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
 
     // World Sim Phase 5: sustained conflicts — only ones where both sides
     // are discovered; the party can't hear about a war between two
-    // factions they've never encountered.
+    // factions they've never encountered. Coalitions: ally counts only
+    // include discovered factions, same fog-of-war rule as everything else
+    // here — a hidden faction joining a known war doesn't get outed by it.
     wars: activeWars
       .filter(w => discoveredFactionIds.has(w.attackerFactionId) && discoveredFactionIds.has(w.defenderFactionId))
-      .map(w => ({
-        name: w.name,
-        attacker: allFactions.find(f => f.id === w.attackerFactionId)?.name || 'Unknown',
-        defender: allFactions.find(f => f.id === w.defenderFactionId)?.name || 'Unknown',
-        momentum: describeWarMomentum(w.momentum),
-        turns_elapsed: worldMeta.currentTurnNumber - w.startedTurn
-      })),
+      .map(w => {
+        const discoveredParticipants = w.participants.filter(p => p.faction.isDiscovered)
+        const attackerAllies = discoveredParticipants.filter(p => p.side === 'ATTACKER' && p.factionId !== w.attackerFactionId).length
+        const defenderAllies = discoveredParticipants.filter(p => p.side === 'DEFENDER' && p.factionId !== w.defenderFactionId).length
+        return {
+          name: w.name,
+          attacker: allFactions.find(f => f.id === w.attackerFactionId)?.name || 'Unknown',
+          defender: allFactions.find(f => f.id === w.defenderFactionId)?.name || 'Unknown',
+          attacker_allies: attackerAllies,
+          defender_allies: defenderAllies,
+          momentum: describeWarMomentum(w.momentum),
+          turns_elapsed: worldMeta.currentTurnNumber - w.startedTurn
+        }
+      }),
 
     // Use compressed timeline from context manager
     recent_timeline_events: compressedTimeline
@@ -274,8 +289,12 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       take: 10 // Last 10 events
     }),
     // World Sim Phase 5: sustained conflicts — narrate from real momentum
-    // and duration, don't invent how a war is going.
-    prisma.war.findMany({ where: { campaignId, status: 'ESCALATING' } })
+    // and duration, don't invent how a war is going. Coalitions: pull
+    // participants for ally counts (see wars mapping below).
+    prisma.war.findMany({
+      where: { campaignId, status: 'ESCALATING' },
+      include: { participants: { include: { faction: { select: { id: true, isDiscovered: true } } } } }
+    })
   ])
 
   if (!campaign || !worldMeta) {
@@ -372,16 +391,24 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
 
     // World Sim Phase 5: sustained conflicts currently in progress. Narrate
     // "how's the war going" from momentum/turns_elapsed, don't improvise.
-    // Fog of war: only wars where both sides are discovered.
+    // Fog of war: only wars where both sides are discovered; ally counts
+    // only include discovered factions.
     wars: activeWars
       .filter(w => discoveredFactionIds.has(w.attackerFactionId) && discoveredFactionIds.has(w.defenderFactionId))
-      .map(w => ({
-        name: w.name,
-        attacker: factions.find(f => f.id === w.attackerFactionId)?.name || 'Unknown',
-        defender: factions.find(f => f.id === w.defenderFactionId)?.name || 'Unknown',
-        momentum: describeWarMomentum(w.momentum),
-        turns_elapsed: (worldMeta?.currentTurnNumber ?? w.startedTurn) - w.startedTurn
-      }))
+      .map(w => {
+        const discoveredParticipants = w.participants.filter(p => p.faction.isDiscovered)
+        const attackerAllies = discoveredParticipants.filter(p => p.side === 'ATTACKER' && p.factionId !== w.attackerFactionId).length
+        const defenderAllies = discoveredParticipants.filter(p => p.side === 'DEFENDER' && p.factionId !== w.defenderFactionId).length
+        return {
+          name: w.name,
+          attacker: factions.find(f => f.id === w.attackerFactionId)?.name || 'Unknown',
+          defender: factions.find(f => f.id === w.defenderFactionId)?.name || 'Unknown',
+          attacker_allies: attackerAllies,
+          defender_allies: defenderAllies,
+          momentum: describeWarMomentum(w.momentum),
+          turns_elapsed: (worldMeta?.currentTurnNumber ?? w.startedTurn) - w.startedTurn
+        }
+      })
   } as any
 
   // Return both world summary and entities for reuse in memory retrieval

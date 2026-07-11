@@ -3,7 +3,7 @@ import { decideFactionTick, decideFactionGoalReassessment, decideFactionCollapse
 import { decideAmbitionTick, decideAmbitionOutcome } from '../ambitionTick'
 import { decideRelationshipTick } from '../relationshipTick'
 import { decideTerritoryClaim } from '../territory'
-import { decideWarDeclaration, decideWarProgress, decideWarResolution } from '../warTick'
+import { decideWarDeclaration, decideWarProgress, decideWarResolution, decideWarJoiner } from '../warTick'
 import { decideNpcTick, deriveTimeOfDay } from '../npcTick'
 import { decideNextWeather } from '../weatherTick'
 
@@ -251,6 +251,40 @@ describe('decideWarResolution', () => {
 
   it('keeps escalating while momentum is inconclusive and duration is short', () => {
     expect(decideWarResolution(20, 3)).toEqual({ resolves: false, outcome: null })
+  })
+})
+
+describe('decideWarJoiner', () => {
+  it('returns null when there are no candidates', () => {
+    expect(decideWarJoiner([])).toBeNull()
+  })
+
+  it('returns null when no candidate meets the military threshold', () => {
+    expect(decideWarJoiner([{ id: 'f1', name: 'Weak Guild', military: 40 }])).toBeNull()
+  })
+
+  it('picks the single eligible candidate', () => {
+    const candidate = { id: 'f1', name: 'Strong Guild', military: 80 }
+    expect(decideWarJoiner([candidate])).toEqual(candidate)
+  })
+
+  it('picks the strongest candidate when several are eligible', () => {
+    const weaker = { id: 'f1', name: 'A', military: 70 }
+    const stronger = { id: 'f2', name: 'B', military: 90 }
+    expect(decideWarJoiner([weaker, stronger])).toEqual(stronger)
+  })
+
+  it('breaks ties deterministically by id', () => {
+    const a = { id: 'a-faction', name: 'A', military: 80 }
+    const b = { id: 'b-faction', name: 'B', military: 80 }
+    expect(decideWarJoiner([b, a])).toEqual(a)
+    expect(decideWarJoiner([a, b])).toEqual(a)
+  })
+
+  it('ignores ineligible candidates and picks among the eligible ones', () => {
+    const tooWeak = { id: 'f1', name: 'Weak', military: 50 }
+    const eligible = { id: 'f2', name: 'Strong', military: 70 }
+    expect(decideWarJoiner([tooWeak, eligible])).toEqual(eligible)
   })
 })
 

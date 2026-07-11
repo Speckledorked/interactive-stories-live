@@ -1,16 +1,47 @@
 # MythOS
 
-An AI-powered collaborative storytelling platform for running interactive narrative campaigns with AI Game Master capabilities.
+*The world remembers.*
+
+An AI-powered collaborative storytelling platform for running interactive narrative campaigns with an AI Game Master and a persistent, living world that keeps simulating itself even when nobody's looking.
 
 ## Features
 
 - **AI Game Master**: Powered by OpenAI for dynamic story generation and scene resolution
-- **Campaign Memory System**: Long-form continuity using RAG (Retrieval-Augmented Generation) with vector embeddings
+- **Living World Simulation**: NPCs and factions pursue their own goals every turn, on and off screen — see [World Simulation](#world-simulation) below
+- **Campaign Memory System**: Long-form continuity using RAG (Retrieval-Augmented Generation) with vector embeddings, so the AI can recall specific past events and consequences instead of improvising them fresh
 - **Real-time Collaboration**: Live updates using Pusher for chat, notifications, and scene updates
-- **PbtA-inspired Mechanics**: Powered by the Apocalypse game system integration
+- **PbtA-inspired Mechanics**: Powered by the Apocalypse game system integration, including a full harm/death-save system
 - **Character Management**: Detailed character sheets with stats, moves, conditions, and progression
 - **Scene Management**: Dynamic scenes with player actions and AI resolution
 - **Payment System**: Stripe integration for AI usage billing
+
+## World Simulation
+
+MythOS runs a deterministic "world tick" after every player action — a pure,
+AI-free simulation step that decides what changes in the background (NPC
+movement and goal progress, faction resource/stability/military drift,
+weather) and writes every change to a durable event log. Only *narrating*
+those changes into prose is delegated to the AI, via a separate offscreen
+event generation pass; the underlying simulation state never depends on the
+AI being available or consistent.
+
+On top of that tick, factions can autonomously commit to major ambitions —
+tournaments, trade wars, coups, heists, crusades — once their resources and
+goals justify it. The tick decides **whether** a faction commits to
+something big; an offscreen AI call decides **what**, chosen from a bounded,
+archetype-specific option list (a guild throws a trade fair, a secret
+society runs a black-market venture, a political faction stages a coup) so
+the result stays flavorful without the AI going off-script. If the AI call
+fails, a deterministic fallback name is used instead, so an ambition never
+silently disappears.
+
+Every offscreen event and consequence is embedded into the campaign's RAG
+memory, so a player can ask "who won the tournament?" turns or sessions
+later and get a real, previously-generated answer instead of the AI
+inventing one on the spot.
+
+Set a faction's **Simulation Goal** and **Archetype** from the campaign
+admin panel (Factions tab) to opt it into this system.
 
 ## Prerequisites
 

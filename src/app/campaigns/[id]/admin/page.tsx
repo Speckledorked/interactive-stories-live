@@ -69,6 +69,16 @@ const FACTION_ARCHETYPES: Array<{ value: string; label: string }> = [
   { value: 'POLITICAL', label: 'Political Faction' },
 ]
 
+interface Location {
+  id: string
+  name: string
+  description: string | null
+  locationType: string | null
+  gmNotes: string | null
+  ownerFactionId: string | null
+  isDiscovered: boolean
+}
+
 interface Clock {
   id: string
   name: string
@@ -103,22 +113,25 @@ export default function AdminPage() {
   const campaignId = params.id as string
 
   // Read tab from URL parameter, default to 'dashboard'
-  const initialTab = searchParams?.get('tab') as 'dashboard' | 'ai' | 'npcs' | 'factions' | 'clocks' | 'invites' | 'members' | 'settings' || 'dashboard'
+  const initialTab = searchParams?.get('tab') as 'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'invites' | 'members' | 'settings' || 'dashboard'
 
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'clocks' | 'invites' | 'members' | 'settings'>(initialTab)
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'invites' | 'members' | 'settings'>(initialTab)
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [npcs, setNpcs] = useState<NPC[]>([])
   const [factions, setFactions] = useState<Faction[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
   const [characters, setCharacters] = useState<{ id: string; name: string }[]>([])
   const [clocks, setClocks] = useState<Clock[]>([])
   const [invites, setInvites] = useState<any[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [editingNpc, setEditingNpc] = useState<string | null>(null)
   const [editingFaction, setEditingFaction] = useState<string | null>(null)
+  const [editingLocation, setEditingLocation] = useState<string | null>(null)
   const [editingClock, setEditingClock] = useState<string | null>(null)
   const [creatingNpc, setCreatingNpc] = useState(false)
   const [creatingFaction, setCreatingFaction] = useState(false)
+  const [creatingLocation, setCreatingLocation] = useState(false)
   const [creatingClock, setCreatingClock] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -166,6 +179,13 @@ export default function AdminPage() {
       if (charactersResponse.ok) {
         const charactersData = await charactersResponse.json()
         setCharacters(charactersData.characters || [])
+      }
+
+      // Fetch Locations
+      const locationsResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/locations`)
+      if (locationsResponse.ok) {
+        const locationsData = await locationsResponse.json()
+        setLocations(locationsData.locations || [])
       }
 
       // Fetch Clocks
@@ -257,6 +277,27 @@ export default function AdminPage() {
       await fetchData()
     } catch (err) {
       setError('Failed to update faction')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateLocation = async (location: Location) => {
+    setSaving(true)
+
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/locations/${location.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(location),
+      })
+
+      if (!response.ok) throw new Error('Failed to update')
+
+      setEditingLocation(null)
+      await fetchData()
+    } catch (err) {
+      setError('Failed to update location')
     } finally {
       setSaving(false)
     }
@@ -426,6 +467,27 @@ export default function AdminPage() {
     }
   }
 
+  const handleCreateLocation = async (locationData: Partial<Location>) => {
+    setSaving(true)
+
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/locations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(locationData),
+      })
+
+      if (!response.ok) throw new Error('Failed to create location')
+
+      setCreatingLocation(false)
+      await fetchData()
+    } catch (err) {
+      setError('Failed to create location')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleCreateClock = async (clockData: Partial<Clock>) => {
     setSaving(true)
 
@@ -483,7 +545,7 @@ export default function AdminPage() {
         isAdmin
         subrow={
           <nav className="max-w-7xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
-            {(['dashboard', 'ai', 'npcs', 'factions', 'clocks', 'invites', 'members', 'settings'] as const).map((tab) => (
+            {(['dashboard', 'ai', 'npcs', 'factions', 'locations', 'clocks', 'invites', 'members', 'settings'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1140,6 +1202,219 @@ export default function AdminPage() {
                           </div>
                           <button
                             onClick={() => setEditingFaction(faction.id)}
+                            className="px-3 py-1 bg-wine-600 text-white rounded-md hover:bg-wine-500"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Locations Tab */}
+            {activeTab === 'locations' && (
+              <div className="space-y-4">
+                <button
+                  onClick={() => setCreatingLocation(true)}
+                  className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500"
+                >
+                  + Create Location
+                </button>
+
+                {creatingLocation && (
+                  <div className="border border-ember-900/30 rounded-lg p-4 bg-black/25">
+                    <h3 className="font-semibold mb-3">Create New Location</h3>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        const formData = new FormData(e.currentTarget)
+                        handleCreateLocation({
+                          name: formData.get('name') as string,
+                          description: formData.get('description') as string || undefined,
+                          locationType: formData.get('locationType') as string || undefined,
+                          ownerFactionId: (formData.get('ownerFactionId') as string) || undefined,
+                          gmNotes: formData.get('gmNotes') as string || undefined,
+                          isDiscovered: formData.get('isDiscovered') === 'on',
+                        })
+                      }}
+                      className="space-y-3"
+                    >
+                      <div>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Name *</label>
+                        <input
+                          type="text"
+                          name="name"
+                          required
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Description</label>
+                        <textarea
+                          name="description"
+                          rows={2}
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Type</label>
+                          <input
+                            type="text"
+                            name="locationType"
+                            placeholder="town, dungeon, wilderness, inn..."
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Owner Faction</label>
+                          <select
+                            name="ownerFactionId"
+                            defaultValue=""
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                          >
+                            <option value="">None</option>
+                            {factions.map((f) => (
+                              <option key={f.id} value={f.id}>{f.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          name="isDiscovered"
+                          id="location-isDiscovered"
+                          defaultChecked
+                          className="rounded border-ember-900/40 bg-black/30"
+                        />
+                        <label htmlFor="location-isDiscovered" className="text-sm text-ember-200/80">
+                          Discovered by players — uncheck to place it on the map as hidden background lore until a scene actually reveals it
+                        </label>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">GM Notes</label>
+                        <textarea
+                          name="gmNotes"
+                          rows={2}
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                        />
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          type="submit"
+                          disabled={saving}
+                          className="px-3 py-2 bg-success-600 text-white rounded-md hover:bg-success-500 disabled:opacity-50"
+                        >
+                          {saving ? 'Creating...' : 'Create'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCreatingLocation(false)}
+                          className="px-3 py-2 bg-black/40 text-white rounded-md hover:bg-black/50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {locations.map((location) => (
+                  <div key={location.id} className="border border-ember-900/30 rounded-lg p-4">
+                    {editingLocation === location.id ? (
+                      <div className="space-y-2">
+                        <input
+                          value={location.name}
+                          onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, name: e.target.value } : l))}
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
+                        />
+                        <textarea
+                          value={location.description || ''}
+                          onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, description: e.target.value } : l))}
+                          placeholder="Description"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
+                          rows={2}
+                        />
+                        <div className="flex space-x-4">
+                          <div className="flex-1">
+                            <label className="text-xs">Type</label>
+                            <input
+                              type="text"
+                              value={location.locationType || ''}
+                              onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, locationType: e.target.value } : l))}
+                              className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-xs">Owner Faction</label>
+                            <select
+                              value={location.ownerFactionId || ''}
+                              onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, ownerFactionId: e.target.value || null } : l))}
+                              className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
+                            >
+                              <option value="">None</option>
+                              {factions.map((f) => (
+                                <option key={f.id} value={f.id}>{f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={location.isDiscovered}
+                            onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, isDiscovered: e.target.checked } : l))}
+                            className="rounded border-ember-900/40 bg-black/30"
+                          />
+                          <label className="text-xs">Discovered by players</label>
+                        </div>
+                        <textarea
+                          value={location.gmNotes || ''}
+                          onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, gmNotes: e.target.value } : l))}
+                          placeholder="GM Notes"
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
+                          rows={2}
+                        />
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleUpdateLocation(location)}
+                            disabled={saving}
+                            className="px-3 py-1 bg-success-600 text-white rounded-md hover:bg-success-500 disabled:opacity-50"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingLocation(null)}
+                            className="px-3 py-1 bg-black/40 text-white rounded-md hover:bg-black/50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold">
+                              {location.name}
+                              {location.isDiscovered === false && (
+                                <span className="ml-2 text-xs font-normal text-ember-400/70 border border-ember-400/30 rounded px-1.5 py-0.5">
+                                  Hidden
+                                </span>
+                              )}
+                            </h3>
+                            <p className="text-sm text-ember-300/60">{location.description}</p>
+                            <p className="text-xs text-ember-400/50">
+                              {location.locationType || 'unknown'}
+                              {location.ownerFactionId && ` · Controlled by ${factions.find(f => f.id === location.ownerFactionId)?.name || 'a faction'}`}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setEditingLocation(location.id)}
                             className="px-3 py-1 bg-wine-600 text-white rounded-md hover:bg-wine-500"
                           >
                             Edit

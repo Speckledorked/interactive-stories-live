@@ -863,6 +863,12 @@ export async function applyWorldUpdates(
             if (locChange.gm_notes_append) {
               updateData.gmNotes = (existing.gmNotes || '') + '\n\n' + locChange.gm_notes_append
             }
+            // Fog of war: same reveal-on-mention rule as NPC/Faction — a live
+            // scene touching this location means the party is there, so it's
+            // discovered; an offscreen tick mentioning it must not out it.
+            if (sceneOrigin && !existing.isDiscovered) {
+              updateData.isDiscovered = true
+            }
             if (Object.keys(updateData).length > 0) {
               await tx.location.update({
                 where: { id: existing.id },
@@ -878,7 +884,7 @@ export async function applyWorldUpdates(
                 description: locChange.description || null,
                 locationType: locChange.location_type || null,
                 gmNotes: locChange.gm_notes_append || null,
-                isDiscovered: true
+                isDiscovered: sceneOrigin
               }
             })
             console.log(`  📍 Created location: ${locChange.name}`)
@@ -897,9 +903,11 @@ export async function applyWorldUpdates(
                 create: {
                   campaignId,
                   name: locationName,
-                  isDiscovered: true
+                  isDiscovered: sceneOrigin
                 },
-                update: {} // Already exists, no changes needed
+                // A PC standing there is itself a discovery event, so reveal
+                // on update too — same reveal-on-mention rule as section 7.
+                update: sceneOrigin ? { isDiscovered: true } : {}
               })
             } catch {
               // Ignore if upsert fails (e.g., concurrent write) — non-critical

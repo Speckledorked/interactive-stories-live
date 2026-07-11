@@ -7,8 +7,11 @@ An AI-powered collaborative storytelling platform for running interactive narrat
 ## Features
 
 - **AI Game Master**: Powered by OpenAI for dynamic story generation and scene resolution
-- **Living World Simulation**: NPCs and factions pursue their own goals every turn, on and off screen — see [World Simulation](#world-simulation) below
-- **Campaign Memory System**: Long-form continuity using RAG (Retrieval-Augmented Generation) with vector embeddings, so the AI can recall specific past events and consequences instead of improvising them fresh
+- **Living World Simulation**: NPCs and factions pursue their own goals every turn, on and off screen — territory changes hands, wars break out (and can grow into multi-faction coalitions), factions rise and collapse — see [World Simulation](#world-simulation) below and the full [Living World Roadmap](#living-world-roadmap)
+- **Player-Faction Integration**: a player character can lead a faction outright — set its strategic goal in-fiction, watch it keep ticking autonomously between sessions
+- **Fog of War**: the AI only narrates what's actually been discovered in play — hidden factions/NPCs/locations, GM-only notes, and exact simulation numbers never leak into player-facing text, even though the simulation itself always sees everything
+- **Campaign Memory System**: Long-form continuity using RAG (Retrieval-Augmented Generation) with vector embeddings, so the AI can recall specific past events and consequences instead of improvising them fresh — including cross-entity queries ("what happened between X and Y") and automatic decay/consolidation of old low-importance memories so a long campaign's memory table stays bounded
+- **Admin Tooling**: a campaign-management panel with a faction relationship/territory map, a tick-log viewer with the reasoning behind every simulated change, and a dry-run "preview next tick" mode
 - **Real-time Collaboration**: Live updates using Pusher for chat, notifications, and scene updates
 - **PbtA-inspired Mechanics**: Powered by the Apocalypse game system integration, including a full harm/death-save system
 - **Character Management**: Detailed character sheets with stats, moves, conditions, and progression
@@ -40,8 +43,27 @@ memory, so a player can ask "who won the tournament?" turns or sessions
 later and get a real, previously-generated answer instead of the AI
 inventing one on the spot.
 
+Territory is real state, not flavor text: factions can contest and conquer
+each other's land, and sustained conflicts escalate into full **wars** —
+multi-turn, attrition-driven, momentum-tracked — that can grow into
+multi-faction **coalitions** as allies join a side. A player character can
+lead a faction outright, setting its strategic goal in-fiction while the
+rest of the simulation (stat drift, ambitions, wars, collapse/succession)
+keeps running underneath them exactly like an NPC-led faction would.
+
+None of this is narrated to players ahead of what they've actually
+discovered: hidden factions/NPCs/locations, GM-only notes, and the
+simulation's exact internal numbers (resources, military, momentum, ...)
+never reach the AI's player-facing prompt — the AI narrates from the same
+qualitative impressions a character in the world would have, while the
+tick itself always operates on real numbers underneath.
+
 Set a faction's **Simulation Goal** and **Archetype** from the campaign
-admin panel (Factions tab) to opt it into this system.
+admin panel (Factions tab) to opt it into this system. The admin panel also
+has a Map tab (faction relationships and territory), a Debug tab (why the
+tick made a given decision, plus a dry-run preview of the next tick), and a
+Simulation Caps section for tuning how many factions/NPCs the tick
+considers per campaign.
 
 ## Living World Roadmap
 
@@ -49,10 +71,12 @@ The long-term goal is a world that simulates itself autonomously — factions,
 NPCs, and territory that tick forward on their own agendas whether or not
 players are present — and remembers everything that happens well enough to
 answer for it later, the way a human GM running a Crusader Kings-style
-campaign would. This list tracks that effort phase by phase. Phases 1–2 are
-live in production; everything below them is ordered, not scheduled — check
-items off as they land and update this list in the same PR that does the
-work.
+campaign would. This list tracks that effort phase by phase, in the order it
+was actually built. **All 8 phases below are complete and live in
+production**, including every item that was deferred out of an earlier
+phase's initial scope — check the phase notes for what's still explicitly
+out of scope going forward (mostly: true point-in-time tick *replay*, as
+opposed to the dry-run preview of the *next* tick that does exist).
 
 ### Phase 1 — Deterministic World Tick ✅
 - [x] Single AI-free tick runs after every player action (NPCs, factions, weather)

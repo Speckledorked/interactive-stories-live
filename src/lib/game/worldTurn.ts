@@ -9,8 +9,10 @@ import { applyWorldUpdates, checkAndResolveCompletedClocks } from './stateUpdate
 import { runWorldTick } from './worldTick'
 import { createCampaignMemory } from '@/lib/ai/memoryCreation'
 import { EventVisibility } from '@prisma/client'
-import { PendingAmbition } from './tick/types'
-import { AMBITION_CATEGORY_OPTIONS } from './tick/ambitionTick'
+import { PendingAmbition, WorldChange, clamp } from './tick/types'
+import { AMBITION_CATEGORY_OPTIONS, decideAmbitionOutcome } from './tick/ambitionTick'
+import { persistWorldEvents } from './tick/worldEventLog'
+import { logSignificantChanges } from './tick/historyLog'
 
 /**
  * Run a world turn - advance clocks and generate background events
@@ -46,6 +48,16 @@ export async function runWorldTurn(campaignId: string) {
     // 2. Check for completed clocks
     console.log('🔍 Checking completed clocks...')
     const completedClocks = await checkAndResolveCompletedClocks(campaignId, currentTurn)
+
+    // 2a. Resolve any ambitions among the clocks that just completed — win
+    // or lose, deterministically, so a faction's tournament/campaign/heist
+    // actually changes its stats instead of only producing a line of
+    // flavor text. Runs before offscreen event generation below so the
+    // world summary the AI sees already reflects the real outcome.
+    const completedAmbitionClocks = completedClocks.filter((c: any) => c.sourceFactionId)
+    if (completedAmbitionClocks.length > 0) {
+      await resolveCompletedAmbitions(campaignId, currentTurn, completedAmbitionClocks)
+    }
 
     // 2b. Major NPCs whose goal just completed this tick — these need AI
     // narration of the outcome and a new goal (see NPC_GOAL_COMPLETED
@@ -133,6 +145,81 @@ async function advanceClocks(campaignId: string) {
 
   console.log(`  Advanced ${advancedClocks.length} clock(s)`)
   return advancedClocks
+}
+
+/**
+ * Resolve completed ambition clocks (see ambitionTick.ts) into a real
+ * faction outcome — win or lose, deterministically — instead of the generic
+ * flavor-text completion event checkAndResolveCompletedClocks would
+ * otherwise produce for them.
+ */
+async function resolveCompletedAmbitions(
+  campaignId: string,
+  currentTurn: number,
+  completedAmbitionClocks: any[]
+) {
+  const changes: WorldChange[] = []
+
+  for (const clock of completedAmbitionClocks) {
+    const faction = await prisma.faction.findUnique({ where: { id: clock.sourceFactionId! } })
+    if (!faction) continue
+
+    const outcome = decideAmbitionOutcome({
+      factionId: faction.id,
+      clockId: clock.id,
+      factionName: faction.name,
+      goal: faction.goal,
+      resources: faction.resources,
+      military: faction.military,
+    })
+
+    const newResources = clamp(faction.resources + outcome.resourceDelta, 0, 100)
+    const newStability = clamp(faction.stability + outcome.stabilityDelta, 0, 100)
+    const newMilitary = clamp(faction.military + outcome.militaryDelta, 0, 100)
+    const newThreatLevel = clamp(faction.threatLevel + outcome.threatLevelDelta, 1, 5)
+
+    await prisma.faction.update({
+      where: { id: faction.id },
+      data: {
+        resources: newResources,
+        stability: newStability,
+        military: newMilitary,
+        threatLevel: newThreatLevel,
+      },
+    })
+
+    await prisma.timelineEvent.create({
+      data: {
+        campaignId,
+        turnNumber: currentTurn,
+        title: `${clock.name} - ${outcome.success ? 'Complete!' : 'Failed'}`,
+        summaryPublic: outcome.consequenceText,
+        summaryGM: `${outcome.consequenceText} (Δresources ${outcome.resourceDelta >= 0 ? '+' : ''}${outcome.resourceDelta}, Δstability ${outcome.stabilityDelta >= 0 ? '+' : ''}${outcome.stabilityDelta}, Δmilitary ${outcome.militaryDelta >= 0 ? '+' : ''}${outcome.militaryDelta})`,
+        isOffscreen: true,
+        visibility: clock.isHidden ? 'GM_ONLY' : 'PUBLIC',
+      },
+    })
+
+    changes.push({
+      entityType: 'FACTION',
+      entityId: faction.id,
+      entityName: faction.name,
+      campaignId,
+      field: 'ambitionResolved',
+      previousValue: 'pending',
+      newValue: outcome.success ? 'succeeded' : 'failed',
+      reason: outcome.consequenceText,
+      significant: true,
+      importance: 'MAJOR',
+    })
+
+    console.log(`  🎯 ${faction.name}'s ambition ${outcome.success ? 'succeeded' : 'failed'}: ${outcome.consequenceText}`)
+  }
+
+  if (changes.length > 0) {
+    await persistWorldEvents(campaignId, currentTurn, changes)
+    await logSignificantChanges(campaignId, currentTurn, changes)
+  }
 }
 
 /**

@@ -67,10 +67,10 @@ work.
 - [x] Major NPCs get new goals automatically when their current one completes, instead of going idle
 
 ### Phase 3 — Faction Feedback & Evolution
-The biggest gap right now: ambitions and goals don't actually respond to what happens. Winning a tournament is currently a nice sentence with zero mechanical effect.
-- [ ] Ambition outcomes apply real stat deltas (resources/stability/military/threatLevel) on completion, not flavor text only
-- [ ] Attempting an ambition costs resources, instead of only being gated by a resource threshold
-- [ ] Automatic goal reassessment each tick, based on current stats and recent history — replaces the admin-panel manual goal setting, which exists today only as a stopgap
+The biggest gap identified: ambitions and goals didn't actually respond to what happens. Winning a tournament used to be a nice sentence with zero mechanical effect — fixed below.
+- [x] Ambition outcomes apply real stat deltas (resources/stability/military/threatLevel) on completion, not flavor text only — deterministic success/fail, weighted by whichever stat the goal leans on (military for EXPAND, resources for ENRICH), never guaranteed
+- [x] Attempting an ambition costs resources, instead of only being gated by a resource threshold
+- [x] Automatic goal reassessment each tick, based on current stats — the admin-panel manual goal setting still works as a seed/override, but the simulation will steer it back toward whatever the faction's circumstances justify. (`DESTABILIZE_RIVAL` is still GM-only until Phase 3's relationship item below lands — the simulation can't yet pick a rival to target)
 - [ ] Faction-to-faction relationship state (rival / ally / at war) that the tick actually reads and writes — replaces the `Faction.relationships` field, which exists in the schema but is currently dead (write-only, used only by campaign export)
 - [ ] Faction collapse — sustained low stability leads to disbanding, absorption by a rival, or a civil-war split
 - [ ] Faction founding — new factions can emerge from world events (splinter groups, rebellions, successor states)

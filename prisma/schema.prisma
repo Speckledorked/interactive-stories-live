@@ -400,6 +400,14 @@ model Clock {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Set the first (and only the first) time checkAndResolveCompletedClocks
+  // processes this clock after currentTicks reaches maxTicks. Without this,
+  // a completed clock would be re-detected as "just completed" on every
+  // subsequent turn forever, since nothing else removes or advances it past
+  // maxTicks — re-firing its completion event and (for ambition clocks)
+  // re-applying faction stat deltas indefinitely.
+  resolvedAt DateTime?
+
   // World Sim Phase 2: set when a faction autonomously spawned this clock
   // while pursuing an ambitious goal, rather than a GM creating it by hand.
   sourceFactionId String?

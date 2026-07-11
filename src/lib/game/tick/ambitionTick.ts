@@ -22,10 +22,16 @@
 
 import { prisma } from '@/lib/prisma'
 import type { FactionGoal, FactionArchetype } from '@prisma/client'
-import { TickContext, TickHandlerResult, WorldChange, PendingAmbition } from './types'
+import { TickContext, TickHandlerResult, WorldChange, PendingAmbition, clamp, stableHash } from './types'
 
 const FACTION_CAP = 10
 const RESOURCES_HIGH_THRESHOLD = 67 // matches factionTick.ts's band() HIGH cutoff
+
+// Committing to an ambition spends resources rather than only requiring a
+// threshold — otherwise an ENRICH faction drifting +4 resources/turn could
+// chain straight from one ambition into the next as soon as its cooldown
+// clock resolved, for free.
+const AMBITION_COMMIT_COST = 20
 
 type AmbitionGoal = 'ENRICH' | 'EXPAND'
 
@@ -101,6 +107,7 @@ export interface AmbitionDecision {
   fallbackFlavor: string
   fallbackName: string
   fallbackConsequence: string
+  resourceCost: number
 }
 
 /** Pure decision function — no DB access, safe to unit test directly. */
@@ -120,7 +127,7 @@ export function decideAmbitionTick(faction: {
     !faction.hasActiveSpawnedClock
 
   if (!shouldSpawn || !shape || !flavorOptions) {
-    return { shouldSpawn: false, maxTicks: 0, category: '', fallbackFlavor: '', fallbackName: '', fallbackConsequence: '' }
+    return { shouldSpawn: false, maxTicks: 0, category: '', fallbackFlavor: '', fallbackName: '', fallbackConsequence: '', resourceCost: 0 }
   }
 
   const fallbackFlavor = flavorOptions[0]
@@ -132,6 +139,7 @@ export function decideAmbitionTick(faction: {
     fallbackFlavor,
     fallbackName: `${faction.name} ${titleCase(fallbackFlavor)}`,
     fallbackConsequence: shape.fallbackConsequence(faction.name),
+    resourceCost: AMBITION_COMMIT_COST,
   }
 }
 
@@ -165,6 +173,12 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
 
     if (!decision.shouldSpawn) continue
 
+    const resourcesAfterCost = clamp(faction.resources - decision.resourceCost, 0, 100)
+    await prisma.faction.update({
+      where: { id: faction.id },
+      data: { resources: resourcesAfterCost },
+    })
+
     pendingAmbitions.push({
       factionId: faction.id,
       factionName: faction.name,
@@ -189,7 +203,65 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
       significant: true,
       importance: 'MAJOR',
     })
+
+    changes.push({
+      entityType: 'FACTION',
+      entityId: faction.id,
+      entityName: faction.name,
+      campaignId: ctx.campaignId,
+      field: 'resources',
+      previousValue: faction.resources,
+      newValue: resourcesAfterCost,
+      reason: `${faction.name} spent ${decision.resourceCost} resources committing to this ambition`,
+      significant: false,
+      importance: 'NORMAL',
+    })
   }
 
   return { changes, pendingAmbitions }
+}
+
+export interface AmbitionOutcome {
+  success: boolean
+  resourceDelta: number
+  stabilityDelta: number
+  militaryDelta: number
+  threatLevelDelta: number
+  consequenceText: string
+}
+
+// Success chance scales with whichever stat the goal actually leans on —
+// military for a campaign of conquest, resources for a tournament/trade
+// venture — so a faction that's already strong where it counts is more
+// likely to pull it off, but never guaranteed (40-90% band) and never
+// hopeless even when weak. Deterministic via stableHash seeded by the
+// faction+clock pair, so the same ambition always resolves the same way;
+// no Math.random(), consistent with the rest of the tick.
+const SUCCESS_FLOOR = 40
+const SUCCESS_CEILING = 90
+const SUCCESS_STAT_WEIGHT = 0.5
+
+/** Pure decision function — no DB access, safe to unit test directly. */
+export function decideAmbitionOutcome(input: {
+  factionId: string
+  clockId: string
+  factionName: string
+  goal: FactionGoal
+  resources: number
+  military: number
+}): AmbitionOutcome {
+  const relevantStat = input.goal === 'EXPAND' ? input.military : input.resources
+  const successChance = clamp(SUCCESS_FLOOR + relevantStat * SUCCESS_STAT_WEIGHT, SUCCESS_FLOOR, SUCCESS_CEILING)
+  const roll = stableHash(`${input.factionId}:${input.clockId}`) % 100
+  const success = roll < successChance
+
+  if (input.goal === 'EXPAND') {
+    return success
+      ? { success: true, resourceDelta: 0, stabilityDelta: -2, militaryDelta: 6, threatLevelDelta: 1, consequenceText: `${input.factionName} claims new ground, reshaping the region's balance of power.` }
+      : { success: false, resourceDelta: -8, stabilityDelta: -4, militaryDelta: -3, threatLevelDelta: 0, consequenceText: `${input.factionName} overextends and is thrown back, its ambitions costing more than they gained.` }
+  }
+
+  return success
+    ? { success: true, resourceDelta: 10, stabilityDelta: 2, militaryDelta: 0, threatLevelDelta: 1, consequenceText: `${input.factionName} comes out ahead, and its coffers and reputation grow.` }
+    : { success: false, resourceDelta: -6, stabilityDelta: -3, militaryDelta: 0, threatLevelDelta: 0, consequenceText: `${input.factionName}'s effort falls flat, and the setback dents its standing.` }
 }

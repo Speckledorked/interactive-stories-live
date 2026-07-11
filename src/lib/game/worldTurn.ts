@@ -438,6 +438,11 @@ async function generateOffscreenEvents(
     // not just a sentence in the event summary above.
     let involvedNpcIds: string[] = []
     let involvedFactionIds: string[] = []
+    // Note: callAIForWorldTurn's response type deliberately has no
+    // location_changes — the offscreen prompt never asks for them, so there's
+    // nothing to forward here today. stateUpdater.ts's location handling is
+    // still sceneOrigin-aware (see sections 7/7b) for when the live-scene
+    // path calls it with real location_changes.
     const hasWorldUpdates =
       (aiResult.world_updates?.npc_changes?.length || 0) > 0 ||
       (aiResult.world_updates?.faction_changes?.length || 0) > 0

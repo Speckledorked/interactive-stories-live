@@ -49,7 +49,11 @@ export async function GET(
         npcs: true,
         factions: true,
         locations: {
-          where: { isDiscovered: true },
+          // Admin sees all locations (including undiscovered ones, so they
+          // can manage them); others see only what the party has found.
+          where: membership.role === 'ADMIN'
+            ? {}
+            : { isDiscovered: true },
           orderBy: { name: 'asc' }
         },
         clocks: {

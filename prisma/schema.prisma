@@ -144,16 +144,16 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Payment system - balance stored in cents (e.g., 100 = $1.00)
-  balance   Int      @default(0)
+  balance Int @default(0)
 
   // Phase 9: Online status
   lastSeenAt DateTime?
-  isOnline   Boolean  @default(false)
+  isOnline   Boolean   @default(false)
 
   campaignMemberships CampaignMembership[]
   characters          Character[]
   playerActions       PlayerAction[]
-  createInvites       CampaignInvite[] @relation("InviteCreator")
+  createInvites       CampaignInvite[]     @relation("InviteCreator")
   diceRolls           DiceRoll[]
 
   // Phase 8: Communication
@@ -195,8 +195,8 @@ model Campaign {
   updatedAt        DateTime @updatedAt
 
   // Phase 9: Campaign notification settings
-  mentionsEnabled      Boolean @default(true)
-  soundEffectsEnabled  Boolean @default(true)
+  mentionsEnabled     Boolean @default(true)
+  soundEffectsEnabled Boolean @default(true)
 
   memberships CampaignMembership[]
   characters  Character[]
@@ -220,10 +220,10 @@ model Campaign {
   turnTracker   TurnTracker[]  @relation("CampaignTurnTracker")
 
   // Campaign Memory (RAG System)
-  memories      CampaignMemory[]
+  memories CampaignMemory[]
 
   // World Sim: persisted event stream
-  worldEvents   WorldEvent[]
+  worldEvents WorldEvent[]
 
   // World Sim Phase 5: sustained multi-turn conflicts between factions.
   wars War[]
@@ -234,48 +234,48 @@ model Campaign {
 //
 
 model Character {
-  id              String   @id @default(cuid())
+  id              String  @id @default(cuid())
   campaignId      String
   userId          String
   name            String
   pronouns        String?
   description     String?
-  appearance      String?  // Physical appearance
-  personality     String?  // Personality traits and demeanor
+  appearance      String? // Physical appearance
+  personality     String? // Personality traits and demeanor
   stats           Json? // For PbtA: {cool: 1, hard: 2, hot: -1, sharp: 1, weird: 0}
   backstory       String?
   goals           String?
-  isAlive         Boolean  @default(true)
+  isAlive         Boolean @default(true)
   currentLocation String?
   gmNotes         String?
 
   // PbtA specific fields
-  harm            Int      @default(0) // 0-6 harm track
-  experience      Int      @default(0) // XP counter
-  conditions      Json?    // { conditions: [{ id, name, category, description, mechanicalEffect?, appliedAt? }] }
-  moves           String[] // Character move IDs they've unlocked
-  holds           Json?    // Temporary holds/forward from moves
+  harm       Int      @default(0) // 0-6 harm track
+  experience Int      @default(0) // XP counter
+  conditions Json? // { conditions: [{ id, name, category, description, mechanicalEffect?, appliedAt? }] }
+  moves      String[] // Character move IDs they've unlocked
+  holds      Json? // Temporary holds/forward from moves
 
   // Organic growth tracking
-  statUsage       Json? // { [statKey: string]: { uses: Int, successes: Int, failures: Int } }
-  perks           Json? // [{ id, name, description, tags? }]
-  advancementLog  Json? // { entries: [], totalStatIncreases, totalPerksGained, totalMovesLearned }
+  statUsage      Json? // { [statKey: string]: { uses: Int, successes: Int, failures: Int } }
+  perks          Json? // [{ id, name, description, tags? }]
+  advancementLog Json? // { entries: [], totalStatIncreases, totalPerksGained, totalMovesLearned }
 
   // Inventory and equipment
-  inventory       Json? // { items: [{ id, name, quantity?, tags? }], slots?: number }
-  equipment       Json? // { weapon?: {...}, armor?: {...}, misc?: [...] }
-  resources       Json? // { gold?: number, reputation?: { [factionId: string]: number }, contacts?: string[] }
+  inventory Json? // { items: [{ id, name, quantity?, tags? }], slots?: number }
+  equipment Json? // { weapon?: {...}, armor?: {...}, misc?: [...] }
+  resources Json? // { gold?: number, reputation?: { [factionId: string]: number }, contacts?: string[] }
 
   // Phase 14: Relationships and consequences (HIDDEN from players)
-  relationships   Json? // { [entityId: string]: { trust: Int, tension: Int, respect: Int, fear: Int } }
-  consequences    Json? // { promises?: string[], debts?: string[], enemies?: string[], longTermThreats?: string[] }
+  relationships Json? // { [entityId: string]: { trust: Int, tension: Int, respect: Int, fear: Int } }
+  consequences  Json? // { promises?: string[], debts?: string[], enemies?: string[], longTermThreats?: string[] }
 
   // Phase 16: Zone-based positioning
-  currentZone     String? // "close", "near", "far", "distant"
-  zoneMetadata    Json?   // { customZones?: string[], zoneEffects?: object }
+  currentZone  String? // "close", "near", "far", "distant"
+  zoneMetadata Json? // { customZones?: string[], zoneEffects?: object }
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -299,7 +299,7 @@ model Character {
 //
 
 model NPC {
-  id              String   @id @default(cuid())
+  id              String  @id @default(cuid())
   campaignId      String
   name            String
   pronouns        String?
@@ -307,8 +307,8 @@ model NPC {
   currentLocation String?
   goals           String?
   relationship    String?
-  isAlive         Boolean  @default(true)
-  importance      Int      @default(1)
+  isAlive         Boolean @default(true)
+  importance      Int     @default(1)
   gmNotes         String?
 
   // Fog of war: defaults true so existing/starting-world NPCs and any NPC
@@ -318,23 +318,23 @@ model NPC {
   // about them — see stateUpdater.ts for how it flips back to true, and
   // worldState.ts for where undiscovered NPCs are excluded from the
   // player-facing AI prompt entirely.
-  isDiscovered    Boolean  @default(true)
+  isDiscovered Boolean @default(true)
 
   // World Sim Phase 1: deterministic tick behavior for major NPCs (importance >= 4)
-  currentPlan     String?
+  currentPlan  String?
   // World Sim Phase 2: how far a major NPC has progressed toward their
   // current `goals` text (0-100). Advances deterministically each tick;
   // reaching 100 completes the goal, emits a MAJOR world event, and clears
   // back to 0 awaiting a new goal (set by the AI via world_updates).
-  goalProgress    Int      @default(0)
+  goalProgress Int     @default(0)
 
   // PbtA fields for significant NPCs
-  threat          String?  // Type of threat (warlord, grotesque, landscape, etc)
-  impulses        String[] // What drives this NPC
-  moves           String[] // Custom moves this NPC can trigger
+  threat   String? // Type of threat (warlord, grotesque, landscape, etc)
+  impulses String[] // What drives this NPC
+  moves    String[] // Custom moves this NPC can trigger
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
@@ -347,7 +347,7 @@ model NPC {
   // defect if their faction collapses (see factionTick.ts).
   factionId   String?
   factionRole FactionRole?
-  faction     Faction? @relation("FactionMembers", fields: [factionId], references: [id], onDelete: SetNull)
+  faction     Faction?     @relation("FactionMembers", fields: [factionId], references: [id], onDelete: SetNull)
 
   @@index([campaignId])
   @@index([factionId])
@@ -377,12 +377,12 @@ model Faction {
   // Added alongside the legacy fields above rather than renaming them (decided
   // 2026-07-08) - influence/threatLevel/currentPlan stay as-is for existing
   // narration code; `goals` (plural) also stays as flavor text.
-  stability     Int         @default(50)
-  military      Int         @default(50)
-  goal          FactionGoal @default(CONSOLIDATE)
+  stability Int         @default(50)
+  military  Int         @default(50)
+  goal      FactionGoal @default(CONSOLIDATE)
 
   // World Sim Phase 2: see FactionArchetype above.
-  archetype     FactionArchetype @default(GENERIC)
+  archetype FactionArchetype @default(GENERIC)
 
   // Fog of war: defaults true so existing/starting-world factions and any
   // faction the AI registers mid-scene (the registration IS the discovery
@@ -392,13 +392,13 @@ model Faction {
   // when a *live scene* touches it (see stateUpdater.ts's sceneOrigin
   // param), never from an offscreen background event, so the party can't
   // learn about a hidden faction just because the simulation moved it.
-  isDiscovered  Boolean          @default(true)
+  isDiscovered Boolean @default(true)
 
   // World Sim Phase 3: false once a faction has collapsed (stability
   // bottomed out) — absorbed by a rival or disbanded into a successor. Kept
   // as a row instead of deleted so its history stays queryable. Excluded
   // from all tick processing once false.
-  isActive      Boolean          @default(true)
+  isActive Boolean @default(true)
 
   // World Sim Phase 6: set when a player character leads this faction
   // rather than an NPC. A player-led faction still ticks like any other
@@ -430,8 +430,11 @@ model Faction {
   territories Location[] @relation("FactionTerritories")
 
   // World Sim Phase 5: sustained conflicts this faction is party to.
-  warsAsAttacker War[] @relation("WarsAsAttacker")
-  warsAsDefender War[] @relation("WarsAsDefender")
+  warsAsAttacker    War[]            @relation("WarsAsAttacker")
+  warsAsDefender    War[]            @relation("WarsAsDefender")
+  // Coalitions: every war this faction is actually fighting in, as either
+  // the original attacker/defender or a joined ally — see WarParticipant.
+  warParticipations WarParticipant[] @relation("WarParticipations")
 
   @@index([campaignId])
 }
@@ -445,7 +448,7 @@ model Location {
   campaignId   String
   name         String
   description  String?
-  locationType String?  // town, dungeon, wilderness, building, inn, etc.
+  locationType String? // town, dungeon, wilderness, building, inn, etc.
   isDiscovered Boolean  @default(true) // false = exists in world but players haven't found it
   gmNotes      String?
   createdAt    DateTime @default(now())
@@ -456,7 +459,7 @@ model Location {
   // reinventing it. Not a climate model - one condition + a severity scalar.
   weather          WeatherCondition @default(CLEAR)
   weatherSeverity  Int              @default(1) // 1 (mild) - 5 (extreme)
-  weatherUpdatedAt DateTime?        // last tick that changed the condition
+  weatherUpdatedAt DateTime? // last tick that changed the condition
 
   // World Sim Phase 4: which faction controls this place, if any — the map
   // EXPAND ambitions and faction collapse actually redraw. isContested is a
@@ -475,7 +478,7 @@ model Location {
 }
 
 //
-// WARS — World Sim Phase 5
+// WARS — World Sim Phase 5, coalitions added later
 //
 // A sustained multi-turn conflict, distinct from a one-shot ambition Clock.
 // Declared deterministically when two rival factions are both militarily
@@ -486,9 +489,26 @@ model Location {
 // sides take attrition losses regardless of who's winning. Resolves once
 // momentum is decisive or the war has dragged on long enough to call a
 // stalemate, at which point the contested territory's fate is settled.
+//
+// Coalitions: a war always DECLARES as strictly 1v1 (attackerFactionId vs
+// defenderFactionId, unchanged) — coalitions grow FROM there, not at
+// declaration. Each tick, a side's existing ALLY factions (see
+// Faction.relationships) can be pulled in as additional WarParticipant rows
+// if they're strong enough and not already committed to any other war. This
+// reuses the ALLY relationship type that Phase 3 already computes but never
+// gave any mechanical weight to. Momentum/attrition/resolution operate on
+// the whole side (sum of all living participants' military, attrition paid
+// by every living participant), but the contested territory prize still
+// goes only to the original attackerFactionId — an ally fighting alongside
+// doesn't inherit land it never personally claimed.
+
+enum WarSide {
+  ATTACKER
+  DEFENDER
+}
 
 model War {
-  id       String @id @default(cuid())
+  id         String @id @default(cuid())
   campaignId String
 
   name                String
@@ -497,7 +517,7 @@ model War {
   contestedLocationId String? // the specific prize this war is over, if any
 
   // -100 (total defender advantage) .. +100 (total attacker advantage).
-  momentum Int @default(0)
+  momentum Int       @default(0)
   status   WarStatus @default(ESCALATING)
   // Set only once resolved: 'attacker' | 'defender' | 'stalemate'.
   outcome  String?
@@ -508,13 +528,33 @@ model War {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  attacker Faction  @relation("WarsAsAttacker", fields: [attackerFactionId], references: [id], onDelete: Cascade)
-  defender Faction  @relation("WarsAsDefender", fields: [defenderFactionId], references: [id], onDelete: Cascade)
+  campaign     Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  attacker     Faction          @relation("WarsAsAttacker", fields: [attackerFactionId], references: [id], onDelete: Cascade)
+  defender     Faction          @relation("WarsAsDefender", fields: [defenderFactionId], references: [id], onDelete: Cascade)
+  // Every faction actually fighting in this war, both sides — including the
+  // original attacker/defender (given their own rows at declaration time),
+  // so all war-math can read participants uniformly instead of special-
+  // casing "the primary pair plus any extras."
+  participants WarParticipant[]
 
   @@index([campaignId])
   @@index([attackerFactionId])
   @@index([defenderFactionId])
+}
+
+model WarParticipant {
+  id         String  @id @default(cuid())
+  warId      String
+  factionId  String
+  side       WarSide
+  joinedTurn Int
+
+  war     War     @relation(fields: [warId], references: [id], onDelete: Cascade)
+  faction Faction @relation("WarParticipations", fields: [factionId], references: [id], onDelete: Cascade)
+
+  @@unique([warId, factionId])
+  @@index([warId])
+  @@index([factionId])
 }
 
 //
@@ -522,18 +562,18 @@ model War {
 //
 
 model Clock {
-  id            String   @id @default(cuid())
-  campaignId    String
-  name          String
-  description   String?
-  currentTicks  Int      @default(0)     // required by worldTurn + stateUpdater
-  maxTicks      Int      @default(4)     // required by code
-  category      String?
-  isHidden      Boolean  @default(false)
-  consequence   String?                 // triggered result
-  gmNotes       String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  campaignId   String
+  name         String
+  description  String?
+  currentTicks Int      @default(0) // required by worldTurn + stateUpdater
+  maxTicks     Int      @default(4) // required by code
+  category     String?
+  isHidden     Boolean  @default(false)
+  consequence  String? // triggered result
+  gmNotes      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Set the first (and only the first) time checkAndResolveCompletedClocks
   // processes this clock after currentTicks reaches maxTicks. Without this,
@@ -567,35 +607,35 @@ model Clock {
 //
 
 model Scene {
-  id                 String      @id @default(cuid())
-  campaignId         String
-  sceneNumber        Int
-  title              String?
-  sceneIntroText     String      @db.Text       // required by createNewScene()
-  framing            String?     @db.Text       // optional alternative, preserved
-  location           String?
-  participants       Json?
-  status             SceneStatus @default(AWAITING_ACTIONS)
-  sceneResolutionText String?    @db.Text
+  id                  String      @id @default(cuid())
+  campaignId          String
+  sceneNumber         Int
+  title               String?
+  sceneIntroText      String      @db.Text // required by createNewScene()
+  framing             String?     @db.Text // optional alternative, preserved
+  location            String?
+  participants        Json?
+  status              SceneStatus @default(AWAITING_ACTIONS)
+  sceneResolutionText String?     @db.Text
 
   // PbtA scene tracking
-  sceneType          String?     @default("dramatic") // "dramatic", "downtime", "combat"
-  stakes             String?     // What's at risk in this scene
+  sceneType String? @default("dramatic") // "dramatic", "downtime", "combat"
+  stakes    String? // What's at risk in this scene
 
   // Phase 16: Freeform Combat & Exchange System
-  combatMode         String?     @default("freeform") // "freeform", "structured"
-  exchangeState      Json?       // { playersActed: string[], exchangeNumber: number, isComplete: boolean, complexity: 'simple' | 'complex' }
-  currentExchange    Int         @default(0)
+  combatMode      String? @default("freeform") // "freeform", "structured"
+  exchangeState   Json? // { playersActed: string[], exchangeNumber: number, isComplete: boolean, complexity: 'simple' | 'complex' }
+  currentExchange Int     @default(0)
 
   // Phase 14: Consequence tracking per scene
-  consequences       Json?       // { created?: string[], resolved?: string[], relationshipChanges?: object[] }
+  consequences Json? // { created?: string[], resolved?: string[], relationshipChanges?: object[] }
 
   // Phase 9: Turn tracking
-  turnDeadline       DateTime?
-  waitingOnUsers     Json?       // Array of user IDs who need to act
+  turnDeadline   DateTime?
+  waitingOnUsers Json? // Array of user IDs who need to act
 
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   playerActions PlayerAction[]
@@ -619,26 +659,26 @@ model Scene {
 //
 
 model PlayerAction {
-  id            String   @id @default(cuid())
+  id            String  @id @default(cuid())
   sceneId       String
   characterId   String
   userId        String
-  actionText    String   @db.Text
+  actionText    String  @db.Text
   intentOutcome String?
-  status        String   @default("pending")
-  resolution    String?  @db.Text
+  status        String  @default("pending")
+  resolution    String? @db.Text
   rollResult    Json?
 
   // PbtA move tracking
-  moveUsed      String?  // Which move was triggered
-  rollRequired  Boolean  @default(false) // Does this need a roll?
-  rollMade      String?  // Link to DiceRoll.id if rolled
+  moveUsed     String? // Which move was triggered
+  rollRequired Boolean @default(false) // Does this need a roll?
+  rollMade     String? // Link to DiceRoll.id if rolled
 
   // Phase 16: Exchange tracking
-  exchangeNumber Int?    // Which exchange this action belongs to
-  actionPriority Int?    @default(0) // For complex exchange ordering
+  exchangeNumber Int? // Which exchange this action belongs to
+  actionPriority Int? @default(0) // For complex exchange ordering
 
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 
   scene     Scene     @relation(fields: [sceneId], references: [id], onDelete: Cascade)
   character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
@@ -653,18 +693,18 @@ model PlayerAction {
 //
 
 model TimelineEvent {
-  id             String          @id @default(cuid())
-  campaignId     String
-  turnNumber     Int?                              // required by world turn + UI
-  title          String
-  summaryPublic  String?        @db.Text
-  summaryGM      String?        @db.Text
-  isOffscreen    Boolean?       @default(false)
-  eventType      EventType?
-  visibility     EventVisibility @default(PUBLIC)
-  sessionDate    DateTime        @default(now())
-  gmNotes        String?
-  createdAt      DateTime        @default(now())
+  id            String          @id @default(cuid())
+  campaignId    String
+  turnNumber    Int? // required by world turn + UI
+  title         String
+  summaryPublic String?         @db.Text
+  summaryGM     String?         @db.Text
+  isOffscreen   Boolean?        @default(false)
+  eventType     EventType?
+  visibility    EventVisibility @default(PUBLIC)
+  sessionDate   DateTime        @default(now())
+  gmNotes       String?
+  createdAt     DateTime        @default(now())
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
@@ -677,8 +717,8 @@ model TimelineEvent {
 //
 
 model WorldMeta {
-  id               String   @id @default(cuid())
-  campaignId       String   @unique
+  id                String   @id @default(cuid())
+  campaignId        String   @unique
   currentTurnNumber Int      @default(1)
   currentInGameDate String?
   currentLocation   String?
@@ -697,11 +737,11 @@ model WorldMeta {
   npcCap     Int?
 
   // Phase 15: AI Health & Cost Tracking
-  aiHealth              Json?     // Circuit breaker state and AI failure tracking
-  aiMetrics             Json?     // Token usage, costs, response times
-  campaignHealthHistory Json?     // Historical health scores and issues
+  aiHealth              Json? // Circuit breaker state and AI failure tracking
+  aiMetrics             Json? // Token usage, costs, response times
+  campaignHealthHistory Json? // Historical health scores and issues
   lastHealthCheck       DateTime? // Last time health was checked
-  currentHealthScore    Int?      // Current campaign health (0-100)
+  currentHealthScore    Int? // Current campaign health (0-100)
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 }
@@ -720,8 +760,8 @@ model CampaignInvite {
   uses       Int      @default(0)
   createdAt  DateTime @default(now())
 
-  campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  createdByUser  User     @relation("InviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  campaign      Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdByUser User     @relation("InviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@index([token])
   @@index([campaignId])
@@ -735,44 +775,44 @@ model Move {
   id          String   @id @default(cuid())
   campaignId  String
   name        String
-  trigger     String   // "When you..."
+  trigger     String // "When you..."
   description String   @db.Text
-  rollType    String?  // "roll+cool", "roll+hard", "act under fire", null for no roll
-  outcomes    Json     // {success: "...", partial: "...", miss: "..."}
+  rollType    String? // "roll+cool", "roll+hard", "act under fire", null for no roll
+  outcomes    Json // {success: "...", partial: "...", miss: "..."}
   category    String   @default("basic") // "basic", "special", "custom"
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  campaign  Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign  Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   diceRolls DiceRoll[]
 
   @@index([campaignId])
 }
 
 model DiceRoll {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   campaignId  String
   sceneId     String?
   characterId String
   userId      String
 
-  rollType    String   // "move", "custom", "help", "interfere"
-  moveId      String?  // If rolling a specific move
+  rollType String // "move", "custom", "help", "interfere"
+  moveId   String? // If rolling a specific move
 
-  dice        Int[]    // [6, 4] for 2d6 showing 6 and 4
-  modifier    Int      @default(0) // Stat modifier or forward
-  total       Int      // Sum of dice + modifier
+  dice     Int[] // [6, 4] for 2d6 showing 6 and 4
+  modifier Int   @default(0) // Stat modifier or forward
+  total    Int // Sum of dice + modifier
 
-  outcome     String   // "strongHit" (10+), "weakHit" (7-9), "miss" (6-)
-  description String?  // Context for the roll
+  outcome     String // "strongHit" (10+), "weakHit" (7-9), "miss" (6-)
+  description String? // Context for the roll
 
-  forward     Int?     @default(0) // +1 forward granted
-  ongoing     Int?     @default(0) // +1 ongoing granted
-  hold        Int?     @default(0) // Hold generated
+  forward Int? @default(0) // +1 forward granted
+  ongoing Int? @default(0) // +1 ongoing granted
+  hold    Int? @default(0) // Hold generated
 
-  isSecret    Boolean  @default(false) // Hidden from other players
-  createdAt   DateTime @default(now())
+  isSecret  Boolean  @default(false) // Hidden from other players
+  createdAt DateTime @default(now())
 
   campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   scene     Scene?    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
@@ -786,20 +826,20 @@ model DiceRoll {
 }
 
 model TurnOrder {
-  id         String   @id @default(cuid())
-  sceneId    String   @unique
+  id      String @id @default(cuid())
+  sceneId String @unique
 
   // JSON array of {characterId, initiative, hasActed}
-  order      Json     // [{characterId: "...", initiative: 12, hasActed: false}]
+  order Json // [{characterId: "...", initiative: 12, hasActed: false}]
 
   currentTurn Int     @default(0) // Index in the order array
   roundNumber Int     @default(1)
   isActive    Boolean @default(false)
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  scene      Scene      @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  scene      Scene       @relation(fields: [sceneId], references: [id], onDelete: Cascade)
   characters Character[]
 
   @@index([sceneId])
@@ -824,12 +864,12 @@ model Message {
   characterId String?
 
   // Phase 9: Mention detection
-  mentionsUserIds Json?    @default("[]")
-  hasMentions     Boolean  @default(false)
+  mentionsUserIds Json?   @default("[]")
+  hasMentions     Boolean @default(false)
 
   // Phase 9: Sound triggers
   triggerSound String?
-  soundVolume  Float?   @default(1.0)
+  soundVolume  Float?  @default(1.0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -847,12 +887,12 @@ model Message {
 }
 
 model PlayerNote {
-  id          String         @id @default(cuid())
-  title       String
-  content     String         @db.Text
-  visibility  NoteVisibility @default(PRIVATE)
-  authorId    String
-  campaignId  String
+  id         String         @id @default(cuid())
+  title      String
+  content    String         @db.Text
+  visibility NoteVisibility @default(PRIVATE)
+  authorId   String
+  campaignId String
 
   // Optional associations
   characterId String?
@@ -881,12 +921,12 @@ model PlayerNote {
 //
 
 model Notification {
-  id         String               @id @default(cuid())
-  type       NotificationType
-  title      String
-  message    String               @db.Text
-  status     NotificationStatus   @default(UNREAD)
-  priority   NotificationPriority @default(NORMAL)
+  id       String               @id @default(cuid())
+  type     NotificationType
+  title    String
+  message  String               @db.Text
+  status   NotificationStatus   @default(UNREAD)
+  priority NotificationPriority @default(NORMAL)
 
   // Recipients
   userId     String
@@ -967,7 +1007,7 @@ model UserNotificationSettings {
 }
 
 model TurnTracker {
-  id         String @id @default(cuid())
+  id         String  @id @default(cuid())
   campaignId String
   sceneId    String?
 
@@ -1007,7 +1047,7 @@ model Map {
   width       Int      @default(800)
   height      Int      @default(600)
   gridSize    Int      @default(40)
-  background  String?  // Color or image URL
+  background  String? // Color or image URL
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -1031,7 +1071,7 @@ model Zone {
   height      Int
   color       String? @default("#3b82f6")
   isActive    Boolean @default(true)
-  metadata    Json?   // For additional properties
+  metadata    Json? // For additional properties
 
   map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
 
@@ -1049,7 +1089,7 @@ model Token {
   size      Int     @default(30)
   isPlayer  Boolean @default(false)
   isVisible Boolean @default(true)
-  metadata  Json?   // For character ID, NPC ID, etc.
+  metadata  Json? // For character ID, NPC ID, etc.
 
   map Map @relation(fields: [mapId], references: [id], onDelete: Cascade)
 
@@ -1076,24 +1116,24 @@ enum ActivityStatus {
 }
 
 model Session {
-  id          String        @id @default(cuid())
-  campaignId  String
-  name        String
-  description String?       @db.Text
-  sessionNumber Int
-  status      SessionStatus @default(SCHEDULED)
-  scheduledAt DateTime?
-  startTime   DateTime?     // Keep for compatibility
-  startedAt   DateTime?     // Add for service compatibility
-  endTime     DateTime?     // Keep for compatibility
-  endedAt     DateTime?     // Add for service compatibility
-  duration    Int?          // In minutes
-  objectives  String[]
-  experienceAwarded Int     @default(0)
-  goldAwarded Int           @default(0)
-  itemsAwarded String[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  campaignId        String
+  name              String
+  description       String?       @db.Text
+  sessionNumber     Int
+  status            SessionStatus @default(SCHEDULED)
+  scheduledAt       DateTime?
+  startTime         DateTime? // Keep for compatibility
+  startedAt         DateTime? // Add for service compatibility
+  endTime           DateTime? // Keep for compatibility
+  endedAt           DateTime? // Add for service compatibility
+  duration          Int? // In minutes
+  objectives        String[]
+  experienceAwarded Int           @default(0)
+  goldAwarded       Int           @default(0)
+  itemsAwarded      String[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   participants SessionParticipant[]
   scenes       SessionScene[]
@@ -1105,17 +1145,17 @@ model Session {
 }
 
 model SessionParticipant {
-  id            String   @id @default(cuid())
-  sessionId     String
-  characterId   String
-  userId        String
-  joinedAt      DateTime @default(now())
-  leftAt        DateTime?
-  wasPresent    Boolean  @default(true)
-  attendanceStatus String @default("PRESENT") // PRESENT, ABSENT, LATE, LEFT_EARLY
-  actionsCount  Int      @default(0)
-  messagesCount Int      @default(0)
-  notes         String?  @db.Text
+  id               String    @id @default(cuid())
+  sessionId        String
+  characterId      String
+  userId           String
+  joinedAt         DateTime  @default(now())
+  leftAt           DateTime?
+  wasPresent       Boolean   @default(true)
+  attendanceStatus String    @default("PRESENT") // PRESENT, ABSENT, LATE, LEFT_EARLY
+  actionsCount     Int       @default(0)
+  messagesCount    Int       @default(0)
+  notes            String?   @db.Text
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -1125,15 +1165,15 @@ model SessionParticipant {
 }
 
 model SessionScene {
-  id          String   @id @default(cuid())
-  sessionId   String
-  sceneId     String
-  orderIndex  Int
-  duration    Int?     // In minutes
-  summary     String?  @db.Text
-  startedAt   DateTime @default(now())
-  endedAt     DateTime?
-  notes       String?  @db.Text
+  id         String    @id @default(cuid())
+  sessionId  String
+  sceneId    String
+  orderIndex Int
+  duration   Int? // In minutes
+  summary    String?   @db.Text
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+  notes      String?   @db.Text
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -1159,26 +1199,26 @@ model SessionNote {
 }
 
 model DowntimeActivity {
-  id              String         @id @default(cuid())
-  characterId     String
-  description     String         @db.Text // Natural language description
-  summary         String         @db.Text // AI-generated summary
-  status          ActivityStatus @default(ACTIVE)
+  id          String         @id @default(cuid())
+  characterId String
+  description String         @db.Text // Natural language description
+  summary     String         @db.Text // AI-generated summary
+  status      ActivityStatus @default(ACTIVE)
 
   // AI-determined properties
-  estimatedDays   Int
-  currentDay      Int            @default(0)
-  costs           Json?          // {gold: 100, resources: [...]}
-  requirements    String[]       // Prerequisites
-  skillsInvolved  String[]       // Skills being used
-  riskLevel       String?        // low, medium, high
+  estimatedDays  Int
+  currentDay     Int      @default(0)
+  costs          Json? // {gold: 100, resources: [...]}
+  requirements   String[] // Prerequisites
+  skillsInvolved String[] // Skills being used
+  riskLevel      String? // low, medium, high
 
-  outcomes        Json?          // Potential outcomes
-  finalOutcome    String?        @db.Text
+  outcomes     Json? // Potential outcomes
+  finalOutcome String? @db.Text
 
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  completedAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
 
   events DowntimeEvent[]
 
@@ -1188,14 +1228,14 @@ model DowntimeActivity {
 }
 
 model DowntimeEvent {
-  id         String   @id @default(cuid())
-  activityId String
-  dayNumber  Int
-  eventText  String   @db.Text // AI-generated event
-  choices    Json?    // Available choices
-  response   String?  @db.Text // Player response
-  outcome    String?  @db.Text // Result of response
-  createdAt  DateTime @default(now())
+  id          String    @id @default(cuid())
+  activityId  String
+  dayNumber   Int
+  eventText   String    @db.Text // AI-generated event
+  choices     Json? // Available choices
+  response    String?   @db.Text // Player response
+  outcome     String?   @db.Text // Result of response
+  createdAt   DateTime  @default(now())
   respondedAt DateTime?
 
   activity DowntimeActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
@@ -1220,22 +1260,22 @@ model TutorialStep {
   stepKey       String   @unique // e.g., "create_character", "first_action"
   title         String
   description   String   @db.Text
-  category      String   // "basics", "combat", "social", "advanced"
+  category      String // "basics", "combat", "social", "advanced"
   orderIndex    Int
   isOptional    Boolean  @default(false)
   prerequisites String[] // Array of stepKeys that must be completed first
 
   // Interactive tutorial data
-  contentBlocks Json?    // Array of content blocks with type, text, images
-  targetElement String?  // CSS selector for highlighting
+  contentBlocks   Json? // Array of content blocks with type, text, images
+  targetElement   String? // CSS selector for highlighting
   tooltipPosition String? @default("bottom") // top, bottom, left, right
 
   // Completion criteria
   completionTrigger String? // e.g., "submit_action", "create_character"
-  validationRules   Json?   // Rules to check if step is complete
+  validationRules   Json? // Rules to check if step is complete
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   userProgress UserTutorialProgress[]
 
@@ -1257,8 +1297,8 @@ model UserTutorialProgress {
   hintsViewed   Int @default(0)
   timeSpent     Int @default(0) // In seconds
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   step TutorialStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
 
@@ -1268,22 +1308,22 @@ model UserTutorialProgress {
 }
 
 model CampaignTutorialMode {
-  id          String  @id @default(cuid())
-  campaignId  String  @unique
-  isEnabled   Boolean @default(true)
+  id         String  @id @default(cuid())
+  campaignId String  @unique
+  isEnabled  Boolean @default(true)
 
   // Tutorial campaign settings
-  useGuidedScenes    Boolean @default(true)
-  showTooltips       Boolean @default(true)
-  provideHints       Boolean @default(true)
-  allowSkip          Boolean @default(true)
+  useGuidedScenes Boolean @default(true)
+  showTooltips    Boolean @default(true)
+  provideHints    Boolean @default(true)
+  allowSkip       Boolean @default(true)
 
   // Progress tracking
   currentStepKey String?
   completedSteps String[] // Array of stepKeys
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("campaign_tutorial_mode")
 }
@@ -1328,31 +1368,31 @@ enum ReportSeverity {
 }
 
 model CampaignSafetySettings {
-  id         String   @id @default(cuid())
-  campaignId String   @unique
+  id         String @id @default(cuid())
+  campaignId String @unique
 
   // X-Card settings
-  xCardEnabled          Boolean @default(true)
-  anonymousXCard        Boolean @default(true) // Don't show who used X-Card
-  pauseOnXCard          Boolean @default(true)
-  xCardNotifyGMOnly     Boolean @default(false)
+  xCardEnabled      Boolean @default(true)
+  anonymousXCard    Boolean @default(true) // Don't show who used X-Card
+  pauseOnXCard      Boolean @default(true)
+  xCardNotifyGMOnly Boolean @default(false)
 
   // Content warnings
   contentWarningsEnabled Boolean @default(true)
   activeWarnings         Json    @default("[]") // Array of ContentWarningType
 
   // Lines and Veils (pre-game safety discussion)
-  lines                 String[] // Hard boundaries - will not be included
-  veils                 String[] // Soft boundaries - will be implied, not detailed
+  lines String[] // Hard boundaries - will not be included
+  veils String[] // Soft boundaries - will be implied, not detailed
 
   // Session Zero settings
-  sessionZeroCompleted  Boolean  @default(false)
-  sessionZeroDate       DateTime?
-  sessionZeroNotes      String?  @db.Text
+  sessionZeroCompleted Boolean   @default(false)
+  sessionZeroDate      DateTime?
+  sessionZeroNotes     String?   @db.Text
 
   // Content moderation
-  autoModeration        Boolean  @default(false)
-  moderationLevel       String   @default("medium") // low, medium, high
+  autoModeration  Boolean @default(false)
+  moderationLevel String  @default("medium") // low, medium, high
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1361,23 +1401,23 @@ model CampaignSafetySettings {
 }
 
 model XCardUse {
-  id         String       @id @default(cuid())
+  id         String  @id @default(cuid())
   campaignId String
   sceneId    String?
   userId     String
 
-  trigger    XCardTrigger
-  targetId   String?      // ID of message, action, scene, etc.
-  reason     String?      @db.Text // Optional explanation
-  isAnonymous Boolean     @default(true)
+  trigger     XCardTrigger
+  targetId    String? // ID of message, action, scene, etc.
+  reason      String?      @db.Text // Optional explanation
+  isAnonymous Boolean      @default(true)
 
   // GM/Moderator response
-  acknowledged  Boolean   @default(false)
+  acknowledged   Boolean   @default(false)
   acknowledgedBy String?
   acknowledgedAt DateTime?
-  resolution    String?   @db.Text
+  resolution     String?   @db.Text
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([campaignId, createdAt])
   @@index([sceneId])
@@ -1385,28 +1425,28 @@ model XCardUse {
 }
 
 model ContentReport {
-  id          String         @id @default(cuid())
-  reporterId  String
-  campaignId  String
+  id         String @id @default(cuid())
+  reporterId String
+  campaignId String
 
   // What's being reported
-  contentType String         // "message", "note", "character", "scene", "user_behavior"
+  contentType String // "message", "note", "character", "scene", "user_behavior"
   contentId   String?
-  contentText String?        @db.Text
+  contentText String? @db.Text
 
-  reason      String         @db.Text
-  category    String?        // harassment, inappropriate_content, cheating, other
-  severity    ReportSeverity @default(MEDIUM)
-  status      ReportStatus   @default(PENDING)
+  reason   String         @db.Text
+  category String? // harassment, inappropriate_content, cheating, other
+  severity ReportSeverity @default(MEDIUM)
+  status   ReportStatus   @default(PENDING)
 
   // Moderation
   reviewedBy  String?
   reviewedAt  DateTime?
-  resolution  String?        @db.Text
-  actionTaken String?        // warning, content_removed, user_banned, dismissed
+  resolution  String?   @db.Text
+  actionTaken String? // warning, content_removed, user_banned, dismissed
 
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([campaignId, status])
   @@index([reporterId])
@@ -1415,13 +1455,13 @@ model ContentReport {
 }
 
 model UserBlock {
-  id            String   @id @default(cuid())
-  userId        String   // User doing the blocking
-  blockedUserId String   // User being blocked
-  campaignId    String?  // Optional: block only in specific campaign
-  reason        String?  @db.Text
+  id            String  @id @default(cuid())
+  userId        String // User doing the blocking
+  blockedUserId String // User being blocked
+  campaignId    String? // Optional: block only in specific campaign
+  reason        String? @db.Text
 
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([userId, blockedUserId, campaignId])
   @@index([userId])
@@ -1430,15 +1470,15 @@ model UserBlock {
 }
 
 model CampaignBan {
-  id         String   @id @default(cuid())
-  campaignId String
-  userId     String
-  bannedBy   String   // GM/Admin who issued the ban
-  reason     String   @db.Text
-  isPermanent Boolean @default(false)
-  expiresAt  DateTime?
+  id          String    @id @default(cuid())
+  campaignId  String
+  userId      String
+  bannedBy    String // GM/Admin who issued the ban
+  reason      String    @db.Text
+  isPermanent Boolean   @default(false)
+  expiresAt   DateTime?
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([campaignId, userId])
   @@index([userId])
@@ -1450,21 +1490,21 @@ model CampaignBan {
 //
 
 enum TransactionType {
-  CREDIT        // User added funds
-  DEBIT         // AI usage charge
-  REFUND        // Refund issued
-  ADJUSTMENT    // Manual adjustment
+  CREDIT // User added funds
+  DEBIT // AI usage charge
+  REFUND // Refund issued
+  ADJUSTMENT // Manual adjustment
 }
 
 model Transaction {
   id            String          @id @default(cuid())
   userId        String
   type          TransactionType
-  amount        Int             // In cents (positive for credit, negative for debit)
-  balanceBefore Int             // Balance before transaction
-  balanceAfter  Int             // Balance after transaction
+  amount        Int // In cents (positive for credit, negative for debit)
+  balanceBefore Int // Balance before transaction
+  balanceAfter  Int // Balance after transaction
   description   String
-  metadata      Json?           // Additional info (e.g., sceneId, tokens used, etc.)
+  metadata      Json? // Additional info (e.g., sceneId, tokens used, etc.)
   createdAt     DateTime        @default(now())
 
   @@index([userId, createdAt])
@@ -1476,22 +1516,22 @@ model Transaction {
 //
 
 model CampaignLog {
-  id          String   @id @default(cuid())
-  campaignId  String
-  sceneId     String?  // Optional link to specific scene
-  turnNumber  Int
+  id         String  @id @default(cuid())
+  campaignId String
+  sceneId    String? // Optional link to specific scene
+  turnNumber Int
 
   // Content
-  title       String
-  summary     String   @db.Text // AI-generated summary of what happened
-  highlights  String[] // Key events or important moments
-  entryType   String   @default("scene") // scene, downtime, world_event, milestone
+  title      String
+  summary    String   @db.Text // AI-generated summary of what happened
+  highlights String[] // Key events or important moments
+  entryType  String   @default("scene") // scene, downtime, world_event, milestone
 
   // Timeline tracking
-  inGameDate  String?  // Optional in-game date/time
-  duration    String?  // How much in-game time passed (e.g., "2 hours", "3 days")
+  inGameDate String? // Optional in-game date/time
+  duration   String? // How much in-game time passed (e.g., "2 hours", "3 days")
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([campaignId, turnNumber])
   @@index([sceneId])
@@ -1514,34 +1554,34 @@ enum WikiEntryType {
 }
 
 model WikiEntry {
-  id          String        @id @default(cuid())
-  campaignId  String
-  entryType   WikiEntryType
+  id         String        @id @default(cuid())
+  campaignId String
+  entryType  WikiEntryType
 
   // Basic info
   name        String
-  summary     String        @db.Text  // Short description
-  description String        @db.Text  // Full details
+  summary     String @db.Text // Short description
+  description String @db.Text // Full details
 
   // Metadata
-  tags        String[]      // For filtering/searching
-  aliases     String[]      // Alternative names
-  imageUrl    String?       // Optional image
+  tags     String[] // For filtering/searching
+  aliases  String[] // Alternative names
+  imageUrl String? // Optional image
 
   // Relationships
-  relatedEntries Json?       // Array of {id, type, relationship} to link entries
+  relatedEntries Json? // Array of {id, type, relationship} to link entries
 
   // Status tracking
-  isActive    Boolean       @default(true)
-  lastSeenTurn Int?         // Last turn this was mentioned/updated
-  importance  String        @default("normal") // minor, normal, major, critical
+  isActive     Boolean @default(true)
+  lastSeenTurn Int? // Last turn this was mentioned/updated
+  importance   String  @default("normal") // minor, normal, major, critical
 
   // History
-  changelog   Json?         // Array of {turn, change, summary} for tracking updates
+  changelog Json? // Array of {turn, change, summary} for tracking updates
 
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  createdBy   String        @default("ai") // ai or userId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String   @default("ai") // ai or userId
 
   @@index([campaignId, entryType])
   @@index([campaignId, name])
@@ -1571,36 +1611,36 @@ enum MemoryImportance {
 }
 
 model CampaignMemory {
-  id            String           @id @default(cuid())
-  campaignId    String
-  campaign      Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   // What this memory is about
-  memoryType    MemoryType
-  sourceId      String           // ID of source (sceneId, npcId, factionId, etc.)
-  turnNumber    Int
+  memoryType MemoryType
+  sourceId   String // ID of source (sceneId, npcId, factionId, etc.)
+  turnNumber Int
 
   // Searchable content
-  title         String
-  summary       String           @db.Text  // 2-3 sentence summary
-  fullContext   String           @db.Text  // Full scene resolution or event description
+  title       String
+  summary     String @db.Text // 2-3 sentence summary
+  fullContext String @db.Text // Full scene resolution or event description
 
   // Vector embedding (pgvector type)
   // Using Unsupported because Prisma doesn't have built-in vector support yet
-  embedding     Unsupported("vector(1536)")?  // OpenAI ada-002 produces 1536 dimensions
+  embedding Unsupported("vector(1536)")? // OpenAI ada-002 produces 1536 dimensions
 
   // Entity tracking (for targeted retrieval)
-  involvedCharacterIds  String[]  @default([])
-  involvedNpcIds        String[]  @default([])
-  involvedFactionIds    String[]  @default([])
-  locationTags          String[]  @default([])
+  involvedCharacterIds String[] @default([])
+  involvedNpcIds       String[] @default([])
+  involvedFactionIds   String[] @default([])
+  locationTags         String[] @default([])
 
   // Importance weighting
   importance    MemoryImportance @default(NORMAL)
-  emotionalTone String?          // "tense", "triumphant", "tragic", etc.
-  tags          String[]         @default([])  // ["combat", "betrayal", "alliance", etc.]
+  emotionalTone String? // "tense", "triumphant", "tragic", etc.
+  tags          String[]         @default([]) // ["combat", "betrayal", "alliance", etc.]
 
-  createdAt     DateTime         @default(now())
+  createdAt DateTime @default(now())
 
   @@index([campaignId, turnNumber])
   @@index([campaignId, memoryType])
@@ -1667,14 +1707,14 @@ enum FriendRequestStatus {
 }
 
 model FriendRequest {
-  id           String              @id @default(cuid())
-  senderId     String
-  receiverId   String
-  status       FriendRequestStatus @default(PENDING)
-  message      String?             @db.Text // Optional message with the request
+  id         String              @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     FriendRequestStatus @default(PENDING)
+  message    String?             @db.Text // Optional message with the request
 
-  createdAt    DateTime            @default(now())
-  respondedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
 
   @@unique([senderId, receiverId])
   @@index([receiverId, status])
@@ -1683,11 +1723,11 @@ model FriendRequest {
 }
 
 model Friendship {
-  id          String   @id @default(cuid())
-  user1Id     String   // Lower ID alphabetically for consistency
-  user2Id     String   // Higher ID alphabetically
+  id      String @id @default(cuid())
+  user1Id String // Lower ID alphabetically for consistency
+  user2Id String // Higher ID alphabetically
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([user1Id, user2Id])
   @@index([user1Id])
@@ -1699,9 +1739,9 @@ model AIValidationFailure {
   id           String   @id @default(cuid())
   campaignId   String
   sceneId      String?
-  errorSummary String   // Short description of what failed
-  rawResponse  Json?    // The AI output that failed validation
-  zodErrors    Json     // Serialised ZodError.errors array
+  errorSummary String // Short description of what failed
+  rawResponse  Json? // The AI output that failed validation
+  zodErrors    Json // Serialised ZodError.errors array
   createdAt    DateTime @default(now())
 
   @@index([campaignId])

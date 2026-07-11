@@ -214,7 +214,8 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
     factions,
     locations,
     clocks,
-    recentEvents
+    recentEvents,
+    activeWars
   ] = await Promise.all([
     prisma.campaign.findUnique({ where: { id: campaignId } }),
     prisma.worldMeta.findUnique({ where: { campaignId } }),
@@ -235,7 +236,10 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       },
       orderBy: { turnNumber: 'desc' },
       take: 10 // Last 10 events
-    })
+    }),
+    // World Sim Phase 5: sustained conflicts — narrate from real momentum
+    // and duration, don't invent how a war is going.
+    prisma.war.findMany({ where: { campaignId, status: 'ESCALATING' } })
   ])
 
   if (!campaign || !worldMeta) {
@@ -314,8 +318,18 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       title: e.title,
       summary: e.summaryPublic || e.summaryGM || 'No summary available',
       turn_number: e.turnNumber
+    })),
+
+    // World Sim Phase 5: sustained conflicts currently in progress. Narrate
+    // "how's the war going" from momentum/turns_elapsed, don't improvise.
+    wars: activeWars.map(w => ({
+      name: w.name,
+      attacker: factions.find(f => f.id === w.attackerFactionId)?.name || 'Unknown',
+      defender: factions.find(f => f.id === w.defenderFactionId)?.name || 'Unknown',
+      momentum: w.momentum, // negative favors the defender, positive the attacker
+      turns_elapsed: (worldMeta?.currentTurnNumber ?? w.startedTurn) - w.startedTurn
     }))
-  }
+  } as any
 
   // Return both world summary and entities for reuse in memory retrieval
   return {

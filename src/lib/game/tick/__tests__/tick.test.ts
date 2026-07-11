@@ -3,6 +3,7 @@ import { decideFactionTick, decideFactionGoalReassessment, decideFactionCollapse
 import { decideAmbitionTick, decideAmbitionOutcome } from '../ambitionTick'
 import { decideRelationshipTick } from '../relationshipTick'
 import { decideTerritoryClaim } from '../territory'
+import { decideWarDeclaration, decideWarProgress, decideWarResolution } from '../warTick'
 import { decideNpcTick, deriveTimeOfDay } from '../npcTick'
 import { decideNextWeather } from '../weatherTick'
 
@@ -171,6 +172,85 @@ describe('decideTerritoryClaim', () => {
     ]
     const claim = decideTerritoryClaim(locations, claimant, [])
     expect(claim).toEqual({ kind: 'settle', locationId: 'l1', locationName: 'Ashford' })
+  })
+})
+
+describe('decideWarDeclaration', () => {
+  const attacker = { id: 'iron-crown', military: 80 }
+  const defender = { id: 'sable-reach', military: 75 }
+
+  it('declares war when both sides are strong and territory is already contested', () => {
+    const decision = decideWarDeclaration(attacker, defender, [
+      { id: 'l1', ownerFactionId: defender.id, isContested: true },
+    ])
+    expect(decision).toEqual({ shouldDeclare: true, contestedLocationId: 'l1' })
+  })
+
+  it('does not declare war without a contested holding, however strong both sides are', () => {
+    const decision = decideWarDeclaration(attacker, defender, [
+      { id: 'l1', ownerFactionId: defender.id, isContested: false },
+    ])
+    expect(decision.shouldDeclare).toBe(false)
+  })
+
+  it('does not declare war if either side is militarily weak', () => {
+    const weakDefender = { id: 'sable-reach', military: 20 }
+    const decision = decideWarDeclaration(attacker, weakDefender, [
+      { id: 'l1', ownerFactionId: weakDefender.id, isContested: true },
+    ])
+    expect(decision.shouldDeclare).toBe(false)
+  })
+
+  it('ignores contested land the defender does not own', () => {
+    const decision = decideWarDeclaration(attacker, defender, [
+      { id: 'l1', ownerFactionId: 'someone-else', isContested: true },
+    ])
+    expect(decision.shouldDeclare).toBe(false)
+  })
+})
+
+describe('decideWarProgress', () => {
+  it('is deterministic for the same war+turn pair', () => {
+    const war = { id: 'war-1' }
+    const a = decideWarProgress(war, { military: 80 }, { military: 60 }, 5)
+    const b = decideWarProgress(war, { military: 80 }, { military: 60 }, 5)
+    expect(a).toEqual(b)
+  })
+
+  it('both sides pay attrition every turn regardless of momentum direction', () => {
+    const progress = decideWarProgress({ id: 'war-1' }, { military: 80 }, { military: 60 }, 5)
+    expect(progress.attackerResourceDelta).toBeLessThan(0)
+    expect(progress.attackerMilitaryDelta).toBeLessThan(0)
+    expect(progress.defenderResourceDelta).toBeLessThan(0)
+    expect(progress.defenderMilitaryDelta).toBeLessThan(0)
+  })
+
+  it('momentum trends toward whichever side has more military, on average', () => {
+    // Sample many turns so the deterministic variance averages out and the
+    // military edge dominates.
+    const deltas = Array.from({ length: 30 }, (_, i) =>
+      decideWarProgress({ id: 'war-1' }, { military: 90 }, { military: 30 }, i).momentumDelta
+    )
+    const average = deltas.reduce((a, b) => a + b, 0) / deltas.length
+    expect(average).toBeGreaterThan(0)
+  })
+})
+
+describe('decideWarResolution', () => {
+  it('resolves in the attacker\'s favor once momentum is decisively positive', () => {
+    expect(decideWarResolution(75, 3)).toEqual({ resolves: true, outcome: 'attacker' })
+  })
+
+  it('resolves in the defender\'s favor once momentum is decisively negative', () => {
+    expect(decideWarResolution(-75, 3)).toEqual({ resolves: true, outcome: 'defender' })
+  })
+
+  it('calls a stalemate once the war has dragged on long enough, regardless of momentum', () => {
+    expect(decideWarResolution(10, 10)).toEqual({ resolves: true, outcome: 'stalemate' })
+  })
+
+  it('keeps escalating while momentum is inconclusive and duration is short', () => {
+    expect(decideWarResolution(20, 3)).toEqual({ resolves: false, outcome: null })
   })
 })
 

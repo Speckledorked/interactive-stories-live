@@ -326,6 +326,11 @@ model Faction {
   influence     Int      @default(50)
   currentPlan   String?
   threatLevel   Int      @default(1)
+  // World Sim Phase 3: written and read by relationshipTick.ts. Shape:
+  // Record<otherFactionId, { type: 'RIVAL' | 'ALLY'; since: number }>.
+  // Absence of an entry for a given faction means NEUTRAL. Recomputed each
+  // tick from both factions' goals/stability, so it evolves on its own as
+  // circumstances change rather than being a one-time GM-authored fact.
   relationships Json?
   gmNotes       String?
   createdAt     DateTime @default(now())
@@ -341,6 +346,12 @@ model Faction {
 
   // World Sim Phase 2: see FactionArchetype above.
   archetype     FactionArchetype @default(GENERIC)
+
+  // World Sim Phase 3: false once a faction has collapsed (stability
+  // bottomed out) — absorbed by a rival or disbanded into a successor. Kept
+  // as a row instead of deleted so its history stays queryable. Excluded
+  // from all tick processing once false.
+  isActive      Boolean          @default(true)
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 

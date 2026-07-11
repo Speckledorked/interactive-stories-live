@@ -66,14 +66,16 @@ work.
 - [x] Ambition outcomes get embedded into RAG memory so they're recallable indefinitely, not just for the next few turns
 - [x] Major NPCs get new goals automatically when their current one completes, instead of going idle
 
-### Phase 3 — Faction Feedback & Evolution
+### Phase 3 — Faction Feedback & Evolution ✅
 The biggest gap identified: ambitions and goals didn't actually respond to what happens. Winning a tournament used to be a nice sentence with zero mechanical effect — fixed below.
 - [x] Ambition outcomes apply real stat deltas (resources/stability/military/threatLevel) on completion, not flavor text only — deterministic success/fail, weighted by whichever stat the goal leans on (military for EXPAND, resources for ENRICH), never guaranteed
 - [x] Attempting an ambition costs resources, instead of only being gated by a resource threshold
-- [x] Automatic goal reassessment each tick, based on current stats — the admin-panel manual goal setting still works as a seed/override, but the simulation will steer it back toward whatever the faction's circumstances justify. (`DESTABILIZE_RIVAL` is still GM-only until Phase 3's relationship item below lands — the simulation can't yet pick a rival to target)
-- [ ] Faction-to-faction relationship state (rival / ally / at war) that the tick actually reads and writes — replaces the `Faction.relationships` field, which exists in the schema but is currently dead (write-only, used only by campaign export)
-- [ ] Faction collapse — sustained low stability leads to disbanding, absorption by a rival, or a civil-war split
-- [ ] Faction founding — new factions can emerge from world events (splinter groups, rebellions, successor states)
+- [x] Automatic goal reassessment each tick, based on current stats — the admin-panel manual goal setting still works as a seed/override, but the simulation will steer it back toward whatever the faction's circumstances justify
+- [x] Faction-to-faction relationship state (rival / ally) that the tick actually reads and writes — replaces the `Faction.relationships` field, which used to be dead (write-only, used only by campaign export). Two factions chasing the same goal (both EXPAND or both ENRICH) become rivals; two stable, inward-looking factions become allies. This is also what makes `DESTABILIZE_RIVAL` reachable automatically — a faction only picks it once it actually has a rival on record. `AT_WAR` was intentionally left out: a real declared war needs the sustained multi-turn conflict object that's Phase 5's job, not a label on a relationship
+- [x] Faction collapse — a faction whose stability bottoms out (≤10) stops existing as an independent actor: absorbed by a rival if it has one (which gains a share of its resources/military), or succeeded by a smaller remnant faction otherwise
+- [x] Faction founding — the collapse-with-no-rival path spawns a "Remnant" successor faction (reduced resources/military, fresh starting stability so it isn't stillborn) instead of the faction simply vanishing — a real, event-driven founding mechanism rather than a separate system bolted on
+
+One deliberate limitation carried forward: `DESTABILIZE_RIVAL` ambitions currently only affect the acting faction, not the rival they're aimed at — actually damaging a *named* rival needs the ambition/Clock to carry a target reference, which doesn't exist yet.
 
 ### Phase 4 — NPCs and Territory in the Web
 Without these links, "war" and "politics" have no map to redraw and no one for the outcome to happen to.

@@ -162,7 +162,9 @@ async function resolveCompletedAmbitions(
 
   for (const clock of completedAmbitionClocks) {
     const faction = await prisma.faction.findUnique({ where: { id: clock.sourceFactionId! } })
-    if (!faction) continue
+    // A faction that collapsed before its ambition resolved is no longer
+    // around to receive the outcome — nothing to apply it to.
+    if (!faction || !faction.isActive) continue
 
     const outcome = decideAmbitionOutcome({
       factionId: faction.id,

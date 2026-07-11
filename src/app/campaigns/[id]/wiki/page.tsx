@@ -15,19 +15,24 @@ import { TavernNav } from '@/components/tavern/TavernNav'
 import { TavernEmptyState, TavernSpinner } from '@/components/tavern/ui'
 
 type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
+// RUMORS isn't a WikiEntryType — it's a separate feed (offscreen
+// PUBLIC/MIXED-visibility TimelineEvents, see /api/campaigns/[id]/rumors),
+// not a WikiEntry row. Handled as a special-cased tab below.
+type WikiTab = WikiEntryType | 'RUMORS'
 
 export default function WikiPage() {
   const router = useRouter()
   const params = useParams()
   const searchParams = useSearchParams()
   const campaignId = params.id as string
-  const initialType = (searchParams.get('type') as WikiEntryType) || 'NPC'
+  const initialType = (searchParams.get('type') as WikiTab) || 'NPC'
   const initialSearch = searchParams.get('search') || ''
 
   const [entries, setEntries] = useState<any[]>([])
+  const [rumors, setRumors] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [selectedType, setSelectedType] = useState<WikiEntryType>(initialType)
+  const [selectedType, setSelectedType] = useState<WikiTab>(initialType)
   const [searchQuery, setSearchQuery] = useState(initialSearch)
   const [selectedEntry, setSelectedEntry] = useState<any>(null)
 
@@ -60,6 +65,15 @@ export default function WikiPage() {
   const loadEntries = async () => {
     setLoading(true)
     try {
+      if (selectedType === 'RUMORS') {
+        const response = await authenticatedFetch(`/api/campaigns/${campaignId}/rumors`)
+        if (!response.ok) throw new Error('Failed to load rumors')
+        const data = await response.json()
+        setRumors(data.rumors || [])
+        setLastCampaignId(campaignId)
+        return
+      }
+
       const response = await authenticatedFetch(
         `/api/campaigns/${campaignId}/wiki?type=${selectedType}`
       )
@@ -80,7 +94,12 @@ export default function WikiPage() {
     entry.summary.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const tabs: { key: WikiEntryType; label: string; icon: string }[] = [
+  const filteredRumors = rumors.filter(rumor =>
+    rumor.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (rumor.summary || '').toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const tabs: { key: WikiTab; label: string; icon: string }[] = [
     { key: 'NPC', label: 'NPCs', icon: '👤' },
     { key: 'FACTION', label: 'Factions', icon: '⚔️' },
     { key: 'LOCATION', label: 'Locations', icon: '🏛️' },
@@ -88,6 +107,7 @@ export default function WikiPage() {
     { key: 'ITEM', label: 'Items', icon: '🎒' },
     { key: 'QUEST', label: 'Quests', icon: '📜' },
     { key: 'LORE', label: 'Lore', icon: '📚' },
+    { key: 'RUMORS', label: 'Rumors', icon: '🗣️' },
   ]
 
   const getImportanceColor = (importance: string) => {
@@ -138,7 +158,47 @@ export default function WikiPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ember-400/50" />
         </div>
 
-      {/* Content */}
+      {/* Rumors — a flat feed, not entity detail, so it gets its own
+          single-column layout instead of the list+detail split below */}
+      {selectedType === 'RUMORS' ? (
+        <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+          <h3 className="text-sm font-bold text-ember-300/60 mb-3">Rumors ({filteredRumors.length})</h3>
+          <p className="text-xs text-ember-400/50 mb-4">
+            Word of things happening elsewhere in the world — not witnessed firsthand, just heard about.
+          </p>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="relative">
+                <div className="spinner h-12 w-12"></div>
+                <div className="absolute inset-0 h-12 w-12 rounded-full bg-primary-500/20 animate-ping"></div>
+              </div>
+            </div>
+          ) : filteredRumors.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-ember-400/50 text-sm">
+                {searchQuery ? 'No rumors match your search' : 'No rumors yet'}
+              </p>
+              <p className="text-xs text-ember-500/40 mt-2">
+                Rumors surface as events happen offscreen, elsewhere in the world
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredRumors.map((rumor: any) => (
+                <div key={rumor.id} className="p-3 rounded-xl bg-black/25 border border-ember-900/30">
+                  <div className="flex items-start justify-between mb-1.5">
+                    <h4 className="font-semibold text-ember-100 text-sm">{rumor.title}</h4>
+                    {rumor.turnNumber && (
+                      <span className="text-xs text-ember-400/50 flex-shrink-0 ml-2">Turn {rumor.turnNumber}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-ember-300/70 leading-relaxed">{rumor.summary}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Entry List */}
         <div className="lg:col-span-1">
@@ -288,6 +348,7 @@ export default function WikiPage() {
           )}
         </div>
       </div>
+      )}
       </main>
 
       <TavernNav campaignId={campaignId} />

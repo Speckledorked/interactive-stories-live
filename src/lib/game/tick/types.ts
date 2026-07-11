@@ -39,6 +39,17 @@ export interface TickContext {
   /** World Sim Phase 8: resolved once per tick in worldTick.ts — see caps.ts. */
   factionCap: number
   npcCap: number
+  /**
+   * World Sim Phase 8: preview mode — handlers still read live DB state and
+   * compute the same WorldChange list they normally would, but every write
+   * call is skipped. Defaults to false (the normal, persisting tick).
+   * Deliberately NOT a transaction-rollback approach: the tick handlers
+   * write through the shared `prisma` singleton, not a transaction-scoped
+   * client, so wrapping runWorldTick in prisma.$transaction wouldn't
+   * actually make their writes rollback-able. Skipping the writes outright
+   * is simpler and equally safe — nothing is ever written to skip.
+   */
+  dryRun: boolean
 }
 
 /**

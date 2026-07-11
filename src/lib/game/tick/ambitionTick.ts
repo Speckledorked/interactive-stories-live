@@ -203,10 +203,12 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
     }
 
     const resourcesAfterCost = clamp(faction.resources - decision.resourceCost, 0, 100)
-    await prisma.faction.update({
-      where: { id: faction.id },
-      data: { resources: resourcesAfterCost },
-    })
+    if (!ctx.dryRun) {
+      await prisma.faction.update({
+        where: { id: faction.id },
+        data: { resources: resourcesAfterCost },
+      })
+    }
 
     pendingAmbitions.push({
       factionId: faction.id,

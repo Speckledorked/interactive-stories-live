@@ -43,10 +43,12 @@ export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandl
 
     // Members are already sorted by importance descending.
     const successor = faction.members[0]
-    await prisma.nPC.update({
-      where: { id: successor.id },
-      data: { factionRole: 'LEADER' },
-    })
+    if (!ctx.dryRun) {
+      await prisma.nPC.update({
+        where: { id: successor.id },
+        data: { factionRole: 'LEADER' },
+      })
+    }
 
     changes.push({
       entityType: 'NPC',

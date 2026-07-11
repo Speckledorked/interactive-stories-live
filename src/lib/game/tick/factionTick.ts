@@ -180,72 +180,79 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
       let successorName: string | null = null
 
       if (absorber?.isActive) {
-        await prisma.faction.update({
-          where: { id: absorber.id },
-          data: {
-            resources: clamp(absorber.resources + collapse.transferResources, 0, 100),
-            military: clamp(absorber.military + collapse.transferMilitary, 0, 100),
-          },
-        })
+        if (!ctx.dryRun) {
+          await prisma.faction.update({
+            where: { id: absorber.id },
+            data: {
+              resources: clamp(absorber.resources + collapse.transferResources, 0, 100),
+              military: clamp(absorber.military + collapse.transferMilitary, 0, 100),
+            },
+          })
 
-        // Members defect to whoever absorbed their faction — demoted to
-        // MEMBER regardless of prior role, since the absorbing faction
-        // already has its own leadership; tickFactionLeadership will fill
-        // any resulting gap there if it somehow doesn't.
-        await prisma.nPC.updateMany({
-          where: { factionId: faction.id },
-          data: { factionId: absorber.id, factionRole: 'MEMBER' },
-        })
+          // Members defect to whoever absorbed their faction — demoted to
+          // MEMBER regardless of prior role, since the absorbing faction
+          // already has its own leadership; tickFactionLeadership will fill
+          // any resulting gap there if it somehow doesn't.
+          await prisma.nPC.updateMany({
+            where: { factionId: faction.id },
+            data: { factionId: absorber.id, factionRole: 'MEMBER' },
+          })
 
-        // Territory follows the same fate as the members — the absorber
-        // takes it all, and nothing stays contested against an owner that
-        // no longer exists.
-        await prisma.location.updateMany({
-          where: { ownerFactionId: faction.id },
-          data: { ownerFactionId: absorber.id, isContested: false },
-        })
+          // Territory follows the same fate as the members — the absorber
+          // takes it all, and nothing stays contested against an owner that
+          // no longer exists.
+          await prisma.location.updateMany({
+            where: { ownerFactionId: faction.id },
+            data: { ownerFactionId: absorber.id, isContested: false },
+          })
+        }
       } else {
         // No rival to absorb it — a smaller successor rises from the
         // wreckage instead of the faction simply vanishing.
         const successor = decideFactionFounding({ name: faction.name, resources: next.resources, military: next.military })
-        const createdSuccessor = await prisma.faction.create({
-          data: {
-            campaignId: ctx.campaignId,
-            name: successor.name,
-            resources: successor.resources,
-            stability: successor.stability,
-            military: successor.military,
-            goal: 'CONSOLIDATE',
-            archetype: faction.archetype,
-            threatLevel: 1,
-            isActive: true,
-            // A player still leads the remnant if they led the predecessor —
-            // the collapse is a setback for their leadership, not the end of it.
-            leaderCharacterId: faction.leaderCharacterId,
-          },
-        })
         successorName = successor.name
 
-        // Members carry over to the remnant with their existing roles —
-        // it's the same people, just organized smaller.
-        await prisma.nPC.updateMany({
-          where: { factionId: faction.id },
-          data: { factionId: createdSuccessor.id },
-        })
+        if (!ctx.dryRun) {
+          const createdSuccessor = await prisma.faction.create({
+            data: {
+              campaignId: ctx.campaignId,
+              name: successor.name,
+              resources: successor.resources,
+              stability: successor.stability,
+              military: successor.military,
+              goal: 'CONSOLIDATE',
+              archetype: faction.archetype,
+              threatLevel: 1,
+              isActive: true,
+              // A player still leads the remnant if they led the predecessor —
+              // the collapse is a setback for their leadership, not the end of it.
+              leaderCharacterId: faction.leaderCharacterId,
+            },
+          })
 
-        // The remnant inherits the predecessor's territory too — diminished
-        // in strength, not in borders (borders erode later via rivals'
-        // EXPAND ambitions, not by fiat at founding).
-        await prisma.location.updateMany({
-          where: { ownerFactionId: faction.id },
-          data: { ownerFactionId: createdSuccessor.id, isContested: false },
-        })
+          // Members carry over to the remnant with their existing roles —
+          // it's the same people, just organized smaller.
+          await prisma.nPC.updateMany({
+            where: { factionId: faction.id },
+            data: { factionId: createdSuccessor.id },
+          })
+
+          // The remnant inherits the predecessor's territory too — diminished
+          // in strength, not in borders (borders erode later via rivals'
+          // EXPAND ambitions, not by fiat at founding).
+          await prisma.location.updateMany({
+            where: { ownerFactionId: faction.id },
+            data: { ownerFactionId: createdSuccessor.id, isContested: false },
+          })
+        }
       }
 
-      await prisma.faction.update({
-        where: { id: faction.id },
-        data: { resources: next.resources, stability: next.stability, military: next.military, isActive: false },
-      })
+      if (!ctx.dryRun) {
+        await prisma.faction.update({
+          where: { id: faction.id },
+          data: { resources: next.resources, stability: next.stability, military: next.military, isActive: false },
+        })
+      }
 
       changes.push({
         entityType: 'FACTION',
@@ -275,15 +282,17 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
       ? faction.goal
       : decideFactionGoalReassessment({ ...next, goal: faction.goal, hasRival: factionHasRival })
 
-    await prisma.faction.update({
-      where: { id: faction.id },
-      data: {
-        resources: next.resources,
-        stability: next.stability,
-        military: next.military,
-        goal: nextGoal,
-      },
-    })
+    if (!ctx.dryRun) {
+      await prisma.faction.update({
+        where: { id: faction.id },
+        data: {
+          resources: next.resources,
+          stability: next.stability,
+          military: next.military,
+          goal: nextGoal,
+        },
+      })
+    }
 
     changes.push(
       ...buildFactionChanges(ctx.campaignId, faction, next)

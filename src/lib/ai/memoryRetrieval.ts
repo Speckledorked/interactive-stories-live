@@ -275,6 +275,78 @@ export async function retrieveNpcHistory(
 }
 
 /**
+ * Pure helper: every unique unordered pair from a list of mentioned entity
+ * IDs, for feeding retrieveCrossEntityHistory once per pair. No DB access —
+ * kept separate so this combinatorics logic is testable on its own.
+ */
+export function generateEntityPairs(entityIds: string[]): Array<[string, string]> {
+  const unique = Array.from(new Set(entityIds))
+  const pairs: Array<[string, string]> = []
+  for (let i = 0; i < unique.length; i++) {
+    for (let j = i + 1; j < unique.length; j++) {
+      pairs.push([unique[i], unique[j]])
+    }
+  }
+  return pairs
+}
+
+/**
+ * Retrieve memories that involve BOTH of two entities — "what happened
+ * between X and Y" — as opposed to retrieveNpcHistory/retrieveFactionHistory,
+ * which each return everything involving just one entity (a union, not an
+ * intersection). Either ID can be an NPC, faction, or character; a memory
+ * matches only if both IDs appear somewhere across its three
+ * involved-entity arrays, regardless of which array either one is in — so
+ * this also answers "history between this NPC and this faction" or
+ * "between these two player characters", not just NPC-NPC pairs.
+ *
+ * @param campaignId - Campaign ID
+ * @param entityIdA - First entity's ID (NPC, faction, or character)
+ * @param entityIdB - Second entity's ID (NPC, faction, or character)
+ * @param limit - Maximum number of memories to retrieve
+ */
+export async function retrieveCrossEntityHistory(
+  campaignId: string,
+  entityIdA: string,
+  entityIdB: string,
+  limit: number = 5
+): Promise<RetrievedMemory[]> {
+  try {
+    const memories = await prisma.$queryRaw<any[]>`
+      SELECT
+        id,
+        turn_number as "turnNumber",
+        title,
+        summary,
+        memory_type as "memoryType",
+        importance,
+        emotional_tone as "emotionalTone",
+        1.0 as similarity
+      FROM campaign_memories
+      WHERE
+        campaign_id = ${campaignId}
+        AND (
+          ${entityIdA} = ANY(involved_npc_ids)
+          OR ${entityIdA} = ANY(involved_faction_ids)
+          OR ${entityIdA} = ANY(involved_character_ids)
+        )
+        AND (
+          ${entityIdB} = ANY(involved_npc_ids)
+          OR ${entityIdB} = ANY(involved_faction_ids)
+          OR ${entityIdB} = ANY(involved_character_ids)
+        )
+      ORDER BY turn_number DESC
+      LIMIT ${limit}
+    `;
+
+    return memories;
+  } catch (error) {
+    console.error('Error retrieving cross-entity history:', error);
+    return [];
+  }
+}
+
+/**
  * Retrieve faction-specific history
  *
  * Gets the most recent and important memories involving a specific faction.

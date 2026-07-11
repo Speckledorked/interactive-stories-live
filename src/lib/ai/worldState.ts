@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
 import { buildOptimizedContext } from './contextManager' // Phase 14.6: Context optimization
-import { retrieveRelevantHistory, retrieveNpcHistory } from './memoryRetrieval' // Campaign Memory RAG
+import { retrieveRelevantHistory, retrieveNpcHistory, retrieveCrossEntityHistory, generateEntityPairs } from './memoryRetrieval' // Campaign Memory RAG
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
@@ -561,6 +561,31 @@ export async function buildSceneResolutionRequest(
       if (namedMemories.length > 0) {
         console.log(`🎯 Named-NPC recall: added ${namedMemories.length} memor(ies) for explicitly mentioned NPC(s)`)
         relevantMemories = [...relevantMemories, ...namedMemories]
+      }
+    }
+
+    // Cross-entity recall: "what happened between X and Y" — if the action
+    // names two or more entities (NPCs and/or factions) at once, pull
+    // memories where BOTH appear, not just each one's own history. This is
+    // an intersection the per-entity recall above can't produce: a player
+    // asking an NPC about their history with a faction, or referencing two
+    // NPCs' shared past, needs the memory that mentions both, which could
+    // easily be outranked by unrelated single-entity memories otherwise.
+    const mentionedFactionIds = entities.factions
+      .filter(f => f.name && actionText.includes(f.name.toLowerCase()))
+      .map(f => f.id)
+    const mentionedEntityIds = Array.from(new Set([...mentionedNpcIds, ...mentionedFactionIds]))
+
+    if (mentionedEntityIds.length >= 2) {
+      const pairs = generateEntityPairs(mentionedEntityIds)
+      const existingIds = new Set(relevantMemories.map((m: any) => m.id))
+      const crossEntityMemories = (
+        await Promise.all(pairs.map(([a, b]) => retrieveCrossEntityHistory(campaignId, a, b, 3)))
+      ).flat().filter(m => !existingIds.has(m.id))
+
+      if (crossEntityMemories.length > 0) {
+        console.log(`🔗 Cross-entity recall: added ${crossEntityMemories.length} memor(ies) shared between mentioned entities`)
+        relevantMemories = [...relevantMemories, ...crossEntityMemories]
       }
     }
   } catch (namedRecallError) {

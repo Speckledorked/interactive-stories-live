@@ -44,6 +44,7 @@ interface Faction {
   currentPlan: string
   threatLevel: number
   gmNotes: string
+  isActive: boolean
 }
 
 // Keep in sync with FactionGoal in prisma/schema.prisma.
@@ -873,7 +874,7 @@ export default function AdminPage() {
                 )}
 
                 {factions.map((faction) => (
-                  <div key={faction.id} className="border border-ember-900/30 rounded-lg p-4">
+                  <div key={faction.id} className={`border border-ember-900/30 rounded-lg p-4 ${faction.isActive === false ? 'opacity-50' : ''}`}>
                     {editingFaction === faction.id ? (
                       <div className="space-y-2">
                         <input
@@ -958,7 +959,14 @@ export default function AdminPage() {
                       <div>
                         <div className="flex justify-between items-start">
                           <div>
-                            <h3 className="font-semibold">{faction.name}</h3>
+                            <h3 className="font-semibold">
+                              {faction.name}
+                              {faction.isActive === false && (
+                                <span className="ml-2 text-xs font-normal text-ember-400/70 border border-ember-400/30 rounded px-1.5 py-0.5">
+                                  Defunct
+                                </span>
+                              )}
+                            </h3>
                             <p className="text-sm text-ember-300/60">{faction.currentPlan}</p>
                             <p className="text-xs text-ember-400/50">
                               Threat: {faction.threatLevel}/5 | Resources: {faction.resources}/100

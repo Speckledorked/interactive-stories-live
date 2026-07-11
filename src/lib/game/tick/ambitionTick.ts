@@ -1,8 +1,10 @@
 // src/lib/game/tick/ambitionTick.ts
 // World Sim Phase 2 — factions autonomously commit to a major ambition
-// while pursuing an outward-looking goal (EXPAND, ENRICH), so events like
-// a region-wide tournament or a war of conquest can originate from
-// simulation instead of requiring a GM to set one up by hand.
+// while pursuing an outward-looking goal (EXPAND, ENRICH, and — Phase 3 —
+// DESTABILIZE_RIVAL once relationshipTick.ts gives them a rival to target),
+// so events like a region-wide tournament, a war of conquest, or a smear
+// campaign can originate from simulation instead of requiring a GM to set
+// one up by hand.
 //
 // Split responsibility, on purpose: this handler deterministically decides
 // WHETHER a faction commits to something big this tick (resources high
@@ -33,7 +35,7 @@ const RESOURCES_HIGH_THRESHOLD = 67 // matches factionTick.ts's band() HIGH cuto
 // clock resolved, for free.
 const AMBITION_COMMIT_COST = 20
 
-type AmbitionGoal = 'ENRICH' | 'EXPAND'
+type AmbitionGoal = 'ENRICH' | 'EXPAND' | 'DESTABILIZE_RIVAL'
 
 // Mechanical shape of an ambition: how long it takes and how it resolves if
 // nobody names it. Purely a function of the goal being pursued — a tournament
@@ -53,6 +55,11 @@ const AMBITION_SHAPES: Partial<Record<FactionGoal, { maxTicks: number; category:
     category: 'urgent',
     fallbackConsequence: (name) => `${name} claims new ground, reshaping the region's balance of power.`,
   },
+  DESTABILIZE_RIVAL: {
+    maxTicks: 5,
+    category: 'urgent',
+    fallbackConsequence: (name) => `${name} deals a blow to its rival's standing, and returns stronger for the effort.`,
+  },
 }
 
 // Bounded flavor options the offscreen AI narration path picks from for
@@ -69,30 +76,37 @@ export const AMBITION_CATEGORY_OPTIONS: Record<FactionArchetype, Record<Ambition
   GENERIC: {
     ENRICH: ['tournament', 'trade fair', 'harvest festival', 'trading expedition', 'grand bazaar', 'founding feast'],
     EXPAND: ['military campaign', 'border annexation', 'colonization venture', 'punitive raid', 'siege preparation'],
+    DESTABILIZE_RIVAL: ['sabotage campaign', 'smear campaign', 'economic blockade', 'spy infiltration', 'bribery scheme'],
   },
   SECRET_SOCIETY: {
     ENRICH: ['black-market venture', 'blackmail operation', 'smuggling run', 'ritual convocation', 'wealthy patron courting'],
     EXPAND: ['infiltration operation', 'recruitment drive', 'rival cell takeover', 'covert coup', 'network expansion'],
+    DESTABILIZE_RIVAL: ['shadow war', 'double agent placement', 'ritual curse', 'discrediting operation', 'rival unmasking'],
   },
   CRIMINAL: {
     ENRICH: ['heist', 'smuggling run', 'extortion racket', 'black-market auction', 'protection racket expansion'],
     EXPAND: ['turf war', 'rival takeover', 'territory grab', 'safehouse network expansion', 'bribery campaign'],
+    DESTABILIZE_RIVAL: ['rival gang war', 'hit job', 'territory sabotage', 'informant planting', 'supply line disruption'],
   },
   RELIGIOUS: {
     ENRICH: ['pilgrimage', 'grand festival', 'relic unveiling', 'tithe drive', 'temple consecration'],
     EXPAND: ['missionary campaign', 'conversion crusade', 'new temple founding', 'holy war', 'schism suppression'],
+    DESTABILIZE_RIVAL: ['heresy accusation', 'holy inquisition', 'schism incitement', 'excommunication campaign', 'relic theft'],
   },
   MILITARY: {
     ENRICH: ['mercenary contract', 'war games tournament', 'weapons fair', 'veteran recruitment gala'],
     EXPAND: ['military campaign', 'siege preparation', 'border annexation', 'garrison expansion', 'punitive raid'],
+    DESTABILIZE_RIVAL: ['covert strike', 'proxy war', 'supply line raid', 'defector recruitment', 'intelligence operation'],
   },
   CORPORATION: {
     ENRICH: ['product launch', 'trade expo', 'shareholder gala', 'merger negotiation', 'ipo campaign'],
     EXPAND: ['hostile takeover', 'market expansion', 'new facility opening', 'competitor buyout', 'lobbying campaign'],
+    DESTABILIZE_RIVAL: ['hostile PR campaign', 'patent sabotage', 'talent poaching raid', 'regulatory complaint', 'supply chain disruption'],
   },
   POLITICAL: {
     ENRICH: ['fundraising gala', 'campaign rally', 'endorsement drive', 'coalition summit'],
     EXPAND: ['election campaign', 'coup attempt', 'redistricting push', 'party expansion', 'no-confidence campaign'],
+    DESTABILIZE_RIVAL: ['smear campaign', 'scandal exposure', 'voter suppression scheme', 'defection courting', 'no-confidence maneuvering'],
   },
 }
 
@@ -147,7 +161,8 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
   const factions = await prisma.faction.findMany({
     where: {
       campaignId: ctx.campaignId,
-      goal: { in: ['ENRICH', 'EXPAND'] },
+      isActive: true,
+      goal: { in: ['ENRICH', 'EXPAND', 'DESTABILIZE_RIVAL'] },
     },
     orderBy: { createdAt: 'asc' },
     take: FACTION_CAP,
@@ -250,7 +265,7 @@ export function decideAmbitionOutcome(input: {
   resources: number
   military: number
 }): AmbitionOutcome {
-  const relevantStat = input.goal === 'EXPAND' ? input.military : input.resources
+  const relevantStat = input.goal === 'EXPAND' || input.goal === 'DESTABILIZE_RIVAL' ? input.military : input.resources
   const successChance = clamp(SUCCESS_FLOOR + relevantStat * SUCCESS_STAT_WEIGHT, SUCCESS_FLOOR, SUCCESS_CEILING)
   const roll = stableHash(`${input.factionId}:${input.clockId}`) % 100
   const success = roll < successChance
@@ -259,6 +274,16 @@ export function decideAmbitionOutcome(input: {
     return success
       ? { success: true, resourceDelta: 0, stabilityDelta: -2, militaryDelta: 6, threatLevelDelta: 1, consequenceText: `${input.factionName} claims new ground, reshaping the region's balance of power.` }
       : { success: false, resourceDelta: -8, stabilityDelta: -4, militaryDelta: -3, threatLevelDelta: 0, consequenceText: `${input.factionName} overextends and is thrown back, its ambitions costing more than they gained.` }
+  }
+
+  if (input.goal === 'DESTABILIZE_RIVAL') {
+    // Self-contained for now: this only affects the acting faction, not
+    // whichever faction it's rivals with. Actually damaging a specific
+    // named rival needs the ambition/Clock to carry a target reference,
+    // which doesn't exist yet — see the README roadmap.
+    return success
+      ? { success: true, resourceDelta: -3, stabilityDelta: 1, militaryDelta: 2, threatLevelDelta: 1, consequenceText: `${input.factionName} deals a blow to its rival's standing, and returns stronger for the effort.` }
+      : { success: false, resourceDelta: -5, stabilityDelta: -3, militaryDelta: -4, threatLevelDelta: 0, consequenceText: `${input.factionName}'s scheme against its rival unravels, costing it dearly.` }
   }
 
   return success

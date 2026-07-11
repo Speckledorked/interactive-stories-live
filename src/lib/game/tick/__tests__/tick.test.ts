@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { decideFactionTick, decideFactionGoalReassessment } from '../factionTick'
+import { decideFactionTick, decideFactionGoalReassessment, decideFactionCollapse, decideFactionFounding } from '../factionTick'
 import { decideAmbitionTick, decideAmbitionOutcome } from '../ambitionTick'
+import { decideRelationshipTick } from '../relationshipTick'
 import { decideNpcTick, deriveTimeOfDay } from '../npcTick'
 import { decideNextWeather } from '../weatherTick'
 
@@ -27,24 +28,86 @@ describe('decideFactionTick', () => {
 
 describe('decideFactionGoalReassessment', () => {
   it('prioritizes DEFEND when stability is low, regardless of other stats', () => {
-    expect(decideFactionGoalReassessment({ resources: 90, stability: 20, military: 90, goal: 'EXPAND' })).toBe('DEFEND')
+    expect(decideFactionGoalReassessment({ resources: 90, stability: 20, military: 90, goal: 'EXPAND', hasRival: false })).toBe('DEFEND')
   })
 
   it('prioritizes ENRICH when resources are low but stability is fine', () => {
-    expect(decideFactionGoalReassessment({ resources: 20, stability: 60, military: 60, goal: 'CONSOLIDATE' })).toBe('ENRICH')
+    expect(decideFactionGoalReassessment({ resources: 20, stability: 60, military: 60, goal: 'CONSOLIDATE', hasRival: false })).toBe('ENRICH')
   })
 
-  it('picks EXPAND when resources and military are both high and stability is not low', () => {
-    expect(decideFactionGoalReassessment({ resources: 80, stability: 50, military: 80, goal: 'CONSOLIDATE' })).toBe('EXPAND')
+  it('picks EXPAND when resources and military are both high, stability is not low, and there is no rival', () => {
+    expect(decideFactionGoalReassessment({ resources: 80, stability: 50, military: 80, goal: 'CONSOLIDATE', hasRival: false })).toBe('EXPAND')
+  })
+
+  it('picks DESTABILIZE_RIVAL instead of EXPAND once a rival exists and military is high', () => {
+    expect(decideFactionGoalReassessment({ resources: 80, stability: 50, military: 80, goal: 'CONSOLIDATE', hasRival: true })).toBe('DESTABILIZE_RIVAL')
+  })
+
+  it('does not pick DESTABILIZE_RIVAL without high military, even with a rival', () => {
+    expect(decideFactionGoalReassessment({ resources: 80, stability: 50, military: 50, goal: 'CONSOLIDATE', hasRival: true })).toBe('CONSOLIDATE')
   })
 
   it('defaults to CONSOLIDATE otherwise', () => {
-    expect(decideFactionGoalReassessment({ resources: 50, stability: 50, military: 50, goal: 'EXPAND' })).toBe('CONSOLIDATE')
+    expect(decideFactionGoalReassessment({ resources: 50, stability: 50, military: 50, goal: 'EXPAND', hasRival: false })).toBe('CONSOLIDATE')
   })
 
   it('is deterministic for the same input', () => {
-    const faction = { resources: 50, stability: 50, military: 50, goal: 'CONSOLIDATE' as const }
+    const faction = { resources: 50, stability: 50, military: 50, goal: 'CONSOLIDATE' as const, hasRival: false }
     expect(decideFactionGoalReassessment(faction)).toEqual(decideFactionGoalReassessment(faction))
+  })
+})
+
+describe('decideFactionCollapse', () => {
+  it('does not collapse above the crisis threshold', () => {
+    expect(decideFactionCollapse({ stability: 15, resources: 50, military: 50 }).collapses).toBe(false)
+  })
+
+  it('collapses once stability bottoms out', () => {
+    const result = decideFactionCollapse({ stability: 5, resources: 60, military: 40 })
+    expect(result.collapses).toBe(true)
+    expect(result.transferResources).toBeGreaterThan(0)
+    expect(result.transferMilitary).toBeGreaterThan(0)
+  })
+
+  it('transfers only a fraction of resources/military, not everything', () => {
+    const result = decideFactionCollapse({ stability: 0, resources: 100, military: 100 })
+    expect(result.transferResources).toBeLessThan(100)
+    expect(result.transferMilitary).toBeLessThan(100)
+  })
+})
+
+describe('decideFactionFounding', () => {
+  it('names the successor after its predecessor', () => {
+    const successor = decideFactionFounding({ name: 'Thornburg Guild', resources: 50, military: 50 })
+    expect(successor.name).toBe('Thornburg Guild Remnant')
+  })
+
+  it('inherits only a fraction of resources/military, not a fraction of the crisis-level stability', () => {
+    const successor = decideFactionFounding({ name: 'Thornburg Guild', resources: 40, military: 40 })
+    expect(successor.resources).toBeLessThan(40)
+    expect(successor.military).toBeLessThan(40)
+    // Stability is a fresh baseline, not derived from the parent's near-zero
+    // collapse-time stability — otherwise the successor would be stillborn.
+    expect(successor.stability).toBeGreaterThan(10)
+  })
+})
+
+describe('decideRelationshipTick', () => {
+  it('makes rivals of two factions chasing the same finite goal', () => {
+    expect(decideRelationshipTick({ goal: 'EXPAND', stability: 50 }, { goal: 'EXPAND', stability: 50 })).toBe('RIVAL')
+    expect(decideRelationshipTick({ goal: 'ENRICH', stability: 50 }, { goal: 'ENRICH', stability: 50 })).toBe('RIVAL')
+  })
+
+  it('makes allies of two stable, inward-looking factions', () => {
+    expect(decideRelationshipTick({ goal: 'CONSOLIDATE', stability: 60 }, { goal: 'DEFEND', stability: 60 })).toBe('ALLY')
+  })
+
+  it('does not ally two inward-looking factions if either is unstable', () => {
+    expect(decideRelationshipTick({ goal: 'CONSOLIDATE', stability: 20 }, { goal: 'DEFEND', stability: 60 })).toBe('NEUTRAL')
+  })
+
+  it('is neutral between factions with unrelated goals', () => {
+    expect(decideRelationshipTick({ goal: 'EXPAND', stability: 50 }, { goal: 'CONSOLIDATE', stability: 50 })).toBe('NEUTRAL')
   })
 })
 
@@ -122,7 +185,13 @@ describe('decideAmbitionTick', () => {
   it('does not spawn for inward-facing goals', () => {
     expect(decideAmbitionTick({ ...base, goal: 'DEFEND' }).shouldSpawn).toBe(false)
     expect(decideAmbitionTick({ ...base, goal: 'CONSOLIDATE' }).shouldSpawn).toBe(false)
-    expect(decideAmbitionTick({ ...base, goal: 'DESTABILIZE_RIVAL' }).shouldSpawn).toBe(false)
+  })
+
+  it('spawns a sabotage-flavored ambition for a high-resource DESTABILIZE_RIVAL faction', () => {
+    const decision = decideAmbitionTick({ ...base, goal: 'DESTABILIZE_RIVAL' })
+    expect(decision.shouldSpawn).toBe(true)
+    expect(decision.fallbackName).toBe('Thornburg Guild Sabotage Campaign')
+    expect(decision.resourceCost).toBeGreaterThan(0)
   })
 
   it('picks a different flavor pool for a different archetype pursuing the same goal', () => {
@@ -160,6 +229,15 @@ describe('decideAmbitionOutcome', () => {
       expect(outcome).toEqual({ success: true, resourceDelta: 0, stabilityDelta: -2, militaryDelta: 6, threatLevelDelta: 1, consequenceText: `${input.factionName} claims new ground, reshaping the region's balance of power.` })
     } else {
       expect(outcome).toEqual({ success: false, resourceDelta: -8, stabilityDelta: -4, militaryDelta: -3, threatLevelDelta: 0, consequenceText: `${input.factionName} overextends and is thrown back, its ambitions costing more than they gained.` })
+    }
+  })
+
+  it('produces exactly one of the two known DESTABILIZE_RIVAL outcome shapes', () => {
+    const outcome = decideAmbitionOutcome({ ...input, goal: 'DESTABILIZE_RIVAL' })
+    if (outcome.success) {
+      expect(outcome).toEqual({ success: true, resourceDelta: -3, stabilityDelta: 1, militaryDelta: 2, threatLevelDelta: 1, consequenceText: `${input.factionName} deals a blow to its rival's standing, and returns stronger for the effort.` })
+    } else {
+      expect(outcome).toEqual({ success: false, resourceDelta: -5, stabilityDelta: -3, militaryDelta: -4, threatLevelDelta: 0, consequenceText: `${input.factionName}'s scheme against its rival unravels, costing it dearly.` })
     }
   })
 

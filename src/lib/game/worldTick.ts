@@ -14,6 +14,7 @@
 // needs to change for that to work.
 
 import { tickWeather } from './tick/weatherTick'
+import { tickFactionRelationships } from './tick/relationshipTick'
 import { tickFactions } from './tick/factionTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
 import { tickNpcs } from './tick/npcTick'
@@ -22,7 +23,13 @@ import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { TickContext, TickHandler, WorldChange, WorldTickResult, PendingAmbition } from './tick/types'
 
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactions, tickFactionAmbitions, tickNpcs]
+// tickFactionRelationships runs BEFORE tickFactions on purpose: it reads
+// each faction's goal as of the end of the previous turn and writes this
+// turn's relationships from that, so tickFactions can then read a
+// freshly-updated relationship for this same turn's goal reassessment
+// (specifically, whether DESTABILIZE_RIVAL is reachable) without a circular
+// same-turn dependency. See relationshipTick.ts for the full reasoning.
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tickFactions, tickFactionAmbitions, tickNpcs]
 
 /**
  * Run one deterministic world tick for a campaign.

@@ -61,8 +61,14 @@ export async function generateCampaignSummary(
       orderBy: { sceneNumber: 'asc' }
     }),
     prisma.worldMeta.findUnique({ where: { campaignId } }),
+    // Fog of war: currently only used as a per-scene "was there a public
+    // event" boolean (extractImportantMoments never reads summaryGM off
+    // these rows), so this filter is defense-in-depth, not a behavior
+    // change — but without it, a future change that starts summarizing
+    // straight from a TimelineEvent's own text would silently leak
+    // GM_ONLY content with no guardrail in place to catch it.
     prisma.timelineEvent.findMany({
-      where: { campaignId },
+      where: { campaignId, visibility: { in: ['PUBLIC', 'MIXED'] } },
       orderBy: { turnNumber: 'desc' },
       take: 20
     }),
@@ -225,8 +231,9 @@ export async function buildOptimizedContext(
     orderBy: { sceneNumber: 'asc' }
   });
 
+  // Fog of war: same defense-in-depth filter as generateCampaignSummary above.
   const timeline = await prisma.timelineEvent.findMany({
-    where: { campaignId },
+    where: { campaignId, visibility: { in: ['PUBLIC', 'MIXED'] } },
     orderBy: { turnNumber: 'desc' }
   });
 

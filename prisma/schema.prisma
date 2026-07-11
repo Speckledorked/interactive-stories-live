@@ -311,6 +311,15 @@ model NPC {
   importance      Int      @default(1)
   gmNotes         String?
 
+  // Fog of war: defaults true so existing/starting-world NPCs and any NPC
+  // the AI introduces mid-scene (which is itself the discovery event) stay
+  // visible without extra steps. Set false to build an NPC into the world
+  // as background lore before the party has any in-fiction way to know
+  // about them — see stateUpdater.ts for how it flips back to true, and
+  // worldState.ts for where undiscovered NPCs are excluded from the
+  // player-facing AI prompt entirely.
+  isDiscovered    Boolean  @default(true)
+
   // World Sim Phase 1: deterministic tick behavior for major NPCs (importance >= 4)
   currentPlan     String?
   // World Sim Phase 2: how far a major NPC has progressed toward their
@@ -374,6 +383,16 @@ model Faction {
 
   // World Sim Phase 2: see FactionArchetype above.
   archetype     FactionArchetype @default(GENERIC)
+
+  // Fog of war: defaults true so existing/starting-world factions and any
+  // faction the AI registers mid-scene (the registration IS the discovery
+  // event) stay visible without extra steps. Set false to build a faction
+  // into the world as background lore/antagonist scheming before the party
+  // has any in-fiction way to know it exists — flips back to true only
+  // when a *live scene* touches it (see stateUpdater.ts's sceneOrigin
+  // param), never from an offscreen background event, so the party can't
+  // learn about a hidden faction just because the simulation moved it.
+  isDiscovered  Boolean          @default(true)
 
   // World Sim Phase 3: false once a faction has collapsed (stability
   // bottomed out) — absorbed by a rival or disbanded into a successor. Kept

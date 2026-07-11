@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
+import { redactGmNotesList } from '@/lib/game/visibility'
 
 // GET /api/campaigns/:id/clocks - List all clocks for a campaign
 export async function GET(
@@ -42,7 +43,7 @@ export async function GET(
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ clocks })
+    return NextResponse.json({ clocks: redactGmNotesList(clocks, membership.role === 'ADMIN') })
   } catch (error) {
     console.error('Get clocks error:', error)
     return NextResponse.json(

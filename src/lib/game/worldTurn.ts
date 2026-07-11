@@ -452,7 +452,10 @@ async function generateOffscreenEvents(
             faction_changes: aiResult.world_updates?.faction_changes,
           },
         },
-        currentTurn
+        currentTurn,
+        // Fog of war: an offscreen event happening in the background is not
+        // the party witnessing anything — it must not reveal entities.
+        false
       )
       involvedNpcIds = applied.involvedNpcIds
       involvedFactionIds = applied.involvedFactionIds

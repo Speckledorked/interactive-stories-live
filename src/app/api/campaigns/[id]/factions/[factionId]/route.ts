@@ -61,6 +61,7 @@ export async function PATCH(
         relationships: body.relationships,
         gmNotes: body.gmNotes,
         leaderCharacterId: body.leaderCharacterId,
+        isDiscovered: body.isDiscovered,
       },
     })
 

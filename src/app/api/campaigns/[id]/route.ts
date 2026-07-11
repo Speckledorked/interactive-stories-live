@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import { UserRole } from '@prisma/client'
+import { redactGmNotesList } from '@/lib/game/visibility'
 
 export async function GET(
   request: NextRequest,
@@ -96,8 +97,19 @@ export async function GET(
       )
     }
 
+    // Fog of war: gmNotes on NPCs/factions/locations/clocks is GM-only,
+    // regardless of which of those entities a non-admin can otherwise see.
+    const isAdmin = membership.role === 'ADMIN'
+    const redactedCampaign = {
+      ...campaign,
+      npcs: redactGmNotesList(campaign.npcs, isAdmin),
+      factions: redactGmNotesList(campaign.factions, isAdmin),
+      locations: redactGmNotesList(campaign.locations, isAdmin),
+      clocks: redactGmNotesList(campaign.clocks, isAdmin),
+    }
+
     return NextResponse.json({
-      campaign,
+      campaign: redactedCampaign,
       userRole: membership.role
     })
   } catch (error) {

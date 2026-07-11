@@ -384,6 +384,9 @@ model Faction {
   // World Sim Phase 4: NPCs affiliated with this faction (leader/members).
   members NPC[] @relation("FactionMembers")
 
+  // World Sim Phase 4: locations this faction controls.
+  territories Location[] @relation("FactionTerritories")
+
   @@index([campaignId])
 }
 
@@ -409,10 +412,20 @@ model Location {
   weatherSeverity  Int              @default(1) // 1 (mild) - 5 (extreme)
   weatherUpdatedAt DateTime?        // last tick that changed the condition
 
+  // World Sim Phase 4: which faction controls this place, if any — the map
+  // EXPAND ambitions and faction collapse actually redraw. isContested is a
+  // foothold state: a rival has moved against it but hasn't taken it yet
+  // (set by a successful EXPAND against owned land, or a successful
+  // DESTABILIZE_RIVAL scheme; cleared when it changes hands).
+  ownerFactionId String?
+  ownerFaction   Faction? @relation("FactionTerritories", fields: [ownerFactionId], references: [id], onDelete: SetNull)
+  isContested    Boolean  @default(false)
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, name])
   @@index([campaignId])
+  @@index([ownerFactionId])
 }
 
 //

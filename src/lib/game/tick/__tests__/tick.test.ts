@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { decideFactionTick, decideFactionGoalReassessment, decideFactionCollapse, decideFactionFounding } from '../factionTick'
 import { decideAmbitionTick, decideAmbitionOutcome } from '../ambitionTick'
 import { decideRelationshipTick } from '../relationshipTick'
+import { decideTerritoryClaim } from '../territory'
 import { decideNpcTick, deriveTimeOfDay } from '../npcTick'
 import { decideNextWeather } from '../weatherTick'
 
@@ -108,6 +109,68 @@ describe('decideRelationshipTick', () => {
 
   it('is neutral between factions with unrelated goals', () => {
     expect(decideRelationshipTick({ goal: 'EXPAND', stability: 50 }, { goal: 'CONSOLIDATE', stability: 50 })).toBe('NEUTRAL')
+  })
+})
+
+describe('decideTerritoryClaim', () => {
+  const claimant = 'iron-crown'
+  const rival = 'sable-reach'
+
+  it('settles unowned land when nothing is contested', () => {
+    const claim = decideTerritoryClaim(
+      [
+        { id: 'l1', name: 'Ashford', ownerFactionId: null, isContested: false },
+        { id: 'l2', name: 'Briar Keep', ownerFactionId: rival, isContested: false },
+      ],
+      claimant,
+      [rival]
+    )
+    expect(claim).toEqual({ kind: 'settle', locationId: 'l1', locationName: 'Ashford' })
+  })
+
+  it('prefers conquering land it already contested over settling new land', () => {
+    const claim = decideTerritoryClaim(
+      [
+        { id: 'l1', name: 'Ashford', ownerFactionId: null, isContested: false },
+        { id: 'l2', name: 'Briar Keep', ownerFactionId: rival, isContested: true },
+      ],
+      claimant,
+      [rival]
+    )
+    expect(claim).toEqual({ kind: 'conquer', locationId: 'l2', locationName: 'Briar Keep', fromFactionId: rival })
+  })
+
+  it('contests a rival holding when no unowned land remains — conquest takes two wins', () => {
+    const claim = decideTerritoryClaim(
+      [
+        { id: 'l1', name: 'Ashford', ownerFactionId: claimant, isContested: false },
+        { id: 'l2', name: 'Briar Keep', ownerFactionId: rival, isContested: false },
+      ],
+      claimant,
+      [rival]
+    )
+    expect(claim).toEqual({ kind: 'contest', locationId: 'l2', locationName: 'Briar Keep', ownerFactionId: rival })
+  })
+
+  it('does nothing when everything is owned by itself or non-rivals', () => {
+    const claim = decideTerritoryClaim(
+      [
+        { id: 'l1', name: 'Ashford', ownerFactionId: claimant, isContested: false },
+        { id: 'l2', name: 'Briar Keep', ownerFactionId: 'neutral-third-party', isContested: false },
+      ],
+      claimant,
+      [rival]
+    )
+    expect(claim).toEqual({ kind: 'none' })
+  })
+
+  it('is deterministic — sorted by name, not input order', () => {
+    const locations = [
+      { id: 'l2', name: 'Briar Keep', ownerFactionId: null, isContested: false },
+      { id: 'l1', name: 'Ashford', ownerFactionId: null, isContested: false },
+    ]
+    const claim = decideTerritoryClaim(locations, claimant, [])
+    expect(claim).toEqual({ kind: 'settle', locationId: 'l1', locationName: 'Ashford' })
   })
 })
 

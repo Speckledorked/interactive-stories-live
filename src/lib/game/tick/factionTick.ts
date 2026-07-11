@@ -185,11 +185,20 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
             military: clamp(absorber.military + collapse.transferMilitary, 0, 100),
           },
         })
+
+        // Members defect to whoever absorbed their faction — demoted to
+        // MEMBER regardless of prior role, since the absorbing faction
+        // already has its own leadership; tickFactionLeadership will fill
+        // any resulting gap there if it somehow doesn't.
+        await prisma.nPC.updateMany({
+          where: { factionId: faction.id },
+          data: { factionId: absorber.id, factionRole: 'MEMBER' },
+        })
       } else {
         // No rival to absorb it — a smaller successor rises from the
         // wreckage instead of the faction simply vanishing.
         const successor = decideFactionFounding({ name: faction.name, resources: next.resources, military: next.military })
-        await prisma.faction.create({
+        const createdSuccessor = await prisma.faction.create({
           data: {
             campaignId: ctx.campaignId,
             name: successor.name,
@@ -203,6 +212,13 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
           },
         })
         successorName = successor.name
+
+        // Members carry over to the remnant with their existing roles —
+        // it's the same people, just organized smaller.
+        await prisma.nPC.updateMany({
+          where: { factionId: faction.id },
+          data: { factionId: createdSuccessor.id },
+        })
       }
 
       await prisma.faction.update({

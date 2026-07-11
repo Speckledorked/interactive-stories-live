@@ -137,7 +137,12 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       description: n.description,
       goals: n.goals,
       relationship: n.relationship,
-      importance: n.importance
+      importance: n.importance,
+      // Cross-reference against the factions array below by id for the
+      // faction's name/goal — kept as a bare id here rather than joined, to
+      // avoid duplicating faction data into every affiliated NPC.
+      factionId: n.factionId,
+      factionRole: n.factionRole
     })),
 
     // Only relevant factions
@@ -264,7 +269,9 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       description: n.description,
       goals: n.goals,
       relationship: n.relationship,
-      importance: n.importance
+      importance: n.importance,
+      factionId: n.factionId,
+      factionRole: n.factionRole
     })),
 
     factions: factions.map(f => ({

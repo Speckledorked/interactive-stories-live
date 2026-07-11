@@ -16,6 +16,7 @@
 import { tickWeather } from './tick/weatherTick'
 import { tickFactionRelationships } from './tick/relationshipTick'
 import { tickFactions } from './tick/factionTick'
+import { tickFactionLeadership } from './tick/leadershipTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
 import { tickNpcs } from './tick/npcTick'
 import { logSignificantChanges } from './tick/historyLog'
@@ -29,7 +30,13 @@ import { TickContext, TickHandler, WorldChange, WorldTickResult, PendingAmbition
 // freshly-updated relationship for this same turn's goal reassessment
 // (specifically, whether DESTABILIZE_RIVAL is reachable) without a circular
 // same-turn dependency. See relationshipTick.ts for the full reasoning.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tickFactions, tickFactionAmbitions, tickNpcs]
+//
+// tickFactionLeadership runs right after tickFactions on purpose too: if a
+// faction collapsed this turn and its members just defected to a rival (see
+// factionTick.ts), this same-turn pass can immediately promote a new
+// leader for that rival if it doesn't already have one, instead of leaving
+// it leaderless until next turn.
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tickFactions, tickFactionLeadership, tickFactionAmbitions, tickNpcs]
 
 /**
  * Run one deterministic world tick for a campaign.

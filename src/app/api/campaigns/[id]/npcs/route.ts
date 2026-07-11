@@ -104,6 +104,8 @@ export async function POST(
         threat: body.threat || null,
         impulses: body.impulses || [],
         moves: body.moves || [],
+        factionId: body.factionId || null,
+        factionRole: body.factionId ? (body.factionRole || 'MEMBER') : null,
       },
     })
 

@@ -30,6 +30,8 @@ interface NPC {
   isAlive: boolean
   importance: number
   gmNotes: string
+  factionId: string | null
+  factionRole: string | null
 }
 
 interface Faction {
@@ -582,6 +584,8 @@ export default function AdminPage() {
                           relationship: formData.get('relationship') as string || undefined,
                           importance: parseInt(formData.get('importance') as string) || 1,
                           gmNotes: formData.get('gmNotes') as string || undefined,
+                          factionId: (formData.get('factionId') as string) || undefined,
+                          factionRole: (formData.get('factionRole') as string) || undefined,
                         })
                       }}
                       className="space-y-3"
@@ -640,6 +644,32 @@ export default function AdminPage() {
                           className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Faction</label>
+                          <select
+                            name="factionId"
+                            defaultValue=""
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                          >
+                            <option value="">None</option>
+                            {factions.map((f) => (
+                              <option key={f.id} value={f.id}>{f.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Role</label>
+                          <select
+                            name="factionRole"
+                            defaultValue="MEMBER"
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                          >
+                            <option value="MEMBER">Member</option>
+                            <option value="LEADER">Leader</option>
+                          </select>
+                        </div>
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-ember-200/80 mb-1">GM Notes</label>
                         <textarea
@@ -691,6 +721,33 @@ export default function AdminPage() {
                           onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, importance: parseInt(e.target.value) } : n))}
                           className="block w-32 border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                         />
+                        <div className="flex space-x-4">
+                          <div>
+                            <label className="text-xs">Faction</label>
+                            <select
+                              value={npc.factionId || ''}
+                              onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, factionId: e.target.value || null } : n))}
+                              className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
+                            >
+                              <option value="">None</option>
+                              {factions.map((f) => (
+                                <option key={f.id} value={f.id}>{f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs">Role</label>
+                            <select
+                              value={npc.factionRole || 'MEMBER'}
+                              onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, factionRole: e.target.value } : n))}
+                              className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
+                              disabled={!npc.factionId}
+                            >
+                              <option value="MEMBER">Member</option>
+                              <option value="LEADER">Leader</option>
+                            </select>
+                          </div>
+                        </div>
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleUpdateNPC(npc)}
@@ -714,6 +771,11 @@ export default function AdminPage() {
                             <h3 className="font-semibold">{npc.name}</h3>
                             <p className="text-sm text-ember-300/60">{npc.description}</p>
                             <p className="text-xs text-ember-400/50">Importance: {npc.importance}/5</p>
+                            {npc.factionId && (
+                              <p className="text-xs text-ember-400/50">
+                                {npc.factionRole === 'LEADER' ? 'Leads' : 'Member of'} {factions.find(f => f.id === npc.factionId)?.name || 'an unknown faction'}
+                              </p>
+                            )}
                           </div>
                           <button
                             onClick={() => setEditingNpc(npc.id)}

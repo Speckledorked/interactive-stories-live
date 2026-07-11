@@ -106,10 +106,11 @@ Without these links, "war" and "politics" have no map to redraw and no one for t
 - [x] Closed a latent `TimelineEvent.visibility` gap in `contextManager.ts`'s scene-summarization paths (now filtered to PUBLIC/MIXED) — defense-in-depth, not a fix for an active leak, since neither path currently reads GM_ONLY text directly
 - [x] Offscreen background ticks can now introduce a new hidden location the same way they already could for NPCs/factions — `callAIForWorldTurn`'s response type and prompt now include `location_changes`, forwarded through `worldTurn.ts` with `sceneOrigin: false`, so a villain's hideout mentioned in an offscreen event registers as a real `Location` row without revealing it to the party
 
-### Phase 7 — Memory & Discovery at Scale
-- [ ] Memory importance decay / summarization so campaign memory stays cheap and retrievable after hundreds of turns, not just dozens
+### Phase 7 — Memory & Discovery at Scale (in progress)
+- [x] Memory importance decay / summarization: `campaign_memories` was uncapped and write-only — nearly every scene, tick change, and offscreen event got its own embedded row forever, so a 100+ scene campaign was really generating several hundred to low thousands of rows, not ~100. `memoryConsolidation.ts` now periodically (every 10 turns, piggybacking on the existing world-turn cadence rather than a new cron) rolls up old `MINOR`/`NORMAL` memories into one per-era summary per 10-turn window and deletes the originals, tagged `era-summary` so a consolidated row is never re-consolidated. `MAJOR`/`CRITICAL` memories are permanently exempt — those are exactly the moments long-term recall exists for. Added baseline test coverage for `createCampaignMemory`/`retrieveRelevantHistory`'s ranking logic, since neither had any tests before this pass
 - [ ] Cross-entity memory queries ("what happened between X and Y") in addition to today's per-entity and semantic search
 - [ ] Player-facing world-state views — faction standings, territory, known rumors — surfaced in the UI instead of only through in-fiction discovery
+- [ ] Known duplication not addressed this pass: `contextManager.ts`'s scene-importance heuristic and `memoryCreation.ts`'s `determineImportance()` independently reimplement the same "is this important" judgment with different keyword lists and different output types — worth reconciling eventually, but that's a riskier refactor than decay and was kept out of scope here
 
 ### Phase 8 — Tooling & Scale (stretch)
 - [ ] Parameterize the per-tick faction/NPC caps (`FACTION_CAP = 10`, `NPC_CAP = 20`) as campaigns grow beyond current defaults

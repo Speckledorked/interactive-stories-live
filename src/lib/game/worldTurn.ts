@@ -8,6 +8,7 @@ import { buildWorldSummaryForAI } from '@/lib/ai/worldState'
 import { applyWorldUpdates, checkAndResolveCompletedClocks } from './stateUpdater'
 import { runWorldTick } from './worldTick'
 import { createCampaignMemory } from '@/lib/ai/memoryCreation'
+import { consolidateOldMemories } from '@/lib/ai/memoryConsolidation'
 import { EventVisibility } from '@prisma/client'
 import { PendingAmbition, WorldChange, clamp } from './tick/types'
 import { AMBITION_CATEGORY_OPTIONS, decideAmbitionOutcome } from './tick/ambitionTick'
@@ -78,6 +79,16 @@ export async function runWorldTurn(campaignId: string) {
     // 4. Update in-game date (simple progression)
     await advanceInGameDate(campaignId)
 
+    // 5. Periodically roll up old, low-importance memories so the RAG table
+    // doesn't grow unbounded over a long campaign — every 10 turns is often
+    // enough to keep it bounded without adding per-turn overhead. Piggybacks
+    // on this existing cadence rather than needing a separate cron job.
+    let memoriesConsolidated = 0
+    if (currentTurn % 10 === 0) {
+      const consolidation = await consolidateOldMemories(campaignId, currentTurn)
+      memoriesConsolidated = consolidation.memoriesRemoved
+    }
+
     console.log('✅ World turn complete')
 
     return {
@@ -85,7 +96,8 @@ export async function runWorldTurn(campaignId: string) {
       clocksAdvanced: advancedClocks.length,
       clocksCompleted: completedClocks.length,
       worldTickChanges: worldTick.changes.length,
-      worldTickHistoryEntries: worldTick.historyEntriesCreated
+      worldTickHistoryEntries: worldTick.historyEntriesCreated,
+      memoriesConsolidated
     }
   } catch (error) {
     console.error('❌ World turn failed:', error)

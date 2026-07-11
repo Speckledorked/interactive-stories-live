@@ -43,6 +43,37 @@ const DEFAULT_OPTIONS: Required<RetrievalOptions> = {
   importanceBoost: true,
 };
 
+const IMPORTANCE_WEIGHTS: Record<string, number> = {
+  CRITICAL: 1.3,
+  MAJOR: 1.15,
+  NORMAL: 1.0,
+  MINOR: 0.85,
+};
+
+/**
+ * Pure post-processing step applied after the SQL similarity+recency query:
+ * filter by minimum similarity, then (optionally) boost by static importance
+ * and re-sort. No DB access — kept separate from retrieveRelevantHistory so
+ * this ranking logic is testable without mocking pgvector.
+ */
+export function filterAndRankMemories(
+  memories: RetrievedMemory[],
+  opts: { minSimilarity: number; importanceBoost: boolean; maxMemories: number }
+): RetrievedMemory[] {
+  let filtered = memories.filter((m) => m.similarity >= opts.minSimilarity);
+
+  if (opts.importanceBoost) {
+    filtered = filtered
+      .map((m) => ({
+        ...m,
+        boostedScore: m.similarity * (IMPORTANCE_WEIGHTS[m.importance] || 1.0),
+      }))
+      .sort((a, b) => b.boostedScore - a.boostedScore);
+  }
+
+  return filtered.slice(0, opts.maxMemories);
+}
+
 /**
  * Retrieve relevant campaign memories using semantic search
  *
@@ -134,26 +165,7 @@ export async function retrieveRelevantHistory(
     `;
 
     // Filter by minimum similarity and apply importance boost
-    let filteredMemories = memories.filter(m => m.similarity >= opts.minSimilarity);
-
-    // Apply importance boost if enabled
-    if (opts.importanceBoost) {
-      const importanceWeights = {
-        CRITICAL: 1.3,
-        MAJOR: 1.15,
-        NORMAL: 1.0,
-        MINOR: 0.85,
-      };
-
-      filteredMemories = filteredMemories
-        .map(m => ({
-          ...m,
-          boostedScore: m.similarity * (importanceWeights[m.importance as keyof typeof importanceWeights] || 1.0),
-        }))
-        .sort((a, b) => b.boostedScore - a.boostedScore);
-    }
-
-    const result = filteredMemories.slice(0, opts.maxMemories);
+    const result = filterAndRankMemories(memories, opts);
 
     console.log(`✓ Retrieved ${result.length} relevant memories for scene ${context.currentScene.sceneNumber}`);
 

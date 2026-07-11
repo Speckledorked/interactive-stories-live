@@ -85,12 +85,12 @@ Without these links, "war" and "politics" have no map to redraw and no one for t
 - [x] Faction leadership continuity — a tick handler enforces "a faction with living members has a living leader" every turn; the most important living member is automatically promoted if it doesn't. (There's no single structured "NPC died" event to hook into yet, so this checks the invariant continuously rather than reacting to a death)
 - [x] NPCs made notable through play get their own independent goal-pursuit loop — this was already true via the consequence system: a relationship-defining player action (killed/betrayed/recruited always, anything else the AI judges "major") escalates a minor NPC to importance 4, which is exactly the threshold the NPC tick simulates, so they immediately start pursuing goals like any major NPC. Verified rather than rebuilt; the one real gap found (a consequence-updated goal kept the old goal's progress) is fixed
 
-### Phase 5 — Sustained Conflict & War
-- [ ] A real multi-turn conflict object (declared → escalating → resolving → resolved) instead of a single-shot Clock standing in for a war
-- [ ] Attrition/momentum tracked per tick, drawing from and feeding back into the involved factions' military and resources
-- [ ] Multi-faction alliances/coalitions inside one conflict
-- [ ] War resolution mechanically changes territory ownership, faction relationships, and the losing side's goal/stats
-- [ ] Offscreen war narration reads from and updates this conflict state, instead of improvising an isolated flavor event each time
+### Phase 5 — Sustained Conflict & War ✅ (core; coalitions deferred)
+- [x] A real multi-turn conflict object (`War`: ESCALATING → RESOLVED) instead of a single-shot Clock standing in for a war. Declaration is the escalation of an existing contest, not a standalone trigger: two rivals both need HIGH military *and* one already has to be contesting the other's territory (via a prior EXPAND or DESTABILIZE_RIVAL) before a war over it can ignite
+- [x] Attrition/momentum tracked per tick — momentum trends toward whichever side has more military (plus small deterministic variance), both sides lose resources/military every turn regardless of who's winning, and it resolves once momentum is decisive or the war has dragged on long enough to call a stalemate. Verified with an isolated 15-turn simulation: resolved in the stronger side's favor after 8 turns of real attrition on both sides
+- [ ] Multi-faction alliances/coalitions inside one conflict — out of scope for now; every war is strictly two factions, attacker vs. defender
+- [x] War resolution mechanically changes territory ownership (the winner takes the contested location) and the loser's stats (an extra stability hit on top of the attrition already paid); a side that collapses mid-war ends it as an immediate stalemate rather than fighting on with nothing
+- [x] The AI world-state summary carries active wars (attacker, defender, momentum, turns elapsed) so "how's the war going" is answered from real state — deliberately read-only for the AI, consistent with the rest of the sim: the tick decides, the AI only narrates
 
 ### Phase 6 — Player-Faction Integration
 - [ ] PC → Faction leadership binding, so "I am the president of X" is a role the engine understands, not just fiction

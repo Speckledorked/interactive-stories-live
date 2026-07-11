@@ -105,6 +105,12 @@ enum FactionRole {
   MEMBER
 }
 
+// World Sim Phase 5: see War below.
+enum WarStatus {
+  ESCALATING
+  RESOLVED
+}
+
 enum WeatherCondition {
   CLEAR
   CLOUDY
@@ -218,6 +224,9 @@ model Campaign {
 
   // World Sim: persisted event stream
   worldEvents   WorldEvent[]
+
+  // World Sim Phase 5: sustained multi-turn conflicts between factions.
+  wars War[]
 }
 
 //
@@ -387,6 +396,10 @@ model Faction {
   // World Sim Phase 4: locations this faction controls.
   territories Location[] @relation("FactionTerritories")
 
+  // World Sim Phase 5: sustained conflicts this faction is party to.
+  warsAsAttacker War[] @relation("WarsAsAttacker")
+  warsAsDefender War[] @relation("WarsAsDefender")
+
   @@index([campaignId])
 }
 
@@ -426,6 +439,49 @@ model Location {
   @@unique([campaignId, name])
   @@index([campaignId])
   @@index([ownerFactionId])
+}
+
+//
+// WARS — World Sim Phase 5
+//
+// A sustained multi-turn conflict, distinct from a one-shot ambition Clock.
+// Declared deterministically when two rival factions are both militarily
+// strong AND there's already contested territory between them (see
+// warTick.ts) — war is the escalation of a contest, not a random event.
+// Each tick while ESCALATING, momentum shifts based on the two sides'
+// relative military strength (plus a small deterministic variance) and both
+// sides take attrition losses regardless of who's winning. Resolves once
+// momentum is decisive or the war has dragged on long enough to call a
+// stalemate, at which point the contested territory's fate is settled.
+
+model War {
+  id       String @id @default(cuid())
+  campaignId String
+
+  name                String
+  attackerFactionId   String
+  defenderFactionId   String
+  contestedLocationId String? // the specific prize this war is over, if any
+
+  // -100 (total defender advantage) .. +100 (total attacker advantage).
+  momentum Int @default(0)
+  status   WarStatus @default(ESCALATING)
+  // Set only once resolved: 'attacker' | 'defender' | 'stalemate'.
+  outcome  String?
+
+  startedTurn  Int
+  resolvedTurn Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  attacker Faction  @relation("WarsAsAttacker", fields: [attackerFactionId], references: [id], onDelete: Cascade)
+  defender Faction  @relation("WarsAsDefender", fields: [defenderFactionId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([attackerFactionId])
+  @@index([defenderFactionId])
 }
 
 //

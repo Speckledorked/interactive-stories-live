@@ -1,5 +1,5 @@
 // src/lib/game/tick/warTick.ts
-// World Sim Phase 5 — sustained multi-turn conflict. Coalitions added later.
+// World Sim Phase 5 — sustained multi-turn conflict, with coalitions.
 //
 // Everything built through Phase 4 (ambitions, collapse, territory) is a
 // one-shot event: a Clock resolves once and it's over. A war is different

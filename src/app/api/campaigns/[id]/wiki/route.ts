@@ -4,28 +4,33 @@ import { prisma } from '@/lib/prisma'
 
 // Fog of war: WikiEntry rows are matched to their source entity by name, not
 // a real FK, so there's no isDiscovered column to filter on directly here.
-// Cross-reference against the currently-discovered NPC/Faction/Location
-// names instead. NPC/FACTION/LOCATION are the only entry types with a
-// corresponding discoverable entity — CLOCK/ITEM/QUEST/LORE/CUSTOM pass
-// through untouched.
+// Cross-reference against the currently-visible NPC/Faction/Location/Clock
+// names instead (isDiscovered for the first three, isHidden for clocks).
+// ITEM/QUEST/LORE/CUSTOM have no corresponding visibility flag and pass
+// through untouched. This is defense in depth on top of the write-side
+// gating in sceneResolver.ts/wikiSync.ts, covering the case where an entity
+// got a wiki entry while visible and was later re-hidden.
 async function filterDiscoveredEntries<T extends { entryType: string; name: string }>(
   campaignId: string,
   entries: T[]
 ): Promise<T[]> {
-  const [discoveredNpcs, discoveredFactions, discoveredLocations] = await Promise.all([
+  const [discoveredNpcs, discoveredFactions, discoveredLocations, visibleClocks] = await Promise.all([
     prisma.nPC.findMany({ where: { campaignId, isDiscovered: true }, select: { name: true } }),
     prisma.faction.findMany({ where: { campaignId, isDiscovered: true }, select: { name: true } }),
     prisma.location.findMany({ where: { campaignId, isDiscovered: true }, select: { name: true } }),
+    prisma.clock.findMany({ where: { campaignId, isHidden: false }, select: { name: true } }),
   ])
 
   const npcNames = new Set(discoveredNpcs.map((n) => n.name))
   const factionNames = new Set(discoveredFactions.map((f) => f.name))
   const locationNames = new Set(discoveredLocations.map((l) => l.name))
+  const clockNames = new Set(visibleClocks.map((c) => c.name))
 
   return entries.filter((entry) => {
     if (entry.entryType === 'NPC') return npcNames.has(entry.name)
     if (entry.entryType === 'FACTION') return factionNames.has(entry.name)
     if (entry.entryType === 'LOCATION') return locationNames.has(entry.name)
+    if (entry.entryType === 'CLOCK') return clockNames.has(entry.name)
     return true
   })
 }

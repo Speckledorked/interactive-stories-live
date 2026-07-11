@@ -34,13 +34,16 @@ export async function GET(
       )
     }
 
-    // Get all factions for the campaign
+    const isAdmin = membership.role === 'ADMIN'
+
+    // Fog of war: admins see undiscovered factions too (they manage them);
+    // everyone else sees only what the party has actually found.
     const factions = await prisma.faction.findMany({
-      where: { campaignId },
+      where: isAdmin ? { campaignId } : { campaignId, isDiscovered: true },
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ factions: redactGmNotesList(factions, membership.role === 'ADMIN') })
+    return NextResponse.json({ factions: redactGmNotesList(factions, isAdmin) })
   } catch (error) {
     console.error('Get factions error:', error)
     return NextResponse.json(

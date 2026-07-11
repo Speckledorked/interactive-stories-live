@@ -7,10 +7,11 @@
 // simulation actually knows who that is.
 //
 // Deliberately scoped to RIVAL and ALLY only — a "cold" relationship layer.
-// AT_WAR is not decided here: declaring and resolving an actual war needs a
-// sustained, multi-turn conflict object that doesn't exist yet (see the
-// README roadmap, Phase 5). Until then, a rivalry is friction and
-// competition, not open conflict.
+// Open war is not decided here: that's warTick.ts's job (the sustained
+// multi-turn War object, Phase 5), which READS these relationships — a war
+// can only ignite between factions on record as RIVALs, and a war coalition
+// only grows through factions on record as ALLYs. A rivalry here is
+// friction and competition; warTick decides when it becomes open conflict.
 //
 // Runs BEFORE tickFactions in the handler order (see worldTick.ts) so it
 // reads each faction's goal as of the end of the previous turn, and
@@ -57,7 +58,55 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
     take: ctx.factionCap,
   })
 
+  // Full campaign roster (uncapped, defunct included) for two jobs below:
+  // knowing which relationship entries point at factions that no longer
+  // exist as independent actors, and naming them in the change reason.
+  const allFactions = await prisma.faction.findMany({
+    where: { campaignId: ctx.campaignId },
+    select: { id: true, name: true, isActive: true },
+  })
+  const activeFactionIds = new Set(allFactions.filter((f) => f.isActive).map((f) => f.id))
+  const factionNameById = new Map(allFactions.map((f) => [f.id, f.name]))
+
   const changes: WorldChange[] = []
+
+  // One mutable working copy per faction, written back once at the end.
+  // The naive alternative — re-spreading faction.relationships fresh for
+  // each pair and writing immediately — silently clobbers earlier same-tick
+  // updates when one faction's relationships change against two or more
+  // partners in the same pass (the later spread of the stale fetched object
+  // doesn't contain the earlier pair's write).
+  const working = new Map<string, Record<string, FactionRelationshipEntry>>()
+  const dirty = new Set<string>()
+  for (const f of factions) {
+    working.set(f.id, { ...((f.relationships as any as Record<string, FactionRelationshipEntry>) || {}) })
+  }
+
+  // Expire relationships whose other side has collapsed or been deleted —
+  // nothing else ever removes these entries (this handler only ever
+  // iterates active pairs), so without this a faction whose only rival
+  // collapsed stays "rivaled" forever, permanently skewing goal
+  // reassessment toward DESTABILIZE_RIVAL.
+  for (const f of factions) {
+    const rels = working.get(f.id)!
+    for (const [otherId, rel] of Object.entries(rels)) {
+      if (activeFactionIds.has(otherId)) continue
+      delete rels[otherId]
+      dirty.add(f.id)
+      changes.push({
+        entityType: 'FACTION',
+        entityId: f.id,
+        entityName: f.name,
+        campaignId: ctx.campaignId,
+        field: 'relationship',
+        previousValue: rel.type,
+        newValue: 'NEUTRAL',
+        reason: `${f.name}'s ${rel.type === 'RIVAL' ? 'rivalry' : 'alliance'} with ${factionNameById.get(otherId) || 'a defunct faction'} lapses — the other side no longer exists as an independent faction`,
+        significant: true,
+        importance: 'NORMAL',
+      })
+    }
+  }
 
   for (let i = 0; i < factions.length; i++) {
     for (let j = i + 1; j < factions.length; j++) {
@@ -65,8 +114,8 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
       const b = factions[j]
 
       const freshType = decideRelationshipTick(a, b)
-      const aRelationships = { ...((a.relationships as any as Record<string, FactionRelationshipEntry>) || {}) }
-      const bRelationships = { ...((b.relationships as any as Record<string, FactionRelationshipEntry>) || {}) }
+      const aRelationships = working.get(a.id)!
+      const bRelationships = working.get(b.id)!
       const existing = aRelationships[b.id]
 
       if (freshType === 'NEUTRAL') {
@@ -74,10 +123,8 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
 
         delete aRelationships[b.id]
         delete bRelationships[a.id]
-        if (!ctx.dryRun) {
-          await prisma.faction.update({ where: { id: a.id }, data: { relationships: aRelationships as any } })
-          await prisma.faction.update({ where: { id: b.id }, data: { relationships: bRelationships as any } })
-        }
+        dirty.add(a.id)
+        dirty.add(b.id)
 
         changes.push({
           entityType: 'FACTION',
@@ -98,10 +145,8 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
 
       aRelationships[b.id] = { type: freshType, since: ctx.turnNumber }
       bRelationships[a.id] = { type: freshType, since: ctx.turnNumber }
-      if (!ctx.dryRun) {
-        await prisma.faction.update({ where: { id: a.id }, data: { relationships: aRelationships as any } })
-        await prisma.faction.update({ where: { id: b.id }, data: { relationships: bRelationships as any } })
-      }
+      dirty.add(a.id)
+      dirty.add(b.id)
 
       changes.push({
         entityType: 'FACTION',
@@ -114,6 +159,15 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
         reason: `${a.name} and ${b.name} become ${freshType === 'RIVAL' ? 'rivals' : 'allies'}, both pursuing ${a.goal === b.goal ? a.goal : `${a.goal}/${b.goal}`}`,
         significant: true,
         importance: 'NORMAL',
+      })
+    }
+  }
+
+  if (!ctx.dryRun) {
+    for (const factionId of dirty) {
+      await prisma.faction.update({
+        where: { id: factionId },
+        data: { relationships: working.get(factionId) as any },
       })
     }
   }

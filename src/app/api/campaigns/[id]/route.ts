@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import { UserRole } from '@prisma/client'
-import { redactGmNotesList } from '@/lib/game/visibility'
+import { redactGmNotes, redactGmNotesList } from '@/lib/game/visibility'
 
 export async function GET(
   request: NextRequest,
@@ -46,8 +46,19 @@ export async function GET(
             }
           }
         },
-        npcs: true,
-        factions: true,
+        // Fog of war: same admin-aware discovery gating as locations below —
+        // an undiscovered NPC/faction must not reach a non-admin's network
+        // response at all, not just have its gmNotes stripped.
+        npcs: {
+          where: membership.role === 'ADMIN'
+            ? {}
+            : { isDiscovered: true }
+        },
+        factions: {
+          where: membership.role === 'ADMIN'
+            ? {}
+            : { isDiscovered: true }
+        },
         locations: {
           // Admin sees all locations (including undiscovered ones, so they
           // can manage them); others see only what the party has found.
@@ -101,15 +112,22 @@ export async function GET(
       )
     }
 
-    // Fog of war: gmNotes on NPCs/factions/locations/clocks is GM-only,
-    // regardless of which of those entities a non-admin can otherwise see.
+    // Fog of war: gmNotes is GM-only on every entity that carries it,
+    // regardless of which entities a non-admin can otherwise see. Timeline
+    // events additionally carry summaryGM — a PUBLIC event still passes the
+    // visibility filter above while its GM-only annotation must not.
     const isAdmin = membership.role === 'ADMIN'
     const redactedCampaign = {
       ...campaign,
+      worldMeta: campaign.worldMeta ? redactGmNotes(campaign.worldMeta, isAdmin) : campaign.worldMeta,
+      characters: redactGmNotesList(campaign.characters, isAdmin),
       npcs: redactGmNotesList(campaign.npcs, isAdmin),
       factions: redactGmNotesList(campaign.factions, isAdmin),
       locations: redactGmNotesList(campaign.locations, isAdmin),
       clocks: redactGmNotesList(campaign.clocks, isAdmin),
+      timeline: redactGmNotesList(campaign.timeline, isAdmin).map(e =>
+        isAdmin ? e : { ...e, summaryGM: null }
+      ),
     }
 
     return NextResponse.json({

@@ -1004,8 +1004,12 @@ async function updateWikiEntries(
     }
   }
 
-  // Update clock entries
-  const clocks = await prisma.clock.findMany({ where: { campaignId } })
+  // Update clock entries. Fog of war: hidden clocks get no wiki entry — the
+  // wiki is readable by every campaign member, and a GM-hidden clock's name/
+  // description/exact progress leaking there would defeat isHidden entirely
+  // (the wiki route's read-side filter deliberately passes CLOCK entries
+  // through, on the assumption this write-side gate exists).
+  const clocks = await prisma.clock.findMany({ where: { campaignId, isHidden: false } })
   for (const clock of clocks) {
     const existing = await prisma.wikiEntry.findFirst({
       where: {

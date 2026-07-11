@@ -144,6 +144,10 @@ export interface AIGMResponse {
         threat_level?: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
         resources?: Record<string, any>
         gm_notes_append?: string
+        // World Sim Phase 6: only set when a player character who leads
+        // this faction makes a strategic decision in-scene — see
+        // schema.ts's FactionChangesSchema for the full reasoning.
+        goal?: 'EXPAND' | 'DEFEND' | 'ENRICH' | 'DESTABILIZE_RIVAL' | 'CONSOLIDATE'
       }
     }>
     location_changes?: Array<{
@@ -582,7 +586,10 @@ You MUST respond with a JSON object matching this structure:
       {"npc_name_or_id": "EXISTING_NPC", "changes": {"notes_append": "New development..."}},
       {"npc_name_or_id": "New Character Name", "is_new": true, "changes": {"description": "Brief 1-sentence description of who they are", "notes_append": "Introduced as..."}}
     ],
-    "faction_changes": [...],
+    "faction_changes": [
+      {"faction_name_or_id": "EXISTING_FACTION", "changes": {"gm_notes_append": "New development..."}},
+      {"faction_name_or_id": "PLAYER_LED_FACTION", "changes": {"goal": "EXPAND", "current_plan": "Massing at the border for a spring offensive"}}
+    ],
     "location_changes": [
       {"name": "The Rusty Flagon", "is_new": true, "description": "A dimly-lit tavern reeking of pipe smoke and old ale.", "location_type": "inn"},
       {"name": "Irongate Keep", "gm_notes_append": "The portcullis is now damaged after the siege."}
@@ -669,6 +676,10 @@ REGISTER NEW NPCs: Whenever you introduce a named character who doesn't already 
 REGISTER NEW FACTIONS: Whenever a new organization, gang, guild, or group emerges mid-campaign (not in the starting world), add them to faction_changes with is_new: true.
 - Include a description (who they are), goals (what they want), and current_plan (what they're doing right now)
 - Example: A new criminal syndicate revealed mid-scene → register with is_new: true
+
+PLAYER-LED FACTIONS: If a faction's leader_character_id in the world state matches a player character in this scene, and that player makes a genuine strategic decision as that leader (e.g. "As Duke, I commit our forces to retaking the border fort" or "I redirect the guild toward trade instead of war"), set changes.goal on that faction to the matching value (EXPAND, DEFEND, ENRICH, DESTABILIZE_RIVAL, or CONSOLIDATE).
+- Only do this for factions the player actually leads — for every other faction, goal is decided automatically by the simulation and setting it here has no effect
+- A player's held or intended actions (not yet acted on) don't count — only a decision actually made this scene
 
 REGISTER LOCATIONS: Whenever the characters visit or you describe a named place, add it to location_changes.
 - is_new: true for the first time a location is named in the story

@@ -153,7 +153,10 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       currentPlan: f.currentPlan,
       threatLevel: f.threatLevel,
       resources: f.resources,
-      influence: f.influence
+      influence: f.influence,
+      // World Sim Phase 6: set only when a player character leads this
+      // faction — see the PLAYER-LED FACTIONS prompt instruction.
+      leader_character_id: f.leaderCharacterId
     })),
 
     locations: locations.map(l => ({
@@ -290,7 +293,8 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       currentPlan: f.currentPlan,
       threatLevel: f.threatLevel,
       resources: f.resources,
-      influence: f.influence
+      influence: f.influence,
+      leader_character_id: f.leaderCharacterId
     })),
 
     clocks: clocks.map(cl => ({

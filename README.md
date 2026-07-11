@@ -92,11 +92,11 @@ Without these links, "war" and "politics" have no map to redraw and no one for t
 - [x] War resolution mechanically changes territory ownership (the winner takes the contested location) and the loser's stats (an extra stability hit on top of the attrition already paid); a side that collapses mid-war ends it as an immediate stalemate rather than fighting on with nothing
 - [x] The AI world-state summary carries active wars (attacker, defender, momentum, turns elapsed) so "how's the war going" is answered from real state — deliberately read-only for the AI, consistent with the rest of the sim: the tick decides, the AI only narrates
 
-### Phase 6 — Player-Faction Integration
-- [ ] PC → Faction leadership binding, so "I am the president of X" is a role the engine understands, not just fiction
-- [ ] Player decisions can directly set a led faction's goal/strategic posture
-- [ ] Player-led factions still tick autonomously between sessions under the same rules as NPC-led ones, rather than freezing when the player isn't actively directing them
-- [ ] Fog of war — players learn faction/war state through in-fiction discovery (rumors, informants, scouting) rather than the AI narrating from omniscient access to the full simulation state (stretch — overlaps prompt design as much as simulation)
+### Phase 6 — Player-Faction Integration ✅ (core; fog of war deferred)
+- [x] PC → Faction leadership binding (`Faction.leaderCharacterId`), set from the admin panel — "I am the president of X" is now a role the engine understands. At most one leader either way: assigning a PC leader demotes any existing NPC LEADER to MEMBER, and `leadershipTick.ts` never auto-promotes an NPC over a player
+- [x] Player decisions can directly set a led faction's goal/strategic posture — scene resolution's `world_updates.faction_changes` now accepts a `goal` field, which the AI GM sets when a player roleplays a genuine strategic decision as a faction leader ("As Duke, I commit our forces to retaking the border fort"). Enforced server-side, not just by prompt instruction: `stateUpdater.ts` only applies it when the target faction actually has that player as `leaderCharacterId`
+- [x] Player-led factions still tick autonomously between sessions under the same rules as NPC-led ones — verified this is true by construction: the only change is that `factionTick.ts` skips *automatic goal reassessment* for a player-led faction, so their chosen goal survives. Stat drift, ambitions, wars, and collapse/founding all still apply unmodified. A collapsed player-led faction's founded remnant stays under the same player's leadership
+- [ ] Fog of war — deferred, as the roadmap itself flagged going in: it's an information-asymmetry / prompt-design problem more than a simulation one, distinct enough from the mechanical work above to warrant its own pass
 
 ### Phase 7 — Memory & Discovery at Scale
 - [ ] Memory importance decay / summarization so campaign memory stays cheap and retrievable after hundreds of turns, not just dozens

@@ -103,6 +103,7 @@ export async function POST(
         threatLevel: body.threatLevel || 1,
         relationships: body.relationships || null,
         gmNotes: body.gmNotes || null,
+        leaderCharacterId: body.leaderCharacterId || null,
       },
     })
 

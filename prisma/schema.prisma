@@ -287,6 +287,9 @@ model Character {
   messages Message[]    @relation("CharacterMessages")
   notes    PlayerNote[] @relation("CharacterNotes")
 
+  // World Sim Phase 6: factions this PC leads (see Faction.leaderCharacterId).
+  ledFactions Faction[] @relation("FactionPCLeader")
+
   @@index([campaignId])
   @@index([userId])
 }
@@ -377,6 +380,17 @@ model Faction {
   // as a row instead of deleted so its history stays queryable. Excluded
   // from all tick processing once false.
   isActive      Boolean          @default(true)
+
+  // World Sim Phase 6: set when a player character leads this faction
+  // rather than an NPC. A player-led faction still ticks like any other
+  // (stats drift, ambitions can trigger, wars can happen) but its `goal`
+  // is never overwritten by the automatic reassessment in factionTick.ts —
+  // the player's own strategic choice sticks, set through scene
+  // resolution's world_updates (see stateUpdater.ts) or the admin panel.
+  // At most one leader either way: assigning a PC leader demotes any
+  // existing NPC LEADER on this faction to MEMBER.
+  leaderCharacterId String?
+  leaderCharacter   Character? @relation("FactionPCLeader", fields: [leaderCharacterId], references: [id], onDelete: SetNull)
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 

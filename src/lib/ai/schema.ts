@@ -151,7 +151,13 @@ export const FactionChangesSchema = z.object({
     current_plan: z.string().optional(),
     threat_level: z.enum(['LOW', 'MEDIUM', 'HIGH', 'EXTREME']).optional(),
     resources: z.record(z.any()).optional(),
-    gm_notes_append: z.string().optional()
+    gm_notes_append: z.string().optional(),
+    // World Sim Phase 6: the faction's simulation-tick goal. Only set this
+    // when a scene has a player character directing a faction they lead
+    // (Faction.leaderCharacterId) — for any other faction the deterministic
+    // tick reassesses this automatically, and setting it here would just be
+    // overwritten next turn.
+    goal: z.enum(['EXPAND', 'DEFEND', 'ENRICH', 'DESTABILIZE_RIVAL', 'CONSOLIDATE']).optional()
   })
 })
 

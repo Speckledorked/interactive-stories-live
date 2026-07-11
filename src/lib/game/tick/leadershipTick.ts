@@ -10,6 +10,11 @@
 // LEADER. If it doesn't, the most important living member steps up.
 // Idempotent — a faction that already has a living leader is untouched, so
 // this reads as "keep this true" rather than "something just happened."
+//
+// World Sim Phase 6 — a faction with a player character as its leader
+// (Faction.leaderCharacterId) is skipped entirely: an NPC never gets
+// auto-promoted over a player, even if every affiliated NPC member outranks
+// them in importance. The player's leadership isn't a gap to fill.
 
 import { prisma } from '@/lib/prisma'
 import { TickContext, TickHandlerResult, WorldChange } from './types'
@@ -32,6 +37,7 @@ export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandl
   const changes: WorldChange[] = []
 
   for (const faction of factions) {
+    if (faction.leaderCharacterId) continue
     if (faction.members.length === 0) continue
 
     const hasLivingLeader = faction.members.some((m) => m.factionRole === 'LEADER')

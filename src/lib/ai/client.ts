@@ -807,7 +807,7 @@ export async function callAIForWorldTurn(
   clocksAboutToComplete: any[],
   campaignId?: string,
   completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = [],
-  pendingAmbitions: Array<{ factionId: string; factionName: string; goal: string; archetype: string }> = [],
+  pendingAmbitions: Array<{ factionId: string; factionName: string; goal: string; archetype: string; targetFactionName?: string }> = [],
   recentAmbitionNames: string[] = []
 ): Promise<{
   offscreen_events: Array<{
@@ -867,7 +867,7 @@ something else. Don't leave any of them without a new goals value.`
     ? `\n\nThese factions have committed enough resources to attempt something
 major this turn. The commitment itself already happened — your only job is
 picking WHAT it is:
-${pendingAmbitions.map(a => `- ${a.factionName} (id: ${a.factionId}), pursuing ${a.goal}: choose one of [${AMBITION_CATEGORY_OPTIONS[a.archetype as keyof typeof AMBITION_CATEGORY_OPTIONS]?.[a.goal as 'ENRICH' | 'EXPAND']?.join(', ') || 'tournament, trade fair'}]`).join('\n')}
+${pendingAmbitions.map(a => `- ${a.factionName} (id: ${a.factionId}), pursuing ${a.goal}${a.targetFactionName ? ` against ${a.targetFactionName}` : ''}: choose one of [${AMBITION_CATEGORY_OPTIONS[a.archetype as keyof typeof AMBITION_CATEGORY_OPTIONS]?.[a.goal as 'ENRICH' | 'EXPAND' | 'DESTABILIZE_RIVAL']?.join(', ') || 'tournament, trade fair'}]`).join('\n')}
 ${recentAmbitionNames.length > 0
   ? `\nAvoid repeating or closely echoing anything already done recently: ${recentAmbitionNames.join(', ')}.`
   : ''}

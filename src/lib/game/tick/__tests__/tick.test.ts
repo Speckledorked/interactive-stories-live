@@ -217,27 +217,49 @@ describe('decideAmbitionOutcome', () => {
   it('produces exactly one of the two known ENRICH outcome shapes', () => {
     const outcome = decideAmbitionOutcome(input)
     if (outcome.success) {
-      expect(outcome).toEqual({ success: true, resourceDelta: 10, stabilityDelta: 2, militaryDelta: 0, threatLevelDelta: 1, consequenceText: `${input.factionName} comes out ahead, and its coffers and reputation grow.` })
+      expect(outcome).toEqual({ success: true, resourceDelta: 10, stabilityDelta: 2, militaryDelta: 0, threatLevelDelta: 1, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName} comes out ahead, and its coffers and reputation grow.` })
     } else {
-      expect(outcome).toEqual({ success: false, resourceDelta: -6, stabilityDelta: -3, militaryDelta: 0, threatLevelDelta: 0, consequenceText: `${input.factionName}'s effort falls flat, and the setback dents its standing.` })
+      expect(outcome).toEqual({ success: false, resourceDelta: -6, stabilityDelta: -3, militaryDelta: 0, threatLevelDelta: 0, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName}'s effort falls flat, and the setback dents its standing.` })
     }
   })
 
   it('produces exactly one of the two known EXPAND outcome shapes', () => {
     const outcome = decideAmbitionOutcome({ ...input, goal: 'EXPAND' })
     if (outcome.success) {
-      expect(outcome).toEqual({ success: true, resourceDelta: 0, stabilityDelta: -2, militaryDelta: 6, threatLevelDelta: 1, consequenceText: `${input.factionName} claims new ground, reshaping the region's balance of power.` })
+      expect(outcome).toEqual({ success: true, resourceDelta: 0, stabilityDelta: -2, militaryDelta: 6, threatLevelDelta: 1, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName} claims new ground, reshaping the region's balance of power.` })
     } else {
-      expect(outcome).toEqual({ success: false, resourceDelta: -8, stabilityDelta: -4, militaryDelta: -3, threatLevelDelta: 0, consequenceText: `${input.factionName} overextends and is thrown back, its ambitions costing more than they gained.` })
+      expect(outcome).toEqual({ success: false, resourceDelta: -8, stabilityDelta: -4, militaryDelta: -3, threatLevelDelta: 0, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName} overextends and is thrown back, its ambitions costing more than they gained.` })
     }
   })
 
-  it('produces exactly one of the two known DESTABILIZE_RIVAL outcome shapes', () => {
-    const outcome = decideAmbitionOutcome({ ...input, goal: 'DESTABILIZE_RIVAL' })
+  it('produces exactly one of the two known DESTABILIZE_RIVAL outcome shapes, naming the target when given', () => {
+    const outcome = decideAmbitionOutcome({ ...input, goal: 'DESTABILIZE_RIVAL', targetFactionName: 'Sable Reach' })
     if (outcome.success) {
-      expect(outcome).toEqual({ success: true, resourceDelta: -3, stabilityDelta: 1, militaryDelta: 2, threatLevelDelta: 1, consequenceText: `${input.factionName} deals a blow to its rival's standing, and returns stronger for the effort.` })
+      expect(outcome).toEqual({ success: true, resourceDelta: -3, stabilityDelta: 1, militaryDelta: 2, threatLevelDelta: 1, targetStabilityDelta: -4, targetResourceDelta: -3, consequenceText: `${input.factionName} deals a blow to Sable Reach's standing, and returns stronger for the effort.` })
     } else {
-      expect(outcome).toEqual({ success: false, resourceDelta: -5, stabilityDelta: -3, militaryDelta: -4, threatLevelDelta: 0, consequenceText: `${input.factionName}'s scheme against its rival unravels, costing it dearly.` })
+      expect(outcome).toEqual({ success: false, resourceDelta: -5, stabilityDelta: -3, militaryDelta: -4, threatLevelDelta: 0, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName}'s scheme against Sable Reach unravels, costing it dearly.` })
+    }
+  })
+
+  it('falls back to generic phrasing when no target is on record', () => {
+    const outcome = decideAmbitionOutcome({ ...input, goal: 'DESTABILIZE_RIVAL' })
+    expect(outcome.consequenceText).toContain('its rival')
+  })
+
+  it('never damages the target on a failed DESTABILIZE_RIVAL attempt', () => {
+    // Sweep clock ids to find both a success and a failure deterministically,
+    // and confirm target deltas are only ever nonzero on the success branch.
+    const outcomes = Array.from({ length: 20 }, (_, i) =>
+      decideAmbitionOutcome({ ...input, goal: 'DESTABILIZE_RIVAL', targetFactionName: 'Sable Reach', clockId: `clock-${i}` })
+    )
+    for (const outcome of outcomes) {
+      if (!outcome.success) {
+        expect(outcome.targetStabilityDelta).toBe(0)
+        expect(outcome.targetResourceDelta).toBe(0)
+      } else {
+        expect(outcome.targetStabilityDelta).toBeLessThan(0)
+        expect(outcome.targetResourceDelta).toBeLessThan(0)
+      }
     }
   })
 

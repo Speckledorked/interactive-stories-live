@@ -362,6 +362,9 @@ model Faction {
   // pursuing an ambitious goal (e.g. a tournament, a campaign of conquest).
   spawnedClocks Clock[] @relation("FactionSpawnedClocks")
 
+  // World Sim Phase 3: DESTABILIZE_RIVAL clocks aimed at this faction.
+  targetedClocks Clock[] @relation("FactionTargetedClocks")
+
   @@index([campaignId])
 }
 
@@ -424,9 +427,17 @@ model Clock {
   sourceFactionId String?
   sourceFaction   Faction? @relation("FactionSpawnedClocks", fields: [sourceFactionId], references: [id], onDelete: SetNull)
 
+  // World Sim Phase 3: set when this ambition is a DESTABILIZE_RIVAL clock
+  // aimed at a specific rival (see relationshipTick.ts) — lets
+  // resolveCompletedAmbitions in worldTurn.ts apply real stat damage to the
+  // named rival on success, not just to the faction that committed to it.
+  targetFactionId String?
+  targetFaction   Faction? @relation("FactionTargetedClocks", fields: [targetFactionId], references: [id], onDelete: SetNull)
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
+  @@index([targetFactionId])
   @@index([sourceFactionId])
 }
 

@@ -24,8 +24,6 @@ import type { FactionGoal } from '@prisma/client'
 import { band } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange } from './types'
 
-const FACTION_CAP = 10
-
 export type RelationshipType = 'RIVAL' | 'ALLY' | 'NEUTRAL'
 
 export interface FactionRelationshipEntry {
@@ -56,7 +54,7 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
   const factions = await prisma.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
     orderBy: { createdAt: 'asc' },
-    take: FACTION_CAP,
+    take: ctx.factionCap,
   })
 
   const changes: WorldChange[] = []

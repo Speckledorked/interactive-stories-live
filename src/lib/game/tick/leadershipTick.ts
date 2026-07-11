@@ -19,13 +19,11 @@
 import { prisma } from '@/lib/prisma'
 import { TickContext, TickHandlerResult, WorldChange } from './types'
 
-const FACTION_CAP = 10
-
 export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandlerResult> {
   const factions = await prisma.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
     orderBy: { createdAt: 'asc' },
-    take: FACTION_CAP,
+    take: ctx.factionCap,
     include: {
       members: {
         where: { isAlive: true },

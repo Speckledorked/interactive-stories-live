@@ -26,7 +26,6 @@ import { prisma } from '@/lib/prisma'
 import type { FactionGoal, FactionArchetype } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, PendingAmbition, clamp, stableHash } from './types'
 
-const FACTION_CAP = 10
 const RESOURCES_HIGH_THRESHOLD = 67 // matches factionTick.ts's band() HIGH cutoff
 
 // Committing to an ambition spends resources rather than only requiring a
@@ -165,7 +164,7 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
       goal: { in: ['ENRICH', 'EXPAND', 'DESTABILIZE_RIVAL'] },
     },
     orderBy: { createdAt: 'asc' },
-    take: FACTION_CAP,
+    take: ctx.factionCap,
     include: {
       spawnedClocks: {
         select: { currentTicks: true, maxTicks: true },

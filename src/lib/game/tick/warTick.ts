@@ -25,8 +25,6 @@
 import { prisma } from '@/lib/prisma'
 import { TickContext, TickHandlerResult, WorldChange, clamp, stableHash } from './types'
 
-const FACTION_CAP = 10
-
 const WAR_MILITARY_THRESHOLD = 67 // matches factionTick.ts's band() HIGH cutoff — both sides must be genuinely strong
 const WAR_DECISIVE_MOMENTUM = 60
 const WAR_MAX_DURATION = 10 // ticks before an inconclusive war is called a stalemate
@@ -224,7 +222,7 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
   const factions = await prisma.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
     orderBy: { createdAt: 'asc' },
-    take: FACTION_CAP,
+    take: ctx.factionCap,
   })
 
   const locations = await prisma.location.findMany({

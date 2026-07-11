@@ -13,6 +13,7 @@
 // another handler to TICK_HANDLERS below. Nothing else about this file
 // needs to change for that to work.
 
+import { prisma } from '@/lib/prisma'
 import { tickWeather } from './tick/weatherTick'
 import { tickFactionRelationships } from './tick/relationshipTick'
 import { tickFactions } from './tick/factionTick'
@@ -24,6 +25,7 @@ import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { TickContext, TickHandler, WorldChange, WorldTickResult, PendingAmbition } from './tick/types'
+import { resolveTickCaps } from './tick/caps'
 
 // tickFactionRelationships runs BEFORE tickFactions on purpose: it reads
 // each faction's goal as of the end of the previous turn and writes this
@@ -55,7 +57,12 @@ const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tic
  * WorldMeta.currentTurnNumber progression instead of inventing a new one.
  */
 export async function runWorldTick(campaignId: string, turnNumber: number): Promise<WorldTickResult> {
-  const ctx: TickContext = { campaignId, turnNumber }
+  const worldMeta = await prisma.worldMeta.findUnique({
+    where: { campaignId },
+    select: { factionCap: true, npcCap: true },
+  })
+  const { factionCap, npcCap } = resolveTickCaps(worldMeta)
+  const ctx: TickContext = { campaignId, turnNumber, factionCap, npcCap }
 
   const changes: WorldChange[] = []
   const pendingAmbitions: PendingAmbition[] = []

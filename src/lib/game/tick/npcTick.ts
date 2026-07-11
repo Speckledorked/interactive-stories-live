@@ -28,7 +28,6 @@ import { TickContext, TickHandlerResult, WorldChange, stableHash } from './types
 // escalation in src/lib/game/consequences.ts) use the exact same cutoff for
 // "major" rather than redefining it.
 export const MAJOR_IMPORTANCE_THRESHOLD = 4
-const NPC_CAP = 20
 
 const TIME_OF_DAY = ['morning', 'afternoon', 'evening', 'night'] as const
 type TimeOfDay = (typeof TIME_OF_DAY)[number]
@@ -127,7 +126,7 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
     prisma.nPC.findMany({
       where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
       orderBy: { importance: 'desc' },
-      take: NPC_CAP,
+      take: ctx.npcCap,
       include: { faction: { select: { name: true, goal: true, isActive: true } } },
     }),
     prisma.location.findMany({

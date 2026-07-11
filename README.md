@@ -43,6 +43,70 @@ inventing one on the spot.
 Set a faction's **Simulation Goal** and **Archetype** from the campaign
 admin panel (Factions tab) to opt it into this system.
 
+## Living World Roadmap
+
+The long-term goal is a world that simulates itself autonomously — factions,
+NPCs, and territory that tick forward on their own agendas whether or not
+players are present — and remembers everything that happens well enough to
+answer for it later, the way a human GM running a Crusader Kings-style
+campaign would. This list tracks that effort phase by phase. Phases 1–2 are
+live in production; everything below them is ordered, not scheduled — check
+items off as they land and update this list in the same PR that does the
+work.
+
+### Phase 1 — Deterministic World Tick ✅
+- [x] Single AI-free tick runs after every player action (NPCs, factions, weather)
+- [x] Every change is written to a durable event log (`world_events`), independent of whether it's narrated
+- [x] Significant changes are logged to campaign history and synced to the Wiki
+- [x] NPCs move on independently-varying schedules and make deterministic progress toward their stated goal
+
+### Phase 2 — Autonomous Faction Ambitions ✅
+- [x] Factions with an outward-looking goal (EXPAND/ENRICH) autonomously commit to a major ambition once resourced enough
+- [x] Ambition *flavor* (tournament, coup, black-market venture, ...) is chosen by an offscreen AI call from a bounded, faction-archetype-specific list, with a deterministic fallback if the AI is unavailable
+- [x] Ambition outcomes get embedded into RAG memory so they're recallable indefinitely, not just for the next few turns
+- [x] Major NPCs get new goals automatically when their current one completes, instead of going idle
+
+### Phase 3 — Faction Feedback & Evolution
+The biggest gap right now: ambitions and goals don't actually respond to what happens. Winning a tournament is currently a nice sentence with zero mechanical effect.
+- [ ] Ambition outcomes apply real stat deltas (resources/stability/military/threatLevel) on completion, not flavor text only
+- [ ] Attempting an ambition costs resources, instead of only being gated by a resource threshold
+- [ ] Automatic goal reassessment each tick, based on current stats and recent history — replaces the admin-panel manual goal setting, which exists today only as a stopgap
+- [ ] Faction-to-faction relationship state (rival / ally / at war) that the tick actually reads and writes — replaces the `Faction.relationships` field, which exists in the schema but is currently dead (write-only, used only by campaign export)
+- [ ] Faction collapse — sustained low stability leads to disbanding, absorption by a rival, or a civil-war split
+- [ ] Faction founding — new factions can emerge from world events (splinter groups, rebellions, successor states)
+
+### Phase 4 — NPCs and Territory in the Web
+Without these links, "war" and "politics" have no map to redraw and no one for the outcome to happen to.
+- [ ] NPC → Faction affiliation (leader / member / rival), and wiring it into tick logic and prompts
+- [ ] Faction → Territory ownership on Location
+- [ ] Contested / border territory state
+- [ ] NPC defection — an NPC's faction allegiance can change based on events, not just their goal text
+- [ ] Faction leadership continuity — when a leader NPC dies, a successor is chosen automatically instead of the faction going headless
+- [ ] NPCs made notable through play (spared, betrayed, promoted) get their own independent goal-pursuit loop, the same way factions do today, not just a static memory of what happened to them
+
+### Phase 5 — Sustained Conflict & War
+- [ ] A real multi-turn conflict object (declared → escalating → resolving → resolved) instead of a single-shot Clock standing in for a war
+- [ ] Attrition/momentum tracked per tick, drawing from and feeding back into the involved factions' military and resources
+- [ ] Multi-faction alliances/coalitions inside one conflict
+- [ ] War resolution mechanically changes territory ownership, faction relationships, and the losing side's goal/stats
+- [ ] Offscreen war narration reads from and updates this conflict state, instead of improvising an isolated flavor event each time
+
+### Phase 6 — Player-Faction Integration
+- [ ] PC → Faction leadership binding, so "I am the president of X" is a role the engine understands, not just fiction
+- [ ] Player decisions can directly set a led faction's goal/strategic posture
+- [ ] Player-led factions still tick autonomously between sessions under the same rules as NPC-led ones, rather than freezing when the player isn't actively directing them
+- [ ] Fog of war — players learn faction/war state through in-fiction discovery (rumors, informants, scouting) rather than the AI narrating from omniscient access to the full simulation state (stretch — overlaps prompt design as much as simulation)
+
+### Phase 7 — Memory & Discovery at Scale
+- [ ] Memory importance decay / summarization so campaign memory stays cheap and retrievable after hundreds of turns, not just dozens
+- [ ] Cross-entity memory queries ("what happened between X and Y") in addition to today's per-entity and semantic search
+- [ ] Player-facing world-state views — faction standings, territory, known rumors — surfaced in the UI instead of only through in-fiction discovery
+
+### Phase 8 — Tooling & Scale (stretch)
+- [ ] Parameterize the per-tick faction/NPC caps (`FACTION_CAP = 10`, `NPC_CAP = 20`) as campaigns grow beyond current defaults
+- [ ] Admin visualization of faction relationships and territory (a simple map or graph view)
+- [ ] Simulation debug tooling — replay a tick, inspect why a given decision was made
+
 ## Prerequisites
 
 - **Node.js** 18+ and npm

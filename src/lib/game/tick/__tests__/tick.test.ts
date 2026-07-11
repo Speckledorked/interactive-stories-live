@@ -70,18 +70,18 @@ describe('decideNpcTick', () => {
 })
 
 describe('decideAmbitionTick', () => {
-  const base = { name: 'Thornburg Guild', resources: 80, hasActiveSpawnedClock: false }
+  const base = { name: 'Thornburg Guild', archetype: 'GENERIC' as const, resources: 80, hasActiveSpawnedClock: false }
 
   it('spawns a tournament clock for a high-resource ENRICH faction', () => {
     const decision = decideAmbitionTick({ ...base, goal: 'ENRICH' })
     expect(decision.shouldSpawn).toBe(true)
-    expect(decision.fallbackName).toBe('Thornburg Guild Grand Tournament')
+    expect(decision.fallbackName).toBe('Thornburg Guild Tournament')
   })
 
   it('spawns a campaign clock for a high-resource EXPAND faction', () => {
     const decision = decideAmbitionTick({ ...base, goal: 'EXPAND' })
     expect(decision.shouldSpawn).toBe(true)
-    expect(decision.fallbackName).toBe('Thornburg Guild Territorial Campaign')
+    expect(decision.fallbackName).toBe('Thornburg Guild Military Campaign')
   })
 
   it('does not spawn below the resource threshold', () => {
@@ -98,6 +98,18 @@ describe('decideAmbitionTick', () => {
     expect(decideAmbitionTick({ ...base, goal: 'DEFEND' }).shouldSpawn).toBe(false)
     expect(decideAmbitionTick({ ...base, goal: 'CONSOLIDATE' }).shouldSpawn).toBe(false)
     expect(decideAmbitionTick({ ...base, goal: 'DESTABILIZE_RIVAL' }).shouldSpawn).toBe(false)
+  })
+
+  it('picks a different flavor pool for a different archetype pursuing the same goal', () => {
+    const guild = decideAmbitionTick({ ...base, goal: 'ENRICH' })
+    const secretSociety = decideAmbitionTick({ ...base, archetype: 'SECRET_SOCIETY', goal: 'ENRICH' })
+    const political = decideAmbitionTick({ ...base, archetype: 'POLITICAL', goal: 'ENRICH' })
+    expect(guild.fallbackName).toBe('Thornburg Guild Tournament')
+    expect(secretSociety.fallbackName).toBe('Thornburg Guild Black-Market Venture')
+    expect(political.fallbackName).toBe('Thornburg Guild Fundraising Gala')
+    // Mechanical pacing (category/maxTicks) stays goal-driven, not archetype-driven.
+    expect(guild.category).toBe(secretSociety.category)
+    expect(guild.maxTicks).toBe(secretSociety.maxTicks)
   })
 })
 

@@ -37,12 +37,31 @@ interface Faction {
   name: string
   description: string
   goals: string
+  goal: string
+  archetype: string
   resources: number
   influence: number
   currentPlan: string
   threatLevel: number
   gmNotes: string
 }
+
+// Keep in sync with FactionGoal in prisma/schema.prisma.
+const FACTION_GOALS = ['EXPAND', 'DEFEND', 'ENRICH', 'DESTABILIZE_RIVAL', 'CONSOLIDATE'] as const
+
+// Keep in sync with FactionArchetype in prisma/schema.prisma. Only used to
+// pick which flavor list the world-sim ambition system draws from (see
+// AMBITION_CATEGORY_OPTIONS in src/lib/game/tick/ambitionTick.ts) — it's
+// cosmetic everywhere else.
+const FACTION_ARCHETYPES: Array<{ value: string; label: string }> = [
+  { value: 'GENERIC', label: 'Generic (guild, kingdom, house)' },
+  { value: 'SECRET_SOCIETY', label: 'Secret Society' },
+  { value: 'CRIMINAL', label: 'Criminal Organization' },
+  { value: 'RELIGIOUS', label: 'Religious Order' },
+  { value: 'MILITARY', label: 'Military Order' },
+  { value: 'CORPORATION', label: 'Corporation' },
+  { value: 'POLITICAL', label: 'Political Faction' },
+]
 
 interface Clock {
   id: string
@@ -730,6 +749,8 @@ export default function AdminPage() {
                           name: formData.get('name') as string,
                           description: formData.get('description') as string || undefined,
                           goals: formData.get('goals') as string || undefined,
+                          goal: formData.get('goal') as string || undefined,
+                          archetype: formData.get('archetype') as string || undefined,
                           currentPlan: formData.get('currentPlan') as string || undefined,
                           threatLevel: parseInt(formData.get('threatLevel') as string) || 1,
                           resources: parseInt(formData.get('resources') as string) || 50,
@@ -762,6 +783,34 @@ export default function AdminPage() {
                           rows={2}
                           className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Simulation Goal</label>
+                          <select
+                            name="goal"
+                            defaultValue="CONSOLIDATE"
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                          >
+                            {FACTION_GOALS.map((g) => (
+                              <option key={g} value={g}>{g.replace('_', ' ')}</option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-ember-400/50 mt-1">Drives what this faction pursues in the background each turn.</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Archetype</label>
+                          <select
+                            name="archetype"
+                            defaultValue="GENERIC"
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                          >
+                            {FACTION_ARCHETYPES.map((a) => (
+                              <option key={a.value} value={a.value}>{a.label}</option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-ember-400/50 mt-1">Shapes the flavor of ambitions this faction pursues (e.g. tournament vs. coup).</p>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-ember-200/80 mb-1">Current Plan</label>
@@ -863,6 +912,32 @@ export default function AdminPage() {
                             />
                           </div>
                         </div>
+                        <div className="flex space-x-4">
+                          <div>
+                            <label className="text-xs">Simulation Goal</label>
+                            <select
+                              value={faction.goal || 'CONSOLIDATE'}
+                              onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, goal: e.target.value } : f))}
+                              className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
+                            >
+                              {FACTION_GOALS.map((g) => (
+                                <option key={g} value={g}>{g.replace('_', ' ')}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs">Archetype</label>
+                            <select
+                              value={faction.archetype || 'GENERIC'}
+                              onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, archetype: e.target.value } : f))}
+                              className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
+                            >
+                              {FACTION_ARCHETYPES.map((a) => (
+                                <option key={a.value} value={a.value}>{a.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleUpdateFaction(faction)}
@@ -887,6 +962,9 @@ export default function AdminPage() {
                             <p className="text-sm text-ember-300/60">{faction.currentPlan}</p>
                             <p className="text-xs text-ember-400/50">
                               Threat: {faction.threatLevel}/5 | Resources: {faction.resources}/100
+                            </p>
+                            <p className="text-xs text-ember-400/50">
+                              {(faction.goal || 'CONSOLIDATE').replace('_', ' ')} · {FACTION_ARCHETYPES.find(a => a.value === faction.archetype)?.label || 'Generic'}
                             </p>
                           </div>
                           <button

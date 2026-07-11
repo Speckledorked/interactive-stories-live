@@ -43,6 +43,8 @@ export async function PATCH(
         name: body.name,
         description: body.description,
         goals: body.goals,
+        goal: body.goal,
+        archetype: body.archetype,
         resources: body.resources,
         influence: body.influence,
         currentPlan: body.currentPlan,

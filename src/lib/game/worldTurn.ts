@@ -181,37 +181,42 @@ async function generateOffscreenEvents(
       [...advancedClocks, ...completedClocks],
       campaignId,
       completedGoalNpcs,
-      pendingAmbitions.map((a) => ({ factionId: a.factionId, factionName: a.factionName, goal: a.goal })),
+      pendingAmbitions.map((a) => ({ factionId: a.factionId, factionName: a.factionName, goal: a.goal, archetype: a.archetype })),
       recentAmbitionNames
     )
 
     // Turn each pending ambition into a real Clock — the tick already decided
     // WHETHER; this resolves WHAT using the AI's pick if it gave one and is
-    // actually one of the bounded options for that faction's goal, otherwise
-    // the deterministic fallback so the ambition never silently disappears.
+    // actually one of the bounded options for that faction's archetype+goal,
+    // otherwise the deterministic fallback so the ambition never silently
+    // disappears. `category` on the Clock stays the MECHANICAL pacing value
+    // from the tick (drives advanceClocks' tick speed below) — the flavor
+    // pick/fallback is narrative only and goes in gmNotes instead, so a
+    // "black-market venture" flavor can never be mistaken for a pacing tag.
     for (const pending of pendingAmbitions) {
-      const validOptions = AMBITION_CATEGORY_OPTIONS[pending.goal as 'ENRICH' | 'EXPAND'] || []
+      const validOptions = AMBITION_CATEGORY_OPTIONS[pending.archetype as keyof typeof AMBITION_CATEGORY_OPTIONS]?.[pending.goal as 'ENRICH' | 'EXPAND'] || []
       const pick = aiResult.ambition_picks?.find((p) => p.faction_id === pending.factionId)
       const useAiPick = !!pick && validOptions.includes(pick.category)
 
       const name = useAiPick ? pick!.name : pending.fallbackName
       const description = useAiPick ? (pick!.description || pending.fallbackConsequence) : pending.fallbackConsequence
-      const category = useAiPick ? pick!.category : pending.category
+      const flavor = useAiPick ? pick!.category : pending.fallbackFlavor
 
       await prisma.clock.create({
         data: {
           campaignId,
           name,
           description,
-          category,
+          category: pending.category,
           maxTicks: pending.maxTicks,
           currentTicks: 0,
           consequence: pending.fallbackConsequence,
+          gmNotes: `Ambition type: ${flavor}`,
           sourceFactionId: pending.factionId,
         },
       })
 
-      console.log(`  🎯 ${pending.factionName} committed to: ${name}${useAiPick ? '' : ' (fallback)'}`)
+      console.log(`  🎯 ${pending.factionName} committed to: ${name} [${flavor}]${useAiPick ? '' : ' (fallback)'}`)
     }
 
     // Create timeline events for each offscreen event

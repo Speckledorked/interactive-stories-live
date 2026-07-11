@@ -38,8 +38,27 @@ export interface TickContext {
   turnNumber: number
 }
 
+/**
+ * A faction has deterministically earned a major ambition this tick (see
+ * ambitionTick.ts) but the specific flavor of it is left to the offscreen
+ * AI narration path — the tick decides WHETHER, not WHAT. fallbackName/
+ * fallbackConsequence/maxTicks/category are used verbatim if the AI call
+ * fails or doesn't address this faction, so an ambition never silently
+ * goes nowhere.
+ */
+export interface PendingAmbition {
+  factionId: string
+  factionName: string
+  goal: string
+  maxTicks: number
+  category: string
+  fallbackName: string
+  fallbackConsequence: string
+}
+
 export interface TickHandlerResult {
   changes: WorldChange[]
+  pendingAmbitions?: PendingAmbition[]
 }
 
 /**
@@ -56,6 +75,7 @@ export interface WorldTickResult {
   timestamp: Date
   changes: WorldChange[]
   historyEntriesCreated: number
+  pendingAmbitions: PendingAmbition[]
 }
 
 /**

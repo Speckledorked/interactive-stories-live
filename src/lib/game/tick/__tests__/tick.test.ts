@@ -75,13 +75,13 @@ describe('decideAmbitionTick', () => {
   it('spawns a tournament clock for a high-resource ENRICH faction', () => {
     const decision = decideAmbitionTick({ ...base, goal: 'ENRICH' })
     expect(decision.shouldSpawn).toBe(true)
-    expect(decision.clockName).toBe('Thornburg Guild Grand Tournament')
+    expect(decision.fallbackName).toBe('Thornburg Guild Grand Tournament')
   })
 
   it('spawns a campaign clock for a high-resource EXPAND faction', () => {
     const decision = decideAmbitionTick({ ...base, goal: 'EXPAND' })
     expect(decision.shouldSpawn).toBe(true)
-    expect(decision.clockName).toBe('Thornburg Guild Territorial Campaign')
+    expect(decision.fallbackName).toBe('Thornburg Guild Territorial Campaign')
   })
 
   it('does not spawn below the resource threshold', () => {

@@ -163,7 +163,12 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       // World Sim Phase 1: persistent weather, ticked independently of the
       // player. Reference this in narration instead of inventing weather.
       weather: l.weather,
-      weather_severity: l.weatherSeverity
+      weather_severity: l.weatherSeverity,
+      // World Sim Phase 4: cross-reference owner_faction_id against the
+      // factions array for the controlling faction's name — narrate control
+      // and contested status from this, don't invent your own map.
+      owner_faction_id: l.ownerFactionId,
+      is_contested: l.isContested
     })),
 
     clocks: clocks.map(cl => ({
@@ -300,7 +305,9 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       // World Sim Phase 1: persistent weather, ticked independently of the
       // player. Reference this in narration instead of inventing weather.
       weather: l.weather,
-      weather_severity: l.weatherSeverity
+      weather_severity: l.weatherSeverity,
+      owner_faction_id: l.ownerFactionId,
+      is_contested: l.isContested
     })),
 
     recent_timeline_events: recentEvents.map(e => ({

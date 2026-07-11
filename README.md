@@ -76,14 +76,14 @@ The biggest gap identified: ambitions and goals didn't actually respond to what 
 - [x] Faction founding — the collapse-with-no-rival path spawns a "Remnant" successor faction (reduced resources/military, fresh starting stability so it isn't stillborn) instead of the faction simply vanishing — a real, event-driven founding mechanism rather than a separate system bolted on
 - [x] `DESTABILIZE_RIVAL` ambitions actually damage the named rival, not just the acting faction — the ambition/Clock now carries a `targetFactionId`, and a successful sabotage/smear/shadow-war attempt applies a real stability/resources hit to that specific faction. A failed attempt never reaches the target at all.
 
-### Phase 4 — NPCs and Territory in the Web
+### Phase 4 — NPCs and Territory in the Web ✅
 Without these links, "war" and "politics" have no map to redraw and no one for the outcome to happen to.
 - [x] NPC → Faction affiliation (leader / member), wired into tick logic (an affiliated NPC's plan text reflects their faction's current goal) and into the AI world-state prompt. (Scoped down from the original "leader / member / rival" — an NPC personally rivaling a faction without belonging to any is a distinct, smaller feature, not folded into this one)
-- [ ] Faction → Territory ownership on Location
-- [ ] Contested / border territory state
+- [x] Faction → Territory ownership on Location (`ownerFactionId`) — a successful EXPAND ambition redraws the actual map, collapse hands a faction's territory to its absorber or successor, and the AI world summary narrates from real ownership instead of inventing it
+- [x] Contested / border territory state — taking a rival's land takes two successful moves, not one: first contest it (via EXPAND against owned land, or a successful DESTABILIZE_RIVAL scheme destabilizing a holding), then conquer it. Unowned land can be settled in one
 - [x] NPC defection — when a faction collapses, its members defect to the absorbing rival (demoted to MEMBER) or carry over to a founded successor faction (keeping their role) — reuses Phase 3's collapse mechanic rather than being a separate trigger
 - [x] Faction leadership continuity — a tick handler enforces "a faction with living members has a living leader" every turn; the most important living member is automatically promoted if it doesn't. (There's no single structured "NPC died" event to hook into yet, so this checks the invariant continuously rather than reacting to a death)
-- [ ] NPCs made notable through play (spared, betrayed, promoted) get their own independent goal-pursuit loop, the same way factions do today, not just a static memory of what happened to them
+- [x] NPCs made notable through play get their own independent goal-pursuit loop — this was already true via the consequence system: a relationship-defining player action (killed/betrayed/recruited always, anything else the AI judges "major") escalates a minor NPC to importance 4, which is exactly the threshold the NPC tick simulates, so they immediately start pursuing goals like any major NPC. Verified rather than rebuilt; the one real gap found (a consequence-updated goal kept the old goal's progress) is fixed
 
 ### Phase 5 — Sustained Conflict & War
 - [ ] A real multi-turn conflict object (declared → escalating → resolving → resolved) instead of a single-shot Clock standing in for a war

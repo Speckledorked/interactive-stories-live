@@ -11,6 +11,7 @@ import { createCampaignMemory } from '@/lib/ai/memoryCreation'
 import { EventVisibility } from '@prisma/client'
 import { PendingAmbition, WorldChange, clamp } from './tick/types'
 import { AMBITION_CATEGORY_OPTIONS, decideAmbitionOutcome } from './tick/ambitionTick'
+import { decideTerritoryClaim } from './tick/territory'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { logSignificantChanges } from './tick/historyLog'
 
@@ -219,6 +220,78 @@ async function resolveCompletedAmbitions(
         significant: true,
         importance: 'NORMAL',
       })
+
+      // A successful scheme also puts one of the rival's holdings in play —
+      // the foothold that lets a later EXPAND conquer it (see territory.ts).
+      const targetHolding = await prisma.location.findFirst({
+        where: { campaignId, ownerFactionId: target.id, isContested: false },
+        orderBy: { name: 'asc' },
+      })
+      if (targetHolding) {
+        await prisma.location.update({ where: { id: targetHolding.id }, data: { isContested: true } })
+        changes.push({
+          entityType: 'FACTION',
+          entityId: target.id,
+          entityName: target.name,
+          campaignId,
+          field: 'territoryContested',
+          previousValue: targetHolding.name,
+          newValue: `${targetHolding.name} (contested)`,
+          reason: `${faction.name}'s scheme has destabilized ${target.name}'s hold on ${targetHolding.name}`,
+          significant: true,
+          importance: 'MAJOR',
+        })
+      }
+    }
+
+    // A successful EXPAND redraws the actual map: conquer contested rival
+    // land, settle unowned land, or contest a rival holding — in that
+    // escalation order (see territory.ts for why conquest takes two wins).
+    if (outcome.success && faction.goal === 'EXPAND') {
+      const [locations, rivalIds] = [
+        await prisma.location.findMany({
+          where: { campaignId },
+          select: { id: true, name: true, ownerFactionId: true, isContested: true },
+        }),
+        Object.entries((faction.relationships as any as Record<string, { type: string }>) || {})
+          .filter(([, r]) => r.type === 'RIVAL')
+          .map(([id]) => id),
+      ]
+
+      const claim = decideTerritoryClaim(locations, faction.id, rivalIds)
+
+      if (claim.kind === 'conquer' || claim.kind === 'settle') {
+        await prisma.location.update({
+          where: { id: claim.locationId },
+          data: { ownerFactionId: faction.id, isContested: false },
+        })
+      } else if (claim.kind === 'contest') {
+        await prisma.location.update({
+          where: { id: claim.locationId },
+          data: { isContested: true },
+        })
+      }
+
+      if (claim.kind !== 'none') {
+        const reasonByKind = {
+          conquer: `${faction.name} seizes ${claim.locationName}, taking it from its former masters`,
+          settle: `${faction.name} claims ${claim.locationName}, bringing it under its banner`,
+          contest: `${faction.name} moves against ${claim.locationName}, contesting its rival's hold on it`,
+        } as const
+        changes.push({
+          entityType: 'FACTION',
+          entityId: faction.id,
+          entityName: faction.name,
+          campaignId,
+          field: claim.kind === 'contest' ? 'territoryContested' : 'territoryClaimed',
+          previousValue: '(none)',
+          newValue: claim.locationName,
+          reason: reasonByKind[claim.kind],
+          significant: true,
+          importance: 'MAJOR',
+        })
+        console.log(`  🗺️ ${reasonByKind[claim.kind]}`)
+      }
     }
 
     await prisma.timelineEvent.create({

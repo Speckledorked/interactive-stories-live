@@ -78,6 +78,9 @@ export function applyNpcConsequence(npc: NPC, consequence: ExtractedConsequence)
 
   if (consequence.updatedGoal && consequence.updatedGoal !== npc.goals) {
     updateData.goals = consequence.updatedGoal
+    // A changed motive starts its pursuit over — same rule as stateUpdater's
+    // goal handling, so progress toward the old goal never bleeds into the new.
+    updateData.goalProgress = 0
     changes.push({
       entityType: 'NPC', entityId: npc.id, entityName: npc.name, campaignId: npc.campaignId,
       field: 'goals', previousValue: npc.goals || '(none)', newValue: consequence.updatedGoal,

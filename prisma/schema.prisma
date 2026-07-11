@@ -98,6 +98,13 @@ enum FactionArchetype {
   POLITICAL
 }
 
+// World Sim Phase 4: an NPC's standing within a faction they're affiliated
+// with (see NPC.factionRole below).
+enum FactionRole {
+  LEADER
+  MEMBER
+}
+
 enum WeatherCondition {
   CLEAR
   CLOUDY
@@ -313,7 +320,16 @@ model NPC {
   // Phase 8: Communication
   notes PlayerNote[] @relation("NPCNotes")
 
+  // World Sim Phase 4: this NPC's affiliation with a faction, if any — gives
+  // a faction actual subjects instead of just abstract stats. A LEADER's
+  // death triggers automatic succession (see npcTick.ts); a MEMBER can
+  // defect if their faction collapses (see factionTick.ts).
+  factionId   String?
+  factionRole FactionRole?
+  faction     Faction? @relation("FactionMembers", fields: [factionId], references: [id], onDelete: SetNull)
+
   @@index([campaignId])
+  @@index([factionId])
 }
 
 model Faction {
@@ -364,6 +380,9 @@ model Faction {
 
   // World Sim Phase 3: DESTABILIZE_RIVAL clocks aimed at this faction.
   targetedClocks Clock[] @relation("FactionTargetedClocks")
+
+  // World Sim Phase 4: NPCs affiliated with this faction (leader/members).
+  members NPC[] @relation("FactionMembers")
 
   @@index([campaignId])
 }

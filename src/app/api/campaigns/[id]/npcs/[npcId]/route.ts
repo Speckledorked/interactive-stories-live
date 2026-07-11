@@ -48,6 +48,8 @@ export async function PATCH(
         isAlive: body.isAlive,
         importance: body.importance,
         gmNotes: body.gmNotes,
+        factionId: body.factionId || null,
+        factionRole: body.factionId ? (body.factionRole || 'MEMBER') : null,
       },
     })
 

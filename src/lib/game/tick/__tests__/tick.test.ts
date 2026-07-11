@@ -153,6 +153,14 @@ describe('decideNpcTick', () => {
     expect(decision.goalCompleted).toBe(true)
     expect(decision.newGoalProgress).toBe(0)
   })
+
+  it('weaves an affiliated faction\'s current goal into the plan text', () => {
+    const unaffiliated = decideNpcTick(npc, 5, ['Harborview'])
+    const affiliated = decideNpcTick(npc, 5, ['Harborview'], { name: 'Iron Crown', goal: 'EXPAND' })
+    expect(unaffiliated.currentPlan).not.toContain('Iron Crown')
+    expect(affiliated.currentPlan).toContain('Iron Crown')
+    expect(affiliated.currentPlan).toContain('EXPAND')
+  })
 })
 
 describe('decideAmbitionTick', () => {

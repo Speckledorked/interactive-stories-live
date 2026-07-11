@@ -13,6 +13,12 @@
 // their goal, and their current relationship note. Movement between a
 // "home" and "work" location is a simple day/night commute — only possible
 // once the campaign has at least 2 discovered locations to commute between.
+//
+// World Sim Phase 4: an NPC affiliated with a faction (see NPC.factionId)
+// has that faction's current goal woven into their plan text, so their
+// flavor reflects what the organization they serve is actually up to this
+// turn. Leadership succession and defection on faction collapse live in
+// leadershipTick.ts and factionTick.ts respectively, not here.
 
 import { prisma } from '@/lib/prisma'
 import type { NPC } from '@prisma/client'
@@ -65,7 +71,12 @@ export interface NpcTickDecision {
 export function decideNpcTick(
   npc: { id: string; goals: string | null; relationship: string | null; currentLocation: string | null; goalProgress: number },
   turnNumber: number,
-  discoveredLocationNames: string[]
+  discoveredLocationNames: string[],
+  // World Sim Phase 4: an affiliated major NPC's plan reflects their
+  // faction's current strategic posture, so "serving Iron Crown" reads
+  // differently while that faction is pursuing EXPAND vs. DEFEND — the
+  // affiliation isn't just a foreign key, it colors the NPC's own flavor text.
+  faction: { name: string; goal: string } | null = null
 ): NpcTickDecision {
   const timeOfDay = deriveTimeOfDay(turnNumber)
   const phaseIndex = phaseIndexAt(npc.id, turnNumber)
@@ -74,9 +85,10 @@ export function decideNpcTick(
 
   const goalText = npc.goals?.trim() || 'no clear goal'
   const relationshipNote = npc.relationship?.trim()
+  const factionNote = faction ? ` [${faction.name}, pursuing ${faction.goal}]` : ''
   const currentPlan = relationshipNote
-    ? `${phase} (${timeOfDay}): ${goalText} — mindful of ${relationshipNote}`
-    : `${phase} (${timeOfDay}): ${goalText}`
+    ? `${phase} (${timeOfDay}): ${goalText} — mindful of ${relationshipNote}${factionNote}`
+    : `${phase} (${timeOfDay}): ${goalText}${factionNote}`
 
   let nextLocation: string | null = null
   const sorted = [...new Set(discoveredLocationNames)].sort()
@@ -116,6 +128,7 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
       where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
       orderBy: { importance: 'desc' },
       take: NPC_CAP,
+      include: { faction: { select: { name: true, goal: true, isActive: true } } },
     }),
     prisma.location.findMany({
       where: { campaignId: ctx.campaignId, isDiscovered: true },
@@ -127,7 +140,8 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
   const changes: WorldChange[] = []
 
   for (const npc of npcs) {
-    const decision = decideNpcTick(npc, ctx.turnNumber, discoveredLocationNames)
+    const factionContext = npc.faction?.isActive ? { name: npc.faction.name, goal: npc.faction.goal } : null
+    const decision = decideNpcTick(npc, ctx.turnNumber, discoveredLocationNames, factionContext)
 
     const updateData: { currentPlan: string; currentLocation?: string; goalProgress: number } = {
       currentPlan: decision.currentPlan,

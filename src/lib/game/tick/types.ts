@@ -63,6 +63,9 @@ export interface PendingAmbition {
   fallbackFlavor: string
   fallbackName: string
   fallbackConsequence: string
+  /** Set only for DESTABILIZE_RIVAL ambitions — the rival being undermined, so its resolution can apply real damage to a specific faction instead of just the one that committed to it. */
+  targetFactionId?: string
+  targetFactionName?: string
 }
 
 export interface TickHandlerResult {

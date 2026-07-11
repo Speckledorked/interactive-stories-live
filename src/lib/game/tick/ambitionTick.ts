@@ -188,6 +188,21 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
 
     if (!decision.shouldSpawn) continue
 
+    // DESTABILIZE_RIVAL ambitions get aimed at whichever faction is on
+    // record as a rival, so resolution can apply real damage to a specific
+    // named faction instead of only affecting the one that committed to it.
+    let targetFactionId: string | undefined
+    let targetFactionName: string | undefined
+    if (faction.goal === 'DESTABILIZE_RIVAL') {
+      const relationships = (faction.relationships as any as Record<string, { type: string }>) || {}
+      const rivalId = Object.entries(relationships).find(([, r]) => r.type === 'RIVAL')?.[0]
+      const rival = rivalId ? await prisma.faction.findUnique({ where: { id: rivalId } }) : null
+      if (rival?.isActive) {
+        targetFactionId = rival.id
+        targetFactionName = rival.name
+      }
+    }
+
     const resourcesAfterCost = clamp(faction.resources - decision.resourceCost, 0, 100)
     await prisma.faction.update({
       where: { id: faction.id },
@@ -204,6 +219,8 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
       fallbackFlavor: decision.fallbackFlavor,
       fallbackName: decision.fallbackName,
       fallbackConsequence: decision.fallbackConsequence,
+      targetFactionId,
+      targetFactionName,
     })
 
     changes.push({
@@ -243,6 +260,9 @@ export interface AmbitionOutcome {
   militaryDelta: number
   threatLevelDelta: number
   consequenceText: string
+  /** Only ever non-zero for a successful DESTABILIZE_RIVAL outcome with a named target — see resolveCompletedAmbitions in worldTurn.ts, which applies these to the target faction, not the acting one. A failed scheme never reaches the target at all. */
+  targetStabilityDelta: number
+  targetResourceDelta: number
 }
 
 // Success chance scales with whichever stat the goal actually leans on —
@@ -264,6 +284,8 @@ export function decideAmbitionOutcome(input: {
   goal: FactionGoal
   resources: number
   military: number
+  /** Only meaningful for DESTABILIZE_RIVAL — the rival this ambition is aimed at, if one was on record when it was committed to. */
+  targetFactionName?: string
 }): AmbitionOutcome {
   const relevantStat = input.goal === 'EXPAND' || input.goal === 'DESTABILIZE_RIVAL' ? input.military : input.resources
   const successChance = clamp(SUCCESS_FLOOR + relevantStat * SUCCESS_STAT_WEIGHT, SUCCESS_FLOOR, SUCCESS_CEILING)
@@ -272,21 +294,20 @@ export function decideAmbitionOutcome(input: {
 
   if (input.goal === 'EXPAND') {
     return success
-      ? { success: true, resourceDelta: 0, stabilityDelta: -2, militaryDelta: 6, threatLevelDelta: 1, consequenceText: `${input.factionName} claims new ground, reshaping the region's balance of power.` }
-      : { success: false, resourceDelta: -8, stabilityDelta: -4, militaryDelta: -3, threatLevelDelta: 0, consequenceText: `${input.factionName} overextends and is thrown back, its ambitions costing more than they gained.` }
+      ? { success: true, resourceDelta: 0, stabilityDelta: -2, militaryDelta: 6, threatLevelDelta: 1, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName} claims new ground, reshaping the region's balance of power.` }
+      : { success: false, resourceDelta: -8, stabilityDelta: -4, militaryDelta: -3, threatLevelDelta: 0, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName} overextends and is thrown back, its ambitions costing more than they gained.` }
   }
 
   if (input.goal === 'DESTABILIZE_RIVAL') {
-    // Self-contained for now: this only affects the acting faction, not
-    // whichever faction it's rivals with. Actually damaging a specific
-    // named rival needs the ambition/Clock to carry a target reference,
-    // which doesn't exist yet — see the README roadmap.
+    const rival = input.targetFactionName || 'its rival'
+    // A failed scheme never reaches the target at all — it unravels before
+    // doing any real damage, hence targetDeltas of 0 on the failure branch.
     return success
-      ? { success: true, resourceDelta: -3, stabilityDelta: 1, militaryDelta: 2, threatLevelDelta: 1, consequenceText: `${input.factionName} deals a blow to its rival's standing, and returns stronger for the effort.` }
-      : { success: false, resourceDelta: -5, stabilityDelta: -3, militaryDelta: -4, threatLevelDelta: 0, consequenceText: `${input.factionName}'s scheme against its rival unravels, costing it dearly.` }
+      ? { success: true, resourceDelta: -3, stabilityDelta: 1, militaryDelta: 2, threatLevelDelta: 1, targetStabilityDelta: -4, targetResourceDelta: -3, consequenceText: `${input.factionName} deals a blow to ${rival}'s standing, and returns stronger for the effort.` }
+      : { success: false, resourceDelta: -5, stabilityDelta: -3, militaryDelta: -4, threatLevelDelta: 0, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName}'s scheme against ${rival} unravels, costing it dearly.` }
   }
 
   return success
-    ? { success: true, resourceDelta: 10, stabilityDelta: 2, militaryDelta: 0, threatLevelDelta: 1, consequenceText: `${input.factionName} comes out ahead, and its coffers and reputation grow.` }
-    : { success: false, resourceDelta: -6, stabilityDelta: -3, militaryDelta: 0, threatLevelDelta: 0, consequenceText: `${input.factionName}'s effort falls flat, and the setback dents its standing.` }
+    ? { success: true, resourceDelta: 10, stabilityDelta: 2, militaryDelta: 0, threatLevelDelta: 1, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName} comes out ahead, and its coffers and reputation grow.` }
+    : { success: false, resourceDelta: -6, stabilityDelta: -3, militaryDelta: 0, threatLevelDelta: 0, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName}'s effort falls flat, and the setback dents its standing.` }
 }

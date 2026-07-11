@@ -166,6 +166,10 @@ async function resolveCompletedAmbitions(
     // around to receive the outcome — nothing to apply it to.
     if (!faction || !faction.isActive) continue
 
+    const target = clock.targetFactionId
+      ? await prisma.faction.findUnique({ where: { id: clock.targetFactionId } })
+      : null
+
     const outcome = decideAmbitionOutcome({
       factionId: faction.id,
       clockId: clock.id,
@@ -173,6 +177,7 @@ async function resolveCompletedAmbitions(
       goal: faction.goal,
       resources: faction.resources,
       military: faction.military,
+      targetFactionName: target?.isActive ? target.name : undefined,
     })
 
     const newResources = clamp(faction.resources + outcome.resourceDelta, 0, 100)
@@ -189,6 +194,32 @@ async function resolveCompletedAmbitions(
         threatLevel: newThreatLevel,
       },
     })
+
+    // Apply the other side of a successful DESTABILIZE_RIVAL — the named
+    // rival actually takes the damage, not just a line in the acting
+    // faction's flavor text.
+    if (target?.isActive && (outcome.targetStabilityDelta !== 0 || outcome.targetResourceDelta !== 0)) {
+      const targetNewStability = clamp(target.stability + outcome.targetStabilityDelta, 0, 100)
+      const targetNewResources = clamp(target.resources + outcome.targetResourceDelta, 0, 100)
+
+      await prisma.faction.update({
+        where: { id: target.id },
+        data: { stability: targetNewStability, resources: targetNewResources },
+      })
+
+      changes.push({
+        entityType: 'FACTION',
+        entityId: target.id,
+        entityName: target.name,
+        campaignId,
+        field: 'ambitionTargeted',
+        previousValue: 'stable',
+        newValue: 'undermined',
+        reason: `${target.name} was undermined by ${faction.name}'s scheme, weakening its stability and resources`,
+        significant: true,
+        importance: 'NORMAL',
+      })
+    }
 
     await prisma.timelineEvent.create({
       data: {
@@ -270,7 +301,7 @@ async function generateOffscreenEvents(
       [...advancedClocks, ...completedClocks],
       campaignId,
       completedGoalNpcs,
-      pendingAmbitions.map((a) => ({ factionId: a.factionId, factionName: a.factionName, goal: a.goal, archetype: a.archetype })),
+      pendingAmbitions.map((a) => ({ factionId: a.factionId, factionName: a.factionName, goal: a.goal, archetype: a.archetype, targetFactionName: a.targetFactionName })),
       recentAmbitionNames
     )
 
@@ -283,7 +314,7 @@ async function generateOffscreenEvents(
     // pick/fallback is narrative only and goes in gmNotes instead, so a
     // "black-market venture" flavor can never be mistaken for a pacing tag.
     for (const pending of pendingAmbitions) {
-      const validOptions = AMBITION_CATEGORY_OPTIONS[pending.archetype as keyof typeof AMBITION_CATEGORY_OPTIONS]?.[pending.goal as 'ENRICH' | 'EXPAND'] || []
+      const validOptions = AMBITION_CATEGORY_OPTIONS[pending.archetype as keyof typeof AMBITION_CATEGORY_OPTIONS]?.[pending.goal as 'ENRICH' | 'EXPAND' | 'DESTABILIZE_RIVAL'] || []
       const pick = aiResult.ambition_picks?.find((p) => p.faction_id === pending.factionId)
       const useAiPick = !!pick && validOptions.includes(pick.category)
 
@@ -300,12 +331,13 @@ async function generateOffscreenEvents(
           maxTicks: pending.maxTicks,
           currentTicks: 0,
           consequence: pending.fallbackConsequence,
-          gmNotes: `Ambition type: ${flavor}`,
+          gmNotes: pending.targetFactionName ? `Ambition type: ${flavor} (targeting ${pending.targetFactionName})` : `Ambition type: ${flavor}`,
           sourceFactionId: pending.factionId,
+          targetFactionId: pending.targetFactionId,
         },
       })
 
-      console.log(`  🎯 ${pending.factionName} committed to: ${name} [${flavor}]${useAiPick ? '' : ' (fallback)'}`)
+      console.log(`  🎯 ${pending.factionName} committed to: ${name} [${flavor}]${pending.targetFactionName ? ` targeting ${pending.targetFactionName}` : ''}${useAiPick ? '' : ' (fallback)'}`)
     }
 
     // Create timeline events for each offscreen event

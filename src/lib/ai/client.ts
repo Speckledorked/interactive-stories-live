@@ -837,6 +837,7 @@ export async function callAIForWorldTurn(
   world_updates?: {
     npc_changes?: AIGMResponse['world_updates']['npc_changes']
     faction_changes?: AIGMResponse['world_updates']['faction_changes']
+    location_changes?: AIGMResponse['world_updates']['location_changes']
   }
   // The flavor picked for each pendingAmbition — the tick already decided
   // WHETHER a faction commits to something big; this is only the WHAT.
@@ -900,11 +901,15 @@ ${goalCompletionNote}${ambitionNote}
 Generate 1-3 brief offscreen events that show villains/factions making moves.
 
 If an event produces a lasting outcome — a named winner, a new rival, a
-faction gaining or losing ground — record it in world_updates so it becomes
-a real, persistent part of the world instead of only existing in this
-summary text. Use npc_changes with is_new: true to introduce anyone the
-event produces (a tournament winner, a new claimant, a survivor) so they
-can be found and questioned later and will remember what happened to them.
+faction gaining or losing ground, a place worth remembering — record it in
+world_updates so it becomes a real, persistent part of the world instead of
+only existing in this summary text. Use npc_changes with is_new: true to
+introduce anyone the event produces (a tournament winner, a new claimant,
+a survivor) so they can be found and questioned later and will remember
+what happened to them. Use location_changes with is_new: true if the event
+happens somewhere specific and nameable (a villain's hideout, a ruin, a
+new settlement) — this registers the place as existing in the world without
+the party discovering it; they'll only learn of it by finding it in play.
 Only include world_updates when an event actually warrants it — most minor
 flavor events don't need any.
 
@@ -923,6 +928,9 @@ Respond with JSON:
     ],
     "faction_changes": [
       {"faction_name_or_id": "EXISTING_FACTION", "changes": {"gm_notes_append": "..."}}
+    ],
+    "location_changes": [
+      {"name": "New Place Name", "is_new": true, "description": "What this place is, only if the event needs it on the record", "location_type": "hideout"}
     ]
   },
   "ambition_picks": [

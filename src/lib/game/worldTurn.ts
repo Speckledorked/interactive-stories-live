@@ -432,20 +432,17 @@ async function generateOffscreenEvents(
       console.log(`  📰 Created offscreen event: ${event.title}`)
     }
 
-    // Apply any structured consequences (new/updated NPCs, faction changes)
-    // through the same path scene resolution uses, so a named outcome (a
-    // tournament winner, a new rival) becomes a real, queryable entity —
-    // not just a sentence in the event summary above.
+    // Apply any structured consequences (new/updated NPCs, faction changes,
+    // and now locations) through the same path scene resolution uses, so a
+    // named outcome (a tournament winner, a new rival, a villain's hideout)
+    // becomes a real, queryable entity — not just a sentence in the event
+    // summary above.
     let involvedNpcIds: string[] = []
     let involvedFactionIds: string[] = []
-    // Note: callAIForWorldTurn's response type deliberately has no
-    // location_changes — the offscreen prompt never asks for them, so there's
-    // nothing to forward here today. stateUpdater.ts's location handling is
-    // still sceneOrigin-aware (see sections 7/7b) for when the live-scene
-    // path calls it with real location_changes.
     const hasWorldUpdates =
       (aiResult.world_updates?.npc_changes?.length || 0) > 0 ||
-      (aiResult.world_updates?.faction_changes?.length || 0) > 0
+      (aiResult.world_updates?.faction_changes?.length || 0) > 0 ||
+      (aiResult.world_updates?.location_changes?.length || 0) > 0
 
     if (hasWorldUpdates) {
       const applied = await applyWorldUpdates(
@@ -455,6 +452,7 @@ async function generateOffscreenEvents(
           world_updates: {
             npc_changes: aiResult.world_updates?.npc_changes,
             faction_changes: aiResult.world_updates?.faction_changes,
+            location_changes: aiResult.world_updates?.location_changes,
           },
         },
         currentTurn,

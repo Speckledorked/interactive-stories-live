@@ -8,6 +8,7 @@ import { buildOptimizedContext } from './contextManager' // Phase 14.6: Context 
 import { retrieveRelevantHistory, retrieveNpcHistory } from './memoryRetrieval' // Campaign Memory RAG
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
+import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
 
 /**
  * Build optimized world summary using context manager
@@ -27,7 +28,7 @@ async function buildOptimizedWorldSummary(
   const optimizedContext = await buildOptimizedContext(prisma, campaignId, currentSceneNumber)
 
   // Get current data
-  const [worldMeta, characters, allNpcs, allFactions, locations, clocks] = await Promise.all([
+  const [worldMeta, characters, allNpcs, allFactions, locations, clocks, activeWars] = await Promise.all([
     prisma.worldMeta.findUnique({ where: { campaignId } }),
     prisma.character.findMany({
       where: { campaignId, isAlive: true },
@@ -38,7 +39,10 @@ async function buildOptimizedWorldSummary(
     prisma.location.findMany({ where: { campaignId, isDiscovered: true } }),
     prisma.clock.findMany({
       where: { campaignId, isHidden: false }
-    })
+    }),
+    // World Sim Phase 5: sustained conflicts — narrate from real momentum
+    // and duration, don't invent how a war is going.
+    prisma.war.findMany({ where: { campaignId, status: 'ESCALATING' } })
   ])
 
   if (!worldMeta) {
@@ -82,7 +86,16 @@ async function buildOptimizedWorldSummary(
     return isActiveThreat || isInConsequences
   })
 
-  console.log(`🔍 Filtered entities: ${relevantNpcs.length}/${allNpcs.length} NPCs, ${relevantFactions.length}/${allFactions.length} factions`)
+  // Fog of war: relevance and discovery are separate gates — a "relevant"
+  // NPC/faction (nearby, a high threat) still isn't narrated as known if
+  // the party has never actually encountered them. Only affects what goes
+  // into worldSummary below, not `entities` at the bottom of this
+  // function, which stays unfiltered on purpose for memory-recall lookups.
+  const discoveredNpcs = relevantNpcs.filter(npc => npc.isDiscovered)
+  const discoveredFactionIds = new Set(allFactions.filter(f => f.isDiscovered).map(f => f.id))
+  const discoveredFactions = relevantFactions.filter(f => f.isDiscovered)
+
+  console.log(`🔍 Filtered entities: ${discoveredNpcs.length}/${allNpcs.length} NPCs, ${discoveredFactions.length}/${allFactions.length} factions`)
 
   // Build compressed timeline from optimized context
   const compressedTimeline = optimizedContext.importantMoments.map(moment => ({
@@ -130,8 +143,9 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       consequences: c.consequences
     })),
 
-    // Only relevant NPCs
-    npcs: relevantNpcs.map(n => ({
+    // Only relevant, discovered NPCs — fog of war: relevance alone isn't
+    // enough, the party has to have actually encountered them.
+    npcs: discoveredNpcs.map(n => ({
       id: n.id,
       name: n.name,
       description: n.description,
@@ -145,15 +159,19 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       factionRole: n.factionRole
     })),
 
-    // Only relevant factions
-    factions: relevantFactions.map(f => ({
+    // Only relevant, discovered factions. Numeric stats are deliberately
+    // qualitative here, not exact — the deterministic tick needs the real
+    // numbers and reads them straight from Prisma; this prompt is narration
+    // only, and an exact "resources: 73" is trivial for the AI to blurt out
+    // as something no player could know in-fiction.
+    factions: discoveredFactions.map(f => ({
       id: f.id,
       name: f.name,
       goals: f.goals,
       currentPlan: f.currentPlan,
-      threatLevel: f.threatLevel,
-      resources: f.resources,
-      influence: f.influence,
+      threat_level: describeThreatLevel(f.threatLevel),
+      resources: describeStat(f.resources),
+      influence: describeStat(f.influence),
       // World Sim Phase 6: set only when a player character leads this
       // faction — see the PLAYER-LED FACTIONS prompt instruction.
       leader_character_id: f.leaderCharacterId
@@ -170,7 +188,9 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       // World Sim Phase 4: cross-reference owner_faction_id against the
       // factions array for the controlling faction's name — narrate control
       // and contested status from this, don't invent your own map.
-      owner_faction_id: l.ownerFactionId,
+      // Fog of war: null if the owner isn't discovered — territory doesn't
+      // reveal a faction's existence just because it's mapped.
+      owner_faction_id: l.ownerFactionId && discoveredFactionIds.has(l.ownerFactionId) ? l.ownerFactionId : null,
       is_contested: l.isContested
     })),
 
@@ -182,6 +202,19 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       description: cl.description || '',
       consequence: cl.consequence || ''
     })),
+
+    // World Sim Phase 5: sustained conflicts — only ones where both sides
+    // are discovered; the party can't hear about a war between two
+    // factions they've never encountered.
+    wars: activeWars
+      .filter(w => discoveredFactionIds.has(w.attackerFactionId) && discoveredFactionIds.has(w.defenderFactionId))
+      .map(w => ({
+        name: w.name,
+        attacker: allFactions.find(f => f.id === w.attackerFactionId)?.name || 'Unknown',
+        defender: allFactions.find(f => f.id === w.defenderFactionId)?.name || 'Unknown',
+        momentum: describeWarMomentum(w.momentum),
+        turns_elapsed: worldMeta.currentTurnNumber - w.startedTurn
+      })),
 
     // Use compressed timeline from context manager
     recent_timeline_events: compressedTimeline
@@ -249,6 +282,14 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
     throw new Error('Campaign or WorldMeta not found')
   }
 
+  // Fog of war: this is the only gate between "the simulation knows about
+  // it" and "the AI is allowed to narrate it." `entities` below stays
+  // unfiltered on purpose (memory-recall lookups need the full set); only
+  // worldSummary — what actually reaches the prompt — is filtered.
+  const discoveredNpcs = npcs.filter(n => n.isDiscovered)
+  const discoveredFactions = factions.filter(f => f.isDiscovered)
+  const discoveredFactionIds = new Set(discoveredFactions.map(f => f.id))
+
   // Format everything for the AI
   const worldSummary = {
     turn_number: worldMeta.currentTurnNumber,
@@ -275,7 +316,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       consequences: c.consequences
     })),
 
-    npcs: npcs.map(n => ({
+    npcs: discoveredNpcs.map(n => ({
       id: n.id,
       name: n.name,
       description: n.description,
@@ -286,14 +327,17 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       factionRole: n.factionRole
     })),
 
-    factions: factions.map(f => ({
+    // Numeric stats are deliberately qualitative here, not exact — see
+    // qualitativeStats.ts. The deterministic tick reads real numbers
+    // straight from Prisma and never goes through this prompt.
+    factions: discoveredFactions.map(f => ({
       id: f.id,
       name: f.name,
       goals: f.goals,
       currentPlan: f.currentPlan,
-      threatLevel: f.threatLevel,
-      resources: f.resources,
-      influence: f.influence,
+      threat_level: describeThreatLevel(f.threatLevel),
+      resources: describeStat(f.resources),
+      influence: describeStat(f.influence),
       leader_character_id: f.leaderCharacterId
     })),
 
@@ -314,7 +358,9 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       // player. Reference this in narration instead of inventing weather.
       weather: l.weather,
       weather_severity: l.weatherSeverity,
-      owner_faction_id: l.ownerFactionId,
+      // Fog of war: null if the owner isn't discovered — territory doesn't
+      // reveal a faction's existence just because it's mapped.
+      owner_faction_id: l.ownerFactionId && discoveredFactionIds.has(l.ownerFactionId) ? l.ownerFactionId : null,
       is_contested: l.isContested
     })),
 
@@ -326,13 +372,16 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
 
     // World Sim Phase 5: sustained conflicts currently in progress. Narrate
     // "how's the war going" from momentum/turns_elapsed, don't improvise.
-    wars: activeWars.map(w => ({
-      name: w.name,
-      attacker: factions.find(f => f.id === w.attackerFactionId)?.name || 'Unknown',
-      defender: factions.find(f => f.id === w.defenderFactionId)?.name || 'Unknown',
-      momentum: w.momentum, // negative favors the defender, positive the attacker
-      turns_elapsed: (worldMeta?.currentTurnNumber ?? w.startedTurn) - w.startedTurn
-    }))
+    // Fog of war: only wars where both sides are discovered.
+    wars: activeWars
+      .filter(w => discoveredFactionIds.has(w.attackerFactionId) && discoveredFactionIds.has(w.defenderFactionId))
+      .map(w => ({
+        name: w.name,
+        attacker: factions.find(f => f.id === w.attackerFactionId)?.name || 'Unknown',
+        defender: factions.find(f => f.id === w.defenderFactionId)?.name || 'Unknown',
+        momentum: describeWarMomentum(w.momentum),
+        turns_elapsed: (worldMeta?.currentTurnNumber ?? w.startedTurn) - w.startedTurn
+      }))
   } as any
 
   // Return both world summary and entities for reuse in memory retrieval

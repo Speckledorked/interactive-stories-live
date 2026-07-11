@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
+import { redactGmNotesList } from '@/lib/game/visibility'
 
 // GET /api/campaigns/:id/npcs - List all NPCs for a campaign
 export async function GET(
@@ -39,7 +40,7 @@ export async function GET(
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ npcs })
+    return NextResponse.json({ npcs: redactGmNotesList(npcs, membership.role === 'ADMIN') })
   } catch (error) {
     console.error('Get NPCs error:', error)
     return NextResponse.json(
@@ -106,6 +107,7 @@ export async function POST(
         moves: body.moves || [],
         factionId: body.factionId || null,
         factionRole: body.factionId ? (body.factionRole || 'MEMBER') : null,
+        isDiscovered: body.isDiscovered !== undefined ? body.isDiscovered : true,
       },
     })
 

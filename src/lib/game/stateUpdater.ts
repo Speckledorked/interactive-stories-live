@@ -42,7 +42,14 @@ export interface AppliedWorldUpdates {
 export async function applyWorldUpdates(
   campaignId: string,
   aiResponse: AIGMResponse,
-  currentTurnNumber: number
+  currentTurnNumber: number,
+  // Fog of war: true when this call is resolving a scene the players are
+  // actually in — the party witnessing an NPC/faction is what reveals them,
+  // so isDiscovered only flips to true on this path. Offscreen background
+  // events (see worldTurn.ts) pass false: the simulation moving a faction
+  // the party has never met must not silently teach the AI to talk about
+  // it as if they had.
+  sceneOrigin: boolean = true
 ): Promise<AppliedWorldUpdates> {
   console.log('💾 Applying world updates to database...')
 
@@ -149,6 +156,12 @@ export async function applyWorldUpdates(
             // Note: tags_add and tags_remove are not supported in the current schema
             // NPCs don't have a tags field
 
+            // Fog of war: the party witnessing this NPC in a live scene is
+            // what reveals them — never on an offscreen background update.
+            if (sceneOrigin && !npc.isDiscovered) {
+              updateData.isDiscovered = true
+            }
+
             if (Object.keys(updateData).length > 0) {
               await tx.nPC.update({
                 where: { id: npc.id },
@@ -167,7 +180,11 @@ export async function applyWorldUpdates(
                 gmNotes: npcChange.changes.notes_append || null,
                 goals: npcChange.changes.goals || null,
                 importance: 1,
-                isAlive: true
+                isAlive: true,
+                // Fog of war: an NPC introduced offscreen (e.g. a tournament
+                // winner) exists but isn't "met" yet — undiscovered until a
+                // live scene actually involves them.
+                isDiscovered: sceneOrigin
               }
             })
             involvedNpcIds.add(newNPC.id)
@@ -781,6 +798,12 @@ export async function applyWorldUpdates(
               updateData.gmNotes = faction.gmNotes + '\n\n' + factionChange.changes.gm_notes_append
             }
 
+            // Fog of war: the party witnessing this faction in a live scene
+            // is what reveals it — never on an offscreen background update.
+            if (sceneOrigin && !faction.isDiscovered) {
+              updateData.isDiscovered = true
+            }
+
             if (Object.keys(updateData).length > 0) {
               await tx.faction.update({
                 where: { id: faction.id },
@@ -805,7 +828,11 @@ export async function applyWorldUpdates(
                 goals: factionChange.changes.goals || '',
                 currentPlan: factionChange.changes.current_plan || '',
                 threatLevel: initialThreat,
-                gmNotes: factionChange.changes.gm_notes_append || ''
+                gmNotes: factionChange.changes.gm_notes_append || '',
+                // Fog of war: a faction introduced offscreen exists but
+                // isn't "known" yet — undiscovered until a live scene
+                // actually involves it.
+                isDiscovered: sceneOrigin
               }
             })
             involvedFactionIds.add(newFaction.id)

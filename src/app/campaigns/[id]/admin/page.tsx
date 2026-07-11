@@ -32,6 +32,7 @@ interface NPC {
   gmNotes: string
   factionId: string | null
   factionRole: string | null
+  isDiscovered: boolean
 }
 
 interface Faction {
@@ -48,6 +49,7 @@ interface Faction {
   gmNotes: string
   isActive: boolean
   leaderCharacterId: string | null
+  isDiscovered: boolean
 }
 
 // Keep in sync with FactionGoal in prisma/schema.prisma.
@@ -595,6 +597,7 @@ export default function AdminPage() {
                           gmNotes: formData.get('gmNotes') as string || undefined,
                           factionId: (formData.get('factionId') as string) || undefined,
                           factionRole: (formData.get('factionRole') as string) || undefined,
+                          isDiscovered: formData.get('isDiscovered') === 'on',
                         })
                       }}
                       className="space-y-3"
@@ -679,6 +682,18 @@ export default function AdminPage() {
                           </select>
                         </div>
                       </div>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          name="isDiscovered"
+                          id="npc-isDiscovered"
+                          defaultChecked
+                          className="rounded border-ember-900/40 bg-black/30"
+                        />
+                        <label htmlFor="npc-isDiscovered" className="text-sm text-ember-200/80">
+                          Discovered by players — uncheck to build them in as hidden background lore until a scene actually reveals them
+                        </label>
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-ember-200/80 mb-1">GM Notes</label>
                         <textarea
@@ -757,6 +772,15 @@ export default function AdminPage() {
                             </select>
                           </div>
                         </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={npc.isDiscovered}
+                            onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, isDiscovered: e.target.checked } : n))}
+                            className="rounded border-ember-900/40 bg-black/30"
+                          />
+                          <label className="text-xs">Discovered by players</label>
+                        </div>
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleUpdateNPC(npc)}
@@ -777,7 +801,14 @@ export default function AdminPage() {
                       <div>
                         <div className="flex justify-between items-start">
                           <div>
-                            <h3 className="font-semibold">{npc.name}</h3>
+                            <h3 className="font-semibold">
+                              {npc.name}
+                              {npc.isDiscovered === false && (
+                                <span className="ml-2 text-xs font-normal text-ember-400/70 border border-ember-400/30 rounded px-1.5 py-0.5">
+                                  Hidden
+                                </span>
+                              )}
+                            </h3>
                             <p className="text-sm text-ember-300/60">{npc.description}</p>
                             <p className="text-xs text-ember-400/50">Importance: {npc.importance}/5</p>
                             {npc.factionId && (
@@ -828,6 +859,7 @@ export default function AdminPage() {
                           resources: parseInt(formData.get('resources') as string) || 50,
                           gmNotes: formData.get('gmNotes') as string || undefined,
                           leaderCharacterId: (formData.get('leaderCharacterId') as string) || undefined,
+                          isDiscovered: formData.get('isDiscovered') === 'on',
                         })
                       }}
                       className="space-y-3"
@@ -898,6 +930,18 @@ export default function AdminPage() {
                           ))}
                         </select>
                         <p className="text-xs text-ember-400/50 mt-1">If set, this faction's Simulation Goal is the player's call — the world tick won't reassess it automatically.</p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          name="isDiscovered"
+                          id="faction-isDiscovered"
+                          defaultChecked
+                          className="rounded border-ember-900/40 bg-black/30"
+                        />
+                        <label htmlFor="faction-isDiscovered" className="text-sm text-ember-200/80">
+                          Discovered by players — uncheck to build them in as hidden background lore until a scene actually reveals them
+                        </label>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-ember-200/80 mb-1">Current Plan</label>
@@ -1038,6 +1082,15 @@ export default function AdminPage() {
                             ))}
                           </select>
                         </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={faction.isDiscovered}
+                            onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, isDiscovered: e.target.checked } : f))}
+                            className="rounded border-ember-900/40 bg-black/30"
+                          />
+                          <label className="text-xs">Discovered by players</label>
+                        </div>
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleUpdateFaction(faction)}
@@ -1068,6 +1121,11 @@ export default function AdminPage() {
                               {faction.leaderCharacterId && (
                                 <span className="ml-2 text-xs font-normal text-wine-300 border border-wine-400/30 rounded px-1.5 py-0.5">
                                   Player-led
+                                </span>
+                              )}
+                              {faction.isDiscovered === false && (
+                                <span className="ml-2 text-xs font-normal text-ember-400/70 border border-ember-400/30 rounded px-1.5 py-0.5">
+                                  Hidden
                                 </span>
                               )}
                             </h3>

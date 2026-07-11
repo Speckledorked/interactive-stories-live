@@ -688,6 +688,14 @@ model WorldMeta {
   gmNotes           String?
   updatedAt         DateTime @updatedAt
 
+  // World Sim Phase 8: per-tick simulation caps (how many factions/NPCs the
+  // tick handlers simulate each turn — see src/lib/game/tick/caps.ts).
+  // Null means "use the default" (10/20) — most campaigns never need to
+  // touch this; it exists for campaigns whose faction/NPC count grows past
+  // the defaults and the admin wants the tick to cover more of them.
+  factionCap Int?
+  npcCap     Int?
+
   // Phase 15: AI Health & Cost Tracking
   aiHealth              Json?     // Circuit breaker state and AI failure tracking
   aiMetrics             Json?     // Token usage, costs, response times

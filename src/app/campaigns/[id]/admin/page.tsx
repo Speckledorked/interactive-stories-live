@@ -50,6 +50,7 @@ interface Faction {
   isActive: boolean
   leaderCharacterId: string | null
   isDiscovered: boolean
+  relationships?: Record<string, { type: 'RIVAL' | 'ALLY'; since: number }> | null
 }
 
 // Keep in sync with FactionGoal in prisma/schema.prisma.
@@ -113,10 +114,10 @@ export default function AdminPage() {
   const campaignId = params.id as string
 
   // Read tab from URL parameter, default to 'dashboard'
-  const initialTab = searchParams?.get('tab') as 'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'invites' | 'members' | 'settings' || 'dashboard'
+  const initialTab = searchParams?.get('tab') as 'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'map' | 'debug' | 'invites' | 'members' | 'settings' || 'dashboard'
 
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'invites' | 'members' | 'settings'>(initialTab)
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'map' | 'debug' | 'invites' | 'members' | 'settings'>(initialTab)
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [npcs, setNpcs] = useState<NPC[]>([])
   const [factions, setFactions] = useState<Faction[]>([])
@@ -125,6 +126,15 @@ export default function AdminPage() {
   const [clocks, setClocks] = useState<Clock[]>([])
   const [invites, setInvites] = useState<any[]>([])
   const [members, setMembers] = useState<Member[]>([])
+  const [simulationSettings, setSimulationSettings] = useState<{
+    factionCap: number | null
+    npcCap: number | null
+    defaultFactionCap: number
+    defaultNpcCap: number
+  } | null>(null)
+  const [worldEvents, setWorldEvents] = useState<any[]>([])
+  const [worldEventsTurn, setWorldEventsTurn] = useState<number | null>(null)
+  const [worldEventsLoading, setWorldEventsLoading] = useState(false)
   const [editingNpc, setEditingNpc] = useState<string | null>(null)
   const [editingFaction, setEditingFaction] = useState<string | null>(null)
   const [editingLocation, setEditingLocation] = useState<string | null>(null)
@@ -140,6 +150,12 @@ export default function AdminPage() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (activeTab === 'debug' && worldEvents.length === 0 && !worldEventsLoading) {
+      fetchWorldEvents(worldEventsTurn)
+    }
+  }, [activeTab])
 
   const fetchData = async () => {
     try {
@@ -195,6 +211,12 @@ export default function AdminPage() {
         setClocks(clocksData.clocks || [])
       }
 
+      // Fetch simulation settings (tick caps)
+      const simSettingsResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/settings/simulation`)
+      if (simSettingsResponse.ok) {
+        setSimulationSettings(await simSettingsResponse.json())
+      }
+
       // Fetch Invites
       const invitesResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/invites`)
       if (invitesResponse.ok) {
@@ -237,6 +259,47 @@ export default function AdminPage() {
       setError('Failed to save AI settings')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSaveSimulationSettings = async () => {
+    if (!simulationSettings) return
+    setSaving(true)
+
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/settings/simulation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          factionCap: simulationSettings.factionCap,
+          npcCap: simulationSettings.npcCap,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Failed to save')
+
+      setError('')
+      alert('Simulation settings saved successfully!')
+    } catch (err) {
+      setError('Failed to save simulation settings')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fetchWorldEvents = async (turn?: number | null) => {
+    setWorldEventsLoading(true)
+    try {
+      const qs = turn !== undefined && turn !== null ? `?turn=${turn}` : ''
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/world-events${qs}`)
+      if (response.ok) {
+        const data = await response.json()
+        setWorldEvents(data.events || [])
+      }
+    } catch (err) {
+      setError('Failed to load world events')
+    } finally {
+      setWorldEventsLoading(false)
     }
   }
 
@@ -545,7 +608,7 @@ export default function AdminPage() {
         isAdmin
         subrow={
           <nav className="max-w-7xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
-            {(['dashboard', 'ai', 'npcs', 'factions', 'locations', 'clocks', 'invites', 'members', 'settings'] as const).map((tab) => (
+            {(['dashboard', 'ai', 'npcs', 'factions', 'locations', 'clocks', 'map', 'debug', 'invites', 'members', 'settings'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -629,6 +692,61 @@ export default function AdminPage() {
                 >
                   {saving ? 'Saving...' : 'Save AI Settings'}
                 </button>
+
+                {simulationSettings && (
+                  <div className="mt-8 pt-6 border-t border-ember-900/30">
+                    <h3 className="font-semibold mb-1">Simulation Caps</h3>
+                    <p className="text-xs text-ember-400/50 mb-3">
+                      How many factions/NPCs the world tick simulates each turn. Leave blank to use the default —
+                      only campaigns whose roster has grown past it need to raise this.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">
+                          Faction cap (default {simulationSettings.defaultFactionCap})
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder={String(simulationSettings.defaultFactionCap)}
+                          value={simulationSettings.factionCap ?? ''}
+                          onChange={(e) =>
+                            setSimulationSettings({
+                              ...simulationSettings,
+                              factionCap: e.target.value === '' ? null : parseInt(e.target.value),
+                            })
+                          }
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">
+                          NPC cap (default {simulationSettings.defaultNpcCap})
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder={String(simulationSettings.defaultNpcCap)}
+                          value={simulationSettings.npcCap ?? ''}
+                          onChange={(e) =>
+                            setSimulationSettings({
+                              ...simulationSettings,
+                              npcCap: e.target.value === '' ? null : parseInt(e.target.value),
+                            })
+                          }
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleSaveSimulationSettings}
+                      disabled={saving}
+                      className="mt-3 px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving...' : 'Save Simulation Caps'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1582,6 +1700,161 @@ export default function AdminPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Map Tab — faction relationships (rival/ally) + territory */}
+            {activeTab === 'map' && (
+              <div className="space-y-6">
+                <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+                  <h3 className="font-semibold mb-1">Faction Relationships</h3>
+                  <p className="text-xs text-ember-400/50 mb-4">
+                    Red dashed = rival, green solid = ally. Only active factions are shown.
+                  </p>
+                  {(() => {
+                    const activeFactions = factions.filter((f) => f.isActive !== false)
+                    if (activeFactions.length === 0) {
+                      return <p className="text-sm text-ember-400/50 italic">No active factions yet.</p>
+                    }
+                    const center = 160
+                    const radius = 120
+                    const positions = activeFactions.map((f, i) => {
+                      const angle = (2 * Math.PI * i) / activeFactions.length - Math.PI / 2
+                      return { id: f.id, name: f.name, x: center + radius * Math.cos(angle), y: center + radius * Math.sin(angle) }
+                    })
+                    const posById = new Map(positions.map((p) => [p.id, p]))
+                    const edges: Array<{ from: string; to: string; type: 'RIVAL' | 'ALLY' }> = []
+                    const seenPairs = new Set<string>()
+                    for (const f of activeFactions) {
+                      const rels = f.relationships || {}
+                      for (const [otherId, rel] of Object.entries(rels)) {
+                        if (!posById.has(otherId)) continue
+                        const key = [f.id, otherId].sort().join(':')
+                        if (seenPairs.has(key)) continue
+                        seenPairs.add(key)
+                        edges.push({ from: f.id, to: otherId, type: rel.type })
+                      }
+                    }
+                    return (
+                      <svg viewBox="0 0 320 320" className="w-full max-w-md mx-auto">
+                        {edges.map((e, i) => {
+                          const a = posById.get(e.from)!
+                          const b = posById.get(e.to)!
+                          return (
+                            <line
+                              key={i}
+                              x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                              stroke={e.type === 'RIVAL' ? '#dc2626' : '#22c55e'}
+                              strokeWidth={2}
+                              strokeDasharray={e.type === 'RIVAL' ? '5 4' : undefined}
+                              opacity={0.75}
+                            />
+                          )
+                        })}
+                        {positions.map((p) => (
+                          <g key={p.id}>
+                            <circle cx={p.x} cy={p.y} r={24} fill="#1c1410" stroke="#a8703a" strokeWidth={1.5} />
+                            <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize={9} fill="#f2c98a">
+                              {p.name.length > 10 ? p.name.slice(0, 9) + '…' : p.name}
+                            </text>
+                          </g>
+                        ))}
+                      </svg>
+                    )
+                  })()}
+                </div>
+
+                <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+                  <h3 className="font-semibold mb-3">Territory</h3>
+                  {locations.length === 0 ? (
+                    <p className="text-sm text-ember-400/50 italic">No locations tracked yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {factions
+                        .filter((f) => locations.some((l) => l.ownerFactionId === f.id))
+                        .map((f) => (
+                          <div key={f.id}>
+                            <h4 className="text-sm font-semibold text-ember-200">{f.name}</h4>
+                            <p className="text-xs text-ember-300/60">
+                              {locations.filter((l) => l.ownerFactionId === f.id).map((l) => l.name).join(', ')}
+                            </p>
+                          </div>
+                        ))}
+                      {locations.some((l) => !l.ownerFactionId) && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-ember-400/60">Unclaimed</h4>
+                          <p className="text-xs text-ember-300/60">
+                            {locations.filter((l) => !l.ownerFactionId).map((l) => l.name).join(', ')}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Debug Tab — inspect why a past tick made a given decision.
+                This is a browsable log of already-recorded WorldEvent rows,
+                not a live re-simulation: replaying a tick against
+                counterfactual state would need a sandboxed dry-run mode
+                threaded through every tick handler, which is real added risk
+                (could double-write memory/history entries if not perfectly
+                isolated) for a "stretch" item — deliberately out of scope. */}
+            {activeTab === 'debug' && (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+                  <h3 className="font-semibold mb-1">Tick Log</h3>
+                  <p className="text-xs text-ember-400/50 mb-4">
+                    Every deterministic tick change and player-action consequence, with the reason the simulation
+                    made that call. Leave the turn blank for the most recent events across all turns.
+                  </p>
+                  <div className="flex items-end gap-3 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-ember-200/80 mb-1">Turn</label>
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder="latest"
+                        value={worldEventsTurn ?? ''}
+                        onChange={(e) => setWorldEventsTurn(e.target.value === '' ? null : parseInt(e.target.value))}
+                        className="block w-28 border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                      />
+                    </div>
+                    <button
+                      onClick={() => fetchWorldEvents(worldEventsTurn)}
+                      disabled={worldEventsLoading}
+                      className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
+                    >
+                      {worldEventsLoading ? 'Loading...' : 'Load'}
+                    </button>
+                  </div>
+
+                  {worldEventsLoading ? (
+                    <p className="text-sm text-ember-400/50">Loading...</p>
+                  ) : worldEvents.length === 0 ? (
+                    <p className="text-sm text-ember-400/50 italic">No events found.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {worldEvents.map((event: any) => (
+                        <div key={event.id} className="p-3 bg-black/25 rounded-lg border border-ember-900/30">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-semibold text-ember-200">
+                              Turn {event.turnNumber} · {event.targetName}
+                            </span>
+                            <span className="text-xs text-ember-400/50">{event.origin}</span>
+                          </div>
+                          <p className="text-xs text-ember-300/70">
+                            {event.field}: <span className="text-ember-400/60">{event.previousValue ?? '—'}</span>
+                            {' → '}
+                            <span className="text-ember-200">{event.newValue ?? '—'}</span>
+                          </p>
+                          <p className="text-xs text-ember-400/50 mt-1 italic">{event.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

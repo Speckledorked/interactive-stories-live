@@ -36,6 +36,9 @@ export interface WorldChange {
 export interface TickContext {
   campaignId: string
   turnNumber: number
+  /** World Sim Phase 8: resolved once per tick in worldTick.ts — see caps.ts. */
+  factionCap: number
+  npcCap: number
 }
 
 /**

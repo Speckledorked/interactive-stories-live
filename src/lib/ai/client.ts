@@ -204,15 +204,25 @@ export interface AIGMRequest {
       goals: string | null
       relationship: string | null
       importance: number
+      // World Sim Phase 4: bare ids — cross-reference against `factions`
+      // below for the name. Absent from that array = the faction is
+      // undiscovered, so don't name it in the prompt.
+      factionId?: string | null
+      factionRole?: string | null
     }>
     factions: Array<{
       id: string
       name: string
       goals: string | null
       currentPlan: string | null
-      threatLevel: number
-      resources: number
-      influence: number
+      // Fog of war: qualitative descriptors, not raw numbers — see
+      // qualitativeStats.ts. The old numeric threatLevel/resources/influence
+      // shape predates that pass and no longer exists here.
+      threat_level: string
+      resources: string
+      influence: string
+      // World Sim Phase 6: set when a player character leads this faction.
+      leader_character_id?: string | null
     }>
     locations?: Array<{
       name: string
@@ -220,6 +230,8 @@ export interface AIGMRequest {
       type: string
       weather?: string
       weather_severity?: number
+      owner_faction_id?: string | null
+      is_contested?: boolean
     }>
     clocks: Array<{
       id: string
@@ -234,6 +246,16 @@ export interface AIGMRequest {
       summary: string
       turn_number: number | null
     }>
+    // World Sim Phase 5: active wars, coalition ally counts included.
+    wars?: Array<{
+      name: string
+      attacker: string
+      defender: string
+      attacker_allies: number
+      defender_allies: number
+      momentum: string
+      turns_elapsed: number
+    }>
     relevant_campaign_history?: Array<{
       turn: number
       title: string
@@ -243,6 +265,9 @@ export interface AIGMRequest {
       emotional_tone: string | null
       relevance: string
     }>
+    // Pre-formatted campaign overview text for large campaigns (see
+    // buildOptimizedWorldSummary); empty/absent for small ones.
+    _campaignSummary?: string
   }
   current_scene_intro: string
   player_actions: Array<{
@@ -677,7 +702,7 @@ REGISTER NEW FACTIONS: Whenever a new organization, gang, guild, or group emerge
 - Include a description (who they are), goals (what they want), and current_plan (what they're doing right now)
 - Example: A new criminal syndicate revealed mid-scene → register with is_new: true
 
-PLAYER-LED FACTIONS: If a faction's leader_character_id in the world state matches a player character in this scene, and that player makes a genuine strategic decision as that leader (e.g. "As Duke, I commit our forces to retaking the border fort" or "I redirect the guild toward trade instead of war"), set changes.goal on that faction to the matching value (EXPAND, DEFEND, ENRICH, DESTABILIZE_RIVAL, or CONSOLIDATE).
+PLAYER-LED FACTIONS: Factions marked "LED BY PLAYER CHARACTER: <name>" in the FACTIONS list are led by that player character. If that player makes a genuine strategic decision as the leader this scene (e.g. "As Duke, I commit our forces to retaking the border fort" or "I redirect the guild toward trade instead of war"), set changes.goal on that faction to the matching value (EXPAND, DEFEND, ENRICH, DESTABILIZE_RIVAL, or CONSOLIDATE).
 - Only do this for factions the player actually leads — for every other faction, goal is decided automatically by the simulation and setting it here has no effect
 - A player's held or intended actions (not yet acted on) don't count — only a decision actually made this scene
 
@@ -738,20 +763,37 @@ ${world_summary.characters.map(c => {
 }).join('\n\n')}
 
 IMPORTANT NPCs:
-${world_summary.npcs.filter(n => n.importance >= 3).map(n =>
-  `• ${n.name} - ${n.relationship || 'Neutral'} | Goals: ${n.goals || 'Unknown'} | Importance: ${n.importance}/5`
-).join('\n')}
+${world_summary.npcs.filter(n => n.importance >= 3).map(n => {
+  // Only name the faction if it's in the discovered factions list — an
+  // affiliation with a hidden faction stays out of the prompt entirely.
+  const npcFaction = n.factionId ? world_summary.factions.find(f => f.id === n.factionId) : null
+  const factionPart = npcFaction ? ` | ${npcFaction.name} (${n.factionRole === 'LEADER' ? 'leader' : 'member'})` : ''
+  return `• ${n.name} - ${n.relationship || 'Neutral'} | Goals: ${n.goals || 'Unknown'} | Importance: ${n.importance}/5${factionPart}`
+}).join('\n')}
 
 FACTIONS:
-${world_summary.factions.map(f =>
-  `• ${f.name} (Threat ${f.threatLevel}/5) - ${f.goals || 'Unknown'} | Plan: ${f.currentPlan || 'Unknown'}`
-).join('\n')}
+${world_summary.factions.map(f => {
+  const leader = f.leader_character_id
+    ? world_summary.characters.find(c => c.id === f.leader_character_id)
+    : null
+  const leaderPart = leader ? ` | LED BY PLAYER CHARACTER: ${leader.name}` : ''
+  return `• ${f.name} (threat: ${f.threat_level}, resources: ${f.resources}, influence: ${f.influence}) - ${f.goals || 'Unknown'} | Plan: ${f.currentPlan || 'Unknown'}${leaderPart}`
+}).join('\n')}
 
-KNOWN LOCATIONS:
+${world_summary.wars && world_summary.wars.length > 0 ? `ACTIVE WARS (narrate from this real state — don't invent how a war is going):
+${world_summary.wars.map(w => {
+  const attackerSide = w.attacker_allies > 0 ? `${w.attacker} and ${w.attacker_allies} all${w.attacker_allies === 1 ? 'y' : 'ies'}` : w.attacker
+  const defenderSide = w.defender_allies > 0 ? `${w.defender} and ${w.defender_allies} all${w.defender_allies === 1 ? 'y' : 'ies'}` : w.defender
+  return `• ${w.name}: ${attackerSide} vs ${defenderSide} — currently ${w.momentum}, ${w.turns_elapsed} turn${w.turns_elapsed === 1 ? '' : 's'} in`
+}).join('\n')}
+
+` : ''}KNOWN LOCATIONS:
 ${world_summary.locations && world_summary.locations.length > 0
-  ? world_summary.locations.map(l =>
-    `• ${l.name}${l.type !== 'unknown' ? ` [${l.type}]` : ''}${l.description ? ` - ${l.description}` : ''}${l.weather ? ` | Weather: ${l.weather}${l.weather_severity ? ` (severity ${l.weather_severity}/5)` : ''} — reference this, don't invent different weather` : ''}`
-  ).join('\n')
+  ? world_summary.locations.map(l => {
+    const owner = l.owner_faction_id ? world_summary.factions.find(f => f.id === l.owner_faction_id) : null
+    const ownerPart = owner ? ` | Controlled by ${owner.name}${l.is_contested ? ' (CONTESTED)' : ''}` : ''
+    return `• ${l.name}${l.type !== 'unknown' ? ` [${l.type}]` : ''}${l.description ? ` - ${l.description}` : ''}${l.weather ? ` | Weather: ${l.weather}${l.weather_severity ? ` (severity ${l.weather_severity}/5)` : ''} — reference this, don't invent different weather` : ''}${ownerPart}`
+  }).join('\n')
   : '(none discovered yet)'}
 
 CLOCKS:
@@ -763,7 +805,12 @@ RECENT TIMELINE:
 ${world_summary.recent_timeline_events.slice(0, 5).map(e =>
   `• Turn ${e.turn_number}: ${e.title} - ${e.summary}`
 ).join('\n')}
-</world_state>
+${world_summary._campaignSummary ? `\n${world_summary._campaignSummary}\n` : ''}${world_summary.relevant_campaign_history && world_summary.relevant_campaign_history.length > 0 ? `
+RELEVANT CAMPAIGN HISTORY (semantically retrieved past events — treat these as established fact and stay consistent with them; if a player asks about one, answer from here, don't improvise):
+${world_summary.relevant_campaign_history.map(m =>
+  `• Turn ${m.turn} [${m.importance}] ${m.title}: ${m.summary}`
+).join('\n')}
+` : ''}</world_state>
 
 <current_scene>
 ${current_scene_intro}

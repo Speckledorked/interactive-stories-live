@@ -79,21 +79,24 @@ describe('tickFactions dry run', () => {
     // rival relationship, so this exercises the "found a successor" branch
     // — the one with a prisma.faction.create() call whose return value
     // (createdSuccessor.id) other writes depend on.
-    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      {
-        id: 'f1',
-        campaignId: 'campaign-1',
-        name: 'The Wilting Guild',
-        resources: 10,
-        stability: 5,
-        military: 10,
-        goal: 'CONSOLIDATE',
-        archetype: 'GENERIC',
-        relationships: {},
-        leaderCharacterId: null,
-        isActive: true,
-      },
-    ] as any)
+    const wiltingGuild = {
+      id: 'f1',
+      campaignId: 'campaign-1',
+      name: 'The Wilting Guild',
+      resources: 10,
+      stability: 5,
+      military: 10,
+      goal: 'CONSOLIDATE',
+      archetype: 'GENERIC',
+      relationships: {},
+      leaderCharacterId: null,
+      isActive: true,
+    }
+    // tickFactions queries factions twice: the capped main list, then an
+    // uncapped id-only list for the stale-rival guard.
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([wiltingGuild] as any)
+      .mockResolvedValueOnce([{ id: 'f1' }] as any)
 
     const result = await tickFactions(baseCtx({ dryRun: true }))
 

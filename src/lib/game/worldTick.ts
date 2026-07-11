@@ -43,9 +43,12 @@ import { resolveTickCaps } from './tick/caps'
 // tickWars runs after both — it reads this turn's post-drift military and
 // resources for momentum/attrition, and reads relationships/territory as of
 // the start of this turn (one-tick lag, same reasoning as above). It runs
-// before tickFactionAmbitions so a faction that just entered a war this
-// turn isn't also weighed for spawning an unrelated ambition Clock on the
-// same tick. See warTick.ts for the full design.
+// before tickFactionAmbitions because ambitionTick explicitly skips any
+// faction with a WarParticipant row in an ESCALATING war — running wars
+// first means a war declared or joined THIS tick already has its
+// participant rows by the time ambitions are weighed, so a faction never
+// commits to an unrelated ambition the same tick it goes to war. (Ordering
+// alone wouldn't guarantee that; the actual guard lives in ambitionTick.)
 const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickFactionAmbitions, tickNpcs]
 
 /**

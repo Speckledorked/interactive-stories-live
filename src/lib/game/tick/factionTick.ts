@@ -166,6 +166,21 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     take: ctx.factionCap,
   })
 
+  // Uncapped set of every currently-active faction, used to ignore
+  // relationship entries pointing at collapsed factions. relationshipTick
+  // (which runs first) expires those entries each turn, but a faction that
+  // collapses THIS turn, inside this very loop, leaves its rivals' entries
+  // stale until next turn — so this check covers the same-tick window, and
+  // the set is kept current as collapses happen below.
+  const activeFactionIds = new Set(
+    (
+      await prisma.faction.findMany({
+        where: { campaignId: ctx.campaignId, isActive: true },
+        select: { id: true },
+      })
+    ).map((f) => f.id)
+  )
+
   const changes: WorldChange[] = []
 
   for (const faction of factions) {
@@ -271,13 +286,18 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
 
       // Skip normal goal reassignment/stat-band logging for a faction that
       // no longer exists as an independent actor as of this tick.
+      activeFactionIds.delete(faction.id)
       continue
     }
 
     // World Sim Phase 6: a player-led faction's goal is the player's call,
     // not the tick's — skip reassessment and leave whatever they (or the AI
     // narrating their decision through scene resolution) last set it to.
-    const factionHasRival = Object.values(relationships).some((r) => r.type === 'RIVAL')
+    // A rival only counts if it still exists as an active faction — see the
+    // activeFactionIds comment above.
+    const factionHasRival = Object.entries(relationships).some(
+      ([otherId, r]) => r.type === 'RIVAL' && activeFactionIds.has(otherId)
+    )
     const nextGoal = faction.leaderCharacterId
       ? faction.goal
       : decideFactionGoalReassessment({ ...next, goal: faction.goal, hasRival: factionHasRival })

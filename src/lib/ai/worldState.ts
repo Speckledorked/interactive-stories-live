@@ -575,8 +575,13 @@ export async function buildSceneResolutionRequest(
   // whether the named NPC is currently on-screen or minor.
   try {
     const actionText = scene.playerActions.map(a => a.actionText).join(' ').toLowerCase()
+    // Fog of war: only DISCOVERED entities qualify for name-mention recall.
+    // entities.* is the full unfiltered campaign list (that's what the
+    // recall guarantee needs for entities the party HAS met, regardless of
+    // current scene relevance) — but a player typing an undiscovered
+    // entity's exact name must not pull its hidden history into the prompt.
     const mentionedNpcIds = entities.npcs
-      .filter(n => n.name && actionText.includes(n.name.toLowerCase()))
+      .filter(n => n.isDiscovered && n.name && actionText.includes(n.name.toLowerCase()))
       .map(n => n.id)
 
     if (mentionedNpcIds.length > 0) {
@@ -599,7 +604,7 @@ export async function buildSceneResolutionRequest(
     // NPCs' shared past, needs the memory that mentions both, which could
     // easily be outranked by unrelated single-entity memories otherwise.
     const mentionedFactionIds = entities.factions
-      .filter(f => f.name && actionText.includes(f.name.toLowerCase()))
+      .filter(f => f.isDiscovered && f.name && actionText.includes(f.name.toLowerCase()))
       .map(f => f.id)
     const mentionedEntityIds = Array.from(new Set([...mentionedNpcIds, ...mentionedFactionIds]))
 

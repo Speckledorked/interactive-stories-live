@@ -172,10 +172,23 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
     },
   })
 
+  // A faction currently fighting a war sits ambitions out entirely — it's
+  // already paying attrition every turn, and it shouldn't be throwing a
+  // tournament while its army bleeds. Because tickWars runs earlier in the
+  // handler order (see worldTick.ts), this also covers wars declared or
+  // joined THIS tick, not just pre-existing ones.
+  const warParticipants = await prisma.warParticipant.findMany({
+    where: { war: { campaignId: ctx.campaignId, status: 'ESCALATING' } },
+    select: { factionId: true },
+  })
+  const factionIdsAtWar = new Set(warParticipants.map((p) => p.factionId))
+
   const changes: WorldChange[] = []
   const pendingAmbitions: PendingAmbition[] = []
 
   for (const faction of factions) {
+    if (factionIdsAtWar.has(faction.id)) continue
+
     const hasActiveSpawnedClock = faction.spawnedClocks.some((c) => c.currentTicks < c.maxTicks)
     const decision = decideAmbitionTick({
       name: faction.name,

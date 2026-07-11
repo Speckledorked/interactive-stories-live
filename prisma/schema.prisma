@@ -478,7 +478,7 @@ model Location {
 }
 
 //
-// WARS — World Sim Phase 5, coalitions added later
+// WARS — World Sim Phase 5, with multi-faction coalitions
 //
 // A sustained multi-turn conflict, distinct from a one-shot ambition Clock.
 // Declared deterministically when two rival factions are both militarily

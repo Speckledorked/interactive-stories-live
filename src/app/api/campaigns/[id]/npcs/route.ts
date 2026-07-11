@@ -34,13 +34,16 @@ export async function GET(
       )
     }
 
-    // Get all NPCs for the campaign
+    const isAdmin = membership.role === 'ADMIN'
+
+    // Fog of war: admins see undiscovered NPCs too (they manage them);
+    // everyone else sees only what the party has actually found.
     const npcs = await prisma.nPC.findMany({
-      where: { campaignId },
+      where: isAdmin ? { campaignId } : { campaignId, isDiscovered: true },
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ npcs: redactGmNotesList(npcs, membership.role === 'ADMIN') })
+    return NextResponse.json({ npcs: redactGmNotesList(npcs, isAdmin) })
   } catch (error) {
     console.error('Get NPCs error:', error)
     return NextResponse.json(

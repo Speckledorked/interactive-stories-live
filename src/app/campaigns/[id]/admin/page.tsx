@@ -135,6 +135,8 @@ export default function AdminPage() {
   const [worldEvents, setWorldEvents] = useState<any[]>([])
   const [worldEventsTurn, setWorldEventsTurn] = useState<number | null>(null)
   const [worldEventsLoading, setWorldEventsLoading] = useState(false)
+  const [tickPreview, setTickPreview] = useState<any[] | null>(null)
+  const [tickPreviewLoading, setTickPreviewLoading] = useState(false)
   const [editingNpc, setEditingNpc] = useState<string | null>(null)
   const [editingFaction, setEditingFaction] = useState<string | null>(null)
   const [editingLocation, setEditingLocation] = useState<string | null>(null)
@@ -300,6 +302,25 @@ export default function AdminPage() {
       setError('Failed to load world events')
     } finally {
       setWorldEventsLoading(false)
+    }
+  }
+
+  const handlePreviewTick = async () => {
+    setTickPreviewLoading(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/world-tick/preview`, {
+        method: 'POST',
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setTickPreview(data.changes || [])
+      } else {
+        setError('Failed to preview world tick')
+      }
+    } catch (err) {
+      setError('Failed to preview world tick')
+    } finally {
+      setTickPreviewLoading(false)
     }
   }
 
@@ -1795,15 +1816,58 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Debug Tab — inspect why a past tick made a given decision.
-                This is a browsable log of already-recorded WorldEvent rows,
-                not a live re-simulation: replaying a tick against
-                counterfactual state would need a sandboxed dry-run mode
-                threaded through every tick handler, which is real added risk
-                (could double-write memory/history entries if not perfectly
-                isolated) for a "stretch" item — deliberately out of scope. */}
+            {/* Debug Tab — inspect why a tick made a given decision.
+                The Tick Log below browses already-recorded WorldEvent rows
+                (past turns). The Preview panel dry-runs the NEXT tick against
+                live current state: every handler's writes are skipped (see
+                TickContext.dryRun), so nothing is persisted and the turn
+                number doesn't advance — this is a preview of what the next
+                tick would do, not a replay of a past one (there's no
+                snapshot of past DB state to replay against). */}
             {activeTab === 'debug' && (
               <div className="space-y-4">
+                <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+                  <h3 className="font-semibold mb-1">Preview Next Tick</h3>
+                  <p className="text-xs text-ember-400/50 mb-4">
+                    Dry-runs the world tick against current state — shows exactly what would change and why,
+                    without writing anything or advancing the turn.
+                  </p>
+                  <button
+                    onClick={handlePreviewTick}
+                    disabled={tickPreviewLoading}
+                    className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
+                  >
+                    {tickPreviewLoading ? 'Simulating...' : 'Preview Next Tick'}
+                  </button>
+
+                  {tickPreview !== null && (
+                    <div className="mt-4 space-y-2">
+                      {tickPreview.length === 0 ? (
+                        <p className="text-sm text-ember-400/50 italic">No changes — the next tick would be a no-op.</p>
+                      ) : (
+                        tickPreview.map((change: any, i: number) => (
+                          <div key={i} className="p-3 bg-black/25 rounded-lg border border-ember-900/30">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-semibold text-ember-200">
+                                {change.entityName} · {change.field}
+                              </span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${change.significant ? 'text-ember-300 bg-ember-900/30' : 'text-ember-400/50 bg-black/30'}`}>
+                                {change.importance}
+                              </span>
+                            </div>
+                            <p className="text-xs text-ember-300/70">
+                              <span className="text-ember-400/60">{change.previousValue ?? '—'}</span>
+                              {' → '}
+                              <span className="text-ember-200">{change.newValue ?? '—'}</span>
+                            </p>
+                            <p className="text-xs text-ember-400/50 mt-1 italic">{change.reason}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
                   <h3 className="font-semibold mb-1">Tick Log</h3>
                   <p className="text-xs text-ember-400/50 mb-4">

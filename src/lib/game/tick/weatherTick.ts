@@ -68,14 +68,16 @@ export async function tickWeather(ctx: TickContext): Promise<TickHandlerResult> 
       continue
     }
 
-    await prisma.location.update({
-      where: { id: location.id },
-      data: {
-        weather: decision.nextCondition,
-        weatherSeverity: decision.nextSeverity,
-        weatherUpdatedAt: new Date(),
-      },
-    })
+    if (!ctx.dryRun) {
+      await prisma.location.update({
+        where: { id: location.id },
+        data: {
+          weather: decision.nextCondition,
+          weatherSeverity: decision.nextSeverity,
+          weatherUpdatedAt: new Date(),
+        },
+      })
+    }
 
     // Only a condition change (not a severity wobble within the same
     // condition) is worth a history entry — otherwise every location would

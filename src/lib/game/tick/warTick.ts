@@ -120,12 +120,14 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
     // A side that collapsed mid-war ends it outright — there's no one left
     // to fight. The survivor (if any) simply keeps whatever it already held.
     if (!war.attacker.isActive || !war.defender.isActive) {
-      await prisma.war.update({
-        where: { id: war.id },
-        data: { status: 'RESOLVED', outcome: 'stalemate', resolvedTurn: ctx.turnNumber },
-      })
-      if (war.contestedLocationId) {
-        await prisma.location.update({ where: { id: war.contestedLocationId }, data: { isContested: false } })
+      if (!ctx.dryRun) {
+        await prisma.war.update({
+          where: { id: war.id },
+          data: { status: 'RESOLVED', outcome: 'stalemate', resolvedTurn: ctx.turnNumber },
+        })
+        if (war.contestedLocationId) {
+          await prisma.location.update({ where: { id: war.contestedLocationId }, data: { isContested: false } })
+        }
       }
       changes.push({
         entityType: 'FACTION',
@@ -145,56 +147,66 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
     const progress = decideWarProgress(war, war.attacker, war.defender, ctx.turnNumber)
     const newMomentum = clamp(war.momentum + progress.momentumDelta, -100, 100)
 
-    await prisma.faction.update({
-      where: { id: war.attackerFactionId },
-      data: {
-        resources: clamp(war.attacker.resources + progress.attackerResourceDelta, 0, 100),
-        military: clamp(war.attacker.military + progress.attackerMilitaryDelta, 0, 100),
-      },
-    })
-    await prisma.faction.update({
-      where: { id: war.defenderFactionId },
-      data: {
-        resources: clamp(war.defender.resources + progress.defenderResourceDelta, 0, 100),
-        military: clamp(war.defender.military + progress.defenderMilitaryDelta, 0, 100),
-      },
-    })
+    if (!ctx.dryRun) {
+      await prisma.faction.update({
+        where: { id: war.attackerFactionId },
+        data: {
+          resources: clamp(war.attacker.resources + progress.attackerResourceDelta, 0, 100),
+          military: clamp(war.attacker.military + progress.attackerMilitaryDelta, 0, 100),
+        },
+      })
+      await prisma.faction.update({
+        where: { id: war.defenderFactionId },
+        data: {
+          resources: clamp(war.defender.resources + progress.defenderResourceDelta, 0, 100),
+          military: clamp(war.defender.military + progress.defenderMilitaryDelta, 0, 100),
+        },
+      })
+    }
 
     const turnsElapsed = ctx.turnNumber - war.startedTurn
     const resolution = decideWarResolution(newMomentum, turnsElapsed)
 
     if (!resolution.resolves) {
-      await prisma.war.update({ where: { id: war.id }, data: { momentum: newMomentum } })
+      if (!ctx.dryRun) {
+        await prisma.war.update({ where: { id: war.id }, data: { momentum: newMomentum } })
+      }
       continue
     }
 
-    await prisma.war.update({
-      where: { id: war.id },
-      data: { momentum: newMomentum, status: 'RESOLVED', outcome: resolution.outcome, resolvedTurn: ctx.turnNumber },
-    })
+    if (!ctx.dryRun) {
+      await prisma.war.update({
+        where: { id: war.id },
+        data: { momentum: newMomentum, status: 'RESOLVED', outcome: resolution.outcome, resolvedTurn: ctx.turnNumber },
+      })
+    }
 
     let contestedLocationName: string | null = null
     if (war.contestedLocationId) {
       const contestedLocation = await prisma.location.findUnique({ where: { id: war.contestedLocationId } })
       contestedLocationName = contestedLocation?.name ?? null
 
-      if (resolution.outcome === 'attacker') {
-        await prisma.location.update({
-          where: { id: war.contestedLocationId },
-          data: { ownerFactionId: war.attackerFactionId, isContested: false },
-        })
-      } else {
-        // Defender holds, or it's a stalemate — either way the siege lifts.
-        await prisma.location.update({ where: { id: war.contestedLocationId }, data: { isContested: false } })
+      if (!ctx.dryRun) {
+        if (resolution.outcome === 'attacker') {
+          await prisma.location.update({
+            where: { id: war.contestedLocationId },
+            data: { ownerFactionId: war.attackerFactionId, isContested: false },
+          })
+        } else {
+          // Defender holds, or it's a stalemate — either way the siege lifts.
+          await prisma.location.update({ where: { id: war.contestedLocationId }, data: { isContested: false } })
+        }
       }
     }
 
     // The losing side takes a stability hit beyond the attrition it already
     // paid every turn — losing a war costs more than fighting one.
-    if (resolution.outcome === 'attacker') {
-      await prisma.faction.update({ where: { id: war.defenderFactionId }, data: { stability: clamp(war.defender.stability - 10, 0, 100) } })
-    } else if (resolution.outcome === 'defender') {
-      await prisma.faction.update({ where: { id: war.attackerFactionId }, data: { stability: clamp(war.attacker.stability - 10, 0, 100) } })
+    if (!ctx.dryRun) {
+      if (resolution.outcome === 'attacker') {
+        await prisma.faction.update({ where: { id: war.defenderFactionId }, data: { stability: clamp(war.defender.stability - 10, 0, 100) } })
+      } else if (resolution.outcome === 'defender') {
+        await prisma.faction.update({ where: { id: war.attackerFactionId }, data: { stability: clamp(war.attacker.stability - 10, 0, 100) } })
+      }
     }
 
     const reasonByOutcome = {
@@ -245,16 +257,18 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
 
     const prizeLocation = locations.find((l) => l.id === decision.contestedLocationId)
 
-    await prisma.war.create({
-      data: {
-        campaignId: ctx.campaignId,
-        name: prizeLocation ? `War for ${prizeLocation.name}` : `${attacker.name} vs. ${defender.name}`,
-        attackerFactionId: attacker.id,
-        defenderFactionId: defender.id,
-        contestedLocationId: decision.contestedLocationId,
-        startedTurn: ctx.turnNumber,
-      },
-    })
+    if (!ctx.dryRun) {
+      await prisma.war.create({
+        data: {
+          campaignId: ctx.campaignId,
+          name: prizeLocation ? `War for ${prizeLocation.name}` : `${attacker.name} vs. ${defender.name}`,
+          attackerFactionId: attacker.id,
+          defenderFactionId: defender.id,
+          contestedLocationId: decision.contestedLocationId,
+          startedTurn: ctx.turnNumber,
+        },
+      })
+    }
 
     factionIdsAtWar.add(attacker.id)
     factionIdsAtWar.add(defender.id)

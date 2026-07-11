@@ -8,7 +8,7 @@
  * - Managing scale for 100+ scene campaigns
  */
 
-import { PrismaClient, Scene } from '@prisma/client';
+import { PrismaClient, Scene, MemoryImportance } from '@prisma/client';
 
 export interface CompressedEvent {
   sceneNumber: number;
@@ -86,8 +86,17 @@ export async function generateCampaignSummary(
   else if (totalScenes < 30) campaignPhase = 'middle';
   else campaignPhase = 'climax';
 
+  // Reuse the importance already computed at scene-resolution time
+  // (memoryCreation.ts's determineImportance()) instead of re-deriving it
+  // independently — see classifySceneImportance's doc comment below.
+  const sceneMemories = await prisma.campaignMemory.findMany({
+    where: { campaignId, memoryType: 'SCENE', sourceId: { in: scenes.map(s => s.id) } },
+    select: { sourceId: true, importance: true }
+  });
+  const memoryImportanceBySceneId = new Map(sceneMemories.map(m => [m.sourceId, m.importance]));
+
   // Extract important moments
-  const keyEvents = await extractImportantMoments(scenes, timeline);
+  const keyEvents = await extractImportantMoments(scenes, timeline, memoryImportanceBySceneId);
 
   // Extract active threats from consequences
   const activeThreats: string[] = [];
@@ -113,30 +122,62 @@ export async function generateCampaignSummary(
 }
 
 /**
+ * Classify a scene's importance for compression purposes.
+ *
+ * This used to independently re-derive importance from keyword-matching
+ * over scene text and a timeline-event check — duplicating the judgment
+ * memoryCreation.ts's determineImportance() already makes (and stores, on
+ * the scene's CampaignMemory row) at scene-resolution time, using richer
+ * signals than are available here (structured character harm, clock/faction
+ * updates, scene type — not just resolution-text keywords). Reuses that
+ * stored value as the source of truth now. The keyword/timeline fallback
+ * only fires when no memory row exists for the scene — memory writes are
+ * best-effort and can fail without blocking gameplay (see
+ * createSceneMemory's own doc comment) — so a scene isn't silently
+ * downgraded to 'normal' just because its embedding call happened to fail.
+ */
+export function classifySceneImportance(
+  memoryImportance: MemoryImportance | undefined,
+  hasPublicTimelineEvent: boolean,
+  resolutionText: string
+): 'critical' | 'important' | 'normal' {
+  if (memoryImportance) {
+    if (memoryImportance === 'CRITICAL') return 'critical';
+    if (memoryImportance === 'MAJOR') return 'important';
+    return 'normal'; // NORMAL or MINOR
+  }
+
+  let importance: 'critical' | 'important' | 'normal' = 'normal';
+  if (hasPublicTimelineEvent) importance = 'important';
+
+  const lowerText = resolutionText.toLowerCase();
+  const criticalKeywords = ['death', 'killed', 'betrayal', 'captured', 'victory', 'defeat', 'destroyed'];
+  if (criticalKeywords.some(keyword => lowerText.includes(keyword))) {
+    importance = 'critical';
+  }
+
+  return importance;
+}
+
+/**
  * Extract important moments from scene history
- * Uses heuristics: character harm, major consequences, timeline event creation
  */
 async function extractImportantMoments(
   scenes: Scene[],
-  timeline: any[]
+  timeline: any[],
+  memoryImportanceBySceneId: Map<string, MemoryImportance> = new Map()
 ): Promise<CompressedEvent[]> {
   const importantMoments: CompressedEvent[] = [];
 
   for (const scene of scenes) {
-    let importance: 'critical' | 'important' | 'normal' = 'normal';
-
-    // Check if this scene created major timeline events
     const sceneEvents = timeline.filter(e => e.turnNumber === scene.sceneNumber);
-    if (sceneEvents.length > 0 && sceneEvents.some(e => e.visibility === 'PUBLIC')) {
-      importance = 'important';
-    }
+    const hasPublicTimelineEvent = sceneEvents.some(e => e.visibility === 'PUBLIC');
 
-    // Check for major consequences in scene resolution
-    const resolutionText = scene.sceneResolutionText?.toLowerCase() || '';
-    const criticalKeywords = ['death', 'killed', 'betrayal', 'captured', 'victory', 'defeat', 'destroyed'];
-    if (criticalKeywords.some(keyword => resolutionText.includes(keyword))) {
-      importance = 'critical';
-    }
+    const importance = classifySceneImportance(
+      memoryImportanceBySceneId.get(scene.id),
+      hasPublicTimelineEvent,
+      scene.sceneResolutionText || ''
+    );
 
     // Always include critical and important scenes
     if (importance !== 'normal') {
@@ -237,10 +278,19 @@ export async function buildOptimizedContext(
     orderBy: { turnNumber: 'desc' }
   });
 
+  // Reuse the importance already computed at scene-resolution time — see
+  // classifySceneImportance's doc comment.
+  const sceneMemories = await prisma.campaignMemory.findMany({
+    where: { campaignId, memoryType: 'SCENE', sourceId: { in: allScenes.map(s => s.id) } },
+    select: { sourceId: true, importance: true }
+  });
+  const memoryImportanceBySceneId = new Map(sceneMemories.map(m => [m.sourceId, m.importance]));
+
   // Extract important moments (excluding recent scenes to avoid duplication)
   const importantMoments = await extractImportantMoments(
     allScenes.filter(s => s.sceneNumber < currentSceneNumber - 3),
-    timeline
+    timeline,
+    memoryImportanceBySceneId
   );
 
   // Build relationship digest

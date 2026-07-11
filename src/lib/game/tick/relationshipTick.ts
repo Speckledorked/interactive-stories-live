@@ -74,8 +74,10 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
 
         delete aRelationships[b.id]
         delete bRelationships[a.id]
-        await prisma.faction.update({ where: { id: a.id }, data: { relationships: aRelationships as any } })
-        await prisma.faction.update({ where: { id: b.id }, data: { relationships: bRelationships as any } })
+        if (!ctx.dryRun) {
+          await prisma.faction.update({ where: { id: a.id }, data: { relationships: aRelationships as any } })
+          await prisma.faction.update({ where: { id: b.id }, data: { relationships: bRelationships as any } })
+        }
 
         changes.push({
           entityType: 'FACTION',
@@ -96,8 +98,10 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
 
       aRelationships[b.id] = { type: freshType, since: ctx.turnNumber }
       bRelationships[a.id] = { type: freshType, since: ctx.turnNumber }
-      await prisma.faction.update({ where: { id: a.id }, data: { relationships: aRelationships as any } })
-      await prisma.faction.update({ where: { id: b.id }, data: { relationships: bRelationships as any } })
+      if (!ctx.dryRun) {
+        await prisma.faction.update({ where: { id: a.id }, data: { relationships: aRelationships as any } })
+        await prisma.faction.update({ where: { id: b.id }, data: { relationships: bRelationships as any } })
+      }
 
       changes.push({
         entityType: 'FACTION',

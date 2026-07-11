@@ -56,13 +56,18 @@ const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tic
  * uses. There is no separate clock; this rides the existing
  * WorldMeta.currentTurnNumber progression instead of inventing a new one.
  */
-export async function runWorldTick(campaignId: string, turnNumber: number): Promise<WorldTickResult> {
+export async function runWorldTick(
+  campaignId: string,
+  turnNumber: number,
+  options: { dryRun?: boolean } = {}
+): Promise<WorldTickResult> {
+  const dryRun = options.dryRun ?? false
   const worldMeta = await prisma.worldMeta.findUnique({
     where: { campaignId },
     select: { factionCap: true, npcCap: true },
   })
   const { factionCap, npcCap } = resolveTickCaps(worldMeta)
-  const ctx: TickContext = { campaignId, turnNumber, factionCap, npcCap }
+  const ctx: TickContext = { campaignId, turnNumber, factionCap, npcCap, dryRun }
 
   const changes: WorldChange[] = []
   const pendingAmbitions: PendingAmbition[] = []
@@ -70,6 +75,21 @@ export async function runWorldTick(campaignId: string, turnNumber: number): Prom
     const result = await handler(ctx)
     changes.push(...result.changes)
     if (result.pendingAmbitions) pendingAmbitions.push(...result.pendingAmbitions)
+  }
+
+  // Dry run (World Sim Phase 8 debug tooling): every handler above already
+  // skipped its own writes via ctx.dryRun, so the only thing left to skip
+  // is this file's own persistence — nothing observed the DB in a way that
+  // needs undoing, because nothing was ever written.
+  if (dryRun) {
+    return {
+      campaignId,
+      turnNumber,
+      timestamp: new Date(),
+      changes,
+      historyEntriesCreated: 0,
+      pendingAmbitions,
+    }
   }
 
   // All three consumers fan out from the same changes array — the event-bus

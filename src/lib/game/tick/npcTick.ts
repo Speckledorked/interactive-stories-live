@@ -150,10 +150,12 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
       updateData.currentLocation = decision.nextLocation
     }
 
-    await prisma.nPC.update({
-      where: { id: npc.id },
-      data: updateData,
-    })
+    if (!ctx.dryRun) {
+      await prisma.nPC.update({
+        where: { id: npc.id },
+        data: updateData,
+      })
+    }
 
     changes.push(...buildNpcChanges(ctx.campaignId, npc, decision))
   }

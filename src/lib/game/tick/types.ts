@@ -45,13 +45,22 @@ export interface TickContext {
  * fallbackConsequence/maxTicks/category are used verbatim if the AI call
  * fails or doesn't address this faction, so an ambition never silently
  * goes nowhere.
+ *
+ * `category` is the MECHANICAL pacing category ('social' | 'urgent', from
+ * the goal) that gets persisted to Clock.category and drives tick speed —
+ * never the narrative flavor. `archetype` + `fallbackFlavor` are the
+ * narrative side: archetype picks which bounded flavor list a faction draws
+ * from (see AMBITION_CATEGORY_OPTIONS in ambitionTick.ts), and
+ * fallbackFlavor is that list's first entry, used if the AI doesn't pick one.
  */
 export interface PendingAmbition {
   factionId: string
   factionName: string
   goal: string
+  archetype: string
   maxTicks: number
   category: string
+  fallbackFlavor: string
   fallbackName: string
   fallbackConsequence: string
 }

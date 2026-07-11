@@ -95,6 +95,8 @@ export async function POST(
         name: body.name,
         description: body.description || null,
         goals: body.goals || null,
+        goal: body.goal || undefined,
+        archetype: body.archetype || undefined,
         resources: body.resources !== undefined ? body.resources : 50,
         influence: body.influence !== undefined ? body.influence : 50,
         currentPlan: body.currentPlan || null,

@@ -84,6 +84,20 @@ enum FactionGoal {
   CONSOLIDATE
 }
 
+// World Sim Phase 2: what kind of organization a faction is, independent of
+// its goal — a guild and a secret society can both pursue ENRICH, but they
+// shouldn't both throw a "Grand Tournament." Drives which bounded ambition
+// flavor list the offscreen AI picks from (see ambitionTick.ts).
+enum FactionArchetype {
+  GENERIC
+  SECRET_SOCIETY
+  CRIMINAL
+  RELIGIOUS
+  MILITARY
+  CORPORATION
+  POLITICAL
+}
+
 enum WeatherCondition {
   CLEAR
   CLOUDY
@@ -324,6 +338,9 @@ model Faction {
   stability     Int         @default(50)
   military      Int         @default(50)
   goal          FactionGoal @default(CONSOLIDATE)
+
+  // World Sim Phase 2: see FactionArchetype above.
+  archetype     FactionArchetype @default(GENERIC)
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 

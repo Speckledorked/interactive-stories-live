@@ -807,7 +807,7 @@ export async function callAIForWorldTurn(
   clocksAboutToComplete: any[],
   campaignId?: string,
   completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = [],
-  pendingAmbitions: Array<{ factionId: string; factionName: string; goal: string }> = [],
+  pendingAmbitions: Array<{ factionId: string; factionName: string; goal: string; archetype: string }> = [],
   recentAmbitionNames: string[] = []
 ): Promise<{
   offscreen_events: Array<{
@@ -867,14 +867,15 @@ something else. Don't leave any of them without a new goals value.`
     ? `\n\nThese factions have committed enough resources to attempt something
 major this turn. The commitment itself already happened — your only job is
 picking WHAT it is:
-${pendingAmbitions.map(a => `- ${a.factionName} (id: ${a.factionId}), pursuing ${a.goal}: choose one of [${AMBITION_CATEGORY_OPTIONS[a.goal as 'ENRICH' | 'EXPAND']?.join(', ') || 'tournament, trade fair'}]`).join('\n')}
+${pendingAmbitions.map(a => `- ${a.factionName} (id: ${a.factionId}), pursuing ${a.goal}: choose one of [${AMBITION_CATEGORY_OPTIONS[a.archetype as keyof typeof AMBITION_CATEGORY_OPTIONS]?.[a.goal as 'ENRICH' | 'EXPAND']?.join(', ') || 'tournament, trade fair'}]`).join('\n')}
 ${recentAmbitionNames.length > 0
   ? `\nAvoid repeating or closely echoing anything already done recently: ${recentAmbitionNames.join(', ')}.`
   : ''}
 For each one, include an ambition_picks entry with faction_id set to their id
 above, category set to EXACTLY one of the options listed for them (not a
-paraphrase), and a specific, setting-appropriate name — "${'{Faction}'} Grand Tournament"
-is a fallback, not a target; make it feel like it belongs to this world.
+paraphrase), and a specific, setting-appropriate name that fits both the
+faction's flavor and this world — a generic "${'{Faction}'} ${'{Category}'}" is the
+deterministic fallback if you skip a faction, not a target to aim for.
 Also include a matching offscreen event narrating it kicking off.`
     : ''
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { decideFactionTick } from '../factionTick'
-import { decideAmbitionTick } from '../ambitionTick'
+import { decideFactionTick, decideFactionGoalReassessment } from '../factionTick'
+import { decideAmbitionTick, decideAmbitionOutcome } from '../ambitionTick'
 import { decideNpcTick, deriveTimeOfDay } from '../npcTick'
 import { decideNextWeather } from '../weatherTick'
 
@@ -22,6 +22,29 @@ describe('decideFactionTick', () => {
     expect(result.resources).toBe(0)
     expect(result.stability).toBe(0)
     expect(result.military).toBe(100)
+  })
+})
+
+describe('decideFactionGoalReassessment', () => {
+  it('prioritizes DEFEND when stability is low, regardless of other stats', () => {
+    expect(decideFactionGoalReassessment({ resources: 90, stability: 20, military: 90, goal: 'EXPAND' })).toBe('DEFEND')
+  })
+
+  it('prioritizes ENRICH when resources are low but stability is fine', () => {
+    expect(decideFactionGoalReassessment({ resources: 20, stability: 60, military: 60, goal: 'CONSOLIDATE' })).toBe('ENRICH')
+  })
+
+  it('picks EXPAND when resources and military are both high and stability is not low', () => {
+    expect(decideFactionGoalReassessment({ resources: 80, stability: 50, military: 80, goal: 'CONSOLIDATE' })).toBe('EXPAND')
+  })
+
+  it('defaults to CONSOLIDATE otherwise', () => {
+    expect(decideFactionGoalReassessment({ resources: 50, stability: 50, military: 50, goal: 'EXPAND' })).toBe('CONSOLIDATE')
+  })
+
+  it('is deterministic for the same input', () => {
+    const faction = { resources: 50, stability: 50, military: 50, goal: 'CONSOLIDATE' as const }
+    expect(decideFactionGoalReassessment(faction)).toEqual(decideFactionGoalReassessment(faction))
   })
 })
 
@@ -76,12 +99,14 @@ describe('decideAmbitionTick', () => {
     const decision = decideAmbitionTick({ ...base, goal: 'ENRICH' })
     expect(decision.shouldSpawn).toBe(true)
     expect(decision.fallbackName).toBe('Thornburg Guild Tournament')
+    expect(decision.resourceCost).toBeGreaterThan(0)
   })
 
   it('spawns a campaign clock for a high-resource EXPAND faction', () => {
     const decision = decideAmbitionTick({ ...base, goal: 'EXPAND' })
     expect(decision.shouldSpawn).toBe(true)
     expect(decision.fallbackName).toBe('Thornburg Guild Military Campaign')
+    expect(decision.resourceCost).toBeGreaterThan(0)
   })
 
   it('does not spawn below the resource threshold', () => {
@@ -110,6 +135,44 @@ describe('decideAmbitionTick', () => {
     // Mechanical pacing (category/maxTicks) stays goal-driven, not archetype-driven.
     expect(guild.category).toBe(secretSociety.category)
     expect(guild.maxTicks).toBe(secretSociety.maxTicks)
+  })
+})
+
+describe('decideAmbitionOutcome', () => {
+  const input = { factionId: 'faction-1', clockId: 'clock-1', factionName: 'Thornburg Guild', goal: 'ENRICH' as const, resources: 80, military: 50 }
+
+  it('is deterministic for the same faction+clock pair', () => {
+    expect(decideAmbitionOutcome(input)).toEqual(decideAmbitionOutcome(input))
+  })
+
+  it('produces exactly one of the two known ENRICH outcome shapes', () => {
+    const outcome = decideAmbitionOutcome(input)
+    if (outcome.success) {
+      expect(outcome).toEqual({ success: true, resourceDelta: 10, stabilityDelta: 2, militaryDelta: 0, threatLevelDelta: 1, consequenceText: `${input.factionName} comes out ahead, and its coffers and reputation grow.` })
+    } else {
+      expect(outcome).toEqual({ success: false, resourceDelta: -6, stabilityDelta: -3, militaryDelta: 0, threatLevelDelta: 0, consequenceText: `${input.factionName}'s effort falls flat, and the setback dents its standing.` })
+    }
+  })
+
+  it('produces exactly one of the two known EXPAND outcome shapes', () => {
+    const outcome = decideAmbitionOutcome({ ...input, goal: 'EXPAND' })
+    if (outcome.success) {
+      expect(outcome).toEqual({ success: true, resourceDelta: 0, stabilityDelta: -2, militaryDelta: 6, threatLevelDelta: 1, consequenceText: `${input.factionName} claims new ground, reshaping the region's balance of power.` })
+    } else {
+      expect(outcome).toEqual({ success: false, resourceDelta: -8, stabilityDelta: -4, militaryDelta: -3, threatLevelDelta: 0, consequenceText: `${input.factionName} overextends and is thrown back, its ambitions costing more than they gained.` })
+    }
+  })
+
+  it('never guarantees success even at a maxed-out relevant stat', () => {
+    // 50 different clock ids give a spread of deterministic rolls; with the
+    // relevant stat maxed the success chance caps at 90%, so across 50
+    // samples both outcomes should appear — proves it isn't a rubber stamp.
+    const outcomes = Array.from({ length: 50 }, (_, i) =>
+      decideAmbitionOutcome({ ...input, resources: 100, clockId: `clock-${i}` })
+    )
+    const successCount = outcomes.filter((o) => o.success).length
+    expect(successCount).toBeGreaterThan(0)
+    expect(successCount).toBeLessThan(50)
   })
 })
 

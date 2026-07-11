@@ -1,11 +1,14 @@
 // src/lib/game/tick/factionTick.ts
 // World Sim Phase 1 — Faction state, driven by `goal`, not randomly.
+// World Sim Phase 3 — `goal` itself is reassessed automatically every tick
+// from the faction's resulting stats (see decideFactionGoalReassessment
+// below), not just set once by a GM and left alone. The admin panel's goal
+// picker still exists as a seed/override, but expect the simulation to
+// steer it back toward whatever its circumstances justify.
 //
-// Each goal applies a small fixed delta to the 4 tracked fields
-// (resources, stability, military — goal itself only changes when a GM or
-// future system sets it explicitly, ticks never change a faction's goal).
-// Capped at 10 factions per campaign, consistent with existing campaign
-// scale elsewhere in the codebase.
+// Each goal applies a small fixed delta to the 4 tracked fields (resources,
+// stability, military). Capped at 10 factions per campaign, consistent with
+// existing campaign scale elsewhere in the codebase.
 
 import { prisma } from '@/lib/prisma'
 import type { Faction, FactionGoal } from '@prisma/client'
@@ -58,6 +61,37 @@ export function decideFactionTick(faction: {
   }
 }
 
+// Priority order matters: a faction in crisis fixes that before anything
+// else, regardless of how rich or armed it is.
+//
+// DESTABILIZE_RIVAL is deliberately unreachable here — picking a rival to
+// undermine requires knowing who the rivals are, and faction-to-faction
+// relationships aren't tracked yet (see the README roadmap, Phase 3). Until
+// then it's only reachable by a GM setting it directly, and this
+// reassessment will leave it alone unless stability or resources fall low
+// enough to override it below.
+//
+/** Pure decision function — no DB access, safe to unit test directly. */
+export function decideFactionGoalReassessment(faction: {
+  resources: number
+  stability: number
+  military: number
+  goal: FactionGoal
+}): FactionGoal {
+  const stabilityBand = band(faction.stability)
+  const resourcesBand = band(faction.resources)
+  const militaryBand = band(faction.military)
+
+  // Internal cohesion is failing — shore it up before anything ambitious.
+  if (stabilityBand === 'LOW') return 'DEFEND'
+  // Too poor to attempt anything ambitious — rebuild the treasury first.
+  if (resourcesBand === 'LOW') return 'ENRICH'
+  // Strong on every front that matters for pushing outward — safe to expand.
+  if (militaryBand === 'HIGH' && resourcesBand === 'HIGH') return 'EXPAND'
+  // Otherwise, hold what it has.
+  return 'CONSOLIDATE'
+}
+
 export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult> {
   const factions = await prisma.faction.findMany({
     where: { campaignId: ctx.campaignId },
@@ -69,6 +103,13 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
 
   for (const faction of factions) {
     const next = decideFactionTick(faction)
+    // DESTABILIZE_RIVAL is a GM-set-only goal for now (see comment above) —
+    // reassessment never picks it, but it also never overrides it unless a
+    // higher-priority crisis (low stability/resources) demands it.
+    const nextGoal =
+      faction.goal === 'DESTABILIZE_RIVAL' && band(next.stability) !== 'LOW' && band(next.resources) !== 'LOW'
+        ? faction.goal
+        : decideFactionGoalReassessment({ ...next, goal: faction.goal })
 
     await prisma.faction.update({
       where: { id: faction.id },
@@ -76,12 +117,28 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
         resources: next.resources,
         stability: next.stability,
         military: next.military,
+        goal: nextGoal,
       },
     })
 
     changes.push(
       ...buildFactionChanges(ctx.campaignId, faction, next)
     )
+
+    if (nextGoal !== faction.goal) {
+      changes.push({
+        entityType: 'FACTION',
+        entityId: faction.id,
+        entityName: faction.name,
+        campaignId: ctx.campaignId,
+        field: 'goal',
+        previousValue: faction.goal,
+        newValue: nextGoal,
+        reason: `${faction.name}'s circumstances shifted its priorities from ${faction.goal} to ${nextGoal}`,
+        significant: true,
+        importance: 'NORMAL',
+      })
+    }
   }
 
   return { changes }

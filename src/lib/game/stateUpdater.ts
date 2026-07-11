@@ -934,7 +934,8 @@ export async function checkAndResolveCompletedClocks(
   const completedClocks = await prisma.clock.findMany({
     where: {
       campaignId,
-      currentTicks: { gte: prisma.clock.fields.maxTicks }
+      currentTicks: { gte: prisma.clock.fields.maxTicks },
+      resolvedAt: null
     }
   })
 
@@ -947,19 +948,30 @@ export async function checkAndResolveCompletedClocks(
 
   // Create timeline events for each completed clock
   for (const clock of completedClocks) {
-    await prisma.timelineEvent.create({
-      data: {
-        campaignId,
-        turnNumber: currentTurnNumber,
-        title: `${clock.name} - Complete!`,
-        summaryPublic: clock.consequence,
-        summaryGM: `Clock "${clock.name}" reached ${clock.maxTicks} ticks. ${clock.gmNotes}`,
-        isOffscreen: true,
-        visibility: clock.isHidden ? 'GM_ONLY' : 'PUBLIC'
-      }
-    })
+    // Ambition-sourced clocks (see ambitionTick.ts) get their real
+    // success/failure outcome narrated by worldTurn.ts's
+    // resolveCompletedAmbitions instead of this generic flavor-text event —
+    // it knows whether the ambition actually succeeded, this doesn't.
+    if (!clock.sourceFactionId) {
+      await prisma.timelineEvent.create({
+        data: {
+          campaignId,
+          turnNumber: currentTurnNumber,
+          title: `${clock.name} - Complete!`,
+          summaryPublic: clock.consequence,
+          summaryGM: `Clock "${clock.name}" reached ${clock.maxTicks} ticks. ${clock.gmNotes}`,
+          isOffscreen: true,
+          visibility: clock.isHidden ? 'GM_ONLY' : 'PUBLIC'
+        }
+      })
 
-    console.log(`  ⏰ Created event for: ${clock.name}`)
+      console.log(`  ⏰ Created event for: ${clock.name}`)
+    }
+
+    await prisma.clock.update({
+      where: { id: clock.id },
+      data: { resolvedAt: new Date() }
+    })
   }
 
   return completedClocks

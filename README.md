@@ -78,11 +78,11 @@ The biggest gap identified: ambitions and goals didn't actually respond to what 
 
 ### Phase 4 — NPCs and Territory in the Web
 Without these links, "war" and "politics" have no map to redraw and no one for the outcome to happen to.
-- [ ] NPC → Faction affiliation (leader / member / rival), and wiring it into tick logic and prompts
+- [x] NPC → Faction affiliation (leader / member), wired into tick logic (an affiliated NPC's plan text reflects their faction's current goal) and into the AI world-state prompt. (Scoped down from the original "leader / member / rival" — an NPC personally rivaling a faction without belonging to any is a distinct, smaller feature, not folded into this one)
 - [ ] Faction → Territory ownership on Location
 - [ ] Contested / border territory state
-- [ ] NPC defection — an NPC's faction allegiance can change based on events, not just their goal text
-- [ ] Faction leadership continuity — when a leader NPC dies, a successor is chosen automatically instead of the faction going headless
+- [x] NPC defection — when a faction collapses, its members defect to the absorbing rival (demoted to MEMBER) or carry over to a founded successor faction (keeping their role) — reuses Phase 3's collapse mechanic rather than being a separate trigger
+- [x] Faction leadership continuity — a tick handler enforces "a faction with living members has a living leader" every turn; the most important living member is automatically promoted if it doesn't. (There's no single structured "NPC died" event to hook into yet, so this checks the invariant continuously rather than reacting to a death)
 - [ ] NPCs made notable through play (spared, betrayed, promoted) get their own independent goal-pursuit loop, the same way factions do today, not just a static memory of what happened to them
 
 ### Phase 5 — Sustained Conflict & War

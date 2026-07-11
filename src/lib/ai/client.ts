@@ -8,6 +8,7 @@ import { circuitBreakerManager } from './circuit-breaker'
 import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
 import { aiResponseCache } from './response-cache'
 import { AI_MODELS } from './models'
+import { AMBITION_CATEGORY_OPTIONS } from '@/lib/game/tick/ambitionTick'
 
 /**
  * AI GM Response Structure
@@ -805,7 +806,9 @@ export async function callAIForWorldTurn(
   worldSummary: any,
   clocksAboutToComplete: any[],
   campaignId?: string,
-  completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = []
+  completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = [],
+  pendingAmbitions: Array<{ factionId: string; factionName: string; goal: string }> = [],
+  recentAmbitionNames: string[] = []
 ): Promise<{
   offscreen_events: Array<{
     title: string
@@ -824,6 +827,17 @@ export async function callAIForWorldTurn(
     npc_changes?: AIGMResponse['world_updates']['npc_changes']
     faction_changes?: AIGMResponse['world_updates']['faction_changes']
   }
+  // The flavor picked for each pendingAmbition — the tick already decided
+  // WHETHER a faction commits to something big; this is only the WHAT.
+  // category must be one of the bounded options given in the prompt for
+  // that faction's goal; worldTurn.ts falls back to the deterministic
+  // template for any faction this doesn't cover or picks outside the list.
+  ambition_picks?: Array<{
+    faction_id: string
+    category: string
+    name: string
+    description?: string
+  }>
 }> {
   const apiKey = process.env.OPENAI_API_KEY
   const startTime = Date.now()
@@ -849,12 +863,27 @@ tournament or completed a scheme doesn't stop existing, they move on to
 something else. Don't leave any of them without a new goals value.`
     : ''
 
+  const ambitionNote = pendingAmbitions.length > 0
+    ? `\n\nThese factions have committed enough resources to attempt something
+major this turn. The commitment itself already happened — your only job is
+picking WHAT it is:
+${pendingAmbitions.map(a => `- ${a.factionName} (id: ${a.factionId}), pursuing ${a.goal}: choose one of [${AMBITION_CATEGORY_OPTIONS[a.goal as 'ENRICH' | 'EXPAND']?.join(', ') || 'tournament, trade fair'}]`).join('\n')}
+${recentAmbitionNames.length > 0
+  ? `\nAvoid repeating or closely echoing anything already done recently: ${recentAmbitionNames.join(', ')}.`
+  : ''}
+For each one, include an ambition_picks entry with faction_id set to their id
+above, category set to EXACTLY one of the options listed for them (not a
+paraphrase), and a specific, setting-appropriate name — "${'{Faction}'} Grand Tournament"
+is a fallback, not a target; make it feel like it belongs to this world.
+Also include a matching offscreen event narrating it kicking off.`
+    : ''
+
   const userPrompt = `World State Summary:
 ${JSON.stringify(worldSummary, null, 2)}
 
 Clocks about to complete or recently advanced:
 ${JSON.stringify(clocksAboutToComplete, null, 2)}
-${goalCompletionNote}
+${goalCompletionNote}${ambitionNote}
 
 Generate 1-3 brief offscreen events that show villains/factions making moves.
 
@@ -884,6 +913,9 @@ Respond with JSON:
       {"faction_name_or_id": "EXISTING_FACTION", "changes": {"gm_notes_append": "..."}}
     ]
   },
+  "ambition_picks": [
+    {"faction_id": "...", "category": "one of the exact options listed above for that faction", "name": "Setting-appropriate event name", "description": "1-2 sentences on what's happening"}
+  ],
   "gm_notes": "Strategic notes about what's developing..."
 }`
 

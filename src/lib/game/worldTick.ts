@@ -20,7 +20,7 @@ import { tickNpcs } from './tick/npcTick'
 import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
-import { TickContext, TickHandler, WorldChange, WorldTickResult } from './tick/types'
+import { TickContext, TickHandler, WorldChange, WorldTickResult, PendingAmbition } from './tick/types'
 
 const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactions, tickFactionAmbitions, tickNpcs]
 
@@ -36,9 +36,11 @@ export async function runWorldTick(campaignId: string, turnNumber: number): Prom
   const ctx: TickContext = { campaignId, turnNumber }
 
   const changes: WorldChange[] = []
+  const pendingAmbitions: PendingAmbition[] = []
   for (const handler of TICK_HANDLERS) {
     const result = await handler(ctx)
     changes.push(...result.changes)
+    if (result.pendingAmbitions) pendingAmbitions.push(...result.pendingAmbitions)
   }
 
   // All three consumers fan out from the same changes array — the event-bus
@@ -53,5 +55,6 @@ export async function runWorldTick(campaignId: string, turnNumber: number): Prom
     timestamp: new Date(),
     changes,
     historyEntriesCreated,
+    pendingAmbitions,
   }
 }

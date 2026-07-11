@@ -9,6 +9,8 @@ import { applyWorldUpdates, checkAndResolveCompletedClocks } from './stateUpdate
 import { runWorldTick } from './worldTick'
 import { createCampaignMemory } from '@/lib/ai/memoryCreation'
 import { EventVisibility } from '@prisma/client'
+import { PendingAmbition } from './tick/types'
+import { AMBITION_CATEGORY_OPTIONS } from './tick/ambitionTick'
 
 /**
  * Run a world turn - advance clocks and generate background events
@@ -53,9 +55,9 @@ export async function runWorldTurn(campaignId: string) {
       .map((c) => ({ npcId: c.entityId, npcName: c.entityName, completedGoal: c.previousValue }))
 
     // 3. Generate offscreen events with AI (if there's interesting clock or NPC activity)
-    if (advancedClocks.length > 0 || completedClocks.length > 0 || completedGoalNpcs.length > 0) {
+    if (advancedClocks.length > 0 || completedClocks.length > 0 || completedGoalNpcs.length > 0 || worldTick.pendingAmbitions.length > 0) {
       console.log('🤖 Generating offscreen events...')
-      await generateOffscreenEvents(campaignId, currentTurn, advancedClocks, completedClocks, completedGoalNpcs)
+      await generateOffscreenEvents(campaignId, currentTurn, advancedClocks, completedClocks, completedGoalNpcs, worldTick.pendingAmbitions)
     } else {
       console.log('  No significant clock or NPC activity - skipping offscreen events')
     }
@@ -142,7 +144,8 @@ async function generateOffscreenEvents(
   currentTurn: number,
   advancedClocks: any[],
   completedClocks: any[],
-  completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = []
+  completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = [],
+  pendingAmbitions: PendingAmbition[] = []
 ) {
   try {
     const campaign = await prisma.campaign.findUnique({
@@ -156,6 +159,20 @@ async function generateOffscreenEvents(
     // Build world summary
     const { worldSummary } = await buildWorldSummaryForAI(campaignId)
 
+    // Recent ambition names (regardless of which faction spawned them) so the
+    // AI doesn't repeat "Thornburg Guild Grand Tournament" for the third time
+    // in a row — just enough context to vary itself, not a hard exclusion list.
+    let recentAmbitionNames: string[] = []
+    if (pendingAmbitions.length > 0) {
+      const recentAmbitionClocks = await prisma.clock.findMany({
+        where: { campaignId, sourceFactionId: { not: null } },
+        select: { name: true },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      })
+      recentAmbitionNames = recentAmbitionClocks.map((c) => c.name)
+    }
+
     // Call AI to generate offscreen events
     const aiResult = await callAIForWorldTurn(
       campaign.universe || 'Generic Fantasy',
@@ -163,8 +180,39 @@ async function generateOffscreenEvents(
       worldSummary,
       [...advancedClocks, ...completedClocks],
       campaignId,
-      completedGoalNpcs
+      completedGoalNpcs,
+      pendingAmbitions.map((a) => ({ factionId: a.factionId, factionName: a.factionName, goal: a.goal })),
+      recentAmbitionNames
     )
+
+    // Turn each pending ambition into a real Clock — the tick already decided
+    // WHETHER; this resolves WHAT using the AI's pick if it gave one and is
+    // actually one of the bounded options for that faction's goal, otherwise
+    // the deterministic fallback so the ambition never silently disappears.
+    for (const pending of pendingAmbitions) {
+      const validOptions = AMBITION_CATEGORY_OPTIONS[pending.goal as 'ENRICH' | 'EXPAND'] || []
+      const pick = aiResult.ambition_picks?.find((p) => p.faction_id === pending.factionId)
+      const useAiPick = !!pick && validOptions.includes(pick.category)
+
+      const name = useAiPick ? pick!.name : pending.fallbackName
+      const description = useAiPick ? (pick!.description || pending.fallbackConsequence) : pending.fallbackConsequence
+      const category = useAiPick ? pick!.category : pending.category
+
+      await prisma.clock.create({
+        data: {
+          campaignId,
+          name,
+          description,
+          category,
+          maxTicks: pending.maxTicks,
+          currentTicks: 0,
+          consequence: pending.fallbackConsequence,
+          sourceFactionId: pending.factionId,
+        },
+      })
+
+      console.log(`  🎯 ${pending.factionName} committed to: ${name}${useAiPick ? '' : ' (fallback)'}`)
+    }
 
     // Create timeline events for each offscreen event
     const createdEvents: { id: string; title: string; summary_gm: string }[] = []

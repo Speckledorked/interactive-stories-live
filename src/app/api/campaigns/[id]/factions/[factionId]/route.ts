@@ -33,9 +33,18 @@ export async function PATCH(
       )
     }
 
+    // A faction has at most one leader either way — assigning a PC leader
+    // demotes any existing NPC LEADER to MEMBER so the two never conflict.
+    if (body.leaderCharacterId) {
+      await prisma.nPC.updateMany({
+        where: { factionId, factionRole: 'LEADER' },
+        data: { factionRole: 'MEMBER' },
+      })
+    }
+
     // Update Faction
     const faction = await prisma.faction.update({
-      where: { 
+      where: {
         id: factionId,
         campaignId,
       },
@@ -51,6 +60,7 @@ export async function PATCH(
         threatLevel: body.threatLevel,
         relationships: body.relationships,
         gmNotes: body.gmNotes,
+        leaderCharacterId: body.leaderCharacterId,
       },
     })
 

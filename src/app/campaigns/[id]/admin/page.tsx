@@ -47,6 +47,7 @@ interface Faction {
   threatLevel: number
   gmNotes: string
   isActive: boolean
+  leaderCharacterId: string | null
 }
 
 // Keep in sync with FactionGoal in prisma/schema.prisma.
@@ -107,6 +108,7 @@ export default function AdminPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [npcs, setNpcs] = useState<NPC[]>([])
   const [factions, setFactions] = useState<Faction[]>([])
+  const [characters, setCharacters] = useState<{ id: string; name: string }[]>([])
   const [clocks, setClocks] = useState<Clock[]>([])
   const [invites, setInvites] = useState<any[]>([])
   const [members, setMembers] = useState<Member[]>([])
@@ -155,6 +157,13 @@ export default function AdminPage() {
       if (factionsResponse.ok) {
         const factionsData = await factionsResponse.json()
         setFactions(factionsData.factions || [])
+      }
+
+      // Fetch Characters (for the faction leader picker)
+      const charactersResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/characters`)
+      if (charactersResponse.ok) {
+        const charactersData = await charactersResponse.json()
+        setCharacters(charactersData.characters || [])
       }
 
       // Fetch Clocks
@@ -818,6 +827,7 @@ export default function AdminPage() {
                           threatLevel: parseInt(formData.get('threatLevel') as string) || 1,
                           resources: parseInt(formData.get('resources') as string) || 50,
                           gmNotes: formData.get('gmNotes') as string || undefined,
+                          leaderCharacterId: (formData.get('leaderCharacterId') as string) || undefined,
                         })
                       }}
                       className="space-y-3"
@@ -874,6 +884,20 @@ export default function AdminPage() {
                           </select>
                           <p className="text-xs text-ember-400/50 mt-1">Shapes the flavor of ambitions this faction pursues (e.g. tournament vs. coup).</p>
                         </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Leader (Player Character)</label>
+                        <select
+                          name="leaderCharacterId"
+                          defaultValue=""
+                          className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                        >
+                          <option value="">None (NPC-led)</option>
+                          {characters.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-ember-400/50 mt-1">If set, this faction's Simulation Goal is the player's call — the world tick won't reassess it automatically.</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-ember-200/80 mb-1">Current Plan</label>
@@ -1001,6 +1025,19 @@ export default function AdminPage() {
                             </select>
                           </div>
                         </div>
+                        <div>
+                          <label className="text-xs">Leader (Player Character)</label>
+                          <select
+                            value={faction.leaderCharacterId || ''}
+                            onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, leaderCharacterId: e.target.value || null } : f))}
+                            className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
+                          >
+                            <option value="">None (NPC-led)</option>
+                            {characters.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
                         <div className="flex space-x-2">
                           <button
                             onClick={() => handleUpdateFaction(faction)}
@@ -1028,6 +1065,11 @@ export default function AdminPage() {
                                   Defunct
                                 </span>
                               )}
+                              {faction.leaderCharacterId && (
+                                <span className="ml-2 text-xs font-normal text-wine-300 border border-wine-400/30 rounded px-1.5 py-0.5">
+                                  Player-led
+                                </span>
+                              )}
                             </h3>
                             <p className="text-sm text-ember-300/60">{faction.currentPlan}</p>
                             <p className="text-xs text-ember-400/50">
@@ -1035,6 +1077,7 @@ export default function AdminPage() {
                             </p>
                             <p className="text-xs text-ember-400/50">
                               {(faction.goal || 'CONSOLIDATE').replace('_', ' ')} · {FACTION_ARCHETYPES.find(a => a.value === faction.archetype)?.label || 'Generic'}
+                              {faction.leaderCharacterId && ` · Led by ${characters.find(c => c.id === faction.leaderCharacterId)?.name || 'a player'}`}
                             </p>
                           </div>
                           <button

@@ -8,6 +8,10 @@
 // owns the two lifecycle events that can end or begin a faction's
 // independent existence: collapse (absorbed by a rival, or succeeded by a
 // smaller remnant) and the founding that comes out of it.
+// World Sim Phase 6 — the one exception to automatic goal reassessment: a
+// faction with a player character as its leader (Faction.leaderCharacterId)
+// keeps whatever goal the player set, since strategic direction is their
+// call, not the tick's. Everything else about it still ticks normally.
 //
 // Each goal applies a small fixed delta to the 4 tracked fields (resources,
 // stability, military). Capped at 10 factions per campaign, consistent with
@@ -217,6 +221,9 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
             archetype: faction.archetype,
             threatLevel: 1,
             isActive: true,
+            // A player still leads the remnant if they led the predecessor —
+            // the collapse is a setback for their leadership, not the end of it.
+            leaderCharacterId: faction.leaderCharacterId,
           },
         })
         successorName = successor.name
@@ -262,8 +269,13 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
       continue
     }
 
+    // World Sim Phase 6: a player-led faction's goal is the player's call,
+    // not the tick's — skip reassessment and leave whatever they (or the AI
+    // narrating their decision through scene resolution) last set it to.
     const factionHasRival = Object.values(relationships).some((r) => r.type === 'RIVAL')
-    const nextGoal = decideFactionGoalReassessment({ ...next, goal: faction.goal, hasRival: factionHasRival })
+    const nextGoal = faction.leaderCharacterId
+      ? faction.goal
+      : decideFactionGoalReassessment({ ...next, goal: faction.goal, hasRival: factionHasRival })
 
     await prisma.faction.update({
       where: { id: faction.id },

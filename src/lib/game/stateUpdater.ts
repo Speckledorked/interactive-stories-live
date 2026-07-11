@@ -766,6 +766,17 @@ export async function applyWorldUpdates(
               updateData.resources = factionChange.changes.resources
             }
 
+            // World Sim Phase 6: only a player-led faction's goal is
+            // settable this way — for any other faction the deterministic
+            // tick (factionTick.ts) owns goal reassessment, and honoring
+            // an AI-set goal here would just get silently overwritten (or
+            // worse, fought over) on the next tick. Enforced server-side,
+            // not just by prompt instruction, since AI output isn't
+            // trustworthy enough to be the only guard.
+            if (factionChange.changes.goal && faction.leaderCharacterId) {
+              updateData.goal = factionChange.changes.goal
+            }
+
             if (factionChange.changes.gm_notes_append) {
               updateData.gmNotes = faction.gmNotes + '\n\n' + factionChange.changes.gm_notes_append
             }

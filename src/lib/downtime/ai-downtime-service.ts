@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client'
 import { NotificationService } from '@/lib/notifications/notification-service'
 import { PusherServer } from '@/lib/realtime/pusher-server'
 import { AI_MODELS } from '@/lib/ai/models'
+import { applyCapabilityChanges, CapabilityChange } from '@/lib/game/capabilities'
 
 const prisma = new PrismaClient()
 
@@ -451,6 +452,23 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
           aiInterpretation
         )
 
+        // Deliberate practice is the fast lane for capability growth: a
+        // completed activity whose skillsInvolved name an UNLOCKED
+        // capability applies one training-channel gain to it (2x scene
+        // gain, still arc-capped). Names that match nothing are skipped by
+        // the writer — vague skill strings must not spawn junk nodes.
+        const skills: string[] = aiInterpretation.skillsInvolved || []
+        if (skills.length > 0) {
+          try {
+            const trainingLog = await this.applyTrainingGains(characterId, skills)
+            for (const line of trainingLog) {
+              console.log(`  📖 Training (${activity.summary}) — ${line}`)
+            }
+          } catch (error) {
+            console.error('Failed to apply downtime training gains (non-critical):', error)
+          }
+        }
+
         results.push({
           activityId: activity.id,
           activityName: activity.summary,
@@ -461,6 +479,39 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
     }
 
     return results
+  }
+
+  // Training-channel capability growth from a completed downtime activity.
+  // Matches skill names against the character's UNLOCKED capabilities only
+  // — downtime can sharpen what you have, but unlocking something new has
+  // to happen in the fiction (a scene), not in a progress bar.
+  private static async applyTrainingGains(characterId: string, skills: string[]): Promise<string[]> {
+    const character = await prisma.character.findUnique({
+      where: { id: characterId },
+      select: { campaignId: true }
+    })
+    if (!character) return []
+
+    const worldMeta = await prisma.worldMeta.findUnique({
+      where: { campaignId: character.campaignId },
+      select: { currentTurnNumber: true }
+    })
+    const currentTurn = worldMeta?.currentTurnNumber ?? 0
+
+    const changes: CapabilityChange[] = skills.map(skill => ({
+      capability_key: skill,
+      change: 'progress' as const,
+      reason: 'Deliberate practice during downtime'
+    }))
+
+    return applyCapabilityChanges(
+      prisma,
+      character.campaignId,
+      characterId,
+      changes,
+      currentTurn,
+      'training'
+    )
   }
 
   // Generate dynamic outcomes based on the player's original intent

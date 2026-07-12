@@ -21,6 +21,7 @@ import {
   PermanentInjury
 } from './harm'
 import { getArmorReduction } from './inventory'
+import { applyCapabilityChanges } from './capabilities'
 import { AI_MODELS } from '@/lib/ai/models'
 import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
 
@@ -655,6 +656,23 @@ export async function applyWorldUpdates(
               }
 
               updateData.resources = currentResources
+            }
+
+            // Knowledge-relative sheet: glimpse/unlock/progress signals from
+            // the fiction. Deterministic gain math + arc caps live in the
+            // writer; the AI only says WHAT happened, never how much.
+            if (pcChange.changes.capability_changes && pcChange.changes.capability_changes.length > 0) {
+              const capabilityLog = await applyCapabilityChanges(
+                tx,
+                campaignId,
+                character.id,
+                pcChange.changes.capability_changes,
+                currentTurnNumber,
+                'scene'
+              )
+              for (const line of capabilityLog) {
+                console.log(`  📖 ${character.name} — ${line}`)
+              }
             }
 
             if (Object.keys(updateData).length > 0) {

@@ -130,6 +130,18 @@ export interface AIGMResponse {
           circumstances: string
           effect: string
         }
+        // Knowledge-relative sheet: what the fiction revealed, unlocked,
+        // or exercised — see lib/game/capabilities.ts CapabilityChange.
+        capability_changes?: Array<{
+          capability_key: string
+          change: 'glimpse' | 'unlock' | 'progress'
+          is_new?: boolean
+          name?: string
+          domain?: string
+          framed_label?: string
+          hint?: string
+          reason: string
+        }>
       }
     }>
     faction_changes?: Array<{
@@ -193,6 +205,14 @@ export interface AIGMRequest {
       location: string | null
       relationships?: any
       consequences?: any
+      // Knowledge-relative sheet (see lib/game/capabilities.ts): what this
+      // character knows exists and can do — qualitative bands only.
+      origin_familiarity?: string
+      capabilities?: {
+        known: Array<{ name: string; domain: string; band: string; description: string | null }>
+        glimpsed: Array<{ domain: string; hint: string | null }>
+        knownDomains: string[]
+      }
     }>
     npcs: Array<{
       id: string
@@ -598,7 +618,8 @@ You MUST respond with a JSON object matching this structure:
           "appearance_changes": {"description": "Deep scar on cheek", "append": true},
           "equipment_changes": {"weapon": {"action": "remove", "value": "Broken sword"}},
           "inventory_changes": {"items_add": [...], "items_remove": [...], "items_modify": [...]},
-          "resource_changes": {"gold_delta": -50, "contacts_add": [...]}
+          "resource_changes": {"gold_delta": -50, "contacts_add": [...]},
+          "capability_changes": [{"capability_key": "swordplay", "change": "progress", "reason": "Survived a duel"}]
         }
       }
     ],
@@ -687,6 +708,24 @@ RESOURCES: gold_delta, contacts_add/remove, reputation_changes
 Make changes MATTER. Reference them in scene_text. Lost eye? Show how it affects vision. Equipment stolen? Show their reaction.
 </character_changes>
 
+<capabilities>
+Each player character's sheet shows their KNOWLEDGE of this world's systems, not a fixed class. Their entry lists: Abilities (what they can do, with a skill band), "Aware of but cannot do" (glimpsed), and "Systems this character knows exist".
+
+NARRATION GATING — this is fog of war applied to the character themselves:
+- NEVER explain or name systems that are NOT in a character's known list. An outsider who has never seen essence magic doesn't get exposition about ranks or essences — they see "impossible things" they lack words for. NPCs may use and reference such systems freely; the NARRATOR must not translate for an ignorant character.
+- Respect skill bands: a novice swordsman fumbles what a masterful one does effortlessly. Never let narration outrun the band.
+- Use a character's own vocabulary for foreign-framed abilities until the fiction teaches them local terms.
+
+CAPABILITY CHANGES — report what the fiction did via capability_changes inside that character's pc_changes:
+- "glimpse": they witnessed/learned a system EXISTS. {"capability_key": "essence-magic", "change": "glimpse", "hint": "Villagers drew power from colored stones", "reason": "Watched the ritual in the square"}
+- "unlock": they can now DO it (first real acquisition — absorbed the essence, completed first training, was initiated). {"capability_key": "dark-essence", "change": "unlock", "reason": "Absorbed the dark essence at the shrine"}
+- "progress": they meaningfully exercised or trained an ability THIS scene (real stakes or deliberate practice — not incidental mention). {"capability_key": "swordplay", "change": "progress", "reason": "Survived a duel with the caravan guard"}
+- New system revealed that isn't listed anywhere? Add is_new with name + domain: {"capability_key": "blood-runes", "change": "glimpse", "is_new": true, "name": "Blood Runes", "domain": "Forbidden Arts", "hint": "The cultist carved glowing sigils in her own skin", "reason": "..."}
+- Use framed_label when a character understands an ability only in their own terms: {"capability_key": "swordplay", "change": "unlock", "framed_label": "Kendo forms", "reason": "..."}
+
+You decide WHAT happened; the game engine decides how much growth it's worth. Do not narrate sudden mastery — growth is slow, and the engine will cap it regardless of what the prose claims.
+</capabilities>
+
 <npc_tracking>
 REGISTER NEW NPCs: Whenever you introduce a named character who doesn't already exist in the world state, add them to npc_changes with is_new: true and a brief description.
 - This creates a persistent record so they can be referenced in future scenes
@@ -754,6 +793,20 @@ ${world_summary.characters.map(c => {
   }
   if (c.consequences && Object.keys(c.consequences).length > 0) {
     parts.push(`⚠️ Consequences: ${JSON.stringify(c.consequences)}`)
+  }
+
+  // Knowledge-relative sheet: what this character KNOWS and CAN DO.
+  // Narration must respect these boundaries — see <capabilities> in the
+  // system prompt.
+  if (c.capabilities) {
+    const cap = c.capabilities
+    if (cap.known.length > 0) {
+      parts.push(`Abilities: ${cap.known.map(k => `${k.name} (${k.band}, ${k.domain})`).join('; ')}`)
+    }
+    if (cap.glimpsed.length > 0) {
+      parts.push(`Aware of but cannot do: ${cap.glimpsed.map(g => `${g.domain}${g.hint ? ` — ${g.hint}` : ''}`).join('; ')}`)
+    }
+    parts.push(`Systems this character knows exist: ${cap.knownDomains.length > 0 ? cap.knownDomains.join(', ') : 'NONE — they are ignorant of this world’s systems'}${c.origin_familiarity ? ` (origin: ${c.origin_familiarity.toLowerCase()})` : ''}`)
   }
 
   return `• ${parts.join('\n  ')}`

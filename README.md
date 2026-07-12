@@ -15,6 +15,7 @@ An AI-powered collaborative storytelling platform for running interactive narrat
 - **Real-time Collaboration**: Live updates using Pusher for chat, notifications, and scene updates
 - **PbtA-inspired Mechanics**: Powered by the Apocalypse game system integration, including a full harm/death-save system
 - **Character Management**: Detailed character sheets with stats, moves, conditions, and progression
+- **Knowledge-Relative Character Sheets**: the sheet shows what the *character* knows, not what the database knows — an outsider to the universe starts nearly blank and their sheet fills in organically as the story reveals systems (glimpsed abilities render as "???" hints, unlocked ones grow through use and downtime training with deterministic, arc-capped gains). Origin familiarity (native / newcomer / outsider) seeds what a new character already knows exists, and the AI narrator is knowledge-gated per character: it never explains systems a character hasn't encountered
 - **Scene Management**: Dynamic scenes with player actions and AI resolution
 - **Payment System**: Stripe integration for AI usage billing, with per-call cost tracking, balance gating, and per-user rate limiting on every AI-invoking route
 - **Input Moderation**: player free-text is screened (OpenAI moderation endpoint) before it ever reaches the completion model — provider-ToS protection, separate from the in-fiction X-Card safety tool

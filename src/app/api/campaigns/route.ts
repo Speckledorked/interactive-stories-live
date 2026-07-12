@@ -8,7 +8,8 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { CreateCampaignRequest, ErrorResponse } from '@/types/api'
 import { getTemplate, applyCampaignTemplate } from '@/lib/templates/campaign-templates'
-import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
+import { generateWorldFromTemplate, GeneratedCapability } from '@/lib/ai/worldGenerator'
+import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 
 // GET /api/campaigns - List user's campaigns
 export async function GET(request: NextRequest) {
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest) {
     // generate a unique world with AI before opening the transaction
     let resolvedWorldSeed = initialWorldSeed || ''
     let generatedFactions: NonNullable<Awaited<ReturnType<typeof generateWorldFromTemplate>>>['factions'] | undefined
+    let generatedCapabilities: GeneratedCapability[] | undefined
 
     if (template && !initialWorldSeed) {
       console.log('🌍 Generating unique world from template...')
@@ -97,6 +99,7 @@ export async function POST(request: NextRequest) {
       if (generated) {
         resolvedWorldSeed = generated.worldSeed
         generatedFactions = generated.factions
+        generatedCapabilities = generated.capabilities
         console.log(`✅ World generated: ${generated.factions.length} unique factions`)
       } else {
         // AI failed — fall back to template defaults
@@ -139,6 +142,26 @@ export async function POST(request: NextRequest) {
       // Apply template moves + factions (AI-generated factions if available)
       if (template) {
         await applyCampaignTemplate(newCampaign.id, template.id, tx, generatedFactions)
+      }
+
+      // Knowledge-relative sheets: persist the universe's capability
+      // scaffold — the learnable systems characters will discover through
+      // the fiction. Duplicated keys within one generation collapse via
+      // skipDuplicates rather than failing the whole campaign create.
+      if (generatedCapabilities && generatedCapabilities.length > 0) {
+        await tx.campaignCapability.createMany({
+          data: generatedCapabilities.map(c => ({
+            campaignId: newCampaign.id,
+            key: slugifyCapabilityKey(c.name),
+            name: c.name,
+            description: c.description || null,
+            domain: c.domain,
+            tier: c.tier,
+            isSecret: c.isSecret
+          })),
+          skipDuplicates: true
+        })
+        console.log(`📖 Seeded ${generatedCapabilities.length} capability nodes`)
       }
 
       return newCampaign

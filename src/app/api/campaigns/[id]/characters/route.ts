@@ -3,9 +3,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { validateStats } from '@/lib/game/advancement'
+import { decideSeedStates } from '@/lib/game/capabilities'
+import { OriginFamiliarity } from '@prisma/client'
 
 interface CreateCharacterBody {
   name: string
+  // Knowledge-relative sheet: how familiar this character is with the
+  // universe's systems — drives capability discovery seeding.
+  originFamiliarity?: 'NATIVE' | 'NEWCOMER' | 'OUTSIDER'
   pronouns?: string
   description?: string
   appearance?: string
@@ -95,11 +100,17 @@ export async function POST(
       )
     }
 
+    const originFamiliarity: OriginFamiliarity =
+      body.originFamiliarity && ['NATIVE', 'NEWCOMER', 'OUTSIDER'].includes(body.originFamiliarity)
+        ? body.originFamiliarity
+        : 'NATIVE'
+
     const character = await prisma.character.create({
       data: {
         campaignId,
         userId: user.userId,
         name: body.name,
+        originFamiliarity,
         pronouns: body.pronouns,
         description: body.description,
         appearance: body.appearance,
@@ -116,6 +127,32 @@ export async function POST(
         consequences: body.consequences || undefined,
       },
     })
+
+    // Knowledge-relative sheet seeding: what this character already knows
+    // EXISTS in this universe, by origin (never what they can do — nothing
+    // seeds UNLOCKED; ability comes from the fiction).
+    try {
+      const scaffold = await prisma.campaignCapability.findMany({
+        where: { campaignId },
+        select: { id: true, tier: true, isSecret: true }
+      })
+      const seeds = decideSeedStates(originFamiliarity, scaffold)
+      if (seeds.length > 0) {
+        await prisma.characterCapability.createMany({
+          data: seeds.map(s => ({
+            characterId: character.id,
+            capabilityId: s.capabilityId,
+            state: s.state,
+            source: `Grew up knowing of this (${originFamiliarity.toLowerCase()})`
+          })),
+          skipDuplicates: true
+        })
+        console.log(`📖 Seeded ${seeds.length} capability glimpses for ${body.name} (${originFamiliarity})`)
+      }
+    } catch (seedError) {
+      // Non-critical: a character without seeds just has a blanker sheet.
+      console.error('Failed to seed character capabilities:', seedError)
+    }
 
     // Auto-create NPCs for contacts mentioned in character's backstory
     if (body.resources?.contacts && body.resources.contacts.length > 0) {

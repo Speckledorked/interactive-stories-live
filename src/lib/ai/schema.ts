@@ -48,6 +48,21 @@ export const InventoryItemSchema = z.object({
   tags: z.array(z.string())
 })
 
+// Knowledge-relative capability change schema. The AI signals WHAT the
+// fiction did (revealed / unlocked / meaningfully exercised a capability);
+// deterministic server math decides what that's worth (see
+// lib/game/capabilities.ts).
+export const CapabilityChangeSchema = z.object({
+  capability_key: z.string(),
+  change: z.enum(['glimpse', 'unlock', 'progress']),
+  is_new: z.boolean().optional(), // registers a brand-new capability node
+  name: z.string().optional(), // display name when is_new
+  domain: z.string().optional(), // grouping when is_new (e.g. "Essence Magic")
+  framed_label: z.string().optional(), // the character's own vocabulary for it
+  hint: z.string().optional(), // what a "???" sheet entry teases
+  reason: z.string()
+})
+
 // PC changes schema
 export const PCChangesSchema = z.object({
   character_name_or_id: z.string(),
@@ -106,7 +121,10 @@ export const PCChangesSchema = z.object({
     heroic_sacrifice: z.object({
       circumstances: z.string(),
       effect: z.string()
-    }).optional()
+    }).optional(),
+    // Knowledge-relative sheet updates: what the fiction revealed,
+    // unlocked, or exercised for this character this scene.
+    capability_changes: z.array(CapabilityChangeSchema).optional()
   })
 })
 

@@ -38,6 +38,9 @@ export default function EnhancedCreateCharacterForm({
     backstory: '',
     goals: '',
     currentLocation: '',
+    // How familiar the character is with this world's systems — seeds
+    // their knowledge-relative sheet (what renders vs. stays hidden).
+    originFamiliarity: 'NATIVE' as 'NATIVE' | 'NEWCOMER' | 'OUTSIDER',
 
     // Stats & Moves
     stats: {
@@ -395,6 +398,25 @@ export default function EnhancedCreateCharacterForm({
                 className="input-field"
                 placeholder="How does your character act and think? Are they brave, cautious, witty, serious, compassionate, ruthless?"
               />
+            </div>
+
+            <div>
+              <label htmlFor="originFamiliarity" className="block text-sm font-medium text-ember-100 mb-1">
+                How well do they know this world?
+              </label>
+              <select
+                id="originFamiliarity"
+                value={formData.originFamiliarity}
+                onChange={(e) => setFormData({ ...formData, originFamiliarity: e.target.value as 'NATIVE' | 'NEWCOMER' | 'OUTSIDER' })}
+                className="input-field"
+              >
+                <option value="NATIVE">Native — grew up here, knows what exists</option>
+                <option value="NEWCOMER">Newcomer — heard of the big things, hazy on details</option>
+                <option value="OUTSIDER">Outsider — a stranger to this world&apos;s ways entirely</option>
+              </select>
+              <p className="text-xs text-ember-300 mt-1">
+                This shapes what appears on your character sheet. An outsider starts with a nearly blank sheet and discovers this world&apos;s powers, arts, and secrets through the story itself.
+              </p>
             </div>
 
             <div>

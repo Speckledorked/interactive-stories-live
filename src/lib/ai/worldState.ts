@@ -9,6 +9,7 @@ import { retrieveRelevantHistory, retrieveNpcHistory, retrieveCrossEntityHistory
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
+import { summarizeCapabilities } from '@/lib/game/capabilities'
 
 /**
  * Build optimized world summary using context manager
@@ -32,7 +33,12 @@ async function buildOptimizedWorldSummary(
     prisma.worldMeta.findUnique({ where: { campaignId } }),
     prisma.character.findMany({
       where: { campaignId, isAlive: true },
-      include: { user: { select: { email: true } } }
+      include: {
+        user: { select: { email: true } },
+        // Knowledge-relative sheet: what each character knows exists /
+        // can do — the prompt gates narration on this per character.
+        capabilities: { include: { capability: true } }
+      }
     }),
     prisma.nPC.findMany({ where: { campaignId } }),
     prisma.faction.findMany({ where: { campaignId } }),
@@ -146,7 +152,11 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       equipment: c.equipment,
       resources: c.resources,
       relationships: c.relationships,
-      consequences: c.consequences
+      consequences: c.consequences,
+      // Knowledge-relative sheet: qualitative bands + known-domains only —
+      // raw proficiency numbers never reach a prompt (fog of war inward).
+      origin_familiarity: c.originFamiliarity,
+      capabilities: summarizeCapabilities(c.capabilities)
     })),
 
     // Only relevant, discovered NPCs — fog of war: relevance alone isn't
@@ -272,7 +282,11 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
     prisma.worldMeta.findUnique({ where: { campaignId } }),
     prisma.character.findMany({
       where: { campaignId, isAlive: true },
-      include: { user: { select: { email: true } } }
+      include: {
+        user: { select: { email: true } },
+        // Knowledge-relative sheet — see the optimized builder above.
+        capabilities: { include: { capability: true } }
+      }
     }),
     prisma.nPC.findMany({ where: { campaignId } }),
     prisma.faction.findMany({ where: { campaignId } }),
@@ -332,7 +346,11 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       equipment: c.equipment,
       resources: c.resources,
       relationships: c.relationships,
-      consequences: c.consequences
+      consequences: c.consequences,
+      // Knowledge-relative sheet: qualitative bands + known-domains only —
+      // raw proficiency numbers never reach a prompt (fog of war inward).
+      origin_familiarity: c.originFamiliarity,
+      capabilities: summarizeCapabilities(c.capabilities)
     })),
 
     npcs: discoveredNpcs.map(n => ({

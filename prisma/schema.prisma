@@ -227,6 +227,86 @@ model Campaign {
 
   // World Sim Phase 5: sustained multi-turn conflicts between factions.
   wars War[]
+
+  // Knowledge-relative capabilities: this universe's latent systems
+  // (magic schools, fighting styles, political arts...) that characters
+  // discover and grow into through the fiction.
+  capabilities CampaignCapability[]
+}
+
+//
+// CAPABILITIES (knowledge-relative character sheets)
+//
+// The universe has a latent tree of learnable systems. What a character
+// SEES of that tree depends on what the fiction has shown them:
+//   no row      -> the character doesn't know this exists (sheet: absent)
+//   GLIMPSED    -> they know it exists but can't do it (sheet: "???" + hint)
+//   UNLOCKED    -> they have it; hidden proficiency grows with use/training
+// Raw proficiency numbers never leave the server — players only ever see
+// qualitative bands (see proficiencyBand in lib/game/capabilities.ts).
+//
+
+enum CapabilityState {
+  GLIMPSED
+  UNLOCKED
+}
+
+// How familiar a character is with this universe's systems at creation.
+// Drives initial discovery seeding, not power level: a NATIVE knows the
+// scaffold of what exists; an OUTSIDER starts with a nearly blank sheet.
+enum OriginFamiliarity {
+  NATIVE
+  NEWCOMER
+  OUTSIDER
+}
+
+model CampaignCapability {
+  id          String   @id @default(cuid())
+  campaignId  String
+  key         String // stable slug, e.g. "dark-essence"
+  name        String
+  description String?
+  domain      String // top-level grouping, e.g. "Essence Magic", "Swordplay"
+  parentId    String?
+  tier        Int      @default(1)
+  // Secret branches are hidden even from natives until the fiction
+  // reveals them (forbidden schools, lost arts).
+  isSecret    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  campaign        Campaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  parent          CampaignCapability?   @relation("CapabilityTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children        CampaignCapability[]  @relation("CapabilityTree")
+  characterStates CharacterCapability[]
+
+  @@unique([campaignId, key])
+  @@index([campaignId])
+}
+
+model CharacterCapability {
+  id           String          @id @default(cuid())
+  characterId  String
+  capabilityId String
+  state        CapabilityState @default(GLIMPSED)
+  proficiency  Int             @default(0) // 0-100, hidden from players
+  // The character's own vocabulary for this capability while they lack
+  // the local frame ("Earth sword forms" before learning local styles).
+  framedLabel  String?
+  hint         String? // shown on "???" (glimpsed) sheet entries
+  source       String? // the fiction that revealed/unlocked it
+  usageCount   Int             @default(0)
+  // Per-arc growth guardrail (see ARC_LENGTH_TURNS / MAX_GROWTH_PER_ARC).
+  growthInArc  Int             @default(0)
+  arcStartTurn Int             @default(0)
+  unlockedAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  character  Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  capability CampaignCapability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, capabilityId])
+  @@index([characterId])
 }
 
 //
@@ -248,6 +328,10 @@ model Character {
   isAlive         Boolean @default(true)
   currentLocation String?
   gmNotes         String?
+
+  // Knowledge-relative sheet: how familiar this character is with the
+  // universe's systems at creation (drives capability discovery seeding).
+  originFamiliarity OriginFamiliarity @default(NATIVE)
 
   // PbtA specific fields
   harm       Int      @default(0) // 0-6 harm track
@@ -289,6 +373,10 @@ model Character {
 
   // World Sim Phase 6: factions this PC leads (see Faction.leaderCharacterId).
   ledFactions Faction[] @relation("FactionPCLeader")
+
+  // Knowledge-relative sheet: what this character knows of / can do with
+  // the universe's capability tree.
+  capabilities CharacterCapability[]
 
   @@index([campaignId])
   @@index([userId])

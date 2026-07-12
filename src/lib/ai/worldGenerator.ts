@@ -19,9 +19,20 @@ interface GeneratedFaction {
   influence: number    // 10-100
 }
 
+export interface GeneratedCapability {
+  domain: string // top-level system grouping, e.g. "Essence Magic"
+  name: string
+  description: string
+  tier: number // 1 = entry knowledge, 3 = deep art
+  isSecret: boolean // hidden even from natives until the fiction reveals it
+}
+
 interface GeneratedWorld {
   worldSeed: string
   factions: GeneratedFaction[]
+  // The universe's latent capability scaffold — what CAN be learned here.
+  // Characters discover it through the fiction (see lib/game/capabilities.ts).
+  capabilities: GeneratedCapability[]
 }
 
 const GENRE_HINTS: Record<string, string> = {
@@ -65,6 +76,14 @@ Return JSON with this structure:
       "resources": 50,
       "influence": 50
     }
+  ],
+  "capability_domains": [
+    {
+      "domain": "Name of a learnable system in this world (a magic tradition, a fighting style, a political art...)",
+      "capabilities": [
+        { "name": "A specific learnable ability/art within the domain", "description": "1 sentence", "tier": 1, "is_secret": false }
+      ]
+    }
   ]
 }
 
@@ -75,6 +94,7 @@ Rules:
 - resources and influence: integers 10-90
 - current_plan: 1-2 sentences, specific and active (e.g. "Bribing city guards to look the other way while they move contraband through the docks")
 - Do NOT reuse names from generic fantasy/superhero tropes (no "The Dark Brotherhood", "League of Shadows", etc.)
+- capability_domains: 3-5 domains, the learnable SYSTEMS of this world (its magic/powers/martial/social arts). 2-4 capabilities per domain. tier 1 = what any practitioner starts with, tier 2-3 = deeper arts. Mark 1-2 capabilities is_secret: true (forbidden or lost arts nobody openly knows)
 - Make it feel like it belongs specifically to "${campaignTitle}"`
 
   try {
@@ -123,8 +143,29 @@ Rules:
       influence: Math.max(10, Math.min(90, Number(f.influence) || 50)),
     }))
 
-    console.log(`✅ Generated unique world: ${factions.length} factions`)
-    return { worldSeed: String(raw.world_seed), factions }
+    // Capability scaffold is optional — an older-style response without it
+    // still produces a valid world (nodes then get created organically
+    // mid-story via is_new capability_changes).
+    const capabilities: GeneratedCapability[] = []
+    if (Array.isArray(raw.capability_domains)) {
+      for (const d of raw.capability_domains) {
+        const domain = String(d?.domain || '').trim()
+        if (!domain || !Array.isArray(d.capabilities)) continue
+        for (const c of d.capabilities) {
+          if (!c?.name) continue
+          capabilities.push({
+            domain,
+            name: String(c.name),
+            description: String(c.description || ''),
+            tier: Math.max(1, Math.min(3, Number(c.tier) || 1)),
+            isSecret: Boolean(c.is_secret),
+          })
+        }
+      }
+    }
+
+    console.log(`✅ Generated unique world: ${factions.length} factions, ${capabilities.length} capabilities`)
+    return { worldSeed: String(raw.world_seed), factions, capabilities }
 
   } catch (err) {
     console.error('World generation failed, using template defaults:', err)

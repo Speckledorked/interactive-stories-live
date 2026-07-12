@@ -146,15 +146,24 @@ Without these links, "war" and "politics" have no map to redraw and no one for t
 - [x] Simulation debug tooling — "inspect why a given decision was made" half: new "Debug" tab + `/api/campaigns/[id]/world-events` route (admin-only — reason strings can reference GM-only state) browsing the already-durable `WorldEvent` log by turn: every tick change and consequence, with its `previousValue`/`newValue`/`reason`. No new capture mechanism needed — `WorldEvent` already recorded all of this every turn, it just had no viewer
 - [x] Tick dry-run / preview: every write call site across all 7 tick handlers is now gated on `TickContext.dryRun`, and `runWorldTick(campaignId, turnNumber, { dryRun: true })` skips the writes plus the normal post-tick persistence (history log, wiki sync, event log) while still returning the exact `WorldChange` list the tick would produce. New admin-only `/api/campaigns/[id]/world-tick/preview` route + a "Preview Next Tick" button in the Debug tab. Deliberately scoped as a preview of the *next* tick against live current state, not a replay of a *past* one — there's no snapshot system to replay historical state against, and building one was out of scope. Also deliberately not implemented via a Prisma transaction rollback: the handlers write through the shared `prisma` singleton, not a transaction-scoped client, so wrapping the whole tick in `prisma.$transaction` wouldn't actually make those writes roll back — skipping them outright is simpler and equally safe
 
-## Game Mechanics Roadmap (PbtA × Urban Shadows fusion)
+## Product Roadmap (PbtA × Urban Shadows fusion)
 
-The mechanical backbone of the game: PbtA-style resolution under the hood,
-Urban Shadows-style social/faction economies on top of the living world sim,
-with a deliberately *ungamified* surface — mechanics stay invisible in the
-prose, sheets show only what the character knows, and receipts live in the
-opt-in transparency panel.
+**Thesis:** the first AI GM that actually *runs a game* instead of improvising
+prose — server-rolled moves the narrator must obey, Urban Shadows-style
+Debt/standing/corruption economies bridging player characters to the living
+faction simulation, with a deliberately *ungamified* surface: mechanics stay
+invisible in the prose, sheets show only what the character knows, and
+receipts live in the opt-in transparency panel.
+
+**The north-star exit test (Phase 2):** a player owes a Debt to a faction,
+that faction loses a war in the offscreen tick, the player learns it from the
+rumor digest, and their next roll is mechanically different because of it.
+When that chain works, this is the product.
 
 ### Foundation — the mechanical spine ✅
+
+Shipped ahead of the original plan: the knowledge-relative sheet system that
+Phase 2's economies build on.
 
 - [x] Knowledge-relative character sheets: the universe has a latent capability tree (`CampaignCapability`); a character's sheet shows only what the fiction has revealed to them (`CharacterCapability`: absent → GLIMPSED "???" → UNLOCKED with a qualitative band). Raw proficiency numbers never leave the server
 - [x] Origin familiarity seeding (native / newcomer / outsider): what a new character already knows *exists*, never what they can do — nothing seeds unlocked
@@ -166,19 +175,59 @@ opt-in transparency panel.
 - [x] Roll receipts: every roll persisted to `DiceRoll` and shown in a collapsed-by-default 🎲 section of the transparency panel — prose never mentions dice
 - [x] Harm keyed to resolution: 4+ harm applies the Impaired −1 to every roll; misses are where harm comes from
 
-### Phase 2 — The Urban Shadows fusion (differentiation)
+### Phase 0 — Clarity and floor
 
-- [ ] **Debt economy**: first-class Debt records between PCs and NPCs/factions — created and called in by the AI as narrative leverage, rendered diegetically on the sheet ("Lord Kessler considers you in his debt"), never as a ledger counter. Replaces today's free-text `consequences.debts` strings
-- [ ] **Faction standing**: per-character standing with the simulated factions; social/political moves roll +standing; standing shifts from scene outcomes *and* from the world tick — a faction losing a war or collapsing changes what its allies and enemies can roll
-- [ ] **World-visibility digest**: push tick drama into notifications ("while you were away, war broke out in the Reach…") — the rumor feed exists, the retention hook doesn't
-- [ ] **Origin archetypes v2**: full creation presets per origin — starting ties, obligations, and glimpse packages — beyond the familiarity selector
-- [ ] **Corruption track**: per-universe "power at a cost" (the dark-essence pattern) — marking corruption grants power now, unlocks a shadow branch of the capability tree, and accumulates toward consequences the character can't take back
-- [ ] **Alpha instrumentation**: funnel/retention events and stuck-scene alerting so a playtest cohort can be observed and unstuck
+Goal: stop building on sand. Exit: CI green, Sentry live, migrations real,
+secrets fixed, email verification on, dead code gone, ruleset documented.
 
-### Platform / reliability (pre-launch, from the product roadmap)
+- [ ] **#1 Ops floor**: CI running vitest + tsc on every push; real migrations replacing `prisma db push --accept-data-loss`; error monitoring (Sentry or equivalent); kill the JWT fallback secret; email verification + password reset
+- [ ] **#2 Dead-code purge + ruleset doc**: delete `sessions/session-service.ts` (never imported) and other dead modules *(partial: the ruleset itself is now implemented and documented in code/README rather than as an upfront ADR — the purge hasn't happened)*
 
-- [ ] Async scene resolution: move the AI call off the request path (DB-backed job + Pusher completion) — resolutions can currently exceed the platform's 60s ceiling
-- [ ] Ops floor: CI running vitest + tsc on every push, error monitoring, real migrations instead of `db push --accept-data-loss`, no fallback JWT secret, email verification
+### Phase 1 — MVP foundation: the mechanical spine
+
+Goal: the core loop becomes a game. Exit: a full multi-scene session where
+every action resolves through a server-rolled move, no resolution is lost to
+timeouts, and the AI respects the outcome band.
+
+- [x] **#3 Resolution engine v1**: server-side move classification (EFFICIENT model, fail-open), 2d6 + stat + capability band + harm rolled server-side, persisted to `DiceRoll`, outcome band passed to the narrator as a binding constraint, hard GM move required on a miss
+- [x] **#4 Roll visibility**: *(deliberately redesigned from "visible dice UI" to hidden-with-receipts per the ungamified-surface decision)* — rolls surface as a collapsed-by-default 🎲 section in the transparency panel; prose never mentions dice
+- [ ] **#5 Async scene resolution**: DB-backed job record, status via Pusher/polling, retry — resolutions can currently exceed the platform's 60s request ceiling (`maxDuration = 60` vs. ~150s worst-case AI calls)
+
+### Phase 2 — Product differentiation: the Urban Shadows fusion
+
+Goal: mechanics and the living world become one system. Exit: the north-star
+chain above works in a real playtest.
+
+- [ ] **#6 Debt economy**: first-class Debt records between PCs and NPCs/factions — created and called in by the AI as narrative leverage, rendered diegetically on the sheet ("Lord Kessler considers you in his debt"), never as a ledger counter. Replaces today's free-text `consequences.debts` strings
+- [ ] **#7 Faction standing**: per-character standing with the simulated factions; social/political moves roll +standing; standing shifts from scene outcomes *and* from the world tick — a faction losing a war or collapsing changes what its allies and enemies can roll
+- [ ] **#8 World-visibility digest**: push tick drama into notifications ("while you were away, war broke out in the Reach…") — the rumor feed exists, the retention hook doesn't
+- [ ] **#9 Origin archetypes / playbook onboarding**: *(v1 shipped: origin familiarity selector + capability discovery seeding)* — still open: full creation presets per origin (starting ties, obligations, glimpse packages) and signup-to-first-scene under 5 minutes
+- [ ] **#10 Corruption track**: per-universe "power at a cost" (the dark-essence pattern) — marking corruption grants power now, unlocks a shadow branch of the capability tree, and accumulates toward consequences the character can't take back
+- [x] **#11 Harm/death keyed to resolution**: 4+ harm applies the Impaired −1 to every roll; misses are where harm comes from (folded into the resolution engine's binding miss rule)
+- [ ] **#12 Alpha instrumentation**: funnel/retention events, stuck-scene alerting, playtest cohort dashboard — D7/D28 retention measurable per cohort
+
+### Phase 3 — Expansion: content and shareability
+
+Goal: easy to start, worth showing off. Exit: 3–5 external groups complete
+4+ week campaigns with defensible D28 retention.
+
+- [ ] **#13 First-party campaign templates**: 3–5 templates tuned to the new ruleset — factions, starting Debts, front-style threats, capability scaffolds
+- [ ] **#14 Scene illustration**: one generated image per resolved scene (deferred until mechanics landed; requires #5 so cost/latency live off the request path)
+- [ ] **#15 Chronicle share link**: read-only public link to a campaign's story log — cheap virality from prose the game already generates
+- [ ] Closed alpha with 3–5 external groups
+
+### Phase 4 — Monetization and scale
+
+Goal: prove people pay. Exit: sustainable unit economics on real cohorts.
+
+- [ ] **#16 Free starter allowance + pricing validation**: credits vs. subscription test; conversion + margin data from ≥50 paying users
+- [ ] Cost-per-session optimization and queue scaling (as data demands)
+
+### Explicitly deferred (identity conflicts / wrong stage)
+
+Mobile app, voice/TTS, creator marketplace/UGC, VTT-style grid combat,
+5e-style crunch, deeper world-sim features before players can *feel* the
+sim through standing/Debts/rumors — per the roadmap's tradeoff analysis.
 
 ## Prerequisites
 

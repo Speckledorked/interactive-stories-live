@@ -32,6 +32,7 @@ import {
 } from './world-state-tracker'
 import { createSceneMemory } from '@/lib/ai/memoryCreation'
 import { extractAndApplyConsequences } from './consequences'
+import { formatRollReceipt } from './resolution'
 
 /**
  * Resolve a scene using the AI GM
@@ -257,6 +258,20 @@ async function performResolution(
     // 6.6. Detect and store world state changes for transparency
     console.log('🔍 Detecting world state changes...')
     const worldStateChanges = await detectWorldStateChanges(campaignId, beforeSnapshot)
+
+    // Roll receipts: the mechanics stay out of the prose on purpose, so
+    // the opt-in transparency panel is the one place a player can verify
+    // what was rolled and why the scene went the way it did.
+    for (const m of aiRequest.action_mechanics || []) {
+      worldStateChanges.push({
+        category: 'roll',
+        type: 'rolled',
+        entityName: m.characterName,
+        details: formatRollReceipt(m),
+        impact: m.outcome === 'miss' ? 'major' : m.outcome === 'weakHit' ? 'moderate' : 'minor'
+      })
+    }
+
     await storeWorldStateChanges(sceneId, worldStateChanges)
     console.log(`✅ Tracked ${worldStateChanges.length} world state changes`)
 

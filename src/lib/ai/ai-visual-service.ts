@@ -1,3 +1,4 @@
+import { openaiFetch } from '@/lib/ai/openaiCompat'
 // PLACE IN: src/lib/ai/ai-visual-service.ts
 
 import { MapService } from '@/lib/maps/map-service'
@@ -125,7 +126,7 @@ Return a JSON object with:
 }`
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

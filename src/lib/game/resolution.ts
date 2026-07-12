@@ -1,3 +1,4 @@
+import { openaiFetch } from '@/lib/ai/openaiCompat'
 // src/lib/game/resolution.ts
 // The mechanical spine: server-rolled PbtA move resolution.
 //
@@ -254,7 +255,7 @@ Rules:
 Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null}]}`
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

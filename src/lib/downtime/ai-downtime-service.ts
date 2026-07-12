@@ -1,3 +1,4 @@
+import { openaiFetch } from '@/lib/ai/openaiCompat'
 // src/lib/downtime/ai-downtime-service.ts
 
 import { PrismaClient } from '@prisma/client'
@@ -109,7 +110,7 @@ Make the interpretation:
 
 If the request seems impossible, suggest a viable alternative.`
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -259,7 +260,7 @@ Return a JSON object:
   "narrative": "Rich narrative description for immersion"
 }`
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -345,7 +346,7 @@ Generate a response that:
 Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 paragraphs.`
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -563,7 +564,7 @@ Based on the player's original intent and what happened during the activity, gen
   "narrative": "Rich description of what was accomplished"
 }`
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

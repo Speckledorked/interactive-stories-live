@@ -1,3 +1,4 @@
+import { openaiFetch } from '@/lib/ai/openaiCompat'
 // src/lib/ai/consequenceExtraction.ts
 //
 // Extracts structured player-action consequences from a resolved scene:
@@ -107,7 +108,7 @@ Rules:
 - Returning an empty consequences array is the normal, expected result for most scenes`
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

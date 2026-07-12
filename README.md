@@ -146,6 +146,40 @@ Without these links, "war" and "politics" have no map to redraw and no one for t
 - [x] Simulation debug tooling — "inspect why a given decision was made" half: new "Debug" tab + `/api/campaigns/[id]/world-events` route (admin-only — reason strings can reference GM-only state) browsing the already-durable `WorldEvent` log by turn: every tick change and consequence, with its `previousValue`/`newValue`/`reason`. No new capture mechanism needed — `WorldEvent` already recorded all of this every turn, it just had no viewer
 - [x] Tick dry-run / preview: every write call site across all 7 tick handlers is now gated on `TickContext.dryRun`, and `runWorldTick(campaignId, turnNumber, { dryRun: true })` skips the writes plus the normal post-tick persistence (history log, wiki sync, event log) while still returning the exact `WorldChange` list the tick would produce. New admin-only `/api/campaigns/[id]/world-tick/preview` route + a "Preview Next Tick" button in the Debug tab. Deliberately scoped as a preview of the *next* tick against live current state, not a replay of a *past* one — there's no snapshot system to replay historical state against, and building one was out of scope. Also deliberately not implemented via a Prisma transaction rollback: the handlers write through the shared `prisma` singleton, not a transaction-scoped client, so wrapping the whole tick in `prisma.$transaction` wouldn't actually make those writes roll back — skipping them outright is simpler and equally safe
 
+## Game Mechanics Roadmap (PbtA × Urban Shadows fusion)
+
+The mechanical backbone of the game: PbtA-style resolution under the hood,
+Urban Shadows-style social/faction economies on top of the living world sim,
+with a deliberately *ungamified* surface — mechanics stay invisible in the
+prose, sheets show only what the character knows, and receipts live in the
+opt-in transparency panel.
+
+### Foundation — the mechanical spine ✅
+
+- [x] Knowledge-relative character sheets: the universe has a latent capability tree (`CampaignCapability`); a character's sheet shows only what the fiction has revealed to them (`CharacterCapability`: absent → GLIMPSED "???" → UNLOCKED with a qualitative band). Raw proficiency numbers never leave the server
+- [x] Origin familiarity seeding (native / newcomer / outsider): what a new character already knows *exists*, never what they can do — nothing seeds unlocked
+- [x] Organic capability growth: the AI signals glimpse/unlock/progress from the fiction; deterministic server math decides gains (diminishing returns, per-arc caps). Downtime training is the fast lane and can only sharpen what you already have
+- [x] Per-character narration knowledge-gating: the AI never explains systems a character hasn't encountered — fog of war applied inward
+- [x] Capability scaffold generation at campaign creation (domains, tiers, secret branches), plus organic node creation mid-story for newly revealed systems
+- [x] Server-rolled move resolution: every risky action is classified to a PbtA basic move (or no_roll), rolled 2d6 + stat + capability band + harm on the server, and the outcome band is a **binding** constraint on the narration (weak hits always cost; misses trigger a hard GM move)
+- [x] Capability bands as roll modifiers: attempting an unknown system −1, novice 0, competent/skilled +1, masterful +2
+- [x] Roll receipts: every roll persisted to `DiceRoll` and shown in a collapsed-by-default 🎲 section of the transparency panel — prose never mentions dice
+- [x] Harm keyed to resolution: 4+ harm applies the Impaired −1 to every roll; misses are where harm comes from
+
+### Phase 2 — The Urban Shadows fusion (differentiation)
+
+- [ ] **Debt economy**: first-class Debt records between PCs and NPCs/factions — created and called in by the AI as narrative leverage, rendered diegetically on the sheet ("Lord Kessler considers you in his debt"), never as a ledger counter. Replaces today's free-text `consequences.debts` strings
+- [ ] **Faction standing**: per-character standing with the simulated factions; social/political moves roll +standing; standing shifts from scene outcomes *and* from the world tick — a faction losing a war or collapsing changes what its allies and enemies can roll
+- [ ] **World-visibility digest**: push tick drama into notifications ("while you were away, war broke out in the Reach…") — the rumor feed exists, the retention hook doesn't
+- [ ] **Origin archetypes v2**: full creation presets per origin — starting ties, obligations, and glimpse packages — beyond the familiarity selector
+- [ ] **Corruption track**: per-universe "power at a cost" (the dark-essence pattern) — marking corruption grants power now, unlocks a shadow branch of the capability tree, and accumulates toward consequences the character can't take back
+- [ ] **Alpha instrumentation**: funnel/retention events and stuck-scene alerting so a playtest cohort can be observed and unstuck
+
+### Platform / reliability (pre-launch, from the product roadmap)
+
+- [ ] Async scene resolution: move the AI call off the request path (DB-backed job + Pusher completion) — resolutions can currently exceed the platform's 60s ceiling
+- [ ] Ops floor: CI running vitest + tsc on every push, error monitoring, real migrations instead of `db push --accept-data-loss`, no fallback JWT secret, email verification
+
 ## Prerequisites
 
 - **Node.js** 18+ and npm

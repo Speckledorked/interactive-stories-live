@@ -146,10 +146,13 @@ model User {
   // Payment system - balance stored in cents (e.g., 100 = $1.00)
   balance Int @default(0)
 
-  // Account security: email verification + password reset
+  // Account security: email verification + password reset.
+  // Tokens are UUIDs looked up via findFirst on plain indexes — not
+  // @unique, because prisma db push conservatively flags adding a unique
+  // constraint as potential data loss and fails the deploy guardrail.
   emailVerified     Boolean   @default(false)
-  emailVerifyToken  String?   @unique
-  resetToken        String?   @unique
+  emailVerifyToken  String?
+  resetToken        String?
   resetTokenExpires DateTime?
 
   // Phase 9: Online status
@@ -170,6 +173,9 @@ model User {
   // Phase 9: Notifications
   notifications        Notification[]            @relation("UserNotifications")
   notificationSettings UserNotificationSettings? @relation("UserNotificationSettings")
+
+  @@index([emailVerifyToken])
+  @@index([resetToken])
 }
 
 model CampaignMembership {

@@ -291,7 +291,17 @@ export interface AIGMRequest {
     character_name: string
     character_id: string
     action_text: string
+    // Server-rolled move outcome (see lib/game/resolution.ts) — a binding
+    // constraint on how well this action goes. Absent = freeform.
+    mechanics?: {
+      move_name: string
+      outcome: 'strongHit' | 'weakHit' | 'miss'
+      outcome_text: string
+    }
   }>
+  // Full roll records for this exchange, carried through so the resolver
+  // can store receipts — not rendered into the prompt directly.
+  action_mechanics?: import('@/lib/game/resolution').ActionMechanics[]
 }
 
 /**
@@ -708,6 +718,15 @@ RESOURCES: gold_delta, contacts_add/remove, reputation_changes
 Make changes MATTER. Reference them in scene_text. Lost eye? Show how it affects vision. Equipment stolen? Show their reaction.
 </character_changes>
 
+<mechanical_outcomes>
+Some player actions arrive with a MECHANICAL OUTCOME line — the game engine already rolled the dice for that action. This outcome is BINDING:
+- STRONG HIT: the attempt succeeds cleanly. Don't undercut it with hidden costs the roll didn't earn.
+- WEAK HIT: the attempt succeeds, but ALWAYS with a real cost, complication, or hard choice — never a clean win.
+- MISS: it goes wrong. Make a hard GM move against them: harm, a threat materializes, a cost is paid, an opportunity is lost, the situation worsens. A miss is never "nothing happens".
+Actions without a MECHANICAL OUTCOME line are yours to adjudicate freely (dialogue, planning, low-stakes activity).
+NEVER mention dice, rolls, moves, hits, or misses in scene_text — express outcomes purely through the fiction. The engine's outcome decides HOW WELL it went; you decide what that looks like.
+</mechanical_outcomes>
+
 <capabilities>
 Each player character's sheet shows their KNOWLEDGE of this world's systems, not a fixed class. Their entry lists: Abilities (what they can do, with a skill band), "Aware of but cannot do" (glimpsed), and "Systems this character knows exist".
 
@@ -867,7 +886,13 @@ ${current_scene_intro}
 </current_scene>
 
 <player_actions>
-${player_actions.map(a => `${a.character_name}: "${a.action_text}"`).join('\n\n')}
+${player_actions.map(a => {
+  const lines = [`${a.character_name}: "${a.action_text}"`]
+  if (a.mechanics) {
+    lines.push(`  → MECHANICAL OUTCOME (binding, already rolled): ${a.mechanics.move_name} — ${a.mechanics.outcome === 'strongHit' ? 'STRONG HIT' : a.mechanics.outcome === 'weakHit' ? 'WEAK HIT' : 'MISS'}. ${a.mechanics.outcome_text}`)
+  }
+  return lines.join('\n')
+}).join('\n\n')}
 </player_actions>
 
 <task>

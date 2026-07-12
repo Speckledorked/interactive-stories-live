@@ -6,8 +6,10 @@
 import { useState } from 'react'
 
 export interface WorldStateChange {
-  category: 'character' | 'npc' | 'faction' | 'clock' | 'timeline' | 'relationship' | 'consequence'
-  type: 'added' | 'modified' | 'removed' | 'ticked'
+  // 'roll' entries are the move-resolution receipts (see
+  // lib/game/resolution.ts): the one place dice surface in the UI.
+  category: 'character' | 'npc' | 'faction' | 'clock' | 'timeline' | 'relationship' | 'consequence' | 'roll'
+  type: 'added' | 'modified' | 'removed' | 'ticked' | 'rolled'
   entityName: string
   details: string
   impact?: 'minor' | 'moderate' | 'major'
@@ -33,7 +35,9 @@ export default function AITransparencyPanel({
     clock: true,
     timeline: true,
     relationship: true,
-    consequence: true
+    consequence: true,
+    // Receipts start collapsed — "behind the screen" is opt-in by design.
+    roll: false
   })
 
   if (!isOpen || changes.length === 0) {
@@ -60,6 +64,7 @@ export default function AITransparencyPanel({
       case 'modified': return '✏️'
       case 'removed': return '➖'
       case 'ticked': return '⏱️'
+      case 'rolled': return '🎲'
       default: return '•'
     }
   }
@@ -74,6 +79,7 @@ export default function AITransparencyPanel({
       case 'timeline': return 'from-yellow-500/20 to-yellow-600/10 border-yellow-500/50'
       case 'relationship': return 'from-pink-500/20 to-pink-600/10 border-pink-500/50'
       case 'consequence': return 'from-red-500/20 to-red-600/10 border-red-500/50'
+      case 'roll': return 'from-teal-500/20 to-teal-600/10 border-teal-500/50'
       default: return 'from-gray-500/20 to-gray-600/10 border-gray-500/50'
     }
   }
@@ -88,6 +94,7 @@ export default function AITransparencyPanel({
       case 'timeline': return '📅'
       case 'relationship': return '💕'
       case 'consequence': return '⚠️'
+      case 'roll': return '🎲'
       default: return '📝'
     }
   }

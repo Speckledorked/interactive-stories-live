@@ -10,6 +10,7 @@ import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
+import { resolveActionMechanics } from '@/lib/game/resolution'
 
 /**
  * Build optimized world summary using context manager
@@ -496,12 +497,40 @@ export async function buildSceneResolutionRequest(
     entities = result.entities
   }
 
+  // The mechanical spine: classify + server-roll every pending action in
+  // this exchange BEFORE the narrator sees them, so outcome bands arrive
+  // as binding constraints. Fails open to [] — freeform resolution.
+  const pendingActions = scene.playerActions.filter(a => a.status === 'pending')
+  const actionMechanics = await resolveActionMechanics(
+    campaignId,
+    sceneId,
+    pendingActions.map(a => ({
+      id: a.id,
+      characterId: a.characterId,
+      userId: a.userId,
+      actionText: a.actionText
+    }))
+  )
+  const mechanicsByActionId = new Map(actionMechanics.map(m => [m.actionId, m]))
+
   // Format player actions
-  const playerActions = scene.playerActions.map(action => ({
-    character_name: action.character.name,
-    character_id: action.character.id,
-    action_text: action.actionText
-  }))
+  const playerActions = scene.playerActions.map(action => {
+    const mechanics = mechanicsByActionId.get(action.id)
+    return {
+      character_name: action.character.name,
+      character_id: action.character.id,
+      action_text: action.actionText,
+      ...(mechanics
+        ? {
+            mechanics: {
+              move_name: mechanics.moveName,
+              outcome: mechanics.outcome,
+              outcome_text: mechanics.outcomeText
+            }
+          }
+        : {})
+    }
+  })
 
   // Phase 16.3: Check if this is a complex exchange (>3 actions)
   let exchangeGuidance = ''
@@ -667,7 +696,8 @@ export async function buildSceneResolutionRequest(
     ai_system_prompt: enhancedSystemPrompt + (fullGuidance ? `\n\n${fullGuidance}` : ''),
     world_summary: worldSummaryWithMemories,
     current_scene_intro: sceneContext,
-    player_actions: playerActions
+    player_actions: playerActions,
+    action_mechanics: actionMechanics
   }
 }
 

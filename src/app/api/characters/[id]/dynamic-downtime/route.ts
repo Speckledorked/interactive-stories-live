@@ -5,6 +5,8 @@ import { verifyAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { AIDrivenDowntimeService } from '@/lib/downtime/ai-downtime-service'
 import { z } from 'zod'
+import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
+import { moderatePlayerText } from '@/lib/ai/moderation'
 
 const createDynamicActivitySchema = z.object({
   description: z.string().min(1, 'Description is required'),
@@ -100,6 +102,21 @@ export async function POST(
     const body = await request.json()
     const { description, campaignContext } = createDynamicActivitySchema.parse(body)
 
+    // Rate limit + moderation before the AI call — this route sends player
+    // free-text to the completion model.
+    const rateLimit = await checkRateLimit(user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds)
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
+    }
+
+    const moderation = await moderatePlayerText(description)
+    if (moderation.flagged) {
+      return NextResponse.json(
+        { error: `Your activity description was blocked by content moderation (${moderation.categories.join(', ')}). Please rephrase it.` },
+        { status: 400 }
+      )
+    }
+
     // Use AI to interpret the activity
     const activity = await AIDrivenDowntimeService.createDynamicActivity(
       characterId,
@@ -141,6 +158,13 @@ export async function PUT(
     const characterId = params.id
     const body = await request.json()
     const { days } = advanceTimeSchema.parse(body)
+
+    // Rate limit — advancing downtime can fan out into multiple AI calls
+    // (event generation per day advanced).
+    const rateLimit = await checkRateLimit(user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds)
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
+    }
 
     const results = await AIDrivenDowntimeService.advanceDynamicDowntime(characterId, days)
 

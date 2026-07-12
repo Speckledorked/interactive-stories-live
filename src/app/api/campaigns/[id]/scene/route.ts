@@ -8,6 +8,8 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
 import { pusherServer } from '@/lib/pusher'
+import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
+import { moderatePlayerText } from '@/lib/ai/moderation'
 
 // POST can trigger a full scene resolution (AI GM call + world tick) inline
 // before responding. 60s is the Vercel Hobby-tier ceiling — safe on every
@@ -101,6 +103,23 @@ export async function POST(
     if (!sceneId || !characterId || !actionText) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Scene ID, character ID, and action text are required' },
+        { status: 400 }
+      )
+    }
+
+    // Rate limit before any DB/AI work — action submission can trigger a
+    // full scene resolution (an LLM call) inline.
+    const rateLimit = await checkRateLimit(user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds)
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
+    }
+
+    // Provider-ToS input moderation — flagged free-text never reaches the
+    // completion model. Distinct from the X-Card safety tool.
+    const moderation = await moderatePlayerText(actionText)
+    if (moderation.flagged) {
+      return NextResponse.json<ErrorResponse>(
+        { error: `Your action was blocked by content moderation (${moderation.categories.join(', ')}). Please rephrase it.` },
         { status: 400 }
       )
     }

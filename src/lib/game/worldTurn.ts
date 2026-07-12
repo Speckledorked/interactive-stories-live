@@ -15,6 +15,7 @@ import { AMBITION_CATEGORY_OPTIONS, decideAmbitionOutcome } from './tick/ambitio
 import { decideTerritoryClaim } from './tick/territory'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { logSignificantChanges } from './tick/historyLog'
+import { sendWorldDigest } from '@/lib/notifications/world-digest'
 
 /**
  * Run a world turn - advance clocks and generate background events
@@ -90,6 +91,12 @@ export async function runWorldTurn(campaignId: string) {
 
     // 4. Update in-game date (simple progression)
     await advanceInGameDate(campaignId)
+
+    // 4b. World-visibility digest: the tick's MAJOR, discovery-safe drama
+    // becomes a "word on the street" notification for every member — the
+    // living world reaching players instead of running silently. Best
+    // effort; never blocks the turn.
+    await sendWorldDigest(campaignId, worldTick.changes)
 
     // 5. Periodically roll up old, low-importance memories so the RAG table
     // doesn't grow unbounded over a long campaign — every 10 turns is often

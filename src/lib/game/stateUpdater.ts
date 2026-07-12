@@ -23,6 +23,7 @@ import {
 import { getArmorReduction } from './inventory'
 import { applyCapabilityChanges } from './capabilities'
 import { applyDebtChanges } from './debts'
+import { applyStandingChanges } from './standing'
 import { AI_MODELS } from '@/lib/ai/models'
 import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
 
@@ -672,6 +673,21 @@ export async function applyWorldUpdates(
               )
               for (const line of debtLog) {
                 console.log(`  🤝 ${line}`)
+              }
+            }
+
+            // Faction standing: social-position shifts earned this scene —
+            // clamped to ±1 per scene, bounded ±3 in the writer.
+            if (pcChange.changes.standing_changes && pcChange.changes.standing_changes.length > 0) {
+              const standingLog = await applyStandingChanges(
+                tx,
+                campaignId,
+                character.id,
+                character.name,
+                pcChange.changes.standing_changes
+              )
+              for (const line of standingLog) {
+                console.log(`  ⭐ ${line}`)
               }
             }
 

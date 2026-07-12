@@ -235,6 +235,9 @@ model Campaign {
 
   // Urban Shadows economy: owed favors between PCs and NPCs/factions.
   debts Debt[]
+
+  // Urban Shadows economy: per-character social position with factions.
+  factionStandings FactionStanding[]
 }
 
 //
@@ -335,6 +338,35 @@ model Debt {
   @@index([characterId, status])
 }
 
+//
+// FACTION STANDING (Urban Shadows economy)
+//
+// A character's social position with a faction, -3 (hunted/hated) to +3
+// (honored/inner circle). Shifts come from scene outcomes; mechanical
+// WEIGHT reads live simulation state at roll time (standing with a
+// collapsed faction is worthless, with a war-weakened one worth less) —
+// this is how the offscreen tick changes what a player can roll without
+// the tick writing standing rows. See lib/game/standing.ts.
+//
+
+model FactionStanding {
+  id          String @id @default(cuid())
+  campaignId  String
+  characterId String
+  factionId   String
+  value       Int    @default(0) // -3..+3
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  faction   Faction   @relation(fields: [factionId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, factionId])
+  @@index([campaignId])
+}
+
 model CharacterCapability {
   id           String          @id @default(cuid())
   characterId  String
@@ -432,6 +464,9 @@ model Character {
 
   // Urban Shadows economy: this PC's owed favors, both directions.
   debts Debt[]
+
+  // Urban Shadows economy: social position with each faction (-3..+3).
+  factionStandings FactionStanding[]
 
   @@index([campaignId])
   @@index([userId])
@@ -578,6 +613,9 @@ model Faction {
   // Coalitions: every war this faction is actually fighting in, as either
   // the original attacker/defender or a joined ally — see WarParticipant.
   warParticipations WarParticipant[] @relation("WarParticipations")
+
+  // Urban Shadows economy: character standings with this faction.
+  characterStandings FactionStanding[]
 
   @@index([campaignId])
 }

@@ -107,6 +107,9 @@ export default function CharacterSheetDisplay({ character, campaign }: Character
   } | undefined
   const hasDebts = !!debtSummary && (debtSummary.owedByCharacter.length > 0 || debtSummary.owedToCharacter.length > 0)
 
+  // Faction standing — qualitative labels only ("honored by", "hostile with")
+  const standingSummary = (character?.standingSummary || []) as Array<{ faction: string; label: string }>
+
   // Parse moves
   const moves = character?.moves || []
 
@@ -338,6 +341,28 @@ export default function CharacterSheetDisplay({ character, campaign }: Character
                           ))}
                       </div>
                     </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Reputation — faction standing in the fiction's own language:
+                how each faction's people treat you, never a number. */}
+            {standingSummary.length > 0 && (
+              <div className="card md:col-span-2">
+                <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide mb-3">Reputation</h3>
+                <div className="flex flex-wrap gap-2">
+                  {standingSummary.map((s, idx) => (
+                    <span
+                      key={idx}
+                      className={`text-sm px-3 py-1.5 rounded-full border ${
+                        s.label.startsWith('hunted') || s.label.startsWith('hostile') || s.label.startsWith('distrusted')
+                          ? 'bg-wine-800/20 border-wine-800/40 text-wine-300'
+                          : 'bg-ember-900/20 border-ember-800/40 text-ember-300'
+                      }`}
+                    >
+                      {s.label.charAt(0).toUpperCase() + s.label.slice(1)} <span className="font-medium">{s.faction}</span>
+                    </span>
                   ))}
                 </div>
               </div>

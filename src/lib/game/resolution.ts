@@ -21,6 +21,7 @@
 import { prisma } from '@/lib/prisma'
 import { BASIC_MOVES, calculateOutcome } from '@/lib/pbta-moves'
 import { proficiencyBand, ProficiencyBand } from './capabilities'
+import { effectiveStandingModifier } from './standing'
 import { AI_MODELS } from '@/lib/ai/models'
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,9 @@ export interface ActionClassification {
   move_name: string // one of BASIC_MOVES names, or "no_roll"
   stat_key: string // cool | hard | hot | sharp | weird
   capability_key: string | null // relevant capability name, if any
+  // Faction whose regard is in play for social/political leverage —
+  // standing with it modifies the roll (see lib/game/standing.ts).
+  faction_name: string | null
 }
 
 export interface ActionMechanics {
@@ -43,6 +47,8 @@ export interface ActionMechanics {
   statMod: number
   capabilityName: string | null
   capabilityMod: number
+  factionName: string | null
+  standingMod: number
   harmPenalty: number
   dice: [number, number]
   total: number
@@ -97,6 +103,16 @@ export interface CharacterForRoll {
   }>
 }
 
+// The faction side of a roll, resolved by the orchestrator from the
+// classifier's faction_name against LIVE simulation state — this is where
+// the offscreen tick reaches into the dice.
+export interface FactionForRoll {
+  name: string
+  isActive: boolean
+  influence: number
+  standing: number // this character's standing value, 0 if no row
+}
+
 /**
  * Roll one classified action. Pure given an injected RNG.
  * Returns null for no_roll classifications or unknown moves.
@@ -105,7 +121,8 @@ export function computeMechanics(
   classification: ActionClassification,
   action: { id: string },
   character: CharacterForRoll,
-  rng: Rng
+  rng: Rng,
+  faction?: FactionForRoll | null
 ): ActionMechanics | null {
   if (classification.move_name === 'no_roll') return null
   const move = BASIC_MOVES.find(m => m.name === classification.move_name)
@@ -137,9 +154,18 @@ export function computeMechanics(
     }
   }
 
+  // Standing weight against live faction state: 0 for a collapsed
+  // faction, capped ±1 at LOW influence, else ±2 — see standing.ts.
+  let factionName: string | null = null
+  let standingMod = 0
+  if (faction) {
+    factionName = faction.name
+    standingMod = effectiveStandingModifier(faction.standing, faction.isActive, faction.influence)
+  }
+
   const harmMod = harmPenalty(character.harm)
   const dice: [number, number] = [rollD6(rng), rollD6(rng)]
-  const total = dice[0] + dice[1] + statMod + capabilityMod + harmMod
+  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + harmMod
   const outcome = calculateOutcome(total)
   const outcomeText = move.outcomes[outcome] || ''
 
@@ -152,6 +178,8 @@ export function computeMechanics(
     statMod,
     capabilityName,
     capabilityMod,
+    factionName,
+    standingMod,
     harmPenalty: harmMod,
     dice,
     total,
@@ -183,13 +211,15 @@ export function parseClassifications(raw: any, actionCount: number): ActionClass
       move_name: c.move_name,
       stat_key: typeof c.stat_key === 'string' ? c.stat_key : 'cool',
       capability_key: typeof c.capability_key === 'string' && c.capability_key ? c.capability_key : null,
+      faction_name: typeof c.faction_name === 'string' && c.faction_name ? c.faction_name : null,
     }))
 }
 
 async function classifyActions(
   actions: Array<{ actionText: string }>,
   characters: CharacterForRoll[],
-  actionCharacterIds: string[]
+  actionCharacterIds: string[],
+  factionNames: string[]
 ): Promise<ActionClassification[]> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return []
@@ -212,15 +242,16 @@ ${MOVE_LIST_FOR_PROMPT}
 - "no_roll": pure dialogue, planning, observation without pressure, or trivial activity — nothing is risked, so no dice
 
 STATS (pick the one that governs the attempt): cool (nerve/composure), hard (force/violence), hot (charm/manipulation), sharp (perception/wits), weird (the strange/supernatural).
-
+${factionNames.length > 0 ? `\nFACTIONS in this world: ${factionNames.join(', ')}\n` : ''}
 ACTIONS:
 ${actionLines}
 
 Rules:
 - Only classify a move when the fiction has real stakes or opposition. Default to "no_roll" when in doubt.
 - capability_key: if the action leans on one of the character's listed known abilities (or clearly on a specific learnable system, even one they lack), name it; else null.
+- faction_name: if the action is social/political leverage aimed at (or invoking the name/backing of) one of the listed FACTIONS — negotiating with its members, trading on its reputation, moving through its territory openly — name that faction exactly as listed; else null. Physical actions with no social dimension get null.
 
-Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay"}]}`
+Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null}]}`
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -271,14 +302,23 @@ export async function resolveActionMechanics(
   if (pendingActions.length === 0) return []
 
   try {
-    const characterRows = await prisma.character.findMany({
-      where: { id: { in: Array.from(new Set(pendingActions.map(a => a.characterId))) } },
-      include: {
-        capabilities: {
-          include: { capability: { select: { key: true, name: true } } },
+    const [characterRows, factionRows] = await Promise.all([
+      prisma.character.findMany({
+        where: { id: { in: Array.from(new Set(pendingActions.map(a => a.characterId))) } },
+        include: {
+          capabilities: {
+            include: { capability: { select: { key: true, name: true } } },
+          },
+          factionStandings: { select: { factionId: true, value: true } },
         },
-      },
-    })
+      }),
+      // ALL factions, active or not: standing with a collapsed faction
+      // must resolve (to zero weight), not silently miss the lookup.
+      prisma.faction.findMany({
+        where: { campaignId },
+        select: { id: true, name: true, isActive: true, influence: true, isDiscovered: true },
+      }),
+    ])
     const characters: CharacterForRoll[] = characterRows.map(c => ({
       id: c.id,
       name: c.name,
@@ -286,11 +326,18 @@ export async function resolveActionMechanics(
       harm: c.harm,
       capabilities: c.capabilities as any,
     }))
+    const standingsByCharacter = new Map(
+      characterRows.map(c => [c.id, new Map(c.factionStandings.map(s => [s.factionId, s.value]))])
+    )
 
     const classifications = await classifyActions(
       pendingActions,
       characters,
-      pendingActions.map(a => a.characterId)
+      pendingActions.map(a => a.characterId),
+      // Only discovered, active factions are offered as classifier
+      // targets — you can't knowingly trade on the name of a faction the
+      // party hasn't met or one that no longer exists.
+      factionRows.filter(f => f.isActive && f.isDiscovered).map(f => f.name)
     )
     if (classifications.length === 0) return []
 
@@ -299,7 +346,23 @@ export async function resolveActionMechanics(
       const action = pendingActions[classification.action_index]
       const character = characters.find(c => c.id === action.characterId)
       if (!character) continue
-      const rolled = computeMechanics(classification, action, character, rng)
+
+      let factionForRoll: FactionForRoll | null = null
+      if (classification.faction_name) {
+        const faction = factionRows.find(
+          f => f.name.toLowerCase() === classification.faction_name!.toLowerCase()
+        )
+        if (faction) {
+          factionForRoll = {
+            name: faction.name,
+            isActive: faction.isActive,
+            influence: faction.influence,
+            standing: standingsByCharacter.get(character.id)?.get(faction.id) ?? 0,
+          }
+        }
+      }
+
+      const rolled = computeMechanics(classification, action, character, rng, factionForRoll)
       if (rolled) mechanics.push(rolled)
     }
 
@@ -315,10 +378,10 @@ export async function resolveActionMechanics(
             userId: action?.userId || '',
             rollType: 'move',
             dice: m.dice,
-            modifier: m.statMod + m.capabilityMod + m.harmPenalty,
+            modifier: m.statMod + m.capabilityMod + m.standingMod + m.harmPenalty,
             total: m.total,
             outcome: m.outcome,
-            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
+            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
           }
         }),
       })
@@ -349,6 +412,7 @@ export function formatRollReceipt(m: ActionMechanics): string {
   const mods = [
     `${m.statMod >= 0 ? '+' : ''}${m.statMod} ${m.statKey}`,
     ...(m.capabilityName ? [`${m.capabilityMod >= 0 ? '+' : ''}${m.capabilityMod} ${m.capabilityName}`] : []),
+    ...(m.factionName ? [`${m.standingMod >= 0 ? '+' : ''}${m.standingMod} standing (${m.factionName})`] : []),
     ...(m.harmPenalty ? [`${m.harmPenalty} impaired`] : []),
   ].join(', ')
   const band = m.outcome === 'strongHit' ? 'strong hit' : m.outcome === 'weakHit' ? 'weak hit' : 'miss'

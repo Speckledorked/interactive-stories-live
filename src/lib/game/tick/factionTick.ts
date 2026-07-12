@@ -19,7 +19,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { Faction, FactionGoal } from '@prisma/client'
-import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
+import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, hasActiveRival, parseFactionRelationships } from './types'
 
 interface FactionDelta {
   resources: number
@@ -39,11 +39,18 @@ const GOAL_DELTAS: Record<FactionGoal, FactionDelta> = {
 
 export type Band = 'LOW' | 'MEDIUM' | 'HIGH'
 
+// The band cutoffs, exported so systems that gate on "genuinely HIGH"
+// (war declaration/joining in warTick.ts, ambition resourcing in
+// ambitionTick.ts) reference the same numbers instead of hardcoding
+// copies that silently drift if the banding is ever rebalanced.
+export const MEDIUM_BAND_MIN = 34
+export const HIGH_BAND_MIN = 67
+
 // Exported — relationshipTick.ts shares this exact banding so "stable" means
 // the same thing everywhere in the tick.
 export function band(value: number): Band {
-  if (value < 34) return 'LOW'
-  if (value <= 66) return 'MEDIUM'
+  if (value < MEDIUM_BAND_MIN) return 'LOW'
+  if (value < HIGH_BAND_MIN) return 'MEDIUM'
   return 'HIGH'
 }
 
@@ -185,11 +192,11 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
 
   for (const faction of factions) {
     const next = decideFactionTick(faction)
-    const relationships = (faction.relationships as Record<string, { type: string }>) || {}
+    const relationships = parseFactionRelationships(faction.relationships)
     const collapse = decideFactionCollapse(next)
 
     if (collapse.collapses) {
-      const rivalId = Object.entries(relationships).find(([, r]) => r.type === 'RIVAL')?.[0]
+      const rivalId = findRivalId(relationships)
       const absorber = rivalId ? await prisma.faction.findUnique({ where: { id: rivalId } }) : null
 
       let successorName: string | null = null
@@ -295,9 +302,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     // narrating their decision through scene resolution) last set it to.
     // A rival only counts if it still exists as an active faction — see the
     // activeFactionIds comment above.
-    const factionHasRival = Object.entries(relationships).some(
-      ([otherId, r]) => r.type === 'RIVAL' && activeFactionIds.has(otherId)
-    )
+    const factionHasRival = hasActiveRival(relationships, activeFactionIds)
     const nextGoal = faction.leaderCharacterId
       ? faction.goal
       : decideFactionGoalReassessment({ ...next, goal: faction.goal, hasRival: factionHasRival })

@@ -105,6 +105,52 @@ export interface WorldTickResult {
 }
 
 /**
+ * Shape of one entry in the Faction.relationships JSON column, keyed by the
+ * other faction's id. Written by relationshipTick.ts; read by nearly every
+ * other tick handler. Lives here (not in relationshipTick.ts) so
+ * factionTick.ts can use the helpers below without an import cycle —
+ * relationshipTick already imports band() from factionTick.
+ */
+export interface FactionRelationshipEntry {
+  type: 'RIVAL' | 'ALLY'
+  since: number
+}
+
+/**
+ * Parse the Faction.relationships JSON column into its real shape. The one
+ * blessed replacement for the `(x as any as Record<...>) || {}` cast that
+ * used to be copy-pasted across every consumer.
+ */
+export function parseFactionRelationships(value: unknown): Record<string, FactionRelationshipEntry> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, FactionRelationshipEntry>
+}
+
+/** First faction id on record as a RIVAL, if any. */
+export function findRivalId(relationships: unknown): string | undefined {
+  return Object.entries(parseFactionRelationships(relationships)).find(([, r]) => r.type === 'RIVAL')?.[0]
+}
+
+/** Every faction id on record as a RIVAL. */
+export function findRivalIds(relationships: unknown): string[] {
+  return Object.entries(parseFactionRelationships(relationships))
+    .filter(([, r]) => r.type === 'RIVAL')
+    .map(([id]) => id)
+}
+
+/**
+ * Whether any on-record rival still exists as an active faction. The
+ * active-set parameter is required on purpose: the stale-rival bug this
+ * helper exists to prevent came from one call site checking `type ===
+ * 'RIVAL'` without asking whether the rival had since collapsed.
+ */
+export function hasActiveRival(relationships: unknown, activeFactionIds: Set<string>): boolean {
+  return Object.entries(parseFactionRelationships(relationships)).some(
+    ([otherId, r]) => r.type === 'RIVAL' && activeFactionIds.has(otherId)
+  )
+}
+
+/**
  * Deterministic pseudo-variety helper. NOT a random number generator —
  * same inputs always produce the same output, so tick behavior stays
  * reproducible and testable. Used to give entities varied-but-stable

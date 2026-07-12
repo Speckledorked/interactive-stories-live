@@ -153,9 +153,6 @@ export async function applyWorldUpdates(
               updateData.goalProgress = 0
             }
 
-            // Note: tags_add and tags_remove are not supported in the current schema
-            // NPCs don't have a tags field
-
             // Fog of war: the party witnessing this NPC in a live scene is
             // what reveals them — never on an offscreen background update.
             if (sceneOrigin && !npc.isDiscovered) {
@@ -777,10 +774,6 @@ export async function applyWorldUpdates(
               }
               const level = factionChange.changes.threat_level.toUpperCase()
               updateData.threatLevel = threatLevelMap[level] || faction.threatLevel
-            }
-
-            if (factionChange.changes.resources) {
-              updateData.resources = factionChange.changes.resources
             }
 
             // World Sim Phase 6: only a player-led faction's goal is

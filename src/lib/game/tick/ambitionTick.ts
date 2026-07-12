@@ -24,9 +24,12 @@
 
 import { prisma } from '@/lib/prisma'
 import type { FactionGoal, FactionArchetype } from '@prisma/client'
-import { TickContext, TickHandlerResult, WorldChange, PendingAmbition, clamp, stableHash } from './types'
+import { HIGH_BAND_MIN } from './factionTick'
+import { TickContext, TickHandlerResult, WorldChange, PendingAmbition, clamp, findRivalId, stableHash } from './types'
 
-const RESOURCES_HIGH_THRESHOLD = 67 // matches factionTick.ts's band() HIGH cutoff
+// The same HIGH cutoff the rest of the tick uses, referenced rather than
+// copied so a rebalance can't drift.
+const RESOURCES_HIGH_THRESHOLD = HIGH_BAND_MIN
 
 // Committing to an ambition spends resources rather than only requiring a
 // threshold — otherwise an ENRICH faction drifting +4 resources/turn could
@@ -206,8 +209,7 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
     let targetFactionId: string | undefined
     let targetFactionName: string | undefined
     if (faction.goal === 'DESTABILIZE_RIVAL') {
-      const relationships = (faction.relationships as any as Record<string, { type: string }>) || {}
-      const rivalId = Object.entries(relationships).find(([, r]) => r.type === 'RIVAL')?.[0]
+      const rivalId = findRivalId(faction.relationships)
       const rival = rivalId ? await prisma.faction.findUnique({ where: { id: rivalId } }) : null
       if (rival?.isActive) {
         targetFactionId = rival.id

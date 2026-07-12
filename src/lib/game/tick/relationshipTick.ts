@@ -23,14 +23,13 @@
 import { prisma } from '@/lib/prisma'
 import type { FactionGoal } from '@prisma/client'
 import { band } from './factionTick'
-import { TickContext, TickHandlerResult, WorldChange } from './types'
+import { FactionRelationshipEntry, TickContext, TickHandlerResult, WorldChange, parseFactionRelationships } from './types'
 
 export type RelationshipType = 'RIVAL' | 'ALLY' | 'NEUTRAL'
 
-export interface FactionRelationshipEntry {
-  type: 'RIVAL' | 'ALLY'
-  since: number
-}
+// The entry shape itself lives in types.ts (see the note there about
+// import cycles); re-exported here for existing importers.
+export type { FactionRelationshipEntry }
 
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideRelationshipTick(
@@ -79,7 +78,7 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
   const working = new Map<string, Record<string, FactionRelationshipEntry>>()
   const dirty = new Set<string>()
   for (const f of factions) {
-    working.set(f.id, { ...((f.relationships as any as Record<string, FactionRelationshipEntry>) || {}) })
+    working.set(f.id, { ...parseFactionRelationships(f.relationships) })
   }
 
   // Expire relationships whose other side has collapsed or been deleted —
@@ -173,10 +172,4 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
   }
 
   return { changes }
-}
-
-/** Does this faction currently have any rival, per its stored relationships? */
-export function hasRival(relationships: unknown): boolean {
-  if (!relationships || typeof relationships !== 'object') return false
-  return Object.values(relationships as Record<string, FactionRelationshipEntry>).some((r) => r.type === 'RIVAL')
 }

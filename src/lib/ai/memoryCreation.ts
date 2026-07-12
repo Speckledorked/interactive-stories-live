@@ -316,65 +316,8 @@ function extractTags(scene: Scene, aiResponse: any): string[] {
   return Array.from(new Set(tags)); // Remove duplicates
 }
 
-/**
- * Create a memory for a clock completion event
- */
-export async function createClockCompletionMemory(
-  campaignId: string,
-  clockId: string,
-  clockName: string,
-  consequence: string,
-  turnNumber: number,
-  involvedEntities: {
-    characterIds?: string[];
-    npcIds?: string[];
-    factionIds?: string[];
-  } = {}
-): Promise<void> {
-  await createCampaignMemory({
-    campaignId,
-    memoryType: 'CLOCK_COMPLETION',
-    sourceId: clockId,
-    turnNumber,
-    title: `Clock Completed: ${clockName}`,
-    summary: `The "${clockName}" clock has filled completely. ${consequence || 'The consequences unfold.'}`,
-    fullContext: consequence || 'Clock completed without specified consequences.',
-    involvedCharacterIds: involvedEntities.characterIds || [],
-    involvedNpcIds: involvedEntities.npcIds || [],
-    involvedFactionIds: involvedEntities.factionIds || [],
-    locationTags: [],
-    importance: 'MAJOR',
-    emotionalTone: undefined,
-    tags: ['clock_completion', 'milestone'],
-  });
-}
-
-/**
- * Create a memory for a significant NPC interaction
- */
-export async function createNpcInteractionMemory(
-  campaignId: string,
-  npcId: string,
-  npcName: string,
-  interactionSummary: string,
-  turnNumber: number,
-  characterIds: string[],
-  importance: MemoryImportance = 'NORMAL'
-): Promise<void> {
-  await createCampaignMemory({
-    campaignId,
-    memoryType: 'NPC_INTERACTION',
-    sourceId: npcId,
-    turnNumber,
-    title: `Interaction with ${npcName}`,
-    summary: interactionSummary,
-    fullContext: interactionSummary,
-    involvedCharacterIds: characterIds,
-    involvedNpcIds: [npcId],
-    involvedFactionIds: [],
-    locationTags: [],
-    importance,
-    emotionalTone: detectEmotionalTone(interactionSummary),
-    tags: ['npc_interaction', 'social'],
-  });
-}
+// createClockCompletionMemory and createNpcInteractionMemory used to live
+// here as speculative wrappers around createCampaignMemory; neither ever
+// gained a caller (clock completions and NPC interactions reach memory
+// through logSignificantChanges / createSceneMemory instead) and both were
+// removed. Rebuild from git history if a direct-call use case appears.

@@ -3,7 +3,7 @@
 // This handles all communication with the AI model
 // Phase 15: Enhanced with strict validation, error handling, and cost tracking
 
-import { validateAIResponse, type ValidationResult } from './validation'
+import { validateAIResponse } from './validation'
 import { circuitBreakerManager } from './circuit-breaker'
 import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
 import { aiResponseCache } from './response-cache'
@@ -41,8 +41,6 @@ export interface AIGMResponse {
       changes: {
         description?: string // Short description for new NPCs
         notes_append?: string
-        tags_add?: string[]
-        tags_remove?: string[]
         // New or updated long-term goal — a new NPC's starting goal, or a
         // fresh direction for an existing major NPC whose previous goal
         // just completed.
@@ -142,7 +140,6 @@ export interface AIGMResponse {
         goals?: string       // Long-term goals for new factions
         current_plan?: string
         threat_level?: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
-        resources?: Record<string, any>
         gm_notes_append?: string
         // World Sim Phase 6: only set when a player character who leads
         // this faction makes a strategic decision in-scene — see

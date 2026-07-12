@@ -132,8 +132,6 @@ export const NPCChangesSchema = z.object({
   changes: z.object({
     description: z.string().optional(), // Short description for new NPCs
     notes_append: z.string().optional(),
-    tags_add: z.array(z.string()).optional(),
-    tags_remove: z.array(z.string()).optional(),
     // New or updated long-term goal. Set this for a new NPC's starting goal,
     // or to give an existing major NPC a fresh direction after their
     // previous goal completed (see the "goalCompleted" world event).
@@ -150,7 +148,6 @@ export const FactionChangesSchema = z.object({
     goals: z.string().optional(),       // Long-term goals for new factions
     current_plan: z.string().optional(),
     threat_level: z.enum(['LOW', 'MEDIUM', 'HIGH', 'EXTREME']).optional(),
-    resources: z.record(z.any()).optional(),
     gm_notes_append: z.string().optional(),
     // World Sim Phase 6: the faction's simulation-tick goal. Only set this
     // when a scene has a player character directing a faction they lead

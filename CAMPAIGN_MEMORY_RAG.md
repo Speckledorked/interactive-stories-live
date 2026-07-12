@@ -106,63 +106,39 @@ Memories are **automatically retrieved** before each scene resolution. The syste
 
 ### Manual Memory Operations
 
-You can also manually create memories for special events:
+You can manually create a memory for a special event through the low-level
+writer everything else funnels through:
 
 ```typescript
 import { createCampaignMemory } from '@/lib/ai/memoryCreation';
 
-// Create a memory for a clock completion
-await createClockCompletionMemory(
+await createCampaignMemory({
   campaignId,
-  clockId,
-  'Ancient Ritual',
-  'The ritual completes, tearing a rift between worlds.',
+  memoryType: 'WORLD_EVENT',
+  sourceId: eventId,
   turnNumber,
-  { npcIds: ['npc-id'], factionIds: ['faction-id'] }
-);
-
-// Create a memory for an NPC interaction
-await createNpcInteractionMemory(
-  campaignId,
-  npcId,
-  'Lady Morgana',
-  'The party forms an uneasy alliance with Lady Morgana to stop the demon invasion.',
-  turnNumber,
-  [characterId1, characterId2],
-  'MAJOR'
-);
+  title: 'The Ancient Ritual Completes',
+  summary: 'The ritual completes, tearing a rift between worlds.',
+  fullContext: '...',
+  involvedCharacterIds: [],
+  involvedNpcIds: ['npc-id'],
+  involvedFactionIds: ['faction-id'],
+  locationTags: [],
+  importance: 'MAJOR',
+  tags: ['milestone'],
+});
 ```
 
 ### Retrieve Specific Memories
 
 ```typescript
-import {
-  retrieveNpcHistory,
-  retrieveFactionHistory,
-  retrieveLocationHistory,
-  getCampaignMemoryStats
-} from '@/lib/ai/memoryRetrieval';
+import { retrieveNpcHistory, retrieveCrossEntityHistory } from '@/lib/ai/memoryRetrieval';
 
-// Get NPC history
+// Everything involving one NPC (most recent first)
 const npcMemories = await retrieveNpcHistory(campaignId, npcId, 5);
 
-// Get faction history
-const factionMemories = await retrieveFactionHistory(campaignId, factionId, 5);
-
-// Get location history
-const locationMemories = await retrieveLocationHistory(campaignId, 'Dragon's Peak', 5);
-
-// Get campaign stats
-const stats = await getCampaignMemoryStats(campaignId);
-console.log(stats);
-// {
-//   total_memories: 42,
-//   critical_memories: 3,
-//   major_memories: 12,
-//   memories_with_embeddings: 42,
-//   earliest_turn: 1,
-//   latest_turn: 42
-// }
+// "What happened between X and Y" — memories where BOTH entities appear
+const sharedMemories = await retrieveCrossEntityHistory(campaignId, npcId, factionId, 5);
 ```
 
 ## Configuration

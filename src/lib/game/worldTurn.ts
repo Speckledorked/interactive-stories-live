@@ -10,7 +10,7 @@ import { runWorldTick } from './worldTick'
 import { createCampaignMemory } from '@/lib/ai/memoryCreation'
 import { consolidateOldMemories } from '@/lib/ai/memoryConsolidation'
 import { EventVisibility } from '@prisma/client'
-import { PendingAmbition, WorldChange, clamp } from './tick/types'
+import { PendingAmbition, WorldChange, clamp, findRivalIds } from './tick/types'
 import { AMBITION_CATEGORY_OPTIONS, decideAmbitionOutcome } from './tick/ambitionTick'
 import { decideTerritoryClaim } from './tick/territory'
 import { persistWorldEvents } from './tick/worldEventLog'
@@ -315,9 +315,7 @@ async function resolveCompletedAmbitions(
           where: { campaignId },
           select: { id: true, name: true, ownerFactionId: true, isContested: true },
         }),
-        Object.entries((faction.relationships as any as Record<string, { type: string }>) || {})
-          .filter(([, r]) => r.type === 'RIVAL')
-          .map(([id]) => id),
+        findRivalIds(faction.relationships),
       ]
 
       const claim = decideTerritoryClaim(locations, faction.id, rivalIds)

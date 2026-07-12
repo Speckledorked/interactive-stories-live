@@ -36,9 +36,12 @@
 // tick either, for the same reason.
 
 import { prisma } from '@/lib/prisma'
-import { TickContext, TickHandlerResult, WorldChange, clamp, stableHash } from './types'
+import { HIGH_BAND_MIN } from './factionTick'
+import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, parseFactionRelationships, stableHash } from './types'
 
-const WAR_MILITARY_THRESHOLD = 67 // matches factionTick.ts's band() HIGH cutoff — both sides must be genuinely strong
+// Both sides must be genuinely strong — the same HIGH cutoff the rest of
+// the tick uses, referenced rather than copied so a rebalance can't drift.
+const WAR_MILITARY_THRESHOLD = HIGH_BAND_MIN
 const WAR_DECISIVE_MOMENTUM = 60
 const WAR_MAX_DURATION = 10 // ticks before an inconclusive war is called a stalemate
 const ATTRITION_RESOURCES = 3
@@ -315,7 +318,7 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
 
       const candidateIds = new Set<string>()
       for (const p of sideParticipants) {
-        const relationships = (p.faction.relationships as any as Record<string, { type: string }>) || {}
+        const relationships = parseFactionRelationships(p.faction.relationships)
         for (const [otherId, rel] of Object.entries(relationships)) {
           if (rel.type === 'ALLY' && !sideFactionIds.has(otherId) && !factionIdsAtWar.has(otherId)) {
             candidateIds.add(otherId)
@@ -380,8 +383,7 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
   for (const defender of factions) {
     if (factionIdsAtWar.has(defender.id)) continue
 
-    const relationships = (defender.relationships as any as Record<string, { type: string }>) || {}
-    const rivalId = Object.entries(relationships).find(([, r]) => r.type === 'RIVAL')?.[0]
+    const rivalId = findRivalId(defender.relationships)
     if (!rivalId || factionIdsAtWar.has(rivalId)) continue
 
     const attacker = factions.find((f) => f.id === rivalId)

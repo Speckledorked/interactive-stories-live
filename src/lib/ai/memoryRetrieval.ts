@@ -292,9 +292,9 @@ export function generateEntityPairs(entityIds: string[]): Array<[string, string]
 
 /**
  * Retrieve memories that involve BOTH of two entities — "what happened
- * between X and Y" — as opposed to retrieveNpcHistory/retrieveFactionHistory,
- * which each return everything involving just one entity (a union, not an
- * intersection). Either ID can be an NPC, faction, or character; a memory
+ * between X and Y" — as opposed to retrieveNpcHistory, which returns
+ * everything involving just one entity (a union, not an intersection).
+ * Either ID can be an NPC, faction, or character; a memory
  * matches only if both IDs appear somewhere across its three
  * involved-entity arrays, regardless of which array either one is in — so
  * this also answers "history between this NPC and this faction" or
@@ -346,111 +346,8 @@ export async function retrieveCrossEntityHistory(
   }
 }
 
-/**
- * Retrieve faction-specific history
- *
- * Gets the most recent and important memories involving a specific faction.
- *
- * @param campaignId - Campaign ID
- * @param factionId - Faction ID
- * @param limit - Maximum number of memories to retrieve
- */
-export async function retrieveFactionHistory(
-  campaignId: string,
-  factionId: string,
-  limit: number = 5
-): Promise<RetrievedMemory[]> {
-  try {
-    const memories = await prisma.$queryRaw<any[]>`
-      SELECT
-        id,
-        turn_number as "turnNumber",
-        title,
-        summary,
-        memory_type as "memoryType",
-        importance,
-        emotional_tone as "emotionalTone",
-        1.0 as similarity
-      FROM campaign_memories
-      WHERE
-        campaign_id = ${campaignId}
-        AND ${factionId} = ANY(involved_faction_ids)
-        AND importance IN ('MAJOR', 'CRITICAL')
-      ORDER BY turn_number DESC
-      LIMIT ${limit}
-    `;
-
-    return memories;
-  } catch (error) {
-    console.error('Error retrieving faction history:', error);
-    return [];
-  }
-}
-
-/**
- * Retrieve memories by location
- *
- * Gets memories that occurred at a specific location.
- *
- * @param campaignId - Campaign ID
- * @param location - Location tag
- * @param limit - Maximum number of memories
- */
-export async function retrieveLocationHistory(
-  campaignId: string,
-  location: string,
-  limit: number = 5
-): Promise<RetrievedMemory[]> {
-  try {
-    const memories = await prisma.$queryRaw<any[]>`
-      SELECT
-        id,
-        turn_number as "turnNumber",
-        title,
-        summary,
-        memory_type as "memoryType",
-        importance,
-        emotional_tone as "emotionalTone",
-        1.0 as similarity
-      FROM campaign_memories
-      WHERE
-        campaign_id = ${campaignId}
-        AND ${location} = ANY(location_tags)
-      ORDER BY turn_number DESC
-      LIMIT ${limit}
-    `;
-
-    return memories;
-  } catch (error) {
-    console.error('Error retrieving location history:', error);
-    return [];
-  }
-}
-
-/**
- * Get campaign memory statistics
- *
- * Returns stats about the campaign's memory database.
- *
- * @param campaignId - Campaign ID
- */
-export async function getCampaignMemoryStats(campaignId: string) {
-  try {
-    const stats = await prisma.$queryRaw<any[]>`
-      SELECT
-        COUNT(*) as total_memories,
-        COUNT(CASE WHEN importance = 'CRITICAL' THEN 1 END) as critical_memories,
-        COUNT(CASE WHEN importance = 'MAJOR' THEN 1 END) as major_memories,
-        COUNT(CASE WHEN embedding IS NOT NULL THEN 1 END) as memories_with_embeddings,
-        MIN(turn_number) as earliest_turn,
-        MAX(turn_number) as latest_turn
-      FROM campaign_memories
-      WHERE campaign_id = ${campaignId}
-    `;
-
-    return stats[0] || null;
-  } catch (error) {
-    console.error('Error getting memory stats:', error);
-    return null;
-  }
-}
+// retrieveFactionHistory, retrieveLocationHistory, and getCampaignMemoryStats
+// used to live here as speculative built-ahead-of-a-consumer exports; they
+// never gained a caller and were removed. Rebuild from git history (or from
+// retrieveNpcHistory's shape, which they all mirrored) if a feature actually
+// needs one.

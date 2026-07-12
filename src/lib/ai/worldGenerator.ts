@@ -1,3 +1,4 @@
+import { openaiFetch } from '@/lib/ai/openaiCompat'
 /**
  * AI World Generator
  *
@@ -98,7 +99,7 @@ Rules:
 - Make it feel like it belongs specifically to "${campaignTitle}"`
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

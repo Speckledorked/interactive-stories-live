@@ -1,3 +1,4 @@
+import { openaiFetch } from '@/lib/ai/openaiCompat'
 // src/lib/ai/client.ts
 // OpenAI client wrapper
 // This handles all communication with the AI model
@@ -394,7 +395,7 @@ export async function callAIGM(
   const estimatedInputTokens = estimateTokenCount(systemPrompt + userPrompt)
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1125,7 +1126,7 @@ Respond with JSON:
 }`
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

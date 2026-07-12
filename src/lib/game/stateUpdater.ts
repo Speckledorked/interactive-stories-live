@@ -1,3 +1,4 @@
+import { openaiFetch } from '@/lib/ai/openaiCompat'
 // src/lib/game/stateUpdater.ts
 // Apply AI GM world updates to the database
 // This is where the AI's narrative decisions become persistent game state
@@ -1134,7 +1135,7 @@ export async function enrichStubFactions(
 
   const startTime = Date.now()
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1227,7 +1228,7 @@ export async function enrichStubNPCs(
 
   const startTime = Date.now()
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

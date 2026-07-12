@@ -1,3 +1,5 @@
+import { openaiFetch } from '@/lib/ai/openaiCompat'
+import { reportError } from '@/lib/monitoring'
 // src/lib/ai/worldState.ts
 // Convert database records into a clean format for the AI GM
 
@@ -869,7 +871,7 @@ Example: Instead of "You check your sword as you remember your oath of vengeance
 Write ONLY the scene introduction. No JSON, no meta-commentary, no character sheets.`
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -909,6 +911,9 @@ Write ONLY the scene introduction. No JSON, no meta-commentary, no character she
     return sceneIntro
   } catch (error) {
     console.error('❌ Scene intro generation failed:', error)
+    // The fallback below is what players see as the "generic opening" —
+    // make sure the REASON reaches the error webhook, not just the logs.
+    await reportError('scene-intro-generation-failed', error, { campaignId })
 
     // Fallback scene intro if AI fails - include character names if available
     const characterNames = campaign.characters.map(c => c.name).join(', ')

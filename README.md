@@ -16,7 +16,8 @@ An AI-powered collaborative storytelling platform for running interactive narrat
 - **PbtA-inspired Mechanics**: Powered by the Apocalypse game system integration, including a full harm/death-save system
 - **Character Management**: Detailed character sheets with stats, moves, conditions, and progression
 - **Scene Management**: Dynamic scenes with player actions and AI resolution
-- **Payment System**: Stripe integration for AI usage billing
+- **Payment System**: Stripe integration for AI usage billing, with per-call cost tracking, balance gating, and per-user rate limiting on every AI-invoking route
+- **Input Moderation**: player free-text is screened (OpenAI moderation endpoint) before it ever reaches the completion model — provider-ToS protection, separate from the in-fiction X-Card safety tool
 
 ## World Simulation
 

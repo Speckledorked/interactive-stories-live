@@ -8,6 +8,7 @@ import { ErrorResponse } from '@/types/api'
 import { prisma } from '@/lib/prisma'
 import { SceneStatus } from '@prisma/client'
 import PusherServer from '@/lib/realtime/pusher-server'
+import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 
 // 60s = Vercel Hobby-tier ceiling, safe on every plan. See scene/route.ts for
 // the full rationale — this route awaits the same resolveScene() call.
@@ -27,6 +28,13 @@ export async function POST(
     console.log(`Campaign: ${campaignId}`)
     console.log(`Scene: ${sceneId}`)
     console.log(`User: ${user.userId}`)
+
+    // Rate limit before any DB/AI work — ending a scene can trigger a
+    // final resolution pass and the world turn (LLM calls).
+    const rateLimit = await checkRateLimit(user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds)
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
+    }
 
     // 1. Verify user is admin of this campaign
     const membership = await prisma.campaignMembership.findUnique({

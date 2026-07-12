@@ -1697,6 +1697,25 @@ model WorldEvent {
 }
 
 //
+// RATE LIMITING
+//
+// Fixed-window request counters for the AI-invoking routes (see
+// src/lib/rateLimit.ts). Postgres-backed rather than in-memory because the
+// app deploys to serverless, where each instance has its own memory — a
+// counter that only one lambda can see limits nothing. Rows are pruned
+// opportunistically as new windows open.
+
+model RateLimitCounter {
+  id          String   @id @default(cuid())
+  key         String // "<userId>:<bucket>"
+  windowStart DateTime
+  count       Int      @default(1)
+
+  @@unique([key, windowStart])
+  @@index([windowStart])
+}
+
+//
 // FRIENDS SYSTEM
 //
 

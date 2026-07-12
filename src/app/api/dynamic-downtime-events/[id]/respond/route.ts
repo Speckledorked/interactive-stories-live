@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyAuth } from '@/lib/auth'
 import { AIDrivenDowntimeService } from '@/lib/downtime/ai-downtime-service'
 import { z } from 'zod'
+import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
+import { moderatePlayerText } from '@/lib/ai/moderation'
 
 const respondSchema = z.object({
   response: z.string().min(1, 'Response is required'),
@@ -24,6 +26,21 @@ export async function POST(
     const eventId = params.id
     const body = await request.json()
     const { response, campaignContext } = respondSchema.parse(body)
+
+    // Rate limit + moderation before the AI call — this route sends player
+    // free-text to the completion model, same as scene action submission.
+    const rateLimit = await checkRateLimit(user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds)
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
+    }
+
+    const moderation = await moderatePlayerText(response)
+    if (moderation.flagged) {
+      return NextResponse.json(
+        { error: `Your response was blocked by content moderation (${moderation.categories.join(', ')}). Please rephrase it.` },
+        { status: 400 }
+      )
+    }
 
     const result = await AIDrivenDowntimeService.respondToDynamicEvent(
       eventId,

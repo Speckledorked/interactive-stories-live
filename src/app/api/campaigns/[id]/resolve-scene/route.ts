@@ -9,6 +9,7 @@ import { resolveScene, getCurrentScene } from '@/lib/game/sceneResolver'
 import { runWorldTurn } from '@/lib/game/worldTurn'
 import { prisma } from '@/lib/prisma'
 import { checkBalance, deductFunds, formatCurrency } from '@/lib/payment/service'
+import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 
 // 60s = Vercel Hobby-tier ceiling, safe on every plan. See scene/route.ts for
 // the full rationale — this route awaits the same resolveScene() call.
@@ -35,6 +36,13 @@ export async function POST(
     console.log(`Campaign: ${campaignId}`)
     console.log(`User: ${user.userId}`)
     console.log(`Requested scene: ${requestedSceneId || 'current'}`)
+
+    // Rate limit before any DB/AI work — this is the most expensive route
+    // in the app (full LLM scene resolution + world turn).
+    const rateLimit = await checkRateLimit(user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds)
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
+    }
 
     // 1. Verify user is admin of this campaign
     const campaign = await prisma.campaign.findUnique({

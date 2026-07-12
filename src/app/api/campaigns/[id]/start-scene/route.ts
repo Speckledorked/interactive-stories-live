@@ -7,6 +7,7 @@ import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import { createNewScene, getCurrentScene } from '@/lib/game/sceneResolver'
 import { prisma } from '@/lib/prisma'
+import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 
 export async function POST(
   request: NextRequest,
@@ -22,6 +23,12 @@ export async function POST(
     console.log(`Campaign: ${campaignId}`)
     console.log(`User: ${user.userId}`)
     console.log(`Participants: ${characterIds?.length || 0} characters`)
+
+    // Rate limit before any DB/AI work — scene intros are an LLM call.
+    const rateLimit = await checkRateLimit(user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds)
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
+    }
 
     // 1. Verify user is admin of this campaign
     const membership = await prisma.campaignMembership.findUnique({

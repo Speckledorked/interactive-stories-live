@@ -70,7 +70,7 @@ describe('computeMechanics', () => {
   it('rolls 2d6 + stat + capability and bands the outcome', () => {
     // dice: 4 and 4 (rng 0.5, 0.5) → 8; +1 cool +1 skilled swordplay = 10 → strong hit
     const m = computeMechanics(
-      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay' },
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null },
       { id: 'a1' },
       baseCharacter,
       seq(0.5, 0.5)
@@ -88,7 +88,7 @@ describe('computeMechanics', () => {
   it('penalizes attempting a system the character has only glimpsed', () => {
     // dice 4+4=8, +0 weird, -1 glimpsed essence magic = 7 → weak hit
     const m = computeMechanics(
-      { action_index: 0, move_name: 'Open Your Brain', stat_key: 'weird', capability_key: 'Essence Magic' },
+      { action_index: 0, move_name: 'Open Your Brain', stat_key: 'weird', capability_key: 'Essence Magic', faction_name: null },
       { id: 'a1' },
       baseCharacter,
       seq(0.5, 0.5)
@@ -102,7 +102,7 @@ describe('computeMechanics', () => {
     // dice 2+3=5, -1 hard, -1 impaired = 3 → miss
     const hurt = { ...baseCharacter, harm: 5 }
     const m = computeMechanics(
-      { action_index: 0, move_name: 'Go Aggro', stat_key: 'hard', capability_key: null },
+      { action_index: 0, move_name: 'Go Aggro', stat_key: 'hard', capability_key: null, faction_name: null },
       { id: 'a1' },
       hurt,
       seq(1 / 6, 2 / 6)
@@ -112,16 +112,42 @@ describe('computeMechanics', () => {
     expect(m!.outcome).toBe('miss')
   })
 
+  it('adds standing weight against live faction state', () => {
+    // dice 4+4=8, +0 hot, +2 honored by an influential faction = 10 → strong hit
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Seduce or Manipulate', stat_key: 'hot', capability_key: null, faction_name: 'Thieves Guild' },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5),
+      { name: 'Thieves Guild', isActive: true, influence: 70, standing: 3 }
+    )
+    expect(m!.standingMod).toBe(2) // ±2 cap even at +3 standing
+    expect(m!.factionName).toBe('Thieves Guild')
+    expect(m!.total).toBe(10)
+
+    // Same roll, same standing — but the faction collapsed offscreen.
+    const collapsed = computeMechanics(
+      { action_index: 0, move_name: 'Seduce or Manipulate', stat_key: 'hot', capability_key: null, faction_name: 'Thieves Guild' },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5),
+      { name: 'Thieves Guild', isActive: false, influence: 70, standing: 3 }
+    )
+    expect(collapsed!.standingMod).toBe(0)
+    expect(collapsed!.total).toBe(8)
+    expect(collapsed!.outcome).toBe('weakHit')
+  })
+
   it('returns null for no_roll and unknown moves', () => {
     expect(
       computeMechanics(
-        { action_index: 0, move_name: 'no_roll', stat_key: 'cool', capability_key: null },
+        { action_index: 0, move_name: 'no_roll', stat_key: 'cool', capability_key: null, faction_name: null },
         { id: 'a1' }, baseCharacter, seq(0.5)
       )
     ).toBeNull()
     expect(
       computeMechanics(
-        { action_index: 0, move_name: 'Made Up Move', stat_key: 'cool', capability_key: null },
+        { action_index: 0, move_name: 'Made Up Move', stat_key: 'cool', capability_key: null, faction_name: null },
         { id: 'a1' }, baseCharacter, seq(0.5)
       )
     ).toBeNull()
@@ -130,7 +156,7 @@ describe('computeMechanics', () => {
   it('falls back to cool for invalid stat keys and clamps stat mods', () => {
     const weird = { ...baseCharacter, stats: { cool: 9 } as any }
     const m = computeMechanics(
-      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'charisma', capability_key: null },
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'charisma', capability_key: null, faction_name: null },
       { id: 'a1' }, weird, seq(0.5, 0.5)
     )
     expect(m!.statKey).toBe('cool')
@@ -143,7 +169,7 @@ describe('parseClassifications', () => {
     const parsed = parseClassifications(
       {
         classifications: [
-          { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay' },
+          { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null },
           { action_index: 1, move_name: 'no_roll' },
           { action_index: 5, move_name: 'Act Under Fire' }, // out of range
           { action_index: 0, move_name: 'Fireball' }, // not a real move
@@ -154,10 +180,11 @@ describe('parseClassifications', () => {
     )
     expect(parsed).toHaveLength(2)
     expect(parsed[0]).toEqual({
-      action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay',
+      action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null,
     })
     expect(parsed[1].move_name).toBe('no_roll')
     expect(parsed[1].capability_key).toBeNull()
+    expect(parsed[1].faction_name).toBeNull()
   })
 
   it('fails open on garbage', () => {
@@ -169,7 +196,7 @@ describe('parseClassifications', () => {
 describe('receipts and band text', () => {
   it('formats a readable receipt with full breakdown', () => {
     const m = computeMechanics(
-      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay' },
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null },
       { id: 'a1' }, baseCharacter, seq(0.5, 0.5)
     )!
     const receipt = formatRollReceipt(m)

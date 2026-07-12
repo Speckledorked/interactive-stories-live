@@ -151,6 +151,12 @@ export interface AIGMResponse {
           description: string
           reason: string
         }>
+        // Faction standing shifts earned this scene — see lib/game/standing.ts.
+        standing_changes?: Array<{
+          faction_name: string
+          delta: number
+          reason: string
+        }>
       }
     }>
     faction_changes?: Array<{
@@ -227,6 +233,8 @@ export interface AIGMRequest {
         owedByCharacter: Array<{ counterparty: string; description: string }>
         owedToCharacter: Array<{ counterparty: string; description: string }>
       }
+      // Social position with discovered active factions (see standing.ts).
+      standings?: Array<{ faction: string; label: string }>
     }>
     npcs: Array<{
       id: string
@@ -644,7 +652,8 @@ You MUST respond with a JSON object matching this structure:
           "inventory_changes": {"items_add": [...], "items_remove": [...], "items_modify": [...]},
           "resource_changes": {"gold_delta": -50, "contacts_add": [...]},
           "capability_changes": [{"capability_key": "swordplay", "change": "progress", "reason": "Survived a duel"}],
-          "debt_changes": [{"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the city", "reason": "A real favor with expectation of return"}]
+          "debt_changes": [{"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the city", "reason": "A real favor with expectation of return"}],
+          "standing_changes": [{"faction_name": "Thieves Guild", "delta": 1, "reason": "Returned their stolen ledger"}]
         }
       }
     ],
@@ -747,6 +756,16 @@ Report via debt_changes inside that character's pc_changes:
 
 NEVER present debts as numbers or a ledger in scene_text — they live in the fiction: a meaningful look, a reminder over drinks, a knock on the door at midnight.
 </debts>
+
+<faction_standing>
+Each character's "Standing:" line is their social position with the world's factions (hunted → hostile → distrusted → unknown → favored → trusted → honored). Standing already modifies the dice behind the scenes — your job is the social texture and the shifts:
+
+- SHOW standing through behavior: guards wave a favored character through, merchants of a hostile faction refuse service, a hunted character gets recognized at the worst moment.
+- SHIFT standing when a scene genuinely earns it — public service or public betrayal, taking a side in their conflict, honoring or refusing a called-in debt. Report via standing_changes inside that character's pc_changes: {"faction_name": "Thieves Guild", "delta": 1, "reason": "Returned the guild's stolen ledger without reading it"}
+- One step at a time: deltas beyond ±1 are clamped by the engine. Reputations are earned scene by scene, not swung in one.
+- Standing is with REAL factions from the FACTIONS list only. NPCs' personal feelings are the relationship system, not standing.
+- NEVER state standing levels or numbers in scene_text — express position purely through how the faction's people treat them.
+</faction_standing>
 
 <mechanical_outcomes>
 Some player actions arrive with a MECHANICAL OUTCOME line — the game engine already rolled the dice for that action. This outcome is BINDING:
@@ -865,6 +884,11 @@ ${world_summary.characters.map(c => {
       ...c.debts.owedToCharacter.map(d => `${d.counterparty} owes ${c.name} (${d.description})`),
     ]
     parts.push(`Debts: ${debtLines.join('; ')}`)
+  }
+
+  // Faction standing: qualitative social position — see <faction_standing>.
+  if (c.standings && c.standings.length > 0) {
+    parts.push(`Standing: ${c.standings.map(s => `${s.label} ${s.faction}`).join('; ')}`)
   }
 
   return `• ${parts.join('\n  ')}`

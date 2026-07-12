@@ -5,6 +5,7 @@ import { getUser } from '@/lib/auth'
 import { validateStats } from '@/lib/game/advancement'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { summarizeDebts } from '@/lib/game/debts'
+import { summarizeStandings } from '@/lib/game/standing'
 
 // Fields the owning player can edit directly — cosmetic/narrative only.
 // Everything mechanical (stats, harm, equipment, inventory, resources,
@@ -58,7 +59,10 @@ export async function GET(
       where: { id: characterId },
       include: {
         capabilities: { include: { capability: true } },
-        debts: { where: { status: 'OUTSTANDING' }, orderBy: { createdAt: 'asc' } }
+        debts: { where: { status: 'OUTSTANDING' }, orderBy: { createdAt: 'asc' } },
+        factionStandings: {
+          include: { faction: { select: { name: true, isActive: true, isDiscovered: true } } }
+        }
       }
     })
 
@@ -72,13 +76,15 @@ export async function GET(
     // Knowledge-relative sheet: ship qualitative bands + hints only — raw
     // proficiency numbers and raw rows never leave the server (fog of war
     // applied to your own character). Debts ship in diegetic summary form.
-    const { capabilities: capabilityRows, debts: debtRows, ...characterFields } = character
+    const { capabilities: capabilityRows, debts: debtRows, factionStandings: standingRows, ...characterFields } = character
     const capabilitySummary = summarizeCapabilities(capabilityRows)
     const debtSummary = summarizeDebts(debtRows)
+    // Qualitative labels only; undiscovered/inactive factions filtered.
+    const standingSummary = summarizeStandings(standingRows)
 
     // All campaign members can view any character in the campaign
     // (Editing is still restricted to owner/admin - see PATCH handler)
-    return NextResponse.json({ ...characterFields, capabilitySummary, debtSummary })
+    return NextResponse.json({ ...characterFields, capabilitySummary, debtSummary, standingSummary })
   } catch (error) {
     console.error('Get character error:', error)
     return NextResponse.json(

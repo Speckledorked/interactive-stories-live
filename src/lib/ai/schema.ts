@@ -74,6 +74,15 @@ export const DebtChangeSchema = z.object({
   reason: z.string()
 })
 
+// Urban Shadows faction standing: a social-position shift with a real
+// simulated faction, earned by this scene (see lib/game/standing.ts —
+// server clamps to ±1 per scene, bounds ±3).
+export const StandingChangeSchema = z.object({
+  faction_name: z.string(),
+  delta: z.number(),
+  reason: z.string()
+})
+
 // PC changes schema
 export const PCChangesSchema = z.object({
   character_name_or_id: z.string(),
@@ -137,7 +146,9 @@ export const PCChangesSchema = z.object({
     // unlocked, or exercised for this character this scene.
     capability_changes: z.array(CapabilityChangeSchema).optional(),
     // Debt economy: favors incurred or settled this scene.
-    debt_changes: z.array(DebtChangeSchema).optional()
+    debt_changes: z.array(DebtChangeSchema).optional(),
+    // Faction standing shifts earned this scene.
+    standing_changes: z.array(StandingChangeSchema).optional()
   })
 })
 

@@ -12,6 +12,7 @@ import { describeStat, describeThreatLevel, describeWarMomentum } from './qualit
 import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { resolveActionMechanics } from '@/lib/game/resolution'
 import { summarizeDebts } from '@/lib/game/debts'
+import { summarizeStandings } from '@/lib/game/standing'
 
 /**
  * Build optimized world summary using context manager
@@ -41,7 +42,11 @@ async function buildOptimizedWorldSummary(
         // can do — the prompt gates narration on this per character.
         capabilities: { include: { capability: true } },
         // Debt economy: open favors are leverage the AI should play with.
-        debts: { where: { status: 'OUTSTANDING' } }
+        debts: { where: { status: 'OUTSTANDING' } },
+        // Faction standing: social position, shown qualitatively.
+        factionStandings: {
+          include: { faction: { select: { name: true, isActive: true, isDiscovered: true } } }
+        }
       }
     }),
     prisma.nPC.findMany({ where: { campaignId } }),
@@ -162,7 +167,9 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       origin_familiarity: c.originFamiliarity,
       capabilities: summarizeCapabilities(c.capabilities),
       // Open favors, both directions — the AI's leverage currency.
-      debts: summarizeDebts(c.debts)
+      debts: summarizeDebts(c.debts),
+      // Social position with discovered active factions, qualitatively.
+      standings: summarizeStandings(c.factionStandings)
     })),
 
     // Only relevant, discovered NPCs — fog of war: relevance alone isn't
@@ -293,7 +300,11 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
         // Knowledge-relative sheet — see the optimized builder above.
         capabilities: { include: { capability: true } },
         // Debt economy — see the optimized builder above.
-        debts: { where: { status: 'OUTSTANDING' } }
+        debts: { where: { status: 'OUTSTANDING' } },
+        // Faction standing — see the optimized builder above.
+        factionStandings: {
+          include: { faction: { select: { name: true, isActive: true, isDiscovered: true } } }
+        }
       }
     }),
     prisma.nPC.findMany({ where: { campaignId } }),
@@ -360,7 +371,9 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       origin_familiarity: c.originFamiliarity,
       capabilities: summarizeCapabilities(c.capabilities),
       // Open favors, both directions — the AI's leverage currency.
-      debts: summarizeDebts(c.debts)
+      debts: summarizeDebts(c.debts),
+      // Social position with discovered active factions, qualitatively.
+      standings: summarizeStandings(c.factionStandings)
     })),
 
     npcs: discoveredNpcs.map(n => ({

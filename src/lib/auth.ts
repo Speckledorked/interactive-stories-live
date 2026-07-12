@@ -6,7 +6,24 @@ import jwt from 'jsonwebtoken'
 import { NextRequest } from 'next/server'
 import { headers } from 'next/headers'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-me'
+// Secret hygiene: a hardcoded fallback in production means anyone who has
+// read this file can mint valid tokens. Production without JWT_SECRET now
+// fails loudly at first use; the dev fallback survives for local work.
+// Lazy (not module-scope) so builds without env vars still compile.
+let cachedSecret: string | null = null
+export function getJwtSecret(): string {
+  if (cachedSecret) return cachedSecret
+  const secret = process.env.JWT_SECRET
+  if (secret) {
+    cachedSecret = secret
+    return secret
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be set in production — refusing to run with a known fallback secret')
+  }
+  cachedSecret = 'dev-only-secret-not-for-production'
+  return cachedSecret
+}
 
 // What we store inside the JWT token
 export interface TokenPayload {
@@ -20,7 +37,7 @@ export interface TokenPayload {
  * @returns JWT token string
  */
 export function createToken(payload: TokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, {
+  return jwt.sign(payload, getJwtSecret(), {
     expiresIn: '30d', // Token expires in 30 days
   })
 }
@@ -32,7 +49,7 @@ export function createToken(payload: TokenPayload): string {
  */
 export function verifyToken(token: string): TokenPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as TokenPayload
+    return jwt.verify(token, getJwtSecret()) as TokenPayload
   } catch (error) {
     return null
   }

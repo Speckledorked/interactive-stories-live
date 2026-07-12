@@ -180,8 +180,8 @@ Phase 2's economies build on.
 Goal: stop building on sand. Exit: CI green, Sentry live, migrations real,
 secrets fixed, email verification on, dead code gone, ruleset documented.
 
-- [ ] **#1 Ops floor**: CI running vitest + tsc on every push; real migrations replacing `prisma db push --accept-data-loss`; error monitoring (Sentry or equivalent); kill the JWT fallback secret; email verification + password reset
-- [ ] **#2 Dead-code purge + ruleset doc**: delete `sessions/session-service.ts` (never imported) and other dead modules *(partial: the ruleset itself is now implemented and documented in code/README rather than as an upfront ADR — the purge hasn't happened)*
+- [x] **#1 Ops floor**: GitHub Actions CI (tsc + vitest on every push/PR); deploys no longer pass `--accept-data-loss` — destructive schema changes now fail the build loudly, with the full migrate-baseline procedure documented in `docs/MIGRATIONS.md` (needs one prod-DB session to complete); error monitoring via `lib/monitoring.ts` (`ERROR_WEBHOOK_URL` → Discord/Slack, wired into resolution failures; drop-in Sentry swap later); JWT fallback secret killed (production refuses to boot without `JWT_SECRET`); email verification on signup (soft-gate) + full password reset flow (request → email → `/auth/reset-password`)
+- [x] **#2 Dead-code purge + ruleset doc**: `sessions/session-service.ts` deleted (was never imported); the PbtA×US ruleset is implemented and documented in code + this README rather than as an upfront ADR
 
 ### Phase 1 — MVP foundation: the mechanical spine
 

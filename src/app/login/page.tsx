@@ -3,13 +3,37 @@
 
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { LogIn, AlertTriangle } from 'lucide-react'
+import { LogIn, AlertTriangle, MailCheck } from 'lucide-react'
 import { login } from '@/lib/clientAuth'
 import { displayFont, bodyFont } from '@/lib/tavernTheme'
 import { TavernBackground } from '@/components/tavern/TavernBackground'
+
+// Reads ?verified= from the email-verification redirect; isolated in a
+// Suspense child because useSearchParams requires it in the app router.
+function VerifiedBanner() {
+  const searchParams = useSearchParams()
+  const verified = searchParams.get('verified')
+  if (verified === '1') {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 mb-5 rounded-lg bg-ember-900/30 border border-ember-700/40 text-ember-100 text-sm">
+        <MailCheck className="w-4 h-4 flex-shrink-0 text-ember-300" />
+        <span>Email verified — welcome to the tavern.</span>
+      </div>
+    )
+  }
+  if (verified === '0') {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 mb-5 rounded-lg bg-wine-800/30 border border-wine-600/40 text-ember-100 text-sm">
+        <AlertTriangle className="w-4 h-4 flex-shrink-0 text-wine-400" />
+        <span>That verification link is invalid or already used.</span>
+      </div>
+    )
+  }
+  return null
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -54,6 +78,10 @@ export default function LoginPage() {
             <h2 className={`${displayFont.className} text-xl text-ember-100`}>Welcome Back</h2>
             <p className="text-ember-300/50 text-sm mt-1">Return to your tales in progress</p>
           </div>
+
+          <Suspense fallback={null}>
+            <VerifiedBanner />
+          </Suspense>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
@@ -113,6 +141,12 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          <p className="text-center mt-4">
+            <Link href="/auth/forgot-password" className="text-sm text-ember-400/60 hover:text-ember-300 transition-colors">
+              Forgot your password?
+            </Link>
+          </p>
 
           <div className="h-px bg-ember-900/30 my-6" />
 

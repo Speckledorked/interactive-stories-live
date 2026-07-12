@@ -401,7 +401,7 @@ export default function StoryPage() {
         throw new Error(data.error || 'Failed to resolve scene')
       }
 
-      setSuccess('Scene resolved! The AI GM has processed all actions.')
+      setSuccess('Resolution started — the GM is writing. Results will appear here shortly.')
       await loadData()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resolve scene')

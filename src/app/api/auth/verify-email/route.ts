@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const user = await prisma.user.findUnique({ where: { emailVerifyToken: token } })
+    const user = await prisma.user.findFirst({ where: { emailVerifyToken: token } })
     if (!user) {
       loginUrl.searchParams.set('verified', '0')
       return NextResponse.redirect(loginUrl)

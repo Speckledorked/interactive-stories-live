@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
     }
 
-    const user = await prisma.user.findUnique({ where: { resetToken: token } })
+    const user = await prisma.user.findFirst({ where: { resetToken: token } })
     if (!user || !user.resetTokenExpires || user.resetTokenExpires < new Date()) {
       return NextResponse.json(
         { error: 'This reset link is invalid or has expired. Request a new one.' },

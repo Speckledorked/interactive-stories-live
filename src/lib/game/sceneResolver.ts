@@ -33,6 +33,7 @@ import {
 import { createSceneMemory } from '@/lib/ai/memoryCreation'
 import { extractAndApplyConsequences } from './consequences'
 import { formatRollReceipt } from './resolution'
+import { reportError } from '@/lib/monitoring'
 
 /**
  * Resolve a scene using the AI GM
@@ -119,6 +120,7 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined
     })
+    await reportError('scene-resolution-failed', error, { campaignId, sceneId })
 
     // CRITICAL: Always revert scene status so it can be retried
     try {

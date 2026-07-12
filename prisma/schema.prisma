@@ -146,6 +146,12 @@ model User {
   // Payment system - balance stored in cents (e.g., 100 = $1.00)
   balance Int @default(0)
 
+  // Account security: email verification + password reset
+  emailVerified     Boolean   @default(false)
+  emailVerifyToken  String?   @unique
+  resetToken        String?   @unique
+  resetTokenExpires DateTime?
+
   // Phase 9: Online status
   lastSeenAt DateTime?
   isOnline   Boolean   @default(false)

@@ -146,6 +146,30 @@ export class EmailService {
     });
   }
 
+  // Send email-address verification link
+  static async sendVerificationEmail(userEmail: string, verifyToken: string) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const verifyUrl = `${appUrl}/api/auth/verify-email?token=${verifyToken}`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 20px;">
+        <div style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <h1 style="color: #1e40af; margin: 0 0 20px 0; font-size: 24px;">🎮 Verify your email</h1>
+          <p style="color: #334155;">Welcome to MythOS! Confirm this is your email address to secure your account.</p>
+          <p style="text-align: center; margin: 30px 0;">
+            <a href="${verifyUrl}" style="background: #1e40af; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">Verify Email</a>
+          </p>
+          <p style="color: #64748b; font-size: 13px;">If you didn't create a MythOS account, you can ignore this email.</p>
+        </div>
+      </div>
+    `;
+
+    return await this.sendEmail({
+      to: userEmail,
+      subject: '✉️ Verify your MythOS email',
+      html
+    });
+  }
+
   // Build welcome email template
   private static buildWelcomeEmailTemplate(userName: string): string {
     return `

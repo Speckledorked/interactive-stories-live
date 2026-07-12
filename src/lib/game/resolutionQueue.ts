@@ -14,6 +14,8 @@
 
 import { prisma } from '@/lib/prisma'
 import { ResolutionJobStatus } from '@prisma/client'
+import { getJwtSecret } from '@/lib/auth'
+import { reportError } from '@/lib/monitoring'
 
 export const MAX_ATTEMPTS = 3
 // A RUNNING job older than this is presumed dead (resolveScene's own
@@ -33,7 +35,10 @@ function baseUrl(): string {
 }
 
 export function internalJobSecret(): string {
-  return process.env.INTERNAL_JOB_SECRET || process.env.JWT_SECRET || 'fallback-secret-change-me'
+  // Falls back to the JWT secret, which itself refuses to run in
+  // production without a real value (see lib/auth.ts) — no hardcoded
+  // fallback can reach production either way.
+  return process.env.INTERNAL_JOB_SECRET || getJwtSecret()
 }
 
 export interface EnqueueResult {
@@ -149,6 +154,11 @@ export async function processResolutionJob(jobId: string): Promise<ProcessResult
       },
     }).catch(e => console.error('Failed to record job failure:', e))
     console.error(`❌ Resolution job ${jobId} attempt ${job.attempts} failed:`, message)
+    if (!retryable) {
+      await reportError('resolution-job-failed', error, {
+        jobId, campaignId: job.campaignId, sceneId: job.sceneId, attempts: job.attempts,
+      })
+    }
     return retryable ? { status: 'retry_scheduled', error: message } : { status: 'failed', error: message }
   }
 }
@@ -204,6 +214,9 @@ export async function recoverStaleJobs(campaignId: string): Promise<void> {
           data: { status: 'FAILED', finishedAt: new Date(), lastError: 'Abandoned after repeated stalls' },
         })
         console.warn(`⚠️ Resolution job ${job.id} abandoned (stale RUNNING, out of attempts)`)
+        await reportError('resolution-job-abandoned', new Error('Stale RUNNING job out of attempts'), {
+          jobId: job.id, campaignId,
+        })
         continue
       }
 

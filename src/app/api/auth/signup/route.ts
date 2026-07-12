@@ -36,12 +36,24 @@ export async function POST(request: NextRequest) {
     // Hash password and create user
     const passwordHash = await hashPassword(password)
 
+    const emailVerifyToken = crypto.randomUUID()
     const user = await prisma.user.create({
       data: {
         email,
         password: passwordHash, // store hashed password in `password` column
+        emailVerifyToken,
       },
     })
+
+    // Best-effort verification email — signup must not fail because SMTP
+    // did. Unverified accounts still work (soft verification); the flag
+    // exists so features can gate on it later.
+    try {
+      const { EmailService } = await import('@/lib/notifications/email-service')
+      await EmailService.sendVerificationEmail(email, emailVerifyToken)
+    } catch (emailError) {
+      console.error('Verification email failed (non-critical):', emailError)
+    }
 
     // Create JWT token
     const token = createToken({

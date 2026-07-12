@@ -232,6 +232,9 @@ model Campaign {
   // (magic schools, fighting styles, political arts...) that characters
   // discover and grow into through the fiction.
   capabilities CampaignCapability[]
+
+  // Urban Shadows economy: owed favors between PCs and NPCs/factions.
+  debts Debt[]
 }
 
 //
@@ -281,6 +284,55 @@ model CampaignCapability {
 
   @@unique([campaignId, key])
   @@index([campaignId])
+}
+
+//
+// DEBTS (Urban Shadows economy)
+//
+// A Debt is one owed favor between a player character and an NPC or
+// faction, in either direction. It's the AI GM's currency for
+// consequences and leverage: incurred when the fiction earns it, called
+// in later as pressure, resolved when honored (or refused — which has its
+// own costs). Rendered diegetically on the sheet ("Lord Kessler considers
+// you in his debt"), never as a ledger counter.
+//
+
+enum DebtDirection {
+  OWED_BY_CHARACTER // the PC owes the counterparty
+  OWED_TO_CHARACTER // the counterparty owes the PC
+}
+
+enum DebtStatus {
+  OUTSTANDING
+  RESOLVED
+}
+
+model Debt {
+  id          String @id @default(cuid())
+  campaignId  String
+  characterId String
+
+  direction        DebtDirection
+  counterpartyType String // "npc" | "faction"
+  // Resolved entity id when the name matched a known NPC/faction; the
+  // denormalized name is authoritative for display either way.
+  counterpartyId   String?
+  counterpartyName String
+
+  description String // what the favor was — the fiction that created it
+  status      DebtStatus @default(OUTSTANDING)
+  resolution  String? // how it ended (honored, refused, forgiven...)
+
+  turnCreated  Int       @default(0)
+  turnResolved Int?
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+
+  campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([characterId, status])
 }
 
 model CharacterCapability {
@@ -377,6 +429,9 @@ model Character {
   // Knowledge-relative sheet: what this character knows of / can do with
   // the universe's capability tree.
   capabilities CharacterCapability[]
+
+  // Urban Shadows economy: this PC's owed favors, both directions.
+  debts Debt[]
 
   @@index([campaignId])
   @@index([userId])

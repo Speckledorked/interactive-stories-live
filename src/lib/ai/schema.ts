@@ -63,6 +63,17 @@ export const CapabilityChangeSchema = z.object({
   reason: z.string()
 })
 
+// Urban Shadows Debt economy: one owed favor between this PC and an
+// NPC/faction, incurred or resolved by the fiction (see lib/game/debts.ts).
+export const DebtChangeSchema = z.object({
+  counterparty_name: z.string(),
+  counterparty_type: z.enum(['npc', 'faction']),
+  direction: z.enum(['owed_by_character', 'owed_to_character']),
+  action: z.enum(['incur', 'resolve']),
+  description: z.string(), // incur: what the favor was; resolve: how it ended
+  reason: z.string()
+})
+
 // PC changes schema
 export const PCChangesSchema = z.object({
   character_name_or_id: z.string(),
@@ -124,7 +135,9 @@ export const PCChangesSchema = z.object({
     }).optional(),
     // Knowledge-relative sheet updates: what the fiction revealed,
     // unlocked, or exercised for this character this scene.
-    capability_changes: z.array(CapabilityChangeSchema).optional()
+    capability_changes: z.array(CapabilityChangeSchema).optional(),
+    // Debt economy: favors incurred or settled this scene.
+    debt_changes: z.array(DebtChangeSchema).optional()
   })
 })
 

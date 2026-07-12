@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { validateStats } from '@/lib/game/advancement'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
+import { summarizeDebts } from '@/lib/game/debts'
 
 // Fields the owning player can edit directly — cosmetic/narrative only.
 // Everything mechanical (stats, harm, equipment, inventory, resources,
@@ -56,7 +57,8 @@ export async function GET(
     const character = await prisma.character.findUnique({
       where: { id: characterId },
       include: {
-        capabilities: { include: { capability: true } }
+        capabilities: { include: { capability: true } },
+        debts: { where: { status: 'OUTSTANDING' }, orderBy: { createdAt: 'asc' } }
       }
     })
 
@@ -69,13 +71,14 @@ export async function GET(
 
     // Knowledge-relative sheet: ship qualitative bands + hints only — raw
     // proficiency numbers and raw rows never leave the server (fog of war
-    // applied to your own character).
-    const { capabilities: capabilityRows, ...characterFields } = character
+    // applied to your own character). Debts ship in diegetic summary form.
+    const { capabilities: capabilityRows, debts: debtRows, ...characterFields } = character
     const capabilitySummary = summarizeCapabilities(capabilityRows)
+    const debtSummary = summarizeDebts(debtRows)
 
     // All campaign members can view any character in the campaign
     // (Editing is still restricted to owner/admin - see PATCH handler)
-    return NextResponse.json({ ...characterFields, capabilitySummary })
+    return NextResponse.json({ ...characterFields, capabilitySummary, debtSummary })
   } catch (error) {
     console.error('Get character error:', error)
     return NextResponse.json(

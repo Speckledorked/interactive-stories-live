@@ -198,7 +198,7 @@ timeouts, and the AI respects the outcome band.
 Goal: mechanics and the living world become one system. Exit: the north-star
 chain above works in a real playtest.
 
-- [ ] **#6 Debt economy**: first-class Debt records between PCs and NPCs/factions — created and called in by the AI as narrative leverage, rendered diegetically on the sheet ("Lord Kessler considers you in his debt"), never as a ledger counter. Replaces today's free-text `consequences.debts` strings
+- [x] **#6 Debt economy**: first-class `Debt` records between PCs and NPCs/factions, both directions — incurred/resolved by the AI via `debt_changes` (earned in fiction, idempotent, oldest-first resolution matching), open debts fed to the narrator as leverage with call-in guidance, rendered diegetically on the sheet as "Obligations & Favors" ("Lord Kessler considers you in their debt"), never a ledger counter
 - [ ] **#7 Faction standing**: per-character standing with the simulated factions; social/political moves roll +standing; standing shifts from scene outcomes *and* from the world tick — a faction losing a war or collapsing changes what its allies and enemies can roll
 - [ ] **#8 World-visibility digest**: push tick drama into notifications ("while you were away, war broke out in the Reach…") — the rumor feed exists, the retention hook doesn't
 - [ ] **#9 Origin archetypes / playbook onboarding**: *(v1 shipped: origin familiarity selector + capability discovery seeding)* — still open: full creation presets per origin (starting ties, obligations, glimpse packages) and signup-to-first-scene under 5 minutes

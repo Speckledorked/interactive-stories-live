@@ -11,6 +11,7 @@ import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { resolveActionMechanics } from '@/lib/game/resolution'
+import { summarizeDebts } from '@/lib/game/debts'
 
 /**
  * Build optimized world summary using context manager
@@ -38,7 +39,9 @@ async function buildOptimizedWorldSummary(
         user: { select: { email: true } },
         // Knowledge-relative sheet: what each character knows exists /
         // can do — the prompt gates narration on this per character.
-        capabilities: { include: { capability: true } }
+        capabilities: { include: { capability: true } },
+        // Debt economy: open favors are leverage the AI should play with.
+        debts: { where: { status: 'OUTSTANDING' } }
       }
     }),
     prisma.nPC.findMany({ where: { campaignId } }),
@@ -157,7 +160,9 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       // Knowledge-relative sheet: qualitative bands + known-domains only —
       // raw proficiency numbers never reach a prompt (fog of war inward).
       origin_familiarity: c.originFamiliarity,
-      capabilities: summarizeCapabilities(c.capabilities)
+      capabilities: summarizeCapabilities(c.capabilities),
+      // Open favors, both directions — the AI's leverage currency.
+      debts: summarizeDebts(c.debts)
     })),
 
     // Only relevant, discovered NPCs — fog of war: relevance alone isn't
@@ -286,7 +291,9 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       include: {
         user: { select: { email: true } },
         // Knowledge-relative sheet — see the optimized builder above.
-        capabilities: { include: { capability: true } }
+        capabilities: { include: { capability: true } },
+        // Debt economy — see the optimized builder above.
+        debts: { where: { status: 'OUTSTANDING' } }
       }
     }),
     prisma.nPC.findMany({ where: { campaignId } }),
@@ -351,7 +358,9 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       // Knowledge-relative sheet: qualitative bands + known-domains only —
       // raw proficiency numbers never reach a prompt (fog of war inward).
       origin_familiarity: c.originFamiliarity,
-      capabilities: summarizeCapabilities(c.capabilities)
+      capabilities: summarizeCapabilities(c.capabilities),
+      // Open favors, both directions — the AI's leverage currency.
+      debts: summarizeDebts(c.debts)
     })),
 
     npcs: discoveredNpcs.map(n => ({

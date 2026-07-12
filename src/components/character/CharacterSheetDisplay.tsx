@@ -100,6 +100,13 @@ export default function CharacterSheetDisplay({ character, campaign }: Character
   } | undefined
   const capabilityDomains: string[] = capabilitySummary?.knownDomains || []
 
+  // Debt economy — diegetic summary from the character GET route
+  const debtSummary = character?.debtSummary as {
+    owedByCharacter: Array<{ counterparty: string; description: string }>
+    owedToCharacter: Array<{ counterparty: string; description: string }>
+  } | undefined
+  const hasDebts = !!debtSummary && (debtSummary.owedByCharacter.length > 0 || debtSummary.owedToCharacter.length > 0)
+
   // Parse moves
   const moves = character?.moves || []
 
@@ -330,6 +337,33 @@ export default function CharacterSheetDisplay({ character, campaign }: Character
                             </div>
                           ))}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Obligations & Favors — the Debt economy, in the fiction's
+                own language: who considers whom in whose debt, never a
+                ledger counter. */}
+            {hasDebts && (
+              <div className="card md:col-span-2">
+                <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide mb-3">Obligations & Favors</h3>
+                <div className="grid md:grid-cols-2 gap-3">
+                  {debtSummary!.owedByCharacter.map((d, idx) => (
+                    <div key={`ob-${idx}`} className="bg-gradient-to-r from-wine-800/20 to-obsidian-900/20 rounded-lg p-4 border border-wine-800/30">
+                      <div className="font-medium text-wine-300 mb-1">
+                        {d.counterparty} considers you in their debt
+                      </div>
+                      <p className="text-xs text-ember-300/60">{d.description}</p>
+                    </div>
+                  ))}
+                  {debtSummary!.owedToCharacter.map((d, idx) => (
+                    <div key={`ot-${idx}`} className="bg-gradient-to-r from-ember-900/20 to-obsidian-900/20 rounded-lg p-4 border border-ember-800/30">
+                      <div className="font-medium text-ember-300 mb-1">
+                        {d.counterparty} owes you
+                      </div>
+                      <p className="text-xs text-ember-300/60">{d.description}</p>
                     </div>
                   ))}
                 </div>

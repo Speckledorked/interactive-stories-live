@@ -5,14 +5,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
-import { resolveScene, getCurrentScene } from '@/lib/game/sceneResolver'
-import { runWorldTurn } from '@/lib/game/worldTurn'
+import { getCurrentScene } from '@/lib/game/sceneResolver'
+import { enqueueSceneResolution } from '@/lib/game/resolutionQueue'
 import { prisma } from '@/lib/prisma'
 import { checkBalance, deductFunds, formatCurrency } from '@/lib/payment/service'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 
-// 60s = Vercel Hobby-tier ceiling, safe on every plan. See scene/route.ts for
-// the full rationale — this route awaits the same resolveScene() call.
+// This route only validates, charges, and enqueues now — the long AI
+// pipeline runs in /api/internal/resolve-job (maxDuration 300). 60s is
+// ample headroom for the payment transaction fan-out.
 export const maxDuration = 60
 
 // Per-player cost in cents based on number of players in the scene
@@ -164,29 +165,22 @@ export async function POST(
       )
     }
 
-    // 5. Resolve the scene (this calls AI and updates DB)
-    console.log('🤖 Calling scene resolver...')
-    const resolutionResult = await resolveScene(campaignId, currentScene.id)
+    // 5. Enqueue the resolution (AI GM + world turn run in the internal
+    // worker route's own invocation — see lib/game/resolutionQueue.ts).
+    // The UI follows the scene:resolving / scene:resolved Pusher events;
+    // players were already watching those, not this response body.
+    console.log('🤖 Enqueueing scene resolution...')
+    const { jobId, deduped } = await enqueueSceneResolution(campaignId, currentScene.id)
 
-    // 6. Run world turn (advance clocks, generate background events)
-    console.log('🌍 Running world turn...')
-    const worldTurnResult = await runWorldTurn(campaignId)
-
-    // 7. Return success
+    // 6. Return accepted — resolution completes asynchronously
     return NextResponse.json({
       success: true,
-      message: 'Scene resolved successfully',
-      resolution: {
-        sceneNumber: currentScene.sceneNumber,
-        sceneText: resolutionResult.sceneText,
-        updatesApplied: resolutionResult.updates,
-        newTurnNumber: resolutionResult.newTurnNumber
-      },
-      worldTurn: {
-        clocksAdvanced: worldTurnResult.clocksAdvanced,
-        clocksCompleted: worldTurnResult.clocksCompleted
-      }
-    })
+      message: deduped
+        ? 'Scene resolution already in progress'
+        : 'Scene resolution started — results will appear when the GM finishes',
+      jobId,
+      sceneNumber: currentScene.sceneNumber
+    }, { status: 202 })
   } catch (error) {
     console.error('❌ Scene resolution error:', error)
 

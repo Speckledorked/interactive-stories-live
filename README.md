@@ -191,7 +191,7 @@ timeouts, and the AI respects the outcome band.
 
 - [x] **#3 Resolution engine v1**: server-side move classification (EFFICIENT model, fail-open), 2d6 + stat + capability band + harm rolled server-side, persisted to `DiceRoll`, outcome band passed to the narrator as a binding constraint, hard GM move required on a miss
 - [x] **#4 Roll visibility**: *(deliberately redesigned from "visible dice UI" to hidden-with-receipts per the ungamified-surface decision)* — rolls surface as a collapsed-by-default 🎲 section in the transparency panel; prose never mentions dice
-- [ ] **#5 Async scene resolution**: DB-backed job record, status via Pusher/polling, retry — resolutions can currently exceed the platform's 60s request ceiling (`maxDuration = 60` vs. ~150s worst-case AI calls)
+- [x] **#5 Async scene resolution**: action submission and manual resolve now enqueue a `ResolutionJob` and return immediately; the AI-GM-plus-world-turn pipeline runs in `/api/internal/resolve-job` (secret-gated, `maxDuration 300`) via HTTP self-invocation with an inline fallback. Atomic PENDING→RUNNING claims dedupe racing submits; failures retry up to 3 attempts; stuck jobs are recovered opportunistically by scene GET traffic (no cron needed). UI needed no changes — it already followed the `scene:resolving`/`scene:resolved`/`scene:resolution-failed` Pusher events
 
 ### Phase 2 — Product differentiation: the Urban Shadows fusion
 

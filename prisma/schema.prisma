@@ -1935,6 +1935,41 @@ model Friendship {
   @@map("friendships")
 }
 
+//
+// ASYNC SCENE RESOLUTION
+//
+// Scene resolution (AI GM call + world turn) can take ~150s — longer than
+// a request handler should live. Action submission enqueues a job here
+// and returns immediately; a dedicated internal route processes it in its
+// own invocation, with the existing Pusher events (scene:resolving /
+// scene:resolved / scene:resolution-failed) carrying progress to the UI.
+// Stale jobs are recovered opportunistically by scene GET traffic.
+//
+
+enum ResolutionJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model ResolutionJob {
+  id         String              @id @default(cuid())
+  campaignId String
+  sceneId    String
+  status     ResolutionJobStatus @default(PENDING)
+  attempts   Int                 @default(0)
+  lastError  String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@index([sceneId, status])
+  @@index([campaignId, status])
+}
+
 model AIValidationFailure {
   id           String   @id @default(cuid())
   campaignId   String

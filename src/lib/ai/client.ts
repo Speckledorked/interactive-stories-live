@@ -142,6 +142,15 @@ export interface AIGMResponse {
           hint?: string
           reason: string
         }>
+        // Debt economy: favors incurred or settled — see lib/game/debts.ts.
+        debt_changes?: Array<{
+          counterparty_name: string
+          counterparty_type: 'npc' | 'faction'
+          direction: 'owed_by_character' | 'owed_to_character'
+          action: 'incur' | 'resolve'
+          description: string
+          reason: string
+        }>
       }
     }>
     faction_changes?: Array<{
@@ -212,6 +221,11 @@ export interface AIGMRequest {
         known: Array<{ name: string; domain: string; band: string; description: string | null }>
         glimpsed: Array<{ domain: string; hint: string | null }>
         knownDomains: string[]
+      }
+      // Open favors, both directions (see lib/game/debts.ts).
+      debts?: {
+        owedByCharacter: Array<{ counterparty: string; description: string }>
+        owedToCharacter: Array<{ counterparty: string; description: string }>
       }
     }>
     npcs: Array<{
@@ -629,7 +643,8 @@ You MUST respond with a JSON object matching this structure:
           "equipment_changes": {"weapon": {"action": "remove", "value": "Broken sword"}},
           "inventory_changes": {"items_add": [...], "items_remove": [...], "items_modify": [...]},
           "resource_changes": {"gold_delta": -50, "contacts_add": [...]},
-          "capability_changes": [{"capability_key": "swordplay", "change": "progress", "reason": "Survived a duel"}]
+          "capability_changes": [{"capability_key": "swordplay", "change": "progress", "reason": "Survived a duel"}],
+          "debt_changes": [{"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the city", "reason": "A real favor with expectation of return"}]
         }
       }
     ],
@@ -717,6 +732,21 @@ RESOURCES: gold_delta, contacts_add/remove, reputation_changes
 
 Make changes MATTER. Reference them in scene_text. Lost eye? Show how it affects vision. Equipment stolen? Show their reaction.
 </character_changes>
+
+<debts>
+Debts are owed favors between player characters and NPCs/factions — the social currency of this world. Each character's "Debts:" line lists their open favors, both directions.
+
+USE DEBTS AS DRAMA:
+- INCUR: when someone does a PC a real favor (or vice versa) with an implicit expectation of return — rescue, protection, information, money, looking the other way — record it. Debts must be EARNED in the fiction, never invented retroactively.
+- CALL IN: NPCs and factions remember. When it serves the story, have a creditor show up wanting repayment — at the worst possible time is best. A called-in debt is pressure, not a transaction: refusing has social consequences (burned relationships, new enemies, reputation).
+- RESOLVE: when a debt is honored, refused, traded away, or forgiven, resolve it with how it ended.
+
+Report via debt_changes inside that character's pc_changes:
+- {"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the burning district", "reason": "Kessler's men saved them at real cost"}
+- {"counterparty_name": "Thieves Guild", "counterparty_type": "faction", "direction": "owed_by_character", "action": "resolve", "description": "Repaid by stealing the ledger for them", "reason": "The job is done"}
+
+NEVER present debts as numbers or a ledger in scene_text — they live in the fiction: a meaningful look, a reminder over drinks, a knock on the door at midnight.
+</debts>
 
 <mechanical_outcomes>
 Some player actions arrive with a MECHANICAL OUTCOME line — the game engine already rolled the dice for that action. This outcome is BINDING:
@@ -826,6 +856,15 @@ ${world_summary.characters.map(c => {
       parts.push(`Aware of but cannot do: ${cap.glimpsed.map(g => `${g.domain}${g.hint ? ` — ${g.hint}` : ''}`).join('; ')}`)
     }
     parts.push(`Systems this character knows exist: ${cap.knownDomains.length > 0 ? cap.knownDomains.join(', ') : 'NONE — they are ignorant of this world’s systems'}${c.origin_familiarity ? ` (origin: ${c.origin_familiarity.toLowerCase()})` : ''}`)
+  }
+
+  // Debt economy: open favors are live dramatic material — see <debts>.
+  if (c.debts && (c.debts.owedByCharacter.length > 0 || c.debts.owedToCharacter.length > 0)) {
+    const debtLines = [
+      ...c.debts.owedByCharacter.map(d => `${c.name} owes ${d.counterparty} (${d.description})`),
+      ...c.debts.owedToCharacter.map(d => `${d.counterparty} owes ${c.name} (${d.description})`),
+    ]
+    parts.push(`Debts: ${debtLines.join('; ')}`)
   }
 
   return `• ${parts.join('\n  ')}`

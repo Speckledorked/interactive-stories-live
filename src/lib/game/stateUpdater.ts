@@ -22,6 +22,7 @@ import {
 } from './harm'
 import { getArmorReduction } from './inventory'
 import { applyCapabilityChanges } from './capabilities'
+import { applyDebtChanges } from './debts'
 import { AI_MODELS } from '@/lib/ai/models'
 import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
 
@@ -656,6 +657,22 @@ export async function applyWorldUpdates(
               }
 
               updateData.resources = currentResources
+            }
+
+            // Debt economy: favors incurred or settled by this scene's
+            // fiction — see lib/game/debts.ts for matching semantics.
+            if (pcChange.changes.debt_changes && pcChange.changes.debt_changes.length > 0) {
+              const debtLog = await applyDebtChanges(
+                tx,
+                campaignId,
+                character.id,
+                character.name,
+                pcChange.changes.debt_changes,
+                currentTurnNumber
+              )
+              for (const line of debtLog) {
+                console.log(`  🤝 ${line}`)
+              }
             }
 
             // Knowledge-relative sheet: glimpse/unlock/progress signals from

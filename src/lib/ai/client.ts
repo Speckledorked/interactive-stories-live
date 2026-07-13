@@ -817,6 +817,11 @@ REGISTER LOCATIONS: Whenever the characters visit or you describe a named place,
 - location_type: pick one of: town, city, dungeon, wilderness, inn, tavern, building, ruin, forest, road, sea, other
 - For already-known locations, use gm_notes_append to record how it changed (fire damage, new guards, etc.)
 - Good example: {"name": "The Hollow Bridge", "is_new": true, "description": "A crumbling stone arch over a black river. Moss covers every surface. Something moves in the water below.", "location_type": "wilderness"}
+
+TRACK PC LOCATION: Whenever a player character's physical location changes during this scene — walks into another room, leaves a building, travels to a new place, is moved/carried/dragged somewhere — set changes.location in that character's pc_changes entry to where they are NOW, matching the name you used in location_changes.
+- This applies to small moves too (tavern common room → upstairs), not just town-to-town travel — a stale location is worse than an over-reported one
+- If a character doesn't move this scene, omit changes.location entirely — don't repeat their existing location
+- Check each PC's 📍 line in PLAYER CHARACTERS below against where the scene_text actually puts them; if they differ, you missed a location update
 </npc_tracking>
 
 <relationships>

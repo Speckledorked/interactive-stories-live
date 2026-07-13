@@ -89,10 +89,7 @@ export async function runWorldTurn(campaignId: string) {
       await applyNpcGoalFallbacks(campaignId, completedGoalNpcs)
     }
 
-    // 4. Update in-game date (simple progression)
-    await advanceInGameDate(campaignId)
-
-    // 4b. World-visibility digest: the tick's MAJOR, discovery-safe drama
+    // 4. World-visibility digest: the tick's MAJOR, discovery-safe drama
     // becomes a "word on the street" notification for every member — the
     // living world reaching players instead of running silently. Best
     // effort; never blocks the turn.
@@ -592,36 +589,6 @@ async function generateOffscreenEvents(
   } catch (error) {
     console.error('  ⚠️ Failed to generate offscreen events:', error)
     // Don't throw - world turn can continue without AI-generated events
-  }
-}
-
-/**
- * Advance the in-game date
- * Simple version - just increments by days
- */
-async function advanceInGameDate(campaignId: string) {
-  const worldMeta = await prisma.worldMeta.findUnique({
-    where: { campaignId }
-  })
-
-  if (!worldMeta) {
-    return
-  }
-
-  // Parse current date (assumes format like "Day 1", "Day 2", etc.)
-  const currentDate = worldMeta.currentInGameDate || 'Day 1'
-  const dayMatch = currentDate.match(/Day (\d+)/)
-
-  if (dayMatch) {
-    const currentDay = parseInt(dayMatch[1])
-    const newDate = `Day ${currentDay + 1}`
-
-    await prisma.worldMeta.update({
-      where: { id: worldMeta.id },
-      data: { currentInGameDate: newDate }
-    })
-
-    console.log(`  📅 Date advanced: ${currentDate} → ${newDate}`)
   }
 }
 

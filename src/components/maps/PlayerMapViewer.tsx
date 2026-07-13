@@ -208,11 +208,20 @@ export function PlayerMapViewer({
 
   // Convert screen coordinates to map coordinates
   const screenToMap = (screenX: number, screenY: number) => {
-    const rect = canvasRef.current?.getBoundingClientRect()
-    if (!rect) return { x: 0, y: 0 }
+    const canvas = canvasRef.current
+    const rect = canvas?.getBoundingClientRect()
+    if (!canvas || !rect) return { x: 0, y: 0 }
 
-    const x = (screenX - rect.left - viewState.panX * viewState.zoom) / viewState.zoom
-    const y = (screenY - rect.top - viewState.panY * viewState.zoom) / viewState.zoom
+    // CSS pixels -> canvas buffer pixels: the canvas's rendered size
+    // (rect.width/height) can be smaller than its 800x600 drawing buffer
+    // (canvas.width/height) — always true on phone-width viewports —
+    // so a raw CSS-pixel delta doesn't line up with zone/token
+    // coordinates, which are defined in buffer space.
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+
+    const x = ((screenX - rect.left) * scaleX) / viewState.zoom - viewState.panX
+    const y = ((screenY - rect.top) * scaleY) / viewState.zoom - viewState.panY
 
     return { x, y }
   }
@@ -363,65 +372,68 @@ export function PlayerMapViewer({
   }
 
   return (
-    <div className={`relative bg-tavern-900 rounded-lg overflow-hidden ${className}`} ref={containerRef}>
-      {/* Map Canvas */}
-      <canvas
-        ref={canvasRef}
-        width={800}
-        height={600}
-        className="w-full h-full cursor-pointer"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => {
-          setHoveredElement(null)
-          setViewState(prev => ({ ...prev, isDragging: false }))
-        }}
-      />
+    <div className={`relative w-full bg-tavern-900 rounded-lg overflow-hidden ${className}`} ref={containerRef}>
+      {/* Map Canvas — fixed aspect ratio so it scales proportionally at any
+          viewport width instead of stretching to an unconstrained height. */}
+      <div className="w-full aspect-[4/3]">
+        <canvas
+          ref={canvasRef}
+          width={800}
+          height={600}
+          className="block w-full h-full cursor-pointer"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={() => {
+            setHoveredElement(null)
+            setViewState(prev => ({ ...prev, isDragging: false }))
+          }}
+        />
+      </div>
 
       {/* Controls */}
-      <div className="absolute top-4 left-4 space-y-2">
-        <Card className="p-2">
+      <div className="absolute top-2 left-2 sm:top-4 sm:left-4 space-y-1.5 sm:space-y-2 max-w-[48%]">
+        <Card className="p-1.5 sm:p-2">
           <div className="flex space-x-1">
-            <Button size="sm" variant="outline" onClick={zoomIn}>
+            <Button size="sm" variant="outline" className="px-2 sm:px-3" onClick={zoomIn}>
               <ZoomIn className="w-4 h-4" />
             </Button>
-            <Button size="sm" variant="outline" onClick={zoomOut}>
+            <Button size="sm" variant="outline" className="px-2 sm:px-3" onClick={zoomOut}>
               <ZoomOut className="w-4 h-4" />
             </Button>
-            <Button size="sm" variant="outline" onClick={resetView}>
+            <Button size="sm" variant="outline" className="hidden sm:inline-flex" onClick={resetView}>
               Reset
             </Button>
           </div>
         </Card>
 
-        <Card className="p-2">
-          <Button size="sm" variant="outline" onClick={focusOnMyCharacter}>
-            <Users className="w-4 h-4 mr-1" />
-            Find Me
+        <Card className="p-1.5 sm:p-2">
+          <Button size="sm" variant="outline" className="px-2 sm:px-3" onClick={focusOnMyCharacter}>
+            <Users className="w-4 h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Find Me</span>
           </Button>
         </Card>
       </div>
 
       {/* Map Info */}
-      <div className="absolute top-4 right-4">
-        <Card className="p-3 max-w-xs">
-          <h3 className="font-semibold text-sm mb-2 text-ember-100">{map.name}</h3>
+      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 max-w-[48%] sm:max-w-xs">
+        <Card className="p-2 sm:p-3">
+          <h3 className="font-semibold text-xs sm:text-sm mb-1 sm:mb-2 text-ember-100 truncate">{map.name}</h3>
           {map.description && (
-            <p className="text-xs text-ember-300/60 mb-2 line-clamp-3">{map.description}</p>
+            <p className="hidden sm:block text-xs text-ember-300/60 mb-2 line-clamp-3">{map.description}</p>
           )}
-          <div className="space-y-1 text-xs text-ember-200/70">
+          <div className="space-y-0.5 sm:space-y-1 text-[10px] sm:text-xs text-ember-200/70">
             <div>Players: {map.tokens.filter(t => t.isPC).length}</div>
             <div>NPCs: {map.tokens.filter(t => !t.isPC).length}</div>
-            <div>Interactive Areas: {map.zones.filter(z => z.triggerType).length}</div>
+            <div className="hidden sm:block">Interactive Areas: {map.zones.filter(z => z.triggerType).length}</div>
           </div>
         </Card>
       </div>
 
       {/* Hover Tooltip */}
       {hoveredElement && (
-        <div className="absolute bottom-4 left-4">
-          <Card className="p-3 max-w-sm">
+        <div className="absolute bottom-2 left-2 right-2 sm:bottom-4 sm:left-4 sm:right-auto sm:max-w-sm">
+          <Card className="p-2 sm:p-3">
             <div className="text-sm">
               <div className="font-semibold flex items-center gap-2 mb-1">
                 {hoveredElement.type === 'token' ? (
@@ -433,7 +445,7 @@ export function PlayerMapViewer({
                     {'triggerType' in hoveredElement.data && hoveredElement.data.triggerType ? 'Interactive' : 'Area'}
                   </Badge>
                 )}
-                {hoveredElement.data.name}
+                <span className="truncate">{hoveredElement.data.name}</span>
               </div>
               {'description' in hoveredElement.data && hoveredElement.data.description && (
                 <div className="text-xs text-ember-300/60 mb-1">
@@ -456,7 +468,7 @@ export function PlayerMapViewer({
       )}
 
       {/* Status Indicator */}
-      <div className="absolute bottom-4 right-4 flex space-x-2">
+      <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 flex flex-col items-end gap-1 sm:flex-row sm:gap-2">
         <Badge variant="secondary">
           AI Generated
         </Badge>

@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { CreateCampaignRequest, ErrorResponse } from '@/types/api'
 import { getTemplate, applyCampaignTemplate } from '@/lib/templates/campaign-templates'
-import { generateWorldFromTemplate, GeneratedCapability } from '@/lib/ai/worldGenerator'
+import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels } from '@/lib/ai/worldGenerator'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 
 // GET /api/campaigns - List user's campaigns
@@ -87,27 +87,35 @@ export async function POST(request: NextRequest) {
     const resolvedUniverse = universe || template?.universe || 'Original'
     const resolvedSystemPrompt = aiSystemPrompt || template?.systemPrompt || ''
 
-    // If a template is selected and the user hasn't provided a custom world seed,
-    // generate a unique world with AI before opening the transaction
+    // If the user hasn't provided a custom world seed, generate a unique
+    // world with AI before opening the transaction — for a known template
+    // (genre hint from its id) or an equally custom universe (genre hint
+    // from the free-text universe description). Only a fully blank/default
+    // "Original" universe with no template falls through to nothing.
     let resolvedWorldSeed = initialWorldSeed || ''
     let generatedFactions: NonNullable<Awaited<ReturnType<typeof generateWorldFromTemplate>>>['factions'] | undefined
     let generatedCapabilities: GeneratedCapability[] | undefined
+    let generatedStatLabels: GeneratedStatLabels | undefined
 
-    if (template && !initialWorldSeed) {
-      console.log('🌍 Generating unique world from template...')
-      const generated = await generateWorldFromTemplate(template.id, title, description || '')
+    if (!initialWorldSeed) {
+      console.log('🌍 Generating unique world...')
+      const generated = await generateWorldFromTemplate(
+        template?.id || null,
+        title,
+        description || '',
+        template ? undefined : resolvedUniverse
+      )
       if (generated) {
         resolvedWorldSeed = generated.worldSeed
         generatedFactions = generated.factions
         generatedCapabilities = generated.capabilities
+        generatedStatLabels = generated.statLabels
         console.log(`✅ World generated: ${generated.factions.length} unique factions`)
       } else {
-        // AI failed — fall back to template defaults
-        resolvedWorldSeed = template.initialWorldSeed
-        console.log('⚠️ World generation failed, using template defaults')
+        // AI failed — fall back to template defaults (or blank for custom)
+        resolvedWorldSeed = template?.initialWorldSeed || ''
+        console.log('⚠️ World generation failed, using fallback defaults')
       }
-    } else if (!resolvedWorldSeed) {
-      resolvedWorldSeed = template?.initialWorldSeed || ''
     }
 
     // Create campaign, world meta, membership, and template data in one transaction
@@ -118,7 +126,8 @@ export async function POST(request: NextRequest) {
           description,
           universe: resolvedUniverse,
           aiSystemPrompt: resolvedSystemPrompt,
-          initialWorldSeed: resolvedWorldSeed
+          initialWorldSeed: resolvedWorldSeed,
+          statLabels: (generatedStatLabels as object | undefined) || undefined
         }
       })
 

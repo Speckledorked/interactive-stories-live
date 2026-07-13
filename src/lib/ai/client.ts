@@ -985,6 +985,19 @@ ${player_actions.map(a => {
    • Create timeline events for significant outcomes
    • Track all character changes (equipment, inventory, resources)
 
+3. scene_text AND world_updates MUST MATCH — never narrate a state change
+   without also recording it, or vice versa:
+   • If scene_text says a character was hit, wounded, or took a blow →
+     pc_changes for that character needs harm_damage matching the severity
+     (a graze is 1, a solid hit 2-3, something brutal or from a real
+     threat higher). A MISS's "hard GM move" doesn't have to be harm, but
+     if you narrate one, the harm_damage MUST be there — don't describe an
+     injury that isn't on the sheet.
+   • If scene_text puts a character somewhere new — even just another
+     room, not only a new city — pc_changes.location must be set to
+     match. Re-read your own scene_text before finalizing world_updates
+     and check every PC's outcome against what you wrote.
+
 CRITICAL REMINDERS:
 ❌ NO flowery descriptions or atmospheric writing
 ❌ NO player character dialogue unless quoting their exact submitted action

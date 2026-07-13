@@ -28,12 +28,23 @@ export interface GeneratedCapability {
   isSecret: boolean // hidden even from natives until the fiction reveals it
 }
 
+// Fiction-flavored display name for one of the 5 fixed PbtA stat keys.
+// The key itself (cool/hard/hot/sharp/weird) and its numeric meaning never
+// change — this only changes what players see it called.
+export interface GeneratedStatLabel {
+  label: string
+  description: string
+}
+
+export type GeneratedStatLabels = Record<'cool' | 'hard' | 'hot' | 'sharp' | 'weird', GeneratedStatLabel>
+
 interface GeneratedWorld {
   worldSeed: string
   factions: GeneratedFaction[]
   // The universe's latent capability scaffold — what CAN be learned here.
   // Characters discover it through the fiction (see lib/game/capabilities.ts).
   capabilities: GeneratedCapability[]
+  statLabels?: GeneratedStatLabels
 }
 
 const GENRE_HINTS: Record<string, string> = {
@@ -43,18 +54,24 @@ const GENRE_HINTS: Record<string, string> = {
 }
 
 /**
- * Generate a unique world seed and faction set for a new campaign.
- * Falls back to null on failure — caller uses template defaults instead.
+ * Generate a unique world seed, faction set, capability scaffold, and
+ * fiction-flavored stat labels for a new campaign. Works for both a known
+ * template (templateId looks up a genre hint) and a fully custom universe
+ * (pass the campaign's free-text universe description as customUniverse —
+ * used as the genre hint instead). Falls back to null on failure — caller
+ * uses template/generic defaults instead.
  */
 export async function generateWorldFromTemplate(
-  templateId: string,
+  templateId: string | null,
   campaignTitle: string,
-  campaignDescription: string
+  campaignDescription: string,
+  customUniverse?: string
 ): Promise<GeneratedWorld | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return null
 
-  const genreHint = GENRE_HINTS[templateId] || 'Genre: original fictional world.'
+  const genreHint = (templateId && GENRE_HINTS[templateId])
+    || (customUniverse ? `Genre: ${customUniverse}` : 'Genre: original fictional world.')
 
   const prompt = `You are creating a unique campaign world for a tabletop RPG.
 
@@ -85,7 +102,14 @@ Return JSON with this structure:
         { "name": "A specific learnable ability/art within the domain", "description": "1 sentence", "tier": 1, "is_secret": false }
       ]
     }
-  ]
+  ],
+  "stat_labels": {
+    "cool": { "label": "This world's name for keeping your head under pressure", "description": "1 short phrase" },
+    "hard": { "label": "This world's name for aggressive, forceful capability", "description": "1 short phrase" },
+    "hot": { "label": "This world's name for charm, presence, and social power", "description": "1 short phrase" },
+    "sharp": { "label": "This world's name for perception, wit, and intellect", "description": "1 short phrase" },
+    "weird": { "label": "This world's name for connection to the strange/supernatural/exotic", "description": "1 short phrase" }
+  }
 }
 
 Rules:
@@ -96,6 +120,7 @@ Rules:
 - current_plan: 1-2 sentences, specific and active (e.g. "Bribing city guards to look the other way while they move contraband through the docks")
 - Do NOT reuse names from generic fantasy/superhero tropes (no "The Dark Brotherhood", "League of Shadows", etc.)
 - capability_domains: 3-5 domains, the learnable SYSTEMS of this world (its magic/powers/martial/social arts). 2-4 capabilities per domain. tier 1 = what any practitioner starts with, tier 2-3 = deeper arts. Mark 1-2 capabilities is_secret: true (forbidden or lost arts nobody openly knows)
+- stat_labels: rename all 5 stats to fit this world's own vocabulary (e.g. a cultivation setting might call "weird" something like "Essence Sense"; a hard sci-fi setting might not use mystical language at all). Keep each label 1-3 words, in-fiction, never the literal PbtA name. The underlying meaning (what each stat measures) must stay the same — only the name and flavor change
 - Make it feel like it belongs specifically to "${campaignTitle}"`
 
   try {
@@ -165,8 +190,26 @@ Rules:
       }
     }
 
+    // Stat labels are optional — an older-style response or a partial one
+    // still produces a valid world; missing/malformed keys fall back to the
+    // generic PBTA_STATS label for that stat (see lib/pbta-moves.ts).
+    const STAT_KEYS = ['cool', 'hard', 'hot', 'sharp', 'weird'] as const
+    let statLabels: GeneratedStatLabels | undefined
+    if (raw.stat_labels && typeof raw.stat_labels === 'object') {
+      const built: Partial<GeneratedStatLabels> = {}
+      for (const key of STAT_KEYS) {
+        const entry = raw.stat_labels[key]
+        if (entry?.label) {
+          built[key] = { label: String(entry.label), description: String(entry.description || '') }
+        }
+      }
+      if (Object.keys(built).length > 0) {
+        statLabels = built as GeneratedStatLabels
+      }
+    }
+
     console.log(`✅ Generated unique world: ${factions.length} factions, ${capabilities.length} capabilities`)
-    return { worldSeed: String(raw.world_seed), factions, capabilities }
+    return { worldSeed: String(raw.world_seed), factions, capabilities, statLabels }
 
   } catch (err) {
     console.error('World generation failed, using template defaults:', err)

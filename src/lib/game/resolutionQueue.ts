@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma'
 import { ResolutionJobStatus } from '@prisma/client'
 import { getJwtSecret } from '@/lib/auth'
 import { reportError } from '@/lib/monitoring'
+import { chargeForSceneResolution, BillingResult } from './resolutionBilling'
 
 export const MAX_ATTEMPTS = 3
 // A RUNNING job older than this is presumed dead (resolveScene's own
@@ -44,13 +45,26 @@ export function internalJobSecret(): string {
 export interface EnqueueResult {
   jobId: string
   deduped: boolean
+  // Present only when a charge was attempted (i.e. a genuinely new job
+  // was about to be created). Absent on dedupe — a resolution already
+  // in flight was already billed once when IT was created.
+  billing?: BillingResult
 }
 
 /**
- * Create (or reuse) the resolution job for a scene and kick the worker.
- * One live job per scene: if a PENDING/RUNNING job already exists, this
- * is a no-op returning it — double-submits and racing players collapse
- * onto the same job.
+ * Create (or reuse) the resolution job for a scene, billing the players
+ * it serves, and kick the worker. One live job per scene: if a
+ * PENDING/RUNNING job already exists, this is a no-op returning it —
+ * double-submits and racing players collapse onto the same job and are
+ * not charged again.
+ *
+ * Billing runs here — the one call site both the auto-resolve paths
+ * (scene/route.ts) and the admin manual-resolve route funnel through —
+ * so "pay per scene resolution" applies uniformly regardless of what
+ * triggered it. See resolutionBilling.ts. A failed charge (insufficient
+ * balance) stops here: no job is created, nothing is billed, and the
+ * caller is expected to surface `billing.details` to whoever triggered
+ * the resolution.
  */
 export async function enqueueSceneResolution(
   campaignId: string,
@@ -64,11 +78,16 @@ export async function enqueueSceneResolution(
     return { jobId: existing.id, deduped: true }
   }
 
+  const billing = await chargeForSceneResolution(campaignId, sceneId)
+  if (!billing.ok) {
+    return { jobId: '', deduped: false, billing }
+  }
+
   const job = await prisma.resolutionJob.create({
     data: { campaignId, sceneId },
   })
   await kickJob(job.id)
-  return { jobId: job.id, deduped: false }
+  return { jobId: job.id, deduped: false, billing }
 }
 
 /**

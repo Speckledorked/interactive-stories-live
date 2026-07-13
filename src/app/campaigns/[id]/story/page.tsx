@@ -339,8 +339,14 @@ export default function StoryPage() {
       if (!response.ok) {
         const data = await response.json()
         if (response.status === 402) {
-          setInsufficientFundsDetails(data.details || 'You need to add funds to submit actions.')
+          // The action itself was saved — only the scene's resolution
+          // (billed per resolution, not per action) is blocked until
+          // someone tops up. Clear the input and refresh so the saved
+          // action shows up alongside the funds prompt.
+          setInsufficientFundsDetails(data.details || 'This scene is ready to resolve, but a participant needs to add funds first.')
           setShowInsufficientFunds(true)
+          setActionText(prev => ({ ...prev, [sceneId]: '' }))
+          await loadData()
           return
         }
         throw new Error(data.error || 'Failed to submit action')

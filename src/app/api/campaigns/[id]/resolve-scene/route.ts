@@ -8,20 +8,13 @@ import { ErrorResponse } from '@/types/api'
 import { getCurrentScene } from '@/lib/game/sceneResolver'
 import { enqueueSceneResolution } from '@/lib/game/resolutionQueue'
 import { prisma } from '@/lib/prisma'
-import { checkBalance, deductFunds, formatCurrency } from '@/lib/payment/service'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 
-// This route only validates, charges, and enqueues now — the long AI
-// pipeline runs in /api/internal/resolve-job (maxDuration 300). 60s is
-// ample headroom for the payment transaction fan-out.
+// This route only validates and enqueues now — billing happens inside
+// enqueueSceneResolution (see lib/game/resolutionBilling.ts), the one
+// call site shared with auto-resolve, and the long AI pipeline runs in
+// /api/internal/resolve-job (maxDuration 300).
 export const maxDuration = 60
-
-// Per-player cost in cents based on number of players in the scene
-function getSceneCostPerPlayer(playerCount: number): number {
-  if (playerCount <= 1) return 25  // $0.25 solo
-  if (playerCount <= 4) return 50  // $0.50 small group
-  return 75                         // $0.75 large group
-}
 
 export async function POST(
   request: NextRequest,
@@ -121,58 +114,22 @@ export async function POST(
       `📝 Scene ${currentScene.sceneNumber} has ${sceneActions.length} action(s)`
     )
 
-    // 3. Charge each participating player based on group size
-    const participants = (currentScene.participants as any) || {}
-    const participantUserIds: string[] = participants.userIds || []
-    const playerCount = participantUserIds.length
-    const costPerPlayer = getSceneCostPerPlayer(playerCount)
+    // 3. Enqueue the resolution — billing (see resolutionBilling.ts) and
+    // the AI GM + world turn all run behind this one call, in the
+    // internal worker route's own invocation. The UI follows the
+    // scene:resolving / scene:resolved Pusher events; players were
+    // already watching those, not this response body.
+    console.log('🤖 Enqueueing scene resolution...')
+    const { jobId, deduped, billing } = await enqueueSceneResolution(campaignId, currentScene.id)
 
-    console.log(`💰 Charging ${playerCount} player(s) ${formatCurrency(costPerPlayer)} each`)
-
-    // Check all participants have sufficient balance before charging anyone
-    const participantUsers = await prisma.user.findMany({
-      where: { id: { in: participantUserIds } },
-      select: { id: true, name: true, email: true }
-    })
-
-    const balanceChecks = await Promise.all(
-      participantUserIds.map(async uid => {
-        const check = await checkBalance(uid, costPerPlayer)
-        const userInfo = participantUsers.find(u => u.id === uid)
-        return { ...check, uid, displayName: userInfo?.name || userInfo?.email || uid }
-      })
-    )
-
-    const skint = balanceChecks.filter(b => !b.sufficient)
-    if (skint.length > 0) {
-      const names = skint.map(b => `${b.displayName} (has ${formatCurrency(b.currentBalance)}, needs ${formatCurrency(costPerPlayer)})`).join(', ')
+    if (billing && !billing.ok) {
       return NextResponse.json<ErrorResponse>(
-        {
-          error: 'Insufficient balance',
-          details: `Cannot resolve: ${names}. Ask them to add funds before retrying.`
-        },
+        { error: billing.error || 'Insufficient balance', details: billing.details },
         { status: 402 }
       )
     }
 
-    // Deduct from each participant
-    for (const uid of participantUserIds) {
-      await deductFunds(
-        uid,
-        costPerPlayer,
-        `Scene #${currentScene.sceneNumber} resolution (${playerCount} player${playerCount !== 1 ? 's' : ''})`,
-        { sceneId: currentScene.id, campaignId }
-      )
-    }
-
-    // 5. Enqueue the resolution (AI GM + world turn run in the internal
-    // worker route's own invocation — see lib/game/resolutionQueue.ts).
-    // The UI follows the scene:resolving / scene:resolved Pusher events;
-    // players were already watching those, not this response body.
-    console.log('🤖 Enqueueing scene resolution...')
-    const { jobId, deduped } = await enqueueSceneResolution(campaignId, currentScene.id)
-
-    // 6. Return accepted — resolution completes asynchronously
+    // 4. Return accepted — resolution completes asynchronously
     return NextResponse.json({
       success: true,
       message: deduped

@@ -23,10 +23,14 @@ vi.mock('../sceneResolver', () => ({
 vi.mock('../worldTurn', () => ({
   runWorldTurn: vi.fn(),
 }))
+vi.mock('../resolutionBilling', () => ({
+  chargeForSceneResolution: vi.fn(),
+}))
 
 import { prisma } from '@/lib/prisma'
 import { resolveScene } from '../sceneResolver'
 import { runWorldTurn } from '../worldTurn'
+import { chargeForSceneResolution } from '../resolutionBilling'
 import {
   enqueueSceneResolution,
   processResolutionJob,
@@ -42,25 +46,45 @@ beforeEach(() => {
   vi.clearAllMocks()
   // kickJob's fetch: pretend delivery succeeds instantly.
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+  // Billing succeeds by default — individual tests override for the
+  // insufficient-balance path.
+  ;(chargeForSceneResolution as any).mockResolvedValue({ ok: true, playerCount: 1, costPerPlayer: 25 })
 })
 
 describe('enqueueSceneResolution', () => {
-  it('dedupes onto an existing live job', async () => {
+  it('dedupes onto an existing live job without billing again', async () => {
     db.resolutionJob.findFirst.mockResolvedValue({ id: 'job1' })
     const result = await enqueueSceneResolution('camp1', 'scene1')
     expect(result).toEqual({ jobId: 'job1', deduped: true })
     expect(db.resolutionJob.create).not.toHaveBeenCalled()
+    expect(chargeForSceneResolution).not.toHaveBeenCalled()
   })
 
-  it('creates and kicks a new job when none is live', async () => {
+  it('bills once and creates/kicks a new job when none is live', async () => {
     db.resolutionJob.findFirst.mockResolvedValue(null)
     db.resolutionJob.create.mockResolvedValue({ id: 'job2' })
     const result = await enqueueSceneResolution('camp1', 'scene1')
-    expect(result).toEqual({ jobId: 'job2', deduped: false })
+    expect(chargeForSceneResolution).toHaveBeenCalledWith('camp1', 'scene1')
+    expect(result).toEqual({
+      jobId: 'job2', deduped: false,
+      billing: { ok: true, playerCount: 1, costPerPlayer: 25 },
+    })
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/internal/resolve-job'),
       expect.objectContaining({ method: 'POST' })
     )
+  })
+
+  it('does not create a job when billing fails (insufficient balance)', async () => {
+    db.resolutionJob.findFirst.mockResolvedValue(null)
+    ;(chargeForSceneResolution as any).mockResolvedValue({
+      ok: false, error: 'Insufficient balance', details: 'Ask them to add funds.',
+    })
+    const result = await enqueueSceneResolution('camp1', 'scene1')
+    expect(db.resolutionJob.create).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(result.deduped).toBe(false)
+    expect(result.billing?.ok).toBe(false)
   })
 })
 

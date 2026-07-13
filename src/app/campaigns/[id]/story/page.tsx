@@ -573,7 +573,11 @@ export default function StoryPage() {
 
   // Helper to check if user has already submitted action in the current exchange
   const hasUserSubmitted = (scene: any) => {
-    const currentExchange = scene.currentExchange || 1
+    // currentExchange is 0 on a scene's first-ever exchange — `|| 1` here
+    // would coerce that real 0 into 1 and could wrongly match a stale
+    // action, permanently showing "already submitted" (see the matching
+    // fix in exchange-manager.ts).
+    const currentExchange = scene.currentExchange ?? 0
     return scene.playerActions?.some((action: any) =>
       action.userId === user?.id &&
       action.characterId === selectedCharacterId &&
@@ -898,7 +902,7 @@ export default function StoryPage() {
                               🎲 GM Controls
                             </p>
                             <p className="text-ember-300/60 text-xs mb-2">
-                              {(scene.playerActions || []).length} action(s) submitted. Current exchange: {scene.currentExchange || 1}
+                              {(scene.playerActions || []).length} action(s) submitted. Current exchange: {scene.currentExchange ?? 0}
                             </p>
                             {hasDefinedParticipants ? (
                               allParticipantsSubmitted ? (

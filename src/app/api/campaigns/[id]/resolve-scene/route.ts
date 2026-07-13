@@ -10,9 +10,9 @@ import { enqueueSceneResolution } from '@/lib/game/resolutionQueue'
 import { prisma } from '@/lib/prisma'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 
-// This route only validates and enqueues now — billing happens inside
-// enqueueSceneResolution (see lib/game/resolutionBilling.ts), the one
-// call site shared with auto-resolve, and the long AI pipeline runs in
+// This route only validates and enqueues — free, like every other
+// mid-scene resolution. Billing happens exactly once, when the scene
+// actually ends (see end-scene/route.ts). The long AI pipeline runs in
 // /api/internal/resolve-job (maxDuration 300).
 export const maxDuration = 60
 
@@ -114,20 +114,12 @@ export async function POST(
       `📝 Scene ${currentScene.sceneNumber} has ${sceneActions.length} action(s)`
     )
 
-    // 3. Enqueue the resolution — billing (see resolutionBilling.ts) and
-    // the AI GM + world turn all run behind this one call, in the
-    // internal worker route's own invocation. The UI follows the
-    // scene:resolving / scene:resolved Pusher events; players were
-    // already watching those, not this response body.
+    // 3. Enqueue the resolution — the AI GM + world turn run behind this
+    // one call, in the internal worker route's own invocation. The UI
+    // follows the scene:resolving / scene:resolved Pusher events; players
+    // were already watching those, not this response body.
     console.log('🤖 Enqueueing scene resolution...')
-    const { jobId, deduped, billing } = await enqueueSceneResolution(campaignId, currentScene.id)
-
-    if (billing && !billing.ok) {
-      return NextResponse.json<ErrorResponse>(
-        { error: billing.error || 'Insufficient balance', details: billing.details },
-        { status: 402 }
-      )
-    }
+    const { jobId, deduped } = await enqueueSceneResolution(campaignId, currentScene.id)
 
     // 4. Return accepted — resolution completes asynchronously
     return NextResponse.json({

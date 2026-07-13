@@ -1,12 +1,9 @@
 // src/lib/game/resolutionBilling.ts
-// Per-scene-resolution billing: who pays, how much, and enforcement.
-// Called from exactly one place — enqueueSceneResolution() — so it
-// applies uniformly no matter what triggers a resolution: the last
-// participant's action auto-resolving a closed scene, an open scene
-// resolving immediately after a single action, or an admin's manual
-// "Resolve Now". Previously this only ran inside the admin manual-resolve
-// route, which meant the normal, automatic way almost everyone actually
-// plays — auto-resolve — never charged anyone.
+// Per-scene billing: who pays, how much, and enforcement. Called from
+// exactly one place — end-scene/route.ts, when a scene actually
+// concludes — so a scene is billed once, covering however many
+// mid-scene exchanges (each action's free AI narration) happened along
+// the way, split across whoever took part in it.
 
 import { prisma } from '@/lib/prisma'
 import { checkBalance, deductFunds, formatCurrency } from '@/lib/payment/service'
@@ -27,14 +24,13 @@ export interface BillingResult {
 }
 
 /**
- * Charge everyone who benefits from resolving this scene's current
- * exchange. Closed scenes (predefined participants) bill every
- * participant, matching the original manual-resolve behavior. Open
- * scenes have no participant list to bill against, so they bill the
- * distinct players who actually submitted an action this exchange —
- * there's no other definition of "who used this resolution." (The old
- * manual-resolve route silently charged nobody for open scenes, since it
- * only ever iterated `participants.userIds`, which is empty for them.)
+ * Charge everyone who took part in this scene, once, as it concludes.
+ * `scene.participants.userIds` accumulates every player who submitted an
+ * action anywhere in the scene's lifetime (see scene/route.ts), so this
+ * covers the whole scene regardless of how many exchanges it went
+ * through. Falls back to the distinct actors in the scene's current
+ * exchange only for the edge case where participants was never
+ * populated (e.g. a scene ended with no actions ever recorded there).
  */
 export async function chargeForSceneResolution(
   campaignId: string,

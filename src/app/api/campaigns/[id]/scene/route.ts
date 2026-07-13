@@ -312,21 +312,11 @@ export async function POST(
         // AI pipeline runs in the internal worker route's own invocation
         // (maxDuration 300) instead of inside this player's request; the
         // UI follows the existing scene:resolving / scene:resolved /
-        // scene:resolution-failed Pusher events exactly as before.
+        // scene:resolution-failed Pusher events exactly as before. Free —
+        // billing only happens once, when the scene actually ends.
         try {
           const { enqueueSceneResolution } = await import('@/lib/game/resolutionQueue')
-          const { billing } = await enqueueSceneResolution(campaignId, sceneId)
-          if (billing && !billing.ok) {
-            // The action itself is already saved — only resolution is
-            // blocked. Surface it as 402 so the submitter's UI can show
-            // the insufficient-funds prompt; the scene just stays
-            // AWAITING_ACTIONS until someone adds funds and re-triggers
-            // resolution (another action, or the admin's Resolve button).
-            return NextResponse.json(
-              { action, error: billing.error || 'Insufficient balance', details: billing.details },
-              { status: 402 }
-            )
-          }
+          await enqueueSceneResolution(campaignId, sceneId)
         } catch (error) {
           console.error(`❌ Failed to enqueue resolution for scene ${scene.sceneNumber}:`, error)
           // Don't fail this response — the action itself already saved.
@@ -348,18 +338,11 @@ export async function POST(
       // Async resolution — see the participant branch above. The old
       // 2-minute inline timeout/revert dance is gone: job bookkeeping and
       // resolveScene's own status-revert handle every failure mode, and
-      // stale jobs are recovered by scene GET traffic.
+      // stale jobs are recovered by scene GET traffic. Free — billing
+      // only happens once, when the scene actually ends.
       try {
         const { enqueueSceneResolution } = await import('@/lib/game/resolutionQueue')
-        const { billing } = await enqueueSceneResolution(campaignId, sceneId)
-        if (billing && !billing.ok) {
-          // Same rescue path as the closed-scene branch above: action
-          // saved, resolution blocked on funds.
-          return NextResponse.json(
-            { action, error: billing.error || 'Insufficient balance', details: billing.details },
-            { status: 402 }
-          )
-        }
+        await enqueueSceneResolution(campaignId, sceneId)
       } catch (error) {
         console.error(`❌ Failed to enqueue resolution for scene ${scene.sceneNumber}:`, error)
         // Don't fail this response — the action itself already saved.

@@ -78,6 +78,27 @@ export async function GET(
       orderBy: { sceneNumber: 'desc' }
     })
 
+    // Opportunistic reconciliation of a historical bug: actions orphaned
+    // by an exchangeNumber/currentExchange divergence that could occur
+    // on a scene's first exchange (see exchange-manager.ts's
+    // reconcileOrphanedActions) could look permanently "already
+    // submitted" to the player. Swept actions are filtered out of this
+    // response too, so the fix is visible without a second reload.
+    for (const scene of activeScenes) {
+      if (scene.playerActions.length === 0) continue
+      try {
+        const { ExchangeManager } = await import('@/lib/game/exchange-manager')
+        const swept = await new ExchangeManager(campaignId, scene.id).reconcileOrphanedActions()
+        if (swept.length > 0) {
+          console.warn(`🔧 Reconciled ${swept.length} orphaned action(s) on scene ${scene.sceneNumber}`)
+          const sweptIds = new Set(swept)
+          scene.playerActions = scene.playerActions.filter(a => !sweptIds.has(a.id))
+        }
+      } catch (reconcileError) {
+        console.error('Orphaned action reconciliation failed (non-critical):', reconcileError)
+      }
+    }
+
     // For backwards compatibility, also return the first scene as "scene"
     const currentScene = activeScenes.length > 0 ? activeScenes[0] : null
 

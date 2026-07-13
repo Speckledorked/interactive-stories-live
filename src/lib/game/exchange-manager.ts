@@ -102,7 +102,16 @@ export class ExchangeManager {
 
     const currentState = (scene.exchangeState as any as ExchangeState) || {
       playersActed: [],
-      exchangeNumber: scene.currentExchange || 1,
+      // currentExchange is a non-nullable Int (@default(0)) — `|| 1` here
+      // used to treat a real, legitimate 0 (a scene's first-ever exchange)
+      // as falsy and jump to 1, diverging this action's exchangeNumber
+      // from the scene's actual currentExchange counter (which
+      // completeExchange/initializeExchange read directly, uncoerced).
+      // That left the action stuck 'pending' forever — completeExchange's
+      // cleanup filter never matched it — which looked to the player
+      // like the game refusing new actions after a resolution. `?? 0`
+      // preserves a real 0.
+      exchangeNumber: scene.currentExchange ?? 0,
       isComplete: false,
       complexity: 'simple',
       actionsThisExchange: 0,
@@ -206,6 +215,45 @@ export class ExchangeManager {
   }
 
   /**
+   * Self-heal for the historical exchangeNumber/currentExchange
+   * divergence bug (see recordAction's comment): sweeps pending actions
+   * left orphaned by it, so a scene corrupted before the fix shipped
+   * doesn't stay permanently stuck showing "already submitted."
+   *
+   * Safety: a genuinely in-flight pending action's owner is always
+   * present in the scene's live exchangeState.playersActed —
+   * recordAction adds it synchronously at submission time. So anything
+   * pending whose owner is missing from that list is either (a) a stale
+   * leftover from an already-resolved exchange that never got swept
+   * (the bug), or (b) a same-exchange action whose recordAction call
+   * failed transiently and hasn't been narrated yet. Only (a) is safe to
+   * sweep, so this is gated on the scene having resolved at least once
+   * — before any resolution, playersActed only ever reflects the one
+   * exchange still being collected, and sweeping there could silently
+   * drop a real, not-yet-resolved action.
+   */
+  async reconcileOrphanedActions(): Promise<string[]> {
+    const scene = await prisma.scene.findUnique({
+      where: { id: this.sceneId },
+      include: { playerActions: { where: { status: 'pending' } } }
+    })
+    if (!scene || !scene.sceneResolutionText || scene.playerActions.length === 0) {
+      return []
+    }
+
+    const exchangeState = scene.exchangeState as any as ExchangeState | null
+    const playersActed = new Set(exchangeState?.playersActed || [])
+    const orphaned = scene.playerActions.filter(a => !playersActed.has(a.characterId))
+    if (orphaned.length === 0) return []
+
+    await prisma.playerAction.updateMany({
+      where: { id: { in: orphaned.map(a => a.id) } },
+      data: { status: 'resolved' }
+    })
+    return orphaned.map(a => a.id)
+  }
+
+  /**
    * Complete the current exchange and prepare for next one
    */
   async completeExchange(): Promise<void> {
@@ -219,7 +267,9 @@ export class ExchangeManager {
 
     const currentState = (scene.exchangeState as any as ExchangeState) || {
       playersActed: [],
-      exchangeNumber: scene.currentExchange || 1,
+      // See the comment in recordAction() — `?? 0` (not `|| 1`) to
+      // preserve a legitimate exchange 0.
+      exchangeNumber: scene.currentExchange ?? 0,
       isComplete: false,
       complexity: 'simple',
       actionsThisExchange: 0,
@@ -371,7 +421,9 @@ export class ExchangeManager {
 
     const currentState = (scene.exchangeState as any as ExchangeState) || {
       playersActed: [],
-      exchangeNumber: scene.currentExchange || 1,
+      // See the comment in recordAction() — `?? 0` (not `|| 1`) to
+      // preserve a legitimate exchange 0.
+      exchangeNumber: scene.currentExchange ?? 0,
       isComplete: false,
       complexity: 'simple',
       actionsThisExchange: 0,

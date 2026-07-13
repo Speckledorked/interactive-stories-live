@@ -3,10 +3,18 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { PBTA_STATS } from '@/lib/pbta-moves'
+
+// The final tab's submit button sits at the exact same screen position as
+// every other tab's "Next →" button. Tapping through tabs quickly, a tap
+// aimed at "Next" on the second-to-last tab lands on "Create Character"
+// the instant the last tab renders — submitting before the Debts &
+// Enemies tab is even visible to read or use. This grace period keeps the
+// submit button disabled just long enough for a reflexive tap to miss.
+const SUBMIT_GRACE_PERIOD_MS = 500
 
 interface StatLabel {
   label: string
@@ -36,6 +44,17 @@ export default function EnhancedCreateCharacterForm({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState<TabKey>('basics')
+  const [submitReady, setSubmitReady] = useState(false)
+
+  useEffect(() => {
+    if (activeTab !== 'consequences') {
+      setSubmitReady(false)
+      return
+    }
+    setSubmitReady(false)
+    const timer = setTimeout(() => setSubmitReady(true), SUBMIT_GRACE_PERIOD_MS)
+    return () => clearTimeout(timer)
+  }, [activeTab])
 
   const [formData, setFormData] = useState({
     // Basic Info
@@ -944,7 +963,7 @@ export default function EnhancedCreateCharacterForm({
           ) : (
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !submitReady}
               className="btn-primary disabled:opacity-50"
             >
               {isSubmitting ? 'Creating Character...' : 'Create Character'}

@@ -85,4 +85,28 @@ describe('generateWorldFromTemplate', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
     expect(await generateWorldFromTemplate('pbta-fantasy', 'Title', '')).toBeNull()
   })
+
+  it('still generates factions/capabilities/stat labels when the GM already wrote a world seed', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    const fetchSpy = mockCompletion({
+      world_seed: 'echoed back, unused',
+      factions: [{ name: 'The Sundered Choir', description: 'x', goals: 'y', current_plan: 'z' }],
+      capability_domains: [
+        { domain: 'Essence Magic', capabilities: [{ name: 'Essence Sensing', description: 'x', tier: 1, is_secret: false }] },
+      ],
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const result = await generateWorldFromTemplate(
+      null, 'The Sundered Veil', 'desc', 'He Who Fights With Monsters',
+      'Helios wakes in an alley with no memory of how he got his essence.'
+    )
+
+    expect(result).not.toBeNull()
+    expect(result?.factions).toHaveLength(1)
+    expect(result?.capabilities).toHaveLength(1)
+    const body = JSON.parse((fetchSpy.mock.calls[0][1] as any).body)
+    expect(body.messages[1].content).toContain('Helios wakes in an alley')
+    expect(body.messages[1].content).toContain('treat it as canon')
+  })
 })

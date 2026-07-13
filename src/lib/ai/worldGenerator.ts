@@ -54,18 +54,25 @@ const GENRE_HINTS: Record<string, string> = {
 }
 
 /**
- * Generate a unique world seed, faction set, capability scaffold, and
- * fiction-flavored stat labels for a new campaign. Works for both a known
- * template (templateId looks up a genre hint) and a fully custom universe
- * (pass the campaign's free-text universe description as customUniverse —
- * used as the genre hint instead). Falls back to null on failure — caller
- * uses template/generic defaults instead.
+ * Generate a faction set, capability scaffold, fiction-flavored stat
+ * labels, and (only when the caller doesn't already have one) a world
+ * seed for a new campaign. Works for both a known template (templateId
+ * looks up a genre hint) and a fully custom universe (pass the campaign's
+ * free-text universe description as customUniverse — used as the genre
+ * hint instead). Falls back to null on failure — caller uses
+ * template/generic defaults instead.
+ *
+ * existingWorldSeed: pass the user's own hand-written world seed, if they
+ * gave one — the AI still generates factions/capabilities/stat labels
+ * grounded in it, it just doesn't invent a competing world_seed of its
+ * own (the caller discards that field when this is set).
  */
 export async function generateWorldFromTemplate(
   templateId: string | null,
   campaignTitle: string,
   campaignDescription: string,
-  customUniverse?: string
+  customUniverse?: string,
+  existingWorldSeed?: string
 ): Promise<GeneratedWorld | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return null
@@ -78,12 +85,13 @@ export async function generateWorldFromTemplate(
 Genre: ${genreHint}
 Campaign title: "${campaignTitle}"
 ${campaignDescription ? `Campaign description: "${campaignDescription}"` : ''}
+${existingWorldSeed ? `The GM already wrote this opening situation — treat it as canon and ground everything you generate in it (don't contradict it, don't invent a competing one):\n"${existingWorldSeed}"` : ''}
 
-Generate a fresh, specific starting world for this exact campaign. Use the title and description as inspiration — the world should feel tailored to them, not generic.
+Generate a fresh, specific starting world for this exact campaign. Use the title, description${existingWorldSeed ? ', and opening situation' : ''} as inspiration — the world should feel tailored to them, not generic.
 
 Return JSON with this structure:
 {
-  "world_seed": "2-3 paragraphs. A specific opening situation already in motion — not 'adventure awaits' but something concrete happening right now. Name real places, factions, and tensions specific to this campaign.",
+  "world_seed": "${existingWorldSeed ? "Restate the GM's own opening situation above, verbatim or near-verbatim — this field is discarded by the caller either way, so just echo it back." : "2-3 paragraphs. A specific opening situation already in motion — not 'adventure awaits' but something concrete happening right now. Name real places, factions, and tensions specific to this campaign."}",
   "factions": [
     {
       "name": "Unique faction name",

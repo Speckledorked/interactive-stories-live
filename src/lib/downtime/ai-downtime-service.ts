@@ -634,20 +634,89 @@ Based on the player's original intent and what happened during the activity, gen
   }
 
   // Get suggestions based on character and campaign context
-  static async getPersonalizedSuggestions(characterId: string, campaignContext?: any) {
-    const suggestions = [
-      "Investigate the mysterious artifact we found last session",
-      "Visit the local library to research our current quest",
-      "Practice your combat skills with the city guards",
-      "Start a business selling items you can craft",
-      "Build relationships with important NPCs we've met",
-      "Explore areas of the city we haven't visited yet",
-      "Learn a new language or skill that might be useful",
-      "Help local citizens with their problems for reputation",
-      "Research our enemies to find their weaknesses",
-      "Create a base of operations for the party"
+  static async getPersonalizedSuggestions(characterId: string, campaignContext?: any): Promise<string[]> {
+    const FALLBACK = [
+      'Investigate the mysterious artifact we found last session',
+      'Visit the local library to research our current quest',
+      'Practice your combat skills with the city guards',
+      'Build relationships with important NPCs we\'ve met',
+      'Explore areas of the city we haven\'t visited yet',
     ]
 
-    return suggestions.slice(0, 5) // Return 5 suggestions
+    try {
+      const character = await prisma.character.findUnique({
+        where: { id: characterId },
+        include: {
+          campaign: true,
+          capabilities: { include: { capability: true } },
+        },
+      })
+      if (!character) return FALLBACK
+
+      const resources = (character.resources as any) || {}
+      const gold = resources.gold || 0
+
+      const { summarizeCapabilities } = await import('@/lib/game/capabilities')
+      const capabilitySummary = summarizeCapabilities(character.capabilities as any)
+      const knownAbilities = capabilitySummary.known.map(k => `${k.name} (${k.band})`).join(', ') || 'None discovered yet'
+
+      const lastScene = await prisma.scene.findFirst({
+        where: { campaignId: character.campaignId, sceneResolutionText: { not: null } },
+        orderBy: { sceneNumber: 'desc' },
+        select: { sceneResolutionText: true },
+      })
+
+      const prompt = `As an AI Game Master, suggest 5 downtime activities specific to this character. Not generic RPG filler — things that follow from who they are and what's actually happened in their story.
+
+Character:
+- Name: ${character.name}
+- Concept: ${character.description || 'Unknown'}
+- Backstory: ${character.backstory || 'Unknown'}
+- Personality: ${character.personality || 'Unknown'}
+- Goals: ${character.goals || 'Unknown'}
+- Current location: ${character.currentLocation || campaignContext?.currentLocation || 'Unknown'}
+- Known abilities: ${knownAbilities}
+- Gold available: ${gold}
+
+Campaign:
+- Setting: ${character.campaign.universe || character.campaign.description?.slice(0, 150) || 'Original setting'}
+${lastScene?.sceneResolutionText ? `- What just happened: ${lastScene.sceneResolutionText.slice(0, 500)}` : ''}
+${campaignContext?.recentEvents ? `- Recent events: ${campaignContext.recentEvents}` : ''}
+
+Return JSON: { "suggestions": ["activity 1", "activity 2", "activity 3", "activity 4", "activity 5"] }
+
+Each suggestion:
+- Written as something the PLAYER would type ("I ...")
+- Follows from this specific character's backstory, goals, location, or what just happened — not a generic RPG downtime list
+- One concrete sentence, no meta-commentary`
+
+      const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: AI_MODELS.EFFICIENT,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.8,
+          max_tokens: 500,
+          response_format: { type: 'json_object' },
+        }),
+      })
+
+      if (!response.ok) return FALLBACK
+
+      const data = await response.json()
+      const parsed = JSON.parse(data.choices[0].message.content)
+      const suggestions = Array.isArray(parsed.suggestions)
+        ? parsed.suggestions.filter((s: unknown) => typeof s === 'string' && s.trim()).slice(0, 5)
+        : []
+
+      return suggestions.length > 0 ? suggestions : FALLBACK
+    } catch (error) {
+      console.error('Error generating personalized downtime suggestions (falling back):', error)
+      return FALLBACK
+    }
   }
 }

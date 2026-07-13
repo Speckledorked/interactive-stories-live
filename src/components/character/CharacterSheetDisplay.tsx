@@ -10,10 +10,19 @@ import HarmTracker from './HarmTracker'
 import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
 import ConsequenceBadge from './ConsequenceBadge'
+import { DynamicDowntimeManager } from '@/components/downtime/DynamicDowntimeManager'
 
 interface CharacterSheetDisplayProps {
   character: any
   campaign?: any
+  // Downtime — rendered in its own tab rather than always-on below the
+  // sheet. Omit these props (or leave activities undefined) to hide the
+  // tab entirely, e.g. when viewing another player's character.
+  downtimeActivities?: any[]
+  downtimeSuggestions?: string[]
+  onCreateDowntimeActivity?: (description: string) => void
+  onAdvanceDowntimeTime?: (characterId: string, days: number) => void
+  onRespondToDowntimeEvent?: (eventId: string, response: string) => void
 }
 
 // Helper function to get currency name based on universe
@@ -44,10 +53,19 @@ function getCurrencyName(universe?: string): { singular: string; plural: string;
   return { singular: 'gold', plural: 'gold', icon: '💰' }
 }
 
-export default function CharacterSheetDisplay({ character, campaign }: CharacterSheetDisplayProps) {
+export default function CharacterSheetDisplay({
+  character,
+  campaign,
+  downtimeActivities,
+  downtimeSuggestions,
+  onCreateDowntimeActivity,
+  onAdvanceDowntimeTime,
+  onRespondToDowntimeEvent,
+}: CharacterSheetDisplayProps) {
   const params = useParams()
   const campaignId = params?.id as string
-  const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'inventory' | 'relationships' | 'advancement'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'inventory' | 'relationships' | 'advancement' | 'downtime'>('overview')
+  const showDowntimeTab = downtimeActivities !== undefined
 
   // Get currency info from campaign universe
   const currency = getCurrencyName(campaign?.universe)
@@ -150,15 +168,6 @@ export default function CharacterSheetDisplay({ character, campaign }: Character
                   <div className="text-lg font-bold text-ember-300">{character.xp}</div>
                 </div>
               )}
-              {statEntries.length > 0 && (
-                <div className="bg-black/25 rounded-lg p-3 border border-ember-900/20">
-                  <div className="text-xs text-ember-400/50 uppercase tracking-wide mb-1">Stat Total</div>
-                  <div className="text-lg font-bold text-wine-300">
-                    {statEntries.reduce((sum, [_, val]) => sum + (val as number), 0) > 0 ? '+' : ''}
-                    {statEntries.reduce((sum, [_, val]) => sum + (val as number), 0)}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -171,7 +180,8 @@ export default function CharacterSheetDisplay({ character, campaign }: Character
           { key: 'stats', label: 'Stats & Status', icon: '📊' },
           { key: 'inventory', label: 'Inventory', icon: '🎒' },
           { key: 'relationships', label: 'Relationships', icon: '💕' },
-          { key: 'advancement', label: 'Advancement', icon: '⭐' }
+          { key: 'advancement', label: 'Advancement', icon: '⭐' },
+          ...(showDowntimeTab ? [{ key: 'downtime', label: 'Downtime', icon: '🌙' }] : []),
         ].map(tab => (
           <button
             key={tab.key}
@@ -715,6 +725,19 @@ export default function CharacterSheetDisplay({ character, campaign }: Character
             </div>
           )
         })()}
+
+        {activeTab === 'downtime' && showDowntimeTab && (
+          <DynamicDowntimeManager
+            activities={downtimeActivities || []}
+            characterId={character.id}
+            characterGold={(character.resources as any)?.gold || 0}
+            characterName={character.name || ''}
+            onCreateActivity={onCreateDowntimeActivity}
+            onAdvanceTime={onAdvanceDowntimeTime}
+            onRespondToEvent={onRespondToDowntimeEvent}
+            suggestions={downtimeSuggestions}
+          />
+        )}
       </div>
     </div>
   )

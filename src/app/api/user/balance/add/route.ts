@@ -7,6 +7,7 @@ import { requireAuth } from '@/lib/auth'
 import { stripe } from '@/lib/stripe'
 import { ErrorResponse } from '@/types/api'
 import { MINIMUM_ADD_AMOUNT, formatCurrency } from '@/lib/payment/service'
+import { getAppUrl } from '@/lib/appUrl'
 
 interface AddFundsRequest {
   amountInCents: number
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the app URL for redirect
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const appUrl = getAppUrl()
 
     // Create Stripe Checkout session
     const session = await stripe.checkout.sessions.create({

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
+import { getAppUrl } from '@/lib/appUrl'
 
 export async function POST(
   request: NextRequest,
@@ -49,7 +50,7 @@ export async function POST(
       },
     })
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const appUrl = getAppUrl()
     const joinUrl = `${appUrl}/join/${invite.token}`
 
     return NextResponse.json({ 
@@ -109,7 +110,7 @@ export async function GET(
       },
     })
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const appUrl = getAppUrl()
 
     const invitesWithUrls = invites.map((invite) => ({
       ...invite,

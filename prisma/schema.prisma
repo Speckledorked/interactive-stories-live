@@ -206,6 +206,12 @@ model Campaign {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  // Player-text input moderation strictness (see lib/ai/moderation.ts).
+  // "standard" (default) doesn't block plain violence — expected content
+  // in a combat RPG. "strict" blocks everything OpenAI's moderation
+  // endpoint flags, for campaigns that want a tighter filter.
+  contentModerationLevel String @default("standard")
+
   // Phase 9: Campaign notification settings
   mentionsEnabled     Boolean @default(true)
   soundEffectsEnabled Boolean @default(true)

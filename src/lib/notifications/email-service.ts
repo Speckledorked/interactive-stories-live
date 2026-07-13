@@ -1,6 +1,7 @@
 // src/lib/notifications/email-service.ts
 
 import nodemailer from 'nodemailer';
+import { getAppUrl } from '@/lib/appUrl';
 
 interface EmailParams {
   to: string;
@@ -148,7 +149,7 @@ export class EmailService {
 
   // Send email-address verification link
   static async sendVerificationEmail(userEmail: string, verifyToken: string) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl = getAppUrl();
     const verifyUrl = `${appUrl}/api/auth/verify-email?token=${verifyToken}`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 20px;">
@@ -198,7 +199,7 @@ export class EmailService {
           </div>
 
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/campaigns" 
+            <a href="${getAppUrl()}/campaigns" 
                style="background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
               Start Your Adventure
             </a>
@@ -207,7 +208,7 @@ export class EmailService {
           <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 30px;">
             <p style="font-size: 14px; color: #6b7280; text-align: center; margin: 0;">
               Questions? Reply to this email or check our 
-              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/help" style="color: #2563eb;">help center</a>.
+              <a href="${getAppUrl()}/help" style="color: #2563eb;">help center</a>.
             </p>
           </div>
         </div>
@@ -221,7 +222,7 @@ export class EmailService {
     inviterName: string, 
     inviteToken: string
   ): string {
-    const joinUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/join/${inviteToken}`;
+    const joinUrl = `${getAppUrl()}/join/${inviteToken}`;
 
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 20px;">
@@ -299,7 +300,7 @@ export class EmailService {
           </div>
 
           <div style="text-align: center; margin-top: 30px;">
-            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/campaigns" 
+            <a href="${getAppUrl()}/campaigns" 
                style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
               View Campaigns
             </a>
@@ -311,7 +312,7 @@ export class EmailService {
 
   // Build password reset email template
   private static buildPasswordResetTemplate(resetToken: string): string {
-    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/reset-password?token=${resetToken}`;
+    const resetUrl = `${getAppUrl()}/auth/reset-password?token=${resetToken}`;
 
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 20px;">

@@ -146,8 +146,15 @@ export async function POST(
     }
 
     // Provider-ToS input moderation — flagged free-text never reaches the
-    // completion model. Distinct from the X-Card safety tool.
-    const moderation = await moderatePlayerText(actionText)
+    // completion model. Distinct from the X-Card safety tool. Strictness
+    // is per-campaign (see settings/ai/route.ts); "standard" doesn't
+    // block plain violence, since that's expected content in a combat RPG.
+    const campaignForModeration = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { contentModerationLevel: true },
+    })
+    const moderationLevel = campaignForModeration?.contentModerationLevel === 'strict' ? 'strict' : 'standard'
+    const moderation = await moderatePlayerText(actionText, moderationLevel)
     if (moderation.flagged) {
       return NextResponse.json<ErrorResponse>(
         { error: `Your action was blocked by content moderation (${moderation.categories.join(', ')}). Please rephrase it.` },

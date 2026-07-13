@@ -18,6 +18,7 @@ interface Campaign {
   universe: string | null
   aiSystemPrompt: string
   initialWorldSeed: string
+  contentModerationLevel: string
 }
 
 interface NPC {
@@ -250,6 +251,7 @@ export default function AdminPage() {
         body: JSON.stringify({
           aiSystemPrompt: campaign.aiSystemPrompt,
           initialWorldSeed: campaign.initialWorldSeed,
+          contentModerationLevel: campaign.contentModerationLevel,
         }),
       })
 
@@ -704,6 +706,27 @@ export default function AdminPage() {
                     rows={6}
                     className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-ember-200/80">
+                    Content Moderation
+                  </label>
+                  <p className="text-xs text-ember-400/50 mb-1">
+                    Player actions are checked before reaching the AI. Standard allows ordinary
+                    combat and violence — expected content in this kind of game — while still
+                    blocking genuinely severe content (sexual content involving minors, self-harm
+                    instructions, credible threats). Strict blocks anything OpenAI's moderation
+                    flags, including plain violence.
+                  </p>
+                  <select
+                    value={campaign.contentModerationLevel}
+                    onChange={(e) => setCampaign({ ...campaign, contentModerationLevel: e.target.value })}
+                    className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                  >
+                    <option value="standard">Standard (default — allows genre-typical violence)</option>
+                    <option value="strict">Strict (blocks all flagged content, including violence)</option>
+                  </select>
                 </div>
 
                 <button

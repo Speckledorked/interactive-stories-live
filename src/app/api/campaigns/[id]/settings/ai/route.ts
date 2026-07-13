@@ -34,16 +34,19 @@ export async function PATCH(
     }
 
     // Update AI settings
+    const contentModerationLevel = body.contentModerationLevel === 'strict' ? 'strict' : 'standard'
     const campaign = await prisma.campaign.update({
       where: { id: campaignId },
       data: {
         aiSystemPrompt: body.aiSystemPrompt,
         initialWorldSeed: body.initialWorldSeed,
+        contentModerationLevel,
       },
       select: {
         id: true,
         aiSystemPrompt: true,
         initialWorldSeed: true,
+        contentModerationLevel: true,
       },
     })
 

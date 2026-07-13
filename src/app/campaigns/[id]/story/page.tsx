@@ -60,8 +60,6 @@ export default function StoryPage() {
   const [addFundsLoading, setAddFundsLoading] = useState(false)
   const [addFundsError, setAddFundsError] = useState('')
   const [resolvingMessage, setResolvingMessage] = useState('')
-  // Tracks which scenes the user has explicitly chosen to continue (vs. stop & read later)
-  const [sceneContinued, setSceneContinued] = useState<Record<string, boolean>>({})
 
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
@@ -175,10 +173,6 @@ export default function StoryPage() {
       console.log('Scene resolved:', data)
       setResolvingMessage('') // Clear resolving message
       setSuccess('')
-      // Reset continue choice so the "what next?" panel shows after each resolution
-      if (data.sceneId) {
-        setSceneContinued(prev => ({ ...prev, [data.sceneId]: false }))
-      }
       // Refresh data so scene resolution appears
       loadData()
     })
@@ -822,34 +816,27 @@ export default function StoryPage() {
                     </div>
                   )}
 
-                  {/* Post-resolution choice: continue now or save and stop */}
-                  {scene.status === 'AWAITING_ACTIONS' && !userHasSubmitted && selectedCharacterId && scene.sceneResolutionText && !sceneContinued[scene.id] && (
-                    <div className="rounded-xl bg-black/30 border border-ember-700/30 shadow-lg shadow-black/30 p-5">
-                      <h3 className="text-base font-bold text-ember-100 mb-1">What would you like to do?</h3>
-                      <p className="text-sm text-ember-300/60 mb-4">Your progress is saved — you can always come back.</p>
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <button
-                          onClick={() => setSceneContinued(prev => ({ ...prev, [scene.id]: true }))}
-                          className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center flex-1 flex items-center justify-center gap-2"
-                        >
-                          <span>Continue the scene</span>
-                          <span className="text-sm opacity-70">→</span>
-                        </button>
-                        <a
-                          href={`/campaigns/${campaignId}/story-log`}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-ember-900/40 text-ember-200/80 hover:text-ember-100 hover:border-ember-700/50 transition-colors text-sm font-medium"
-                        >
-                          <span>Save &amp; read later</span>
-                          <span className="text-sm opacity-70">📖</span>
-                        </a>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action Form (shown after user chooses to continue, or on first action before any resolution) */}
-                  {scene.status === 'AWAITING_ACTIONS' && !userHasSubmitted && selectedCharacterId && (!scene.sceneResolutionText || sceneContinued[scene.id]) && (
+                  {/* Action Form — shown immediately after resolution, same as the
+                      first action in a scene. A "save & read later" escape hatch
+                      sits alongside it rather than gating it behind an extra click
+                      (it used to require clicking "Continue the scene" first,
+                      which read as a dead end since neither button looked like
+                      "take your turn"). */}
+                  {scene.status === 'AWAITING_ACTIONS' && !userHasSubmitted && selectedCharacterId && (
                     <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-                      <h3 className="text-lg font-bold text-ember-100 mb-4">Your Action</h3>
+                      <div className="flex items-center justify-between gap-3 mb-4">
+                        <h3 className="text-lg font-bold text-ember-100">Your Action</h3>
+                        {scene.sceneResolutionText && (
+                          <a
+                            href={`/campaigns/${campaignId}/story-log`}
+                            className="text-xs text-ember-300/60 hover:text-ember-200 transition-colors whitespace-nowrap flex items-center gap-1"
+                            title="Your progress is saved — come back anytime"
+                          >
+                            <span>Save &amp; read later</span>
+                            <span className="opacity-70">📖</span>
+                          </a>
+                        )}
+                      </div>
                       {isWaitingOnUser && (
                         <div className="bg-ember-900/20 border border-ember-700/40 text-ember-300 px-3 py-2 rounded-lg mb-4 text-sm">
                           ⏳ Waiting for your action...

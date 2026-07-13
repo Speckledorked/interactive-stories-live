@@ -910,7 +910,7 @@ export default function StoryPage() {
                             {hasDefinedParticipants ? (
                               allParticipantsSubmitted ? (
                                 <p className="text-success-400 text-xs mb-1">
-                                  ✓ All participants have submitted! Auto-resolving now...
+                                  ✓ All participants have submitted — resolution should start on its own. If nothing happens within a minute, resolve manually.
                                 </p>
                               ) : (
                                 <p className="text-ember-400/50 text-xs">
@@ -924,17 +924,30 @@ export default function StoryPage() {
                             )}
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                            {/* Only show manual resolve for open scenes or as "force early" for closed scenes */}
-                            {(!hasDefinedParticipants || !allParticipantsSubmitted) && (
-                              <button
-                                onClick={() => handleResolveScene(scene.id)}
-                                disabled={resolving}
-                                className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
-                                title={hasDefinedParticipants ? "Force resolution before all participants submit" : "Manually resolve this exchange"}
-                              >
-                                {resolving ? 'Resolving...' : hasDefinedParticipants ? 'Force Resolve' : 'Resolve Exchange'}
-                              </button>
-                            )}
+                            {/* Always available to the admin: for open scenes it's the normal
+                                resolve, before everyone submits it's a force, and after everyone
+                                submits it's the rescue path for a lost auto-resolve — hiding it
+                                in that state left stuck scenes with no way out. */}
+                            <button
+                              onClick={() => handleResolveScene(scene.id)}
+                              disabled={resolving}
+                              className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
+                              title={
+                                !hasDefinedParticipants
+                                  ? 'Manually resolve this exchange'
+                                  : allParticipantsSubmitted
+                                    ? 'Kick off resolution if auto-resolve did not start'
+                                    : 'Force resolution before all participants submit'
+                              }
+                            >
+                              {resolving
+                                ? 'Resolving...'
+                                : !hasDefinedParticipants
+                                  ? 'Resolve Exchange'
+                                  : allParticipantsSubmitted
+                                    ? 'Resolve Now'
+                                    : 'Force Resolve'}
+                            </button>
                             <button
                               onClick={() => handleEndScene(scene.id)}
                               disabled={endingScene}

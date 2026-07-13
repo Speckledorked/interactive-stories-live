@@ -19,6 +19,16 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Preserved across the signup form (e.g. an invite link sent someone
+  // here to make an account first) and forwarded to the login link too,
+  // so the round trip survives either path. Read directly from
+  // window.location rather than useSearchParams() to avoid needing a
+  // Suspense boundary for this whole page.
+  const returnTo = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('returnTo')
+    : null
+  const safeReturnTo = returnTo && returnTo.startsWith('/') ? returnTo : null
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -37,7 +47,7 @@ export default function SignupPage() {
 
     try {
       await signup(email, password)
-      router.push('/campaigns')
+      router.push(safeReturnTo || '/campaigns')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Signup failed')
     } finally {
@@ -180,7 +190,10 @@ export default function SignupPage() {
 
           <p className="text-center text-ember-300/50 text-sm">
             Already have an account?{' '}
-            <Link href="/login" className="text-ember-300 hover:text-ember-200 font-semibold transition-colors">
+            <Link
+              href={safeReturnTo ? `/login?returnTo=${encodeURIComponent(safeReturnTo)}` : '/login'}
+              className="text-ember-300 hover:text-ember-200 font-semibold transition-colors"
+            >
               Login here
             </Link>
           </p>

@@ -42,6 +42,17 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Preserved across login (e.g. an invite link sent someone here) and
+  // forwarded to the signup link too, so the round trip survives either
+  // path. Read directly from window.location rather than
+  // useSearchParams() to avoid needing a Suspense boundary for the whole
+  // page — only an in-app path is accepted, so this can't become an
+  // open redirect.
+  const returnTo = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('returnTo')
+    : null
+  const safeReturnTo = returnTo && returnTo.startsWith('/') ? returnTo : null
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -49,7 +60,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password)
-      router.push('/campaigns')
+      router.push(safeReturnTo || '/campaigns')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
@@ -152,7 +163,10 @@ export default function LoginPage() {
 
           <p className="text-center text-ember-300/50 text-sm">
             Don&rsquo;t have an account?{' '}
-            <Link href="/signup" className="text-ember-300 hover:text-ember-200 font-semibold transition-colors">
+            <Link
+              href={safeReturnTo ? `/signup?returnTo=${encodeURIComponent(safeReturnTo)}` : '/signup'}
+              className="text-ember-300 hover:text-ember-200 font-semibold transition-colors"
+            >
               Sign up for free
             </Link>
           </p>

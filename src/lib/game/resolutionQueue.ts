@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma'
 import { ResolutionJobStatus } from '@prisma/client'
 import { getJwtSecret } from '@/lib/auth'
 import { reportError } from '@/lib/monitoring'
+import { getAppUrl } from '@/lib/appUrl'
 
 export const MAX_ATTEMPTS = 3
 // A RUNNING job older than this is presumed dead (resolveScene's own
@@ -27,12 +28,6 @@ export const PENDING_STALE_MS = 45 * 1000
 // How long the enqueuing request waits for the worker invocation to be
 // delivered before letting go — delivery is what matters, not completion.
 const KICK_DELIVERY_TIMEOUT_MS = 3000
-
-function baseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
-  return 'http://localhost:3000'
-}
 
 export function internalJobSecret(): string {
   // Falls back to the JWT secret, which itself refuses to run in
@@ -88,7 +83,7 @@ export async function kickJob(jobId: string): Promise<void> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), KICK_DELIVERY_TIMEOUT_MS)
   try {
-    await fetch(`${baseUrl()}/api/internal/resolve-job`, {
+    await fetch(`${getAppUrl()}/api/internal/resolve-job`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

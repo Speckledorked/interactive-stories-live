@@ -5,9 +5,10 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { CommandPaletteProvider } from '@/contexts/CommandPaletteContext'
 import { ErrorHandlerInit } from './ErrorHandlerInit'
+import { getAppUrl } from '@/lib/appUrl'
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
+  metadataBase: new URL(getAppUrl()),
   title: 'MythOS - Automated Game Master',
   description: 'The world remembers. Play tabletop RPGs with an AI Game Master.',
   openGraph: {

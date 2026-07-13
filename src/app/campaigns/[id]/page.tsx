@@ -808,6 +808,7 @@ export default function CampaignLobbyPage() {
             <h2 className="text-xl sm:text-2xl font-bold mb-4 text-ember-100">Create New Character</h2>
             <EnhancedCreateCharacterForm
               campaignId={campaignId}
+              statLabels={campaign.statLabels}
               onSuccess={() => {
                 setShowCreateCharacter(false)
                 // Refresh characters list after creating a new one

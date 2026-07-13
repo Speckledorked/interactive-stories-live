@@ -212,6 +212,15 @@ model Campaign {
   // endpoint flags, for campaigns that want a tighter filter.
   contentModerationLevel String @default("standard")
 
+  // Fiction-flavored display names for the 5 fixed PbtA stat keys
+  // (cool/hard/hot/sharp/weird — see lib/pbta-moves.ts), generated once at
+  // campaign creation alongside the capability scaffold (see
+  // lib/ai/worldGenerator.ts). Null falls back to the generic PBTA_STATS
+  // labels. Only the label changes — the underlying keys and resolution
+  // math are the same for every campaign.
+  // Shape: Record<'cool'|'hard'|'hot'|'sharp'|'weird', { label: string; description: string }>
+  statLabels Json?
+
   // Phase 9: Campaign notification settings
   mentionsEnabled     Boolean @default(true)
   soundEffectsEnabled Boolean @default(true)

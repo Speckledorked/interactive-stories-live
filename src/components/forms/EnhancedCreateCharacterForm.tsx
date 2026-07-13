@@ -8,8 +8,18 @@ import { useRouter } from 'next/navigation'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { PBTA_STATS } from '@/lib/pbta-moves'
 
+interface StatLabel {
+  label: string
+  description: string
+}
+
 interface EnhancedCreateCharacterFormProps {
   campaignId: string
+  // Fiction-flavored names for the 5 fixed stats, generated for this
+  // campaign at creation time (see lib/ai/worldGenerator.ts). Falls back
+  // to the generic PBTA_STATS names when a campaign doesn't have them
+  // (older campaigns, or generation failed).
+  statLabels?: Partial<Record<keyof typeof PBTA_STATS, StatLabel>>
   onSuccess?: () => void
   onCancel?: () => void
 }
@@ -18,6 +28,7 @@ type TabKey = 'basics' | 'character' | 'stats' | 'equipment' | 'resources' | 'co
 
 export default function EnhancedCreateCharacterForm({
   campaignId,
+  statLabels,
   onSuccess,
   onCancel
 }: EnhancedCreateCharacterFormProps) {
@@ -454,33 +465,36 @@ export default function EnhancedCreateCharacterForm({
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-ember-100 mb-2">
-                Character Stats (Powered by the Apocalypse)
+                Character Stats
               </label>
               <p className="text-xs text-ember-300/60 mb-4">
                 Range: -1 (weak) to +2 (strong). Most stats start at 0 or +1.
               </p>
               <div className="space-y-3">
-                {Object.entries(formData.stats).map(([stat, value]) => (
-                  <div key={stat} className="bg-black/25 rounded-md p-3 border border-ember-900/30">
-                    <div className="flex items-center justify-between mb-1">
-                      <label htmlFor={stat} className="text-sm font-medium capitalize text-white">
-                        {stat}
-                      </label>
-                      <input
-                        type="number"
-                        id={stat}
-                        min="-1"
-                        max="2"
-                        value={value}
-                        onChange={(e) => handleStatChange(stat, parseInt(e.target.value) || 0)}
-                        className="w-16 text-center rounded-md bg-black/30 border-ember-900/40 text-white shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm font-bold"
-                      />
+                {Object.entries(formData.stats).map(([stat, value]) => {
+                  const custom = statLabels?.[stat as keyof typeof PBTA_STATS]
+                  return (
+                    <div key={stat} className="bg-black/25 rounded-md p-3 border border-ember-900/30">
+                      <div className="flex items-center justify-between mb-1">
+                        <label htmlFor={stat} className={`text-sm font-medium text-white ${custom ? '' : 'capitalize'}`}>
+                          {custom?.label || stat}
+                        </label>
+                        <input
+                          type="number"
+                          id={stat}
+                          min="-1"
+                          max="2"
+                          value={value}
+                          onChange={(e) => handleStatChange(stat, parseInt(e.target.value) || 0)}
+                          className="w-16 text-center rounded-md bg-black/30 border-ember-900/40 text-white shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm font-bold"
+                        />
+                      </div>
+                      <p className="text-xs text-ember-300/60">
+                        {custom?.description || PBTA_STATS[stat as keyof typeof PBTA_STATS]}
+                      </p>
                     </div>
-                    <p className="text-xs text-ember-300/60">
-                      {PBTA_STATS[stat as keyof typeof PBTA_STATS]}
-                    </p>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 

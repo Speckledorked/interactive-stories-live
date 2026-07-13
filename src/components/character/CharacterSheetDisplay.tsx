@@ -261,9 +261,17 @@ export default function CharacterSheetDisplay({ character, campaign }: Character
               <div className="card">
                 <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide mb-3">Stats</h3>
                 <div className="space-y-3">
-                  {statEntries.map(([stat, value]) => (
-                    <StatBar key={stat} name={stat} value={value as number} />
-                  ))}
+                  {statEntries.map(([stat, value]) => {
+                    const custom = (campaign?.statLabels as any)?.[stat]
+                    return (
+                      <StatBar
+                        key={stat}
+                        name={custom?.label || stat}
+                        value={value as number}
+                        description={custom?.description}
+                      />
+                    )
+                  })}
                 </div>
               </div>
             )}

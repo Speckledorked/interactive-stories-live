@@ -87,35 +87,36 @@ export async function POST(request: NextRequest) {
     const resolvedUniverse = universe || template?.universe || 'Original'
     const resolvedSystemPrompt = aiSystemPrompt || template?.systemPrompt || ''
 
-    // If the user hasn't provided a custom world seed, generate a unique
-    // world with AI before opening the transaction — for a known template
-    // (genre hint from its id) or an equally custom universe (genre hint
-    // from the free-text universe description). Only a fully blank/default
-    // "Original" universe with no template falls through to nothing.
+    // Generate factions, the capability scaffold, and stat labels with AI
+    // regardless of whether the user wrote their own world seed — writing
+    // "what's happening when the story begins" and wanting AI-generated
+    // factions/essences/etc are independent choices, not one or the other.
+    // Only the world_seed TEXT itself defers to the user's own if they gave
+    // one; everything else generated still applies on top of it.
     let resolvedWorldSeed = initialWorldSeed || ''
     let generatedFactions: NonNullable<Awaited<ReturnType<typeof generateWorldFromTemplate>>>['factions'] | undefined
     let generatedCapabilities: GeneratedCapability[] | undefined
     let generatedStatLabels: GeneratedStatLabels | undefined
 
-    if (!initialWorldSeed) {
-      console.log('🌍 Generating unique world...')
-      const generated = await generateWorldFromTemplate(
-        template?.id || null,
-        title,
-        description || '',
-        template ? undefined : resolvedUniverse
-      )
-      if (generated) {
-        resolvedWorldSeed = generated.worldSeed
-        generatedFactions = generated.factions
-        generatedCapabilities = generated.capabilities
-        generatedStatLabels = generated.statLabels
-        console.log(`✅ World generated: ${generated.factions.length} unique factions`)
-      } else {
-        // AI failed — fall back to template defaults (or blank for custom)
-        resolvedWorldSeed = template?.initialWorldSeed || ''
-        console.log('⚠️ World generation failed, using fallback defaults')
-      }
+    console.log('🌍 Generating world context (factions, capabilities, stat labels)...')
+    const generated = await generateWorldFromTemplate(
+      template?.id || null,
+      title,
+      description || '',
+      template ? undefined : resolvedUniverse,
+      initialWorldSeed || undefined
+    )
+    if (generated) {
+      if (!initialWorldSeed) resolvedWorldSeed = generated.worldSeed
+      generatedFactions = generated.factions
+      generatedCapabilities = generated.capabilities
+      generatedStatLabels = generated.statLabels
+      console.log(`✅ World generated: ${generated.factions.length} unique factions`)
+    } else if (!initialWorldSeed) {
+      // AI failed and the user didn't write their own — fall back to
+      // template defaults (or blank for custom).
+      resolvedWorldSeed = template?.initialWorldSeed || ''
+      console.log('⚠️ World generation failed, using fallback defaults')
     }
 
     // Create campaign, world meta, membership, and template data in one transaction

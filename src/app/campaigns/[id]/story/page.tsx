@@ -691,22 +691,21 @@ export default function StoryPage() {
                         }`}>
                           {scene.status.replace('_', ' ')}
                         </span>
-                        {scene.status === 'RESOLVING' && (
-                          <>
-                            <AILoadingState type="resolution" />
-                            {isAdmin && (
-                              <button
-                                onClick={() => handleResetScene(scene.id)}
-                                className="text-xs px-2 py-1 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded transition-colors"
-                                title="Reset stuck scene"
-                              >
-                                Reset
-                              </button>
-                            )}
-                          </>
+                        {scene.status === 'RESOLVING' && isAdmin && (
+                          <button
+                            onClick={() => handleResetScene(scene.id)}
+                            className="text-xs px-2 py-1 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded transition-colors"
+                            title="Reset stuck scene"
+                          >
+                            Reset
+                          </button>
                         )}
                       </div>
                     </div>
+
+                    {scene.status === 'RESOLVING' && (
+                      <AILoadingState type="resolution" />
+                    )}
 
                     {/* Show intro text only if no resolutions exist yet */}
                     {!scene.sceneResolutionText && (

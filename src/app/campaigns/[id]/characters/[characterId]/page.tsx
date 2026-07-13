@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import CharacterSheetDisplay from '@/components/character/CharacterSheetDisplay'
-import { DynamicDowntimeManager } from '@/components/downtime/DynamicDowntimeManager'
 import { pusherClient } from '@/lib/pusher'
 import { Home, Scroll, User } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
@@ -195,24 +194,18 @@ export default function CharacterPage() {
       <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
         <p className="text-ember-300/50 text-sm mb-4">{campaign?.campaign?.name}</p>
 
-        {/* Character Sheet */}
+        {/* Character Sheet (Downtime is one of its tabs) */}
         <TavernCard className="p-5">
-          <CharacterSheetDisplay character={character} campaign={campaign?.campaign} />
-        </TavernCard>
-
-        {/* Downtime */}
-        <div className="mt-8">
-          <DynamicDowntimeManager
-            activities={downtimeActivities}
-            characterId={characterId}
-            characterGold={(character?.resources as any)?.gold || 0}
-            characterName={character?.name || ''}
-            onCreateActivity={handleCreateDowntimeActivity}
-            onAdvanceTime={handleAdvanceDowntimeTime}
-            onRespondToEvent={handleRespondToDowntimeEvent}
-            suggestions={downtimeSuggestions}
+          <CharacterSheetDisplay
+            character={character}
+            campaign={campaign?.campaign}
+            downtimeActivities={downtimeActivities}
+            downtimeSuggestions={downtimeSuggestions}
+            onCreateDowntimeActivity={handleCreateDowntimeActivity}
+            onAdvanceDowntimeTime={handleAdvanceDowntimeTime}
+            onRespondToDowntimeEvent={handleRespondToDowntimeEvent}
           />
-        </div>
+        </TavernCard>
       </main>
 
       <TavernNav active="characters" campaignId={campaignId} />

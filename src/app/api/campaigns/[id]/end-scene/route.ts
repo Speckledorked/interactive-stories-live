@@ -68,8 +68,28 @@ export async function POST(
       )
     }
 
-    // 3. If scene has actions and is not already resolved, trigger AI resolution first
-    if (scene.playerActions.length > 0 && scene.status !== 'RESOLVED') {
+    if (scene.status === 'RESOLVED') {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Scene already ended' },
+        { status: 400 }
+      )
+    }
+
+    // 2.5. This is the one point in a scene's life where billing happens:
+    // every exchange along the way (each action's AI response) was free,
+    // and this charges once, per player, for the whole scene now that
+    // it's concluding. Checked before spending on the final AI call.
+    const { chargeForSceneResolution } = await import('@/lib/game/resolutionBilling')
+    const billing = await chargeForSceneResolution(campaignId, sceneId)
+    if (!billing.ok) {
+      return NextResponse.json<ErrorResponse>(
+        { error: billing.error || 'Insufficient balance', details: billing.details },
+        { status: 402 }
+      )
+    }
+
+    // 3. If scene has actions, trigger AI resolution first
+    if (scene.playerActions.length > 0) {
       console.log('🎬 Triggering final resolution before ending scene')
 
       try {

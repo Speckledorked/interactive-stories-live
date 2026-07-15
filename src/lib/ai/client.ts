@@ -811,9 +811,11 @@ REGISTER NEW NPCs: Whenever you introduce a named character who doesn't already 
 - Example: A faction leader already in the world state → just use notes_append
 - Good description: "A grizzled dwarven blacksmith with a prosthetic left hand. Owns the Ember & Iron forge."
 
-REGISTER NEW FACTIONS: Whenever a new organization, gang, guild, or group emerges mid-campaign (not in the starting world), add them to faction_changes with is_new: true.
+REGISTER NEW FACTIONS: Whenever you name an organization, gang, guild, house, or group that isn't already in the FACTIONS list below, add them to faction_changes with is_new: true — same rule as NPCs: check the list, not whether it "feels" pre-established. A major house that's obviously part of the setting's lore but has never actually appeared in the FACTIONS list still needs registering the first time you name it, or it will never exist as a real faction the party can interact with, build standing with, or see tracked.
 - Include a description (who they are), goals (what they want), and current_plan (what they're doing right now)
+- Only skip is_new for factions already listed in the FACTIONS list
 - Example: A new criminal syndicate revealed mid-scene → register with is_new: true
+- Example: The player finally meets a noble house that's been referenced only in passing but was never in the FACTIONS list → register it now, this is still the first time it's real
 
 PLAYER-LED FACTIONS: Factions marked "LED BY PLAYER CHARACTER: <name>" in the FACTIONS list are led by that player character. If that player makes a genuine strategic decision as the leader this scene (e.g. "As Duke, I commit our forces to retaking the border fort" or "I redirect the guild toward trade instead of war"), set changes.goal on that faction to the matching value (EXPAND, DEFEND, ENRICH, DESTABILIZE_RIVAL, or CONSOLIDATE).
 - Only do this for factions the player actually leads — for every other faction, goal is decided automatically by the simulation and setting it here has no effect

@@ -52,26 +52,30 @@ export async function createCampaignMemory(data: MemoryData): Promise<void> {
       success: true
     }).catch(console.error);
 
-    // Insert using raw SQL to handle vector type
+    // Insert using raw SQL to handle vector type. Column names are quoted
+    // and camelCase because that's what Prisma actually created the table
+    // with (no @map on CampaignMemory's fields — only @@map on the table
+    // itself) — unquoted snake_case identifiers here would silently target
+    // nonexistent columns and fail against a real database.
     await prisma.$executeRaw`
       INSERT INTO campaign_memories (
         id,
-        campaign_id,
-        memory_type,
-        source_id,
-        turn_number,
+        "campaignId",
+        "memoryType",
+        "sourceId",
+        "turnNumber",
         title,
         summary,
-        full_context,
+        "fullContext",
         embedding,
-        involved_character_ids,
-        involved_npc_ids,
-        involved_faction_ids,
-        location_tags,
+        "involvedCharacterIds",
+        "involvedNpcIds",
+        "involvedFactionIds",
+        "locationTags",
         importance,
-        emotional_tone,
+        "emotionalTone",
         tags,
-        created_at
+        "createdAt"
       ) VALUES (
         gen_random_uuid(),
         ${data.campaignId},

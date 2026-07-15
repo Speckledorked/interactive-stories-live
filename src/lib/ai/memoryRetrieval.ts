@@ -129,37 +129,41 @@ export async function retrieveRelevantHistory(
     // Uses cosine distance operator <=> (1 - cosine similarity)
     // Handle empty entity arrays by providing empty arrays to PostgreSQL
     // PostgreSQL's && operator returns false when one array is empty, which is what we want
+    // Column names below are quoted camelCase because that's what Prisma
+    // actually created the table with (no @map on CampaignMemory's fields,
+    // only @@map on the table itself) — unquoted snake_case would silently
+    // target nonexistent columns.
     const memories = await prisma.$queryRaw<any[]>`
       SELECT
         id,
-        turn_number as "turnNumber",
+        "turnNumber" as "turnNumber",
         title,
         summary,
-        memory_type as "memoryType",
+        "memoryType" as "memoryType",
         importance,
-        emotional_tone as "emotionalTone",
+        "emotionalTone" as "emotionalTone",
         (1 - (embedding <=> ${embeddingString}::vector)) as similarity
       FROM campaign_memories
       WHERE
-        campaign_id = ${campaignId}
+        "campaignId" = ${campaignId}
         AND embedding IS NOT NULL
         -- Entity filtering: include memories involving current NPCs/factions/characters
         -- When arrays are empty, use ARRAY[]::text[] which makes the overlap check return false
         -- This ensures we only match general memories (with no entities) when no entities are provided
         AND (
-          (${npcIds.length > 0} AND involved_npc_ids && ${npcIds}::text[])
-          OR (${factionIds.length > 0} AND involved_faction_ids && ${factionIds}::text[])
-          OR (${characterIds.length > 0} AND involved_character_ids && ${characterIds}::text[])
+          (${npcIds.length > 0} AND "involvedNpcIds" && ${npcIds}::text[])
+          OR (${factionIds.length > 0} AND "involvedFactionIds" && ${factionIds}::text[])
+          OR (${characterIds.length > 0} AND "involvedCharacterIds" && ${characterIds}::text[])
           OR (
-            cardinality(involved_npc_ids) = 0
-            AND cardinality(involved_faction_ids) = 0
-            AND cardinality(involved_character_ids) = 0
+            cardinality("involvedNpcIds") = 0
+            AND cardinality("involvedFactionIds") = 0
+            AND cardinality("involvedCharacterIds") = 0
           )  -- Also include general memories
         )
       ORDER BY
         -- Blend similarity with recency and importance
         (1 - (embedding <=> ${embeddingString}::vector)) * ${1 - opts.recencyBias} +
-        (turn_number::float / GREATEST((SELECT MAX(turn_number) FROM campaign_memories WHERE campaign_id = ${campaignId}), 1)) * ${opts.recencyBias}
+        ("turnNumber"::float / GREATEST((SELECT MAX("turnNumber") FROM campaign_memories WHERE "campaignId" = ${campaignId}), 1)) * ${opts.recencyBias}
         DESC
       LIMIT ${opts.maxMemories * 2}  -- Get extra, then filter by similarity threshold
     `;
@@ -254,18 +258,18 @@ export async function retrieveNpcHistory(
     const memories = await prisma.$queryRaw<any[]>`
       SELECT
         id,
-        turn_number as "turnNumber",
+        "turnNumber" as "turnNumber",
         title,
         summary,
-        memory_type as "memoryType",
+        "memoryType" as "memoryType",
         importance,
-        emotional_tone as "emotionalTone",
+        "emotionalTone" as "emotionalTone",
         1.0 as similarity
       FROM campaign_memories
       WHERE
-        campaign_id = ${campaignId}
-        AND ${npcId} = ANY(involved_npc_ids)
-      ORDER BY turn_number DESC
+        "campaignId" = ${campaignId}
+        AND ${npcId} = ANY("involvedNpcIds")
+      ORDER BY "turnNumber" DESC
       LIMIT ${limit}
     `;
 
@@ -317,27 +321,27 @@ export async function retrieveCrossEntityHistory(
     const memories = await prisma.$queryRaw<any[]>`
       SELECT
         id,
-        turn_number as "turnNumber",
+        "turnNumber" as "turnNumber",
         title,
         summary,
-        memory_type as "memoryType",
+        "memoryType" as "memoryType",
         importance,
-        emotional_tone as "emotionalTone",
+        "emotionalTone" as "emotionalTone",
         1.0 as similarity
       FROM campaign_memories
       WHERE
-        campaign_id = ${campaignId}
+        "campaignId" = ${campaignId}
         AND (
-          ${entityIdA} = ANY(involved_npc_ids)
-          OR ${entityIdA} = ANY(involved_faction_ids)
-          OR ${entityIdA} = ANY(involved_character_ids)
+          ${entityIdA} = ANY("involvedNpcIds")
+          OR ${entityIdA} = ANY("involvedFactionIds")
+          OR ${entityIdA} = ANY("involvedCharacterIds")
         )
         AND (
-          ${entityIdB} = ANY(involved_npc_ids)
-          OR ${entityIdB} = ANY(involved_faction_ids)
-          OR ${entityIdB} = ANY(involved_character_ids)
+          ${entityIdB} = ANY("involvedNpcIds")
+          OR ${entityIdB} = ANY("involvedFactionIds")
+          OR ${entityIdB} = ANY("involvedCharacterIds")
         )
-      ORDER BY turn_number DESC
+      ORDER BY "turnNumber" DESC
       LIMIT ${limit}
     `;
 

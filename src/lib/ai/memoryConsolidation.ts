@@ -79,23 +79,27 @@ export async function consolidateOldMemories(
       return { bucketsConsolidated: 0, memoriesRemoved: 0 }
     }
 
+    // Column names below are quoted camelCase because that's what Prisma
+    // actually created the table with (no @map on CampaignMemory's fields,
+    // only @@map on the table itself) — unquoted snake_case would silently
+    // target nonexistent columns.
     const eligible = await prisma.$queryRaw<EligibleMemoryRow[]>`
       SELECT
         id,
-        turn_number as "turnNumber",
+        "turnNumber" as "turnNumber",
         title,
         summary,
-        involved_character_ids as "involvedCharacterIds",
-        involved_npc_ids as "involvedNpcIds",
-        involved_faction_ids as "involvedFactionIds",
-        location_tags as "locationTags"
+        "involvedCharacterIds" as "involvedCharacterIds",
+        "involvedNpcIds" as "involvedNpcIds",
+        "involvedFactionIds" as "involvedFactionIds",
+        "locationTags" as "locationTags"
       FROM campaign_memories
       WHERE
-        campaign_id = ${campaignId}
-        AND turn_number <= ${cutoffTurn}
+        "campaignId" = ${campaignId}
+        AND "turnNumber" <= ${cutoffTurn}
         AND importance IN ('MINOR', 'NORMAL')
         AND NOT (${ERA_SUMMARY_TAG} = ANY(tags))
-      ORDER BY turn_number ASC
+      ORDER BY "turnNumber" ASC
     `
 
     if (eligible.length === 0) {

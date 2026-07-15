@@ -305,6 +305,14 @@ export interface AIGMRequest {
       emotional_tone: string | null
       relevance: string
     }>
+    // Imported reference lore (paste/URL/wiki — see lib/lore/) relevant to
+    // this scene, mirrors relevant_campaign_history but for static
+    // world-bible content rather than play history.
+    relevant_lore?: Array<{
+      title: string
+      content: string
+      relevance: string
+    }>
     // Pre-formatted campaign overview text for large campaigns (see
     // buildOptimizedWorldSummary); empty/absent for small ones.
     _campaignSummary?: string
@@ -947,6 +955,11 @@ ${world_summary._campaignSummary ? `\n${world_summary._campaignSummary}\n` : ''}
 RELEVANT CAMPAIGN HISTORY (semantically retrieved past events — treat these as established fact and stay consistent with them; if a player asks about one, answer from here, don't improvise):
 ${world_summary.relevant_campaign_history.map(m =>
   `• Turn ${m.turn} [${m.importance}] ${m.title}: ${m.summary}`
+).join('\n')}
+` : ''}${world_summary.relevant_lore && world_summary.relevant_lore.length > 0 ? `
+RELEVANT LORE (reference material the GM imported — treat this as canon for this world; draw on it for names, places, and details instead of inventing your own when it already covers the topic):
+${world_summary.relevant_lore.map(l =>
+  `• ${l.title}: ${l.content}`
 ).join('\n')}
 ` : ''}</world_state>
 

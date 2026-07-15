@@ -265,6 +265,11 @@ model Campaign {
 
   // Urban Shadows economy: per-character social position with factions.
   factionStandings FactionStanding[]
+
+  // Lore import: pasted text / URLs / wiki crawls, chunked and embedded for
+  // the AI GM to draw on during play (see lib/lore, lib/ai/loreRetrieval.ts).
+  loreImportJobs LoreImportJob[]
+  loreEntries    LoreEntry[]
 }
 
 //
@@ -1854,6 +1859,78 @@ model CampaignMemory {
   @@index([campaignId, memoryType])
   @@index([campaignId, importance])
   @@map("campaign_memories")
+}
+
+//
+// LORE IMPORT — reference material (pasted text, a URL, or an entire wiki)
+// chunked and embedded the same way CampaignMemory is, but for static
+// world-bible content rather than "things that happened in play". See
+// lib/lore/ (collection + chunking) and lib/ai/loreRetrieval.ts (semantic
+// search, mirrors memoryRetrieval.ts).
+//
+
+enum LoreSourceType {
+  PASTE
+  URL
+  WIKI
+}
+
+enum LoreImportJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model LoreImportJob {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  sourceType  LoreSourceType
+  sourceUrl   String? // for URL / WIKI
+  sourceTitle String? // display name shown in the admin UI
+  rawText     String? @db.Text // for PASTE
+
+  status   LoreImportJobStatus @default(PENDING)
+  attempts Int                 @default(0)
+  lastError String?
+
+  // Progress, shown to the admin while a wiki crawl is running.
+  pagesFound     Int @default(0)
+  pagesDone      Int @default(0)
+  entriesCreated Int @default(0)
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  entries LoreEntry[]
+
+  @@index([campaignId, status])
+}
+
+model LoreEntry {
+  id         String        @id @default(cuid())
+  campaignId String
+  campaign   Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  jobId      String
+  job        LoreImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  title     String
+  sourceUrl String? // the specific page this chunk came from, for WIKI/URL sources
+  content   String  @db.Text // one chunk — see lib/lore/textChunker.ts
+
+  embedding Unsupported("vector(1536)")?
+
+  tags String[] @default([])
+
+  createdAt DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([jobId])
+  @@map("lore_entries")
 }
 
 //

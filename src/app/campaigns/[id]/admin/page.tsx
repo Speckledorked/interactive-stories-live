@@ -10,6 +10,7 @@ import AILoadingState from '@/components/scene/AILoadingState'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
+import LoreManagerPanel from '@/components/admin/LoreManagerPanel'
 
 interface Campaign {
   id: string
@@ -115,10 +116,10 @@ export default function AdminPage() {
   const campaignId = params.id as string
 
   // Read tab from URL parameter, default to 'dashboard'
-  const initialTab = searchParams?.get('tab') as 'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'map' | 'debug' | 'invites' | 'members' | 'settings' || 'dashboard'
+  const initialTab = searchParams?.get('tab') as 'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'lore' | 'map' | 'debug' | 'invites' | 'members' | 'settings' || 'dashboard'
 
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'map' | 'debug' | 'invites' | 'members' | 'settings'>(initialTab)
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'lore' | 'map' | 'debug' | 'invites' | 'members' | 'settings'>(initialTab)
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [npcs, setNpcs] = useState<NPC[]>([])
   const [factions, setFactions] = useState<Faction[]>([])
@@ -631,7 +632,7 @@ export default function AdminPage() {
         isAdmin
         subrow={
           <nav className="max-w-7xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
-            {(['dashboard', 'ai', 'npcs', 'factions', 'locations', 'clocks', 'map', 'debug', 'invites', 'members', 'settings'] as const).map((tab) => (
+            {(['dashboard', 'ai', 'npcs', 'factions', 'locations', 'clocks', 'lore', 'map', 'debug', 'invites', 'members', 'settings'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1746,6 +1747,11 @@ export default function AdminPage() {
                   ))}
                 </div>
               </div>
+            )}
+
+            {/* Lore Tab */}
+            {activeTab === 'lore' && (
+              <LoreManagerPanel campaignId={campaignId} />
             )}
 
             {/* Map Tab — faction relationships (rival/ally) + territory */}

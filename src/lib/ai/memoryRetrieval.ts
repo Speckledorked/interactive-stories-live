@@ -181,9 +181,11 @@ export async function retrieveRelevantHistory(
  * Build a search query from current scene context
  *
  * Combines scene intro, stakes, player actions, NPC goals, and faction plans
- * into a coherent query for semantic search.
+ * into a coherent query for semantic search. Exported so lib/ai/loreRetrieval.ts
+ * can search imported lore against the same "what's this scene about" text
+ * instead of re-deriving its own.
  */
-function buildSearchQuery(context: RetrievalContext): string {
+export function buildSearchQuery(context: RetrievalContext): string {
   const parts: string[] = [];
 
   // Scene intro and stakes

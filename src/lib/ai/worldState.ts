@@ -7,7 +7,8 @@ import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
 import { buildOptimizedContext } from './contextManager' // Phase 14.6: Context optimization
-import { retrieveRelevantHistory, retrieveNpcHistory, retrieveCrossEntityHistory, generateEntityPairs } from './memoryRetrieval' // Campaign Memory RAG
+import { retrieveRelevantHistory, retrieveNpcHistory, retrieveCrossEntityHistory, generateEntityPairs, buildSearchQuery } from './memoryRetrieval' // Campaign Memory RAG
+import { retrieveRelevantLore } from './loreRetrieval' // Imported lore RAG (see lib/lore/)
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
@@ -639,6 +640,28 @@ export async function buildSceneResolutionRequest(
     // Log but continue - scene resolution can work without memories if needed
   }
 
+  // Imported Lore Retrieval: search any pasted/URL/wiki lore the GM has
+  // imported (see lib/lore/) for what's relevant to this scene. Same
+  // scene-context query text memory retrieval uses, so a query naming an
+  // NPC or location matches lore about it the same way it matches history.
+  let relevantLore: any[] = []
+  try {
+    const query = buildSearchQuery({
+      currentScene: scene,
+      playerActions: scene.playerActions,
+      characters: entities.characters,
+      npcs: entities.npcs,
+      factions: entities.factions,
+    })
+    relevantLore = await retrieveRelevantLore(campaignId, query, { maxEntries: 5, minSimilarity: 0.75 })
+    if (relevantLore.length > 0) {
+      console.log(`📚 Retrieved ${relevantLore.length} relevant lore entries`)
+    }
+  } catch (loreError) {
+    console.error('⚠️ Lore retrieval failed:', loreError instanceof Error ? loreError.message : String(loreError))
+    // Log but continue - scene resolution can work without imported lore
+  }
+
   // Guaranteed recall: if the player's action text names an NPC directly,
   // pull that NPC's own history instead of hoping semantic search surfaces
   // it. entities.npcs is the campaign's full NPC list (not the "nearby or
@@ -695,7 +718,7 @@ export async function buildSceneResolutionRequest(
     console.error('⚠️ Named NPC recall failed:', namedRecallError)
   }
 
-  // Add memories to world summary
+  // Add memories and imported lore to world summary
   const worldSummaryWithMemories = {
     ...worldSummary,
     relevant_campaign_history: relevantMemories.map(m => ({
@@ -706,6 +729,11 @@ export async function buildSceneResolutionRequest(
       importance: m.importance,
       emotional_tone: m.emotionalTone,
       relevance: Math.round(m.similarity * 100) + '%',
+    })),
+    relevant_lore: relevantLore.map(l => ({
+      title: l.title,
+      content: l.content,
+      relevance: Math.round(l.similarity * 100) + '%',
     })),
   }
 

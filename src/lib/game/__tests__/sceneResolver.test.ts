@@ -202,10 +202,16 @@ describe('Scene Resolver', () => {
 
       // Verify turn was incremented (currentInGameDate is always included
       // too — it defaults to 'Day 1' when the AI response has no time_passage
-      // data and worldMeta.currentInGameDate isn't set on the fixture)
+      // data and worldMeta.currentInGameDate isn't set on the fixture).
+      // hoursSinceWorldTurn banks this exchange's in-game time toward the
+      // next world turn — 0 here since the fixture has no time_passage.
       expect(prisma.worldMeta.update).toHaveBeenCalledWith({
         where: { id: mockWorldMeta.id },
-        data: { currentTurnNumber: 6, currentInGameDate: 'Day 1' },
+        data: {
+          currentTurnNumber: 6,
+          currentInGameDate: 'Day 1',
+          hoursSinceWorldTurn: { increment: 0 },
+        },
       });
     });
 

@@ -980,6 +980,13 @@ model WorldMeta {
   gmNotes           String?
   updatedAt         DateTime @updatedAt
 
+  // World-turn pacing: the faction/NPC simulation advances with IN-GAME
+  // time, not per player action. hoursSinceWorldTurn accumulates the AI's
+  // time_passage each resolution; a world turn runs once it crosses
+  // worldTurnHours (null = default, see lib/game/tick/pacing.ts).
+  hoursSinceWorldTurn Float @default(0)
+  worldTurnHours      Int?
+
   // World Sim Phase 8: per-tick simulation caps (how many factions/NPCs the
   // tick handlers simulate each turn — see src/lib/game/tick/caps.ts).
   // Null means "use the default" (10/20) — most campaigns never need to

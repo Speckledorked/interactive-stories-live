@@ -95,15 +95,16 @@ export async function POST(
       try {
         // Import resolution functions
         const { resolveScene } = await import('@/lib/game/sceneResolver')
-        const { runWorldTurn } = await import('@/lib/game/worldTurn')
+        const { runWorldTurnIfDue } = await import('@/lib/game/worldTurn')
 
         // Resolve the scene to generate final AI response
         await resolveScene(campaignId, sceneId)
         console.log('✅ Final resolution complete')
 
-        // Run world turn to process any final updates
-        await runWorldTurn(campaignId)
-        console.log('✅ World turn complete')
+        // World turn paced by in-game time — scene ending doesn't itself
+        // mean fiction time passed (see lib/game/tick/pacing.ts).
+        const { ran } = await runWorldTurnIfDue(campaignId)
+        console.log(ran ? '✅ World turn complete' : '✅ World turn not due yet')
       } catch (error) {
         console.error('❌ Final resolution failed:', error)
         // Continue to mark as RESOLVED even if resolution fails

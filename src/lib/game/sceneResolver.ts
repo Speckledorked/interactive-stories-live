@@ -33,6 +33,7 @@ import {
 import { createSceneMemory } from '@/lib/ai/memoryCreation'
 import { extractAndApplyConsequences } from './consequences'
 import { formatRollReceipt } from './resolution'
+import { elapsedInGameHours } from './tick/pacing'
 import { aggregateInventoryItems, describeAggregatedItem } from './itemRegistry'
 import { reportError } from '@/lib/monitoring'
 
@@ -398,11 +399,17 @@ async function performResolution(
       )
     }
 
+    // Bank this exchange's in-game time toward the next world turn — the
+    // faction/NPC simulation advances with fiction time, not per action
+    // (see lib/game/tick/pacing.ts and runWorldTurnIfDue).
+    const hoursThisExchange = elapsedInGameHours(timePassage)
+
     await prisma.worldMeta.update({
       where: { id: worldMeta.id },
       data: {
         currentTurnNumber: currentTurn + 1,
-        currentInGameDate: newInGameDate
+        currentInGameDate: newInGameDate,
+        hoursSinceWorldTurn: { increment: hoursThisExchange }
       }
     })
 

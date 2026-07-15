@@ -131,10 +131,12 @@ export async function processResolutionJob(jobId: string): Promise<ProcessResult
 
   try {
     const { resolveScene } = await import('./sceneResolver')
-    const { runWorldTurn } = await import('./worldTurn')
+    const { runWorldTurnIfDue } = await import('./worldTurn')
 
     await resolveScene(job.campaignId, job.sceneId)
-    await runWorldTurn(job.campaignId)
+    // Paced by in-game time: only runs when the fiction has actually
+    // advanced far enough since the last world turn (see tick/pacing.ts).
+    await runWorldTurnIfDue(job.campaignId)
 
     await prisma.resolutionJob.update({
       where: { id: jobId },

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { DEFAULT_FACTION_CAP, DEFAULT_NPC_CAP } from '@/lib/game/tick/caps'
+import { DEFAULT_WORLD_TURN_HOURS } from '@/lib/game/tick/pacing'
 
 export async function GET(
   request: NextRequest,
@@ -27,14 +28,16 @@ export async function GET(
 
     const worldMeta = await prisma.worldMeta.findUnique({
       where: { campaignId },
-      select: { factionCap: true, npcCap: true },
+      select: { factionCap: true, npcCap: true, worldTurnHours: true },
     })
 
     return NextResponse.json({
       factionCap: worldMeta?.factionCap ?? null,
       npcCap: worldMeta?.npcCap ?? null,
+      worldTurnHours: worldMeta?.worldTurnHours ?? null,
       defaultFactionCap: DEFAULT_FACTION_CAP,
       defaultNpcCap: DEFAULT_NPC_CAP,
+      defaultWorldTurnHours: DEFAULT_WORLD_TURN_HOURS,
     })
   } catch (error) {
     console.error('Get simulation settings error:', error)
@@ -69,7 +72,7 @@ export async function PATCH(
     // Null clears the override back to the default; a positive integer sets
     // a campaign-specific cap. Anything else is rejected rather than
     // silently coerced — a bad cap value would quietly change tick behavior.
-    for (const field of ['factionCap', 'npcCap'] as const) {
+    for (const field of ['factionCap', 'npcCap', 'worldTurnHours'] as const) {
       if (body[field] !== null && body[field] !== undefined) {
         if (!Number.isInteger(body[field]) || body[field] < 1) {
           return NextResponse.json(
@@ -85,15 +88,18 @@ export async function PATCH(
       data: {
         factionCap: body.factionCap === undefined ? undefined : body.factionCap,
         npcCap: body.npcCap === undefined ? undefined : body.npcCap,
+        worldTurnHours: body.worldTurnHours === undefined ? undefined : body.worldTurnHours,
       },
-      select: { factionCap: true, npcCap: true },
+      select: { factionCap: true, npcCap: true, worldTurnHours: true },
     })
 
     return NextResponse.json({
       factionCap: worldMeta.factionCap,
       npcCap: worldMeta.npcCap,
+      worldTurnHours: worldMeta.worldTurnHours,
       defaultFactionCap: DEFAULT_FACTION_CAP,
       defaultNpcCap: DEFAULT_NPC_CAP,
+      defaultWorldTurnHours: DEFAULT_WORLD_TURN_HOURS,
     })
   } catch (error) {
     console.error('Update simulation settings error:', error)

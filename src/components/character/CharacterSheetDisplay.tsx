@@ -325,42 +325,52 @@ export default function CharacterSheetDisplay({
             {/* Abilities & Knowledge — the knowledge-relative sheet. What
                 renders here is what the character KNOWS: unlocked abilities
                 show with a qualitative skill band, glimpsed ones as "???",
-                and everything they've never encountered simply isn't here. */}
-            {capabilitySummary && (capabilitySummary.known.length > 0 || capabilitySummary.glimpsed.length > 0) && (
+                and everything they've never encountered simply isn't here.
+                Always shown (not just when non-empty) — an Outsider starts
+                with a genuinely blank sheet by design, and without an
+                explicit empty state that's indistinguishable from the
+                feature being broken. */}
+            {capabilitySummary && (
               <div className="card md:col-span-2">
                 <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide mb-3">Abilities & Knowledge</h3>
-                <div className="space-y-4">
-                  {capabilityDomains.map(domain => (
-                    <div key={domain}>
-                      <div className="text-xs font-semibold text-ember-400/50 uppercase tracking-wide mb-2">{domain}</div>
-                      <div className="grid md:grid-cols-2 gap-3">
-                        {capabilitySummary.known
-                          .filter((k: any) => k.domain === domain)
-                          .map((k: any, idx: number) => (
-                            <div key={`k-${idx}`} className="bg-gradient-to-r from-ember-900/20 to-wine-800/15 rounded-lg p-4 border border-ember-800/30">
-                              <div className="flex items-center justify-between gap-2 mb-1">
-                                <span className="font-medium text-ember-300">{k.name}</span>
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-ember-800/40 text-ember-300/80 capitalize whitespace-nowrap">{k.band}</span>
+                {capabilitySummary.known.length === 0 && capabilitySummary.glimpsed.length === 0 ? (
+                  <p className="text-sm text-ember-300/50 italic">
+                    You haven't discovered anything about this world's systems yet — abilities and lore will appear here as the story reveals them.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {capabilityDomains.map(domain => (
+                      <div key={domain}>
+                        <div className="text-xs font-semibold text-ember-400/50 uppercase tracking-wide mb-2">{domain}</div>
+                        <div className="grid md:grid-cols-2 gap-3">
+                          {capabilitySummary.known
+                            .filter((k: any) => k.domain === domain)
+                            .map((k: any, idx: number) => (
+                              <div key={`k-${idx}`} className="bg-gradient-to-r from-ember-900/20 to-wine-800/15 rounded-lg p-4 border border-ember-800/30">
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <span className="font-medium text-ember-300">{k.name}</span>
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-ember-800/40 text-ember-300/80 capitalize whitespace-nowrap">{k.band}</span>
+                                </div>
+                                {k.description && (
+                                  <p className="text-xs text-ember-300/60">{k.description}</p>
+                                )}
                               </div>
-                              {k.description && (
-                                <p className="text-xs text-ember-300/60">{k.description}</p>
-                              )}
-                            </div>
-                          ))}
-                        {capabilitySummary.glimpsed
-                          .filter((g: any) => g.domain === domain)
-                          .map((g: any, idx: number) => (
-                            <div key={`g-${idx}`} className="rounded-lg p-4 border border-dashed border-ember-800/40 bg-obsidian-900/30">
-                              <div className="font-medium text-ember-300/40 mb-1">???</div>
-                              <p className="text-xs text-ember-300/40 italic">
-                                {g.hint || 'You know something like this exists… but not what it is.'}
-                              </p>
-                            </div>
-                          ))}
+                            ))}
+                          {capabilitySummary.glimpsed
+                            .filter((g: any) => g.domain === domain)
+                            .map((g: any, idx: number) => (
+                              <div key={`g-${idx}`} className="rounded-lg p-4 border border-dashed border-ember-800/40 bg-obsidian-900/30">
+                                <div className="font-medium text-ember-300/40 mb-1">???</div>
+                                <p className="text-xs text-ember-300/40 italic">
+                                  {g.hint || 'You know something like this exists… but not what it is.'}
+                                </p>
+                              </div>
+                            ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

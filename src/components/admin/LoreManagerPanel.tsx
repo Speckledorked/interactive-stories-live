@@ -1,0 +1,280 @@
+// src/components/admin/LoreManagerPanel.tsx
+// Admin UI for importing reference lore: paste raw text, import a single
+// page by URL, or crawl an entire MediaWiki-based wiki (Fandom, wiki.gg,
+// Wikipedia, etc — see lib/lore/mediaWikiClient.ts; non-MediaWiki sites
+// fall back to being imported as a single page). Each import runs as a
+// background job (lib/lore/loreQueue.ts); this panel polls for progress.
+
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import { authenticatedFetch } from '@/lib/clientAuth'
+
+type SourceType = 'PASTE' | 'URL' | 'WIKI'
+type JobStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+
+interface LoreJob {
+  id: string
+  sourceType: SourceType
+  sourceUrl: string | null
+  sourceTitle: string | null
+  status: JobStatus
+  lastError: string | null
+  pagesFound: number
+  pagesDone: number
+  entriesCreated: number
+  createdAt: string
+  finishedAt: string | null
+}
+
+const SOURCE_TABS: Array<{ value: SourceType; label: string }> = [
+  { value: 'PASTE', label: 'Paste Text' },
+  { value: 'URL', label: 'Single Page' },
+  { value: 'WIKI', label: 'Whole Wiki' },
+]
+
+const POLL_INTERVAL_MS = 4000
+
+export default function LoreManagerPanel({ campaignId }: { campaignId: string }) {
+  const [jobs, setJobs] = useState<LoreJob[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [sourceType, setSourceType] = useState<SourceType>('PASTE')
+  const [title, setTitle] = useState('')
+  const [text, setText] = useState('')
+  const [url, setUrl] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchJobs = async () => {
+    try {
+      const res = await authenticatedFetch(`/api/campaigns/${campaignId}/lore`)
+      if (!res.ok) throw new Error('Failed to load lore sources')
+      const data = await res.json()
+      setJobs(data.jobs || [])
+      setError(null)
+    } catch (err) {
+      setError('Failed to load lore sources')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchJobs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId])
+
+  useEffect(() => {
+    const hasLiveJob = jobs.some(j => j.status === 'PENDING' || j.status === 'RUNNING')
+    if (hasLiveJob && !pollRef.current) {
+      pollRef.current = setInterval(fetchJobs, POLL_INTERVAL_MS)
+    } else if (!hasLiveJob && pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setFormError(null)
+
+    if (sourceType === 'PASTE' && !text.trim()) {
+      setFormError('Paste some text to import.')
+      return
+    }
+    if (sourceType !== 'PASTE' && !url.trim()) {
+      setFormError('Enter a URL to import.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const res = await authenticatedFetch(`/api/campaigns/${campaignId}/lore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceType,
+          sourceTitle: title.trim() || undefined,
+          ...(sourceType === 'PASTE' ? { rawText: text } : { sourceUrl: url.trim() }),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to start import')
+
+      setTitle('')
+      setText('')
+      setUrl('')
+      await fetchJobs()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Failed to start import')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async (jobId: string) => {
+    if (!confirm('Delete this lore source and everything imported from it?')) return
+    try {
+      const res = await authenticatedFetch(`/api/campaigns/${campaignId}/lore/${jobId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete')
+      await fetchJobs()
+    } catch (err) {
+      setError('Failed to delete lore source')
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="border border-ember-900/30 rounded-lg p-4 bg-black/25">
+        <h3 className="font-semibold mb-3">Import Lore</h3>
+        <p className="text-xs text-ember-300/60 mb-3">
+          Reference material the AI GM can draw on during play — a world bible, faction writeups, a wiki page,
+          or an entire fan wiki. Wiki crawling only works for MediaWiki-based sites (Fandom, wiki.gg, Wikipedia, etc);
+          give it any page URL on the wiki and it finds the rest itself.
+        </p>
+
+        <div className="flex gap-2 mb-3">
+          {SOURCE_TABS.map(tab => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setSourceType(tab.value)}
+              className={`px-3 py-1.5 text-sm rounded-md border ${
+                sourceType === tab.value
+                  ? 'bg-wine-600 border-wine-500 text-white'
+                  : 'border-ember-900/40 text-ember-300/70 hover:text-ember-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-ember-200/80 mb-1">Title (optional)</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={sourceType === 'PASTE' ? 'e.g. Essence Magic Overview' : undefined}
+              className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+            />
+          </div>
+
+          {sourceType === 'PASTE' ? (
+            <div>
+              <label className="block text-sm font-medium text-ember-200/80 mb-1">Text *</label>
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={8}
+                placeholder="Paste any chunk of lore — history, factions, magic systems, character bios..."
+                className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-ember-200/80 mb-1">
+                {sourceType === 'WIKI' ? 'Any page URL on the wiki *' : 'URL *'}
+              </label>
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder={sourceType === 'WIKI' ? 'https://example.fandom.com/wiki/Main_Page' : 'https://example.com/article'}
+                className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+              />
+            </div>
+          )}
+
+          {formError && <p className="text-sm text-red-400">{formError}</p>}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-4 py-2 bg-success-600 text-white rounded-md hover:bg-success-500 disabled:opacity-50"
+          >
+            {submitting ? 'Starting import...' : 'Import'}
+          </button>
+        </form>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="font-semibold">Imported Sources</h3>
+        {loading && <p className="text-sm text-ember-300/60">Loading...</p>}
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        {!loading && jobs.length === 0 && (
+          <p className="text-sm text-ember-300/60">No lore imported yet.</p>
+        )}
+        {jobs.map(job => (
+          <LoreJobRow key={job.id} job={job} onDelete={() => handleDelete(job.id)} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function LoreJobRow({ job, onDelete }: { job: LoreJob; onDelete: () => void }) {
+  const label = job.sourceTitle || job.sourceUrl || 'Pasted text'
+  const progressPct = job.pagesFound > 0 ? Math.round((job.pagesDone / job.pagesFound) * 100) : null
+
+  return (
+    <div className="border border-ember-900/30 rounded-lg p-4 flex justify-between items-start gap-4">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono uppercase text-ember-400/60">{job.sourceType}</span>
+          <h4 className="font-medium truncate">{label}</h4>
+          <StatusBadge status={job.status} />
+        </div>
+        {(job.status === 'PENDING' || job.status === 'RUNNING') && job.sourceType === 'WIKI' && (
+          <p className="text-xs text-ember-300/60 mt-1">
+            {job.pagesFound > 0
+              ? `Crawling ${job.pagesDone}/${job.pagesFound} pages${progressPct !== null ? ` (${progressPct}%)` : ''}`
+              : 'Finding pages...'}
+          </p>
+        )}
+        {job.status === 'COMPLETED' && (
+          <p className="text-xs text-ember-300/60 mt-1">
+            {job.entriesCreated} {job.entriesCreated === 1 ? 'entry' : 'entries'} imported
+            {job.pagesFound > 1 ? ` from ${job.pagesFound} pages` : ''}
+          </p>
+        )}
+        {job.status === 'FAILED' && job.lastError && (
+          <p className="text-xs text-red-400 mt-1">{job.lastError}</p>
+        )}
+      </div>
+      <button
+        onClick={onDelete}
+        className="px-3 py-1 text-sm bg-black/40 text-ember-300/80 rounded-md hover:bg-black/50 hover:text-red-400 shrink-0"
+      >
+        Delete
+      </button>
+    </div>
+  )
+}
+
+function StatusBadge({ status }: { status: JobStatus }) {
+  const styles: Record<JobStatus, string> = {
+    PENDING: 'text-ember-300/70 border-ember-400/30',
+    RUNNING: 'text-blue-300 border-blue-400/40',
+    COMPLETED: 'text-success-400 border-success-500/40',
+    FAILED: 'text-red-400 border-red-500/40',
+  }
+  return (
+    <span className={`text-xs border rounded px-1.5 py-0.5 ${styles[status]}`}>
+      {status === 'RUNNING' ? 'Importing...' : status.charAt(0) + status.slice(1).toLowerCase()}
+    </span>
+  )
+}

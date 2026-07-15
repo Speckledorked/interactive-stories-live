@@ -28,6 +28,12 @@ export interface RateLimitResult {
 // playing, tight for a script hammering the API.
 export const AI_ACTION_LIMIT = { bucket: 'ai-action', limit: 10, windowSeconds: 60 } as const
 
+// Lore imports each kick off a background job (an embedding call per
+// chunk, up to a whole wiki crawl) — cheap per-request but expensive in
+// aggregate, so this gets its own tighter bucket rather than sharing
+// ai-action's budget with actual gameplay.
+export const LORE_IMPORT_LIMIT = { bucket: 'lore-import', limit: 5, windowSeconds: 60 } as const
+
 const PRUNE_RETENTION_MS = 60 * 60 * 1000 // keep at most an hour of windows
 
 export async function checkRateLimit(

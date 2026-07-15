@@ -634,9 +634,20 @@ async function applyOrganicCharacterGrowth(
     return
   }
 
+  // Only THIS exchange's actions. This runs before completeExchange()
+  // flips them to 'resolved', so 'pending' is exactly the set that was
+  // just rolled and narrated. Without this filter, every earlier
+  // exchange's rolls in a long-running scene would be re-counted into
+  // statUsage on each new resolution, inflating growth quadratically.
+  const currentExchangeActions = scene.playerActions.filter(a => a.status === 'pending')
+  if (currentExchangeActions.length === 0) {
+    console.log('  No pending actions this exchange')
+    return
+  }
+
   // Group actions by character
   const actionsByCharacter = new Map<string, any[]>()
-  for (const action of scene.playerActions) {
+  for (const action of currentExchangeActions) {
     const charId = action.characterId
     if (!actionsByCharacter.has(charId)) {
       actionsByCharacter.set(charId, [])

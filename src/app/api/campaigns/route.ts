@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { CreateCampaignRequest, ErrorResponse } from '@/types/api'
-import { getTemplate, applyCampaignTemplate } from '@/lib/templates/campaign-templates'
+import { getTemplate, applyCampaignTemplate, createFactionsForCampaign } from '@/lib/templates/campaign-templates'
 import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels } from '@/lib/ai/worldGenerator'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 
@@ -149,9 +149,15 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Apply template moves + factions (AI-generated factions if available)
+      // Apply template moves + factions (AI-generated factions if available).
+      // Template-less/custom-universe campaigns still get their AI-generated
+      // factions persisted directly — factions aren't a template-only
+      // concept, only the default Move records are.
       if (template) {
         await applyCampaignTemplate(newCampaign.id, template.id, tx, generatedFactions)
+      } else if (generatedFactions && generatedFactions.length > 0) {
+        await createFactionsForCampaign(newCampaign.id, tx, generatedFactions)
+        console.log(`✅ Persisted ${generatedFactions.length} AI-generated factions (no template)`)
       }
 
       // Knowledge-relative sheets: persist the universe's capability

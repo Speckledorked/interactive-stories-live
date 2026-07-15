@@ -150,12 +150,17 @@ export default function CharactersListPage() {
                   <div className="grid grid-cols-3 gap-3 text-xs mb-4">
                     {Object.entries(character.stats as Record<string, number>)
                       .slice(0, 6)
-                      .map(([stat, value]) => (
-                        <div key={stat} className="text-center p-2 bg-black/25 rounded-lg border border-ember-900/30">
-                          <div className="text-ember-400/50 uppercase font-medium mb-1">{stat}</div>
-                          <div className="text-ember-100 font-bold text-base">{value}</div>
-                        </div>
-                      ))}
+                      .map(([stat, value]) => {
+                        const custom = (campaign?.statLabels as any)?.[stat]
+                        return (
+                          <div key={stat} className="text-center p-2 bg-black/25 rounded-lg border border-ember-900/30">
+                            <div className={`text-ember-400/50 font-medium mb-1 ${custom?.label ? '' : 'uppercase'}`}>
+                              {custom?.label || stat}
+                            </div>
+                            <div className="text-ember-100 font-bold text-base">{value}</div>
+                          </div>
+                        )
+                      })}
                   </div>
                 )}
 

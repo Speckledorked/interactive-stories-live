@@ -106,7 +106,6 @@ export default function WikiPage() {
     { key: 'CLOCK', label: 'Clocks', icon: '⏰' },
     { key: 'ITEM', label: 'Items', icon: '🎒' },
     { key: 'QUEST', label: 'Quests', icon: '📜' },
-    { key: 'LORE', label: 'Lore', icon: '📚' },
     { key: 'RUMORS', label: 'Rumors', icon: '🗣️' },
   ]
 

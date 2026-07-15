@@ -270,6 +270,45 @@ model Campaign {
   // the AI GM to draw on during play (see lib/lore, lib/ai/loreRetrieval.ts).
   loreImportJobs LoreImportJob[]
   loreEntries    LoreEntry[]
+
+  // Quest tracking: named objectives the AI GM opens/progresses/closes
+  // through play (quest_changes in world_updates — see lib/game/stateUpdater.ts).
+  quests Quest[]
+}
+
+//
+// QUESTS — named objectives with a lifecycle, tracked from the fiction.
+// The AI GM registers a quest when an NPC/faction gives the party a job,
+// appends progress beats as scenes resolve, and closes it when the fiction
+// settles it. Synced to the wiki's QUEST tab (see sceneResolver.ts).
+//
+
+enum QuestStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+  ABANDONED
+}
+
+model Quest {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String      @db.Text
+  objective   String?     @db.Text // what "done" looks like, in-fiction
+  givenBy     String? // NPC or faction name that issued it (free text)
+  reward      String? // what was promised, if anything (free text)
+  status      QuestStatus @default(ACTIVE)
+  // Appended narrative beats, newest last — "Turn 4: found the smuggler's ledger"
+  progressLog String?     @db.Text
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
+
+  @@index([campaignId, status])
 }
 
 //

@@ -33,6 +33,7 @@ import {
 import { createSceneMemory } from '@/lib/ai/memoryCreation'
 import { extractAndApplyConsequences } from './consequences'
 import { formatRollReceipt } from './resolution'
+import { aggregateInventoryItems, describeAggregatedItem } from './itemRegistry'
 import { reportError } from '@/lib/monitoring'
 
 /**
@@ -1099,6 +1100,91 @@ async function updateWikiEntries(
           summary: location.description || `A location in the world`,
           description: locDesc,
           tags: location.locationType ? [location.locationType] : [],
+          aliases: [],
+          importance: 'normal',
+          lastSeenTurn: turnNumber,
+          createdBy: 'ai'
+        }
+      })
+    }
+  }
+
+  // Sync Quest records to wiki entries. Quests are inherently
+  // player-visible (they were given to the party on-screen), so no
+  // discovery gate — description regenerated each sync like clocks.
+  const quests = await prisma.quest.findMany({ where: { campaignId } })
+  for (const quest of quests) {
+    const existing = await prisma.wikiEntry.findFirst({
+      where: { campaignId, entryType: 'QUEST', name: quest.name }
+    })
+
+    const statusLine = quest.status === 'ACTIVE' ? 'In progress' : quest.status.charAt(0) + quest.status.slice(1).toLowerCase()
+    const questDesc = [
+      quest.description,
+      quest.objective ? `Objective: ${quest.objective}` : null,
+      quest.givenBy ? `Given by: ${quest.givenBy}` : null,
+      quest.reward ? `Reward: ${quest.reward}` : null,
+      `Status: ${statusLine}`,
+      quest.progressLog ? `Progress:\n${quest.progressLog}` : null,
+    ].filter(Boolean).join('\n\n')
+
+    if (existing) {
+      await prisma.wikiEntry.update({
+        where: { id: existing.id },
+        data: {
+          description: questDesc,
+          isActive: quest.status === 'ACTIVE',
+          lastSeenTurn: turnNumber,
+          updatedAt: new Date()
+        }
+      })
+    } else {
+      await prisma.wikiEntry.create({
+        data: {
+          campaignId,
+          entryType: 'QUEST',
+          name: quest.name,
+          summary: quest.objective || quest.description,
+          description: questDesc,
+          tags: [quest.status.toLowerCase()],
+          aliases: [],
+          importance: 'major',
+          lastSeenTurn: turnNumber,
+          createdBy: 'ai'
+        }
+      })
+    }
+  }
+
+  // Sync the party's items to wiki entries — aggregated across every
+  // living character's inventory (there is no Item table; see
+  // lib/game/itemRegistry.ts). Entries for items the party no longer
+  // carries are left in place as a record, like every other entry type.
+  const inventoryCharacters = await prisma.character.findMany({
+    where: { campaignId, isAlive: true },
+    select: { name: true, inventory: true }
+  })
+  const aggregatedItems = aggregateInventoryItems(inventoryCharacters)
+  for (const item of aggregatedItems) {
+    const existing = await prisma.wikiEntry.findFirst({
+      where: { campaignId, entryType: 'ITEM', name: item.name }
+    })
+    const itemDesc = describeAggregatedItem(item)
+
+    if (existing) {
+      await prisma.wikiEntry.update({
+        where: { id: existing.id },
+        data: { description: itemDesc, lastSeenTurn: turnNumber, updatedAt: new Date() }
+      })
+    } else {
+      await prisma.wikiEntry.create({
+        data: {
+          campaignId,
+          entryType: 'ITEM',
+          name: item.name,
+          summary: itemDesc.split('\n')[0],
+          description: itemDesc,
+          tags: item.tags,
           aliases: [],
           importance: 'normal',
           lastSeenTurn: turnNumber,

@@ -54,10 +54,12 @@ const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tic
 /**
  * Run one deterministic world tick for a campaign.
  *
- * Cadence: called once per player action (from runWorldTurn, after a scene
- * resolves) — the same cadence the rest of the world-turn system already
- * uses. There is no separate clock; this rides the existing
- * WorldMeta.currentTurnNumber progression instead of inventing a new one.
+ * Cadence: paced by IN-GAME time — runWorldTurnIfDue only invokes
+ * runWorldTurn (and therefore this) once enough fictional hours have
+ * accumulated from the AI's time_passage (default one in-game day; see
+ * lib/game/tick/pacing.ts). There is no separate clock; this rides the
+ * existing WorldMeta.currentTurnNumber progression instead of inventing
+ * a new one.
  */
 export async function runWorldTick(
   campaignId: string,

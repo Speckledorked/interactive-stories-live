@@ -21,12 +21,12 @@ vi.mock('../sceneResolver', () => ({
   getCurrentScene: vi.fn(),
 }))
 vi.mock('../worldTurn', () => ({
-  runWorldTurn: vi.fn(),
+  runWorldTurnIfDue: vi.fn().mockResolvedValue({ ran: false }),
 }))
 
 import { prisma } from '@/lib/prisma'
 import { resolveScene } from '../sceneResolver'
-import { runWorldTurn } from '../worldTurn'
+import { runWorldTurnIfDue } from '../worldTurn'
 import {
   enqueueSceneResolution,
   processResolutionJob,
@@ -81,7 +81,7 @@ describe('processResolutionJob', () => {
     const result = await processResolutionJob('job1')
 
     expect(resolveScene).toHaveBeenCalledWith('camp1', 'scene1')
-    expect(runWorldTurn).toHaveBeenCalledWith('camp1')
+    expect(runWorldTurnIfDue).toHaveBeenCalledWith('camp1')
     expect(db.resolutionJob.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) })
     )

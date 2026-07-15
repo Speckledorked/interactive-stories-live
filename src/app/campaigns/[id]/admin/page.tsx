@@ -131,8 +131,10 @@ export default function AdminPage() {
   const [simulationSettings, setSimulationSettings] = useState<{
     factionCap: number | null
     npcCap: number | null
+    worldTurnHours: number | null
     defaultFactionCap: number
     defaultNpcCap: number
+    defaultWorldTurnHours: number
   } | null>(null)
   const [worldEvents, setWorldEvents] = useState<any[]>([])
   const [worldEventsTurn, setWorldEventsTurn] = useState<number | null>(null)
@@ -278,6 +280,7 @@ export default function AdminPage() {
         body: JSON.stringify({
           factionCap: simulationSettings.factionCap,
           npcCap: simulationSettings.npcCap,
+          worldTurnHours: simulationSettings.worldTurnHours,
         }),
       })
 
@@ -783,12 +786,34 @@ export default function AdminPage() {
                         />
                       </div>
                     </div>
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-ember-200/80 mb-1">
+                        World advances every N in-game hours (default {simulationSettings.defaultWorldTurnHours})
+                      </label>
+                      <p className="text-xs text-ember-400/50 mb-2">
+                        Factions and NPCs move with story time, not per action — the off-screen world advances once
+                        this many fictional hours have passed in play. Lower = a more restless world.
+                      </p>
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder={String(simulationSettings.defaultWorldTurnHours)}
+                        value={simulationSettings.worldTurnHours ?? ''}
+                        onChange={(e) =>
+                          setSimulationSettings({
+                            ...simulationSettings,
+                            worldTurnHours: e.target.value === '' ? null : parseInt(e.target.value),
+                          })
+                        }
+                        className="block w-full max-w-xs border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                      />
+                    </div>
                     <button
                       onClick={handleSaveSimulationSettings}
                       disabled={saving}
                       className="mt-3 px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
                     >
-                      {saving ? 'Saving...' : 'Save Simulation Caps'}
+                      {saving ? 'Saving...' : 'Save Simulation Settings'}
                     </button>
                   </div>
                 )}

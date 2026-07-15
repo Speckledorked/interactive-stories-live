@@ -11,6 +11,7 @@ import { createCampaignMemory } from '@/lib/ai/memoryCreation'
 import { consolidateOldMemories } from '@/lib/ai/memoryConsolidation'
 import { EventVisibility } from '@prisma/client'
 import { PendingAmbition, WorldChange, clamp, findRivalIds } from './tick/types'
+import { resolveWorldTurnHours, decideWorldTurnPacing } from './tick/pacing'
 import { AMBITION_CATEGORY_OPTIONS, decideAmbitionOutcome } from './tick/ambitionTick'
 import { decideTerritoryClaim } from './tick/territory'
 import { persistWorldEvents } from './tick/worldEventLog'
@@ -18,9 +19,45 @@ import { logSignificantChanges } from './tick/historyLog'
 import { sendWorldDigest } from '@/lib/notifications/world-digest'
 
 /**
+ * Run a world turn only if enough IN-GAME time has accumulated since the
+ * last one (see lib/game/tick/pacing.ts — default one fictional day).
+ * This is what the resolution pipeline calls: rapid exchanges where mere
+ * minutes pass in the fiction no longer advance factions, and a "three
+ * days later" beat does. The accumulator reset is an atomic claim
+ * (updateMany with a gte guard) so concurrent resolutions can't both run
+ * a turn off the same banked hours. Admin force paths still call
+ * runWorldTurn directly, bypassing the gate.
+ */
+export async function runWorldTurnIfDue(campaignId: string): Promise<{ ran: boolean }> {
+  const worldMeta = await prisma.worldMeta.findUnique({
+    where: { campaignId },
+    select: { hoursSinceWorldTurn: true, worldTurnHours: true }
+  })
+  if (!worldMeta) return { ran: false }
+
+  const threshold = resolveWorldTurnHours(worldMeta)
+  const decision = decideWorldTurnPacing(worldMeta.hoursSinceWorldTurn, threshold)
+  if (!decision.shouldRun) {
+    console.log(`🌍 World turn not due (${worldMeta.hoursSinceWorldTurn.toFixed(1)}h banked of ${threshold}h)`)
+    return { ran: false }
+  }
+
+  const claimed = await prisma.worldMeta.updateMany({
+    where: { campaignId, hoursSinceWorldTurn: { gte: threshold } },
+    data: { hoursSinceWorldTurn: decision.remainingHours }
+  })
+  if (claimed.count === 0) {
+    return { ran: false }
+  }
+
+  await runWorldTurn(campaignId)
+  return { ran: true }
+}
+
+/**
  * Run a world turn - advance clocks and generate background events
  * This simulates the world moving forward independent of player actions
- * 
+ *
  * @param campaignId - Campaign to advance
  */
 export async function runWorldTurn(campaignId: string) {

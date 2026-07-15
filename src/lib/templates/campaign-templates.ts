@@ -433,10 +433,37 @@ export interface GeneratedFactionOverride {
   name: string
   description: string
   goals: string
-  currentPlan: string
+  currentPlan?: string
   threatLevel: number
   resources: number
   influence: number
+}
+
+/**
+ * Persist a set of factions for a new campaign. Shared by applyCampaignTemplate
+ * (template campaigns) and the route handler directly (template-less/custom
+ * universe campaigns) — factions aren't template-specific, so this doesn't
+ * belong gated behind "did the user pick a template".
+ */
+export async function createFactionsForCampaign(
+  campaignId: string,
+  prisma: any,
+  factions: GeneratedFactionOverride[]
+): Promise<void> {
+  for (const faction of factions) {
+    await prisma.faction.create({
+      data: {
+        campaignId,
+        name: faction.name,
+        description: faction.description,
+        goals: faction.goals,
+        currentPlan: faction.currentPlan ?? null,
+        resources: faction.resources,
+        influence: faction.influence,
+        threatLevel: faction.threatLevel
+      }
+    })
+  }
 }
 
 /**
@@ -481,20 +508,7 @@ export async function applyCampaignTemplate(
     influence: f.influence,
   }))
 
-  for (const faction of factionsToCreate) {
-    await prisma.faction.create({
-      data: {
-        campaignId,
-        name: faction.name,
-        description: faction.description,
-        goals: faction.goals,
-        currentPlan: faction.currentPlan ?? null,
-        resources: faction.resources,
-        influence: faction.influence,
-        threatLevel: faction.threatLevel
-      }
-    })
-  }
+  await createFactionsForCampaign(campaignId, prisma, factionsToCreate)
 
   console.log(`✅ Applied template: ${template.name} (${factionsToCreate.length} factions, ${generatedFactions ? 'AI-generated' : 'template defaults'})`)
 }

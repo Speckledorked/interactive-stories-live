@@ -182,6 +182,20 @@ export interface AIGMResponse {
       location_type?: string // town, dungeon, wilderness, inn, building, etc.
       gm_notes_append?: string
     }>
+    // Quest lifecycle: open when the fiction hands the party a job/goal,
+    // append progress beats as scenes advance it, close when it settles.
+    quest_changes?: Array<{
+      name: string
+      is_new?: boolean // true when a quest is taken on for the first time
+      changes: {
+        description?: string // what this quest is, for new quests
+        objective?: string   // what "done" looks like
+        given_by?: string    // NPC/faction that issued it
+        reward?: string      // what was promised, if anything
+        status?: 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'ABANDONED'
+        progress_append?: string // one beat of progress made THIS scene
+      }
+    }>
     organic_advancement?: Array<{
       character_id: string
       stat_increases?: Array<{
@@ -295,6 +309,15 @@ export interface AIGMRequest {
       defender_allies: number
       momentum: string
       turns_elapsed: number
+    }>
+    // Open quests, so the AI progresses/closes existing undertakings
+    // instead of re-registering or forgetting them.
+    quests?: Array<{
+      name: string
+      description: string
+      objective: string | null
+      given_by: string | null
+      recent_progress: string | null
     }>
     relevant_campaign_history?: Array<{
       turn: number
@@ -680,6 +703,11 @@ You MUST respond with a JSON object matching this structure:
       {"name": "The Rusty Flagon", "is_new": true, "description": "A dimly-lit tavern reeking of pipe smoke and old ale.", "location_type": "inn"},
       {"name": "Irongate Keep", "gm_notes_append": "The portcullis is now damaged after the siege."}
     ],
+    "quest_changes": [
+      {"name": "The Missing Caravan", "is_new": true, "changes": {"description": "Merchants vanished on the north road", "objective": "Find the caravan and learn what took it", "given_by": "Guildmaster Oren", "reward": "200 gold and guild favor"}},
+      {"name": "EXISTING_QUEST", "changes": {"progress_append": "Found wolf tracks that turn to bootprints at the river"}},
+      {"name": "ANOTHER_EXISTING_QUEST", "changes": {"status": "COMPLETED", "progress_append": "Delivered the ledger to the magistrate"}}
+    ],
     "organic_advancement": [...],
     "notes_for_gm": "..."
   }
@@ -828,6 +856,11 @@ REGISTER LOCATIONS: Whenever the characters visit or you describe a named place,
 - For already-known locations, use gm_notes_append to record how it changed (fire damage, new guards, etc.)
 - Good example: {"name": "The Hollow Bridge", "is_new": true, "description": "A crumbling stone arch over a black river. Moss covers every surface. Something moves in the water below.", "location_type": "wilderness"}
 
+TRACK QUESTS: Whenever the fiction hands the party a concrete job, goal, or promise with a "done" state — an NPC asks for help, a faction offers work, the party commits to a rescue/heist/investigation — register it in quest_changes with is_new: true (name, description, objective, given_by, reward if promised). Check the ACTIVE QUESTS list below first; only register genuinely new undertakings.
+- Every scene that meaningfully advances an active quest, add a progress_append beat for it (one sentence, concrete: what was learned/gained/lost)
+- When a quest resolves — success, failure, or the party walking away — set status to COMPLETED, FAILED, or ABANDONED, with a final progress_append saying how
+- Vague ambitions ("get stronger", "explore the city") are NOT quests; only track things with a specific fictional endpoint
+
 TRACK PC LOCATION: Whenever a player character's physical location changes during this scene — walks into another room, leaves a building, travels to a new place, is moved/carried/dragged somewhere — set changes.location in that character's pc_changes entry to where they are NOW, matching the name you used in location_changes.
 - This applies to small moves too (tavern common room → upstairs), not just town-to-town travel — a stale location is worse than an over-reported one
 - If a character doesn't move this scene, omit changes.location entirely — don't repeat their existing location
@@ -953,6 +986,12 @@ RECENT TIMELINE:
 ${world_summary.recent_timeline_events.slice(0, 5).map(e =>
   `• Turn ${e.turn_number}: ${e.title} - ${e.summary}`
 ).join('\n')}
+${world_summary.quests && world_summary.quests.length > 0 ? `
+ACTIVE QUESTS (open undertakings — advance or close these via quest_changes; don't re-register them):
+${world_summary.quests.map(q =>
+  `• ${q.name}: ${q.objective || q.description}${q.given_by ? ` (for ${q.given_by})` : ''}${q.recent_progress ? ` | Last progress: ${q.recent_progress}` : ''}`
+).join('\n')}
+` : ''}
 ${world_summary._campaignSummary ? `\n${world_summary._campaignSummary}\n` : ''}${world_summary.relevant_campaign_history && world_summary.relevant_campaign_history.length > 0 ? `
 RELEVANT CAMPAIGN HISTORY (semantically retrieved past events — treat these as established fact and stay consistent with them; if a player asks about one, answer from here, don't improvise):
 ${world_summary.relevant_campaign_history.map(m =>

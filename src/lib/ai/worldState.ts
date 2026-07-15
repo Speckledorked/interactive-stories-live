@@ -18,6 +18,16 @@ import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
 
 /**
+ * Last appended beat of a quest's progress log — the prompt only needs
+ * "where this quest currently stands", not its whole history.
+ */
+function lastProgressBeat(progressLog: string | null): string | null {
+  if (!progressLog) return null
+  const lines = progressLog.split('\n').map(l => l.trim()).filter(Boolean)
+  return lines.length > 0 ? lines[lines.length - 1] : null
+}
+
+/**
  * Build optimized world summary using context manager
  * Reduces token usage for large campaigns (10+ scenes)
  *
@@ -35,7 +45,7 @@ async function buildOptimizedWorldSummary(
   const optimizedContext = await buildOptimizedContext(prisma, campaignId, currentSceneNumber)
 
   // Get current data
-  const [worldMeta, characters, allNpcs, allFactions, locations, clocks, activeWars] = await Promise.all([
+  const [worldMeta, characters, allNpcs, allFactions, locations, clocks, activeWars, activeQuests] = await Promise.all([
     prisma.worldMeta.findUnique({ where: { campaignId } }),
     prisma.character.findMany({
       where: { campaignId, isAlive: true },
@@ -66,6 +76,12 @@ async function buildOptimizedWorldSummary(
     prisma.war.findMany({
       where: { campaignId, status: 'ESCALATING' },
       include: { participants: { include: { faction: { select: { id: true, isDiscovered: true } } } } }
+    }),
+    // Open quests, so the AI advances/closes them instead of forgetting
+    // or duplicating them (quest_changes in world_updates).
+    prisma.quest.findMany({
+      where: { campaignId, status: 'ACTIVE' },
+      orderBy: { createdAt: 'asc' }
     })
   ])
 
@@ -235,6 +251,14 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       consequence: cl.consequence || ''
     })),
 
+    quests: activeQuests.map(q => ({
+      name: q.name,
+      description: q.description,
+      objective: q.objective,
+      given_by: q.givenBy,
+      recent_progress: lastProgressBeat(q.progressLog)
+    })),
+
     // World Sim Phase 5: sustained conflicts — only ones where both sides
     // are discovered; the party can't hear about a war between two
     // factions they've never encountered. Coalitions: ally counts only
@@ -292,7 +316,8 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
     locations,
     clocks,
     recentEvents,
-    activeWars
+    activeWars,
+    activeQuests
   ] = await Promise.all([
     prisma.campaign.findUnique({ where: { id: campaignId } }),
     prisma.worldMeta.findUnique({ where: { campaignId } }),
@@ -330,6 +355,12 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
     prisma.war.findMany({
       where: { campaignId, status: 'ESCALATING' },
       include: { participants: { include: { faction: { select: { id: true, isDiscovered: true } } } } }
+    }),
+    // Open quests, so the AI advances/closes them instead of forgetting
+    // or duplicating them (quest_changes in world_updates).
+    prisma.quest.findMany({
+      where: { campaignId, status: 'ACTIVE' },
+      orderBy: { createdAt: 'asc' }
     })
   ])
 
@@ -411,6 +442,14 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       max_ticks: cl.maxTicks,
       description: cl.description || '',
       consequence: cl.consequence || ''
+    })),
+
+    quests: activeQuests.map(q => ({
+      name: q.name,
+      description: q.description,
+      objective: q.objective,
+      given_by: q.givenBy,
+      recent_progress: lastProgressBeat(q.progressLog)
     })),
 
     locations: locations.map(l => ({

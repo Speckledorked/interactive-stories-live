@@ -386,6 +386,30 @@ export async function resolveActionMechanics(
           }
         }),
       })
+
+      // Also stamp each action row with its roll — the organic advancement
+      // system (applyOrganicCharacterGrowth) reads PlayerAction.rollResult
+      // to accumulate statUsage, which is what makes stats grow from
+      // consistent successful use. Without this write, that whole chain
+      // silently never fires.
+      await Promise.all(
+        mechanics.map(m =>
+          prisma.playerAction.update({
+            where: { id: m.actionId },
+            data: {
+              rollResult: {
+                stat: m.statKey,
+                outcome: m.outcome,
+                dice: m.dice,
+                total: m.total,
+                moveName: m.moveName,
+              },
+              moveUsed: m.moveName,
+              rollRequired: true,
+            },
+          })
+        )
+      )
       console.log(`🎲 Rolled ${mechanics.length} move(s): ${mechanics.map(m => `${m.characterName} ${m.moveName}=${m.outcome}`).join('; ')}`)
     }
 

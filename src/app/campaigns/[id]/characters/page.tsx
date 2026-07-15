@@ -131,9 +131,6 @@ export default function CharactersListPage() {
               >
                 <div className="flex items-start justify-between mb-4">
                   <h3 className="text-xl font-bold text-ember-100 group-hover:text-ember-300 transition-colors">{character.name}</h3>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-ember-900/30 text-ember-300 border border-ember-800/40">
-                    Lvl {character.level || 1}
-                  </span>
                 </div>
 
                 {character.class && (

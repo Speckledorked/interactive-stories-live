@@ -937,6 +937,64 @@ export async function applyWorldUpdates(
         }
       }
 
+      // 7a. Quest lifecycle: open/progress/close named undertakings from
+      // the fiction. Matched by name (case-insensitive) like NPCs/factions.
+      if (world_updates.quest_changes) {
+        console.log(`🎯 Applying ${world_updates.quest_changes.length} quest change(s)`)
+
+        for (const questChange of world_updates.quest_changes) {
+          if (!questChange?.name) continue
+          const changes = questChange.changes || {}
+
+          const existing = await tx.quest.findFirst({
+            where: {
+              campaignId,
+              name: { equals: questChange.name, mode: 'insensitive' }
+            }
+          })
+
+          const progressLine = changes.progress_append
+            ? `Turn ${currentTurnNumber}: ${changes.progress_append}`
+            : null
+
+          if (existing) {
+            const updateData: any = {}
+            if (changes.description) updateData.description = changes.description
+            if (changes.objective) updateData.objective = changes.objective
+            if (changes.given_by) updateData.givenBy = changes.given_by
+            if (changes.reward) updateData.reward = changes.reward
+            if (progressLine) {
+              updateData.progressLog = existing.progressLog
+                ? `${existing.progressLog}\n${progressLine}`
+                : progressLine
+            }
+            if (changes.status && changes.status !== existing.status) {
+              updateData.status = changes.status
+              if (changes.status !== 'ACTIVE') updateData.resolvedAt = new Date()
+            }
+            if (Object.keys(updateData).length > 0) {
+              await tx.quest.update({ where: { id: existing.id }, data: updateData })
+              console.log(`  🎯 Updated quest: ${existing.name}${changes.status ? ` (${changes.status})` : ''}`)
+            }
+          } else {
+            await tx.quest.create({
+              data: {
+                campaignId,
+                name: questChange.name,
+                description: changes.description || questChange.name,
+                objective: changes.objective || null,
+                givenBy: changes.given_by || null,
+                reward: changes.reward || null,
+                status: changes.status || 'ACTIVE',
+                progressLog: progressLine,
+                ...(changes.status && changes.status !== 'ACTIVE' ? { resolvedAt: new Date() } : {})
+              }
+            })
+            console.log(`  🎯 Registered quest: ${questChange.name}`)
+          }
+        }
+      }
+
       // 7b. Auto-register locations from character movement
       if (world_updates.pc_changes) {
         for (const pcChange of world_updates.pc_changes) {

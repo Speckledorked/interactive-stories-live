@@ -77,7 +77,7 @@ describe('applyCampaignTemplate', () => {
     await expect(applyCampaignTemplate('camp1', 'not-a-real-template', prisma)).rejects.toThrow('not found')
   })
 
-  it('seeds front-style threats as Clocks, resolving sourceFactionId when the named faction exists', async () => {
+  it('seeds front-style threats as Clocks, resolving relatedFactionId (not sourceFactionId) when the named faction exists', async () => {
     const prisma = makeMockPrisma()
     prisma.faction.findFirst.mockResolvedValue({ id: 'faction-iron-co' })
 
@@ -86,19 +86,30 @@ describe('applyCampaignTemplate', () => {
     expect(prisma.clock.create).toHaveBeenCalled()
     const calls = prisma.clock.create.mock.calls.map((c: any) => c[0].data)
     const linked = calls.find((d: any) => d.name === 'The Iron Company Tightens Its Grip')
-    expect(linked.sourceFactionId).toBe('faction-iron-co')
+    // relatedFactionId, deliberately NOT sourceFactionId — see the schema
+    // comment: sourceFactionId would opt this clock out of the generic
+    // completion event and into resolveCompletedAmbitions, which would
+    // misapply faction stat deltas to it.
+    expect(linked.relatedFactionId).toBe('faction-iron-co')
+    expect(linked.sourceFactionId).toBeUndefined()
     expect(linked.maxTicks).toBe(6)
   })
 
-  it('leaves sourceFactionId undefined when the named faction cannot be resolved (e.g. AI factions replaced it)', async () => {
+  it('leaves relatedFactionId undefined when the named faction cannot be resolved (e.g. AI factions replaced it)', async () => {
     const prisma = makeMockPrisma() // findFirst -> null by default
     await applyCampaignTemplate('camp1', 'pbta-fantasy', prisma, [makeFaction({ name: 'Something Else Entirely' })])
 
     const calls = prisma.clock.create.mock.calls.map((c: any) => c[0].data)
     const linked = calls.find((d: any) => d.name === 'The Iron Company Tightens Its Grip')
-    expect(linked.sourceFactionId).toBeUndefined()
+    expect(linked.relatedFactionId).toBeUndefined()
     // The unlinked front (no sourceFactionName at all) still gets created.
     expect(calls.some((d: any) => d.name === "Something Wakes in the Wizard's Tower")).toBe(true)
+  })
+
+  it('skips template fronts entirely when AI generation already produced fronts', async () => {
+    const prisma = makeMockPrisma()
+    await applyCampaignTemplate('camp1', 'pbta-fantasy', prisma, undefined, false, true)
+    expect(prisma.clock.create).not.toHaveBeenCalled()
   })
 
   it('seeds the template capability scaffold as a fallback when AI generation produced none', async () => {

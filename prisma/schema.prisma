@@ -760,6 +760,10 @@ model Faction {
   // World Sim Phase 3: DESTABILIZE_RIVAL clocks aimed at this faction.
   targetedClocks Clock[] @relation("FactionTargetedClocks")
 
+  // #13 / universal front-style threats concerning this faction, without
+  // being its tracked ambition (see Clock.relatedFactionId).
+  relatedClocks Clock[] @relation("FactionRelatedClocks")
+
   // World Sim Phase 4: NPCs affiliated with this faction (leader/members).
   members NPC[] @relation("FactionMembers")
 
@@ -943,6 +947,18 @@ model Clock {
   // resolver in worldTurn.ts to handle it instead), and a joint scheme has
   // no such resolver — it wants the generic path.
   participantNpcIds String[] @default([])
+
+  // #13 / universal front-style threats: a front (template-authored or
+  // AI-generated, see campaign-templates.ts's FrontTemplate and
+  // worldGenerator.ts's GeneratedFront) may concern a real faction WITHOUT
+  // being that faction's tracked ambition. Same reasoning as
+  // participantNpcIds above — deliberately separate from sourceFactionId
+  // so a front's completion routes through the generic checkAndResolve-
+  // CompletedClocks path (a public flavor-text event) instead of
+  // resolveCompletedAmbitions, which expects a real PendingAmbition and
+  // would otherwise misapply faction stat deltas to an unrelated front.
+  relatedFactionId String?
+  relatedFaction   Faction? @relation("FactionRelatedClocks", fields: [relatedFactionId], references: [id], onDelete: SetNull)
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 

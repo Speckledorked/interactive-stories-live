@@ -38,6 +38,23 @@ export interface GeneratedStatLabel {
 
 export type GeneratedStatLabels = Record<'cool' | 'hard' | 'hot' | 'sharp' | 'weird', GeneratedStatLabel>
 
+// Universal front-style threats (#13's FrontTemplate concept, now generated
+// for EVERY campaign — not just ones using a static first-party template).
+// A ticking danger clock with a stated consequence, optionally naming a
+// real faction from `factions` above (by name; the caller resolves that to
+// a real id — see campaigns/route.ts and reseedWorld.ts, both of which use
+// Clock.relatedFactionId, deliberately not sourceFactionId, so completion
+// gets the generic flavor-text event rather than being mistaken for a
+// tracked faction ambition).
+export interface GeneratedFront {
+  name: string
+  description: string
+  category: string
+  maxTicks: number
+  consequence: string
+  sourceFactionName?: string
+}
+
 interface GeneratedWorld {
   worldSeed: string
   factions: GeneratedFaction[]
@@ -45,6 +62,7 @@ interface GeneratedWorld {
   // Characters discover it through the fiction (see lib/game/capabilities.ts).
   capabilities: GeneratedCapability[]
   statLabels?: GeneratedStatLabels
+  fronts: GeneratedFront[]
 }
 
 const GENRE_HINTS: Record<string, string> = {
@@ -126,7 +144,17 @@ Return JSON with this structure:
     "hot": { "label": "This world's name for charm, presence, and social power", "description": "1 short phrase" },
     "sharp": { "label": "This world's name for perception, wit, and intellect", "description": "1 short phrase" },
     "weird": { "label": "This world's name for connection to the strange/supernatural/exotic", "description": "1 short phrase" }
-  }
+  },
+  "fronts": [
+    {
+      "name": "Short punchy name for a looming danger already in motion",
+      "description": "1-2 sentences: what it is and why it's getting worse",
+      "category": "urgent | slow | social",
+      "max_ticks": 6,
+      "consequence": "1 sentence: what happens if nobody stops it in time",
+      "source_faction_name": "exact name of a faction from the factions list above, ONLY if this threat is that faction's doing — omit entirely otherwise"
+    }
+  ]
 }
 
 Rules:
@@ -139,6 +167,9 @@ Rules:
 - Do NOT reuse names from generic fantasy/superhero tropes (no "The Dark Brotherhood", "League of Shadows", etc.)
 - capability_domains: 3-5 domains, the learnable SYSTEMS of this world (its magic/powers/martial/social arts). 2-4 capabilities per domain. tier 1 = what any practitioner starts with, tier 2-3 = deeper arts. Mark 1-2 capabilities is_secret: true (forbidden or lost arts nobody openly knows)
 - stat_labels: rename all 5 stats to fit this world's own vocabulary (e.g. a cultivation setting might call "weird" something like "Essence Sense"; a hard sci-fi setting might not use mystical language at all). Keep each label 1-3 words, in-fiction, never the literal PbtA name. The underlying meaning (what each stat measures) must stay the same — only the name and flavor change
+- fronts: 1-3 concrete, escalating dangers already in motion — the kind of thing that gets visibly worse if nobody intervenes (not vague "evil is out there" flavor text). ${loreDigest ? 'Ground these in canon where the lore describes a real brewing conflict, threat, or crisis; invent only to fill gaps.' : ''}At least one should name a real source_faction_name from the factions list when the threat is that faction's own doing; others may be faction-free (a natural disaster, a supernatural phenomenon, a slow-building crisis nobody's causing on purpose)
+- category: "urgent" ticks forward reliably every world turn, "slow" only occasionally, "social" is the default pace — pick whichever fits how fast this danger should visibly escalate
+- max_ticks: 4-10, longer for slower-building threats
 - Make it feel like it belongs specifically to "${campaignTitle}"`
 
   try {
@@ -159,8 +190,9 @@ Rules:
         ],
         temperature: 0.95,
         // Canon-grounded generation allows up to 6 factions — give the
-        // response room so the JSON doesn't truncate mid-array.
-        max_tokens: loreDigest ? 1600 : 1000,
+        // response room so the JSON doesn't truncate mid-array. Fronts add
+        // a bounded amount on top regardless of lore.
+        max_tokens: loreDigest ? 1900 : 1300,
         response_format: { type: 'json_object' }
       })
     })
@@ -228,8 +260,26 @@ Rules:
       }
     }
 
-    console.log(`✅ Generated unique world: ${factions.length} factions, ${capabilities.length} capabilities`)
-    return { worldSeed: String(raw.world_seed), factions, capabilities, statLabels }
+    // Fronts are optional — an older-style response, or the AI simply
+    // choosing not to name any, still produces a valid world (a campaign
+    // isn't required to open with a ticking danger clock).
+    const fronts: GeneratedFront[] = []
+    if (Array.isArray(raw.fronts)) {
+      for (const f of raw.fronts) {
+        if (!f?.name || !f?.consequence) continue
+        fronts.push({
+          name: String(f.name),
+          description: String(f.description || ''),
+          category: ['urgent', 'slow', 'social'].includes(f.category) ? f.category : 'social',
+          maxTicks: Math.max(4, Math.min(10, Number(f.max_ticks) || 6)),
+          consequence: String(f.consequence),
+          sourceFactionName: f.source_faction_name ? String(f.source_faction_name) : undefined,
+        })
+      }
+    }
+
+    console.log(`✅ Generated unique world: ${factions.length} factions, ${capabilities.length} capabilities, ${fronts.length} fronts`)
+    return { worldSeed: String(raw.world_seed), factions, capabilities, statLabels, fronts }
 
   } catch (err) {
     console.error('World generation failed, using template defaults:', err)

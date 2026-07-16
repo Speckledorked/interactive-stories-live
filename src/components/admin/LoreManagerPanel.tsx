@@ -157,6 +157,9 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
           ? `Added ${data.capabilitiesAdded.length} learnable system${data.capabilitiesAdded.length === 1 ? '' : 's'}: ${data.capabilitiesAdded.join(', ')}`
           : 'No new learnable systems'
       )
+      if (data.frontsAdded?.length > 0) {
+        parts.push(`Added ${data.frontsAdded.length} front-style threat${data.frontsAdded.length === 1 ? '' : 's'}: ${data.frontsAdded.join(', ')}`)
+      }
       if (data.statLabelsSet) parts.push('Stat labels set from canon')
       if (data.corruptionThemeSet) parts.push('Corruption theme set from canon')
       if (data.archetypesReplaced > 0) parts.push(`${data.archetypesReplaced} origin archetypes regenerated from canon`)

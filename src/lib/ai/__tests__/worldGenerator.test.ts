@@ -74,6 +74,36 @@ describe('generateWorldFromTemplate', () => {
     expect(result?.statLabels).toBeUndefined()
   })
 
+  it('parses and normalizes fronts, clamping max_ticks and defaulting an invalid category', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({
+      world_seed: 'seed',
+      factions: [{ name: 'The Iron Company', description: 'x', goals: 'y', current_plan: 'z' }],
+      fronts: [
+        { name: 'The Iron Company Tightens Its Grip', description: 'x', category: 'urgent', max_ticks: 3, consequence: 'bad', source_faction_name: 'The Iron Company' },
+        { name: 'Unlinked Threat', description: 'y', category: 'bogus', max_ticks: 999, consequence: 'worse' },
+        { name: '', consequence: 'missing a name, dropped' },
+        { name: 'Missing consequence, dropped' },
+      ],
+    }))
+
+    const result = await generateWorldFromTemplate('pbta-fantasy', 'Title', '')
+
+    expect(result?.fronts).toEqual([
+      { name: 'The Iron Company Tightens Its Grip', description: 'x', category: 'urgent', maxTicks: 4, consequence: 'bad', sourceFactionName: 'The Iron Company' },
+      { name: 'Unlinked Threat', description: 'y', category: 'social', maxTicks: 10, consequence: 'worse', sourceFactionName: undefined },
+    ])
+  })
+
+  it('defaults to an empty fronts array when the response has none', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({ world_seed: 'seed', factions: [] }))
+
+    const result = await generateWorldFromTemplate('pbta-fantasy', 'Title', '')
+
+    expect(result?.fronts).toEqual([])
+  })
+
   it('returns null when the response is missing required fields', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
     vi.stubGlobal('fetch', mockCompletion({ factions: [] }))

@@ -66,13 +66,21 @@ const GENRE_HINTS: Record<string, string> = {
  * gave one — the AI still generates factions/capabilities/stat labels
  * grounded in it, it just doesn't invent a competing world_seed of its
  * own (the caller discards that field when this is set).
+ *
+ * loreDigest: excerpts of the campaign's imported canon (see
+ * lib/lore/loreDigest.ts). When present it is the highest authority —
+ * factions and capability systems should come from it BY NAME, invention
+ * only filling the gaps canon leaves. Used by the reseed-from-lore route;
+ * creation-time generation runs before any lore exists so it never passes
+ * this.
  */
 export async function generateWorldFromTemplate(
   templateId: string | null,
   campaignTitle: string,
   campaignDescription: string,
   customUniverse?: string,
-  existingWorldSeed?: string
+  existingWorldSeed?: string,
+  loreDigest?: string
 ): Promise<GeneratedWorld | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return null
@@ -86,6 +94,7 @@ Genre: ${genreHint}
 Campaign title: "${campaignTitle}"
 ${campaignDescription ? `Campaign description: "${campaignDescription}"` : ''}
 ${existingWorldSeed ? `The GM already wrote this opening situation — treat it as canon and ground everything you generate in it (don't contradict it, don't invent a competing one):\n"${existingWorldSeed}"` : ''}
+${loreDigest ? `CANON LORE — excerpts imported from this universe's actual source material. This is the HIGHEST authority, above everything else in this prompt. Factions, powers, arts, places, and names that appear here are real canon: use them, with their canonical names. Invent only where canon is silent.\n<canon>\n${loreDigest}\n</canon>` : ''}
 
 Generate a fresh, specific starting world for this exact campaign. Use the title, description${existingWorldSeed ? ', and opening situation' : ''} as inspiration — the world should feel tailored to them, not generic.
 
@@ -122,7 +131,8 @@ Return JSON with this structure:
 
 Rules:
 - world_seed: 150-250 words, specific and atmospheric, names real locations and tensions
-- factions: 2-4 factions, each with a unique name that fits the genre
+- factions: ${loreDigest ? '3-6 factions, drawn from the canon lore by name wherever it names any (great houses, orders, guilds, organizations); invent only if canon offers too few' : '2-4 factions, each with a unique name that fits the genre'}${loreDigest ? `
+- capability_domains: draw the learnable systems from the canon lore by name wherever it describes any (its magic systems, martial traditions, crafts); invent only to fill gaps` : ''}
 - threat_level: 1 (minor) to 5 (existential). Not everyone should be a 4 or 5
 - resources and influence: integers 10-90
 - current_plan: 1-2 sentences, specific and active (e.g. "Bribing city guards to look the other way while they move contraband through the docks")
@@ -148,7 +158,9 @@ Rules:
           { role: 'user', content: prompt }
         ],
         temperature: 0.95,
-        max_tokens: 1000,
+        // Canon-grounded generation allows up to 6 factions — give the
+        // response room so the JSON doesn't truncate mid-array.
+        max_tokens: loreDigest ? 1600 : 1000,
         response_format: { type: 'json_object' }
       })
     })

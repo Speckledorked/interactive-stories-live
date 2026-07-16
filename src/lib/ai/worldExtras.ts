@@ -57,7 +57,10 @@ export async function generateWorldExtras(
   universe: string,
   factions: FactionForExtras[],
   capabilities: GeneratedCapability[],
-  statLabels?: GeneratedStatLabels
+  statLabels?: GeneratedStatLabels,
+  // Imported-canon excerpts (lib/lore/loreDigest.ts) — when present,
+  // archetypes and the corruption theme must be grounded in them.
+  loreDigest?: string
 ): Promise<GeneratedWorldExtras | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return null
@@ -74,6 +77,7 @@ Campaign: "${campaignTitle}"${campaignDescription ? `\nDescription: "${campaignD
 Factions in this world: ${factions.length > 0 ? factions.map(f => f.name).join(', ') : 'none yet'}
 Learnable systems (capability keys): ${capabilityKeys.length > 0 ? capabilityKeys.join('; ') : 'none yet'}
 The 5 character stats in this world's vocabulary: ${statLine}
+${loreDigest ? `\nCANON LORE — excerpts from this universe's actual source material. Highest authority: archetypes should be recognizable entry points into THIS canon (its real roles, orders, professions), and the corruption theme must be something this canon's fiction genuinely treats as power-at-a-cost — not something invented to sound thematic.\n<canon>\n${loreDigest}\n</canon>` : ''}
 
 Produce two things as JSON:
 

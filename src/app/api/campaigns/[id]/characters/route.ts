@@ -5,6 +5,7 @@ import { getUser } from '@/lib/auth'
 import { validateStats } from '@/lib/game/advancement'
 import { decideSeedStates } from '@/lib/game/capabilities'
 import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
+import { recordEvent } from '@/lib/analytics/events'
 import { OriginFamiliarity } from '@prisma/client'
 
 interface CreateCharacterBody {
@@ -283,6 +284,8 @@ export async function POST(
         }
       }
     }
+
+    await recordEvent('CHARACTER_CREATED', { userId: user.userId, campaignId })
 
     return NextResponse.json({ character })
   } catch (error) {

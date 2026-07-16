@@ -17,6 +17,7 @@ import { reportError } from '@/lib/monitoring'
 import { getAppUrl } from '@/lib/appUrl'
 import { runLoreImport } from './loreImportService'
 import { reseedWorldFromLore, clearPendingWorldSeed } from './reseedWorld'
+import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
 
 export const MAX_ATTEMPTS = 3
 // A wiki crawl can legitimately run for minutes; a RUNNING job older than
@@ -225,4 +226,13 @@ export async function recoverStaleLoreJobs(campaignId: string): Promise<void> {
   } catch (error) {
     console.error('Stale lore job recovery failed (non-critical):', error)
   }
+}
+
+/**
+ * Global counterpart to recoverStaleLoreJobs — see
+ * resolutionQueue.sweepGloballyStuckResolutionJobs for why this exists
+ * separately from the per-campaign sweep above.
+ */
+export async function sweepGloballyStuckLoreJobs(): Promise<void> {
+  await alertStuckJobs(prisma.loreImportJob as any, 'lore-import-job-stuck')
 }

@@ -6,7 +6,7 @@
 // user token.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { processResolutionJob, internalJobSecret } from '@/lib/game/resolutionQueue'
+import { processResolutionJob, internalJobSecret, sweepGloballyStuckResolutionJobs } from '@/lib/game/resolutionQueue'
 
 // The whole point of this route: a ceiling high enough for the real
 // pipeline (~150s resolution + world turn) with room to spare.
@@ -30,5 +30,14 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await processResolutionJob(jobId)
+
+  // #12 alpha instrumentation: this worker route fires on any real scene
+  // resolution across the whole app, making it a good place to also glance
+  // at every campaign for anything long stuck (see stuckJobAlert.ts).
+  // Awaited, not fire-and-forget — a serverless function can freeze before
+  // a detached promise finishes; the sweep is already fully guarded
+  // against throwing, so awaiting it costs a little latency, never safety.
+  await sweepGloballyStuckResolutionJobs()
+
   return NextResponse.json(result)
 }

@@ -2014,6 +2014,10 @@ model LoreImportJob {
   attempts Int                 @default(0)
   lastError String?
 
+  // Set once a global stuck-job sweep (lib/jobs/stuckJobAlert.ts) has fired
+  // an alert for this job — see the identical field on ResolutionJob.
+  alertedStuckAt DateTime?
+
   // Set when the campaign was created WITH this lore source: on completion
   // the worker automatically reseeds the world from the imported canon
   // (lib/lore/reseedWorld.ts) instead of waiting for the admin button.
@@ -2190,6 +2194,11 @@ model ResolutionJob {
   attempts   Int                 @default(0)
   lastError  String?
 
+  // Set once a global stuck-job sweep (lib/jobs/stuckJobAlert.ts) has fired
+  // an alert for this job, so a dead job gets reported exactly once instead
+  // of on every sweep. Cleared implicitly by the job leaving PENDING/RUNNING.
+  alertedStuckAt DateTime?
+
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   startedAt  DateTime?
@@ -2211,4 +2220,33 @@ model AIValidationFailure {
   @@index([campaignId])
   @@index([createdAt])
   @@map("ai_validation_failures")
+}
+
+//
+// ALPHA INSTRUMENTATION (#12) — funnel/retention events
+//
+// A deliberately loose-coupled event log: no FK relations to User/Campaign,
+// so recording an event can never fail on a constraint and a deleted
+// entity's historical events still count toward that day's funnel numbers.
+// See lib/analytics/events.ts for the writer and the dashboard queries.
+
+enum AnalyticsEventType {
+  SIGNUP
+  CAMPAIGN_CREATED
+  CHARACTER_CREATED
+  SCENE_STARTED
+  ACTION_SUBMITTED
+}
+
+model AnalyticsEvent {
+  id         String             @id @default(cuid())
+  type       AnalyticsEventType
+  userId     String?
+  campaignId String?
+  metadata   Json?
+  createdAt  DateTime           @default(now())
+
+  @@index([type, createdAt])
+  @@index([userId, createdAt])
+  @@map("analytics_events")
 }

@@ -18,18 +18,23 @@ An AI-powered collaborative storytelling platform for running interactive narrat
 - **Character Management**: Detailed character sheets with stats, moves, conditions, and progression
 - **Knowledge-Relative Character Sheets**: the sheet shows what the *character* knows, not what the database knows — an outsider to the universe starts nearly blank and their sheet fills in organically as the story reveals systems (glimpsed abilities render as "???" hints, unlocked ones grow through use and downtime training with deterministic, arc-capped gains). Origin familiarity (native / newcomer / outsider) seeds what a new character already knows exists, and the AI narrator is knowledge-gated per character: it never explains systems a character hasn't encountered
 - **Scene Management**: Dynamic scenes with player actions and AI resolution
+- **Lore Import**: feed the AI GM reference material — pasted text, a single page URL, or an entire MediaWiki wiki (Fandom, wiki.gg, ...) crawled via its API — chunked, embedded, and retrieved per scene as canon for the narrator
+- **Quest & Item Tracking**: the fiction's concrete undertakings get a real lifecycle (registered → progress beats → completed/failed/abandoned) fed back to the AI and synced to the wiki, and the party's inventories aggregate into a browsable item registry
 - **Payment System**: Stripe integration for AI usage billing, with per-call cost tracking, balance gating, and per-user rate limiting on every AI-invoking route
 - **Input Moderation**: player free-text is screened (OpenAI moderation endpoint) before it ever reaches the completion model — provider-ToS protection, separate from the in-fiction X-Card safety tool
 
 ## World Simulation
 
-MythOS runs a deterministic "world tick" after every player action — a pure,
-AI-free simulation step that decides what changes in the background (NPC
-movement and goal progress, faction resource/stability/military drift,
-weather) and writes every change to a durable event log. Only *narrating*
-those changes into prose is delegated to the AI, via a separate offscreen
-event generation pass; the underlying simulation state never depends on the
-AI being available or consistent.
+MythOS runs a deterministic "world tick" paced by **in-game time**: each
+resolution banks the fiction's time passage, and the tick fires once a full
+in-game day (per-campaign configurable) has actually passed in the story —
+so a rapid combat exchange doesn't move the world, and a three-day journey
+does. The tick itself is a pure, AI-free simulation step that decides what
+changes in the background (NPC movement and goal progress, faction
+resource/stability/military drift, weather) and writes every change to a
+durable event log. Only *narrating* those changes into prose is delegated
+to the AI, via a separate offscreen event generation pass; the underlying
+simulation state never depends on the AI being available or consistent.
 
 On top of that tick, factions can autonomously commit to major ambitions —
 tournaments, trade wars, coups, heists, crusades — once their resources and
@@ -74,77 +79,49 @@ The long-term goal is a world that simulates itself autonomously — factions,
 NPCs, and territory that tick forward on their own agendas whether or not
 players are present — and remembers everything that happens well enough to
 answer for it later, the way a human GM running a Crusader Kings-style
-campaign would. This list tracks that effort phase by phase, in the order it
-was actually built. **All 8 phases below are complete and live in
-production**, including every item that was deferred out of an earlier
-phase's initial scope — check the phase notes for what's still explicitly
-out of scope going forward (mostly: true point-in-time tick *replay*, as
-opposed to the dry-run preview of the *next* tick that does exist).
+campaign would. Phases 1–8 are complete and live in production; the detailed
+per-phase build notes that used to live here are preserved in this file's
+git history.
 
-### Phase 1 — Deterministic World Tick ✅
-- [x] Single AI-free tick runs after every player action (NPCs, factions, weather)
-- [x] Every change is written to a durable event log (`world_events`), independent of whether it's narrated
-- [x] Significant changes are logged to campaign history and synced to the Wiki
-- [x] NPCs move on independently-varying schedules and make deterministic progress toward their stated goal
+### Built (Phases 1–8) ✅
 
-### Phase 2 — Autonomous Faction Ambitions ✅
-- [x] Factions with an outward-looking goal (EXPAND/ENRICH) autonomously commit to a major ambition once resourced enough
-- [x] Ambition *flavor* (tournament, coup, black-market venture, ...) is chosen by an offscreen AI call from a bounded, faction-archetype-specific list, with a deterministic fallback if the AI is unavailable
-- [x] Ambition outcomes get embedded into RAG memory so they're recallable indefinitely, not just for the next few turns
-- [x] Major NPCs get new goals automatically when their current one completes, instead of going idle
+- **Deterministic world tick** — AI-free simulation step (NPC goals and movement, faction stat drift, weather), every change written to a durable `world_events` log; the AI only narrates, never decides
+- **Autonomous faction ambitions** — resourced factions commit to archetype-flavored ventures (tournaments, coups, trade wars) with real costs, deterministic outcomes, and real stat consequences on completion
+- **Faction feedback & evolution** — automatic goal reassessment each tick, rival/ally relationships the tick reads and writes, collapse (absorption by a rival or remnant succession), and event-driven founding
+- **NPCs & territory in the web** — NPC↔faction affiliation and defection, leadership continuity, and faction-owned/contested territory that ambitions and wars actually redraw
+- **Sustained wars & coalitions** — multi-turn attrition/momentum conflicts that allies can join; resolution changes territory ownership and hits the losing side's stats coalition-wide
+- **Player-faction integration** — a PC can lead a faction outright and set its strategy in-fiction; the simulation keeps ticking underneath under the same rules as NPC-led factions
+- **Fog of war** — discovery flags on NPCs/factions/locations, GM notes stripped at the API layer, qualitative stats (never raw numbers) in AI prompts, discovery-gated wiki on both write and read sides
+- **Memory & discovery at scale** — RAG memory with consolidation/decay, cross-entity recall ("what happened between X and Y"), a rumors feed of off-screen events, and a player-facing world wiki
+- **Tooling & scale** — per-campaign simulation caps, an admin relationship/territory map, a tick-log debugger with per-decision reasoning, and a dry-run next-tick preview
 
-### Phase 3 — Faction Feedback & Evolution ✅
-The biggest gap identified: ambitions and goals didn't actually respond to what happens. Winning a tournament used to be a nice sentence with zero mechanical effect — fixed below.
-- [x] Ambition outcomes apply real stat deltas (resources/stability/military/threatLevel) on completion, not flavor text only — deterministic success/fail, weighted by whichever stat the goal leans on (military for EXPAND, resources for ENRICH), never guaranteed
-- [x] Attempting an ambition costs resources, instead of only being gated by a resource threshold
-- [x] Automatic goal reassessment each tick, based on current stats — the admin-panel manual goal setting still works as a seed/override, but the simulation will steer it back toward whatever the faction's circumstances justify
-- [x] Faction-to-faction relationship state (rival / ally) that the tick actually reads and writes — replaces the `Faction.relationships` field, which used to be dead (write-only, used only by campaign export). Two factions chasing the same goal (both EXPAND or both ENRICH) become rivals; two stable, inward-looking factions become allies. This is also what makes `DESTABILIZE_RIVAL` reachable automatically — a faction only picks it once it actually has a rival on record. `AT_WAR` was intentionally left out: a real declared war needs the sustained multi-turn conflict object that's Phase 5's job, not a label on a relationship
-- [x] Faction collapse — a faction whose stability bottoms out (≤10) stops existing as an independent actor: absorbed by a rival if it has one (which gains a share of its resources/military), or succeeded by a smaller remnant faction otherwise
-- [x] Faction founding — the collapse-with-no-rival path spawns a "Remnant" successor faction (reduced resources/military, fresh starting stability so it isn't stillborn) instead of the faction simply vanishing — a real, event-driven founding mechanism rather than a separate system bolted on
-- [x] `DESTABILIZE_RIVAL` ambitions actually damage the named rival, not just the acting faction — the ambition/Clock now carries a `targetFactionId`, and a successful sabotage/smear/shadow-war attempt applies a real stability/resources hit to that specific faction. A failed attempt never reaches the target at all.
+### Recently shipped
 
-### Phase 4 — NPCs and Territory in the Web ✅
-Without these links, "war" and "politics" have no map to redraw and no one for the outcome to happen to.
-- [x] NPC → Faction affiliation (leader / member), wired into tick logic (an affiliated NPC's plan text reflects their faction's current goal) and into the AI world-state prompt. (Scoped down from the original "leader / member / rival" — an NPC personally rivaling a faction without belonging to any is a distinct, smaller feature, not folded into this one)
-- [x] Faction → Territory ownership on Location (`ownerFactionId`) — a successful EXPAND ambition redraws the actual map, collapse hands a faction's territory to its absorber or successor, and the AI world summary narrates from real ownership instead of inventing it
-- [x] Contested / border territory state — taking a rival's land takes two successful moves, not one: first contest it (via EXPAND against owned land, or a successful DESTABILIZE_RIVAL scheme destabilizing a holding), then conquer it. Unowned land can be settled in one
-- [x] NPC defection — when a faction collapses, its members defect to the absorbing rival (demoted to MEMBER) or carry over to a founded successor faction (keeping their role) — reuses Phase 3's collapse mechanic rather than being a separate trigger
-- [x] Faction leadership continuity — a tick handler enforces "a faction with living members has a living leader" every turn; the most important living member is automatically promoted if it doesn't. (There's no single structured "NPC died" event to hook into yet, so this checks the invariant continuously rather than reacting to a death)
-- [x] NPCs made notable through play get their own independent goal-pursuit loop — this was already true via the consequence system: a relationship-defining player action (killed/betrayed/recruited always, anything else the AI judges "major") escalates a minor NPC to importance 4, which is exactly the threshold the NPC tick simulates, so they immediately start pursuing goals like any major NPC. Verified rather than rebuilt; the one real gap found (a consequence-updated goal kept the old goal's progress) is fixed
+- **World turn paced by in-game time** — the simulation banks the fiction's `time_passage` and advances once a full in-game day (per-campaign tunable, admin panel → Simulation) has passed, instead of once per player action
+- **Quest tracking** — first-class quest lifecycle (registered → progress beats → completed/failed/abandoned) driven by the fiction, fed back to the AI so it advances rather than forgets undertakings, synced to the wiki
+- **Item registry** — the party's per-character inventories aggregated into browsable wiki entries (who carries what, in what quantity)
+- **Lore import** — paste text, a page URL, or an entire MediaWiki wiki, chunked + embedded, semantically retrieved per scene and injected as canon for the narrator
+- **Organic advancement actually fires** — server rolls now stamp each action with its result, so stat growth from consistent successful use works (it was silently dead: the growth system read a field nothing wrote), counted once per exchange even in long scenes
+- **Custom-universe world generation fixed** — template-less campaigns now persist their AI-generated factions (they were generated and silently discarded), and writing your own opening world seed no longer disables faction/capability/stat-label generation
+- **Campaign memory unbroken** — the RAG memory raw SQL targeted snake_case columns that don't exist (Prisma created camelCase); every memory write/read/consolidation had been silently failing
 
-### Phase 5 — Sustained Conflict & War ✅
-- [x] A real multi-turn conflict object (`War`: ESCALATING → RESOLVED) instead of a single-shot Clock standing in for a war. Declaration is the escalation of an existing contest, not a standalone trigger: two rivals both need HIGH military *and* one already has to be contesting the other's territory (via a prior EXPAND or DESTABILIZE_RIVAL) before a war over it can ignite
-- [x] Attrition/momentum tracked per tick — momentum trends toward whichever side has more military (plus small deterministic variance), both sides lose resources/military every turn regardless of who's winning, and it resolves once momentum is decisive or the war has dragged on long enough to call a stalemate. Verified with an isolated 15-turn simulation: resolved in the stronger side's favor after 8 turns of real attrition on both sides
-- [x] Multi-faction alliances/coalitions inside one conflict: a war still *declares* strictly 1v1, but each side can grow — a new `WarParticipant` join model tracks every faction actually fighting on a side, and each tick a side can pull in one of its members' existing `ALLY` factions (if strong enough and not already committed to another war), giving the `ALLY` relationship type real mechanical weight for the first time (Phase 3 built it but it was narrative flavor only until now). Momentum/attrition operate on the whole side (sum of every living participant's military; attrition paid by everyone on both sides); the contested-territory prize still goes only to the original attacker — an ally fighting alongside doesn't inherit land it never personally claimed. Covered by both pure-function tests (`decideWarJoiner`) and mocked DB-wrapper tests exercising aggregation, attrition-across-a-coalition, partial-side-collapse (a coalition partner collapsing doesn't end the war if the primary is still standing), and prize-goes-to-primary-only
-- [x] War resolution mechanically changes territory ownership (the winner takes the contested location) and the loser's stats (an extra stability hit on top of the attrition already paid, now applied to every faction on the losing side); a side with zero living participants ends the war as an immediate stalemate rather than fighting on with nothing
-- [x] The AI world-state summary carries active wars (attacker, defender, ally counts per side, momentum, turns elapsed) so "how's the war going" is answered from real state — deliberately read-only for the AI, consistent with the rest of the sim: the tick decides, the AI only narrates. Ally counts are fog-of-war gated the same as everything else — an undiscovered faction joining a known war doesn't get outed by it
+### Phase 9 — True Autonomy (next)
 
-### Phase 6 — Player-Faction Integration ✅
-- [x] PC → Faction leadership binding (`Faction.leaderCharacterId`), set from the admin panel — "I am the president of X" is now a role the engine understands. At most one leader either way: assigning a PC leader demotes any existing NPC LEADER to MEMBER, and `leadershipTick.ts` never auto-promotes an NPC over a player
-- [x] Player decisions can directly set a led faction's goal/strategic posture — scene resolution's `world_updates.faction_changes` now accepts a `goal` field, which the AI GM sets when a player roleplays a genuine strategic decision as a faction leader ("As Duke, I commit our forces to retaking the border fort"). Enforced server-side, not just by prompt instruction: `stateUpdater.ts` only applies it when the target faction actually has that player as `leaderCharacterId`
-- [x] Player-led factions still tick autonomously between sessions under the same rules as NPC-led ones — verified this is true by construction: the only change is that `factionTick.ts` skips *automatic goal reassessment* for a player-led faction, so their chosen goal survives. Stat drift, ambitions, wars, and collapse/founding all still apply unmodified. A collapsed player-led faction's founded remnant stays under the same player's leadership
-- [x] Fog of war — see below; deferred out of Phase 6 proper since it's an information-asymmetry / prompt-design problem more than a simulation one
+Goal: the world moves even when nobody is playing, and imported lore shapes
+the world's *structure*, not just its narration.
 
-### Phase 6.5 — Fog of War ✅
-- [x] Structural secrecy: `gmNotes` is now stripped from every player-facing API response (campaign, factions, npcs, locations, clocks) via a shared `redactGmNotesList()` helper — enforced at the API layer regardless of what the AI does with its prompt. Admins still see it
-- [x] Real discovery flags: `NPC.isDiscovered` / `Faction.isDiscovered` / `Location.isDiscovered` (all default `true`, so nothing existing changes behavior). `applyWorldUpdates()` takes a `sceneOrigin` flag — a live scene the players witnessed flips an entity to discovered on mention, but an offscreen background tick event never does, so the simulation can move a hidden faction, NPC, or location around without the party learning about it for free. Manual toggles added to the admin panel for all three, plus new `locations/route.ts` + `locations/[locationId]/route.ts` API routes (Location previously had none — it only ever existed nested read-only inside the campaign GET)
-- [x] Both AI world-summary builders (`buildWorldSummaryForAI` and the token-optimized `buildOptimizedWorldSummary`) already filtered locations at the query level (`isDiscovered: true`) from an earlier pass; they now also filter factions/NPCs the same way, null out a location's `owner_faction_id` if the owner is undiscovered, and drop wars where either side is undiscovered
-- [x] Exact numbers replaced with qualitative descriptors in AI-facing prompts: resources/influence/threat level become weak/moderate/strong-style bands (`qualitativeStats.ts`, reusing `factionTick.ts`'s existing LOW/MEDIUM/HIGH thresholds) and war momentum becomes a prose descriptor ("favors the attacker") instead of a raw number — the AI narrates from the same impressions a character in the world would have, not simulation internals. The `entities` block each builder returns for RAG memory retrieval is deliberately left unfiltered, so existing NPC-recall guarantees are untouched
-- [x] Closed a latent `TimelineEvent.visibility` gap in `contextManager.ts`'s scene-summarization paths (now filtered to PUBLIC/MIXED) — defense-in-depth, not a fix for an active leak, since neither path currently reads GM_ONLY text directly
-- [x] Offscreen background ticks can now introduce a new hidden location the same way they already could for NPCs/factions — `callAIForWorldTurn`'s response type and prompt now include `location_changes`, forwarded through `worldTurn.ts` with `sceneOrigin: false`, so a villain's hideout mentioned in an offscreen event registers as a real `Location` row without revealing it to the party
+- [ ] **Real-time heartbeat**: a scheduled job advances in-game time for active campaigns at a configurable rate (e.g., one fictional day per real day), driving the same paced world turn — log in after a week away and the war is lost, the duke is dead. This is the last gap between "simulates between actions" and "simulates, period": today every tick is still *triggered* by player traffic, even though it's now *paced* by fiction time. Needs the project's first scheduled/cron infrastructure
+- [ ] **Lore-aware world generation**: founding factions, the capability scaffold, and stat labels are generated at campaign creation — *before* lore can be imported — so a campaign's great houses can't come from the wiki you feed it a minute later. Allow lore import during creation and/or a "regenerate world from lore" pass that seeds factions and capabilities from imported material
+- [ ] **Witnessing the living world**: the simulation generates more than players ever perceive. "While you were away" recaps when a world turn ran, and scene openings that surface off-screen fallout more aggressively — the machinery should be *felt*, not just logged
+- [ ] **NPC society**: NPC↔NPC relationships, joint schemes, and independent movement between locations — faction-level politics is rich, individual-level society is thin
 
-### Phase 7 — Memory & Discovery at Scale ✅
-- [x] Memory importance decay / summarization: `campaign_memories` was uncapped and write-only — nearly every scene, tick change, and offscreen event got its own embedded row forever, so a 100+ scene campaign was really generating several hundred to low thousands of rows, not ~100. `memoryConsolidation.ts` now periodically (every 10 turns, piggybacking on the existing world-turn cadence rather than a new cron) rolls up old `MINOR`/`NORMAL` memories into one per-era summary per 10-turn window and deletes the originals, tagged `era-summary` so a consolidated row is never re-consolidated. `MAJOR`/`CRITICAL` memories are permanently exempt — those are exactly the moments long-term recall exists for. Added baseline test coverage for `createCampaignMemory`/`retrieveRelevantHistory`'s ranking logic, since neither had any tests before this pass
-- [x] Cross-entity memory queries ("what happened between X and Y"): `retrieveCrossEntityHistory()` finds memories where two specific entities (any mix of NPC/faction/character) both appear, an intersection the existing per-entity functions (`retrieveNpcHistory`, `retrieveFactionHistory`) can't produce on their own. Wired into scene resolution's existing named-entity guaranteed-recall mechanism (`worldState.ts`) — when a player action names two or more NPCs/factions at once, their shared history is pulled directly instead of hoping semantic search surfaces it. `campaign_memories` had no frontend-facing API before this pass (confirmed by research — every existing retrieval function is server-internal, feeding the AI prompt only), so this stayed backend-only rather than adding a new API route or UI with no other feature depending on it yet
-- [x] Player-facing world-state views: the campaign wiki (`/campaigns/[id]/wiki`) already was this — readable by every campaign member, showing NPC/Faction/Location detail — but scoping this item surfaced that it had **no fog-of-war gating at all**, completely bypassing all the Phase 6.5 work: `sceneResolver.ts`'s `updateWikiEntries` fetched *every* NPC and Faction in the campaign (no `isDiscovered` filter, unlike its own Location query three lines below, which already had one) on every scene resolution, and faction wiki entries embedded exact `resources`/`stability`/`military` numbers in plain text. Fixed on both the write side (`sceneResolver.ts`, `wikiSync.ts` — both now skip undiscovered NPCs/factions and use `qualitativeStats.ts` instead of raw numbers) and the read side (`wiki/route.ts` now cross-references discovered NPC/Faction/Location names as defense in depth, since `WikiEntry` matches its source by name, not a real FK, so an entity re-hidden after its wiki entry already exists needs a read-time check too). Also added territory to faction/location wiki entries ("Controls: ...", "Controlled by: ...", both discovery-gated) — the "faction standings, territory" half of this item
-- [x] Known-rumors feed: new `/api/campaigns/[id]/rumors` route + a "Rumors" tab on the wiki page — a dedicated feed of offscreen events (`isOffscreen: true`) with PUBLIC/MIXED visibility, distinct from the story/log (what players actually witnessed): this is what's circulating in the world around them, never `summaryGM`
-- [x] Reconciled the importance-heuristic duplication: `contextManager.ts`'s `extractImportantMoments` used to independently re-derive a scene's importance via keyword-matching over resolution text. It now reuses the importance `memoryCreation.ts`'s `determineImportance()` already computed and stored on the scene's `CampaignMemory` row (richer signals — structured character harm, clock/faction updates, scene type — not just text keywords) via the new `classifySceneImportance()`, falling back to the old keyword/timeline heuristic only when no memory row exists for a scene (memory writes are best-effort and can fail without blocking gameplay)
+### Hardening backlog (known gaps from a full codebase audit)
 
-### Phase 8 — Tooling & Scale (stretch) ✅
-- [x] Parameterized the per-tick faction/NPC caps: `FACTION_CAP`/`NPC_CAP` were hardcoded as a duplicated local `const` in 6 different tick files. Replaced with `WorldMeta.factionCap`/`npcCap` (nullable — `null` means "use the default," so nothing existing changes behavior), resolved once per tick in `worldTick.ts` via `resolveTickCaps()` (`tick/caps.ts`) and threaded through `TickContext` so every handler sees the same value for a turn instead of each independently querying `WorldMeta`. New `/api/campaigns/[id]/settings/simulation` route (GET/PATCH, admin-only) and an admin-panel "Simulation Caps" section (in AI Settings) to set them per campaign
-- [x] Admin visualization of faction relationships and territory: new "Map" tab — a dependency-free SVG relationship graph (factions arranged in a circle, red dashed lines for rivals, green solid for allies, read straight from `Faction.relationships`) plus a territory panel grouping discovered locations by owning faction (with an "Unclaimed" bucket). Deliberately simple per the roadmap's own framing ("a simple map or graph view") — no new charting/graph library added
-- [x] Simulation debug tooling — "inspect why a given decision was made" half: new "Debug" tab + `/api/campaigns/[id]/world-events` route (admin-only — reason strings can reference GM-only state) browsing the already-durable `WorldEvent` log by turn: every tick change and consequence, with its `previousValue`/`newValue`/`reason`. No new capture mechanism needed — `WorldEvent` already recorded all of this every turn, it just had no viewer
-- [x] Tick dry-run / preview: every write call site across all 7 tick handlers is now gated on `TickContext.dryRun`, and `runWorldTick(campaignId, turnNumber, { dryRun: true })` skips the writes plus the normal post-tick persistence (history log, wiki sync, event log) while still returning the exact `WorldChange` list the tick would produce. New admin-only `/api/campaigns/[id]/world-tick/preview` route + a "Preview Next Tick" button in the Debug tab. Deliberately scoped as a preview of the *next* tick against live current state, not a replay of a *past* one — there's no snapshot system to replay historical state against, and building one was out of scope. Also deliberately not implemented via a Prisma transaction rollback: the handlers write through the shared `prisma` singleton, not a transaction-scoped client, so wrapping the whole tick in `prisma.$transaction` wouldn't actually make those writes roll back — skipping them outright is simpler and equally safe
+- [ ] Tutorial completion triggers are never sent from the app — every new user's onboarding is permanently stuck at 0%
+- [ ] X-Card safety dropdown offers 11 trigger reasons but the API's enum accepts 5 — 10 of 11 options fail with a 400 (safety-critical, cheap fix)
+- [ ] Mention/whisper/note-share notifications have a fully built read side (panel, filters, sounds) and no writer
+- [ ] Safety admin panel is a self-declared stub — content reporting, user blocking, and campaign banning exist as a service with no routes or UI
+- [ ] Dead schema surface to clean or wire: `Session*` models + orphaned transcript-export route, `Campaign.mentionsEnabled`/`soundEffectsEnabled`, `Character.experience` (an XP counter nothing increments)
 
 ## Product Roadmap (PbtA × Urban Shadows fusion)
 
@@ -160,51 +137,27 @@ that faction loses a war in the offscreen tick, the player learns it from the
 rumor digest, and their next roll is mechanically different because of it.
 When that chain works, this is the product.
 
-### Foundation — the mechanical spine ✅
+### Foundation + Phases 0–1 — the mechanical spine ✅
 
-Shipped ahead of the original plan: the knowledge-relative sheet system that
-Phase 2's economies build on.
+All complete (detailed build notes preserved in this file's git history):
 
-- [x] Knowledge-relative character sheets: the universe has a latent capability tree (`CampaignCapability`); a character's sheet shows only what the fiction has revealed to them (`CharacterCapability`: absent → GLIMPSED "???" → UNLOCKED with a qualitative band). Raw proficiency numbers never leave the server
-- [x] Origin familiarity seeding (native / newcomer / outsider): what a new character already knows *exists*, never what they can do — nothing seeds unlocked
-- [x] Organic capability growth: the AI signals glimpse/unlock/progress from the fiction; deterministic server math decides gains (diminishing returns, per-arc caps). Downtime training is the fast lane and can only sharpen what you already have
-- [x] Per-character narration knowledge-gating: the AI never explains systems a character hasn't encountered — fog of war applied inward
-- [x] Capability scaffold generation at campaign creation (domains, tiers, secret branches), plus organic node creation mid-story for newly revealed systems
-- [x] Server-rolled move resolution: every risky action is classified to a PbtA basic move (or no_roll), rolled 2d6 + stat + capability band + harm on the server, and the outcome band is a **binding** constraint on the narration (weak hits always cost; misses trigger a hard GM move)
-- [x] Capability bands as roll modifiers: attempting an unknown system −1, novice 0, competent/skilled +1, masterful +2
-- [x] Roll receipts: every roll persisted to `DiceRoll` and shown in a collapsed-by-default 🎲 section of the transparency panel — prose never mentions dice
-- [x] Harm keyed to resolution: 4+ harm applies the Impaired −1 to every roll; misses are where harm comes from
-
-### Phase 0 — Clarity and floor
-
-Goal: stop building on sand. Exit: CI green, Sentry live, migrations real,
-secrets fixed, email verification on, dead code gone, ruleset documented.
-
-- [x] **#1 Ops floor**: GitHub Actions CI (tsc + vitest on every push/PR); deploys no longer pass `--accept-data-loss` — destructive schema changes now fail the build loudly, with the full migrate-baseline procedure documented in `docs/MIGRATIONS.md` (needs one prod-DB session to complete); error monitoring via `lib/monitoring.ts` (`ERROR_WEBHOOK_URL` → Discord/Slack, wired into resolution failures; drop-in Sentry swap later); JWT fallback secret killed (production refuses to boot without `JWT_SECRET`); email verification on signup (soft-gate) + full password reset flow (request → email → `/auth/reset-password`)
-- [x] **#2 Dead-code purge + ruleset doc**: `sessions/session-service.ts` deleted (was never imported); the PbtA×US ruleset is implemented and documented in code + this README rather than as an upfront ADR
-
-### Phase 1 — MVP foundation: the mechanical spine
-
-Goal: the core loop becomes a game. Exit: a full multi-scene session where
-every action resolves through a server-rolled move, no resolution is lost to
-timeouts, and the AI respects the outcome band.
-
-- [x] **#3 Resolution engine v1**: server-side move classification (EFFICIENT model, fail-open), 2d6 + stat + capability band + harm rolled server-side, persisted to `DiceRoll`, outcome band passed to the narrator as a binding constraint, hard GM move required on a miss
-- [x] **#4 Roll visibility**: *(deliberately redesigned from "visible dice UI" to hidden-with-receipts per the ungamified-surface decision)* — rolls surface as a collapsed-by-default 🎲 section in the transparency panel; prose never mentions dice
-- [x] **#5 Async scene resolution**: action submission and manual resolve now enqueue a `ResolutionJob` and return immediately; the AI-GM-plus-world-turn pipeline runs in `/api/internal/resolve-job` (secret-gated, `maxDuration 300`) via HTTP self-invocation with an inline fallback. Atomic PENDING→RUNNING claims dedupe racing submits; failures retry up to 3 attempts; stuck jobs are recovered opportunistically by scene GET traffic (no cron needed). UI needed no changes — it already followed the `scene:resolving`/`scene:resolved`/`scene:resolution-failed` Pusher events
+- **Knowledge-relative sheets & capabilities**: latent per-universe capability tree; sheets show only what the fiction has revealed (absent → GLIMPSED "???" → UNLOCKED with a qualitative band); origin-familiarity seeding; deterministic arc-capped growth from use and downtime training; per-character narration knowledge-gating
+- **Server-rolled move resolution**: every risky action classified to a PbtA move and rolled 2d6 + stat + capability band + harm *on the server*; the outcome band binds the narration (weak hits cost, misses trigger a hard GM move); persisted receipts in the opt-in transparency panel — prose never mentions dice
+- **Ops floor**: CI (tsc + vitest on every push), no more `--accept-data-loss` deploys, error monitoring webhook, JWT fallback secret killed, email verification + password reset
+- **Async scene resolution**: submissions enqueue a `ResolutionJob` and return immediately; the AI-GM-plus-world-turn pipeline runs in a secret-gated internal route with atomic claims, retries, and traffic-driven recovery of stuck jobs — no cron needed
 
 ### Phase 2 — Product differentiation: the Urban Shadows fusion
 
 Goal: mechanics and the living world become one system. Exit: the north-star
 chain above works in a real playtest.
 
-- [x] **#6 Debt economy**: first-class `Debt` records between PCs and NPCs/factions, both directions — incurred/resolved by the AI via `debt_changes` (earned in fiction, idempotent, oldest-first resolution matching), open debts fed to the narrator as leverage with call-in guidance, rendered diegetically on the sheet as "Obligations & Favors" ("Lord Kessler considers you in their debt"), never a ledger counter
-- [x] **#7 Faction standing**: per-character `FactionStanding` (-3 hunted … +3 honored), shifted by scene outcomes via `standing_changes` (server-clamped to ±1/scene). Social/political rolls take an *effective* standing modifier computed against **live simulation state** at roll time: a collapsed faction's regard is worth 0, a war-weakened (LOW-influence) faction's caps at ±1, a healthy one at ±2 — so the offscreen tick literally changes what a player can roll, with zero new tick writes. Rendered qualitatively ("trusted by the Thieves Guild") on the sheet and in prompts; receipts show the standing term
-- [x] **#8 World-visibility digest**: after every world turn, the tick's MAJOR changes involving *discovered* entities become one "Word on the street…" notification per campaign member (capped at 3 rumor lines, fog-safe templates — GM-grade tick reasons never leak), linking to the story log's rumor feed. The living world now reaches players instead of running silently
-- [ ] **#9 Origin archetypes / playbook onboarding**: *(v1 shipped: origin familiarity selector + capability discovery seeding)* — still open: full creation presets per origin (starting ties, obligations, glimpse packages) and signup-to-first-scene under 5 minutes
-- [ ] **#10 Corruption track**: per-universe "power at a cost" (the dark-essence pattern) — marking corruption grants power now, unlocks a shadow branch of the capability tree, and accumulates toward consequences the character can't take back
-- [x] **#11 Harm/death keyed to resolution**: 4+ harm applies the Impaired −1 to every roll; misses are where harm comes from (folded into the resolution engine's binding miss rule)
-- [ ] **#12 Alpha instrumentation**: funnel/retention events, stuck-scene alerting, playtest cohort dashboard — D7/D28 retention measurable per cohort
+- [x] **#6 Debt economy**: first-class `Debt` records between PCs and NPCs/factions, incurred/resolved from the fiction, fed to the narrator as leverage, rendered diegetically ("Lord Kessler considers you in their debt")
+- [x] **#7 Faction standing**: per-character standing (-3 hunted … +3 honored) shifted by scene outcomes; the roll modifier is computed against **live simulation state** — a collapsed faction's regard is worth 0, a war-weakened one caps at ±1 — so the offscreen tick literally changes what a player can roll
+- [x] **#8 World-visibility digest**: MAJOR discovered-entity tick changes become a fog-safe "Word on the street…" notification per member after each world turn
+- [x] **#11 Harm/death keyed to resolution**: 4+ harm applies Impaired −1 to every roll; misses are where harm comes from
+- [ ] **#9 Origin archetypes / playbook onboarding**: *(v1 shipped: origin familiarity + discovery seeding)* — still open: full creation presets per origin and signup-to-first-scene under 5 minutes
+- [ ] **#10 Corruption track**: per-universe "power at a cost" — marking corruption grants power now, unlocks a shadow capability branch, and accumulates toward irreversible consequences
+- [ ] **#12 Alpha instrumentation**: funnel/retention events, stuck-scene alerting, playtest cohort dashboard
 
 ### Phase 3 — Expansion: content and shareability
 
@@ -212,7 +165,7 @@ Goal: easy to start, worth showing off. Exit: 3–5 external groups complete
 4+ week campaigns with defensible D28 retention.
 
 - [ ] **#13 First-party campaign templates**: 3–5 templates tuned to the new ruleset — factions, starting Debts, front-style threats, capability scaffolds
-- [ ] **#14 Scene illustration**: one generated image per resolved scene (deferred until mechanics landed; requires #5 so cost/latency live off the request path)
+- [ ] **#14 Scene illustration**: one generated image per resolved scene (deferred until mechanics landed; async resolution already keeps its cost/latency off the request path)
 - [ ] **#15 Chronicle share link**: read-only public link to a campaign's story log — cheap virality from prose the game already generates
 - [ ] Closed alpha with 3–5 external groups
 

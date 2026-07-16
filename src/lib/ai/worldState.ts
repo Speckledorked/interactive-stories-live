@@ -954,20 +954,43 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
     }).join('\n')}`
     : '\n\nNo player characters have been created yet.'
 
-  const prompt = `You are the Game Master for a ${campaign.universe} campaign.
+  // The campaign opener has no prior scene to be "mid-action" relative to —
+  // dropping straight into a fight or chase here reads as arbitrary, not
+  // tense, because nothing has grounded where the character even is yet.
+  // Scene 2+ always follows a resolution that already established the
+  // situation, so in-medias-res works there. Only the opener needs a
+  // (brief) establishing beat before the hook.
+  const isFirstScene = !lastScene
 
-${campaign.aiSystemPrompt}
+  const openingGuidance = isFirstScene
+    ? `**TONE & STYLE:**
+- Open with a brief establishing beat: where the character is, what they're doing, what the place feels like — one or two sentences of real ground beneath their feet before anything else happens
+- Show, don't tell - use vivid sensory details
+- Once they're grounded, introduce something that demands a choice - tension, an arrival, a discovery
+- Be subtle - weave in character details naturally, don't list them
+- Match the tone of ${campaign.universe}
 
-WORLD STATE:
-${JSON.stringify(worldSummaryData, null, 2)}
-${characterContext}
+**WHAT TO INCLUDE:**
+- A real place and moment the character can picture themselves standing in, before the hook lands
+- Clear stakes - something starts to matter as the beat unfolds
+- Hints at the character's background/goals through context, not exposition
+- A dramatic question or choice that demands action by the end
+- 2-3 paragraphs maximum
 
-LAST SCENE RESOLUTION:
-${lastScene?.sceneResolutionText || 'This is the first scene of the campaign.'}
+**WHAT TO AVOID:**
+- Generic openings ("The heroes gather...", "Times are uncertain...")
+- Starting mid-fight, mid-chase, or mid-crisis with zero setup — this is the character's first moment in the story, not their fiftieth
+- Character introductions or descriptions
+- Listing equipment, stats, or inventory
+- Explaining backstories or goals directly
+- Long exposition dumps
+- "Your character feels/thinks/remembers" - stay external and immersive
 
-Generate an engaging, atmospheric scene introduction that:
+**APPROACH:**
+Start with the character somewhere concrete and grounded - their location if one is known, otherwise a place that fits their concept and the universe. Let the reader settle into that place for a beat. Then let the hook arrive: a stranger approaches, something goes wrong, a choice presents itself. If they have enemies or goals, let those color what "wrong" or "urgent" looks like. Setup, then stakes - not stakes with no setup.
 
-**TONE & STYLE:**
+Example: Instead of opening on a mid-swing sword fight, write "The tavern's back room smells of tallow and spilled ale. Three days he's waited at this table, and now the door creaks open" - then let the hook follow.`
+    : `**TONE & STYLE:**
 - Start with ACTION or ATMOSPHERE, not character introductions
 - Show, don't tell - use vivid sensory details
 - Create IMMEDIATE tension or intrigue
@@ -992,7 +1015,22 @@ Generate an engaging, atmospheric scene introduction that:
 **APPROACH:**
 If they have a location, start there mid-scene. If they have enemies, maybe hint at danger. If they have goals, drop them into a situation that challenges those goals. But do it all through ATMOSPHERE and ACTION, not explanation.
 
-Example: Instead of "You check your sword as you remember your oath of vengeance," write "The blade catches firelight from the distant campfires. Three days of tracking, and finally, smoke on the horizon."
+Example: Instead of "You check your sword as you remember your oath of vengeance," write "The blade catches firelight from the distant campfires. Three days of tracking, and finally, smoke on the horizon."`
+
+  const prompt = `You are the Game Master for a ${campaign.universe} campaign.
+
+${campaign.aiSystemPrompt}
+
+WORLD STATE:
+${JSON.stringify(worldSummaryData, null, 2)}
+${characterContext}
+
+LAST SCENE RESOLUTION:
+${lastScene?.sceneResolutionText || 'This is the first scene of the campaign. There is no prior action to continue from - the character has not yet set foot in the story.'}
+
+Generate an engaging, atmospheric scene introduction that:
+
+${openingGuidance}
 
 Write ONLY the scene introduction. No JSON, no meta-commentary, no character sheets.`
 

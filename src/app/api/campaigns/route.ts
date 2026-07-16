@@ -194,7 +194,12 @@ export async function POST(request: NextRequest) {
           // Canon lore was provided: lock play until the import finishes
           // and the auto-reseed replaces this provisional world (see
           // lib/lore/seedingGate.ts).
-          pendingWorldSeed: Boolean(validatedLore)
+          pendingWorldSeed: Boolean(validatedLore),
+          // #13: which static template this came from, if any — lets
+          // characters/route.ts apply the template's starting-Debt
+          // scaffolding when each character joins (Debts need a real
+          // characterId, unavailable at campaign creation).
+          templateId: template?.id
         }
       })
 
@@ -239,7 +244,10 @@ export async function POST(request: NextRequest) {
       // factions persisted directly — factions aren't a template-only
       // concept, only the default Move records are.
       if (template) {
-        await applyCampaignTemplate(newCampaign.id, template.id, tx, generatedFactions)
+        await applyCampaignTemplate(
+          newCampaign.id, template.id, tx, generatedFactions,
+          Boolean(generatedCapabilities && generatedCapabilities.length > 0)
+        )
       } else if (generatedFactions && generatedFactions.length > 0) {
         await createFactionsForCampaign(newCampaign.id, tx, generatedFactions)
         console.log(`✅ Persisted ${generatedFactions.length} AI-generated factions (no template)`)

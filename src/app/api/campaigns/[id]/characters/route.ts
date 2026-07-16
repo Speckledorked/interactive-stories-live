@@ -6,6 +6,7 @@ import { validateStats } from '@/lib/game/advancement'
 import { decideSeedStates } from '@/lib/game/capabilities'
 import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import { recordEvent } from '@/lib/analytics/events'
+import { getTemplate } from '@/lib/templates/campaign-templates'
 import { OriginFamiliarity } from '@prisma/client'
 
 interface CreateCharacterBody {
@@ -243,6 +244,42 @@ export async function POST(
       } catch (archetypeError) {
         console.error('Failed to apply archetype seeding (non-critical):', archetypeError)
       }
+    }
+
+    // #13 first-party templates: the starting complication every character
+    // in this world begins already entangled in (see campaign-templates.ts
+    // startingDebtTemplates doc — Debts need a real characterId, which is
+    // why this runs here and not at campaign creation). Independent of any
+    // archetype tie above: a template obligation and a personal archetype
+    // tie are different layers of the fiction, not alternatives.
+    try {
+      const campaignForTemplate = await prisma.campaign.findUnique({
+        where: { id: campaignId },
+        select: { templateId: true },
+      })
+      const template = campaignForTemplate?.templateId ? getTemplate(campaignForTemplate.templateId) : null
+      if (template?.startingDebtTemplates && template.startingDebtTemplates.length > 0) {
+        for (const debtTemplate of template.startingDebtTemplates) {
+          const faction = await prisma.faction.findFirst({
+            where: { campaignId, name: { equals: debtTemplate.counterpartyFactionName, mode: 'insensitive' } },
+            select: { id: true },
+          })
+          await prisma.debt.create({
+            data: {
+              campaignId,
+              characterId: character.id,
+              direction: debtTemplate.direction === 'owed_by_character' ? 'OWED_BY_CHARACTER' : 'OWED_TO_CHARACTER',
+              counterpartyType: 'faction',
+              counterpartyId: faction?.id || null,
+              counterpartyName: debtTemplate.counterpartyFactionName,
+              description: debtTemplate.description,
+            },
+          })
+        }
+        console.log(`🤝 Seeded ${template.startingDebtTemplates.length} template starting debt(s) for ${body.name}`)
+      }
+    } catch (templateDebtError) {
+      console.error('Failed to seed template starting debts (non-critical):', templateDebtError)
     }
 
     // Auto-create NPCs for contacts mentioned in character's backstory

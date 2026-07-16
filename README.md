@@ -172,7 +172,7 @@ chain above works in a real playtest.
 Goal: easy to start, worth showing off. Exit: 3–5 external groups complete
 4+ week campaigns with defensible D28 retention.
 
-- [ ] **#13 First-party campaign templates**: 3–5 templates tuned to the new ruleset — factions, starting Debts, front-style threats, capability scaffolds
+- [x] **#13 First-party campaign templates**: the 3 existing templates (PbtA Fantasy, MHA: UA Arc, Monster of the Week) are deepened to actually use the new economy instead of predating it. Each ships **front-style threats** (Apocalypse World-style danger clocks with a stated consequence, linked to a real faction's id when it resolves — e.g. "The Iron Company Tightens Its Grip"), a **capability scaffold** (a fallback baseline seeded only when AI world generation didn't already produce a bespoke one — offline/no-API-key campaigns still get a working tree), and a **starting Debt** every character in that world begins already entangled in (seeded at character creation, since a Debt needs a real characterId that doesn't exist yet at campaign creation — `Campaign.templateId` persists which template to apply it from). Faction-name references degrade gracefully to unlinked-but-present when AI-generated factions replace the template's own
 - [ ] **#14 Scene illustration**: one generated image per resolved scene (deferred until mechanics landed; async resolution already keeps its cost/latency off the request path)
 - [ ] **#15 Chronicle share link**: read-only public link to a campaign's story log — cheap virality from prose the game already generates
 - [ ] Closed alpha with 3–5 external groups

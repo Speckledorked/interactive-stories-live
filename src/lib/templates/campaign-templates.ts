@@ -2,6 +2,8 @@
 // Phase 18: Campaign Presets & Content Packs
 // Pre-built system modules for quick campaign creation
 
+import { slugifyCapabilityKey } from '@/lib/game/capabilities'
+
 export interface CampaignTemplate {
   id: string
   name: string
@@ -13,7 +15,48 @@ export interface CampaignTemplate {
   defaultPerks: PerkTemplate[]
   factionTemplates: FactionTemplate[]
   startingItems: ItemTemplate[]
+  // #13: front-style threats (Apocalypse World "fronts" — a ticking danger
+  // clock with a stated consequence). sourceFactionName, when set, must
+  // match a name in factionTemplates above — applyCampaignTemplate resolves
+  // it to a real Faction id so the clock shows up tied to that faction, the
+  // same linkage the world sim creates organically via ambition clocks.
+  frontTemplates?: FrontTemplate[]
+  // #13: capability scaffold. This is a FALLBACK baseline only — when AI
+  // world generation succeeds it already produces a bespoke scaffold for
+  // this exact campaign, which takes precedence (see campaigns/route.ts).
+  // Templates guarantee every campaign gets a working scaffold even
+  // offline (no OPENAI_API_KEY) or if the AI call fails.
+  capabilityTemplates?: TemplateCapability[]
+  // #13: a complication each new character starts the world already
+  // entangled in. Applied at CHARACTER creation (Debt rows need a real
+  // characterId, which doesn't exist yet at campaign creation) — see
+  // api/campaigns/[id]/characters/route.ts. counterpartyFactionName must
+  // match a name in factionTemplates above.
+  startingDebtTemplates?: StartingDebtTemplate[]
   tags: string[]
+}
+
+export interface FrontTemplate {
+  name: string
+  description: string
+  category: string
+  maxTicks: number
+  consequence: string
+  sourceFactionName?: string
+}
+
+export interface TemplateCapability {
+  domain: string
+  name: string
+  description: string
+  tier: number // 1 = entry knowledge, 3 = deep art
+  isSecret: boolean
+}
+
+export interface StartingDebtTemplate {
+  description: string
+  direction: 'owed_by_character' | 'owed_to_character'
+  counterpartyFactionName: string
 }
 
 export interface MoveTemplate {
@@ -207,6 +250,42 @@ The town council is worried, and adventurers are needed to investigate the threa
     { name: 'Spellbook', description: 'Contains three minor spells', tags: ['magic'] }
   ],
 
+  frontTemplates: [
+    {
+      name: 'The Iron Company Tightens Its Grip',
+      description: 'The mercenary guild is buying up debts and contracts across Thornhaven, positioning to control the town outright.',
+      category: 'political',
+      maxTicks: 6,
+      consequence: 'The Iron Company forecloses on half the town — merchants answer to them now, not the council.',
+      sourceFactionName: 'The Iron Company'
+    },
+    {
+      name: 'Something Wakes in the Wizard\'s Tower',
+      description: 'The lights in the old tower are getting brighter, and the tremors are getting closer to town.',
+      category: 'supernatural',
+      maxTicks: 8,
+      consequence: 'Whatever was sealed in the tower breaks free and marches on Thornhaven.'
+    }
+  ],
+
+  capabilityTemplates: [
+    { domain: 'Swordplay', name: 'Bladework', description: 'Trained use of sword and shield in melee', tier: 1, isSecret: false },
+    { domain: 'Swordplay', name: 'Riposte', description: 'Turning a parried blow into a killing counter', tier: 2, isSecret: false },
+    { domain: 'Essence Magic', name: 'Cantrips', description: 'The minor spells every apprentice learns first', tier: 1, isSecret: false },
+    { domain: 'Essence Magic', name: 'Ritual Casting', description: 'Slow, powerful magic worked outside combat', tier: 2, isSecret: false },
+    { domain: 'Essence Magic', name: 'Blood Rites', description: 'Forbidden magic that trades the caster\'s vitality for power', tier: 3, isSecret: true },
+    { domain: 'Woodcraft', name: 'Tracking', description: 'Reading trail-sign and predicting a quarry\'s path', tier: 1, isSecret: false },
+    { domain: 'Woodcraft', name: 'Beast Speech', description: 'Communicating with the Whisperwood\'s creatures', tier: 2, isSecret: false }
+  ],
+
+  startingDebtTemplates: [
+    {
+      description: 'The Iron Company fronted your gear and travel coin — they expect it repaid, in service or in silver.',
+      direction: 'owed_by_character',
+      counterpartyFactionName: 'The Iron Company'
+    }
+  ],
+
   tags: ['fantasy', 'dungeon-crawl', 'magic', 'adventure']
 }
 
@@ -315,6 +394,41 @@ But as you prepare for the exercise, alarms blare throughout the school. Real vi
     { name: 'Provisional License', description: 'Allows hero work under supervision', tags: ['credential'] }
   ],
 
+  frontTemplates: [
+    {
+      name: 'The League Recruits',
+      description: 'The League of Villains is quietly pulling disaffected quirk-users into its ranks, growing faster than the Pro Hero Association can track.',
+      category: 'villainy',
+      maxTicks: 8,
+      consequence: 'The League launches a coordinated strike on a hero agency — casualties are real, and public trust in heroes cracks.',
+      sourceFactionName: 'League of Villains'
+    },
+    {
+      name: 'Public Trust in Heroes Erodes',
+      description: 'A string of botched rescues and a hostile press cycle are turning public opinion against licensed heroes.',
+      category: 'social',
+      maxTicks: 6,
+      consequence: 'A ballot measure strips heroes of their authority to act without police sign-off — everything gets slower and more dangerous.'
+    }
+  ],
+
+  capabilityTemplates: [
+    { domain: 'Quirk Control', name: 'Basic Application', description: 'Using your quirk reliably, on command, without strain', tier: 1, isSecret: false },
+    { domain: 'Quirk Control', name: 'Refined Technique', description: 'Precise, efficient use that costs you far less than a beginner\'s', tier: 2, isSecret: false },
+    { domain: 'Quirk Control', name: 'Overdrive', description: 'Pushing your quirk past its safe limits — Plus Ultra, at a cost', tier: 3, isSecret: true },
+    { domain: 'Combat Technique', name: 'Hero Basics', description: 'U.A.\'s foundational combat and rescue curriculum', tier: 1, isSecret: false },
+    { domain: 'Combat Technique', name: 'Combo Work', description: 'Chaining your quirk with a weapon, gadget, or ally\'s power', tier: 2, isSecret: false },
+    { domain: 'Support Engineering', name: 'Gear Maintenance', description: 'Keeping support-department gadgets running and tuned to your quirk', tier: 1, isSecret: false }
+  ],
+
+  startingDebtTemplates: [
+    {
+      description: 'The Pro Hero Association sponsored your provisional license — they expect results, and they\'re watching.',
+      direction: 'owed_by_character',
+      counterpartyFactionName: 'Pro Hero Association'
+    }
+  ],
+
   tags: ['superhero', 'school', 'modern', 'anime']
 }
 
@@ -410,6 +524,41 @@ But you know better. Something supernatural is hunting in Millbrook, and it's yo
     { name: 'Investigation Kit', description: 'Camera, UV light, EMF detector', tags: ['utility'] }
   ],
 
+  frontTemplates: [
+    {
+      name: 'The Deaths Continue',
+      description: 'Millbrook\'s "cardiac" deaths are accelerating — the thing hunting here is getting bolder, or hungrier.',
+      category: 'horror',
+      maxTicks: 6,
+      consequence: 'The monster claims someone the hunters know personally — and the town starts noticing the pattern.'
+    },
+    {
+      name: 'The Watchers Move In',
+      description: 'The Watchers have caught wind of Millbrook and are quietly deciding whether the hunters are an asset or a liability to contain.',
+      category: 'political',
+      maxTicks: 8,
+      consequence: 'The Watchers pull rank, seize the hunters\' evidence, and take the case out of their hands entirely.',
+      sourceFactionName: 'The Watchers'
+    }
+  ],
+
+  capabilityTemplates: [
+    { domain: 'Investigation', name: 'Fieldcraft', description: 'Reading a scene for evidence a normal investigator would miss', tier: 1, isSecret: false },
+    { domain: 'Investigation', name: 'Occult Research', description: 'Tracing a monster back to its lore, weaknesses, and origin', tier: 2, isSecret: false },
+    { domain: 'Combat', name: 'Hunter\'s Reflexes', description: 'Fighting something that shouldn\'t exist without freezing up', tier: 1, isSecret: false },
+    { domain: 'Combat', name: 'Killing Blow', description: 'Knowing exactly where and how a given monster type actually dies', tier: 2, isSecret: false },
+    { domain: 'The Sight', name: 'Glimpsing the Unnatural', description: 'Noticing wrongness other people\'s eyes slide past', tier: 1, isSecret: false },
+    { domain: 'The Sight', name: 'Communion', description: 'Speaking with what hunts in the dark — on its terms, not yours', tier: 3, isSecret: true }
+  ],
+
+  startingDebtTemplates: [
+    {
+      description: 'The Watchers fed you the case file on Millbrook — in exchange, they expect a full report on whatever you find.',
+      direction: 'owed_by_character',
+      counterpartyFactionName: 'The Watchers'
+    }
+  ],
+
   tags: ['horror', 'investigation', 'modern', 'supernatural']
 }
 
@@ -470,12 +619,20 @@ export async function createFactionsForCampaign(
  * Apply template to a new campaign.
  * If generatedFactions is provided, those are used instead of the template's
  * hardcoded faction list (world seed is handled at the route level).
+ *
+ * hasGeneratedCapabilities: true when AI world generation already produced
+ * a bespoke capability scaffold for this exact campaign — in that case
+ * template.capabilityTemplates is skipped (the AI one takes precedence,
+ * see campaigns/route.ts). False (or AI generation unavailable/failed)
+ * means the template's scaffold becomes the real one, guaranteeing every
+ * template campaign has a working capability tree even offline.
  */
 export async function applyCampaignTemplate(
   campaignId: string,
   templateId: string,
   prisma: any,
-  generatedFactions?: GeneratedFactionOverride[]
+  generatedFactions?: GeneratedFactionOverride[],
+  hasGeneratedCapabilities = false
 ): Promise<void> {
   const template = getTemplate(templateId)
   if (!template) {
@@ -509,6 +666,54 @@ export async function applyCampaignTemplate(
   }))
 
   await createFactionsForCampaign(campaignId, prisma, factionsToCreate)
+
+  // Front-style threats: ticking danger clocks with a stated consequence,
+  // the same shape the world sim spawns organically from faction ambition
+  // (see worldTurn.ts). sourceFactionName matches against template.
+  // factionTemplates specifically — if AI factions replaced them, the name
+  // won't resolve and the front is still created, just unlinked from a
+  // faction (still a real threat, just not faction-attributed).
+  if (template.frontTemplates && template.frontTemplates.length > 0) {
+    for (const front of template.frontTemplates) {
+      let sourceFactionId: string | undefined
+      if (front.sourceFactionName) {
+        const faction = await prisma.faction.findFirst({
+          where: { campaignId, name: { equals: front.sourceFactionName, mode: 'insensitive' } },
+          select: { id: true },
+        })
+        sourceFactionId = faction?.id
+      }
+      await prisma.clock.create({
+        data: {
+          campaignId,
+          name: front.name,
+          description: front.description,
+          category: front.category,
+          maxTicks: front.maxTicks,
+          consequence: front.consequence,
+          sourceFactionId,
+        },
+      })
+    }
+    console.log(`⏰ Seeded ${template.frontTemplates.length} front-style threats`)
+  }
+
+  // Capability scaffold fallback — see hasGeneratedCapabilities doc above.
+  if (!hasGeneratedCapabilities && template.capabilityTemplates && template.capabilityTemplates.length > 0) {
+    await prisma.campaignCapability.createMany({
+      data: template.capabilityTemplates.map(c => ({
+        campaignId,
+        key: slugifyCapabilityKey(c.name),
+        name: c.name,
+        description: c.description,
+        domain: c.domain,
+        tier: c.tier,
+        isSecret: c.isSecret,
+      })),
+      skipDuplicates: true,
+    })
+    console.log(`📖 Seeded ${template.capabilityTemplates.length} template capability nodes (AI scaffold unavailable)`)
+  }
 
   console.log(`✅ Applied template: ${template.name} (${factionsToCreate.length} factions, ${generatedFactions ? 'AI-generated' : 'template defaults'})`)
 }

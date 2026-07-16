@@ -219,6 +219,22 @@ export async function POST(request: NextRequest) {
           skipDuplicates: true
         })
         console.log(`📖 Seeded ${generatedCapabilities.length} capability nodes`)
+
+        // Shadow branches: in a universe WITH a corruption theme, the
+        // scaffold's secret nodes are its forbidden arts — unlockable only
+        // by characters carrying enough corruption marks (tier = marks
+        // required; see shadowUnlockBlocked). Only generation-time secrets
+        // qualify: nodes discovered mid-story are born isSecret without
+        // being forbidden, which is exactly why isShadow is its own flag.
+        if (worldExtras?.corruptionTheme) {
+          const shadowed = await tx.campaignCapability.updateMany({
+            where: { campaignId: newCampaign.id, isSecret: true },
+            data: { isShadow: true }
+          })
+          if (shadowed.count > 0) {
+            console.log(`🌑 Marked ${shadowed.count} secret capability nodes as shadow branches`)
+          }
+        }
       }
 
       return newCampaign

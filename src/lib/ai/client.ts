@@ -363,6 +363,9 @@ export interface AIGMRequest {
     name: string
     description: string
     bargainGuidance?: string
+    // The campaign's forbidden arts — capability nodes only the marked can
+    // unlock (required_marks = the node's tier; enforced by the engine).
+    shadow_arts?: Array<{ name: string; domain: string; required_marks: number }>
   } | null
   player_actions: Array<{
     character_name: string
@@ -869,6 +872,10 @@ Corruption is a devil's bargain the PLAYER walks into, never something you impos
 - Each character's current state is on their "Corruption:" line in PLAYER CHARACTERS. Weave that stage into narration as an undertone; never name numbers or mechanics in prose
 - A character whose conditions show "${'Consumed'}" has reached the end of the track — ${request.corruption_theme.name} is claiming them; play their unraveling honestly
 - NEVER treat a merely dark-flavored ability as corrupting. Only ${request.corruption_theme.name} itself, as defined above, marks corruption
+${request.corruption_theme.shadow_arts && request.corruption_theme.shadow_arts.length > 0 ? `
+SHADOW ARTS — this world's forbidden arts, wieldable only by the marked:
+${request.corruption_theme.shadow_arts.map(s => `- ${s.name} (${s.domain})`).join('\n')}
+These may be glimpsed by anyone — rumors, forbidden texts, witnessing one used — but they refuse the unmarked. Only a character already carrying enough of ${request.corruption_theme.name} can unlock one; the engine enforces this, downgrading premature unlocks to glimpses. Narrate a premature attempt as the art itself resisting: it wants more of them first. Never present learning one as safe or free.` : ''}
 </corruption>
 ` : ''}
 

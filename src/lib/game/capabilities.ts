@@ -153,6 +153,23 @@ export function slugifyCapabilityKey(name: string): string {
 type Db = Prisma.TransactionClient
 
 /**
+ * Shadow-branch gate (pure): may this character UNLOCK this node right
+ * now? Shadow arts are the corruption-priced branch of the capability
+ * tree — unlocking one requires corruption marks at least equal to the
+ * node's tier (tier 1 = one mark opens the door, tier 3 = deep in).
+ * Everything non-shadow is ungated, and campaigns without a corruption
+ * theme never set isShadow at all, so nothing changes for them.
+ * Glimpsing is never gated — anyone may learn the forbidden EXISTS.
+ */
+export function shadowUnlockBlocked(
+  node: { isShadow: boolean; tier: number },
+  corruption: number
+): boolean {
+  if (!node.isShadow) return false
+  return (Number(corruption) || 0) < Math.max(1, node.tier)
+}
+
+/**
  * The single writer for capability state. Resolves each change's node by
  * key or name within the campaign (creating a stub node when the AI marks
  * it is_new — same pattern as stub NPCs/factions), then applies:
@@ -172,6 +189,20 @@ export async function applyCapabilityChanges(
   channel: GrowthChannel = 'scene'
 ): Promise<string[]> {
   const log: string[] = []
+
+  // Shadow gate context, fetched at most once and only if a shadow node
+  // actually comes up (most campaigns/scenes never touch one).
+  let shadowCtx: { corruption: number } | null = null
+  const getShadowCtx = async () => {
+    if (!shadowCtx) {
+      const character = await db.character.findUnique({
+        where: { id: characterId },
+        select: { corruption: true },
+      })
+      shadowCtx = { corruption: character?.corruption ?? 0 }
+    }
+    return shadowCtx
+  }
 
   for (const change of changes) {
     const key = slugifyCapabilityKey(change.capability_key)
@@ -229,6 +260,29 @@ export async function applyCapabilityChanges(
 
     if (change.change === 'unlock') {
       if (existing?.state === 'UNLOCKED') continue
+      if (node.isShadow) {
+        const ctx = await getShadowCtx()
+        if (shadowUnlockBlocked(node, ctx.corruption)) {
+          // The forbidden art refuses the insufficiently marked: downgrade
+          // to a glimpse so the sheet remembers it exists, but nothing
+          // unlocks until corruption catches up to the node's tier.
+          if (!existing) {
+            await db.characterCapability.create({
+              data: {
+                characterId,
+                capabilityId: node.id,
+                state: 'GLIMPSED',
+                hint: change.hint || 'It resists you — it wants more of you first',
+                source: change.reason,
+                arcStartTurn: currentTurn,
+              },
+            })
+          }
+          log.push(`${node.name} resists — it demands a deeper price than has yet been paid`)
+          console.warn(`  🌑 shadow gate: unlock of "${node.name}" (tier ${node.tier}) blocked at corruption ${ctx.corruption} — downgraded to glimpse`)
+          continue
+        }
+      }
       await db.characterCapability.upsert({
         where: { characterId_capabilityId: { characterId, capabilityId: node.id } },
         create: {

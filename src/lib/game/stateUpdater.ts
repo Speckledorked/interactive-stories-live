@@ -25,6 +25,13 @@ import { getArmorReduction } from './inventory'
 import { applyCapabilityChanges } from './capabilities'
 import { applyDebtChanges } from './debts'
 import { applyStandingChanges } from './standing'
+import {
+  parseCorruptionTheme,
+  applyCorruptionMarks,
+  corruptionStage,
+  CONSUMED_CONDITION_NAME,
+  CorruptionTheme
+} from './corruption'
 import { AI_MODELS } from '@/lib/ai/models'
 import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
 
@@ -65,6 +72,10 @@ export async function applyWorldUpdates(
   // resolved to real IDs here and nowhere else).
   const involvedNpcIds = new Set<string>()
   const involvedFactionIds = new Set<string>()
+
+  // Lazily fetched the first time a corruption_change appears — undefined
+  // means "not looked up yet", null means "this campaign has no theme".
+  let corruptionTheme: CorruptionTheme | null | undefined = undefined
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -401,6 +412,40 @@ export async function applyWorldUpdates(
                 appliedAt: currentTurnNumber
               }).updatedConditions
               harmMessages.push(sacrifice.legacy || `${character.name} makes the ultimate sacrifice.`)
+            }
+
+            // Corruption marks — only when this campaign actually has a
+            // corruption theme (a universe without one ignores the field
+            // entirely). Clamped to one mark per scene, never decreases;
+            // reaching the cap adds the Consumed condition (see
+            // lib/game/corruption.ts).
+            if (pcChange.changes.corruption_change) {
+              if (corruptionTheme === undefined) {
+                const campaignRow = await tx.campaign.findUnique({
+                  where: { id: campaignId },
+                  select: { corruptionTheme: true }
+                })
+                corruptionTheme = parseCorruptionTheme(campaignRow?.corruptionTheme)
+              }
+              if (corruptionTheme) {
+                const marks = Number(pcChange.changes.corruption_change.marks) || 0
+                const result = applyCorruptionMarks(character.corruption, marks)
+                if (result.applied > 0) {
+                  updateData.corruption = result.newValue
+                  const stage = corruptionStage(corruptionTheme, result.newValue)
+                  harmMessages.push(`${corruptionTheme.name} deepens${stage ? `: ${stage}` : ''} (${pcChange.changes.corruption_change.reason || 'no reason given'})`)
+                  if (result.reachedMax) {
+                    currentConditions = markCondition(currentConditions, {
+                      id: `consumed_${Date.now()}`,
+                      name: CONSUMED_CONDITION_NAME,
+                      category: 'Special',
+                      description: `${corruptionTheme.name} has taken all there was to take. This character is slipping beyond the player's control.`,
+                      mechanicalEffect: 'The final stage of corruption — irreversible',
+                      appliedAt: currentTurnNumber
+                    }).updatedConditions
+                  }
+                }
+              }
             }
 
             // Update harm and conditions if changed

@@ -16,6 +16,7 @@ import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { resolveActionMechanics } from '@/lib/game/resolution'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
+import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
 
 /**
  * Last appended beat of a quest's progress log — the prompt only needs
@@ -782,11 +783,26 @@ export async function buildSceneResolutionRequest(
     relevantMemories.length > 0
   )
 
+  // Corruption: attach the campaign's theme (gates the <corruption> prompt
+  // section) and each character's qualitative stage. The summary builders
+  // don't carry raw corruption values, but entities.characters are the
+  // unfiltered rows — match by id. No theme = the track doesn't exist here.
+  const corruptionTheme = parseCorruptionTheme(campaign.corruptionTheme)
+  if (corruptionTheme) {
+    for (const summaryCharacter of worldSummaryWithMemories.characters as any[]) {
+      const raw = entities.characters.find((rc: any) => rc.id === summaryCharacter.id)
+      if (raw && raw.corruption > 0) {
+        summaryCharacter.corruption_status = describeCorruptionForPrompt(corruptionTheme, raw.corruption)
+      }
+    }
+  }
+
   return {
     campaign_universe: campaign.universe || 'Generic Fantasy',
     ai_system_prompt: enhancedSystemPrompt + (fullGuidance ? `\n\n${fullGuidance}` : ''),
     world_summary: worldSummaryWithMemories,
     current_scene_intro: sceneContext,
+    corruption_theme: corruptionTheme,
     player_actions: playerActions,
     action_mechanics: actionMechanics
   }

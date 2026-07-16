@@ -9,6 +9,7 @@ import { requireAuth } from '@/lib/auth'
 import { CreateCampaignRequest, ErrorResponse } from '@/types/api'
 import { getTemplate, applyCampaignTemplate, createFactionsForCampaign } from '@/lib/templates/campaign-templates'
 import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels } from '@/lib/ai/worldGenerator'
+import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 
 // GET /api/campaigns - List user's campaigns
@@ -119,6 +120,24 @@ export async function POST(request: NextRequest) {
       console.log('⚠️ World generation failed, using fallback defaults')
     }
 
+    // Second-stage generation: origin archetype cards + the corruption
+    // theme, grounded in the factions/capabilities generated above.
+    // Fail-open — a campaign without these still works (blank creation
+    // wizard, no corruption track).
+    let worldExtras: GeneratedWorldExtras | null = null
+    try {
+      worldExtras = await generateWorldExtras(
+        title,
+        description || '',
+        resolvedUniverse,
+        (generatedFactions || []).map(f => ({ name: f.name, description: f.description })),
+        generatedCapabilities || [],
+        generatedStatLabels
+      )
+    } catch (extrasError) {
+      console.error('World extras generation failed (non-critical):', extrasError)
+    }
+
     // Create campaign, world meta, membership, and template data in one transaction
     const campaign = await prisma.$transaction(async (tx) => {
       const newCampaign = await tx.campaign.create({
@@ -128,9 +147,31 @@ export async function POST(request: NextRequest) {
           universe: resolvedUniverse,
           aiSystemPrompt: resolvedSystemPrompt,
           initialWorldSeed: resolvedWorldSeed,
-          statLabels: (generatedStatLabels as object | undefined) || undefined
+          statLabels: (generatedStatLabels as object | undefined) || undefined,
+          // Null is meaningful: this universe has no power-at-a-cost
+          // concept, so the corruption track stays disabled.
+          corruptionTheme: (worldExtras?.corruptionTheme as object | undefined) || undefined
         }
       })
+
+      // Origin archetype cards — ready-to-play entry points into this
+      // world (see lib/ai/worldExtras.ts and the character creation form).
+      if (worldExtras && worldExtras.archetypes.length > 0) {
+        await tx.campaignArchetype.createMany({
+          data: worldExtras.archetypes.map(a => ({
+            campaignId: newCampaign.id,
+            name: a.name,
+            description: a.description,
+            originFamiliarity: a.originFamiliarity,
+            suggestedStats: (a.suggestedStats as object | null) || undefined,
+            startingGear: (a.startingGear as object | null) || undefined,
+            startingTie: (a.startingTie as object | null) || undefined,
+            backstoryPrompts: a.backstoryPrompts,
+            glimpseCapabilityKeys: a.glimpseCapabilityKeys
+          }))
+        })
+        console.log(`🎭 Seeded ${worldExtras.archetypes.length} origin archetypes`)
+      }
 
       await tx.worldMeta.create({
         data: {

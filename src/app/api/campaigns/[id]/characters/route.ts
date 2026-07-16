@@ -8,6 +8,9 @@ import { OriginFamiliarity } from '@prisma/client'
 
 interface CreateCharacterBody {
   name: string
+  // Origin archetype card picked in the creation wizard, if any — seeds
+  // extra capability glimpses and a starting tie (Debt/faction standing).
+  archetypeId?: string
   // Knowledge-relative sheet: how familiar this character is with the
   // universe's systems — drives capability discovery seeding.
   originFamiliarity?: 'NATIVE' | 'NEWCOMER' | 'OUTSIDER'
@@ -152,6 +155,85 @@ export async function POST(
     } catch (seedError) {
       // Non-critical: a character without seeds just has a blanker sheet.
       console.error('Failed to seed character capabilities:', seedError)
+    }
+
+    // Origin archetype seeding: if the player picked an archetype card,
+    // seed its extra capability glimpses and its starting tie into the
+    // living world (a Debt or a faction standing). Best-effort — the
+    // character exists either way; the archetype's stats/gear were already
+    // applied client-side as wizard prefill.
+    if (body.archetypeId && typeof body.archetypeId === 'string') {
+      try {
+        const archetype = await prisma.campaignArchetype.findFirst({
+          where: { id: body.archetypeId, campaignId }
+        })
+        if (archetype) {
+          // Extra glimpses on top of familiarity seeding.
+          if (archetype.glimpseCapabilityKeys.length > 0) {
+            const nodes = await prisma.campaignCapability.findMany({
+              where: { campaignId, key: { in: archetype.glimpseCapabilityKeys }, isSecret: false },
+              select: { id: true }
+            })
+            if (nodes.length > 0) {
+              await prisma.characterCapability.createMany({
+                data: nodes.map(n => ({
+                  characterId: character.id,
+                  capabilityId: n.id,
+                  state: 'GLIMPSED' as const,
+                  source: `${archetype.name} background`
+                })),
+                skipDuplicates: true
+              })
+            }
+          }
+
+          // Starting tie into the living world.
+          const tie = archetype.startingTie as any
+          if (tie?.kind && tie?.counterparty_name) {
+            if (tie.kind === 'faction_standing') {
+              const faction = await prisma.faction.findFirst({
+                where: { campaignId, name: { equals: tie.counterparty_name, mode: 'insensitive' } },
+                select: { id: true }
+              })
+              if (faction) {
+                const value = Math.max(-2, Math.min(2, Number(tie.standing_value) || 1))
+                await prisma.factionStanding.upsert({
+                  where: { characterId_factionId: { characterId: character.id, factionId: faction.id } },
+                  create: { campaignId, characterId: character.id, factionId: faction.id, value },
+                  update: { value }
+                })
+                console.log(`⭐ Archetype tie: standing ${value} with ${tie.counterparty_name}`)
+              }
+            } else {
+              const direction = tie.kind === 'debt_owed_by_character' ? 'OWED_BY_CHARACTER' : 'OWED_TO_CHARACTER'
+              const counterpartyType = tie.counterparty_type === 'faction' ? 'faction' : 'npc'
+              const counterparty = counterpartyType === 'faction'
+                ? await prisma.faction.findFirst({
+                    where: { campaignId, name: { equals: tie.counterparty_name, mode: 'insensitive' } },
+                    select: { id: true }
+                  })
+                : await prisma.nPC.findFirst({
+                    where: { campaignId, name: { equals: tie.counterparty_name, mode: 'insensitive' } },
+                    select: { id: true }
+                  })
+              await prisma.debt.create({
+                data: {
+                  campaignId,
+                  characterId: character.id,
+                  direction,
+                  counterpartyType,
+                  counterpartyId: counterparty?.id || null,
+                  counterpartyName: tie.counterparty_name,
+                  description: tie.description || `A tie from their past as ${archetype.name}`
+                }
+              })
+              console.log(`🤝 Archetype tie: debt ${direction} ${tie.counterparty_name}`)
+            }
+          }
+        }
+      } catch (archetypeError) {
+        console.error('Failed to apply archetype seeding (non-critical):', archetypeError)
+      }
     }
 
     // Auto-create NPCs for contacts mentioned in character's backstory

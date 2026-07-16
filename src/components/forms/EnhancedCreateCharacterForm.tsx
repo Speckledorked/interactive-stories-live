@@ -110,6 +110,78 @@ export default function EnhancedCreateCharacterForm({
     },
   })
 
+  // Origin archetype cards — per-universe playbook presets generated at
+  // campaign creation. Picking one pre-fills the wizard; "start from
+  // scratch" always remains available (and is the only path for campaigns
+  // whose generation produced no cards).
+  interface ArchetypeCard {
+    id: string
+    name: string
+    description: string
+    originFamiliarity: 'NATIVE' | 'NEWCOMER' | 'OUTSIDER'
+    suggestedStats: Record<string, number> | null
+    startingGear: {
+      weapon?: string
+      armor?: string
+      misc?: string
+      items?: Array<{ name: string; quantity: number; tags: string[] }>
+    } | null
+    startingTie: { description?: string } | null
+    backstoryPrompts: string[]
+  }
+  const [archetypes, setArchetypes] = useState<ArchetypeCard[]>([])
+  const [selectedArchetypeId, setSelectedArchetypeId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    authenticatedFetch(`/api/campaigns/${campaignId}/archetypes`)
+      .then(res => (res.ok ? res.json() : { archetypes: [] }))
+      .then(data => {
+        if (!cancelled) setArchetypes(data.archetypes || [])
+      })
+      .catch(() => {
+        // No cards is a fully supported state — the blank wizard works.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [campaignId])
+
+  const applyArchetype = (archetype: ArchetypeCard) => {
+    setSelectedArchetypeId(archetype.id)
+    setFormData(prev => ({
+      ...prev,
+      originFamiliarity: archetype.originFamiliarity,
+      ...(archetype.suggestedStats
+        ? { stats: { ...prev.stats, ...archetype.suggestedStats } }
+        : {}),
+      ...(archetype.startingGear
+        ? {
+            equipment: {
+              weapon: archetype.startingGear.weapon || prev.equipment.weapon,
+              armor: archetype.startingGear.armor || prev.equipment.armor,
+              misc: archetype.startingGear.misc || prev.equipment.misc,
+            },
+            inventory: {
+              ...prev.inventory,
+              items: (archetype.startingGear.items || []).map((item, idx) => ({
+                id: `archetype-${idx}-${Date.now()}`,
+                name: item.name,
+                quantity: item.quantity,
+                tags: item.tags,
+              })),
+            },
+          }
+        : {}),
+    }))
+  }
+
+  const clearArchetype = () => {
+    setSelectedArchetypeId(null)
+  }
+
+  const selectedArchetype = archetypes.find(a => a.id === selectedArchetypeId) || null
+
   // Temporary input states
   const [newItemName, setNewItemName] = useState('')
   const [newItemQuantity, setNewItemQuantity] = useState(1)
@@ -139,7 +211,12 @@ export default function EnhancedCreateCharacterForm({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          // Server-side archetype seeding: extra capability glimpses + the
+          // starting tie (a Debt or faction standing) into the living world.
+          archetypeId: selectedArchetypeId || undefined,
+        }),
       })
 
       const data = await response.json()
@@ -339,6 +416,50 @@ export default function EnhancedCreateCharacterForm({
         {/* Basic Info Tab */}
         {activeTab === 'basics' && (
           <div className="space-y-4">
+            {archetypes.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-ember-100 mb-1">
+                  Choose an origin
+                </label>
+                <p className="text-xs text-ember-300/60 mb-2">
+                  Ready-to-play entry points into this world — picking one fills in stats, gear, and a starting
+                  connection you can still tweak on the later tabs. Or build from scratch.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {archetypes.map(archetype => (
+                    <button
+                      key={archetype.id}
+                      type="button"
+                      onClick={() => applyArchetype(archetype)}
+                      className={`text-left rounded-lg p-4 border transition-colors ${
+                        selectedArchetypeId === archetype.id
+                          ? 'bg-ember-900/30 border-ember-500/60'
+                          : 'bg-black/25 border-ember-900/30 hover:border-ember-700/50'
+                      }`}
+                    >
+                      <div className="font-medium text-ember-200 mb-1">{archetype.name}</div>
+                      <p className="text-xs text-ember-300/60">{archetype.description}</p>
+                      {archetype.startingTie?.description && (
+                        <p className="text-xs text-ember-400/50 mt-2 italic">Starts with: {archetype.startingTie.description}</p>
+                      )}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={clearArchetype}
+                    className={`text-left rounded-lg p-4 border border-dashed transition-colors ${
+                      selectedArchetypeId === null
+                        ? 'bg-ember-900/20 border-ember-500/50'
+                        : 'border-ember-900/40 hover:border-ember-700/50'
+                    }`}
+                  >
+                    <div className="font-medium text-ember-300/80 mb-1">Start from scratch</div>
+                    <p className="text-xs text-ember-300/50">Build every detail yourself.</p>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-ember-100 mb-1">
                 Character Name <span className="text-wine-400">*</span>
@@ -461,6 +582,16 @@ export default function EnhancedCreateCharacterForm({
                 className="input-field"
                 placeholder="What is your character's history? Where did they come from? What important events shaped who they are today?"
               />
+              {selectedArchetype && selectedArchetype.backstoryPrompts.length > 0 && (
+                <div className="mt-2 text-xs text-ember-300/60 bg-black/20 rounded-md p-3 border border-ember-900/30">
+                  <span className="font-medium text-ember-300/80">Questions to spark your {selectedArchetype.name} backstory:</span>
+                  <ul className="list-disc list-inside mt-1 space-y-0.5">
+                    {selectedArchetype.backstoryPrompts.map((prompt, idx) => (
+                      <li key={idx}>{prompt}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <div>

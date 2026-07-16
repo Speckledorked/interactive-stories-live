@@ -16,6 +16,7 @@ import { internalJobSecret } from '@/lib/game/resolutionQueue'
 import { reportError } from '@/lib/monitoring'
 import { getAppUrl } from '@/lib/appUrl'
 import { runLoreImport } from './loreImportService'
+import { reseedWorldFromLore } from './reseedWorld'
 
 export const MAX_ATTEMPTS = 3
 // A wiki crawl can legitimately run for minutes; a RUNNING job older than
@@ -90,6 +91,27 @@ export async function processLoreImportJob(jobId: string): Promise<ProcessResult
       data: { status: 'COMPLETED', finishedAt: new Date(), lastError: null },
     })
     console.log(`✅ Lore import job ${jobId} completed`)
+
+    // Campaigns created WITH a lore source finish becoming their canon
+    // world here: the import that was still crawling when the campaign was
+    // born now reseeds the provisional generated world (fresh-mode replace
+    // while no characters exist — see lib/lore/reseedWorld.ts). Best-effort:
+    // a reseed failure must not fail the import, and the admin button can
+    // always re-run it.
+    if (job.autoReseedOnComplete) {
+      try {
+        const result = await reseedWorldFromLore(job.campaignId)
+        if (!result.ok) {
+          console.warn(`⚠️ Auto-reseed after lore import ${jobId} did not run: ${result.reason}`)
+        }
+      } catch (reseedError) {
+        console.error(`❌ Auto-reseed after lore import ${jobId} failed:`, reseedError)
+        await reportError('lore-auto-reseed-failed', reseedError, {
+          jobId, campaignId: job.campaignId,
+        })
+      }
+    }
+
     return { status: 'completed' }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

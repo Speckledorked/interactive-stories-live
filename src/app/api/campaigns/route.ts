@@ -11,6 +11,7 @@ import { getTemplate, applyCampaignTemplate, createFactionsForCampaign } from '@
 import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
+import { kickLoreImportJob } from '@/lib/lore/loreQueue'
 
 // GET /api/campaigns - List user's campaigns
 export async function GET(request: NextRequest) {
@@ -66,13 +67,50 @@ export async function POST(request: NextRequest) {
   try {
     const user = requireAuth(request)
     const body = await request.json()
-    const { title, description, universe, aiSystemPrompt, initialWorldSeed, templateId } = body
+    const { title, description, universe, aiSystemPrompt, initialWorldSeed, templateId, loreImport } = body
 
     if (!title) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Title is required' },
         { status: 400 }
       )
+    }
+
+    // Optional canon lore source, validated up front so a bad URL fails the
+    // request before any generation runs. The import itself is async (a
+    // wiki crawl takes minutes) — the campaign is created immediately with
+    // a provisional generated world, and when the import finishes the
+    // worker auto-reseeds that world from canon (lib/lore/reseedWorld.ts,
+    // fresh-mode: replace, since no characters exist yet).
+    let validatedLore: { sourceType: 'URL' | 'WIKI' | 'PASTE'; sourceUrl: string | null; rawText: string | null; sourceTitle: string | null } | null = null
+    if (loreImport) {
+      const sourceType = loreImport.sourceType
+      if (!['PASTE', 'URL', 'WIKI'].includes(sourceType)) {
+        return NextResponse.json<ErrorResponse>({ error: 'loreImport.sourceType must be PASTE, URL, or WIKI' }, { status: 400 })
+      }
+      let rawText: string | null = null
+      let sourceUrl: string | null = null
+      if (sourceType === 'PASTE') {
+        rawText = typeof loreImport.rawText === 'string' ? loreImport.rawText.trim() : ''
+        if (!rawText) {
+          return NextResponse.json<ErrorResponse>({ error: 'loreImport.rawText is required for a pasted lore source' }, { status: 400 })
+        }
+        if (rawText.length > 200_000) {
+          return NextResponse.json<ErrorResponse>({ error: 'Pasted lore is too long (max 200,000 characters)' }, { status: 400 })
+        }
+      } else {
+        const urlCandidate = typeof loreImport.sourceUrl === 'string' ? loreImport.sourceUrl.trim() : ''
+        try {
+          new URL(urlCandidate)
+        } catch {
+          return NextResponse.json<ErrorResponse>({ error: 'A valid loreImport.sourceUrl is required' }, { status: 400 })
+        }
+        sourceUrl = urlCandidate
+      }
+      const sourceTitle = typeof loreImport.sourceTitle === 'string' && loreImport.sourceTitle.trim()
+        ? loreImport.sourceTitle.trim().slice(0, 200)
+        : null
+      validatedLore = { sourceType, sourceUrl, rawText, sourceTitle }
     }
 
     // Resolve template if provided
@@ -239,6 +277,31 @@ export async function POST(request: NextRequest) {
 
       return newCampaign
     })
+
+    // Kick off the canon import AFTER the campaign exists. The kick has a
+    // short delivery timeout, so this doesn't hold the response long; when
+    // the import completes, the worker reseeds the provisional world above
+    // from canon automatically.
+    if (validatedLore) {
+      try {
+        const loreJob = await prisma.loreImportJob.create({
+          data: {
+            campaignId: campaign.id,
+            sourceType: validatedLore.sourceType,
+            sourceUrl: validatedLore.sourceUrl,
+            sourceTitle: validatedLore.sourceTitle,
+            rawText: validatedLore.rawText,
+            autoReseedOnComplete: true,
+          },
+        })
+        await kickLoreImportJob(loreJob.id)
+        console.log(`📚 Creation-time lore import ${loreJob.id} started (auto-reseed on completion)`)
+      } catch (loreError) {
+        // The campaign is already created and fully playable on its
+        // provisional world — a failed import start must not fail creation.
+        console.error('Failed to start creation-time lore import:', loreError)
+      }
+    }
 
     return NextResponse.json({ campaign }, { status: 201 })
   } catch (error) {

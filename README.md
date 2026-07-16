@@ -66,12 +66,20 @@ never reach the AI's player-facing prompt — the AI narrates from the same
 qualitative impressions a character in the world would have, while the
 tick itself always operates on real numbers underneath.
 
-Set a faction's **Simulation Goal** and **Archetype** from the campaign
-admin panel (Factions tab) to opt it into this system. The admin panel also
+Every active faction is simulated automatically — no opt-in. Each starts
+with a default goal and archetype, and the tick reassesses its goal every
+turn from its actual circumstances, so a well-resourced faction drifts
+toward expansion and starts committing to ambitions on its own. The
+campaign admin panel's **Simulation Goal** and **Archetype** controls
+(Factions tab) are a steering wheel, not an ignition switch: use them to
+seed or override a faction's direction and flavor its ambitions (guild vs.
+secret society vs. political machine) — the simulation will steer the goal
+back toward whatever the faction's stats justify, except for player-led
+factions, whose chosen goal is deliberately preserved. The admin panel also
 has a Map tab (faction relationships and territory), a Debug tab (why the
 tick made a given decision, plus a dry-run preview of the next tick), and a
-Simulation Caps section for tuning how many factions/NPCs the tick
-considers per campaign.
+Simulation section for tuning per-campaign tick caps and how much in-game
+time passes between world turns.
 
 ## Living World Roadmap
 

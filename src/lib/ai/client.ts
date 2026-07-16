@@ -158,6 +158,12 @@ export interface AIGMResponse {
           delta: number
           reason: string
         }>
+        // Corruption mark (see lib/game/corruption.ts) — ONLY meaningful in
+        // campaigns with a corruption theme; server clamps to 1 mark/scene.
+        corruption_change?: {
+          marks: number
+          reason: string
+        }
       }
     }>
     faction_changes?: Array<{
@@ -250,6 +256,9 @@ export interface AIGMRequest {
       }
       // Social position with discovered active factions (see standing.ts).
       standings?: Array<{ faction: string; label: string }>
+      // Qualitative corruption state — only set when the campaign has a
+      // corruption theme (see lib/game/corruption.ts). Never a raw number.
+      corruption_status?: string
     }>
     npcs: Array<{
       id: string
@@ -341,6 +350,13 @@ export interface AIGMRequest {
     _campaignSummary?: string
   }
   current_scene_intro: string
+  // The campaign's corruption theme, when this universe has one — gates the
+  // <corruption> prompt section and the corruption_change response channel.
+  corruption_theme?: {
+    name: string
+    description: string
+    bargainGuidance?: string
+  } | null
   player_actions: Array<{
     character_name: string
     character_id: string
@@ -830,6 +846,20 @@ CAPABILITY CHANGES — report what the fiction did via capability_changes inside
 
 You decide WHAT happened; the game engine decides how much growth it's worth. Do not narrate sudden mastery — growth is slow, and the engine will cap it regardless of what the prose claims.
 </capabilities>
+${request.corruption_theme ? `
+<corruption>
+THIS UNIVERSE'S POWER-AT-A-COST: "${request.corruption_theme.name}" — ${request.corruption_theme.description}
+${request.corruption_theme.bargainGuidance ? `When a bargain fits: ${request.corruption_theme.bargainGuidance}` : ''}
+
+Corruption is a devil's bargain the PLAYER walks into, never something you impose:
+- Offer a bargain SPARINGLY (at most once every few scenes) at a moment of real desperation — typically on a miss: name what ${request.corruption_theme.name} could do for them right now, and what it will cost. Let the player's next action accept or refuse
+- Only mark corruption when the character actually draws on it: report {"corruption_change": {"marks": 1, "reason": "..."}} inside that character's pc_changes. The engine caps marks at one per scene and they NEVER go away
+- When a character accepts, the power works — narrate a real, immediate benefit, not a monkey's paw. The cost is the mark itself and what it slowly makes of them
+- Each character's current state is on their "Corruption:" line in PLAYER CHARACTERS. Weave that stage into narration as an undertone; never name numbers or mechanics in prose
+- A character whose conditions show "${'Consumed'}" has reached the end of the track — ${request.corruption_theme.name} is claiming them; play their unraveling honestly
+- NEVER treat a merely dark-flavored ability as corrupting. Only ${request.corruption_theme.name} itself, as defined above, marks corruption
+</corruption>
+` : ''}
 
 <npc_tracking>
 REGISTER NEW NPCs: Whenever you introduce a named character who doesn't already exist in the world state, add them to npc_changes with is_new: true and a brief description.
@@ -933,6 +963,11 @@ ${world_summary.characters.map(c => {
       ...c.debts.owedToCharacter.map(d => `${d.counterparty} owes ${c.name} (${d.description})`),
     ]
     parts.push(`Debts: ${debtLines.join('; ')}`)
+  }
+
+  // Corruption: qualitative stage only — see <corruption>.
+  if (c.corruption_status) {
+    parts.push(`Corruption: ${c.corruption_status}`)
   }
 
   // Faction standing: qualitative social position — see <faction_standing>.

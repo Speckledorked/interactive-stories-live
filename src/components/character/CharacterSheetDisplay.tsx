@@ -11,6 +11,7 @@ import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
 import ConsequenceBadge from './ConsequenceBadge'
 import { DynamicDowntimeManager } from '@/components/downtime/DynamicDowntimeManager'
+import { parseCorruptionTheme, corruptionStage, MAX_CORRUPTION } from '@/lib/game/corruption'
 
 interface CharacterSheetDisplayProps {
   character: any
@@ -127,6 +128,13 @@ export default function CharacterSheetDisplay({
 
   // Faction standing — qualitative labels only ("honored by", "hostile with")
   const standingSummary = (character?.standingSummary || []) as Array<{ faction: string; label: string }>
+
+  // Corruption — only exists when this campaign's universe has a
+  // power-at-a-cost concept (Campaign.corruptionTheme); rendered
+  // diegetically (staged prose, subtle marks), never as "3/5".
+  const corruptionTheme = parseCorruptionTheme(campaign?.corruptionTheme)
+  const corruptionValue = Math.max(0, Number(character?.corruption) || 0)
+  const corruptionStageText = corruptionTheme ? corruptionStage(corruptionTheme, corruptionValue) : null
 
   // Parse moves
   const moves = character?.moves || []
@@ -393,6 +401,26 @@ export default function CharacterSheetDisplay({
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Corruption — only in universes whose fiction has a
+                power-at-a-cost concept, and only once this character has
+                actually marked it. Staged prose + subtle marks, never
+                "3/5" — and never shown at zero: an untouched character
+                shouldn't be advertised a mechanic they haven't met. */}
+            {corruptionTheme && corruptionValue > 0 && (
+              <div className="card md:col-span-2 border-wine-800/40">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-wine-400/80 uppercase tracking-wide">{corruptionTheme.name}</h3>
+                  <span className="text-wine-400/70 tracking-widest" aria-label="corruption marks">
+                    {'●'.repeat(Math.min(corruptionValue, MAX_CORRUPTION))}
+                    {'○'.repeat(Math.max(0, MAX_CORRUPTION - corruptionValue))}
+                  </span>
+                </div>
+                {corruptionStageText && (
+                  <p className="text-sm text-wine-300/80 italic">{corruptionStageText}</p>
+                )}
               </div>
             )}
 

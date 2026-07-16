@@ -221,6 +221,13 @@ model Campaign {
   // Shape: Record<'cool'|'hard'|'hot'|'sharp'|'weird', { label: string; description: string }>
   statLabels Json?
 
+  // Corruption track theme — what "power at a cost" means in THIS
+  // universe, generated at creation (see lib/ai/worldExtras.ts). Defined
+  // by the fiction's own devil's bargain, never by aesthetics; null means
+  // this universe has no such concept and the track is disabled entirely.
+  // Shape: { name, description, stages: string[5], bargainGuidance }
+  corruptionTheme Json?
+
   // Phase 9: Campaign notification settings
   mentionsEnabled     Boolean @default(true)
   soundEffectsEnabled Boolean @default(true)
@@ -274,6 +281,47 @@ model Campaign {
   // Quest tracking: named objectives the AI GM opens/progresses/closes
   // through play (quest_changes in world_updates — see lib/game/stateUpdater.ts).
   quests Quest[]
+
+  // Playbook onboarding: 3-5 ready-to-play character archetypes generated
+  // for this universe at creation (see lib/ai/worldExtras.ts).
+  archetypes CampaignArchetype[]
+}
+
+//
+// ORIGIN ARCHETYPES — per-universe playbook cards for fast character
+// creation. Picking one pre-fills the creation wizard (stats, gear,
+// familiarity) and seeds starting ties (a Debt or faction standing) plus
+// extra capability glimpses server-side. Purely optional — the blank
+// wizard still works, and a campaign whose generation failed simply has
+// no cards.
+//
+
+model CampaignArchetype {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  name        String // "Newly Awakened Outworlder"
+  description String @db.Text // 1-2 sentence pitch shown on the card
+
+  originFamiliarity OriginFamiliarity @default(NATIVE)
+  // Valid PbtA stat array (sum +2, each -2..+3, at most one >= +2) keyed by
+  // the 5 fixed stat keys; null = leave the wizard's defaults alone.
+  suggestedStats Json?
+  // { weapon, armor, misc, items: [{ name, quantity, tags }] }
+  startingGear Json?
+  // One starting tie into the living world:
+  // { kind: 'debt_owed_by_character' | 'debt_owed_to_character' | 'faction_standing',
+  //   counterparty_type: 'npc' | 'faction', counterparty_name, description, standing_value? }
+  startingTie Json?
+  // Questions shown as backstory guidance when the card is picked.
+  backstoryPrompts String[] @default([])
+  // CampaignCapability keys to seed as GLIMPSED on top of familiarity seeding.
+  glimpseCapabilityKeys String[] @default([])
+
+  createdAt DateTime @default(now())
+
+  @@index([campaignId])
 }
 
 //
@@ -491,6 +539,10 @@ model Character {
   // PbtA specific fields
   harm       Int      @default(0) // 0-6 harm track
   experience Int      @default(0) // XP counter
+  // Corruption marks (0..5) toward this campaign's corruption theme.
+  // Only meaningful when Campaign.corruptionTheme is set; never decreases
+  // (the whole point is irreversibility) — see lib/game/corruption.ts.
+  corruption Int      @default(0)
   conditions Json? // { conditions: [{ id, name, category, description, mechanicalEffect?, appliedAt? }] }
   moves      String[] // Character move IDs they've unlocked
   holds      Json? // Temporary holds/forward from moves

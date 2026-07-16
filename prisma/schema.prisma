@@ -2005,6 +2005,11 @@ model LoreImportJob {
   attempts Int                 @default(0)
   lastError String?
 
+  // Set when the campaign was created WITH this lore source: on completion
+  // the worker automatically reseeds the world from the imported canon
+  // (lib/lore/reseedWorld.ts) instead of waiting for the admin button.
+  autoReseedOnComplete Boolean @default(false)
+
   // Progress, shown to the admin while a wiki crawl is running.
   pagesFound     Int @default(0)
   pagesDone      Int @default(0)

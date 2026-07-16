@@ -267,6 +267,8 @@ function CreateCampaignModal({
     aiSystemPrompt: '',
     initialWorldSeed: ''
   })
+  const [loreUrl, setLoreUrl] = useState('')
+  const [loreCrawlWiki, setLoreCrawlWiki] = useState(true)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -308,6 +310,13 @@ function CreateCampaignModal({
         payload.universe = formData.universe || 'Original'
         payload.aiSystemPrompt = formData.aiSystemPrompt || 'You are the Game Master for this campaign.'
         payload.initialWorldSeed = formData.initialWorldSeed || ''
+      }
+
+      if (loreUrl.trim()) {
+        payload.loreImport = {
+          sourceType: loreCrawlWiki ? 'WIKI' : 'URL',
+          sourceUrl: loreUrl.trim(),
+        }
       }
 
       const response = await authenticatedFetch('/api/campaigns', {
@@ -461,6 +470,36 @@ function CreateCampaignModal({
                   className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 min-h-[80px] resize-none"
                   placeholder="What's this campaign about?"
                 />
+              </div>
+
+              {/* Canon lore — imported in the background after creation;
+                  when it finishes, the world's factions/systems are rebuilt
+                  from canon automatically (see reseedWorld.ts). */}
+              <div>
+                <label className="block text-sm font-semibold text-ember-300/70 mb-2">
+                  Canon Lore <span className="text-ember-400/40 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="url"
+                  value={loreUrl}
+                  onChange={(e) => setLoreUrl(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60"
+                  placeholder="e.g., https://coppermind.net — a wiki or article about your universe"
+                />
+                <label className="flex items-center gap-2 mt-2 text-xs text-ember-300/60 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={loreCrawlWiki}
+                    onChange={(e) => setLoreCrawlWiki(e.target.checked)}
+                    className="rounded border-ember-900/40 bg-black/30"
+                  />
+                  Crawl the whole wiki (works for MediaWiki sites: Fandom, wiki.gg, Wikipedia...)
+                </label>
+                <p className="text-xs text-ember-400/40 mt-1.5">
+                  Imports in the background — your world&apos;s factions, powers, and character archetypes are
+                  automatically rebuilt from this canon once it finishes (usually a few minutes for a whole wiki).
+                  You can also paste text or add more sources later in Admin → Lore.
+                </p>
               </div>
 
               {/* Custom fields — always shown for custom, toggleable for templates */}

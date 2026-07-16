@@ -21,6 +21,7 @@ import { tickFactionLeadership } from './tick/leadershipTick'
 import { tickWars } from './tick/warTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
 import { tickNpcs } from './tick/npcTick'
+import { tickNpcSocialTies, tickNpcJointSchemes } from './tick/npcSocietyTick'
 import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
@@ -49,7 +50,14 @@ import { resolveTickCaps } from './tick/caps'
 // participant rows by the time ambitions are weighed, so a faction never
 // commits to an unrelated ambition the same tick it goes to war. (Ordering
 // alone wouldn't guarantee that; the actual guard lives in ambitionTick.)
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickFactionAmbitions, tickNpcs]
+//
+// tickNpcSocialTies runs right after tickNpcs and reads faction
+// affiliation/relationships as of this same turn (no lag needed — unlike
+// the faction pair above, NPC ties simply derive from faction state, they
+// don't feed back into it). tickNpcJointSchemes runs immediately after
+// that, in the same pass, so a scheme can use the ties this turn just
+// established rather than waiting a full extra tick (see npcSocietyTick.ts).
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickFactionAmbitions, tickNpcs, tickNpcSocialTies, tickNpcJointSchemes]
 
 /**
  * Run one deterministic world tick for a campaign.

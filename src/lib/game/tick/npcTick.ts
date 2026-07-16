@@ -50,6 +50,14 @@ function phaseIndexAt(npcId: string, turnNumber: number): number {
   return Math.floor(turnNumber / tempo) % PLAN_PHASES.length
 }
 
+// Exported for npcSocietyTick.ts: joint schemes trigger when two allied
+// NPCs' independently-paced schedules happen to converge on "acting" the
+// same turn — reusing this exact cycle (not a separate one) keeps "acting"
+// meaning the same thing everywhere a phase is checked.
+export function isActingPhase(npcId: string, turnNumber: number): boolean {
+  return PLAN_PHASES[phaseIndexAt(npcId, turnNumber)] === 'acting'
+}
+
 // Deterministic pace: a goal takes 25 ticks of active pursuit to complete.
 // Long enough that background arcs feel like they're actually unfolding
 // over the campaign, short enough that a major NPC's goal completes within

@@ -17,6 +17,23 @@ import { resolveActionMechanics } from '@/lib/game/resolution'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
 import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
+import { parseFactionRelationships } from '@/lib/game/tick/types'
+
+/**
+ * Phase 9 NPC society: resolve NPC.socialTies into AI-facing lines, naming
+ * only OTHER discovered NPCs — fog of war applies to social ties exactly
+ * like every other NPC-facing field the prompt builders below already gate.
+ */
+function describeNpcSocialTies(rawTies: unknown, discoveredNpcNameById: Map<string, string>): string[] {
+  const ties = parseFactionRelationships(rawTies)
+  const lines: string[] = []
+  for (const [otherId, tie] of Object.entries(ties)) {
+    const name = discoveredNpcNameById.get(otherId)
+    if (!name) continue
+    lines.push(`${tie.type === 'ALLY' ? 'ally' : 'rival'}: ${name}`)
+  }
+  return lines
+}
 
 /**
  * Last appended beat of a quest's progress log — the prompt only needs
@@ -133,6 +150,7 @@ async function buildOptimizedWorldSummary(
   // into worldSummary below, not `entities` at the bottom of this
   // function, which stays unfiltered on purpose for memory-recall lookups.
   const discoveredNpcs = relevantNpcs.filter(npc => npc.isDiscovered)
+  const discoveredNpcNameById = new Map(discoveredNpcs.map(n => [n.id, n.name]))
   const discoveredFactionIds = new Set(allFactions.filter(f => f.isDiscovered).map(f => f.id))
   const discoveredFactions = relevantFactions.filter(f => f.isDiscovered)
 
@@ -205,7 +223,9 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       // faction's name/goal — kept as a bare id here rather than joined, to
       // avoid duplicating faction data into every affiliated NPC.
       factionId: n.factionId,
-      factionRole: n.factionRole
+      factionRole: n.factionRole,
+      // Phase 9 NPC society: this NPC's own web of allies/rivals.
+      social_ties: describeNpcSocialTies(n.socialTies, discoveredNpcNameById)
     })),
 
     // Only relevant, discovered factions. Numeric stats are deliberately
@@ -374,6 +394,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
   // unfiltered on purpose (memory-recall lookups need the full set); only
   // worldSummary — what actually reaches the prompt — is filtered.
   const discoveredNpcs = npcs.filter(n => n.isDiscovered)
+  const discoveredNpcNameById = new Map(discoveredNpcs.map(n => [n.id, n.name]))
   const discoveredFactions = factions.filter(f => f.isDiscovered)
   const discoveredFactionIds = new Set(discoveredFactions.map(f => f.id))
 
@@ -419,7 +440,9 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       relationship: n.relationship,
       importance: n.importance,
       factionId: n.factionId,
-      factionRole: n.factionRole
+      factionRole: n.factionRole,
+      // Phase 9 NPC society: this NPC's own web of allies/rivals.
+      social_ties: describeNpcSocialTies(n.socialTies, discoveredNpcNameById)
     })),
 
     // Numeric stats are deliberately qualitative here, not exact — see

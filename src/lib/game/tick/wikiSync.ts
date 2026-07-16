@@ -10,7 +10,7 @@
 // scope for this pass) so LOCATION_WEATHER changes are ignored.
 
 import { prisma } from '@/lib/prisma'
-import { WorldChange } from './types'
+import { WorldChange, parseFactionRelationships } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
 import { describeStat } from '@/lib/ai/qualitativeStats'
 
@@ -41,7 +41,8 @@ export async function syncWikiEntriesForChanges(
       // Fog of war: an undiscovered NPC gets no wiki entry — the wiki is
       // readable by every campaign member, not just admins.
       if (!npc || !npc.isDiscovered) continue
-      await syncNpcWikiEntry(campaignId, turnNumber, npc)
+      const socialLine = await describeSocialTies(npc.socialTies)
+      await syncNpcWikiEntry(campaignId, turnNumber, npc, socialLine)
     } else {
       const faction = await prisma.faction.findUnique({
         where: { id: entityId },
@@ -56,16 +57,41 @@ export async function syncWikiEntriesForChanges(
   return synced
 }
 
+// Phase 9: NPC society — resolve NPC.socialTies into a wiki-readable line,
+// naming only DISCOVERED counterparts (an undiscovered ally's name is
+// exactly the kind of thing fog of war exists to keep off the wiki).
+async function describeSocialTies(rawTies: unknown): Promise<string | null> {
+  const ties = parseFactionRelationships(rawTies)
+  const otherIds = Object.keys(ties)
+  if (otherIds.length === 0) return null
+
+  const others = await prisma.nPC.findMany({
+    where: { id: { in: otherIds }, isDiscovered: true },
+    select: { id: true, name: true },
+  })
+  const nameById = new Map(others.map((o) => [o.id, o.name]))
+
+  const allies = otherIds.filter((id) => ties[id].type === 'ALLY' && nameById.has(id)).map((id) => nameById.get(id)!)
+  const rivals = otherIds.filter((id) => ties[id].type === 'RIVAL' && nameById.has(id)).map((id) => nameById.get(id)!)
+
+  const parts: string[] = []
+  if (allies.length > 0) parts.push(`Allied with ${allies.join(', ')}`)
+  if (rivals.length > 0) parts.push(`At odds with ${rivals.join(', ')}`)
+  return parts.length > 0 ? parts.join('; ') : null
+}
+
 async function syncNpcWikiEntry(
   campaignId: string,
   turnNumber: number,
-  npc: { name: string; description: string | null; goals: string | null; relationship: string | null; currentPlan: string | null; importance: number }
+  npc: { name: string; description: string | null; goals: string | null; relationship: string | null; currentPlan: string | null; importance: number },
+  socialLine: string | null
 ): Promise<void> {
   const description = [
     npc.description || `${npc.name} is a character encountered during the adventure.`,
     `Current goal: ${npc.goals || 'Unknown'}`,
     `Relationship: ${npc.relationship || 'Neutral'}`,
     npc.currentPlan ? `Currently: ${npc.currentPlan}` : null,
+    socialLine,
   ].filter(Boolean).join('\n\n')
 
   const wikiImportance = npc.importance >= MAJOR_IMPORTANCE_THRESHOLD ? 'major' : 'normal'

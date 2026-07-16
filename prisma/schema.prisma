@@ -237,6 +237,13 @@ model Campaign {
   // a campaign forever.
   pendingWorldSeed Boolean @default(false)
 
+  // #13 first-party templates: which static template (campaign-templates.ts)
+  // this campaign was created from, if any — a compile-time id, not a DB
+  // relation, since templates are TypeScript objects. Lets a template's
+  // startingDebtTemplates be applied when each character joins (Debt rows
+  // need a real characterId, which doesn't exist yet at campaign creation).
+  templateId String?
+
   // Phase 9: Campaign notification settings
   mentionsEnabled     Boolean @default(true)
   soundEffectsEnabled Boolean @default(true)

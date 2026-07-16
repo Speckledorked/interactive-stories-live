@@ -269,6 +269,30 @@ export default function AdminPage() {
     }
   }
 
+  const [generatingExtras, setGeneratingExtras] = useState(false)
+  const handleGenerateWorldExtras = async () => {
+    setGeneratingExtras(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/world-extras`, { method: 'POST' })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Generation failed')
+      const parts = []
+      if (data.archetypesCreated > 0) parts.push(`${data.archetypesCreated} origin archetypes created`)
+      parts.push(
+        data.corruptionThemeSet
+          ? `corruption theme: "${data.corruptionThemeName}"`
+          : data.corruptionThemeName === null
+            ? 'no corruption theme — this universe has no power-at-a-cost concept (that\'s a valid outcome)'
+            : 'corruption theme already existed'
+      )
+      alert(`Done: ${parts.join('; ')}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate world extras')
+    } finally {
+      setGeneratingExtras(false)
+    }
+  }
+
   const handleSaveSimulationSettings = async () => {
     if (!simulationSettings) return
     setSaving(true)
@@ -740,6 +764,23 @@ export default function AdminPage() {
                 >
                   {saving ? 'Saving...' : 'Save AI Settings'}
                 </button>
+
+                <div className="mt-8 pt-6 border-t border-ember-900/30">
+                  <h3 className="font-semibold mb-1">Origin Archetypes & Corruption Theme</h3>
+                  <p className="text-xs text-ember-400/50 mb-3">
+                    New campaigns generate these automatically. If this campaign predates that (or generation
+                    failed), backfill them here: 4 ready-to-play archetype cards for character creation, and this
+                    universe&apos;s power-at-a-cost corruption theme — if its fiction has one. Only fills what&apos;s
+                    missing; never replaces existing cards or an existing theme.
+                  </p>
+                  <button
+                    onClick={handleGenerateWorldExtras}
+                    disabled={generatingExtras}
+                    className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
+                  >
+                    {generatingExtras ? 'Generating...' : 'Generate Archetypes & Corruption Theme'}
+                  </button>
+                </div>
 
                 {simulationSettings && (
                   <div className="mt-8 pt-6 border-t border-ember-900/30">

@@ -22,6 +22,7 @@ An AI-powered collaborative storytelling platform for running interactive narrat
 - **Quest & Item Tracking**: the fiction's concrete undertakings get a real lifecycle (registered → progress beats → completed/failed/abandoned) fed back to the AI and synced to the wiki, and the party's inventories aggregate into a browsable item registry
 - **Payment System**: Stripe integration for AI usage billing, with per-call cost tracking, balance gating, and per-user rate limiting on every AI-invoking route
 - **Input Moderation**: player free-text is screened (OpenAI moderation endpoint) before it ever reaches the completion model — provider-ToS protection, separate from the in-fiction X-Card safety tool
+- **Ask the GM**: an always-available, out-of-character channel for clarifying questions ("what can I see on the allomancer?") that's architecturally kept out of the action-resolution pipeline entirely — no dice, no world state changes, no exchange consumed, not even a `PlayerAction` row. The GM answers from the same fog-of-war-safe knowledge the narrator has (so it can't leak what the character wouldn't know) and says "you don't know" rather than invent. Answers are shared with the whole party in real time, the way a question asked aloud at the table would be
 
 ## World Simulation
 

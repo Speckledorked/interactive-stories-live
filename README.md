@@ -164,7 +164,7 @@ chain above works in a real playtest.
 - [x] **#8 World-visibility digest**: MAJOR discovered-entity tick changes become a fog-safe "Word on the street…" notification per member after each world turn
 - [x] **#11 Harm/death keyed to resolution**: 4+ harm applies Impaired −1 to every roll; misses are where harm comes from
 - [ ] **#9 Origin archetypes / playbook onboarding**: *(v1 shipped: origin familiarity + discovery seeding)* — still open: full creation presets per origin and signup-to-first-scene under 5 minutes
-- [ ] **#10 Corruption track**: per-universe "power at a cost" — marking corruption grants power now, unlocks a shadow capability branch, and accumulates toward irreversible consequences
+- [ ] **#10 Corruption track**: per-universe "power at a cost" — marking corruption grants power now and accumulates toward irreversible consequences. Defined by what *this universe's fiction* treats as a devil's bargain (forbidden rites, a Shard's influence, forbidden knowledge) — never by aesthetics (a dark-affinity power set is not corruption), and optional: a universe with no such concept generates no track
 - [ ] **#12 Alpha instrumentation**: funnel/retention events, stuck-scene alerting, playtest cohort dashboard
 
 ### Phase 3 — Expansion: content and shareability

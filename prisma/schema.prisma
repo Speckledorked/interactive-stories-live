@@ -397,6 +397,12 @@ model CampaignCapability {
   // Secret branches are hidden even from natives until the fiction
   // reveals them (forbidden schools, lost arts).
   isSecret    Boolean  @default(false)
+  // Shadow branch: unlockable only through corruption marks (unlock
+  // requires corruption >= tier — see lib/game/capabilities.ts). Set at
+  // generation time ONLY for campaigns with a corruption theme; distinct
+  // from isSecret because mid-story is_new nodes are born secret without
+  // being forbidden.
+  isShadow    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   campaign        Campaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)

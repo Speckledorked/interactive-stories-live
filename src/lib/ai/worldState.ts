@@ -789,11 +789,30 @@ export async function buildSceneResolutionRequest(
   // don't carry raw corruption values, but entities.characters are the
   // unfiltered rows — match by id. No theme = the track doesn't exist here.
   const corruptionTheme = parseCorruptionTheme(campaign.corruptionTheme)
+  let corruptionThemeForPrompt: AIGMRequest['corruption_theme'] = corruptionTheme
   if (corruptionTheme) {
     for (const summaryCharacter of worldSummaryWithMemories.characters as any[]) {
       const raw = entities.characters.find((rc: any) => rc.id === summaryCharacter.id)
       if (raw && raw.corruption > 0) {
         summaryCharacter.corruption_status = describeCorruptionForPrompt(corruptionTheme, raw.corruption)
+      }
+    }
+
+    // Shadow arts: the forbidden branch of the capability tree. Listed in
+    // the <corruption> section so the AI knows which arts resist the
+    // unmarked (the engine enforces the gate either way).
+    const shadowNodes = await prisma.campaignCapability.findMany({
+      where: { campaignId: campaign.id, isShadow: true },
+      select: { name: true, domain: true, tier: true },
+    })
+    if (shadowNodes.length > 0) {
+      corruptionThemeForPrompt = {
+        ...corruptionTheme,
+        shadow_arts: shadowNodes.map(n => ({
+          name: n.name,
+          domain: n.domain,
+          required_marks: Math.max(1, n.tier),
+        })),
       }
     }
   }
@@ -803,7 +822,7 @@ export async function buildSceneResolutionRequest(
     ai_system_prompt: enhancedSystemPrompt + (fullGuidance ? `\n\n${fullGuidance}` : ''),
     world_summary: worldSummaryWithMemories,
     current_scene_intro: sceneContext,
-    corruption_theme: corruptionTheme,
+    corruption_theme: corruptionThemeForPrompt,
     player_actions: playerActions,
     action_mechanics: actionMechanics
   }

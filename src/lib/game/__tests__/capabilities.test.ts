@@ -11,6 +11,7 @@ import {
   slugifyCapabilityKey,
   summarizeCapabilities,
   applyCapabilityChanges,
+  shadowUnlockBlocked,
   UNLOCK_STARTING_PROFICIENCY,
   ARC_LENGTH_TURNS,
   MAX_GROWTH_PER_ARC,
@@ -155,6 +156,9 @@ describe('applyCapabilityChanges (writer)', () => {
       upsert: vi.fn(async ({ create }: any) => create),
       update: vi.fn(async () => ({})),
     },
+    character: {
+      findUnique: vi.fn(async () => ({ corruption: 0 })),
+    },
   })
 
   let db: ReturnType<typeof makeDb>
@@ -240,5 +244,77 @@ describe('applyCapabilityChanges (writer)', () => {
     expect(log).toContain('Glimpsed: Blood Runes')
     // second change resolved no node and wasn't is_new → skipped silently
     expect(db.campaignCapability.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('shadow gate: an under-marked unlock downgrades to a glimpse', async () => {
+    db.campaignCapability.findFirst.mockResolvedValue({
+      id: 'cap4', name: 'Void Binding', tier: 2, isShadow: true,
+    })
+    db.characterCapability.findUnique.mockResolvedValue(null)
+    db.character.findUnique.mockResolvedValue({ corruption: 1 } as any)
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'void-binding', change: 'unlock', reason: 'read the forbidden text' },
+    ], 8)
+
+    expect(db.characterCapability.upsert).not.toHaveBeenCalled()
+    expect(db.characterCapability.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ state: 'GLIMPSED' }) })
+    )
+    expect(log[0]).toContain('Void Binding resists')
+  })
+
+  it('shadow gate: a sufficiently marked character unlocks normally', async () => {
+    db.campaignCapability.findFirst.mockResolvedValue({
+      id: 'cap4', name: 'Void Binding', tier: 2, isShadow: true,
+    })
+    db.characterCapability.findUnique.mockResolvedValue(null)
+    db.character.findUnique.mockResolvedValue({ corruption: 2 } as any)
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'void-binding', change: 'unlock', reason: 'gave it what it wanted' },
+    ], 8)
+
+    expect(db.characterCapability.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ state: 'UNLOCKED' }) })
+    )
+    expect(log).toEqual(['Unlocked: Void Binding'])
+  })
+
+  it('shadow gate: glimpsing a shadow node is never gated', async () => {
+    db.campaignCapability.findFirst.mockResolvedValue({
+      id: 'cap4', name: 'Void Binding', tier: 3, isShadow: true,
+    })
+    db.characterCapability.findUnique.mockResolvedValue(null)
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'void-binding', change: 'glimpse', hint: 'a shape in the dark', reason: 'witnessed it' },
+    ], 8)
+
+    // No corruption lookup needed — the gate only guards unlocks.
+    expect(db.character.findUnique).not.toHaveBeenCalled()
+    expect(log).toEqual(['Glimpsed: Void Binding'])
+  })
+})
+
+describe('shadowUnlockBlocked', () => {
+  it('never gates non-shadow nodes', () => {
+    expect(shadowUnlockBlocked({ isShadow: false, tier: 3 }, 0)).toBe(false)
+  })
+
+  it('requires marks at least equal to the tier', () => {
+    expect(shadowUnlockBlocked({ isShadow: true, tier: 2 }, 1)).toBe(true)
+    expect(shadowUnlockBlocked({ isShadow: true, tier: 2 }, 2)).toBe(false)
+    expect(shadowUnlockBlocked({ isShadow: true, tier: 2 }, 5)).toBe(false)
+  })
+
+  it('floors the requirement at one mark even for tier-0 nodes', () => {
+    expect(shadowUnlockBlocked({ isShadow: true, tier: 0 }, 0)).toBe(true)
+    expect(shadowUnlockBlocked({ isShadow: true, tier: 0 }, 1)).toBe(false)
+  })
+
+  it('treats malformed corruption values as zero', () => {
+    expect(shadowUnlockBlocked({ isShadow: true, tier: 1 }, NaN)).toBe(true)
+    expect(shadowUnlockBlocked({ isShadow: true, tier: 1 }, undefined as any)).toBe(true)
   })
 })

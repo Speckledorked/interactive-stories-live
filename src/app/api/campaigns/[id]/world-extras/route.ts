@@ -105,6 +105,16 @@ export async function POST(
         data: { corruptionTheme: extras.corruptionTheme as object },
       })
       corruptionThemeSet = true
+
+      // Same rule as campaign creation: with a corruption theme in play,
+      // the scaffold's secret nodes become the world's forbidden (shadow)
+      // arts. A backfill can't tell generation-time secrets from mid-story
+      // is_new discoveries (both are just isSecret rows by now) — accepted:
+      // this only runs once, on campaigns predating the corruption system.
+      await prisma.campaignCapability.updateMany({
+        where: { campaignId, isSecret: true },
+        data: { isShadow: true },
+      })
     }
 
     return NextResponse.json({

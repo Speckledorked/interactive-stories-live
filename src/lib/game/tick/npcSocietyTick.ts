@@ -18,9 +18,18 @@
 //                   checkAndResolveCompletedClocks) — no new advancement
 //                   logic needed, same as faction ambition clocks.
 //
-// Known scope boundary: ties only form between NPCs who have a faction
-// affiliation. An unaffiliated major NPC (a lone wolf, an independent
-// operator) gets no derived social ties in this pass — see the README.
+// Unaffiliated NPCs (no faction — a lone wolf, an independent operator)
+// get a second, independent signal: their deterministic "home" location
+// (the same stableHash(id) % locations formula npcTick.ts already uses for
+// the day/night commute, re-derived here rather than stored, so it needs
+// no new field). Two unaffiliated NPCs who share a home turf are grounded
+// in something real about the fiction — sharing territory — which reads as
+// community (ALLY) between ordinary NPCs, or turf rivalry (RIVAL) between
+// two PbtA-style "threats" (NPC.threat set — predators competing for the
+// same ground). One threat, one not: no clean signal, stays NEUTRAL. This
+// is a second opinion, not a fallback guess — it only ever fires when the
+// faction-derived signal (decideNpcSocialTie) has nothing to say, i.e. at
+// least one side has no faction.
 //
 // Runs immediately after tickNpcs in the handler order (worldTick.ts):
 // joint schemes read the ties this file just wrote in the same pass (no
@@ -28,7 +37,7 @@
 // dependency, just ties-then-consequences).
 
 import { prisma } from '@/lib/prisma'
-import { TickContext, TickHandlerResult, WorldChange, FactionRelationshipEntry, parseFactionRelationships } from './types'
+import { TickContext, TickHandlerResult, WorldChange, FactionRelationshipEntry, parseFactionRelationships, stableHash } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD, isActingPhase } from './npcTick'
 
 export type NpcSocialTieType = 'ALLY' | 'RIVAL' | 'NEUTRAL'
@@ -48,13 +57,47 @@ export function decideNpcSocialTie(
   return factionRelationship
 }
 
+/**
+ * Deterministic "home" location for tie-forming purposes — the exact same
+ * formula npcTick.ts uses for the day/night commute (stableHash(id) %
+ * sortedLocations.length), re-derived here rather than read off
+ * NPC.currentLocation, which reflects wherever they happen to be THIS
+ * turn's time-of-day, not their stable home base.
+ */
+export function deriveHomeLocation(npcId: string, sortedLocationNames: string[]): string | null {
+  if (sortedLocationNames.length === 0) return null
+  return sortedLocationNames[stableHash(npcId) % sortedLocationNames.length]
+}
+
+/**
+ * Pure decision: the second-opinion tie for two NPCs with no faction-derived
+ * signal (see the module doc above). sameHomeLocation must already account
+ * for both being non-null — pass false when either has no derivable home.
+ */
+export function decideUnaffiliatedTie(
+  a: { threat: string | null },
+  b: { threat: string | null },
+  sameHomeLocation: boolean
+): NpcSocialTieType {
+  if (!sameHomeLocation) return 'NEUTRAL'
+  const aIsThreat = !!a.threat?.trim()
+  const bIsThreat = !!b.threat?.trim()
+  if (aIsThreat && bIsThreat) return 'RIVAL'
+  if (!aIsThreat && !bIsThreat) return 'ALLY'
+  return 'NEUTRAL'
+}
+
 export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerResult> {
-  const npcs = await prisma.nPC.findMany({
-    where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
-    orderBy: { importance: 'desc' },
-    take: ctx.npcCap,
-    select: { id: true, name: true, factionId: true, socialTies: true },
-  })
+  const [npcs, locations] = await Promise.all([
+    prisma.nPC.findMany({
+      where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
+      orderBy: { importance: 'desc' },
+      take: ctx.npcCap,
+      select: { id: true, name: true, factionId: true, threat: true, socialTies: true },
+    }),
+    prisma.location.findMany({ where: { campaignId: ctx.campaignId, isDiscovered: true }, select: { name: true } }),
+  ])
+  const sortedLocationNames = [...new Set(locations.map((l) => l.name))].sort()
 
   const factionIds = [...new Set(npcs.map((n) => n.factionId).filter((id): id is string => !!id))]
   const factions = factionIds.length > 0
@@ -98,7 +141,21 @@ export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerRe
       const a = npcs[i]
       const b = npcs[j]
       const factionRel = a.factionId && b.factionId ? factionRelationshipBetween(a.factionId, b.factionId) : 'NEUTRAL'
-      const freshType = decideNpcSocialTie(a, b, factionRel)
+      let freshType: NpcSocialTieType = decideNpcSocialTie(a, b, factionRel)
+
+      // Second opinion for unaffiliated NPCs — only consulted when the
+      // faction-derived signal has nothing to say (at least one side has
+      // no faction, so decideNpcSocialTie already returned NEUTRAL).
+      let viaTerritory = false
+      if (freshType === 'NEUTRAL' && !a.factionId && !b.factionId) {
+        const homeA = deriveHomeLocation(a.id, sortedLocationNames)
+        const homeB = deriveHomeLocation(b.id, sortedLocationNames)
+        const unaffiliatedType = decideUnaffiliatedTie(a, b, homeA !== null && homeA === homeB)
+        if (unaffiliatedType !== 'NEUTRAL') {
+          freshType = unaffiliatedType
+          viaTerritory = true
+        }
+      }
 
       const aTies = working.get(a.id)!
       const bTies = working.get(b.id)!
@@ -126,13 +183,19 @@ export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerRe
       dirty.add(a.id)
       dirty.add(b.id)
 
+      const reason = viaTerritory
+        ? (freshType === 'RIVAL'
+            ? `${a.name} and ${b.name}, neither answering to any faction, become rivals over the same turf`
+            : `${a.name} and ${b.name}, neither answering to any faction, find community sharing the same turf`)
+        : a.factionId === b.factionId
+          ? `${a.name} and ${b.name} stand together, serving the same cause`
+          : `${a.name} and ${b.name} become ${freshType === 'RIVAL' ? 'rivals' : 'allies'} through their factions' own ${freshType === 'RIVAL' ? 'rivalry' : 'alliance'}`
+
       changes.push({
         entityType: 'NPC', entityId: a.id, entityName: a.name, campaignId: ctx.campaignId,
         field: 'socialTie', previousValue: existing?.type || 'NEUTRAL', newValue: freshType,
-        reason: a.factionId === b.factionId
-          ? `${a.name} and ${b.name} stand together, serving the same cause`
-          : `${a.name} and ${b.name} become ${freshType === 'RIVAL' ? 'rivals' : 'allies'} through their factions' own ${freshType === 'RIVAL' ? 'rivalry' : 'alliance'}`,
-        significant: freshType === 'RIVAL', // a new individual rivalry is worth a beat; a new same-faction alliance is routine background texture
+        reason,
+        significant: freshType === 'RIVAL', // a new individual rivalry is worth a beat; a new same-faction/turf alliance is routine background texture
         importance: 'NORMAL',
       })
     }

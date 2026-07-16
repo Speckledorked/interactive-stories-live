@@ -123,6 +123,48 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
     }
   }
 
+  const [reseeding, setReseeding] = useState(false)
+  const [reseedResult, setReseedResult] = useState<string | null>(null)
+  const [reseedError, setReseedError] = useState<string | null>(null)
+
+  const handleReseed = async () => {
+    if (!confirm(
+      'Regenerate the world\'s structure from imported lore?\n\n' +
+      'This ADDS canon factions and learnable systems it finds in the lore. ' +
+      'Nothing existing is removed or overwritten (archetype cards are only ' +
+      'regenerated if no characters have been created yet).'
+    )) return
+    setReseeding(true)
+    setReseedResult(null)
+    setReseedError(null)
+    try {
+      const res = await authenticatedFetch(`/api/campaigns/${campaignId}/reseed-from-lore`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Reseed failed')
+
+      const parts: string[] = []
+      parts.push(
+        data.factionsAdded.length > 0
+          ? `Added ${data.factionsAdded.length} faction${data.factionsAdded.length === 1 ? '' : 's'}: ${data.factionsAdded.join(', ')}`
+          : 'No new factions (canon ones may already exist)'
+      )
+      parts.push(
+        data.capabilitiesAdded.length > 0
+          ? `Added ${data.capabilitiesAdded.length} learnable system${data.capabilitiesAdded.length === 1 ? '' : 's'}: ${data.capabilitiesAdded.join(', ')}`
+          : 'No new learnable systems'
+      )
+      if (data.statLabelsSet) parts.push('Stat labels set from canon')
+      if (data.corruptionThemeSet) parts.push('Corruption theme set from canon')
+      if (data.archetypesReplaced > 0) parts.push(`${data.archetypesReplaced} origin archetypes regenerated from canon`)
+      parts.push(`(grounded in ${data.loreEntriesSampled} of ${data.loreEntriesTotal} imported lore entries)`)
+      setReseedResult(parts.join('. '))
+    } catch (err) {
+      setReseedError(err instanceof Error ? err.message : 'Reseed failed')
+    } finally {
+      setReseeding(false)
+    }
+  }
+
   const handleDelete = async (jobId: string) => {
     if (!confirm('Delete this lore source and everything imported from it?')) return
     try {
@@ -209,6 +251,29 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
             {submitting ? 'Starting import...' : 'Import'}
           </button>
         </form>
+      </div>
+
+      <div className="border border-ember-900/30 rounded-lg p-4 bg-black/25">
+        <h3 className="font-semibold mb-2">World from Lore</h3>
+        <p className="text-xs text-ember-300/60 mb-3">
+          The world&apos;s founding factions and learnable systems are generated when the campaign is created —
+          before lore can be imported. Once your lore is in, run this to reseed the world&apos;s structure from
+          canon: factions and systems named in the lore are added alongside what already exists (nothing is
+          deleted or overwritten; origin archetypes are only regenerated while no characters exist yet).
+        </p>
+        <button
+          type="button"
+          onClick={handleReseed}
+          disabled={reseeding || jobs.every(j => j.status !== 'COMPLETED')}
+          className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
+        >
+          {reseeding ? 'Reseeding world…' : 'Reseed world from imported lore'}
+        </button>
+        {jobs.length > 0 && jobs.every(j => j.status !== 'COMPLETED') && (
+          <p className="text-xs text-ember-400/50 mt-2">Available once an import has completed.</p>
+        )}
+        {reseedResult && <p className="text-sm text-success-400 mt-3">{reseedResult}</p>}
+        {reseedError && <p className="text-sm text-red-400 mt-3">{reseedError}</p>}
       </div>
 
       <div className="space-y-3">

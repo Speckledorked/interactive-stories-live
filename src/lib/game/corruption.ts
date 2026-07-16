@@ -14,6 +14,59 @@
 export const MAX_CORRUPTION = 5
 // The final stage: the character is slipping beyond the player's control.
 export const CONSUMED_CONDITION_NAME = 'Consumed'
+// Roll bonus when a character invokes an open bargain on their next
+// action (see resolution.ts): a devil's bargain should feel decisive —
+// +2 on 2d6 is a real band shift, priced by a permanent mark.
+export const CORRUPTION_SURGE_BONUS = 2
+
+/**
+ * Deterministic backstop for surge marking: a character whose roll was
+ * powered by a corruption surge MUST gain a mark this scene, whether or
+ * not the narrator remembered to report corruption_change. Injects a
+ * corruption_change into pc_changes for each surged character that
+ * doesn't already have one (matched by id or name, case-insensitive).
+ * Mutates and returns world_updates for call-site convenience.
+ */
+export function ensureSurgeCorruptionChanges(
+  worldUpdates: {
+    pc_changes?: Array<{
+      character_name_or_id: string
+      changes: { corruption_change?: { marks: number; reason: string } }
+    }>
+  },
+  surgedCharacters: Array<{ characterId: string; characterName: string }>
+): typeof worldUpdates {
+  if (surgedCharacters.length === 0) return worldUpdates
+  if (!worldUpdates.pc_changes) worldUpdates.pc_changes = []
+
+  for (const surged of surgedCharacters) {
+    const alreadyMarked = worldUpdates.pc_changes.some(pc => {
+      const ref = pc.character_name_or_id.toLowerCase()
+      return (
+        pc.changes?.corruption_change &&
+        (ref === surged.characterId.toLowerCase() || ref === surged.characterName.toLowerCase())
+      )
+    })
+    if (alreadyMarked) continue
+
+    // Reuse an existing pc_changes entry for this character when there is
+    // one, so we don't create a second entry that re-reads stale state.
+    const existingEntry = worldUpdates.pc_changes.find(pc => {
+      const ref = pc.character_name_or_id.toLowerCase()
+      return ref === surged.characterId.toLowerCase() || ref === surged.characterName.toLowerCase()
+    })
+    const change = { marks: 1, reason: 'Invoked the bargain — the surge was real, and so is the price' }
+    if (existingEntry) {
+      existingEntry.changes.corruption_change = change
+    } else {
+      worldUpdates.pc_changes.push({
+        character_name_or_id: surged.characterId,
+        changes: { corruption_change: change },
+      })
+    }
+  }
+  return worldUpdates
+}
 
 export interface CorruptionTheme {
   name: string // "Essence Saturation", "The Whispering Debt", ...

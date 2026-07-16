@@ -30,6 +30,7 @@ import {
   applyCorruptionMarks,
   corruptionStage,
   CONSUMED_CONDITION_NAME,
+  MAX_CORRUPTION,
   CorruptionTheme
 } from './corruption'
 import { AI_MODELS } from '@/lib/ai/models'
@@ -1036,6 +1037,42 @@ export async function applyWorldUpdates(
               }
             })
             console.log(`  🎯 Registered quest: ${questChange.name}`)
+          }
+        }
+      }
+
+      // 7a-bis. Corruption bargain offers: persist so the character's NEXT
+      // action can mechanically invoke them (see resolution.ts surge).
+      // Live scenes only — an offscreen tick can't put an offer in front
+      // of a player — and only in campaigns that actually have a theme.
+      if (sceneOrigin && world_updates.bargain_offers && world_updates.bargain_offers.length > 0) {
+        if (corruptionTheme === undefined) {
+          const campaignRow = await tx.campaign.findUnique({
+            where: { id: campaignId },
+            select: { corruptionTheme: true }
+          })
+          corruptionTheme = parseCorruptionTheme(campaignRow?.corruptionTheme)
+        }
+        if (corruptionTheme) {
+          for (const offer of world_updates.bargain_offers) {
+            if (!offer?.character_name_or_id || !offer?.offer) continue
+            const character = await tx.character.findFirst({
+              where: {
+                campaignId,
+                OR: [
+                  { id: offer.character_name_or_id },
+                  { name: { equals: offer.character_name_or_id, mode: 'insensitive' } }
+                ]
+              },
+              select: { id: true, name: true, corruption: true }
+            })
+            // No offers to the already-consumed — there's nothing left to spend.
+            if (!character || character.corruption >= MAX_CORRUPTION) continue
+            await tx.character.update({
+              where: { id: character.id },
+              data: { pendingBargain: { offer: offer.offer, offeredTurn: currentTurnNumber } }
+            })
+            console.log(`😈 Bargain offered to ${character.name}: ${offer.offer}`)
           }
         }
       }

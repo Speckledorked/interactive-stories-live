@@ -67,6 +67,42 @@ describe('harmPenalty', () => {
 })
 
 describe('computeMechanics', () => {
+  it('applies the corruption surge when the action accepts an open bargain', () => {
+    // dice 4+4=8, +1 cool, +2 surge = 11 → strong hit
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null, accepts_bargain: true },
+      { id: 'a1' },
+      { ...baseCharacter, corruption: 1, pendingBargainOffer: 'The essence will carry you across' },
+      seq(0.5, 0.5)
+    )
+    expect(m!.corruptionSurgeBonus).toBe(2)
+    expect(m!.total).toBe(11)
+    expect(m!.outcome).toBe('strongHit')
+  })
+
+  it('grants no surge without an open bargain, when the classifier does not flag acceptance, or at max corruption', () => {
+    const accepted = { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null, accepts_bargain: true }
+    // accepts_bargain but nothing pending
+    const noOffer = computeMechanics(accepted, { id: 'a1' }, { ...baseCharacter, corruption: 1 }, seq(0.5, 0.5))
+    expect(noOffer!.corruptionSurgeBonus).toBe(0)
+    // pending offer but not accepted
+    const notAccepted = computeMechanics(
+      { ...accepted, accepts_bargain: false },
+      { id: 'a1' },
+      { ...baseCharacter, corruption: 1, pendingBargainOffer: 'offer' },
+      seq(0.5, 0.5)
+    )
+    expect(notAccepted!.corruptionSurgeBonus).toBe(0)
+    // fully consumed characters have nothing left to spend
+    const consumed = computeMechanics(
+      accepted,
+      { id: 'a1' },
+      { ...baseCharacter, corruption: 5, pendingBargainOffer: 'offer' },
+      seq(0.5, 0.5)
+    )
+    expect(consumed!.corruptionSurgeBonus).toBe(0)
+  })
+
   it('rolls 2d6 + stat + capability and bands the outcome', () => {
     // dice: 4 and 4 (rng 0.5, 0.5) → 8; +1 cool +1 skilled swordplay = 10 → strong hit
     const m = computeMechanics(
@@ -180,7 +216,7 @@ describe('parseClassifications', () => {
     )
     expect(parsed).toHaveLength(2)
     expect(parsed[0]).toEqual({
-      action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null,
+      action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null, accepts_bargain: false,
     })
     expect(parsed[1].move_name).toBe('no_roll')
     expect(parsed[1].capability_key).toBeNull()
@@ -211,5 +247,23 @@ describe('receipts and band text', () => {
     expect(describeOutcomeBand('strongHit')).toContain('STRONG HIT')
     expect(describeOutcomeBand('weakHit')).toContain('cost')
     expect(describeOutcomeBand('miss')).toContain('hard GM move')
+  })
+})
+
+describe('parseClassifications accepts_bargain passthrough', () => {
+  it('passes true through and defaults anything else to false', () => {
+    const parsed = parseClassifications(
+      {
+        classifications: [
+          { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', accepts_bargain: true },
+          { action_index: 1, move_name: 'Act Under Fire', stat_key: 'cool', accepts_bargain: 'yes' },
+          { action_index: 2, move_name: 'Act Under Fire', stat_key: 'cool' },
+        ],
+      },
+      3
+    )
+    expect(parsed[0].accepts_bargain).toBe(true)
+    expect(parsed[1].accepts_bargain).toBe(false)
+    expect(parsed[2].accepts_bargain).toBe(false)
   })
 })

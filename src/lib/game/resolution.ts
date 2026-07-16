@@ -20,7 +20,9 @@ import { openaiFetch } from '@/lib/ai/openaiCompat'
 // system existed.
 
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { BASIC_MOVES, calculateOutcome } from '@/lib/pbta-moves'
+import { MAX_CORRUPTION, CORRUPTION_SURGE_BONUS } from './corruption'
 import { proficiencyBand, ProficiencyBand } from './capabilities'
 import { effectiveStandingModifier } from './standing'
 import { AI_MODELS } from '@/lib/ai/models'
@@ -37,6 +39,10 @@ export interface ActionClassification {
   // Faction whose regard is in play for social/political leverage —
   // standing with it modifies the roll (see lib/game/standing.ts).
   faction_name: string | null
+  // True when this action invokes the character's open corruption bargain
+  // (see lib/game/corruption.ts) — grants the surge bonus at roll time.
+  // Optional: absent means false.
+  accepts_bargain?: boolean
 }
 
 export interface ActionMechanics {
@@ -51,6 +57,10 @@ export interface ActionMechanics {
   factionName: string | null
   standingMod: number
   harmPenalty: number
+  // CORRUPTION_SURGE_BONUS when this roll invoked an open bargain, else 0.
+  // A non-zero value is also the signal that a mark MUST land this scene
+  // (see ensureSurgeCorruptionChanges in corruption.ts).
+  corruptionSurgeBonus: number
   dice: [number, number]
   total: number
   outcome: 'strongHit' | 'weakHit' | 'miss'
@@ -96,6 +106,9 @@ export interface CharacterForRoll {
   name: string
   stats: Record<string, number> | null
   harm: number
+  // Corruption bargain state — only relevant in campaigns with a theme.
+  corruption?: number
+  pendingBargainOffer?: string | null
   capabilities: Array<{
     state: 'GLIMPSED' | 'UNLOCKED'
     proficiency: number
@@ -164,9 +177,19 @@ export function computeMechanics(
     standingMod = effectiveStandingModifier(faction.standing, faction.isActive, faction.influence)
   }
 
+  // Corruption surge: the classifier says this action invokes the
+  // character's open bargain. Only honored when a bargain is actually
+  // pending and the character isn't already fully consumed.
+  const corruptionSurgeBonus =
+    classification.accepts_bargain &&
+    character.pendingBargainOffer &&
+    (character.corruption ?? 0) < MAX_CORRUPTION
+      ? CORRUPTION_SURGE_BONUS
+      : 0
+
   const harmMod = harmPenalty(character.harm)
   const dice: [number, number] = [rollD6(rng), rollD6(rng)]
-  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + harmMod
+  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + harmMod + corruptionSurgeBonus
   const outcome = calculateOutcome(total)
   const outcomeText = move.outcomes[outcome] || ''
 
@@ -182,6 +205,7 @@ export function computeMechanics(
     factionName,
     standingMod,
     harmPenalty: harmMod,
+    corruptionSurgeBonus,
     dice,
     total,
     outcome,
@@ -213,6 +237,7 @@ export function parseClassifications(raw: any, actionCount: number): ActionClass
       stat_key: typeof c.stat_key === 'string' ? c.stat_key : 'cool',
       capability_key: typeof c.capability_key === 'string' && c.capability_key ? c.capability_key : null,
       faction_name: typeof c.faction_name === 'string' && c.faction_name ? c.faction_name : null,
+      accepts_bargain: c.accepts_bargain === true,
     }))
 }
 
@@ -232,7 +257,7 @@ async function classifyActions(
         .filter(r => r.state === 'UNLOCKED')
         .map(r => r.framedLabel || r.capability.name)
         .join(', ')
-      return `${i}. ${character?.name || 'Unknown'}: "${a.actionText}"${knownCaps ? ` [known abilities: ${knownCaps}]` : ''}`
+      return `${i}. ${character?.name || 'Unknown'}: "${a.actionText}"${knownCaps ? ` [known abilities: ${knownCaps}]` : ''}${character?.pendingBargainOffer ? ` [OPEN BARGAIN: ${character.pendingBargainOffer}]` : ''}`
     })
     .join('\n')
 
@@ -251,8 +276,9 @@ Rules:
 - Only classify a move when the fiction has real stakes or opposition. Default to "no_roll" when in doubt.
 - capability_key: if the action leans on one of the character's listed known abilities (or clearly on a specific learnable system, even one they lack), name it; else null.
 - faction_name: if the action is social/political leverage aimed at (or invoking the name/backing of) one of the listed FACTIONS — negotiating with its members, trading on its reputation, moving through its territory openly — name that faction exactly as listed; else null. Physical actions with no social dimension get null.
+- accepts_bargain: true ONLY if that action's line shows an [OPEN BARGAIN: ...] AND the action clearly reaches for / accepts / draws on that offered power. Refusing it, ignoring it, or doing something unrelated is false. Actions with no open bargain are always false.
 
-Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null}]}`
+Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null, "accepts_bargain": false}]}`
 
   try {
     const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
@@ -325,6 +351,8 @@ export async function resolveActionMechanics(
       name: c.name,
       stats: (c.stats as Record<string, number> | null) || null,
       harm: c.harm,
+      corruption: c.corruption,
+      pendingBargainOffer: (c.pendingBargain as any)?.offer || null,
       capabilities: c.capabilities as any,
     }))
     const standingsByCharacter = new Map(
@@ -413,6 +441,19 @@ export async function resolveActionMechanics(
       console.log(`🎲 Rolled ${mechanics.length} move(s): ${mechanics.map(m => `${m.characterName} ${m.moveName}=${m.outcome}`).join('; ')}`)
     }
 
+    // A bargain is an offer for the character's NEXT action — that action
+    // just happened (rolled or not), so the window closes either way. The
+    // AI can always offer again later.
+    const actingWithBargain = characters.filter(
+      c => c.pendingBargainOffer && pendingActions.some(a => a.characterId === c.id)
+    )
+    if (actingWithBargain.length > 0) {
+      await prisma.character.updateMany({
+        where: { id: { in: actingWithBargain.map(c => c.id) } },
+        data: { pendingBargain: Prisma.JsonNull },
+      })
+    }
+
     return mechanics
   } catch (error) {
     console.error('Action mechanics failed (failing open — freeform resolution):', error)
@@ -439,6 +480,7 @@ export function formatRollReceipt(m: ActionMechanics): string {
     ...(m.capabilityName ? [`${m.capabilityMod >= 0 ? '+' : ''}${m.capabilityMod} ${m.capabilityName}`] : []),
     ...(m.factionName ? [`${m.standingMod >= 0 ? '+' : ''}${m.standingMod} standing (${m.factionName})`] : []),
     ...(m.harmPenalty ? [`${m.harmPenalty} impaired`] : []),
+    ...(m.corruptionSurgeBonus ? [`+${m.corruptionSurgeBonus} corruption surge (bargain accepted)`] : []),
   ].join(', ')
   const band = m.outcome === 'strongHit' ? 'strong hit' : m.outcome === 'weakHit' ? 'weak hit' : 'miss'
   return `${m.moveName}: 2d6 (${m.dice[0]}+${m.dice[1]}) ${mods} = ${m.total} — ${band}`

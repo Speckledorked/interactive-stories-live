@@ -34,6 +34,7 @@ import { createSceneMemory } from '@/lib/ai/memoryCreation'
 import { extractAndApplyConsequences } from './consequences'
 import { formatRollReceipt } from './resolution'
 import { elapsedInGameHours } from './tick/pacing'
+import { ensureSurgeCorruptionChanges } from './corruption'
 import { aggregateInventoryItems, describeAggregatedItem } from './itemRegistry'
 import { reportError } from '@/lib/monitoring'
 
@@ -219,6 +220,17 @@ async function performResolution(
     // 5.5. Capture world state before applying updates (for transparency)
     console.log('📸 Capturing world state snapshot...')
     const beforeSnapshot = await captureWorldStateSnapshot(campaignId)
+
+    // 5.9. Corruption surge backstop: any roll powered by an accepted
+    // bargain MUST cost its mark this scene, whether or not the narrator
+    // remembered to report corruption_change — inject it if missing.
+    const surgedCharacters = (aiRequest.action_mechanics || [])
+      .filter(m => m.corruptionSurgeBonus > 0)
+      .map(m => ({ characterId: m.characterId, characterName: m.characterName }))
+    if (surgedCharacters.length > 0) {
+      ensureSurgeCorruptionChanges(aiResponse.world_updates as any, surgedCharacters)
+      console.log(`😈 Corruption surge invoked by: ${surgedCharacters.map(c => c.characterName).join(', ')}`)
+    }
 
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')

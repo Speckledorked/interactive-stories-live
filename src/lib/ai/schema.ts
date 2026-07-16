@@ -148,7 +148,13 @@ export const PCChangesSchema = z.object({
     // Debt economy: favors incurred or settled this scene.
     debt_changes: z.array(DebtChangeSchema).optional(),
     // Faction standing shifts earned this scene.
-    standing_changes: z.array(StandingChangeSchema).optional()
+    standing_changes: z.array(StandingChangeSchema).optional(),
+    // Corruption mark drawn from this campaign's corruption theme —
+    // ignored entirely in campaigns without one (see lib/game/corruption.ts).
+    corruption_change: z.object({
+      marks: z.number(),
+      reason: z.string()
+    }).optional()
   })
 })
 
@@ -230,6 +236,28 @@ export const LocationChangesSchema = z.object({
   gm_notes_append: z.string().optional()
 })
 
+// Quest lifecycle schema (see lib/game/stateUpdater.ts quest handling)
+export const QuestChangeSchema = z.object({
+  name: z.string(),
+  is_new: z.boolean().optional(),
+  changes: z.object({
+    description: z.string().optional(),
+    objective: z.string().optional(),
+    given_by: z.string().optional(),
+    reward: z.string().optional(),
+    status: z.enum(['ACTIVE', 'COMPLETED', 'FAILED', 'ABANDONED']).optional(),
+    progress_append: z.string().optional()
+  })
+})
+
+// A corruption bargain narrated to a character this scene — persisted so
+// the character's NEXT action can mechanically invoke it (corruption
+// surge at roll time). Only meaningful in campaigns with a theme.
+export const BargainOfferSchema = z.object({
+  character_name_or_id: z.string(),
+  offer: z.string()
+})
+
 // World updates schema
 export const WorldUpdatesSchema = z.object({
   new_timeline_events: z.array(TimelineEventSchema).optional(),
@@ -238,6 +266,8 @@ export const WorldUpdatesSchema = z.object({
   pc_changes: z.array(PCChangesSchema).optional(),
   faction_changes: z.array(FactionChangesSchema).optional(),
   location_changes: z.array(LocationChangesSchema).optional(),
+  quest_changes: z.array(QuestChangeSchema).optional(),
+  bargain_offers: z.array(BargainOfferSchema).optional(),
   organic_advancement: z.array(OrganicAdvancementSchema).optional(),
   notes_for_gm: z.string().optional()
 })

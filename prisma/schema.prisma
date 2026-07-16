@@ -164,6 +164,7 @@ model User {
   playerActions       PlayerAction[]
   createInvites       CampaignInvite[]     @relation("InviteCreator")
   diceRolls           DiceRoll[]
+  gmClarifications    GmClarification[]
 
   // Phase 8: Communication
   sentMessages     Message[]    @relation("UserMessages")
@@ -260,6 +261,7 @@ model Campaign {
   invites     CampaignInvite[]
   moves       Move[]
   diceRolls   DiceRoll[]
+  gmClarifications GmClarification[]
 
   // Phase 8: Communication
   messages Message[]    @relation("CampaignMessages")
@@ -600,6 +602,7 @@ model Character {
   playerActions PlayerAction[]
   diceRolls     DiceRoll[]
   turnOrders    TurnOrder[]
+  gmClarifications GmClarification[]
 
   // Phase 8: Communication
   messages Message[]    @relation("CharacterMessages")
@@ -1006,6 +1009,7 @@ model Scene {
   playerActions PlayerAction[]
   diceRolls     DiceRoll[]
   turnOrder     TurnOrder?
+  gmClarifications GmClarification[]
 
   // Phase 8: Communication
   messages Message[]    @relation("SceneMessages")
@@ -1051,6 +1055,35 @@ model PlayerAction {
 
   @@index([sceneId])
   @@index([characterId])
+}
+
+//
+// GM CLARIFICATIONS — out-of-character Q&A, deliberately NOT a PlayerAction
+//
+// "Ask the GM" is a meta channel: a player clarifying the fiction before
+// committing to a real action ("what can I see on this person?"), answered
+// from the same fog-of-war-safe knowledge the AI narrator has, but never
+// treated as something that happens in the story. It must never become a
+// PlayerAction row — that would make it eligible for dice classification
+// (resolveActionMechanics blindly processes every pending PlayerAction) and
+// exchange-completion counting (ExchangeManager). See lib/ai/askGm.ts.
+model GmClarification {
+  id          String   @id @default(cuid())
+  campaignId  String
+  sceneId     String
+  characterId String
+  userId      String
+  question    String   @db.Text
+  answer      String   @db.Text
+  createdAt   DateTime @default(now())
+
+  campaign  Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scene     Scene     @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([sceneId])
 }
 
 //

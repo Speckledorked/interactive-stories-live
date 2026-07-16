@@ -41,6 +41,13 @@ export default function StoryPage() {
   const [actionText, setActionText] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<Record<string, boolean>>({})
+  // Ask-the-GM: an out-of-character clarifying question, deliberately
+  // separate from the action form's state — asking a question shouldn't be
+  // blocked by having already submitted your real action for this exchange.
+  const [askGmText, setAskGmText] = useState<Record<string, string>>({})
+  const [askingGm, setAskingGm] = useState<Record<string, boolean>>({})
+  const [askGmError, setAskGmError] = useState<Record<string, string>>({})
+  const [showAskGm, setShowAskGm] = useState<Record<string, boolean>>({})
   const [resolving, setResolving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -156,6 +163,13 @@ export default function StoryPage() {
     channel.bind('action:created', (data: any) => {
       console.log('New action created:', data)
       // Refresh data so actions list stays up to date
+      loadData()
+    })
+
+    // Listen for ask-the-GM clarifications — shared with the whole party,
+    // the same "said out loud at the table" visibility a real question has.
+    channel.bind('gm:clarification', (data: any) => {
+      console.log('GM clarification:', data)
       loadData()
     })
 
@@ -357,6 +371,37 @@ export default function StoryPage() {
       setError(err instanceof Error ? err.message : 'Failed to submit action')
     } finally {
       setSubmitting(prev => ({ ...prev, [sceneId]: false }))
+    }
+  }
+
+  // Ask-the-GM: an out-of-character clarifying question. Deliberately a
+  // separate endpoint from handleSubmitAction — this never creates a
+  // PlayerAction, never rolls dice, never counts toward the exchange.
+  const handleAskGm = async (e: React.FormEvent, sceneId: string) => {
+    e.preventDefault()
+    const question = askGmText[sceneId]?.trim()
+    if (!question || !selectedCharacterId) return
+
+    setAskingGm(prev => ({ ...prev, [sceneId]: true }))
+    setAskGmError(prev => ({ ...prev, [sceneId]: '' }))
+
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/scene/ask-gm`, {
+        method: 'POST',
+        body: JSON.stringify({ sceneId, characterId: selectedCharacterId, question })
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to ask the GM')
+      }
+
+      setAskGmText(prev => ({ ...prev, [sceneId]: '' }))
+      await loadData() // Reload to show the new clarification
+    } catch (err) {
+      setAskGmError(prev => ({ ...prev, [sceneId]: err instanceof Error ? err.message : 'Failed to ask the GM' }))
+    } finally {
+      setAskingGm(prev => ({ ...prev, [sceneId]: false }))
     }
   }
 
@@ -870,6 +915,71 @@ export default function StoryPage() {
                       <p className="text-success-400 text-sm">
                         ✓ You've submitted your action. Waiting for other participants...
                       </p>
+                    </div>
+                  )}
+
+                  {/* Ask the GM — an out-of-character clarifying question,
+                      not a turn. Available independent of whether the real
+                      action has been submitted yet: asking a question
+                      shouldn't be blocked by having already committed your
+                      action for this exchange. */}
+                  {scene.status === 'AWAITING_ACTIONS' && selectedCharacterId && (
+                    <div className="rounded-xl bg-gradient-to-br from-tavern-800/50 to-tavern-900/50 border border-ember-900/20 shadow-lg shadow-black/20 p-5">
+                      <button
+                        type="button"
+                        onClick={() => setShowAskGm(prev => ({ ...prev, [scene.id]: !prev[scene.id] }))}
+                        className="flex items-center justify-between w-full text-left"
+                      >
+                        <div>
+                          <h3 className="text-sm font-bold text-ember-300/70">💬 Ask the GM</h3>
+                          <p className="text-xs text-ember-400/50 mt-0.5">
+                            A clarifying question, out of character — this doesn&apos;t count as your action and nothing happens in the story because of it.
+                          </p>
+                        </div>
+                        <span className="text-ember-400/50 flex-shrink-0 ml-3">{showAskGm[scene.id] ? '▼' : '▶'}</span>
+                      </button>
+
+                      {showAskGm[scene.id] && (
+                        <div className="mt-4 space-y-3">
+                          {scene.gmClarifications && scene.gmClarifications.length > 0 && (
+                            <div className="space-y-2">
+                              {scene.gmClarifications.map((c: any) => (
+                                <div key={c.id} className="bg-black/25 rounded-lg p-3 text-sm">
+                                  <p className="text-ember-300/70">
+                                    <span className="text-xs uppercase tracking-wide text-ember-400/50 mr-1.5">[OOC]</span>
+                                    <span className="font-medium">{c.characterName || c.character?.name}</span>
+                                    {' asks: '}
+                                    <span className="text-ember-200/80">{c.question}</span>
+                                  </p>
+                                  <p className="text-ember-100/90 mt-1.5 pl-3 border-l-2 border-ember-700/40">{c.answer}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {askGmError[scene.id] && (
+                            <p className="text-xs text-red-400">{askGmError[scene.id]}</p>
+                          )}
+
+                          <form onSubmit={(e) => handleAskGm(e, scene.id)} className="flex gap-2">
+                            <input
+                              type="text"
+                              value={askGmText[scene.id] || ''}
+                              onChange={(e) => setAskGmText(prev => ({ ...prev, [scene.id]: e.target.value }))}
+                              className="flex-1 px-3 py-2 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 text-sm"
+                              placeholder="e.g. What can I see on this person?"
+                              maxLength={500}
+                            />
+                            <button
+                              type="submit"
+                              disabled={askingGm[scene.id] || !askGmText[scene.id]?.trim()}
+                              className="px-4 py-2 rounded-lg bg-ember-900/40 hover:bg-ember-900/60 text-ember-200 text-sm font-medium border border-ember-800/50 transition-colors disabled:opacity-50 whitespace-nowrap"
+                            >
+                              {askingGm[scene.id] ? 'Asking...' : 'Ask'}
+                            </button>
+                          </form>
+                        </div>
+                      )}
                     </div>
                   )}
 

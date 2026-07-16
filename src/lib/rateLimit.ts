@@ -24,8 +24,8 @@ export interface RateLimitResult {
 }
 
 // One shared budget across all AI-triggering actions (submit action,
-// resolve, start/end scene, downtime) — generous for a human actually
-// playing, tight for a script hammering the API.
+// resolve, start/end scene, downtime, ask-the-GM clarifying questions) —
+// generous for a human actually playing, tight for a script hammering the API.
 export const AI_ACTION_LIMIT = { bucket: 'ai-action', limit: 10, windowSeconds: 60 } as const
 
 // Lore imports each kick off a background job (an embedding call per

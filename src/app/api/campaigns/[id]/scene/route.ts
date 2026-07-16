@@ -74,6 +74,15 @@ export async function GET(
               select: { id: true, email: true }
             }
           }
+        },
+        // Ask-the-GM: out-of-character Q&A, visible to the whole party —
+        // never a PlayerAction, never mechanically consequential (see
+        // GmClarification's schema doc).
+        gmClarifications: {
+          include: {
+            character: { select: { id: true, name: true } }
+          },
+          orderBy: { createdAt: 'asc' }
         }
       },
       orderBy: { sceneNumber: 'desc' }

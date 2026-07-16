@@ -8,6 +8,7 @@ import { ErrorResponse } from '@/types/api'
 import { createNewScene, getCurrentScene } from '@/lib/game/sceneResolver'
 import { prisma } from '@/lib/prisma'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
+import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 
 export async function POST(
   request: NextRequest,
@@ -45,6 +46,12 @@ export async function POST(
         { error: 'Only campaign admins can start new scenes' },
         { status: 403 }
       )
+    }
+
+    // Play lock: no scenes while a creation-time canon import is still
+    // reseeding the world (see lib/lore/seedingGate.ts).
+    if (await isWorldSeeding(campaignId)) {
+      return NextResponse.json({ error: SEEDING_MESSAGE, worldSeeding: true }, { status: 409 })
     }
 
     // 2. Validate character IDs if provided

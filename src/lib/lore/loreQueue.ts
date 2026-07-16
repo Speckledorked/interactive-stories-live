@@ -16,7 +16,7 @@ import { internalJobSecret } from '@/lib/game/resolutionQueue'
 import { reportError } from '@/lib/monitoring'
 import { getAppUrl } from '@/lib/appUrl'
 import { runLoreImport } from './loreImportService'
-import { reseedWorldFromLore } from './reseedWorld'
+import { reseedWorldFromLore, clearPendingWorldSeed } from './reseedWorld'
 
 export const MAX_ATTEMPTS = 3
 // A wiki crawl can legitimately run for minutes; a RUNNING job older than
@@ -109,6 +109,13 @@ export async function processLoreImportJob(jobId: string): Promise<ProcessResult
         await reportError('lore-auto-reseed-failed', reseedError, {
           jobId, campaignId: job.campaignId,
         })
+      } finally {
+        // Whatever happened above, the play lock comes off: the campaign
+        // continues on whichever world it has (canon on success, the
+        // provisional one otherwise — the admin button can re-run).
+        await clearPendingWorldSeed(job.campaignId).catch(e =>
+          console.error('Failed to clear pendingWorldSeed:', e)
+        )
       }
     }
 
@@ -129,6 +136,13 @@ export async function processLoreImportJob(jobId: string): Promise<ProcessResult
       await reportError('lore-import-job-failed', error, {
         jobId, campaignId: job.campaignId, sourceType: job.sourceType, attempts: job.attempts,
       })
+      // A permanently failed creation-time import unlocks the campaign on
+      // its provisional world rather than holding players hostage.
+      if (job.autoReseedOnComplete) {
+        await clearPendingWorldSeed(job.campaignId).catch(e =>
+          console.error('Failed to clear pendingWorldSeed after failed import:', e)
+        )
+      }
     }
     return retryable ? { status: 'retry_scheduled', error: message } : { status: 'failed', error: message }
   }
@@ -170,7 +184,7 @@ export async function recoverStaleLoreJobs(campaignId: string): Promise<void> {
   try {
     const live = await prisma.loreImportJob.findMany({
       where: { campaignId, status: { in: ['PENDING', 'RUNNING'] } },
-      select: { id: true, status: true, attempts: true, updatedAt: true, startedAt: true },
+      select: { id: true, status: true, attempts: true, updatedAt: true, startedAt: true, autoReseedOnComplete: true },
       take: 5,
     })
     const now = Date.now()
@@ -188,6 +202,12 @@ export async function recoverStaleLoreJobs(campaignId: string): Promise<void> {
         await reportError('lore-import-job-abandoned', new Error('Stale RUNNING job out of attempts'), {
           jobId: job.id, campaignId,
         })
+        // An abandoned creation-time import must release the play lock.
+        if (job.autoReseedOnComplete) {
+          await clearPendingWorldSeed(campaignId).catch(e =>
+            console.error('Failed to clear pendingWorldSeed after abandoned import:', e)
+          )
+        }
         continue
       }
 

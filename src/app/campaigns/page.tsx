@@ -497,8 +497,9 @@ function CreateCampaignModal({
                 </label>
                 <p className="text-xs text-ember-400/40 mt-1.5">
                   Imports in the background — your world&apos;s factions, powers, and character archetypes are
-                  automatically rebuilt from this canon once it finishes (usually a few minutes for a whole wiki).
-                  You can also paste text or add more sources later in Admin → Lore.
+                  rebuilt from this canon automatically. The campaign stays locked (no characters or scenes)
+                  until the world is ready, usually a few minutes for a whole wiki. You can also paste text or
+                  add more sources later in Admin → Lore.
                 </p>
               </div>
 

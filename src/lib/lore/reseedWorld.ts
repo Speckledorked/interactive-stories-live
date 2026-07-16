@@ -69,6 +69,18 @@ export function planFactionMerge(
   }
 }
 
+/**
+ * Release the creation-time play lock (Campaign.pendingWorldSeed). Lives
+ * here rather than in seedingGate.ts so loreQueue can import it without a
+ * module cycle (seedingGate → loreQueue → this file).
+ */
+export async function clearPendingWorldSeed(campaignId: string): Promise<void> {
+  await prisma.campaign.updateMany({
+    where: { id: campaignId, pendingWorldSeed: true },
+    data: { pendingWorldSeed: false },
+  })
+}
+
 export async function reseedWorldFromLore(campaignId: string): Promise<ReseedResult> {
   const campaign = await prisma.campaign.findUnique({ where: { id: campaignId } })
   if (!campaign) return { ok: false, reason: 'not_found' }

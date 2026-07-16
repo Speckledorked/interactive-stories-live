@@ -228,6 +228,15 @@ model Campaign {
   // Shape: { name, description, stages: string[5], bargainGuidance }
   corruptionTheme Json?
 
+  // True while a creation-time lore import + auto-reseed is in flight —
+  // the campaign is unplayable (no characters, no scenes) until the world
+  // has finished becoming its canon self, so a mid-import character can't
+  // flip the reseed into additive mode. Cleared by the worker when the
+  // reseed finishes (or the import permanently fails), with a stale-flag
+  // self-heal in lib/lore/seedingGate.ts so a dead worker can never lock
+  // a campaign forever.
+  pendingWorldSeed Boolean @default(false)
+
   // Phase 9: Campaign notification settings
   mentionsEnabled     Boolean @default(true)
   soundEffectsEnabled Boolean @default(true)
@@ -2008,6 +2017,8 @@ model LoreImportJob {
   // Set when the campaign was created WITH this lore source: on completion
   // the worker automatically reseeds the world from the imported canon
   // (lib/lore/reseedWorld.ts) instead of waiting for the admin button.
+  // While such a job is in flight the campaign is unplayable — see
+  // Campaign.pendingWorldSeed.
   autoReseedOnComplete Boolean @default(false)
 
   // Progress, shown to the admin while a wiki crawl is running.

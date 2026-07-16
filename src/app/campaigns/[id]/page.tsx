@@ -87,6 +87,18 @@ export default function CampaignLobbyPage() {
     }
   }
 
+  // While the world is being seeded from canon lore (creation-time
+  // import + auto-reseed), play is locked server-side — poll until the
+  // banner can come down. The poll itself drives the server's stale-flag
+  // self-heal and stuck-import recovery.
+  const worldSeeding = Boolean((data as any)?.campaign?.pendingWorldSeed)
+  useEffect(() => {
+    if (!worldSeeding) return
+    const interval = setInterval(loadCampaign, 8000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [worldSeeding, campaignId])
+
   const handleDeleteCharacter = async (characterId: string) => {
     setDeleteError('')
     try {
@@ -217,6 +229,22 @@ export default function CampaignLobbyPage() {
       />
 
       <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
+        {/* World-seeding lock: canon lore is still being imported and the
+            world rebuilt from it — play opens when this clears. */}
+        {worldSeeding && (
+          <div className="mb-6 rounded-xl bg-gradient-to-r from-ember-900/40 to-wine-900/30 border border-ember-600/40 px-5 py-4 flex items-center gap-4">
+            <div className="spinner h-8 w-8 flex-shrink-0"></div>
+            <div>
+              <p className="font-semibold text-ember-100">The world is being forged from your canon lore…</p>
+              <p className="text-sm text-ember-300/60 mt-0.5">
+                Importing and rebuilding factions, powers, and character archetypes from the source material.
+                Characters and scenes unlock when it finishes — usually a few minutes for a whole wiki.
+                This page updates automatically.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Campaign summary */}
         <div className="mb-8">
           <p className="text-sm sm:text-base text-ember-300/60 leading-relaxed mb-3">{campaign.description}</p>

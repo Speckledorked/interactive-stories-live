@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { validateStats } from '@/lib/game/advancement'
 import { decideSeedStates } from '@/lib/game/capabilities'
+import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import { OriginFamiliarity } from '@prisma/client'
 
 interface CreateCharacterBody {
@@ -74,6 +75,13 @@ export async function POST(
         { error: 'Character name is required' },
         { status: 400 }
       )
+    }
+
+    // Play lock: no characters until a creation-time canon import has
+    // finished reseeding the world — a character created now would freeze
+    // the provisional world in place (see lib/lore/seedingGate.ts).
+    if (await isWorldSeeding(campaignId)) {
+      return NextResponse.json({ error: SEEDING_MESSAGE, worldSeeding: true }, { status: 409 })
     }
 
     // Validate stats if provided

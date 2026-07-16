@@ -8,6 +8,7 @@ import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import { UserRole } from '@prisma/client'
 import { redactGmNotes, redactGmNotesList } from '@/lib/game/visibility'
+import { isWorldSeeding } from '@/lib/lore/seedingGate'
 
 export async function GET(
   request: NextRequest,
@@ -116,9 +117,19 @@ export async function GET(
     // regardless of which entities a non-admin can otherwise see. Timeline
     // events additionally carry summaryGM — a PUBLIC event still passes the
     // visibility filter above while its GM-only annotation must not.
+    // World-seeding play lock: this GET is what the campaign page polls
+    // while the banner is up, so run the live check here — it self-heals a
+    // stale flag and re-kicks a stuck import (see lib/lore/seedingGate.ts),
+    // meaning players watching the page are themselves the retry loop.
+    let pendingWorldSeed = campaign.pendingWorldSeed
+    if (pendingWorldSeed) {
+      pendingWorldSeed = await isWorldSeeding(campaignId)
+    }
+
     const isAdmin = membership.role === 'ADMIN'
     const redactedCampaign = {
       ...campaign,
+      pendingWorldSeed,
       worldMeta: campaign.worldMeta ? redactGmNotes(campaign.worldMeta, isAdmin) : campaign.worldMeta,
       characters: redactGmNotesList(campaign.characters, isAdmin),
       npcs: redactGmNotesList(campaign.npcs, isAdmin),

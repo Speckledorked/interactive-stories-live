@@ -12,6 +12,7 @@ import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels } f
 import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 import { kickLoreImportJob } from '@/lib/lore/loreQueue'
+import { clearPendingWorldSeed } from '@/lib/lore/reseedWorld'
 
 // GET /api/campaigns - List user's campaigns
 export async function GET(request: NextRequest) {
@@ -188,7 +189,11 @@ export async function POST(request: NextRequest) {
           statLabels: (generatedStatLabels as object | undefined) || undefined,
           // Null is meaningful: this universe has no power-at-a-cost
           // concept, so the corruption track stays disabled.
-          corruptionTheme: (worldExtras?.corruptionTheme as object | undefined) || undefined
+          corruptionTheme: (worldExtras?.corruptionTheme as object | undefined) || undefined,
+          // Canon lore was provided: lock play until the import finishes
+          // and the auto-reseed replaces this provisional world (see
+          // lib/lore/seedingGate.ts).
+          pendingWorldSeed: Boolean(validatedLore)
         }
       })
 
@@ -298,8 +303,10 @@ export async function POST(request: NextRequest) {
         console.log(`📚 Creation-time lore import ${loreJob.id} started (auto-reseed on completion)`)
       } catch (loreError) {
         // The campaign is already created and fully playable on its
-        // provisional world — a failed import start must not fail creation.
+        // provisional world — a failed import start must not fail creation,
+        // and must not leave the play lock behind.
         console.error('Failed to start creation-time lore import:', loreError)
+        await clearPendingWorldSeed(campaign.id).catch(() => {})
       }
     }
 

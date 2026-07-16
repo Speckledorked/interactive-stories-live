@@ -188,6 +188,13 @@ export interface AIGMResponse {
       location_type?: string // town, dungeon, wilderness, inn, building, etc.
       gm_notes_append?: string
     }>
+    // Corruption bargains narrated this scene — persisted so the
+    // character's NEXT action can mechanically invoke them (surge bonus
+    // at roll time). Only meaningful in campaigns with a corruption theme.
+    bargain_offers?: Array<{
+      character_name_or_id: string
+      offer: string
+    }>
     // Quest lifecycle: open when the fiction hands the party a job/goal,
     // append progress beats as scenes advance it, close when it settles.
     quest_changes?: Array<{
@@ -367,6 +374,9 @@ export interface AIGMRequest {
       move_name: string
       outcome: 'strongHit' | 'weakHit' | 'miss'
       outcome_text: string
+      // True when this roll was powered by accepting an open corruption
+      // bargain — narrate the borrowed power working, and the price.
+      corruption_surge?: boolean
     }
   }>
   // Full roll records for this exchange, carried through so the resolver
@@ -853,7 +863,8 @@ ${request.corruption_theme.bargainGuidance ? `When a bargain fits: ${request.cor
 
 Corruption is a devil's bargain the PLAYER walks into, never something you impose:
 - Offer a bargain SPARINGLY (at most once every few scenes) at a moment of real desperation — typically on a miss: name what ${request.corruption_theme.name} could do for them right now, and what it will cost. Let the player's next action accept or refuse
-- Only mark corruption when the character actually draws on it: report {"corruption_change": {"marks": 1, "reason": "..."}} inside that character's pc_changes. The engine caps marks at one per scene and they NEVER go away
+- Whenever you narrate an offer, ALSO record it structurally in world_updates.bargain_offers: [{"character_name_or_id": "...", "offer": "one sentence naming the power and the price"}]. This is what lets the engine honor the bargain mechanically on their next roll — an offer that exists only in prose has no mechanical teeth
+- If a character's action line shows CORRUPTION SURGE, they accepted: the engine already boosted that roll. Narrate the borrowed power genuinely working, and report {"corruption_change": {"marks": 1, "reason": "..."}} inside that character's pc_changes. For marks outside a formal bargain (a character deliberately drawing on ${request.corruption_theme.name} unprompted), report corruption_change the same way. The engine caps marks at one per scene and they NEVER go away
 - When a character accepts, the power works — narrate a real, immediate benefit, not a monkey's paw. The cost is the mark itself and what it slowly makes of them
 - Each character's current state is on their "Corruption:" line in PLAYER CHARACTERS. Weave that stage into narration as an undertone; never name numbers or mechanics in prose
 - A character whose conditions show "${'Consumed'}" has reached the end of the track — ${request.corruption_theme.name} is claiming them; play their unraveling honestly
@@ -1048,6 +1059,9 @@ ${player_actions.map(a => {
   const lines = [`${a.character_name}: "${a.action_text}"`]
   if (a.mechanics) {
     lines.push(`  → MECHANICAL OUTCOME (binding, already rolled): ${a.mechanics.move_name} — ${a.mechanics.outcome === 'strongHit' ? 'STRONG HIT' : a.mechanics.outcome === 'weakHit' ? 'WEAK HIT' : 'MISS'}. ${a.mechanics.outcome_text}`)
+    if (a.mechanics.corruption_surge) {
+      lines.push(`  → CORRUPTION SURGE: this character ACCEPTED the open bargain — the borrowed power visibly fueled this attempt. Narrate it working, and report corruption_change marks 1 for them (see <corruption>).`)
+    }
   }
   return lines.join('\n')
 }).join('\n\n')}

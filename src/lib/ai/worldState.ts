@@ -590,7 +590,8 @@ export async function buildSceneResolutionRequest(
             mechanics: {
               move_name: mechanics.moveName,
               outcome: mechanics.outcome,
-              outcome_text: mechanics.outcomeText
+              outcome_text: mechanics.outcomeText,
+              ...(mechanics.corruptionSurgeBonus > 0 ? { corruption_surge: true } : {})
             }
           }
         : {})

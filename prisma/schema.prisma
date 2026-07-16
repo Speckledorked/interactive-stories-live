@@ -543,6 +543,11 @@ model Character {
   // Only meaningful when Campaign.corruptionTheme is set; never decreases
   // (the whole point is irreversibility) — see lib/game/corruption.ts.
   corruption Int      @default(0)
+  // An open corruption bargain narrated to this character last scene —
+  // their NEXT action can invoke it for an engine-enforced surge bonus
+  // (and the mark). Cleared after that action, accepted or not.
+  // Shape: { offer: string, offeredTurn: number }
+  pendingBargain Json?
   conditions Json? // { conditions: [{ id, name, category, description, mechanicalEffect?, appliedAt? }] }
   moves      String[] // Character move IDs they've unlocked
   holds      Json? // Temporary holds/forward from moves

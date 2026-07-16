@@ -6,6 +6,7 @@ import {
   applyCorruptionMarks,
   corruptionStage,
   describeCorruptionForPrompt,
+  ensureSurgeCorruptionChanges,
 } from '../corruption'
 
 const theme = {
@@ -81,5 +82,51 @@ describe('describeCorruptionForPrompt', () => {
     expect(describeCorruptionForPrompt(theme, 3)).toContain('deep in')
     expect(describeCorruptionForPrompt(theme, 5)).toContain('fully consumed')
     expect(describeCorruptionForPrompt(theme, 3)).not.toMatch(/\b3\b/)
+  })
+})
+
+describe('ensureSurgeCorruptionChanges', () => {
+  const surged = [{ characterId: 'char-1', characterName: 'Helios' }]
+
+  it('is a no-op with no surged characters', () => {
+    const updates = { pc_changes: [] as any[] }
+    ensureSurgeCorruptionChanges(updates, [])
+    expect(updates.pc_changes).toEqual([])
+  })
+
+  it('injects a corruption_change for a surged character the AI forgot', () => {
+    const updates: any = { pc_changes: [] }
+    ensureSurgeCorruptionChanges(updates, surged)
+    expect(updates.pc_changes).toHaveLength(1)
+    expect(updates.pc_changes[0].character_name_or_id).toBe('char-1')
+    expect(updates.pc_changes[0].changes.corruption_change.marks).toBe(1)
+  })
+
+  it('reuses an existing pc_changes entry for that character instead of adding a second', () => {
+    const updates: any = {
+      pc_changes: [{ character_name_or_id: 'Helios', changes: { harm_damage: 1 } }],
+    }
+    ensureSurgeCorruptionChanges(updates, surged)
+    expect(updates.pc_changes).toHaveLength(1)
+    expect(updates.pc_changes[0].changes.harm_damage).toBe(1)
+    expect(updates.pc_changes[0].changes.corruption_change.marks).toBe(1)
+  })
+
+  it('leaves an AI-reported corruption_change alone (no double mark)', () => {
+    const updates: any = {
+      pc_changes: [{
+        character_name_or_id: 'Helios',
+        changes: { corruption_change: { marks: 1, reason: 'AI said so' } },
+      }],
+    }
+    ensureSurgeCorruptionChanges(updates, surged)
+    expect(updates.pc_changes).toHaveLength(1)
+    expect(updates.pc_changes[0].changes.corruption_change.reason).toBe('AI said so')
+  })
+
+  it('creates pc_changes when the AI omitted the array entirely', () => {
+    const updates: any = {}
+    ensureSurgeCorruptionChanges(updates, surged)
+    expect(updates.pc_changes).toHaveLength(1)
   })
 })

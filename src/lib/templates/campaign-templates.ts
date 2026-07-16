@@ -626,13 +626,19 @@ export async function createFactionsForCampaign(
  * see campaigns/route.ts). False (or AI generation unavailable/failed)
  * means the template's scaffold becomes the real one, guaranteeing every
  * template campaign has a working capability tree even offline.
+ *
+ * hasGeneratedFronts: same fallback relationship, for front-style threats —
+ * true when AI generation already produced bespoke (and, when lore was
+ * imported, canon-grounded) fronts for this campaign, in which case
+ * template.frontTemplates is skipped.
  */
 export async function applyCampaignTemplate(
   campaignId: string,
   templateId: string,
   prisma: any,
   generatedFactions?: GeneratedFactionOverride[],
-  hasGeneratedCapabilities = false
+  hasGeneratedCapabilities = false,
+  hasGeneratedFronts = false
 ): Promise<void> {
   const template = getTemplate(templateId)
   if (!template) {
@@ -673,15 +679,15 @@ export async function applyCampaignTemplate(
   // factionTemplates specifically — if AI factions replaced them, the name
   // won't resolve and the front is still created, just unlinked from a
   // faction (still a real threat, just not faction-attributed).
-  if (template.frontTemplates && template.frontTemplates.length > 0) {
+  if (!hasGeneratedFronts && template.frontTemplates && template.frontTemplates.length > 0) {
     for (const front of template.frontTemplates) {
-      let sourceFactionId: string | undefined
+      let relatedFactionId: string | undefined
       if (front.sourceFactionName) {
         const faction = await prisma.faction.findFirst({
           where: { campaignId, name: { equals: front.sourceFactionName, mode: 'insensitive' } },
           select: { id: true },
         })
-        sourceFactionId = faction?.id
+        relatedFactionId = faction?.id
       }
       await prisma.clock.create({
         data: {
@@ -691,11 +697,16 @@ export async function applyCampaignTemplate(
           category: front.category,
           maxTicks: front.maxTicks,
           consequence: front.consequence,
-          sourceFactionId,
+          // relatedFactionId, NOT sourceFactionId — sourceFactionId opts a
+          // clock out of the generic completion event (see the schema
+          // comment) and into resolveCompletedAmbitions, which expects a
+          // real tracked ambition and would otherwise misapply faction
+          // stat deltas to this front when it completes.
+          relatedFactionId,
         },
       })
     }
-    console.log(`⏰ Seeded ${template.frontTemplates.length} front-style threats`)
+    console.log(`⏰ Seeded ${template.frontTemplates.length} front-style threats (template fallback)`)
   }
 
   // Capability scaffold fallback — see hasGeneratedCapabilities doc above.

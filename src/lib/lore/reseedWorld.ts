@@ -38,6 +38,7 @@ export interface ReseedSummary {
   factionsRetired: string[]
   factionsAlreadyPresent: number
   capabilitiesAdded: string[]
+  frontsAdded: string[]
   statLabelsSet: boolean
   corruptionThemeSet: boolean
   archetypesReplaced: number
@@ -67,6 +68,17 @@ export function planFactionMerge(
       ? existingNames.filter(n => !generatedLower.has(n.toLowerCase()))
       : [],
   }
+}
+
+/**
+ * Pure: which generated fronts are actually new, by name (case-insensitive)
+ * against every currently-unresolved clock in the campaign. Purely
+ * additive in both fresh and live mode — see the doc comment at the call
+ * site for why fronts don't get a fresh-mode "retire" step like factions do.
+ */
+export function planFrontMerge(existingClockNames: string[], generatedFrontNames: string[]): string[] {
+  const existingLower = new Set(existingClockNames.map(n => n.toLowerCase()))
+  return generatedFrontNames.filter(n => !existingLower.has(n.toLowerCase()))
 }
 
 /**
@@ -157,6 +169,44 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
       })),
       skipDuplicates: true,
     })
+  }
+
+  // --- Fronts: purely additive in both modes ---------------------------------
+  // Unlike factions/capabilities, fronts have no stable canon identity to
+  // dedupe cleanly against a "provisional vs canon" distinction, so fresh
+  // mode does NOT retire existing ones here — only new, name-deduped fronts
+  // are added. Worst case on a repeatedly-reseeded campaign is a handful of
+  // extra danger clocks, never a wrongly-deleted GM-authored one.
+  const existingClocks = await prisma.clock.findMany({
+    where: { campaignId, resolvedAt: null },
+    select: { name: true },
+  })
+  const newFrontNames = new Set(
+    planFrontMerge(existingClocks.map(c => c.name), generated.fronts.map(f => f.name))
+  )
+  const newFronts = generated.fronts.filter(f => newFrontNames.has(f.name))
+  if (newFronts.length > 0) {
+    for (const front of newFronts) {
+      let relatedFactionId: string | undefined
+      if (front.sourceFactionName) {
+        const faction = await prisma.faction.findFirst({
+          where: { campaignId, name: { equals: front.sourceFactionName, mode: 'insensitive' } },
+          select: { id: true },
+        })
+        relatedFactionId = faction?.id
+      }
+      await prisma.clock.create({
+        data: {
+          campaignId,
+          name: front.name,
+          description: front.description,
+          category: front.category,
+          maxTicks: front.maxTicks,
+          consequence: front.consequence,
+          relatedFactionId, // NOT sourceFactionId — see the schema comment
+        },
+      })
+    }
   }
 
   // --- Stat labels -----------------------------------------------------------
@@ -266,6 +316,7 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
     factionsRetired: plan.toRetire,
     factionsAlreadyPresent: generated.factions.length - newFactions.length,
     capabilitiesAdded: newCaps.map(c => c.name),
+    frontsAdded: newFronts.map(f => f.name),
     statLabelsSet,
     corruptionThemeSet,
     archetypesReplaced,
@@ -275,7 +326,7 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
   console.log(
     `🌍 Reseeded world from lore for ${campaignId} (${fresh ? 'fresh — replaced' : 'live — additive'}):` +
     ` +${summary.factionsAdded.length} factions (${summary.factionsRetired.length} retired),` +
-    ` +${summary.capabilitiesAdded.length} capabilities` +
+    ` +${summary.capabilitiesAdded.length} capabilities, +${summary.frontsAdded.length} fronts` +
     ` (sampled ${lore.sampledEntries}/${lore.totalEntries} lore entries)`
   )
 

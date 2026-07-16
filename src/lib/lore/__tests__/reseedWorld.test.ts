@@ -2,7 +2,7 @@
 // Fresh-vs-live faction merge planning for lore reseeds.
 
 import { describe, it, expect } from 'vitest'
-import { planFactionMerge } from '../reseedWorld'
+import { planFactionMerge, planFrontMerge } from '../reseedWorld'
 
 describe('planFactionMerge', () => {
   const existing = ['The Ashveil Syndicate', 'House Venture']
@@ -30,5 +30,22 @@ describe('planFactionMerge', () => {
     expect(planFactionMerge([], generated, true).toAdd).toHaveLength(3)
     expect(planFactionMerge(existing, [], true).toRetire).toEqual(existing)
     expect(planFactionMerge(existing, [], false).toRetire).toEqual([])
+  })
+})
+
+describe('planFrontMerge', () => {
+  it('keeps only fronts not already present, case-insensitively', () => {
+    const existing = ['The Iron Company Tightens Its Grip']
+    const generated = ['the iron company tightens its grip', 'A New Canon Threat']
+    expect(planFrontMerge(existing, generated)).toEqual(['A New Canon Threat'])
+  })
+
+  it('is purely additive — never returns anything to retire, unlike factions', () => {
+    expect(planFrontMerge(['Existing Front'], [])).toEqual([])
+  })
+
+  it('handles empty inputs', () => {
+    expect(planFrontMerge([], ['Front A', 'Front B'])).toEqual(['Front A', 'Front B'])
+    expect(planFrontMerge(['Front A'], [])).toEqual([])
   })
 })

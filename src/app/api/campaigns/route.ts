@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { CreateCampaignRequest, ErrorResponse } from '@/types/api'
 import { getTemplate, applyCampaignTemplate, createFactionsForCampaign } from '@/lib/templates/campaign-templates'
-import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels } from '@/lib/ai/worldGenerator'
+import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels, GeneratedFront } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 import { kickLoreImportJob } from '@/lib/lore/loreQueue'
@@ -138,8 +138,9 @@ export async function POST(request: NextRequest) {
     let generatedFactions: NonNullable<Awaited<ReturnType<typeof generateWorldFromTemplate>>>['factions'] | undefined
     let generatedCapabilities: GeneratedCapability[] | undefined
     let generatedStatLabels: GeneratedStatLabels | undefined
+    let generatedFronts: GeneratedFront[] | undefined
 
-    console.log('🌍 Generating world context (factions, capabilities, stat labels)...')
+    console.log('🌍 Generating world context (factions, capabilities, stat labels, fronts)...')
     const generated = await generateWorldFromTemplate(
       template?.id || null,
       title,
@@ -152,7 +153,8 @@ export async function POST(request: NextRequest) {
       generatedFactions = generated.factions
       generatedCapabilities = generated.capabilities
       generatedStatLabels = generated.statLabels
-      console.log(`✅ World generated: ${generated.factions.length} unique factions`)
+      generatedFronts = generated.fronts
+      console.log(`✅ World generated: ${generated.factions.length} unique factions, ${generated.fronts.length} fronts`)
     } else if (!initialWorldSeed) {
       // AI failed and the user didn't write their own — fall back to
       // template defaults (or blank for custom).
@@ -246,7 +248,8 @@ export async function POST(request: NextRequest) {
       if (template) {
         await applyCampaignTemplate(
           newCampaign.id, template.id, tx, generatedFactions,
-          Boolean(generatedCapabilities && generatedCapabilities.length > 0)
+          Boolean(generatedCapabilities && generatedCapabilities.length > 0),
+          Boolean(generatedFronts && generatedFronts.length > 0)
         )
       } else if (generatedFactions && generatedFactions.length > 0) {
         await createFactionsForCampaign(newCampaign.id, tx, generatedFactions)
@@ -287,6 +290,37 @@ export async function POST(request: NextRequest) {
             console.log(`🌑 Marked ${shadowed.count} secret capability nodes as shadow branches`)
           }
         }
+      }
+
+      // Universal front-style threats (#13's concept, generated for EVERY
+      // campaign now — template or not): a ticking danger clock the world
+      // already opens with, grounded in canon when lore was imported.
+      // relatedFactionId, deliberately NOT sourceFactionId — see the schema
+      // comment on Clock — so completion gets the generic flavor-text event
+      // instead of being mistaken for a tracked faction ambition.
+      if (generatedFronts && generatedFronts.length > 0) {
+        for (const front of generatedFronts) {
+          let relatedFactionId: string | undefined
+          if (front.sourceFactionName) {
+            const faction = await tx.faction.findFirst({
+              where: { campaignId: newCampaign.id, name: { equals: front.sourceFactionName, mode: 'insensitive' } },
+              select: { id: true },
+            })
+            relatedFactionId = faction?.id
+          }
+          await tx.clock.create({
+            data: {
+              campaignId: newCampaign.id,
+              name: front.name,
+              description: front.description,
+              category: front.category,
+              maxTicks: front.maxTicks,
+              consequence: front.consequence,
+              relatedFactionId,
+            },
+          })
+        }
+        console.log(`⏰ Seeded ${generatedFronts.length} AI-generated front-style threats`)
       }
 
       return newCampaign

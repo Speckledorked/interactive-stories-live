@@ -677,6 +677,15 @@ model NPC {
   factionRole FactionRole?
   faction     Faction?     @relation("FactionMembers", fields: [factionId], references: [id], onDelete: SetNull)
 
+  // Phase 9: NPC society — individual-level relationships between major
+  // NPCs, derived from faction affiliation (same faction = ALLY; rival/ally
+  // factions per Faction.relationships = inherited). Shape mirrors
+  // Faction.relationships: Record<otherNpcId, { type: 'RIVAL' | 'ALLY';
+  // since: number }>. Written by npcSocietyTick.ts; distinct from the
+  // `relationship` field above, which is this NPC's stance toward the
+  // PLAYER CHARACTERS, not toward other NPCs.
+  socialTies Json?
+
   @@index([campaignId])
   @@index([factionId])
 }
@@ -925,6 +934,15 @@ model Clock {
   // named rival on success, not just to the faction that committed to it.
   targetFactionId String?
   targetFaction   Faction? @relation("FactionTargetedClocks", fields: [targetFactionId], references: [id], onDelete: SetNull)
+
+  // Phase 9: NPC society — set when two allied major NPCs are jointly
+  // pursuing this clock (see npcSocietyTick.ts). Deliberately NOT
+  // sourceFactionId even when both NPCs share a faction: sourceFactionId
+  // opts a clock OUT of the generic completion narration in
+  // checkAndResolveCompletedClocks (it expects the ambition-specific
+  // resolver in worldTurn.ts to handle it instead), and a joint scheme has
+  // no such resolver — it wants the generic path.
+  participantNpcIds String[] @default([])
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 

@@ -10,6 +10,14 @@ import { prisma } from '@/lib/prisma'
 // through untouched. This is defense in depth on top of the write-side
 // gating in sceneResolver.ts/wikiSync.ts, covering the case where an entity
 // got a wiki entry while visible and was later re-hidden.
+
+// The reverse direction matters too: entities that exist and are visible but
+// have never been WRITTEN about (wiki sync only fires when a scene resolution
+// touches an entity, so world-generation factions/locations start entry-less).
+// The campaign overview counts those live entities and links here, so without
+// stubs the wiki says "2 factions" and shows none. visibleEntityStubs()
+// synthesizes read-only entries for them, using the same admin-aware
+// visibility filters as the campaign GET so the counts line up exactly.
 async function filterDiscoveredEntries<T extends { entryType: string; name: string }>(
   campaignId: string,
   entries: T[]
@@ -33,6 +41,87 @@ async function filterDiscoveredEntries<T extends { entryType: string; name: stri
     if (entry.entryType === 'CLOCK') return clockNames.has(entry.name)
     return true
   })
+}
+
+const ENTITY_STUB_FIELDS = {
+  id: true,
+  name: true,
+  description: true,
+  createdAt: true,
+  updatedAt: true,
+} as const
+
+function toStubEntry(
+  campaignId: string,
+  entryType: string,
+  row: { id: string; name: string; description: string | null; createdAt: Date; updatedAt: Date }
+) {
+  const summary =
+    row.description && row.description.length > 200
+      ? row.description.slice(0, 197) + '…'
+      : row.description || 'Known to exist — the chronicle has nothing on record yet.'
+  return {
+    id: `${entryType.toLowerCase()}-stub-${row.id}`,
+    campaignId,
+    entryType,
+    name: row.name,
+    summary,
+    description: row.description || 'Nothing recorded yet. Entries fill in as the story touches them.',
+    tags: [] as string[],
+    aliases: [] as string[],
+    imageUrl: null,
+    importance: 'normal',
+    lastSeenTurn: null,
+    changelog: [] as unknown[],
+    createdBy: 'world',
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+/**
+ * Read-only stub entries for visible entities no scene has written about
+ * yet. Visibility filters intentionally mirror the campaign GET
+ * (api/campaigns/[id]/route.ts) — that's where the overview counts that
+ * link here come from. gmNotes never enters the stub (only name +
+ * description are selected).
+ */
+async function visibleEntityStubs(
+  campaignId: string,
+  isAdmin: boolean,
+  requestedType: string | null,
+  existingEntries: Array<{ entryType: string; name: string }>
+) {
+  const wanted = (type: string) => !requestedType || requestedType === type
+  const discovery = isAdmin ? {} : { isDiscovered: true }
+
+  const [npcs, factions, locations, clocks] = await Promise.all([
+    wanted('NPC')
+      ? prisma.nPC.findMany({ where: { campaignId, ...discovery }, select: ENTITY_STUB_FIELDS })
+      : [],
+    wanted('FACTION')
+      ? prisma.faction.findMany({ where: { campaignId, ...discovery }, select: ENTITY_STUB_FIELDS })
+      : [],
+    wanted('LOCATION')
+      ? prisma.location.findMany({ where: { campaignId, ...discovery }, select: ENTITY_STUB_FIELDS })
+      : [],
+    wanted('CLOCK')
+      ? prisma.clock.findMany({
+          where: { campaignId, ...(isAdmin ? {} : { isHidden: false }) },
+          select: ENTITY_STUB_FIELDS,
+        })
+      : [],
+  ])
+
+  const covered = new Set(existingEntries.map((e) => `${e.entryType}:${e.name.toLowerCase()}`))
+  const stubs = [
+    ...npcs.map((r) => toStubEntry(campaignId, 'NPC', r)),
+    ...factions.map((r) => toStubEntry(campaignId, 'FACTION', r)),
+    ...locations.map((r) => toStubEntry(campaignId, 'LOCATION', r)),
+    ...clocks.map((r) => toStubEntry(campaignId, 'CLOCK', r)),
+  ].filter((s) => !covered.has(`${s.entryType}:${s.name.toLowerCase()}`))
+  stubs.sort((a, b) => a.name.localeCompare(b.name))
+  return stubs
 }
 
 // GET /api/campaigns/[id]/wiki - Get wiki entries
@@ -89,7 +178,11 @@ export async function GET(
     const isAdmin = membership.role === 'ADMIN'
     const visibleEntries = isAdmin ? entries : await filterDiscoveredEntries(campaignId, entries)
 
-    return NextResponse.json({ entries: visibleEntries })
+    // Entities the fiction knows about but the wiki hasn't written up yet
+    // still deserve a row — see visibleEntityStubs above.
+    const stubs = await visibleEntityStubs(campaignId, isAdmin, entryType, visibleEntries)
+
+    return NextResponse.json({ entries: [...visibleEntries, ...stubs] })
   } catch (error) {
     console.error('Error fetching wiki entries:', error)
     return NextResponse.json({ error: 'Failed to fetch wiki entries' }, { status: 500 })

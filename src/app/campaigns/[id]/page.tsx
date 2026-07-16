@@ -471,6 +471,53 @@ export default function CampaignLobbyPage() {
                   {campaign.clocks.length} →
                 </span>
               </Link>
+              {/* Items/quests/rumors aren't included in this page's campaign
+                  payload, so these are link-only rows — the wiki tab itself
+                  shows the live list. */}
+              <Link
+                href={`/campaigns/${campaignId}/wiki?type=ITEM`}
+                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
+              >
+                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
+                  Items:
+                </span>
+                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
+                  →
+                </span>
+              </Link>
+              <Link
+                href={`/campaigns/${campaignId}/wiki?type=QUEST`}
+                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
+              >
+                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
+                  Quests:
+                </span>
+                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
+                  →
+                </span>
+              </Link>
+              <Link
+                href={`/campaigns/${campaignId}/wiki?type=RUMORS`}
+                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
+              >
+                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
+                  Rumors:
+                </span>
+                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
+                  →
+                </span>
+              </Link>
+              <Link
+                href={`/campaigns/${campaignId}/wiki`}
+                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group border-t border-ember-900/30 mt-2 pt-3"
+              >
+                <span className="text-ember-300 group-hover:text-ember-200 transition-colors font-medium">
+                  Open full wiki
+                </span>
+                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
+                  →
+                </span>
+              </Link>
             </div>
           </div>
         </div>

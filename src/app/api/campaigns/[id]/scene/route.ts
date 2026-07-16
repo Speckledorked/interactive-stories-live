@@ -10,6 +10,7 @@ import { SubmitActionRequest, ErrorResponse } from '@/types/api'
 import { pusherServer } from '@/lib/pusher'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { moderatePlayerText } from '@/lib/ai/moderation'
+import { recordEvent } from '@/lib/analytics/events'
 
 // POST can trigger a full scene resolution (AI GM call + world tick) inline
 // before responding. 60s is the Vercel Hobby-tier ceiling — safe on every
@@ -247,6 +248,8 @@ export async function POST(
         }
       }
     })
+
+    await recordEvent('ACTION_SUBMITTED', { userId: user.userId, campaignId, metadata: { sceneId } })
 
     // Update exchange state to track who has acted
     try {

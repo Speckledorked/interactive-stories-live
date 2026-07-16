@@ -17,6 +17,7 @@ import { ResolutionJobStatus } from '@prisma/client'
 import { getJwtSecret } from '@/lib/auth'
 import { reportError } from '@/lib/monitoring'
 import { getAppUrl } from '@/lib/appUrl'
+import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
 
 export const MAX_ATTEMPTS = 3
 // A RUNNING job older than this is presumed dead (resolveScene's own
@@ -237,4 +238,16 @@ export async function recoverStaleJobs(campaignId: string): Promise<void> {
   } catch (error) {
     console.error('Stale job recovery failed (non-critical):', error)
   }
+}
+
+/**
+ * Global counterpart to recoverStaleJobs: recovery above only looks at ONE
+ * campaign's jobs and only runs when someone requests that campaign's
+ * scene. A job stuck in a campaign nobody is currently looking at has no
+ * traffic to trigger that — this scans across ALL campaigns and fires a
+ * one-time alert (see lib/jobs/stuckJobAlert.ts), piggybacked on the
+ * internal worker route so it runs on any real app usage.
+ */
+export async function sweepGloballyStuckResolutionJobs(): Promise<void> {
+  await alertStuckJobs(prisma.resolutionJob as any, 'resolution-job-stuck')
 }

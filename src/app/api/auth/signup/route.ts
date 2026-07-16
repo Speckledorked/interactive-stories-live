@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { hashPassword } from '@/lib/password'
 import { createToken } from '@/lib/auth'
 import { SignupRequest, AuthResponse, ErrorResponse } from '@/types/api'
+import { recordEvent } from '@/lib/analytics/events'
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,6 +55,8 @@ export async function POST(request: NextRequest) {
     } catch (emailError) {
       console.error('Verification email failed (non-critical):', emailError)
     }
+
+    await recordEvent('SIGNUP', { userId: user.id })
 
     // Create JWT token
     const token = createToken({

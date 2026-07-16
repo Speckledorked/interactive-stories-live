@@ -13,6 +13,7 @@ import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 import { kickLoreImportJob } from '@/lib/lore/loreQueue'
 import { clearPendingWorldSeed } from '@/lib/lore/reseedWorld'
+import { recordEvent } from '@/lib/analytics/events'
 
 // GET /api/campaigns - List user's campaigns
 export async function GET(request: NextRequest) {
@@ -282,6 +283,8 @@ export async function POST(request: NextRequest) {
 
       return newCampaign
     })
+
+    await recordEvent('CAMPAIGN_CREATED', { userId: user.userId, campaignId: campaign.id })
 
     // Kick off the canon import AFTER the campaign exists. The kick has a
     // short delivery timeout, so this doesn't hold the response long; when

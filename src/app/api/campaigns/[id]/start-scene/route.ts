@@ -9,6 +9,7 @@ import { createNewScene, getCurrentScene } from '@/lib/game/sceneResolver'
 import { prisma } from '@/lib/prisma'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
+import { recordEvent } from '@/lib/analytics/events'
 
 export async function POST(
   request: NextRequest,
@@ -100,6 +101,18 @@ export async function POST(
     const newScene = await createNewScene(campaignId, characterIds)
 
     console.log(`✅ Scene ${newScene.sceneNumber} created`)
+
+    // Funnel: credit every participating player, not just the admin who
+    // clicked "start scene" — "reached their first scene" is what this
+    // stage means for each of them. Falls back to the requester when the
+    // scene opened with no fixed participants yet.
+    const participantUserIds: string[] = (newScene.participants as any)?.userIds || []
+    const scenesStartedFor = participantUserIds.length > 0 ? participantUserIds : [user.userId]
+    await Promise.all(
+      scenesStartedFor.map(uid =>
+        recordEvent('SCENE_STARTED', { userId: uid, campaignId, metadata: { sceneNumber: newScene.sceneNumber } })
+      )
+    )
 
     return NextResponse.json({
       success: true,

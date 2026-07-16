@@ -5,7 +5,7 @@
 // admin's request. Auth is a shared internal secret, never a user token.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { processLoreImportJob } from '@/lib/lore/loreQueue'
+import { processLoreImportJob, sweepGloballyStuckLoreJobs } from '@/lib/lore/loreQueue'
 import { internalJobSecret } from '@/lib/game/resolutionQueue'
 
 // A wiki crawl (up to WIKI_MAX_PAGES) needs real headroom — same ceiling
@@ -30,5 +30,9 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await processLoreImportJob(jobId)
+
+  // #12 alpha instrumentation — see resolve-job/route.ts's identical hook.
+  await sweepGloballyStuckLoreJobs()
+
   return NextResponse.json(result)
 }

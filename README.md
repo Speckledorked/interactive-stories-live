@@ -113,6 +113,7 @@ git history.
 - **Organic advancement actually fires** — server rolls now stamp each action with its result, so stat growth from consistent successful use works (it was silently dead: the growth system read a field nothing wrote), counted once per exchange even in long scenes
 - **Custom-universe world generation fixed** — template-less campaigns now persist their AI-generated factions (they were generated and silently discarded), and writing your own opening world seed no longer disables faction/capability/stat-label generation
 - **Campaign memory unbroken** — the RAG memory raw SQL targeted snake_case columns that don't exist (Prisma created camelCase); every memory write/read/consolidation had been silently failing
+- **First scene no longer drops you mid-fight** — the campaign opener shared the same "start already in progress" instructions as every later scene, which reads fine after a resolution but is jarring with no story behind it yet. The opener now gets its own prompt: a brief establishing beat (place, arrival, a real moment to stand in) before the hook lands; scene 2+ keeps starting on the action
 
 ### Phase 9 — True Autonomy (next)
 

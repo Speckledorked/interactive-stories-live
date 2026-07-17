@@ -266,6 +266,7 @@ model Campaign {
   moves       Move[]
   diceRolls   DiceRoll[]
   gmClarifications GmClarification[]
+  aiCostEntries AICostEntry[]
 
   // Phase 8: Communication
   messages Message[]    @relation("CampaignMessages")
@@ -1930,6 +1931,29 @@ model Transaction {
 
   @@index([userId, createdAt])
   @@map("transactions")
+}
+
+// Per-request AI cost ledger — durable and queryable by scene, unlike
+// WorldMeta.aiMetrics.requestHistory (a rolling 50-entry JSON array shared
+// across the WHOLE campaign, which can silently evict a scene's own entries
+// once enough other calls interleave). This is what metered scene billing
+// (resolutionBilling.ts) actually sums; aiMetrics stays as-is for the
+// admin analytics dashboard's running totals.
+model AICostEntry {
+  id           String   @id @default(cuid())
+  campaignId   String
+  sceneId      String? // null for campaign-level calls not tied to one scene (world turn, lore import, ...)
+  requestType  String
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  costMicros   Int // cost in millionths of a dollar (1,000,000 = $1) — real per-call AI cost is often sub-cent, so cents would round most entries to zero
+  createdAt    DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([sceneId])
 }
 
 //

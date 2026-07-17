@@ -177,7 +177,7 @@ export default function HelpPage() {
               { icon: '🗺️', title: 'Maps', desc: 'AI-generated tactical maps with zones and character tokens' },
               { icon: '📚', title: 'Wiki', desc: 'Track NPCs, factions, and progress clocks automatically updated by the AI' },
               { icon: '📜', title: 'Story Log', desc: 'Auto-generated chronicle of your adventure with highlights and timeline' },
-              { icon: '📥', title: 'Export', desc: 'Download your campaign data as JSON or readable text transcripts' }
+              { icon: '📥', title: 'Export', desc: 'Download your campaign data — characters, scenes, factions, and more — as JSON' }
             ].map((feature, index) => (
               <div key={index} className="p-4 bg-black/25 rounded-xl border border-ember-900/30 hover:border-ember-700/40 transition-all duration-200">
                 <div className="text-3xl mb-2">{feature.icon}</div>

@@ -37,7 +37,6 @@ export async function GET(
     const searchParams = request.nextUrl.searchParams;
     const includeCharacters = searchParams.get('characters') !== 'false';
     const includeScenes = searchParams.get('scenes') !== 'false';
-    const includeSessions = searchParams.get('sessions') !== 'false';
     const includeTimeline = searchParams.get('timeline') !== 'false';
     const includeMessages = searchParams.get('messages') !== 'false';
     const includeNotes = searchParams.get('notes') !== 'false';
@@ -50,7 +49,6 @@ export async function GET(
     const exportData = await CampaignExporter.exportCampaign(campaignId, {
       includeCharacters,
       includeScenes,
-      includeSessions,
       includeTimeline,
       includeMessages,
       includeNotes,

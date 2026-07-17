@@ -1,7 +1,7 @@
 /**
  * Phase 18.6: Campaign Export/Import Service
  *
- * Allows players to export campaigns, characters, and session data
+ * Allows players to export campaigns, characters, and scene data
  * Supports JSON format for full data export
  */
 
@@ -10,7 +10,6 @@ import { prisma } from '@/lib/prisma';
 export interface ExportOptions {
   includeCharacters?: boolean;
   includeScenes?: boolean;
-  includeSessions?: boolean;
   includeTimeline?: boolean;
   includeMessages?: boolean;
   includeNotes?: boolean;
@@ -27,7 +26,6 @@ export interface CampaignExportData {
   campaign: any;
   characters?: any[];
   scenes?: any[];
-  sessions?: any[];
   timeline?: any[];
   messages?: any[];
   notes?: any[];
@@ -50,7 +48,6 @@ export class CampaignExporter {
     const opts = {
       includeCharacters: true,
       includeScenes: true,
-      includeSessions: true,
       includeTimeline: true,
       includeMessages: true,
       includeNotes: true,
@@ -93,10 +90,6 @@ export class CampaignExporter {
 
     if (opts.includeScenes) {
       exportData.scenes = await this.exportScenes(campaignId);
-    }
-
-    if (opts.includeSessions) {
-      exportData.sessions = await this.exportSessions(campaignId);
     }
 
     if (opts.includeTimeline) {
@@ -153,63 +146,6 @@ export class CampaignExporter {
     return character;
   }
 
-  /**
-   * Export session transcript
-   */
-  static async exportSessionTranscript(sessionId: string) {
-    const session = await prisma.session.findUnique({
-      where: { id: sessionId },
-      include: {
-        participants: true,
-        scenes: true,
-        notes: {
-          orderBy: { timestamp: 'asc' },
-        },
-      },
-    });
-
-    if (!session) {
-      throw new Error('Session not found');
-    }
-
-    // Get all scenes from this session
-    const sceneIds = session.scenes.map((s) => s.sceneId);
-    const scenes = await prisma.scene.findMany({
-      where: { id: { in: sceneIds } },
-      include: {
-        playerActions: {
-          include: {
-            character: {
-              select: { name: true, pronouns: true },
-            },
-            user: {
-              select: { name: true },
-            },
-          },
-          orderBy: { createdAt: 'asc' },
-        },
-        messages: {
-          include: {
-            author: {
-              select: { name: true },
-            },
-            character: {
-              select: { name: true },
-            },
-          },
-          orderBy: { createdAt: 'asc' },
-        },
-      },
-      orderBy: { sceneNumber: 'asc' },
-    });
-
-    return {
-      session,
-      scenes,
-      transcript: this.generateTranscript(scenes),
-    };
-  }
-
   // Private helper methods
 
   private static sanitizeCampaign(campaign: any) {
@@ -242,22 +178,6 @@ export class CampaignExporter {
       },
       orderBy: { sceneNumber: 'asc' },
     });
-  }
-
-  private static async exportSessions(campaignId: string) {
-    const sessions = await prisma.session.findMany({
-      where: {
-        campaignId,
-      },
-      include: {
-        participants: true,
-        scenes: true,
-        notes: true,
-      },
-      orderBy: { sessionNumber: 'asc' },
-    });
-
-    return sessions;
   }
 
   private static async exportTimeline(campaignId: string) {
@@ -335,51 +255,6 @@ export class CampaignExporter {
     return await prisma.worldMeta.findUnique({
       where: { campaignId },
     });
-  }
-
-  /**
-   * Generate human-readable transcript from scenes
-   */
-  private static generateTranscript(scenes: any[]): string {
-    let transcript = '';
-
-    for (const scene of scenes) {
-      transcript += `\n\n========================================\n`;
-      transcript += `SCENE ${scene.sceneNumber}: ${scene.title || 'Untitled'}\n`;
-      transcript += `========================================\n\n`;
-
-      if (scene.sceneIntroText) {
-        transcript += `GM: ${scene.sceneIntroText}\n\n`;
-      }
-
-      // Interleave actions and messages by timestamp
-      const events = [
-        ...scene.playerActions.map((a: any) => ({ type: 'action', data: a, time: a.createdAt })),
-        ...scene.messages.map((m: any) => ({ type: 'message', data: m, time: m.createdAt })),
-      ].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-
-      for (const event of events) {
-        if (event.type === 'action') {
-          const action = event.data;
-          transcript += `[ACTION] ${action.character.name}: ${action.actionText}\n`;
-          if (action.resolution) {
-            transcript += `  → ${action.resolution}\n`;
-          }
-          transcript += '\n';
-        } else if (event.type === 'message') {
-          const msg = event.data;
-          const speaker = msg.character?.name || msg.author.name || 'Unknown';
-          const prefix = msg.type === 'WHISPER' ? '[WHISPER]' : msg.type === 'SYSTEM' ? '[SYSTEM]' : '';
-          transcript += `${prefix} ${speaker}: ${msg.content}\n`;
-        }
-      }
-
-      if (scene.sceneResolutionText) {
-        transcript += `\nGM RESOLUTION: ${scene.sceneResolutionText}\n`;
-      }
-    }
-
-    return transcript;
   }
 
   /**

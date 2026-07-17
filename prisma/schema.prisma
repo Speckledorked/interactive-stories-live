@@ -265,10 +265,6 @@ model Campaign {
   // need a real characterId, which doesn't exist yet at campaign creation).
   templateId String?
 
-  // Phase 9: Campaign notification settings
-  mentionsEnabled     Boolean @default(true)
-  soundEffectsEnabled Boolean @default(true)
-
   memberships CampaignMembership[]
   characters  Character[]
   npcs        NPC[]
@@ -1543,104 +1539,18 @@ model Token {
 }
 
 //
-// PHASE 11: SESSION & DOWNTIME MODELS
+// PHASE 11: DOWNTIME MODELS
 //
-
-enum SessionStatus {
-  SCHEDULED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-}
+// (Session/SessionParticipant/SessionScene/SessionNote lived here too, but
+// were removed as dead schema — nothing ever created a Session row, so the
+// "group scenes into a session" concept never had a real write path. See
+// README's hardening backlog.)
 
 enum ActivityStatus {
   ACTIVE
   COMPLETED
   FAILED
   CANCELLED
-}
-
-model Session {
-  id                String        @id @default(cuid())
-  campaignId        String
-  name              String
-  description       String?       @db.Text
-  sessionNumber     Int
-  status            SessionStatus @default(SCHEDULED)
-  scheduledAt       DateTime?
-  startTime         DateTime? // Keep for compatibility
-  startedAt         DateTime? // Add for service compatibility
-  endTime           DateTime? // Keep for compatibility
-  endedAt           DateTime? // Add for service compatibility
-  duration          Int? // In minutes
-  objectives        String[]
-  experienceAwarded Int           @default(0)
-  goldAwarded       Int           @default(0)
-  itemsAwarded      String[]
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-
-  participants SessionParticipant[]
-  scenes       SessionScene[]
-  notes        SessionNote[]
-
-  @@index([campaignId])
-  @@index([status])
-  @@map("sessions")
-}
-
-model SessionParticipant {
-  id               String    @id @default(cuid())
-  sessionId        String
-  characterId      String
-  userId           String
-  joinedAt         DateTime  @default(now())
-  leftAt           DateTime?
-  wasPresent       Boolean   @default(true)
-  attendanceStatus String    @default("PRESENT") // PRESENT, ABSENT, LATE, LEFT_EARLY
-  actionsCount     Int       @default(0)
-  messagesCount    Int       @default(0)
-  notes            String?   @db.Text
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, characterId])
-  @@index([sessionId])
-  @@map("session_participants")
-}
-
-model SessionScene {
-  id         String    @id @default(cuid())
-  sessionId  String
-  sceneId    String
-  orderIndex Int
-  duration   Int? // In minutes
-  summary    String?   @db.Text
-  startedAt  DateTime  @default(now())
-  endedAt    DateTime?
-  notes      String?   @db.Text
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([sessionId])
-  @@map("session_scenes")
-}
-
-model SessionNote {
-  id        String   @id @default(cuid())
-  sessionId String
-  authorId  String
-  content   String   @db.Text
-  noteType  String   @default("general") // general, highlight, decision, npc
-  isPublic  Boolean  @default(true)
-  timestamp DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([sessionId])
-  @@map("session_notes")
 }
 
 model DowntimeActivity {

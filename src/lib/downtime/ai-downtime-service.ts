@@ -1,14 +1,12 @@
 import { openaiFetch } from '@/lib/ai/openaiCompat'
 // src/lib/downtime/ai-downtime-service.ts
 
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { NotificationService } from '@/lib/notifications/notification-service'
 import { PusherServer } from '@/lib/realtime/pusher-server'
 import { AI_MODELS } from '@/lib/ai/models'
 import { applyCapabilityChanges, CapabilityChange } from '@/lib/game/capabilities'
 import { applyDebtChanges } from '@/lib/game/debts'
-
-const prisma = new PrismaClient()
 
 // What a downtime activity actually costs — not always gold. The AI picks
 // whichever of these genuinely fit the described activity (any subset, or

@@ -22,13 +22,13 @@ const {
   questFindUniqueMock: vi.fn(),
 }))
 
-vi.mock('@prisma/client', () => ({
-  PrismaClient: class {
-    character = { findUnique: findUniqueMock, update: updateMock }
-    scene = { findFirst: findFirstMock }
-    downtimeActivity = { create: activityCreateMock, findMany: activityFindManyMock, update: activityUpdateMock }
-    worldMeta = { findUnique: worldMetaFindUniqueMock }
-    quest = { create: questCreateMock, findUnique: questFindUniqueMock }
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    character: { findUnique: findUniqueMock, update: updateMock },
+    scene: { findFirst: findFirstMock },
+    downtimeActivity: { create: activityCreateMock, findMany: activityFindManyMock, update: activityUpdateMock },
+    worldMeta: { findUnique: worldMetaFindUniqueMock },
+    quest: { create: questCreateMock, findUnique: questFindUniqueMock },
   },
 }))
 

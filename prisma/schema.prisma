@@ -1651,12 +1651,22 @@ model DowntimeActivity {
   status      ActivityStatus @default(ACTIVE)
 
   // AI-determined properties
-  estimatedDays  Int
-  currentDay     Int      @default(0)
-  costs          Json? // {gold: 100, resources: [...]}
+  estimatedDays Int
+  currentDay    Int @default(0)
+  // {gold?: number, items?: [{name, quantity}], favor?: {counterparty_name,
+  // counterparty_type, description}, requiresQuest?: {name, description,
+  // givenBy}} — see lib/downtime/ai-downtime-service.ts. Each present cost
+  // type is mechanically charged at creation (gold from
+  // Character.resources, items from Character.inventory, favor as an
+  // incurred Debt); requiresQuest spawns a real, tracked Quest rather than
+  // gating completion on it.
+  costs          Json?
   requirements   String[] // Prerequisites
   skillsInvolved String[] // Skills being used
   riskLevel      String? // low, medium, high
+  // Set when costs.requiresQuest spawned a real Quest — informational
+  // link, not an enforced completion gate (see costs comment above).
+  linkedQuestId  String?
 
   outcomes     Json? // Potential outcomes
   finalOutcome String? @db.Text

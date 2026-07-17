@@ -6,8 +6,20 @@ import { NotificationService } from '@/lib/notifications/notification-service'
 import { PusherServer } from '@/lib/realtime/pusher-server'
 import { AI_MODELS } from '@/lib/ai/models'
 import { applyCapabilityChanges, CapabilityChange } from '@/lib/game/capabilities'
+import { applyDebtChanges } from '@/lib/game/debts'
 
 const prisma = new PrismaClient()
+
+// What a downtime activity actually costs — not always gold. The AI picks
+// whichever of these genuinely fit the described activity (any subset, or
+// none); each present one is mechanically charged in createDynamicActivity,
+// not just displayed as flavor text.
+export interface DowntimeCosts {
+  gold?: number // 0/absent if none
+  items?: Array<{ name: string; quantity: number }> // materials consumed from Character.inventory
+  favor?: { counterparty_name: string; counterparty_type: 'npc' | 'faction'; description: string } | null // incurs a Debt owed BY the character
+  requiresQuest?: { name: string; description: string; givenBy?: string | null } | null // spawns a real, tracked Quest
+}
 
 export interface DynamicDowntimeActivity {
   id: string
@@ -16,7 +28,7 @@ export interface DynamicDowntimeActivity {
   aiInterpretation: {
     summary: string
     estimatedDuration: number
-    costs: { gold?: number; resources?: string[] }
+    costs: DowntimeCosts
     requirements: string[]
     skillsInvolved: string[]
     riskLevel: 'low' | 'medium' | 'high'
@@ -68,6 +80,10 @@ export class AIDrivenDowntimeService {
 
       const resources = (character.resources as any) || {}
       const gold = resources.gold || 0
+      const inventory = (character.inventory as any)?.items || []
+      const inventoryText = inventory.length > 0
+        ? inventory.map((i: any) => `${i.name}${i.quantity ? ` x${i.quantity}` : ''}`).join(', ')
+        : 'Nothing notable'
 
       const prompt = `As an AI Game Master, interpret this player's downtime activity request:
 
@@ -78,6 +94,7 @@ Character Context:
 - Background: ${character.backstory || 'Unknown'}
 - Current Location: ${character.currentLocation || campaignContext?.currentLocation || 'Campaign setting'}
 - Available Gold: ${gold}
+- Inventory: ${inventoryText}
 
 Campaign Context:
 - Setting: ${character.campaign.universe || character.campaign.description?.slice(0, 100) || 'Fantasy'}
@@ -89,8 +106,10 @@ Analyze this request and return a JSON object with:
   "summary": "Clear description of what the character will do",
   "estimatedDuration": number (days, 1-365),
   "costs": {
-    "gold": number (0 if no cost),
-    "resources": ["list", "of", "materials"] (empty array if none)
+    "gold": number (0 if this costs no money),
+    "items": [{"name": "existing inventory item name", "quantity": number}] (materials/components CONSUMED from the character's own inventory listed above — only ever items they actually have; empty array if none consumed),
+    "favor": {"counterparty_name": "an NPC or faction name", "counterparty_type": "npc"|"faction", "description": "what favor is being spent"} or null (set this when the cost is political/social — pulling strings, calling in a favor, using up goodwill with someone specific. This makes the character owe them one; null if no favor is spent),
+    "requiresQuest": {"name": "short quest name", "description": "what the character must go do", "givenBy": "who tasked them, or null"} or null (set this ONLY when the activity cannot be resolved by downtime narration alone and genuinely requires the party to go undertake something in a real scene later — e.g. "forge a masterwork blade" needs rare ore fetched first. This spawns a tracked quest; null for anything downtime alone can resolve)
   },
   "requirements": ["what", "needs", "to", "happen", "first"],
   "skillsInvolved": ["relevant", "character", "skills"],
@@ -100,6 +119,8 @@ Analyze this request and return a JSON object with:
   "isViable": boolean (can this actually be done?),
   "aiNotes": "Any important considerations or modifications"
 }
+
+Costs are almost never just gold — pick whichever of gold/items/favor/requiresQuest actually fit what the character described, including several at once or none at all. A quiet afternoon of rest costs nothing. Training with a mentor might cost a favor instead of coin. Crafting consumes materials. Only charge what the fiction actually justifies.
 
 Make the interpretation:
 1. Realistic for the character's level and resources
@@ -147,7 +168,7 @@ If the request seems impossible, suggest a viable alternative.`
         interpretation: {
           summary: `Attempt to: ${playerDescription}`,
           estimatedDuration: 7,
-          costs: { gold: 0, resources: [] },
+          costs: { gold: 0, items: [], favor: null, requiresQuest: null } as DowntimeCosts,
           requirements: ["Determine feasibility"],
           skillsInvolved: ["General"],
           riskLevel: 'medium',
@@ -177,27 +198,14 @@ If the request seems impossible, suggest a viable alternative.`
     }
 
     const interpretation = interpretationResult.interpretation
+    const costs: DowntimeCosts = interpretation.costs || {}
 
-    // Charge the gold cost now, at commitment — the UI shows "Cost: X gold"
-    // as a real cost, not flavor text, so it needs to actually be one.
-    // Previously nothing here ever touched Character.resources: every
-    // downtime activity was free regardless of what it claimed to cost.
-    const goldCost = interpretation.costs.gold || 0
-    if (goldCost > 0) {
-      const character = await prisma.character.findUnique({
-        where: { id: characterId },
-        select: { resources: true },
-      })
-      const currentResources: any = (character?.resources as any) || {}
-      const currentGold = currentResources.gold || 0
-      if (currentGold < goldCost) {
-        throw new Error(`Not enough gold for this activity (needs ${goldCost}, have ${currentGold})`)
-      }
-      await prisma.character.update({
-        where: { id: characterId },
-        data: { resources: { ...currentResources, gold: currentGold - goldCost } },
-      })
-    }
+    // Charge whatever the activity actually costs, now, at commitment — the
+    // UI shows these as real costs, not flavor text. Rejects (before
+    // touching anything) if gold or items are unaffordable; favor and
+    // requiresQuest are never "unaffordable" — they're forward-looking
+    // obligations, not resources that run out.
+    const { extraRequirements, linkedQuestId } = await this.chargeDowntimeCosts(characterId, costs, interpretation.summary)
 
     // Create the activity using the correct schema fields
     const activity = await prisma.downtimeActivity.create({
@@ -207,13 +215,11 @@ If the request seems impossible, suggest a viable alternative.`
         description: playerDescription, // Store original player intent
         estimatedDays: interpretation.estimatedDuration,
         currentDay: 0,
-        costs: {
-          gold: interpretation.costs.gold || 0,
-          resources: interpretation.costs.resources
-        },
-        requirements: interpretation.requirements,
+        costs: costs as any,
+        requirements: [...interpretation.requirements, ...extraRequirements],
         skillsInvolved: interpretation.skillsInvolved,
         riskLevel: interpretation.riskLevel,
+        linkedQuestId,
         outcomes: {
           potentialOutcomes: interpretation.potentialOutcomes,
           aiInterpretation: interpretation
@@ -226,6 +232,97 @@ If the request seems impossible, suggest a viable alternative.`
     await this.generateInitialEvents(activity.id, interpretation)
 
     return activity
+  }
+
+  // Checks affordability and charges every cost type an activity carries.
+  // All-or-nothing: gold/item affordability is checked before anything is
+  // mutated, so a shortfall on either never leaves a partial charge behind.
+  private static async chargeDowntimeCosts(
+    characterId: string,
+    costs: DowntimeCosts,
+    activitySummary: string
+  ): Promise<{ extraRequirements: string[]; linkedQuestId: string | null }> {
+    const goldCost = costs.gold || 0
+    const itemCosts = costs.items || []
+
+    const character = await prisma.character.findUnique({
+      where: { id: characterId },
+      select: { name: true, campaignId: true, resources: true, inventory: true },
+    })
+    if (!character) throw new Error('Character not found')
+
+    const currentResources: any = (character.resources as any) || {}
+    const currentGold = currentResources.gold || 0
+    if (goldCost > 0 && currentGold < goldCost) {
+      throw new Error(`Not enough gold for this activity (needs ${goldCost}, have ${currentGold})`)
+    }
+
+    const currentInventory: any = (character.inventory as any) || { items: [] }
+    const items: any[] = currentInventory.items || []
+    for (const need of itemCosts) {
+      const have = items.find((i: any) => i.name?.toLowerCase() === need.name.toLowerCase())
+      if (!have || (have.quantity ?? 1) < need.quantity) {
+        throw new Error(`Not enough ${need.name} for this activity (needs ${need.quantity}, have ${have?.quantity ?? 0})`)
+      }
+    }
+
+    if (goldCost > 0 || itemCosts.length > 0) {
+      for (const need of itemCosts) {
+        const item = items.find((i: any) => i.name?.toLowerCase() === need.name.toLowerCase())
+        item.quantity = (item.quantity ?? 1) - need.quantity
+      }
+      const remainingItems = items.filter((i: any) => (i.quantity ?? 1) > 0)
+
+      await prisma.character.update({
+        where: { id: characterId },
+        data: {
+          ...(goldCost > 0 ? { resources: { ...currentResources, gold: currentGold - goldCost } } : {}),
+          ...(itemCosts.length > 0 ? { inventory: { ...currentInventory, items: remainingItems } } : {}),
+        },
+      })
+    }
+
+    const extraRequirements: string[] = []
+    let linkedQuestId: string | null = null
+
+    if (costs.favor) {
+      const worldMeta = await prisma.worldMeta.findUnique({
+        where: { campaignId: character.campaignId },
+        select: { currentTurnNumber: true },
+      })
+      await applyDebtChanges(
+        prisma,
+        character.campaignId,
+        characterId,
+        character.name,
+        [{
+          counterparty_name: costs.favor.counterparty_name,
+          counterparty_type: costs.favor.counterparty_type,
+          direction: 'owed_by_character',
+          action: 'incur',
+          description: costs.favor.description,
+          reason: `Cost of downtime activity: ${activitySummary}`,
+        }],
+        worldMeta?.currentTurnNumber ?? 0
+      )
+      extraRequirements.push(`Owes ${costs.favor.counterparty_name} a favor: ${costs.favor.description}`)
+    }
+
+    if (costs.requiresQuest) {
+      const quest = await prisma.quest.create({
+        data: {
+          campaignId: character.campaignId,
+          name: costs.requiresQuest.name,
+          description: costs.requiresQuest.description,
+          givenBy: costs.requiresQuest.givenBy || null,
+          status: 'ACTIVE',
+        },
+      })
+      linkedQuestId = quest.id
+      extraRequirements.push(`Requires completing the quest: "${costs.requiresQuest.name}"`)
+    }
+
+    return { extraRequirements, linkedQuestId }
   }
 
   // Generate AI events for any type of activity

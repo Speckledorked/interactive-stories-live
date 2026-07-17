@@ -92,6 +92,38 @@ describe('processReseedJob', () => {
     expect(clearPendingWorldSeed).toHaveBeenCalledWith('camp1')
   })
 
+  it('retries "generation_failed" (a probabilistic AI hiccup) while attempts remain, without releasing the play lock yet', async () => {
+    db.reseedJob.updateMany.mockResolvedValue({ count: 1 })
+    db.reseedJob.findUnique.mockResolvedValue({
+      id: 'job1', campaignId: 'camp1', attempts: 1, releasesPlayLock: true,
+    })
+    ;(reseedWorldFromLore as any).mockResolvedValue({ ok: false, reason: 'generation_failed' } as any)
+
+    const result = await processReseedJob('job1')
+
+    expect(result.status).toBe('retry_scheduled')
+    expect(db.reseedJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'PENDING', lastError: 'generation_failed' }) })
+    )
+    expect(clearPendingWorldSeed).not.toHaveBeenCalled()
+  })
+
+  it('fails "generation_failed" terminally once attempts are exhausted', async () => {
+    db.reseedJob.updateMany.mockResolvedValue({ count: 1 })
+    db.reseedJob.findUnique.mockResolvedValue({
+      id: 'job1', campaignId: 'camp1', attempts: MAX_ATTEMPTS, releasesPlayLock: true,
+    })
+    ;(reseedWorldFromLore as any).mockResolvedValue({ ok: false, reason: 'generation_failed' } as any)
+
+    const result = await processReseedJob('job1')
+
+    expect(result.status).toBe('failed')
+    expect(db.reseedJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'FAILED' }) })
+    )
+    expect(clearPendingWorldSeed).toHaveBeenCalledWith('camp1')
+  })
+
   it('returns the job to PENDING on a thrown error while attempts remain', async () => {
     db.reseedJob.updateMany.mockResolvedValue({ count: 1 })
     db.reseedJob.findUnique.mockResolvedValue({

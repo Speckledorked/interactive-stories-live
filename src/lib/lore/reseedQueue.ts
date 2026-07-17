@@ -37,6 +37,15 @@ const KICK_DELIVERY_TIMEOUT_MS = 3000
  * Kick off (or reuse) the reseed job's worker invocation. Callers create
  * the ReseedJob row themselves — this just hands an already-created job
  * to the worker.
+ *
+ * Deliberately does NOT fall back to inline processing on a failed kick
+ * (unlike kickLoreImportJob, which this otherwise mirrors) — the entire
+ * point of this module is keeping reseedWorldFromLore's two AI calls off
+ * the interactive request. Falling back here would silently run them
+ * inline again on exactly the request path this was built to protect,
+ * reproducing the 502s this was meant to fix. A failed kick just leaves
+ * the job PENDING; the next admin poll's recoverStaleReseedJobs (or a
+ * later kick attempt) picks it up within PENDING_STALE_MS.
  */
 export async function kickReseedJob(jobId: string): Promise<void> {
   const controller = new AbortController()
@@ -52,11 +61,9 @@ export async function kickReseedJob(jobId: string): Promise<void> {
       signal: controller.signal,
     })
   } catch (error) {
-    if ((error as Error)?.name === 'AbortError') {
-      return
+    if ((error as Error)?.name !== 'AbortError') {
+      console.error('Reseed kick failed — job stays PENDING for the next recovery sweep:', error)
     }
-    console.error('Reseed kick failed — falling back to inline processing:', error)
-    await processReseedJob(jobId)
   } finally {
     clearTimeout(timer)
   }
@@ -88,18 +95,28 @@ export async function processReseedJob(jobId: string): Promise<ProcessResult> {
     const result = await reseedWorldFromLore(job.campaignId)
 
     if (!result.ok) {
-      // A clean "nothing to do" (no lore imported, campaign gone) isn't a
-      // retryable failure — it's just done.
+      // "no_lore"/"not_found" are genuinely done — no amount of retrying
+      // changes them. "generation_failed" (the AI call errored, or — as
+      // seen in practice — returned truncated/malformed JSON) is a
+      // probabilistic hiccup, not a deterministic one: retrying gives the
+      // model another independent attempt, which can simply succeed.
+      const retryable = result.reason === 'generation_failed' && job.attempts < MAX_ATTEMPTS
       await prisma.reseedJob.update({
         where: { id: jobId },
-        data: { status: 'FAILED', finishedAt: new Date(), lastError: result.reason },
+        data: {
+          status: retryable ? 'PENDING' : 'FAILED',
+          lastError: result.reason,
+          ...(retryable ? {} : { finishedAt: new Date() }),
+        },
       })
-      if (job.releasesPlayLock) {
+      if (!retryable && job.releasesPlayLock) {
         await clearPendingWorldSeed(job.campaignId).catch(e =>
           console.error('Failed to clear pendingWorldSeed:', e)
         )
       }
-      return { status: 'failed', error: result.reason }
+      return retryable
+        ? { status: 'retry_scheduled', error: result.reason }
+        : { status: 'failed', error: result.reason }
     }
 
     await prisma.reseedJob.update({

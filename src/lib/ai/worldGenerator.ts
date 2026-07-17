@@ -222,12 +222,15 @@ Rules:
         ],
         temperature: 0.95,
         // Canon-grounded generation allows up to 6 factions — give the
-        // response room so the JSON doesn't truncate mid-array. Fronts add
-        // a bounded amount on top regardless of lore. NPCs/locations are
-        // deliberately NOT part of this call (see worldExtras.ts) — this
-        // response is already dense enough that a truncated one fails
-        // JSON.parse entirely, zeroing out factions/capabilities too.
-        max_tokens: loreDigest ? 1900 : 1300,
+        // response real headroom so the JSON doesn't truncate mid-array.
+        // A truncated response fails JSON.parse entirely and zeroes out
+        // factions/capabilities/fronts together, not just whichever field
+        // was mid-write — seen in practice against a content-rich real
+        // wiki digest even at 1900. Fronts add a bounded amount on top
+        // regardless of lore. NPCs/locations are deliberately NOT part of
+        // this call (see worldExtras.ts) — kept separate specifically so
+        // this response stays as small as the rules below allow.
+        max_tokens: loreDigest ? 3200 : 1300,
         response_format: { type: 'json_object' }
       })
     })

@@ -185,6 +185,10 @@ model CampaignMembership {
   campaignId String
   role       UserRole @default(PLAYER)
   joinedAt   DateTime @default(now())
+  // Last time this member loaded the campaign lobby page — the checkpoint
+  // "While you were away" recaps diff offscreen fallout against. Null means
+  // they've never landed on the lobby yet (no recap to show).
+  lastViewedAt DateTime?
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)

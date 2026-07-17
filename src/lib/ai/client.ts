@@ -222,7 +222,13 @@ export interface AIGMResponse {
         description: string
         tags?: string[]
       }>
-      new_moves?: string[]
+      // Rare, narratively-earned signature tricks — see the <moves>
+      // guidance below. id is derived server-side from name; don't invent one.
+      new_moves?: Array<{
+        name: string
+        trigger: string
+        description: string
+      }>
     }>
     notes_for_gm?: string // AI's private notes for continuity
   }
@@ -737,7 +743,9 @@ You MUST respond with a JSON object matching this structure:
       {"name": "EXISTING_QUEST", "changes": {"progress_append": "Found wolf tracks that turn to bootprints at the river"}},
       {"name": "ANOTHER_EXISTING_QUEST", "changes": {"status": "COMPLETED", "progress_append": "Delivered the ledger to the magistrate"}}
     ],
-    "organic_advancement": [...],
+    "organic_advancement": [
+      {"character_id": "CHARACTER_NAME", "new_moves": [{"name": "Read the Room", "trigger": "When you enter a tense negotiation", "description": "You always get one honest tell from the room before anyone speaks."}]}
+    ],
     "notes_for_gm": "..."
   }
 }
@@ -776,8 +784,9 @@ narrative levers:
   critically dying.
 
 ORGANIC CHARACTER GROWTH:
-- Stats grow from -2 to +3 based on consistent use (keep total at +2, max one stat ≥ +2)
-- Award perks for repeated tagged actions (combat, stealth, investigation)
+- Stats grow from -2 to +3 based on consistent use (keep total at +2, max one stat ≥ +2) — the engine detects this on its own from roll outcomes; you don't need to report it.
+- Perks reward a repeated PATTERN of tagged actions (combat, stealth, investigation) — the engine also detects the common ones on its own; propose your own via new_perks only for a pattern its fixed list wouldn't catch.
+- New moves (organic_advancement.new_moves) are different: a RARE, one-time reward for a genuine narrative turning point, not routine competence — a mentor taught them a signature technique, they survived by exploiting one specific trait, a transformation left them permanently changed. Reserve for maybe once every several sessions per character. {"name": "Read the Room", "trigger": "When you enter a tense negotiation", "description": "You always get one honest tell from the room before anyone speaks."} — trigger names the situation it applies to, description says what it does. Don't invent an id; the engine derives one from name.
 - Growth driven by what characters DO, not player choices
 
 TIME PASSAGE:

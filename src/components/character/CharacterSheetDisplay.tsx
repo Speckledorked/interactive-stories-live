@@ -136,8 +136,9 @@ export default function CharacterSheetDisplay({
   const corruptionValue = Math.max(0, Number(character?.corruption) || 0)
   const corruptionStageText = corruptionTheme ? corruptionStage(corruptionTheme, corruptionValue) : null
 
-  // Parse moves
-  const moves = character?.moves || []
+  // Parse moves — legacy rows may still hold bare strings; new rows are
+  // {id, name, trigger, description} objects (see lib/game/advancement.ts)
+  const moves = Array.isArray(character?.moves) ? character.moves : []
 
   return (
     <div className="space-y-6">
@@ -170,12 +171,6 @@ export default function CharacterSheetDisplay({
                   {character.harm}/6
                 </div>
               </div>
-              {character.xp !== undefined && (
-                <div className="bg-black/25 rounded-lg p-3 border border-ember-900/20">
-                  <div className="text-xs text-ember-400/50 uppercase tracking-wide mb-1">XP</div>
-                  <div className="text-lg font-bold text-ember-300">{character.xp}</div>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -255,9 +250,15 @@ export default function CharacterSheetDisplay({
               <div className="card">
                 <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide mb-3">Moves</h3>
                 <div className="space-y-2">
-                  {moves.map((move: string, idx: number) => (
+                  {moves.map((move: any, idx: number) => (
                     <div key={idx} className="bg-ember-900/20 rounded-lg p-3 border border-ember-700/30">
-                      <div className="text-sm text-ember-300 font-medium">{move}</div>
+                      <div className="text-sm text-ember-300 font-medium">{move.name || move}</div>
+                      {move.trigger && (
+                        <div className="text-xs text-ember-400/50 italic mt-1">{move.trigger}</div>
+                      )}
+                      {move.description && (
+                        <p className="text-xs text-ember-300/60 mt-1">{move.description}</p>
+                      )}
                     </div>
                   ))}
                 </div>

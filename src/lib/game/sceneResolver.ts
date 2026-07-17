@@ -19,6 +19,7 @@ import {
   logStatIncrease,
   logPerkGained,
   logMoveLearned,
+  buildMoveFromAI,
   type RecentAction,
   type StatUsage,
   type AdvancementLog
@@ -700,15 +701,25 @@ async function applyOrganicCharacterGrowth(
       }
     }
 
+    // Turn number gates both stat-growth cooldown (computeOrganicGrowth)
+    // and advancement log entries — fetched once, up front, for both.
+    const worldMeta = await prisma.worldMeta.findUnique({
+      where: { campaignId }
+    })
+    const turnNumber = worldMeta?.currentTurnNumber ?? 0
+
     // Compute system-based growth suggestions
-    const systemGrowth = computeOrganicGrowth(character, recentActions)
+    const systemGrowth = computeOrganicGrowth(character, recentActions, turnNumber)
 
     // Check if AI suggested growth for this character
     const aiGrowth = aiResponse.world_updates?.organic_advancement?.find(
       (adv: any) => adv.character_id === characterId
     )
 
-    // Merge AI and system suggestions
+    // Merge AI and system suggestions. AI-reported moves arrive as bare
+    // {name, trigger, description} — buildMoveFromAI derives a stable id
+    // from the name so the same conceptual move dedupes across scenes even
+    // if the AI phrases it slightly differently each time.
     const mergedGrowth = {
       statIncreases: [
         ...(systemGrowth.statIncreases || []),
@@ -720,7 +731,7 @@ async function applyOrganicCharacterGrowth(
       ],
       newMoves: [
         ...(systemGrowth.newMoves || []),
-        ...(aiGrowth?.new_moves || [])
+        ...((aiGrowth?.new_moves || []).map(buildMoveFromAI))
       ]
     }
 
@@ -735,13 +746,9 @@ async function applyOrganicCharacterGrowth(
       // Get or create advancement log
       let advancementLog: AdvancementLog = (character.advancementLog as any) || createAdvancementLog()
 
-      // Get turn number for logging
-      const worldMeta = await prisma.worldMeta.findUnique({
-        where: { campaignId }
-      })
-      const turnNumber = worldMeta?.currentTurnNumber
-
-      // Log all stat increases
+      // Log all stat increases, and stamp lastGrowthTurn on each one that
+      // actually applied so computeOrganicGrowth's arc-cooldown gate has
+      // something to check next time (see advancement.ts StatUsage).
       const oldStats = (character.stats as Record<string, number>) || {}
       for (const statIncrease of mergedGrowth.statIncreases) {
         const oldValue = oldStats[statIncrease.statKey] || 0
@@ -756,6 +763,9 @@ async function applyOrganicCharacterGrowth(
             turnNumber,
             sceneId
           )
+          if (updatedStatUsage && updatedStatUsage[statIncrease.statKey]) {
+            updatedStatUsage[statIncrease.statKey].lastGrowthTurn = turnNumber
+          }
         }
       }
 
@@ -775,7 +785,8 @@ async function applyOrganicCharacterGrowth(
       for (const move of mergedGrowth.newMoves) {
         advancementLog = logMoveLearned(
           advancementLog,
-          move,
+          move.id,
+          move.name,
           `Demonstrated mastery`,
           turnNumber,
           sceneId
@@ -789,7 +800,7 @@ async function applyOrganicCharacterGrowth(
           statUsage: updatedStatUsage,
           stats: applied.updatedStats,
           perks: applied.updatedPerks,
-          moves: applied.updatedMoves,
+          moves: applied.updatedMoves as any,
           advancementLog: advancementLog as any
         }
       })

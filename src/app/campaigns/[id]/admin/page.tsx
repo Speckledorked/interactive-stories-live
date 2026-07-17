@@ -11,6 +11,11 @@ import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import LoreManagerPanel from '@/components/admin/LoreManagerPanel'
+import { AdminNav, type AdminTabKey } from '@/components/admin/AdminNav'
+import { AdminOverviewPanel } from '@/components/admin/AdminOverviewPanel'
+import { DataAdvancedPanel } from '@/components/admin/DataAdvancedPanel'
+import { PublicChroniclePanel } from '@/components/admin/PublicChroniclePanel'
+import type { SetupChecklistItem } from '@/components/admin/SetupChecklist'
 
 interface Campaign {
   id: string
@@ -20,6 +25,7 @@ interface Campaign {
   aiSystemPrompt: string
   initialWorldSeed: string
   contentModerationLevel: string
+  scenes?: unknown[]
 }
 
 interface NPC {
@@ -115,11 +121,15 @@ export default function AdminPage() {
   const searchParams = useSearchParams()
   const campaignId = params.id as string
 
-  // Read tab from URL parameter, default to 'dashboard'
-  const initialTab = searchParams?.get('tab') as 'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'lore' | 'map' | 'debug' | 'invites' | 'members' | 'safety' | 'settings' || 'dashboard'
+  // Read tab from URL parameter, default to 'overview'. A couple of old
+  // tab keys (from before the admin nav regroup) are remapped so stale
+  // bookmarks/links still land somewhere sensible.
+  const legacyTabMap: Record<string, AdminTabKey> = { dashboard: 'overview', settings: 'data', debug: 'data' }
+  const rawTab = searchParams?.get('tab') || 'overview'
+  const initialTab = (legacyTabMap[rawTab] || (rawTab as AdminTabKey)) ?? 'overview'
 
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'lore' | 'map' | 'debug' | 'invites' | 'members' | 'safety' | 'settings'>(initialTab)
+  const [activeTab, setActiveTab] = useState<AdminTabKey>(initialTab)
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [npcs, setNpcs] = useState<NPC[]>([])
   const [factions, setFactions] = useState<Faction[]>([])
@@ -151,7 +161,6 @@ export default function AdminPage() {
   const [creatingClock, setCreatingClock] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [reports, setReports] = useState<any[]>([])
   const [reportsLoading, setReportsLoading] = useState(false)
   const [bans, setBans] = useState<any[]>([])
@@ -174,13 +183,13 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => {
-    if (activeTab === 'debug' && worldEvents.length === 0 && !worldEventsLoading) {
+    if (activeTab === 'data' && worldEvents.length === 0 && !worldEventsLoading) {
       fetchWorldEvents(worldEventsTurn)
     }
     if (activeTab === 'safety' && !safetyLoaded && !reportsLoading) {
       fetchSafetyData()
     }
-    if (activeTab === 'settings' && chronicleShare === null && !chronicleShareLoading) {
+    if (activeTab === 'safety' && chronicleShare === null && !chronicleShareLoading) {
       fetchChronicleShare()
     }
   }, [activeTab])
@@ -840,40 +849,63 @@ export default function AdminPage() {
     )
   }
 
+  const checklistItems: SetupChecklistItem[] = [
+    {
+      label: 'Write an opening scene',
+      done: (campaign?.scenes?.length ?? 0) > 0,
+      href: `/campaigns/${campaignId}/story`,
+      required: true,
+    },
+    {
+      label: 'Invite players',
+      done: invites.length > 0,
+      href: `/campaigns/${campaignId}/admin?tab=invites`,
+      badge: 'recommended',
+    },
+    {
+      label: 'Review Safety settings',
+      done: safetyLoaded,
+      href: `/campaigns/${campaignId}/admin?tab=safety`,
+      badge: 'recommended',
+    },
+    {
+      label: 'Import lore',
+      done: npcs.length > 0 || factions.length > 0 || locations.length > 0,
+      href: `/campaigns/${campaignId}/admin?tab=lore`,
+      badge: 'optional',
+    },
+    {
+      label: 'Configure narration style',
+      done: Boolean(campaign?.aiSystemPrompt?.trim()),
+      href: `/campaigns/${campaignId}/admin?tab=ai`,
+      badge: 'optional',
+    },
+  ]
+
   return (
     <TavernPage>
-      <TavernHeader
-        backHref={`/campaigns/${campaignId}`}
-        title="Campaign Admin"
-        campaignId={campaignId}
-        isAdmin
-        subrow={
-          <nav className="max-w-7xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
-            {(['dashboard', 'ai', 'npcs', 'factions', 'locations', 'clocks', 'lore', 'map', 'debug', 'invites', 'members', 'safety', 'settings'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-2.5 py-2 border-b-2 whitespace-nowrap flex-shrink-0 capitalize transition-colors ${
-                  activeTab === tab ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
-                }`}
-              >
-                {tab === 'ai' ? 'AI Settings' : tab}
-              </button>
-            ))}
-          </nav>
-        }
-      />
+      <TavernHeader backHref={`/campaigns/${campaignId}`} title="Campaign Admin" campaignId={campaignId} isAdmin />
 
       <main className="max-w-7xl mx-auto px-4 pt-28 pb-28">
         {error && (
-          <div className="mb-4 bg-wine-800/20 text-wine-300 p-4 rounded-md">
+          <div className="mb-4 rounded-md border border-myth-danger/30 bg-myth-danger/10 p-4 text-myth-danger">
             {error}
           </div>
         )}
 
-            {/* Dashboard Tab */}
-            {activeTab === 'dashboard' && (
-              <WorldStateDashboard
+        <div className="flex flex-col gap-8 md:flex-row">
+          <AdminNav activeKey={activeTab} onSelect={setActiveTab} />
+
+          <div className="min-w-0 flex-1">
+            {/* Overview Tab */}
+            {activeTab === 'overview' && campaign && (
+              <AdminOverviewPanel
+                campaignId={campaignId}
+                campaign={campaign}
+                onCampaignChange={(next) => setCampaign({ ...campaign, ...next })}
+                onSaveCampaignInfo={handleSaveCampaignInfo}
+                saving={saving}
+                checklistItems={checklistItems}
                 npcs={npcs.map(npc => ({
                   id: npc.id,
                   name: npc.name,
@@ -2013,7 +2045,7 @@ export default function AdminPage() {
             {/* Map Tab — faction relationships (rival/ally) + territory */}
             {activeTab === 'map' && (
               <div className="space-y-6">
-                <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+                <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
                   <h3 className="font-semibold mb-1">Faction Relationships</h3>
                   <p className="text-xs text-ember-400/50 mb-4">
                     Red dashed = rival, green solid = ally. Only active factions are shown.
@@ -2071,7 +2103,7 @@ export default function AdminPage() {
                   })()}
                 </div>
 
-                <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+                <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
                   <h3 className="font-semibold mb-3">Territory</h3>
                   {locations.length === 0 ? (
                     <p className="text-sm text-ember-400/50 italic">No locations tracked yet.</p>
@@ -2101,111 +2133,23 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Debug Tab — inspect why a tick made a given decision.
-                The Tick Log below browses already-recorded WorldEvent rows
-                (past turns). The Preview panel dry-runs the NEXT tick against
-                live current state: every handler's writes are skipped (see
-                TickContext.dryRun), so nothing is persisted and the turn
-                number doesn't advance — this is a preview of what the next
-                tick would do, not a replay of a past one (there's no
-                snapshot of past DB state to replay against). */}
-            {activeTab === 'debug' && (
-              <div className="space-y-4">
-                <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-                  <h3 className="font-semibold mb-1">Preview Next Tick</h3>
-                  <p className="text-xs text-ember-400/50 mb-4">
-                    Dry-runs the world tick against current state — shows exactly what would change and why,
-                    without writing anything or advancing the turn.
-                  </p>
-                  <button
-                    onClick={handlePreviewTick}
-                    disabled={tickPreviewLoading}
-                    className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
-                  >
-                    {tickPreviewLoading ? 'Simulating...' : 'Preview Next Tick'}
-                  </button>
-
-                  {tickPreview !== null && (
-                    <div className="mt-4 space-y-2">
-                      {tickPreview.length === 0 ? (
-                        <p className="text-sm text-ember-400/50 italic">No changes — the next tick would be a no-op.</p>
-                      ) : (
-                        tickPreview.map((change: any, i: number) => (
-                          <div key={i} className="p-3 bg-black/25 rounded-lg border border-ember-900/30">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm font-semibold text-ember-200">
-                                {change.entityName} · {change.field}
-                              </span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${change.significant ? 'text-ember-300 bg-ember-900/30' : 'text-ember-400/50 bg-black/30'}`}>
-                                {change.importance}
-                              </span>
-                            </div>
-                            <p className="text-xs text-ember-300/70">
-                              <span className="text-ember-400/60">{change.previousValue ?? '—'}</span>
-                              {' → '}
-                              <span className="text-ember-200">{change.newValue ?? '—'}</span>
-                            </p>
-                            <p className="text-xs text-ember-400/50 mt-1 italic">{change.reason}</p>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-                  <h3 className="font-semibold mb-1">Tick Log</h3>
-                  <p className="text-xs text-ember-400/50 mb-4">
-                    Every deterministic tick change and player-action consequence, with the reason the simulation
-                    made that call. Leave the turn blank for the most recent events across all turns.
-                  </p>
-                  <div className="flex items-end gap-3 mb-4">
-                    <div>
-                      <label className="block text-sm font-medium text-ember-200/80 mb-1">Turn</label>
-                      <input
-                        type="number"
-                        min={1}
-                        placeholder="latest"
-                        value={worldEventsTurn ?? ''}
-                        onChange={(e) => setWorldEventsTurn(e.target.value === '' ? null : parseInt(e.target.value))}
-                        className="block w-28 border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
-                      />
-                    </div>
-                    <button
-                      onClick={() => fetchWorldEvents(worldEventsTurn)}
-                      disabled={worldEventsLoading}
-                      className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
-                    >
-                      {worldEventsLoading ? 'Loading...' : 'Load'}
-                    </button>
-                  </div>
-
-                  {worldEventsLoading ? (
-                    <p className="text-sm text-ember-400/50">Loading...</p>
-                  ) : worldEvents.length === 0 ? (
-                    <p className="text-sm text-ember-400/50 italic">No events found.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {worldEvents.map((event: any) => (
-                        <div key={event.id} className="p-3 bg-black/25 rounded-lg border border-ember-900/30">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-semibold text-ember-200">
-                              Turn {event.turnNumber} · {event.targetName}
-                            </span>
-                            <span className="text-xs text-ember-400/50">{event.origin}</span>
-                          </div>
-                          <p className="text-xs text-ember-300/70">
-                            {event.field}: <span className="text-ember-400/60">{event.previousValue ?? '—'}</span>
-                            {' → '}
-                            <span className="text-ember-200">{event.newValue ?? '—'}</span>
-                          </p>
-                          <p className="text-xs text-ember-400/50 mt-1 italic">{event.reason}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+            {/* Data & Advanced Tab — Export & Backup, Debug (tick preview +
+                tick log; collapsed behind a disclosure), and Danger Zone. */}
+            {activeTab === 'data' && campaign && (
+              <DataAdvancedPanel
+                campaignId={campaignId}
+                campaignTitle={campaign.title}
+                tickPreview={tickPreview}
+                tickPreviewLoading={tickPreviewLoading}
+                onPreviewTick={handlePreviewTick}
+                worldEvents={worldEvents}
+                worldEventsLoading={worldEventsLoading}
+                worldEventsTurn={worldEventsTurn}
+                onWorldEventsTurnChange={setWorldEventsTurn}
+                onLoadWorldEvents={() => fetchWorldEvents(worldEventsTurn)}
+                saving={saving}
+                onDeleteCampaign={handleDeleteCampaign}
+              />
             )}
 
             {/* Invites Tab */}
@@ -2312,9 +2256,16 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Safety Tab */}
+            {/* Safety & Publishing Tab */}
             {activeTab === 'safety' && (
               <div className="space-y-8">
+                <PublicChroniclePanel
+                  chronicleShare={chronicleShare}
+                  chronicleShareLoading={chronicleShareLoading}
+                  onEnable={handleEnableChronicleShare}
+                  onDisable={handleDisableChronicleShare}
+                />
+
                 {reportsLoading && <div className="text-sm text-ember-300/60">Loading safety data...</div>}
 
                 {safetySettings && (
@@ -2491,235 +2442,8 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Settings Tab */}
-            {activeTab === 'settings' && campaign && (
-              <div className="space-y-6">
-                <div className="border-b pb-6">
-                  <h3 className="text-lg font-semibold text-ember-100 mb-4">
-                    Campaign Information
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-ember-200/80">
-                        Campaign ID (Read-only)
-                      </label>
-                      <p className="mt-1 text-sm text-ember-300/60 font-mono">{campaignId}</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-ember-200/80">
-                        Title
-                      </label>
-                      <input
-                        type="text"
-                        value={campaign.title}
-                        onChange={(e) => setCampaign({ ...campaign, title: e.target.value })}
-                        className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-ember-200/80">
-                        Description
-                      </label>
-                      <textarea
-                        value={campaign.description || ''}
-                        onChange={(e) => setCampaign({ ...campaign, description: e.target.value })}
-                        rows={3}
-                        className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-ember-200/80">
-                        Universe
-                      </label>
-                      <input
-                        type="text"
-                        value={campaign.universe || ''}
-                        onChange={(e) => setCampaign({ ...campaign, universe: e.target.value })}
-                        className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
-                      />
-                    </div>
-
-                    <button
-                      onClick={handleSaveCampaignInfo}
-                      disabled={saving}
-                      className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
-                    >
-                      {saving ? 'Saving...' : 'Save Campaign Information'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Public Chronicle Link Section */}
-                <div className="border-b pb-6">
-                  <h3 className="text-lg font-semibold text-ember-100 mb-2">
-                    Public Chronicle Link
-                  </h3>
-                  <p className="text-sm text-ember-300/60 mb-4">
-                    A read-only, no-login-required page showing every resolved scene in order — nothing else (no character sheets, no admin data). Off by default; share it as far as you like once on.
-                  </p>
-                  {chronicleShare?.enabled ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          readOnly
-                          value={typeof window !== 'undefined' ? `${window.location.origin}/chronicle/${chronicleShare.token}` : ''}
-                          className="flex-1 px-3 py-2 border rounded-md border-ember-900/40 bg-black/30 text-ember-100 text-sm font-mono"
-                          onFocus={(e) => e.target.select()}
-                        />
-                        <button
-                          onClick={() => {
-                            if (typeof window !== 'undefined') {
-                              navigator.clipboard.writeText(`${window.location.origin}/chronicle/${chronicleShare.token}`)
-                            }
-                          }}
-                          className="px-3 py-2 bg-black/30 border border-ember-900/40 text-ember-200 rounded-md hover:bg-black/40 text-sm flex-shrink-0"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                      <button
-                        onClick={handleDisableChronicleShare}
-                        disabled={chronicleShareLoading}
-                        className="px-4 py-2 bg-black/30 border border-wine-700/50 text-wine-300 rounded-md hover:bg-wine-900/20 disabled:opacity-50 text-sm"
-                      >
-                        Disable Public Link
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={handleEnableChronicleShare}
-                      disabled={chronicleShareLoading}
-                      className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50 text-sm"
-                    >
-                      {chronicleShareLoading ? 'Enabling...' : 'Enable Public Link'}
-                    </button>
-                  )}
-                </div>
-
-                {/* Export & Backup Section */}
-                <div className="border-b pb-6">
-                  <h3 className="text-lg font-semibold text-ember-100 mb-4">
-                    Export & Backup
-                  </h3>
-                  <p className="text-sm text-ember-300/60 mb-4">
-                    Download your campaign data for backup or to move to another platform.
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={async () => {
-                        try {
-                          const response = await authenticatedFetch(`/api/campaigns/${campaignId}/export`)
-                          if (response.ok) {
-                            const blob = await response.blob()
-                            const url = window.URL.createObjectURL(blob)
-                            const link = document.createElement('a')
-                            link.href = url
-                            link.download = `campaign-${campaignId}-${Date.now()}.json`
-                            document.body.appendChild(link)
-                            link.click()
-                            document.body.removeChild(link)
-                            window.URL.revokeObjectURL(url)
-                          } else {
-                            alert('Export failed. Please try again.')
-                          }
-                        } catch (error) {
-                          console.error('Export error:', error)
-                          alert('Export failed. Please try again.')
-                        }
-                      }}
-                      className="px-4 py-2 bg-black/40 text-white rounded-md hover:bg-black/50 flex items-center gap-2"
-                    >
-                      <span>📥</span>
-                      Export Campaign (JSON)
-                    </button>
-                  </div>
-                </div>
-
-                {/* Safety Tools Section */}
-                <div className="border-b pb-6">
-                  <h3 className="text-lg font-semibold text-ember-100 mb-4">
-                    Safety Tools
-                  </h3>
-                  <p className="text-sm text-ember-300/60 mb-4">
-                    Configure content warnings and safety settings for your campaign.
-                  </p>
-                  <div className="space-y-4">
-                    <div className="bg-ember-900/15 border border-ember-800/30 rounded-lg p-4">
-                      <h4 className="font-medium text-ember-200 mb-2">✋ X-Card</h4>
-                      <p className="text-sm text-ember-300/80">
-                        The X-Card is always available on the story page. Players can use it
-                        anonymously to pause or rewind uncomfortable content.
-                      </p>
-                    </div>
-                    <div className="bg-ember-900/20 border border-ember-700/40 rounded-lg p-4">
-                      <h4 className="font-medium text-ember-200 mb-2">⚠️ Content Warnings</h4>
-                      <p className="text-sm text-ember-300 mb-3">
-                        Set content warnings to let players know what topics may appear in this campaign.
-                      </p>
-                      <p className="text-xs text-ember-400">
-                        Note: Full safety settings panel will be added in a future update.
-                        For now, use the X-Card feature during gameplay.
-                      </p>
-                    </div>
-                    <div className="bg-wine-800/15 border border-wine-700/30 rounded-lg p-4">
-                      <h4 className="font-medium text-ember-200 mb-2">🛡️ Lines & Veils</h4>
-                      <p className="text-sm text-ember-300/80">
-                        <strong>Lines:</strong> Hard boundaries that won't appear in the story<br />
-                        <strong>Veils:</strong> Content that happens off-screen
-                      </p>
-                      <p className="text-xs text-ember-400 mt-2">
-                        Configure these in Session Zero with your group. Use the X-Card during play.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border border-wine-600/40 rounded-lg p-6 bg-wine-800/20">
-                  <h3 className="text-lg font-semibold text-wine-300 mb-2">
-                    Danger Zone
-                  </h3>
-                  <p className="text-sm text-wine-400 mb-4">
-                    Once you delete a campaign, there is no going back. This will permanently delete
-                    all campaign data including characters, scenes, NPCs, factions, clocks, and timeline events.
-                  </p>
-
-                  {!showDeleteConfirm ? (
-                    <button
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500"
-                    >
-                      Delete Campaign
-                    </button>
-                  ) : (
-                    <div className="space-y-3">
-                      <p className="text-sm font-semibold text-wine-300">
-                        Are you absolutely sure? This action cannot be undone.
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleDeleteCampaign}
-                          disabled={saving}
-                          className="px-4 py-2 bg-wine-500 text-white rounded-md hover:bg-wine-600 disabled:opacity-50"
-                        >
-                          {saving ? 'Deleting...' : 'Yes, Delete Campaign'}
-                        </button>
-                        <button
-                          onClick={() => setShowDeleteConfirm(false)}
-                          disabled={saving}
-                          className="px-4 py-2 bg-black/40 text-white rounded-md hover:bg-black/50 disabled:opacity-50"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+          </div>
+        </div>
       </main>
 
       <TavernNav campaignId={campaignId} />

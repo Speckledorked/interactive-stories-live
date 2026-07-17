@@ -16,6 +16,7 @@ import { AdminOverviewPanel } from '@/components/admin/AdminOverviewPanel'
 import { DataAdvancedPanel } from '@/components/admin/DataAdvancedPanel'
 import { PublicChroniclePanel } from '@/components/admin/PublicChroniclePanel'
 import type { SetupChecklistItem } from '@/components/admin/SetupChecklist'
+import { FieldHelp } from '@/components/ui/field-help'
 
 interface Campaign {
   id: string
@@ -935,9 +936,16 @@ export default function AdminPage() {
             {activeTab === 'ai' && campaign && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-ember-200/80">
-                    AI System Prompt
-                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <label className="block text-sm font-medium text-ember-200/80">
+                      AI System Prompt
+                    </label>
+                    <FieldHelp
+                      what="Extra instructions layered into every AI-narrated scene — tone, style, house rules, anything you want the GM voice to consistently honor."
+                      whoItAffects="Every scene the AI narrates for this campaign, for all players."
+                      whenToUse="You want a consistent narrative voice or a standing rule the AI should never break."
+                    />
+                  </div>
                   <textarea
                     value={campaign.aiSystemPrompt}
                     onChange={(e) => setCampaign({ ...campaign, aiSystemPrompt: e.target.value })}
@@ -945,11 +953,18 @@ export default function AdminPage() {
                     className="mt-1 block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm"
                   />
                 </div>
-                
+
                 <div>
-                  <label className="block text-sm font-medium text-ember-200/80">
-                    Initial World Seed
-                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <label className="block text-sm font-medium text-ember-200/80">
+                      Initial World Seed
+                    </label>
+                    <FieldHelp
+                      what="The founding lore text the world was generated from. It seeds NPCs, factions, and locations at creation time (and again on a lore reseed) — it isn't re-read on every scene."
+                      whoItAffects="Only what gets generated at creation or on a future reseed — not scenes already played."
+                      whenToUse="Correcting or expanding the campaign's founding premise before generating more of the world."
+                    />
+                  </div>
                   <textarea
                     value={campaign.initialWorldSeed}
                     onChange={(e) => setCampaign({ ...campaign, initialWorldSeed: e.target.value })}
@@ -1142,7 +1157,14 @@ export default function AdminPage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Importance (1-5)</label>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <label className="block text-sm font-medium text-ember-200/80">Importance (1-5)</label>
+                            <FieldHelp
+                              what="How central this NPC is meant to be — higher importance NPCs are more likely to be woven into generated scenes and remembered by the simulation."
+                              whoItAffects="How often the AI reaches for this NPC when narrating and building context."
+                              whenToUse="Mark your major recurring cast higher than one-off background characters."
+                            />
+                          </div>
                           <input
                             type="number"
                             name="importance"
@@ -1466,7 +1488,14 @@ export default function AdminPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Threat Level (1-5)</label>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <label className="block text-sm font-medium text-ember-200/80">Threat Level (1-5)</label>
+                            <FieldHelp
+                              what="How aggressively this faction's ambitions read to the world tick — higher threat factions push harder and get flagged more often."
+                              whoItAffects="How often and how aggressively the world-tick simulation escalates this faction's plans."
+                              whenToUse="Signal how dangerous or ambitious this faction should feel as the world moves on its own."
+                            />
+                          </div>
                           <input
                             type="number"
                             name="threatLevel"
@@ -1477,7 +1506,14 @@ export default function AdminPage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Resources (0-100)</label>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <label className="block text-sm font-medium text-ember-200/80">Resources (0-100)</label>
+                            <FieldHelp
+                              what="This faction's material/political capital — spent and regenerated by the world tick as it pursues its Simulation Goal."
+                              whoItAffects="What this faction can attempt each turn; low resources constrain its ambitions."
+                              whenToUse="Reflect how well-funded or depleted a faction currently is."
+                            />
+                          </div>
                           <input
                             type="number"
                             name="resources"
@@ -1948,7 +1984,14 @@ export default function AdminPage() {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-ember-200/80 mb-1">Consequence (when filled)</label>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <label className="block text-sm font-medium text-ember-200/80">Consequence (when filled)</label>
+                          <FieldHelp
+                            what="What happens in the fiction once this clock fills all its segments — the AI reads this to narrate the payoff."
+                            whoItAffects="How the story responds automatically when the clock completes."
+                            whenToUse="Any clock where reaching full should trigger a specific narrative beat."
+                          />
+                        </div>
                         <textarea
                           name="consequence"
                           rows={2}
@@ -1964,16 +2007,21 @@ export default function AdminPage() {
                           className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
                         />
                       </div>
-                      <div className="flex items-center">
+                      <div className="flex items-center gap-1.5">
                         <input
                           type="checkbox"
                           name="isHidden"
                           id="isHidden"
                           className="h-4 w-4 text-ember-300 focus:ring-ember-500/40 border-ember-900/40 rounded"
                         />
-                        <label htmlFor="isHidden" className="ml-2 block text-sm text-ember-200/80">
+                        <label htmlFor="isHidden" className="block text-sm text-ember-200/80">
                           Hide from players
                         </label>
+                        <FieldHelp
+                          what="Hidden clocks tick and matter mechanically, but players never see them or their progress — only you do."
+                          whoItAffects="Whether this clock appears on the players' story/wiki views."
+                          whenToUse="Tracking a secret threat or countdown players shouldn't see coming."
+                        />
                       </div>
                       <div className="flex space-x-2">
                         <button
@@ -2292,22 +2340,36 @@ export default function AdminPage() {
                           />
                           Pause the scene when the X-Card is used
                         </label>
-                        <label className="flex items-center gap-2 text-sm text-ember-200">
-                          <input
-                            type="checkbox"
-                            checked={safetySettings.anonymousXCard}
-                            onChange={(e) => setSafetySettings({ ...safetySettings, anonymousXCard: e.target.checked })}
+                        <div className="flex items-center gap-1.5">
+                          <label className="flex items-center gap-2 text-sm text-ember-200">
+                            <input
+                              type="checkbox"
+                              checked={safetySettings.anonymousXCard}
+                              onChange={(e) => setSafetySettings({ ...safetySettings, anonymousXCard: e.target.checked })}
+                            />
+                            Keep who used the X-Card anonymous
+                          </label>
+                          <FieldHelp
+                            what="When on, the table sees that someone used the X-Card, but not who."
+                            whoItAffects="What the rest of the table (not the GM) sees in the X-Card notification."
+                            whenToUse="Your group wants the safety net without any social pressure about who reached for it."
                           />
-                          Keep who used the X-Card anonymous
-                        </label>
-                        <label className="flex items-center gap-2 text-sm text-ember-200">
-                          <input
-                            type="checkbox"
-                            checked={safetySettings.xCardNotifyGMOnly}
-                            onChange={(e) => setSafetySettings({ ...safetySettings, xCardNotifyGMOnly: e.target.checked })}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <label className="flex items-center gap-2 text-sm text-ember-200">
+                            <input
+                              type="checkbox"
+                              checked={safetySettings.xCardNotifyGMOnly}
+                              onChange={(e) => setSafetySettings({ ...safetySettings, xCardNotifyGMOnly: e.target.checked })}
+                            />
+                            Notify GM only (not the whole table)
+                          </label>
+                          <FieldHelp
+                            what="Restricts the X-Card notification to you alone — other players won't see that it was used at all."
+                            whoItAffects="Whether non-GM players are notified when someone uses the X-Card."
+                            whenToUse="You'd rather quietly redirect the scene than have the whole table know something was flagged."
                           />
-                          Notify GM only (not the whole table)
-                        </label>
+                        </div>
                       </div>
                       <div className="grid sm:grid-cols-2 gap-4">
                         <div>

@@ -421,7 +421,11 @@ async function performResolution(
       data: {
         currentTurnNumber: currentTurn + 1,
         currentInGameDate: newInGameDate,
-        hoursSinceWorldTurn: { increment: hoursThisExchange }
+        hoursSinceWorldTurn: { increment: hoursThisExchange },
+        // Tracks what play itself has banked since the last heartbeat sweep,
+        // so the sweep can top up to real elapsed time instead of stacking
+        // on top of active play (see lib/game/cronHeartbeat.ts).
+        hoursBankedSinceLastHeartbeat: { increment: hoursThisExchange }
       }
     })
 

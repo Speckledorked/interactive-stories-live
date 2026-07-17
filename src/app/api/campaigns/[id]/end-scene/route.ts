@@ -75,15 +75,17 @@ export async function POST(
       )
     }
 
-    // 2.5. This is the one point in a scene's life where billing happens:
-    // every exchange along the way (each action's AI response) was free,
-    // and this charges once, per player, for the whole scene now that
-    // it's concluding. Checked before spending on the final AI call.
-    const { chargeForSceneResolution } = await import('@/lib/game/resolutionBilling')
-    const billing = await chargeForSceneResolution(campaignId, sceneId)
-    if (!billing.ok) {
+    // 2.5. Billing is metered on real AI cost (resolutionBilling.ts sums
+    // AICostEntry rows for this scene), which the FINAL resolution call
+    // below hasn't recorded yet — so this preflight check is a
+    // conservative estimate (cost so far + a buffer), just to block an
+    // obviously unaffordable attempt before spending on one more call.
+    // The real charge happens after resolution, once its cost is known.
+    const { preflightSceneBilling, chargeForSceneResolution } = await import('@/lib/game/resolutionBilling')
+    const preflight = await preflightSceneBilling(sceneId)
+    if (!preflight.ok) {
       return NextResponse.json<ErrorResponse>(
-        { error: billing.error || 'Insufficient balance', details: billing.details },
+        { error: preflight.error || 'Insufficient balance', details: preflight.details },
         { status: 402 }
       )
     }
@@ -110,6 +112,18 @@ export async function POST(
         // Continue to mark as RESOLVED even if resolution fails
         // The admin explicitly wants to end this scene
       }
+    }
+
+    // 3.5. The real, metered charge: sums every AICostEntry this scene
+    // recorded across all its exchanges plus the final call above. Runs
+    // regardless of whether resolution just succeeded or failed — the AI
+    // spend already happened either way. Best-effort: a failure here
+    // (e.g. a balance that ran out between the preflight estimate and now)
+    // is logged, not blocking — the scene has already been resolved and
+    // there's no undoing the AI spend by refusing to mark it RESOLVED.
+    const charge = await chargeForSceneResolution(campaignId, sceneId)
+    if (!charge.ok) {
+      console.error('⚠️ Scene resolved but metered billing failed:', charge.error, charge.details)
     }
 
     // 4. Mark scene as RESOLVED

@@ -1433,11 +1433,9 @@ export default function StoryPage() {
               </div>
 
               <div className="bg-black/25 border border-ember-900/40 rounded-lg p-4 mb-6">
-                <p className="text-xs font-semibold text-ember-300/60 mb-2">Pricing Structure:</p>
+                <p className="text-xs font-semibold text-ember-300/60 mb-2">Pricing:</p>
                 <div className="text-xs text-ember-300/60 space-y-1">
-                  <p>• Solo play (1 player): $0.25 per scene</p>
-                  <p>• Small group (2-4 players): $0.50 per scene</p>
-                  <p>• Large group (5-6 players): $0.75 per scene</p>
+                  <p>Each scene is billed once, when it ends, for the actual AI cost of everything that happened in it — split evenly across whoever took part. Typically a few cents per player; larger or longer scenes cost more, quiet ones cost less.</p>
                 </div>
               </div>
 

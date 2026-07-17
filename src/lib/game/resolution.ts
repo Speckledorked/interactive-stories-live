@@ -26,6 +26,7 @@ import { MAX_CORRUPTION, CORRUPTION_SURGE_BONUS } from './corruption'
 import { proficiencyBand, ProficiencyBand } from './capabilities'
 import { effectiveStandingModifier } from './standing'
 import { AI_MODELS } from '@/lib/ai/models'
+import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -245,7 +246,9 @@ async function classifyActions(
   actions: Array<{ actionText: string }>,
   characters: CharacterForRoll[],
   actionCharacterIds: string[],
-  factionNames: string[]
+  factionNames: string[],
+  campaignId: string,
+  sceneId: string
 ): Promise<ActionClassification[]> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return []
@@ -280,6 +283,7 @@ Rules:
 
 Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null, "accepts_bargain": false}]}`
 
+  const startTime = Date.now()
   try {
     const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -303,7 +307,23 @@ Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fi
       return []
     }
     const data = await response.json()
-    return parseClassifications(JSON.parse(data.choices[0].message.content), actions.length)
+    const content = data.choices[0].message.content
+    const usage = data.usage || {}
+    // Every scene-resolution turn makes this call — it needs to be in the
+    // metered billing total (resolutionBilling.ts) just as much as the
+    // narration call, or the classifier's real cost silently falls outside
+    // what players are charged for.
+    await recordAICost({
+      campaignId,
+      sceneId,
+      model: AI_MODELS.EFFICIENT,
+      requestType: 'action_classification',
+      inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
+      outputTokens: usage.completion_tokens || estimateTokenCount(content),
+      responseTimeMs: Date.now() - startTime,
+      success: true,
+    }).catch(console.error)
+    return parseClassifications(JSON.parse(content), actions.length)
   } catch (error) {
     // Fail open: unclassified actions resolve freeform, as they always did.
     console.error('Action classification failed (failing open):', error)
@@ -366,7 +386,9 @@ export async function resolveActionMechanics(
       // Only discovered, active factions are offered as classifier
       // targets — you can't knowingly trade on the name of a faction the
       // party hasn't met or one that no longer exists.
-      factionRows.filter(f => f.isActive && f.isDiscovered).map(f => f.name)
+      factionRows.filter(f => f.isActive && f.isDiscovered).map(f => f.name),
+      campaignId,
+      sceneId
     )
     if (classifications.length === 0) return []
 

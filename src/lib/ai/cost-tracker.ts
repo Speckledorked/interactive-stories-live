@@ -185,6 +185,24 @@ export class AICostTracker {
       // Log cost information
       console.log(`💰 AI Cost Tracking [${requestType}, ${this.model}]: $${cost.toFixed(5)} (${params.inputTokens} in + ${params.outputTokens} out) — campaign total $${updatedMetrics.totalCost.toFixed(4)}`)
 
+      // Durable, per-request, queryable-by-scene — what metered scene
+      // billing sums (resolutionBilling.ts). The aiMetrics update above is
+      // a rolling summary for the admin dashboard and isn't reliable for
+      // billing: requestHistory is capped at 50 entries shared across the
+      // whole campaign, so a busy campaign can evict a scene's own rows
+      // before it ends.
+      await prisma.aICostEntry.create({
+        data: {
+          campaignId: this.campaignId,
+          sceneId: params.sceneId,
+          requestType,
+          model: this.model,
+          inputTokens: params.inputTokens,
+          outputTokens: params.outputTokens,
+          costMicros: Math.round(cost * 1_000_000),
+        },
+      }).catch(err => console.error('Failed to record AICostEntry:', err))
+
     } catch (error) {
       console.error('Failed to record AI cost metrics:', error)
     }

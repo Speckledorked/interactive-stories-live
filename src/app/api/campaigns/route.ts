@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
     let generatedNpcs: GeneratedNPC[] | undefined
     let generatedLocations: GeneratedLocation[] | undefined
 
-    console.log('🌍 Generating world context (factions, capabilities, stat labels, fronts, NPCs, locations)...')
+    console.log('🌍 Generating world context (factions, capabilities, stat labels, fronts)...')
     const generated = await generateWorldFromTemplate(
       template?.id || null,
       title,
@@ -156,9 +156,7 @@ export async function POST(request: NextRequest) {
       generatedCapabilities = generated.capabilities
       generatedStatLabels = generated.statLabels
       generatedFronts = generated.fronts
-      generatedNpcs = generated.npcs
-      generatedLocations = generated.locations
-      console.log(`✅ World generated: ${generated.factions.length} unique factions, ${generated.fronts.length} fronts, ${generated.npcs.length} NPCs, ${generated.locations.length} locations`)
+      console.log(`✅ World generated: ${generated.factions.length} unique factions, ${generated.fronts.length} fronts`)
     } else if (!initialWorldSeed) {
       // AI failed and the user didn't write their own — fall back to
       // template defaults (or blank for custom).
@@ -166,10 +164,15 @@ export async function POST(request: NextRequest) {
       console.log('⚠️ World generation failed, using fallback defaults')
     }
 
-    // Second-stage generation: origin archetype cards + the corruption
-    // theme, grounded in the factions/capabilities generated above.
+    // Second-stage generation: origin archetype cards, the corruption
+    // theme, and notable NPCs/locations, grounded in the factions/
+    // capabilities generated above. A separate call from the one above on
+    // purpose — that one is already at its own token budget, and cramming
+    // more into it risks truncating its JSON response, which would zero
+    // out factions/capabilities/fronts too, not just this stage's content.
     // Fail-open — a campaign without these still works (blank creation
-    // wizard, no corruption track).
+    // wizard, no corruption track, wiki without NPCs/locations until play
+    // introduces them).
     let worldExtras: GeneratedWorldExtras | null = null
     try {
       worldExtras = await generateWorldExtras(
@@ -180,6 +183,10 @@ export async function POST(request: NextRequest) {
         generatedCapabilities || [],
         generatedStatLabels
       )
+      if (worldExtras) {
+        generatedNpcs = worldExtras.npcs
+        generatedLocations = worldExtras.locations
+      }
     } catch (extrasError) {
       console.error('World extras generation failed (non-critical):', extrasError)
     }

@@ -15,7 +15,7 @@ import { AI_MODELS } from './models'
 import { validateStats } from '@/lib/game/advancement'
 import { MAX_CORRUPTION, CorruptionTheme } from '@/lib/game/corruption'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
-import type { GeneratedCapability, GeneratedStatLabels } from './worldGenerator'
+import type { GeneratedCapability, GeneratedStatLabels, GeneratedNPC, GeneratedLocation } from './worldGenerator'
 
 export interface GeneratedArchetypeTie {
   kind: 'debt_owed_by_character' | 'debt_owed_to_character' | 'faction_standing'
@@ -44,6 +44,15 @@ export interface GeneratedArchetype {
 export interface GeneratedWorldExtras {
   archetypes: GeneratedArchetype[]
   corruptionTheme: CorruptionTheme | null
+  // Notable NPCs/locations, generated here rather than in the main
+  // world-gen call (worldGenerator.ts) — that call is already at its own
+  // token budget, and a truncated response there fails JSON.parse
+  // entirely, silently zeroing out factions/capabilities/fronts too, not
+  // just these. This call fails independently: losing npcs/locations to a
+  // truncated or failed response still leaves the world's load-bearing
+  // content (factions etc.) untouched.
+  npcs: GeneratedNPC[]
+  locations: GeneratedLocation[]
 }
 
 interface FactionForExtras {
@@ -79,7 +88,7 @@ Learnable systems (capability keys): ${capabilityKeys.length > 0 ? capabilityKey
 The 5 character stats in this world's vocabulary: ${statLine}
 ${loreDigest ? `\nCANON LORE — excerpts from this universe's actual source material. Highest authority: archetypes should be recognizable entry points into THIS canon (its real roles, orders, professions), and the corruption theme must be something this canon's fiction genuinely treats as power-at-a-cost — not something invented to sound thematic.\n<canon>\n${loreDigest}\n</canon>` : ''}
 
-Produce two things as JSON:
+Produce four things as JSON:
 
 {
   "archetypes": [
@@ -99,7 +108,25 @@ Produce two things as JSON:
     "description": "2-3 sentences: what this force is and why drawing on it costs the self",
     "stages": ["stage 1 (subtle)", "stage 2", "stage 3", "stage 4", "stage 5 (the point of no return)"],
     "bargain_guidance": "1-2 sentences on when a bargain fits this world's fiction"
-  }
+  },
+  "npcs": [
+    {
+      "name": "Full name",
+      "description": "1 sentence: who they are and why they matter",
+      "pronouns": "e.g. she/her, he/him, they/them",
+      "importance": 3,
+      "goals": "What they're after, 1 short phrase",
+      "faction_name": "exact name of a faction from the list above, ONLY if they belong to one — omit entirely otherwise"
+    }
+  ],
+  "locations": [
+    {
+      "name": "Place name",
+      "description": "1 sentence: what it is and why it matters",
+      "location_type": "town | city | wilderness | dungeon | building | landmark | etc",
+      "owner_faction_name": "exact name of a faction from the list above, ONLY if that faction controls it — omit entirely otherwise"
+    }
+  ]
 }
 
 Rules for archetypes:
@@ -113,7 +140,18 @@ Rules for corruption_theme — read carefully:
 - Corruption is what THIS universe's fiction treats as a devil's bargain: power that changes or spends the self in ways the character cannot control or undo (forbidden rites, a god's invasive influence, knowledge that erodes the knower)
 - NEVER define corruption by aesthetics. A dark/shadow/blood-affinity power set is NOT corruption — in many settings those are ordinary, even heroic, power sources. Do not pick something corrupting just because it sounds sinister
 - If this universe's fiction has NO genuine power-at-a-cost concept, return null for corruption_theme. Returning null is a correct, expected answer — do not invent a corruption mechanic for a world that doesn't have one
-- stages: exactly ${MAX_CORRUPTION} in-fiction descriptions of what each accumulated mark looks like from the inside, subtle to irreversible`
+- stages: exactly ${MAX_CORRUPTION} in-fiction descriptions of what each accumulated mark looks like from the inside, subtle to irreversible
+
+Rules for npcs:
+- ${loreDigest ? '3-6 notable individuals, drawn from the canon lore by name wherever it names any (leaders, rivals, mentors, notorious figures); invent only to fill gaps' : '2-4 notable individuals who already have a place in this world'}
+- importance: 4-5 only for figures who are genuinely pivotal (faction leaders, the face of a looming threat); 2-3 for everyone else
+- faction_name: only when clearly affiliated with one of the factions listed above — omit otherwise
+- Keep description and goals SHORT (one sentence / one short phrase) — this is a wiki stub, not a character sheet
+
+Rules for locations:
+- ${loreDigest ? '2-4 notable places, drawn from the canon lore by name wherever it names any (capitals, strongholds, landmarks); invent only to fill gaps' : '2-3 notable places already part of this world'}
+- owner_faction_name: only when a faction from the list above clearly controls it — omit otherwise
+- Keep description SHORT (one sentence) — this is a wiki stub, not a gazetteer entry`
 
   try {
     const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
@@ -132,7 +170,11 @@ Rules for corruption_theme — read carefully:
           { role: 'user', content: prompt }
         ],
         temperature: 0.9,
-        max_tokens: 1600,
+        // Archetypes are the heaviest item (gear/tie/backstory prompts x4)
+        // — npcs/locations add a bounded amount on top. Canon-grounded
+        // generation gets more headroom since named individuals/places
+        // pulled from real lore run longer than invented ones.
+        max_tokens: loreDigest ? 2600 : 2000,
         response_format: { type: 'json_object' }
       })
     })
@@ -226,10 +268,38 @@ Rules for corruption_theme — read carefully:
       }
     }
 
-    console.log(`✅ World extras: ${archetypes.length} archetypes, corruption theme: ${corruptionTheme ? corruptionTheme.name : 'none (universe has no such concept)'}`)
-    return { archetypes, corruptionTheme }
+    const npcs: GeneratedNPC[] = []
+    if (Array.isArray(raw.npcs)) {
+      for (const n of raw.npcs) {
+        if (!n?.name) continue
+        npcs.push({
+          name: String(n.name),
+          description: String(n.description || ''),
+          pronouns: n.pronouns ? String(n.pronouns) : undefined,
+          importance: Math.max(1, Math.min(5, Number(n.importance) || 2)),
+          goals: n.goals ? String(n.goals) : undefined,
+          factionName: n.faction_name ? String(n.faction_name) : undefined,
+        })
+      }
+    }
+
+    const locations: GeneratedLocation[] = []
+    if (Array.isArray(raw.locations)) {
+      for (const l of raw.locations) {
+        if (!l?.name) continue
+        locations.push({
+          name: String(l.name),
+          description: String(l.description || ''),
+          locationType: l.location_type ? String(l.location_type) : undefined,
+          ownerFactionName: l.owner_faction_name ? String(l.owner_faction_name) : undefined,
+        })
+      }
+    }
+
+    console.log(`✅ World extras: ${archetypes.length} archetypes, corruption theme: ${corruptionTheme ? corruptionTheme.name : 'none (universe has no such concept)'}, ${npcs.length} NPCs, ${locations.length} locations`)
+    return { archetypes, corruptionTheme, npcs, locations }
   } catch (err) {
-    console.error('World extras generation failed (archetypes/corruption skipped):', err)
+    console.error('World extras generation failed (archetypes/corruption/npcs/locations skipped):', err)
     return null
   }
 }

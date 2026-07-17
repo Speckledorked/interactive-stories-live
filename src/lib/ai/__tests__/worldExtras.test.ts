@@ -109,4 +109,56 @@ describe('generateWorldExtras', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
     expect(await generateWorldExtras('T', '', 'U', factions, capabilities)).toBeNull()
   })
+
+  it('parses and normalizes npcs, clamping importance and dropping unnamed entries', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({
+      archetypes: [],
+      corruption_theme: null,
+      npcs: [
+        { name: 'Lord Kessler', description: 'x', pronouns: 'he/him', importance: 9, goals: 'rule', faction_name: 'The Adventure Society' },
+        { name: 'A Nobody', description: 'y', importance: 0 },
+        { description: 'missing a name, dropped' },
+      ],
+    }))
+
+    const result = await generateWorldExtras('T', '', 'U', factions, capabilities)
+
+    expect(result?.npcs).toEqual([
+      { name: 'Lord Kessler', description: 'x', pronouns: 'he/him', importance: 5, goals: 'rule', factionName: 'The Adventure Society' },
+      { name: 'A Nobody', description: 'y', pronouns: undefined, importance: 2, goals: undefined, factionName: undefined },
+    ])
+  })
+
+  it('defaults to an empty npcs array when the response has none', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({ archetypes: [], corruption_theme: null }))
+    const result = await generateWorldExtras('T', '', 'U', factions, capabilities)
+    expect(result?.npcs).toEqual([])
+  })
+
+  it('parses and normalizes locations, dropping unnamed entries', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({
+      archetypes: [],
+      corruption_theme: null,
+      locations: [
+        { name: 'Ashveil Keep', description: 'x', location_type: 'stronghold', owner_faction_name: 'The Adventure Society' },
+        { description: 'missing a name, dropped' },
+      ],
+    }))
+
+    const result = await generateWorldExtras('T', '', 'U', factions, capabilities)
+
+    expect(result?.locations).toEqual([
+      { name: 'Ashveil Keep', description: 'x', locationType: 'stronghold', ownerFactionName: 'The Adventure Society' },
+    ])
+  })
+
+  it('defaults to an empty locations array when the response has none', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({ archetypes: [], corruption_theme: null }))
+    const result = await generateWorldExtras('T', '', 'U', factions, capabilities)
+    expect(result?.locations).toEqual([])
+  })
 })

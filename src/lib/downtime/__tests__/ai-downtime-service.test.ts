@@ -5,11 +5,17 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { findUniqueMock, findFirstMock, updateMock, activityCreateMock } = vi.hoisted(() => ({
+const {
+  findUniqueMock, findFirstMock, updateMock, activityCreateMock,
+  worldMetaFindUniqueMock, questCreateMock, applyDebtChangesMock,
+} = vi.hoisted(() => ({
   findUniqueMock: vi.fn(),
   findFirstMock: vi.fn(),
   updateMock: vi.fn(),
   activityCreateMock: vi.fn(),
+  worldMetaFindUniqueMock: vi.fn(),
+  questCreateMock: vi.fn(),
+  applyDebtChangesMock: vi.fn(),
 }))
 
 vi.mock('@prisma/client', () => ({
@@ -17,11 +23,17 @@ vi.mock('@prisma/client', () => ({
     character = { findUnique: findUniqueMock, update: updateMock }
     scene = { findFirst: findFirstMock }
     downtimeActivity = { create: activityCreateMock }
+    worldMeta = { findUnique: worldMetaFindUniqueMock }
+    quest = { create: questCreateMock }
   },
 }))
 
 vi.mock('@/lib/game/capabilities', () => ({
   summarizeCapabilities: vi.fn().mockReturnValue({ known: [], glimpsed: [], knownDomains: [] }),
+}))
+
+vi.mock('@/lib/game/debts', () => ({
+  applyDebtChanges: applyDebtChangesMock,
 }))
 
 import { AIDrivenDowntimeService } from '../ai-downtime-service'
@@ -121,13 +133,13 @@ describe('createDynamicActivity — gold cost', () => {
     vi.spyOn(AIDrivenDowntimeService as any, 'generateInitialEvents').mockResolvedValue(undefined)
   })
 
-  function stubInterpretation(gold: number) {
+  function stubInterpretation(costs: Record<string, unknown>) {
     return vi.spyOn(AIDrivenDowntimeService, 'interpretDowntimeActivity').mockResolvedValue({
       success: true,
       interpretation: {
         summary: 'Train at the local guild',
         estimatedDuration: 3,
-        costs: { gold, resources: [] },
+        costs,
         requirements: [],
         skillsInvolved: [],
         riskLevel: 'low',
@@ -140,7 +152,7 @@ describe('createDynamicActivity — gold cost', () => {
   }
 
   it('charges gold and creates the activity when affordable — previously nothing ever deducted it', async () => {
-    stubInterpretation(20)
+    stubInterpretation({ gold: 20 })
     findUniqueMock.mockResolvedValue({ resources: { gold: 50 } })
     updateMock.mockResolvedValue({})
 
@@ -154,7 +166,7 @@ describe('createDynamicActivity — gold cost', () => {
   })
 
   it('rejects the activity when the character cannot afford it, without creating it', async () => {
-    stubInterpretation(100)
+    stubInterpretation({ gold: 100 })
     findUniqueMock.mockResolvedValue({ resources: { gold: 10 } })
 
     await expect(
@@ -166,12 +178,110 @@ describe('createDynamicActivity — gold cost', () => {
   })
 
   it('skips the gold check entirely for free activities', async () => {
-    stubInterpretation(0)
+    stubInterpretation({ gold: 0 })
     findUniqueMock.mockResolvedValue({ resources: { gold: 0 } })
 
     await AIDrivenDowntimeService.createDynamicActivity('char1', 'I rest at the inn')
 
     expect(updateMock).not.toHaveBeenCalled()
     expect(activityCreateMock).toHaveBeenCalled()
+  })
+
+  it('charges consumed items from inventory', async () => {
+    stubInterpretation({ items: [{ name: 'Iron Ore', quantity: 2 }] })
+    findUniqueMock.mockResolvedValue({
+      resources: {},
+      inventory: { items: [{ id: 'i1', name: 'Iron Ore', quantity: 5 }] },
+    })
+    updateMock.mockResolvedValue({})
+
+    await AIDrivenDowntimeService.createDynamicActivity('char1', 'I forge a dagger')
+
+    expect(updateMock).toHaveBeenCalledWith({
+      where: { id: 'char1' },
+      data: { inventory: { items: [{ id: 'i1', name: 'Iron Ore', quantity: 3 }] } },
+    })
+  })
+
+  it('rejects when an item cost is unaffordable, case-insensitively matched, without creating the activity', async () => {
+    stubInterpretation({ items: [{ name: 'iron ore', quantity: 10 }] })
+    findUniqueMock.mockResolvedValue({
+      resources: {},
+      inventory: { items: [{ id: 'i1', name: 'Iron Ore', quantity: 2 }] },
+    })
+
+    await expect(
+      AIDrivenDowntimeService.createDynamicActivity('char1', 'I forge a dagger')
+    ).rejects.toThrow('Not enough')
+
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(activityCreateMock).not.toHaveBeenCalled()
+  })
+
+  it('removes an item entirely once its quantity is fully consumed', async () => {
+    stubInterpretation({ items: [{ name: 'Iron Ore', quantity: 5 }] })
+    findUniqueMock.mockResolvedValue({
+      resources: {},
+      inventory: { items: [{ id: 'i1', name: 'Iron Ore', quantity: 5 }] },
+    })
+    updateMock.mockResolvedValue({})
+
+    await AIDrivenDowntimeService.createDynamicActivity('char1', 'I forge a sword')
+
+    expect(updateMock).toHaveBeenCalledWith({
+      where: { id: 'char1' },
+      data: { inventory: { items: [] } },
+    })
+  })
+
+  it('incurs a debt as payment for a favor — never blocked by affordability', async () => {
+    stubInterpretation({
+      favor: { counterparty_name: 'Lord Kessler', counterparty_type: 'npc', description: 'Vouching for the character' },
+    })
+    findUniqueMock.mockResolvedValue({ name: 'Helios', campaignId: 'camp1', resources: {} })
+    worldMetaFindUniqueMock.mockResolvedValue({ currentTurnNumber: 5 })
+
+    const activity = await AIDrivenDowntimeService.createDynamicActivity('char1', 'I call in a favor for guild access')
+
+    expect(applyDebtChangesMock).toHaveBeenCalledWith(
+      expect.anything(),
+      'camp1',
+      'char1',
+      'Helios',
+      [expect.objectContaining({
+        counterparty_name: 'Lord Kessler',
+        direction: 'owed_by_character',
+        action: 'incur',
+      })],
+      5
+    )
+    expect(activityCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        requirements: expect.arrayContaining([expect.stringContaining('Lord Kessler')]),
+      }),
+    }))
+  })
+
+  it('spawns a real, tracked quest when the activity requires an external mission', async () => {
+    stubInterpretation({
+      requiresQuest: { name: 'Find the Ashenvale Ore', description: 'Track down rare ore', givenBy: null },
+    })
+    findUniqueMock.mockResolvedValue({ name: 'Helios', campaignId: 'camp1', resources: {} })
+    questCreateMock.mockResolvedValue({ id: 'quest1' })
+
+    await AIDrivenDowntimeService.createDynamicActivity('char1', 'I commission a masterwork blade')
+
+    expect(questCreateMock).toHaveBeenCalledWith({
+      data: {
+        campaignId: 'camp1',
+        name: 'Find the Ashenvale Ore',
+        description: 'Track down rare ore',
+        givenBy: null,
+        status: 'ACTIVE',
+      },
+    })
+    expect(activityCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ linkedQuestId: 'quest1' }),
+    }))
   })
 })

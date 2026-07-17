@@ -164,6 +164,26 @@ export function DynamicDowntimeManager({
     onAdvanceTime(characterId, days)
   }
 
+  // Costs are no longer just gold — pick apart whichever cost types this
+  // activity actually carries (gold, consumed items, a spent favor, a
+  // linked quest) so the preview and the activity card are both honest
+  // about everything that'll actually be charged, not just the gold part.
+  const formatDowntimeCosts = (costs: any): string[] => {
+    if (!costs) return []
+    const lines: string[] = []
+    if (costs.gold > 0) lines.push(`${costs.gold} gold`)
+    if (Array.isArray(costs.items) && costs.items.length > 0) {
+      lines.push(costs.items.map((i: any) => `${i.quantity}x ${i.name}`).join(', '))
+    }
+    if (costs.favor) {
+      lines.push(`A favor owed to ${costs.favor.counterparty_name}`)
+    }
+    if (costs.requiresQuest) {
+      lines.push(`Requires completing "${costs.requiresQuest.name}"`)
+    }
+    return lines
+  }
+
   // Get risk level color
   const getRiskColor = (riskLevel: string) => {
     switch (riskLevel) {
@@ -268,9 +288,9 @@ export function DynamicDowntimeManager({
                     <div className="space-y-2 text-sm">
                       <p><strong>Activity:</strong> {createModal.interpretation.summary}</p>
                       <p><strong>Duration:</strong> ~{createModal.interpretation.estimatedDuration} days</p>
-                      {createModal.interpretation.costs?.gold && createModal.interpretation.costs.gold > 0 && (
-                        <p><strong>Cost:</strong> {createModal.interpretation.costs.gold} gold</p>
-                      )}
+                      {formatDowntimeCosts(createModal.interpretation.costs).map((line, idx) => (
+                        <p key={idx}><strong>Cost:</strong> {line}</p>
+                      ))}
                       <p><strong>Risk Level:</strong>
                         <Badge className={`ml-2 ${getRiskColor(createModal.interpretation.riskLevel)}`}>
                           {createModal.interpretation.riskLevel}
@@ -457,14 +477,14 @@ export function DynamicDowntimeManager({
                   </div>
 
                   {/* Costs & Requirements */}
-                  {((activity.aiInterpretation.costs?.gold && activity.aiInterpretation.costs.gold > 0) || activity.aiInterpretation.requirements.length > 0) && (
+                  {(formatDowntimeCosts(activity.aiInterpretation.costs).length > 0 || activity.aiInterpretation.requirements.length > 0) && (
                     <div className="text-xs space-y-1">
-                      {activity.aiInterpretation.costs?.gold && activity.aiInterpretation.costs.gold > 0 && (
-                        <div className="flex items-center gap-1">
+                      {formatDowntimeCosts(activity.aiInterpretation.costs).map((line, idx) => (
+                        <div key={idx} className="flex items-center gap-1">
                           <Coins className="w-3 h-3 text-ember-400" />
-                          <span>Cost: {activity.aiInterpretation.costs.gold} gold</span>
+                          <span>Cost: {line}</span>
                         </div>
-                      )}
+                      ))}
                       {activity.aiInterpretation.skillsInvolved.length > 0 && (
                         <div>
                           <span className="font-medium">Skills: </span>

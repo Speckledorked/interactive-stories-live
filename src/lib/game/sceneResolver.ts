@@ -85,6 +85,13 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     throw new Error('Scene not found')
   }
 
+  // X-Card pause (see lib/safety/safety-service.ts) — enforced here rather
+  // than only at the route level since resolveScene has multiple entry
+  // points (end-scene route, the async resolution queue worker).
+  if (scene.isPaused) {
+    throw new Error('Scene is paused for a safety check-in. A GM must resume it before resolution can continue.')
+  }
+
   // Allow re-resolving a stuck RESOLVING scene
   if (scene.status === 'RESOLVING') {
     console.warn(`⚠️ Scene is already RESOLVING - this might be a stuck scene from a previous failed resolution`)

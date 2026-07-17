@@ -581,6 +581,28 @@ export default function StoryPage() {
     }
   }
 
+  const handleResumeScene = async (sceneId: string) => {
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/scenes/${sceneId}/resume`,
+        { method: 'POST' }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to resume scene')
+      }
+
+      setSuccess('Scene resumed.')
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resume scene')
+    }
+  }
+
   if (loading) {
     return (
       <TavernPage>
@@ -729,6 +751,11 @@ export default function StoryPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {scene.isPaused && (
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400">
+                            ✋ paused
+                          </span>
+                        )}
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           scene.status === 'AWAITING_ACTIONS'
                             ? 'bg-success-500/20 text-success-400'
@@ -749,6 +776,25 @@ export default function StoryPage() {
                         )}
                       </div>
                     </div>
+
+                    {scene.isPaused && (
+                      <div className="bg-red-900/20 border border-red-500/40 rounded-lg p-4 mb-4 flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-red-300 font-medium">This scene is paused for a safety check-in.</p>
+                          <p className="text-red-200/60 text-sm mt-1">
+                            {scene.pausedReason || 'A player used the X-Card.'} No new actions can be submitted until a GM resumes play.
+                          </p>
+                        </div>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleResumeScene(scene.id)}
+                            className="flex-shrink-0 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium transition-colors"
+                          >
+                            Resume Scene
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {scene.status === 'RESOLVING' && (
                       <AILoadingState type="resolution" />
@@ -866,7 +912,7 @@ export default function StoryPage() {
                       (it used to require clicking "Continue the scene" first,
                       which read as a dead end since neither button looked like
                       "take your turn"). */}
-                  {scene.status === 'AWAITING_ACTIONS' && !userHasSubmitted && selectedCharacterId && (
+                  {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && !userHasSubmitted && selectedCharacterId && (
                     <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
                       <div className="flex items-center justify-between gap-3 mb-4">
                         <h3 className="text-lg font-bold text-ember-100">Your Action</h3>
@@ -986,7 +1032,7 @@ export default function StoryPage() {
                   )}
 
                   {/* GM Controls (Admin Only) */}
-                  {scene.status === 'AWAITING_ACTIONS' && isAdmin && (() => {
+                  {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && isAdmin && (() => {
                     const participants = scene.participants as any
                     const hasDefinedParticipants = participants?.characterIds && participants.characterIds.length > 0
                     const submittedUserIds = new Set((scene.playerActions || []).map((a: any) => a.userId))

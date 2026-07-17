@@ -594,7 +594,6 @@ model Character {
   pendingBargain Json?
   conditions Json? // { conditions: [{ id, name, category, description, mechanicalEffect?, appliedAt? }] }
   moves      Json? // [{ id, name, trigger, description }] — rare, narratively-earned signature tricks (see lib/game/advancement.ts). Distinct from capabilities (skill-tree systems) and perks (repeated-pattern bonuses).
-  holds      Json? // Temporary holds/forward from moves
 
   // Organic growth tracking
   statUsage      Json? // { [statKey: string]: { uses: Int, successes: Int, failures: Int, lastGrowthTurn?: Int } } — lastGrowthTurn gates re-proposing a +1 within the same arc (see ARC_LENGTH_TURNS in lib/game/capabilities.ts)
@@ -1005,6 +1004,15 @@ model Scene {
   participants        Json?
   status              SceneStatus @default(AWAITING_ACTIONS)
   sceneResolutionText String?     @db.Text
+
+  // X-Card pause (see lib/safety/safety-service.ts pauseScene/resumeScene).
+  // Deliberately separate from SceneStatus rather than a PAUSED enum value —
+  // pausing can happen mid-AWAITING_ACTIONS or mid-RESOLVING and must
+  // survive either, so it's an orthogonal flag both the action-submission
+  // and resolution gates check, not a status transition.
+  isPaused     Boolean   @default(false)
+  pausedAt     DateTime?
+  pausedReason String?
 
   // PbtA scene tracking
   sceneType String? @default("dramatic") // "dramatic", "downtime", "combat"
@@ -1769,19 +1777,6 @@ model CampaignTutorialMode {
 // PHASE 25: SAFETY TOOLS & CONTENT MODERATION
 //
 
-enum ContentWarningType {
-  VIOLENCE
-  SEXUAL_CONTENT
-  GORE
-  HORROR
-  SUBSTANCE_ABUSE
-  MENTAL_HEALTH
-  DISCRIMINATION
-  DEATH
-  TRAUMA
-  CUSTOM
-}
-
 // Content-category taxonomy — what kind of content triggered the X-Card,
 // not what surface it appeared on (XCardUse.targetId already records the
 // specific message/scene/action id when that's known). Must stay in sync
@@ -1826,22 +1821,12 @@ model CampaignSafetySettings {
   pauseOnXCard      Boolean @default(true)
   xCardNotifyGMOnly Boolean @default(false)
 
-  // Content warnings
-  contentWarningsEnabled Boolean @default(true)
-  activeWarnings         Json    @default("[]") // Array of ContentWarningType
-
-  // Lines and Veils (pre-game safety discussion)
+  // Lines and Veils (pre-game safety discussion) — hard/soft content
+  // boundaries, enforced by feeding both into the <safety> prompt section
+  // (see lib/ai/worldState.ts, lib/ai/client.ts). Lines must never appear;
+  // veils may be implied but never detailed.
   lines String[] // Hard boundaries - will not be included
   veils String[] // Soft boundaries - will be implied, not detailed
-
-  // Session Zero settings
-  sessionZeroCompleted Boolean   @default(false)
-  sessionZeroDate      DateTime?
-  sessionZeroNotes     String?   @db.Text
-
-  // Content moderation
-  autoModeration  Boolean @default(false)
-  moderationLevel String  @default("medium") // low, medium, high
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

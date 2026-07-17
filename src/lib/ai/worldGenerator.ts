@@ -55,6 +55,31 @@ export interface GeneratedFront {
   sourceFactionName?: string
 }
 
+// Notable NPCs and locations the world already contains, so a freshly
+// created (or freshly reseeded) campaign's wiki has more than factions and
+// fronts to show — previously nothing populated these until actual play
+// narrated them into existence, which made even a fully lore-imported
+// campaign's wiki look empty until someone had already played a scene.
+export interface GeneratedNPC {
+  name: string
+  description: string
+  pronouns?: string
+  // 1-5, mirrors NPC.importance. >=4 marks a "major" NPC that enters the
+  // deterministic goal/schedule tick loop (see npcTick.ts) — reserved for
+  // figures canon or the fiction frames as genuinely pivotal, not every
+  // named background character.
+  importance: number
+  goals?: string
+  factionName?: string // exact name of a faction from the factions list, if affiliated
+}
+
+export interface GeneratedLocation {
+  name: string
+  description: string
+  locationType?: string
+  ownerFactionName?: string // exact name of a faction from the factions list, if controlled by one
+}
+
 interface GeneratedWorld {
   worldSeed: string
   factions: GeneratedFaction[]
@@ -63,6 +88,8 @@ interface GeneratedWorld {
   capabilities: GeneratedCapability[]
   statLabels?: GeneratedStatLabels
   fronts: GeneratedFront[]
+  npcs: GeneratedNPC[]
+  locations: GeneratedLocation[]
 }
 
 const GENRE_HINTS: Record<string, string> = {
@@ -154,6 +181,24 @@ Return JSON with this structure:
       "consequence": "1 sentence: what happens if nobody stops it in time",
       "source_faction_name": "exact name of a faction from the factions list above, ONLY if this threat is that faction's doing — omit entirely otherwise"
     }
+  ],
+  "npcs": [
+    {
+      "name": "Full name",
+      "description": "1-2 sentences: who they are and why they matter",
+      "pronouns": "e.g. she/her, he/him, they/them",
+      "importance": 3,
+      "goals": "What they're after, 1 sentence",
+      "faction_name": "exact name of a faction from the factions list above, ONLY if they belong to one — omit entirely otherwise"
+    }
+  ],
+  "locations": [
+    {
+      "name": "Place name",
+      "description": "1-2 sentences: what it is and why it matters",
+      "location_type": "town | city | wilderness | dungeon | building | landmark | etc",
+      "owner_faction_name": "exact name of a faction from the factions list above, ONLY if that faction controls it — omit entirely otherwise"
+    }
   ]
 }
 
@@ -170,6 +215,8 @@ Rules:
 - fronts: 1-3 concrete, escalating dangers already in motion — the kind of thing that gets visibly worse if nobody intervenes (not vague "evil is out there" flavor text). ${loreDigest ? 'Ground these in canon where the lore describes a real brewing conflict, threat, or crisis; invent only to fill gaps.' : ''}At least one should name a real source_faction_name from the factions list when the threat is that faction's own doing; others may be faction-free (a natural disaster, a supernatural phenomenon, a slow-building crisis nobody's causing on purpose)
 - category: "urgent" ticks forward reliably every world turn, "slow" only occasionally, "social" is the default pace — pick whichever fits how fast this danger should visibly escalate
 - max_ticks: 4-10, longer for slower-building threats
+- npcs: ${loreDigest ? '3-6 notable individuals, drawn from the canon lore by name wherever it names any (leaders, rivals, mentors, notorious figures); invent only to fill gaps' : '2-4 notable individuals who already have a place in this world'}. importance: 4-5 only for figures who are genuinely pivotal (faction leaders, the face of a front-style threat); 2-3 for everyone else. Give a faction_name only when they're clearly affiliated with one of the factions above
+- locations: ${loreDigest ? '2-4 notable places, drawn from the canon lore by name wherever it names any (capitals, strongholds, landmarks); invent only to fill gaps' : '2-3 notable places already part of this world'}. Give an owner_faction_name only when a faction from the list above clearly controls it
 - Make it feel like it belongs specifically to "${campaignTitle}"`
 
   try {
@@ -190,9 +237,9 @@ Rules:
         ],
         temperature: 0.95,
         // Canon-grounded generation allows up to 6 factions — give the
-        // response room so the JSON doesn't truncate mid-array. Fronts add
-        // a bounded amount on top regardless of lore.
-        max_tokens: loreDigest ? 1900 : 1300,
+        // response room so the JSON doesn't truncate mid-array. Fronts,
+        // NPCs, and locations add a bounded amount on top regardless of lore.
+        max_tokens: loreDigest ? 2700 : 2000,
         response_format: { type: 'json_object' }
       })
     })
@@ -278,8 +325,41 @@ Rules:
       }
     }
 
-    console.log(`✅ Generated unique world: ${factions.length} factions, ${capabilities.length} capabilities, ${fronts.length} fronts`)
-    return { worldSeed: String(raw.world_seed), factions, capabilities, statLabels, fronts }
+    // NPCs and locations are optional the same way fronts are — an
+    // older-style response, or the AI naming none, still produces a valid
+    // world. Without these the wiki has nothing but factions/fronts to show
+    // until actual play introduces anyone, even on a fully lore-imported
+    // campaign.
+    const npcs: GeneratedNPC[] = []
+    if (Array.isArray(raw.npcs)) {
+      for (const n of raw.npcs) {
+        if (!n?.name) continue
+        npcs.push({
+          name: String(n.name),
+          description: String(n.description || ''),
+          pronouns: n.pronouns ? String(n.pronouns) : undefined,
+          importance: Math.max(1, Math.min(5, Number(n.importance) || 2)),
+          goals: n.goals ? String(n.goals) : undefined,
+          factionName: n.faction_name ? String(n.faction_name) : undefined,
+        })
+      }
+    }
+
+    const locations: GeneratedLocation[] = []
+    if (Array.isArray(raw.locations)) {
+      for (const l of raw.locations) {
+        if (!l?.name) continue
+        locations.push({
+          name: String(l.name),
+          description: String(l.description || ''),
+          locationType: l.location_type ? String(l.location_type) : undefined,
+          ownerFactionName: l.owner_faction_name ? String(l.owner_faction_name) : undefined,
+        })
+      }
+    }
+
+    console.log(`✅ Generated unique world: ${factions.length} factions, ${capabilities.length} capabilities, ${fronts.length} fronts, ${npcs.length} NPCs, ${locations.length} locations`)
+    return { worldSeed: String(raw.world_seed), factions, capabilities, statLabels, fronts, npcs, locations }
 
   } catch (err) {
     console.error('World generation failed, using template defaults:', err)

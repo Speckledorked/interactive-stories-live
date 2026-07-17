@@ -7,8 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { CreateCampaignRequest, ErrorResponse } from '@/types/api'
-import { getTemplate, applyCampaignTemplate, createFactionsForCampaign } from '@/lib/templates/campaign-templates'
-import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels, GeneratedFront } from '@/lib/ai/worldGenerator'
+import { getTemplate, applyCampaignTemplate, createFactionsForCampaign, createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
+import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels, GeneratedFront, GeneratedNPC, GeneratedLocation } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 import { kickLoreImportJob } from '@/lib/lore/loreQueue'
@@ -139,8 +139,10 @@ export async function POST(request: NextRequest) {
     let generatedCapabilities: GeneratedCapability[] | undefined
     let generatedStatLabels: GeneratedStatLabels | undefined
     let generatedFronts: GeneratedFront[] | undefined
+    let generatedNpcs: GeneratedNPC[] | undefined
+    let generatedLocations: GeneratedLocation[] | undefined
 
-    console.log('🌍 Generating world context (factions, capabilities, stat labels, fronts)...')
+    console.log('🌍 Generating world context (factions, capabilities, stat labels, fronts, NPCs, locations)...')
     const generated = await generateWorldFromTemplate(
       template?.id || null,
       title,
@@ -154,7 +156,9 @@ export async function POST(request: NextRequest) {
       generatedCapabilities = generated.capabilities
       generatedStatLabels = generated.statLabels
       generatedFronts = generated.fronts
-      console.log(`✅ World generated: ${generated.factions.length} unique factions, ${generated.fronts.length} fronts`)
+      generatedNpcs = generated.npcs
+      generatedLocations = generated.locations
+      console.log(`✅ World generated: ${generated.factions.length} unique factions, ${generated.fronts.length} fronts, ${generated.npcs.length} NPCs, ${generated.locations.length} locations`)
     } else if (!initialWorldSeed) {
       // AI failed and the user didn't write their own — fall back to
       // template defaults (or blank for custom).
@@ -321,6 +325,20 @@ export async function POST(request: NextRequest) {
           })
         }
         console.log(`⏰ Seeded ${generatedFronts.length} AI-generated front-style threats`)
+      }
+
+      // Notable NPCs and locations: previously nothing seeded these at
+      // creation, so the wiki stayed empty of characters/places (only
+      // factions/fronts existed) until actual play introduced anyone —
+      // even on a campaign built from a full lore import. factionName/
+      // ownerFactionName resolve against the factions just created above.
+      if (generatedNpcs && generatedNpcs.length > 0) {
+        await createNPCsForCampaign(newCampaign.id, tx, generatedNpcs)
+        console.log(`🧑‍🤝‍🧑 Seeded ${generatedNpcs.length} AI-generated NPCs`)
+      }
+      if (generatedLocations && generatedLocations.length > 0) {
+        await createLocationsForCampaign(newCampaign.id, tx, generatedLocations)
+        console.log(`🗺️ Seeded ${generatedLocations.length} AI-generated locations`)
       }
 
       return newCampaign

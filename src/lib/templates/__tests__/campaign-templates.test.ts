@@ -1,6 +1,14 @@
 // src/lib/templates/__tests__/campaign-templates.test.ts
 import { describe, it, expect, vi } from 'vitest'
-import { createFactionsForCampaign, applyCampaignTemplate, type GeneratedFactionOverride } from '../campaign-templates'
+import {
+  createFactionsForCampaign,
+  createNPCsForCampaign,
+  createLocationsForCampaign,
+  applyCampaignTemplate,
+  type GeneratedFactionOverride,
+  type GeneratedNPCOverride,
+  type GeneratedLocationOverride,
+} from '../campaign-templates'
 
 function makeFaction(overrides: Partial<GeneratedFactionOverride> = {}): GeneratedFactionOverride {
   return {
@@ -24,6 +32,28 @@ function makeMockPrisma() {
     move: { create: vi.fn().mockResolvedValue({}) },
     clock: { create: vi.fn().mockResolvedValue({}) },
     campaignCapability: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    nPC: { create: vi.fn().mockResolvedValue({}) },
+    location: { create: vi.fn().mockResolvedValue({}) },
+  }
+}
+
+function makeNpc(overrides: Partial<GeneratedNPCOverride> = {}): GeneratedNPCOverride {
+  return {
+    name: 'Lord Kessler',
+    description: 'A ruthless magnate.',
+    pronouns: 'he/him',
+    importance: 3,
+    goals: 'Expand his holdings',
+    ...overrides,
+  }
+}
+
+function makeLocation(overrides: Partial<GeneratedLocationOverride> = {}): GeneratedLocationOverride {
+  return {
+    name: 'Ashveil Keep',
+    description: 'A fortified stronghold.',
+    locationType: 'stronghold',
+    ...overrides,
   }
 }
 
@@ -49,6 +79,77 @@ describe('createFactionsForCampaign', () => {
     await createFactionsForCampaign('camp1', prisma, [makeFaction({ currentPlan: undefined })])
     expect(prisma.faction.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ currentPlan: null }),
+    })
+  })
+})
+
+describe('createNPCsForCampaign', () => {
+  it('creates one NPC row per given npc', async () => {
+    const prisma = makeMockPrisma()
+    await createNPCsForCampaign('camp1', prisma, [makeNpc({ name: 'A' }), makeNpc({ name: 'B' })])
+    expect(prisma.nPC.create).toHaveBeenCalledTimes(2)
+    expect(prisma.nPC.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ campaignId: 'camp1', name: 'A' }),
+    })
+  })
+
+  it('is a no-op for an empty npc list', async () => {
+    const prisma = makeMockPrisma()
+    await createNPCsForCampaign('camp1', prisma, [])
+    expect(prisma.nPC.create).not.toHaveBeenCalled()
+  })
+
+  it('resolves factionName to a factionId and MEMBER role when a match exists', async () => {
+    const prisma = makeMockPrisma()
+    prisma.faction.findFirst.mockResolvedValue({ id: 'fac1' })
+    await createNPCsForCampaign('camp1', prisma, [makeNpc({ factionName: 'The Iron Company' })])
+    expect(prisma.faction.findFirst).toHaveBeenCalledWith({
+      where: { campaignId: 'camp1', name: { equals: 'The Iron Company', mode: 'insensitive' } },
+      select: { id: true },
+    })
+    expect(prisma.nPC.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ factionId: 'fac1', factionRole: 'MEMBER' }),
+    })
+  })
+
+  it('leaves factionId/factionRole unset when the faction name has no match', async () => {
+    const prisma = makeMockPrisma()
+    prisma.faction.findFirst.mockResolvedValue(null)
+    await createNPCsForCampaign('camp1', prisma, [makeNpc({ factionName: 'Nobody' })])
+    expect(prisma.nPC.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ factionId: undefined, factionRole: undefined }),
+    })
+  })
+
+  it('does not look up a faction when factionName is absent', async () => {
+    const prisma = makeMockPrisma()
+    await createNPCsForCampaign('camp1', prisma, [makeNpc({ factionName: undefined })])
+    expect(prisma.faction.findFirst).not.toHaveBeenCalled()
+  })
+})
+
+describe('createLocationsForCampaign', () => {
+  it('creates one Location row per given location', async () => {
+    const prisma = makeMockPrisma()
+    await createLocationsForCampaign('camp1', prisma, [makeLocation({ name: 'A' }), makeLocation({ name: 'B' })])
+    expect(prisma.location.create).toHaveBeenCalledTimes(2)
+    expect(prisma.location.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ campaignId: 'camp1', name: 'A' }),
+    })
+  })
+
+  it('is a no-op for an empty location list', async () => {
+    const prisma = makeMockPrisma()
+    await createLocationsForCampaign('camp1', prisma, [])
+    expect(prisma.location.create).not.toHaveBeenCalled()
+  })
+
+  it('resolves ownerFactionName to an ownerFactionId when a match exists', async () => {
+    const prisma = makeMockPrisma()
+    prisma.faction.findFirst.mockResolvedValue({ id: 'fac1' })
+    await createLocationsForCampaign('camp1', prisma, [makeLocation({ ownerFactionName: 'The Iron Company' })])
+    expect(prisma.location.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ ownerFactionId: 'fac1' }),
     })
   })
 })

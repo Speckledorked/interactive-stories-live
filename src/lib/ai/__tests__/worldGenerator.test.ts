@@ -104,6 +104,62 @@ describe('generateWorldFromTemplate', () => {
     expect(result?.fronts).toEqual([])
   })
 
+  it('parses and normalizes npcs, clamping importance and dropping unnamed entries', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({
+      world_seed: 'seed',
+      factions: [{ name: 'The Iron Company', description: 'x', goals: 'y', current_plan: 'z' }],
+      npcs: [
+        { name: 'Lord Kessler', description: 'x', pronouns: 'he/him', importance: 9, goals: 'rule', faction_name: 'The Iron Company' },
+        { name: 'A Nobody', description: 'y', importance: 0 },
+        { description: 'missing a name, dropped' },
+      ],
+    }))
+
+    const result = await generateWorldFromTemplate('pbta-fantasy', 'Title', '')
+
+    expect(result?.npcs).toEqual([
+      { name: 'Lord Kessler', description: 'x', pronouns: 'he/him', importance: 5, goals: 'rule', factionName: 'The Iron Company' },
+      { name: 'A Nobody', description: 'y', pronouns: undefined, importance: 2, goals: undefined, factionName: undefined },
+    ])
+  })
+
+  it('defaults to an empty npcs array when the response has none', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({ world_seed: 'seed', factions: [] }))
+
+    const result = await generateWorldFromTemplate('pbta-fantasy', 'Title', '')
+
+    expect(result?.npcs).toEqual([])
+  })
+
+  it('parses and normalizes locations, dropping unnamed entries', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({
+      world_seed: 'seed',
+      factions: [{ name: 'The Iron Company', description: 'x', goals: 'y', current_plan: 'z' }],
+      locations: [
+        { name: 'Ashveil Keep', description: 'x', location_type: 'stronghold', owner_faction_name: 'The Iron Company' },
+        { description: 'missing a name, dropped' },
+      ],
+    }))
+
+    const result = await generateWorldFromTemplate('pbta-fantasy', 'Title', '')
+
+    expect(result?.locations).toEqual([
+      { name: 'Ashveil Keep', description: 'x', locationType: 'stronghold', ownerFactionName: 'The Iron Company' },
+    ])
+  })
+
+  it('defaults to an empty locations array when the response has none', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({ world_seed: 'seed', factions: [] }))
+
+    const result = await generateWorldFromTemplate('pbta-fantasy', 'Title', '')
+
+    expect(result?.locations).toEqual([])
+  })
+
   it('returns null when the response is missing required fields', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
     vi.stubGlobal('fetch', mockCompletion({ factions: [] }))

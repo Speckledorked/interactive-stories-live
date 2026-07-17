@@ -16,7 +16,8 @@ import { internalJobSecret } from '@/lib/game/resolutionQueue'
 import { reportError } from '@/lib/monitoring'
 import { getAppUrl } from '@/lib/appUrl'
 import { runLoreImport } from './loreImportService'
-import { reseedWorldFromLore, clearPendingWorldSeed } from './reseedWorld'
+import { clearPendingWorldSeed } from './reseedWorld'
+import { kickReseedJob } from './reseedQueue'
 import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
 
 export const MAX_ATTEMPTS = 3
@@ -96,24 +97,27 @@ export async function processLoreImportJob(jobId: string): Promise<ProcessResult
     // Campaigns created WITH a lore source finish becoming their canon
     // world here: the import that was still crawling when the campaign was
     // born now reseeds the provisional generated world (fresh-mode replace
-    // while no characters exist — see lib/lore/reseedWorld.ts). Best-effort:
-    // a reseed failure must not fail the import, and the admin button can
-    // always re-run it.
+    // while no characters exist — see lib/lore/reseedWorld.ts). Runs as its
+    // own ReseedJob (lib/lore/reseedQueue.ts) rather than inline: it makes
+    // up to two more sequential AI calls on top of whatever budget this
+    // import invocation already spent crawling, real timeout risk for a
+    // large source. releasesPlayLock: true means that job's own completion
+    // (success, clean failure, or exhausted retries) takes the lock off —
+    // never held hostage by a stuck reseed, and the campaign continues on
+    // whichever world it has in the meantime.
     if (job.autoReseedOnComplete) {
       try {
-        const result = await reseedWorldFromLore(job.campaignId)
-        if (!result.ok) {
-          console.warn(`⚠️ Auto-reseed after lore import ${jobId} did not run: ${result.reason}`)
-        }
+        const reseedJob = await prisma.reseedJob.create({
+          data: { campaignId: job.campaignId, releasesPlayLock: true },
+        })
+        await kickReseedJob(reseedJob.id)
       } catch (reseedError) {
-        console.error(`❌ Auto-reseed after lore import ${jobId} failed:`, reseedError)
+        console.error(`❌ Failed to start auto-reseed after lore import ${jobId}:`, reseedError)
         await reportError('lore-auto-reseed-failed', reseedError, {
           jobId, campaignId: job.campaignId,
         })
-      } finally {
-        // Whatever happened above, the play lock comes off: the campaign
-        // continues on whichever world it has (canon on success, the
-        // provisional one otherwise — the admin button can re-run).
+        // No ReseedJob exists to own releasing the lock — do it directly
+        // so a failed kick can't strand the campaign locked forever.
         await clearPendingWorldSeed(job.campaignId).catch(e =>
           console.error('Failed to clear pendingWorldSeed:', e)
         )

@@ -27,6 +27,64 @@ interface LoreJob {
   finishedAt: string | null
 }
 
+interface ReseedSummary {
+  fresh: boolean
+  loreEntriesSampled: number
+  loreEntriesTotal: number
+  factionsAdded: string[]
+  factionsRetired: string[]
+  factionsAlreadyPresent: number
+  capabilitiesAdded: string[]
+  frontsAdded: string[]
+  npcsAdded: string[]
+  locationsAdded: string[]
+  statLabelsSet: boolean
+  corruptionThemeSet: boolean
+  archetypesReplaced: number
+  archetypesSkipped: boolean
+}
+
+interface ReseedJob {
+  id: string
+  status: JobStatus
+  lastError: string | null
+  summary: ReseedSummary | null
+  createdAt: string
+  finishedAt: string | null
+}
+
+function formatReseedSummary(s: ReseedSummary): string {
+  const parts: string[] = []
+  if (s.fresh) parts.push('Fresh campaign — generated world replaced by canon')
+  parts.push(
+    s.factionsAdded.length > 0
+      ? `Added ${s.factionsAdded.length} faction${s.factionsAdded.length === 1 ? '' : 's'}: ${s.factionsAdded.join(', ')}`
+      : 'No new factions (canon ones may already exist)'
+  )
+  if (s.factionsRetired?.length > 0) {
+    parts.push(`Retired ${s.factionsRetired.length} non-canon faction${s.factionsRetired.length === 1 ? '' : 's'}: ${s.factionsRetired.join(', ')}`)
+  }
+  parts.push(
+    s.capabilitiesAdded.length > 0
+      ? `Added ${s.capabilitiesAdded.length} learnable system${s.capabilitiesAdded.length === 1 ? '' : 's'}: ${s.capabilitiesAdded.join(', ')}`
+      : 'No new learnable systems'
+  )
+  if (s.frontsAdded?.length > 0) {
+    parts.push(`Added ${s.frontsAdded.length} front-style threat${s.frontsAdded.length === 1 ? '' : 's'}: ${s.frontsAdded.join(', ')}`)
+  }
+  if (s.npcsAdded?.length > 0) {
+    parts.push(`Added ${s.npcsAdded.length} NPC${s.npcsAdded.length === 1 ? '' : 's'}: ${s.npcsAdded.join(', ')}`)
+  }
+  if (s.locationsAdded?.length > 0) {
+    parts.push(`Added ${s.locationsAdded.length} location${s.locationsAdded.length === 1 ? '' : 's'}: ${s.locationsAdded.join(', ')}`)
+  }
+  if (s.statLabelsSet) parts.push('Stat labels set from canon')
+  if (s.corruptionThemeSet) parts.push('Corruption theme set from canon')
+  if (s.archetypesReplaced > 0) parts.push(`${s.archetypesReplaced} origin archetypes regenerated from canon`)
+  parts.push(`(grounded in ${s.loreEntriesSampled} of ${s.loreEntriesTotal} imported lore entries)`)
+  return parts.join('. ')
+}
+
 const SOURCE_TABS: Array<{ value: SourceType; label: string }> = [
   { value: 'PASTE', label: 'Paste Text' },
   { value: 'URL', label: 'Single Page' },
@@ -63,8 +121,23 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
     }
   }
 
+  const [reseedJob, setReseedJob] = useState<ReseedJob | null>(null)
+  const reseedPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const fetchReseedJob = async () => {
+    try {
+      const res = await authenticatedFetch(`/api/campaigns/${campaignId}/reseed-from-lore`)
+      if (!res.ok) return
+      const data = await res.json()
+      setReseedJob(data.job || null)
+    } catch {
+      // best-effort — the poll loop (or the next page load) will retry
+    }
+  }
+
   useEffect(() => {
     fetchJobs()
+    fetchReseedJob()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId])
 
@@ -84,6 +157,23 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobs])
+
+  useEffect(() => {
+    const isLive = reseedJob?.status === 'PENDING' || reseedJob?.status === 'RUNNING'
+    if (isLive && !reseedPollRef.current) {
+      reseedPollRef.current = setInterval(fetchReseedJob, POLL_INTERVAL_MS)
+    } else if (!isLive && reseedPollRef.current) {
+      clearInterval(reseedPollRef.current)
+      reseedPollRef.current = null
+    }
+    return () => {
+      if (reseedPollRef.current) {
+        clearInterval(reseedPollRef.current)
+        reseedPollRef.current = null
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reseedJob?.status])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -123,9 +213,10 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
     }
   }
 
-  const [reseeding, setReseeding] = useState(false)
-  const [reseedResult, setReseedResult] = useState<string | null>(null)
-  const [reseedError, setReseedError] = useState<string | null>(null)
+  const [reseedStarting, setReseedStarting] = useState(false)
+  const [reseedStartError, setReseedStartError] = useState<string | null>(null)
+
+  const reseedInFlight = reseedStarting || reseedJob?.status === 'PENDING' || reseedJob?.status === 'RUNNING'
 
   const handleReseed = async () => {
     if (!confirm(
@@ -134,41 +225,17 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
       'by the canon one (non-canon factions are retired). Once characters exist, ' +
       'canon factions and systems are only ADDED — nothing in play is touched.'
     )) return
-    setReseeding(true)
-    setReseedResult(null)
-    setReseedError(null)
+    setReseedStarting(true)
+    setReseedStartError(null)
     try {
       const res = await authenticatedFetch(`/api/campaigns/${campaignId}/reseed-from-lore`, { method: 'POST' })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Reseed failed')
-
-      const parts: string[] = []
-      if (data.fresh) parts.push('Fresh campaign — generated world replaced by canon')
-      parts.push(
-        data.factionsAdded.length > 0
-          ? `Added ${data.factionsAdded.length} faction${data.factionsAdded.length === 1 ? '' : 's'}: ${data.factionsAdded.join(', ')}`
-          : 'No new factions (canon ones may already exist)'
-      )
-      if (data.factionsRetired?.length > 0) {
-        parts.push(`Retired ${data.factionsRetired.length} non-canon faction${data.factionsRetired.length === 1 ? '' : 's'}: ${data.factionsRetired.join(', ')}`)
-      }
-      parts.push(
-        data.capabilitiesAdded.length > 0
-          ? `Added ${data.capabilitiesAdded.length} learnable system${data.capabilitiesAdded.length === 1 ? '' : 's'}: ${data.capabilitiesAdded.join(', ')}`
-          : 'No new learnable systems'
-      )
-      if (data.frontsAdded?.length > 0) {
-        parts.push(`Added ${data.frontsAdded.length} front-style threat${data.frontsAdded.length === 1 ? '' : 's'}: ${data.frontsAdded.join(', ')}`)
-      }
-      if (data.statLabelsSet) parts.push('Stat labels set from canon')
-      if (data.corruptionThemeSet) parts.push('Corruption theme set from canon')
-      if (data.archetypesReplaced > 0) parts.push(`${data.archetypesReplaced} origin archetypes regenerated from canon`)
-      parts.push(`(grounded in ${data.loreEntriesSampled} of ${data.loreEntriesTotal} imported lore entries)`)
-      setReseedResult(parts.join('. '))
+      if (!res.ok) throw new Error(data.error || 'Failed to start reseed')
+      setReseedJob(data.job)
     } catch (err) {
-      setReseedError(err instanceof Error ? err.message : 'Reseed failed')
+      setReseedStartError(err instanceof Error ? err.message : 'Failed to start reseed')
     } finally {
-      setReseeding(false)
+      setReseedStarting(false)
     }
   }
 
@@ -271,16 +338,26 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
         <button
           type="button"
           onClick={handleReseed}
-          disabled={reseeding || jobs.every(j => j.status !== 'COMPLETED')}
+          disabled={reseedInFlight || jobs.every(j => j.status !== 'COMPLETED')}
           className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
         >
-          {reseeding ? 'Reseeding world…' : 'Reseed world from imported lore'}
+          {reseedInFlight ? 'Reseeding world…' : 'Reseed world from imported lore'}
         </button>
         {jobs.length > 0 && jobs.every(j => j.status !== 'COMPLETED') && (
           <p className="text-xs text-ember-400/50 mt-2">Available once an import has completed.</p>
         )}
-        {reseedResult && <p className="text-sm text-success-400 mt-3">{reseedResult}</p>}
-        {reseedError && <p className="text-sm text-red-400 mt-3">{reseedError}</p>}
+        {reseedInFlight && (
+          <p className="text-xs text-ember-300/60 mt-3">
+            Running in the background — this page checks in every few seconds, safe to navigate away and come back.
+          </p>
+        )}
+        {reseedStartError && <p className="text-sm text-red-400 mt-3">{reseedStartError}</p>}
+        {!reseedInFlight && reseedJob?.status === 'COMPLETED' && reseedJob.summary && (
+          <p className="text-sm text-success-400 mt-3">{formatReseedSummary(reseedJob.summary)}</p>
+        )}
+        {!reseedInFlight && reseedJob?.status === 'FAILED' && (
+          <p className="text-sm text-red-400 mt-3">{reseedJob.lastError || 'Reseed failed'}</p>
+        )}
       </div>
 
       <div className="space-y-3">

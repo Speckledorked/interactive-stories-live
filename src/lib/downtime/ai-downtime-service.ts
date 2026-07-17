@@ -517,6 +517,52 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
     const results = []
 
     for (const activity of activeActivities) {
+      // costs.requiresQuest (see ai-downtime-service.ts's DowntimeCosts)
+      // spawned a real, linked Quest — the activity can't actually finish
+      // until that quest resolves, however many days pass. A failed/
+      // abandoned quest fails the activity outright rather than leaving it
+      // stalled forever with no way to close it.
+      if (activity.linkedQuestId) {
+        const quest = await prisma.quest.findUnique({
+          where: { id: activity.linkedQuestId },
+          select: { status: true, name: true },
+        })
+        if (quest && (quest.status === 'FAILED' || quest.status === 'ABANDONED')) {
+          await prisma.downtimeActivity.update({
+            where: { id: activity.id },
+            data: { status: 'FAILED', completedAt: new Date() },
+          })
+          results.push({
+            activityId: activity.id,
+            activityName: activity.summary,
+            completed: true,
+            outcomes: { primaryOutcome: `Fell through — the linked quest "${quest.name}" was ${quest.status.toLowerCase()}.` },
+          })
+          continue
+        }
+        if (quest && quest.status === 'ACTIVE') {
+          // Blocked on the quest: let days (and their events) still pass,
+          // but never let the activity actually cross the finish line.
+          const blockedDay = Math.min(activity.currentDay + days, activity.estimatedDays - 1)
+          await prisma.downtimeActivity.update({
+            where: { id: activity.id },
+            data: { currentDay: Math.max(activity.currentDay, blockedDay) },
+          })
+          for (let day = activity.currentDay + 1; day <= blockedDay; day++) {
+            if (Math.random() < 0.4) {
+              const aiInterpretation = (activity.outcomes as any)?.aiInterpretation || {}
+              const event = await this.generateDynamicEvent(activity.id, day, aiInterpretation, null, null)
+              if (event) {
+                results.push({ activityId: activity.id, activityName: activity.summary, day, event })
+              }
+            }
+          }
+          continue
+        }
+        // quest.status === 'COMPLETED' (or the quest was somehow deleted)
+        // falls through to normal progress/completion below.
+      }
+
       const newCurrentDay = Math.min(
         activity.currentDay + days,
         activity.estimatedDays

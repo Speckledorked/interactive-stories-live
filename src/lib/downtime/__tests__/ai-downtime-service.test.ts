@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 const {
   findUniqueMock, findFirstMock, updateMock, activityCreateMock,
   worldMetaFindUniqueMock, questCreateMock, applyDebtChangesMock,
+  activityFindManyMock, activityUpdateMock, questFindUniqueMock,
 } = vi.hoisted(() => ({
   findUniqueMock: vi.fn(),
   findFirstMock: vi.fn(),
@@ -16,15 +17,18 @@ const {
   worldMetaFindUniqueMock: vi.fn(),
   questCreateMock: vi.fn(),
   applyDebtChangesMock: vi.fn(),
+  activityFindManyMock: vi.fn(),
+  activityUpdateMock: vi.fn(),
+  questFindUniqueMock: vi.fn(),
 }))
 
 vi.mock('@prisma/client', () => ({
   PrismaClient: class {
     character = { findUnique: findUniqueMock, update: updateMock }
     scene = { findFirst: findFirstMock }
-    downtimeActivity = { create: activityCreateMock }
+    downtimeActivity = { create: activityCreateMock, findMany: activityFindManyMock, update: activityUpdateMock }
     worldMeta = { findUnique: worldMetaFindUniqueMock }
-    quest = { create: questCreateMock }
+    quest = { create: questCreateMock, findUnique: questFindUniqueMock }
   },
 }))
 
@@ -283,5 +287,95 @@ describe('createDynamicActivity — gold cost', () => {
     expect(activityCreateMock).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ linkedQuestId: 'quest1' }),
     }))
+  })
+})
+
+describe('advanceDynamicDowntime — quest-gated activities', () => {
+  function baseActivity(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'activity1',
+      characterId: 'char1',
+      summary: 'Commission a masterwork blade',
+      description: 'Commission a masterwork blade',
+      currentDay: 0,
+      estimatedDays: 3,
+      linkedQuestId: 'quest1',
+      outcomes: { aiInterpretation: { skillsInvolved: [] } },
+      events: [],
+      ...overrides,
+    }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    activityUpdateMock.mockResolvedValue({})
+    // Event/outcome generation is its own AI pipeline, out of scope for
+    // gating logic — stubbed deterministic so day-advancement is testable
+    // without a real completion/event roll.
+    vi.spyOn(AIDrivenDowntimeService, 'generateDynamicEvent').mockResolvedValue(null)
+    vi.spyOn(AIDrivenDowntimeService, 'generateDynamicOutcomes').mockResolvedValue({ primaryOutcome: 'Done' } as any)
+  })
+
+  it('blocks completion while the linked quest is still active, even once all days have passed', async () => {
+    activityFindManyMock.mockResolvedValue([baseActivity({ currentDay: 3, estimatedDays: 3 })])
+    questFindUniqueMock.mockResolvedValue({ status: 'ACTIVE', name: 'Find the Ashenvale Ore' })
+
+    const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(activityUpdateMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) })
+    )
+    expect(results.some((r: any) => r.completed)).toBe(false)
+  })
+
+  it('lets days (and their events) still advance while blocked, capped just short of completion', async () => {
+    activityFindManyMock.mockResolvedValue([baseActivity({ currentDay: 0, estimatedDays: 3 })])
+    questFindUniqueMock.mockResolvedValue({ status: 'ACTIVE', name: 'Find the Ashenvale Ore' })
+
+    await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 5)
+
+    expect(activityUpdateMock).toHaveBeenCalledWith({
+      where: { id: 'activity1' },
+      data: { currentDay: 2 }, // estimatedDays - 1, never reaches 3
+    })
+  })
+
+  it('completes normally once the linked quest resolves', async () => {
+    activityFindManyMock.mockResolvedValue([baseActivity({ currentDay: 2, estimatedDays: 3 })])
+    questFindUniqueMock.mockResolvedValue({ status: 'COMPLETED', name: 'Find the Ashenvale Ore' })
+
+    const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(activityUpdateMock).toHaveBeenCalledWith({
+      where: { id: 'activity1' },
+      data: { currentDay: 3, status: 'COMPLETED', completedAt: expect.any(Date) },
+    })
+    expect(results.some((r: any) => r.completed)).toBe(true)
+  })
+
+  it('fails the activity outright when the linked quest fails', async () => {
+    activityFindManyMock.mockResolvedValue([baseActivity()])
+    questFindUniqueMock.mockResolvedValue({ status: 'FAILED', name: 'Find the Ashenvale Ore' })
+
+    const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(activityUpdateMock).toHaveBeenCalledWith({
+      where: { id: 'activity1' },
+      data: { status: 'FAILED', completedAt: expect.any(Date) },
+    })
+    expect(results[0]).toMatchObject({ completed: true })
+    expect(results[0].outcomes.primaryOutcome).toContain('failed')
+  })
+
+  it('activities without a linked quest are unaffected', async () => {
+    activityFindManyMock.mockResolvedValue([baseActivity({ linkedQuestId: null, currentDay: 2, estimatedDays: 3 })])
+
+    await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(questFindUniqueMock).not.toHaveBeenCalled()
+    expect(activityUpdateMock).toHaveBeenCalledWith({
+      where: { id: 'activity1' },
+      data: { currentDay: 3, status: 'COMPLETED', completedAt: expect.any(Date) },
+    })
   })
 })

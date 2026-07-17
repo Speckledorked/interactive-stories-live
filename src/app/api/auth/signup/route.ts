@@ -8,6 +8,12 @@ import { hashPassword } from '@/lib/password'
 import { createToken } from '@/lib/auth'
 import { SignupRequest, AuthResponse, ErrorResponse } from '@/types/api'
 import { recordEvent } from '@/lib/analytics/events'
+import { addFunds } from '@/lib/payment/service'
+
+// One-time welcome credit so a new signup can actually play a scene
+// without funding a balance first — without this, balance defaults to 0
+// and the activation funnel dead-ends at the very first paywall.
+const WELCOME_CREDIT_CENTS = 100
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,6 +60,14 @@ export async function POST(request: NextRequest) {
       await EmailService.sendVerificationEmail(email, emailVerifyToken)
     } catch (emailError) {
       console.error('Verification email failed (non-critical):', emailError)
+    }
+
+    // Best-effort welcome credit — same reasoning as the email above: a
+    // funding hiccup must not fail signup itself, just leave balance at 0.
+    try {
+      await addFunds(user.id, WELCOME_CREDIT_CENTS, 'Welcome credit — your first scene is on us')
+    } catch (creditError) {
+      console.error('Welcome credit failed (non-critical):', creditError)
     }
 
     await recordEvent('SIGNUP', { userId: user.id })

@@ -60,6 +60,15 @@ enum NotificationType {
   SCENE_RESOLVED
   AI_RESPONSE_READY
   WORLD_EVENT
+  // A friend request/acceptance previously hijacked CAMPAIGN_INVITE ("no
+  // FRIEND_REQUEST yet" — see notification-service.ts) which meant real
+  // campaign-invite acceptance (join/[token]/route.ts) never notified
+  // anyone. Splitting these frees CAMPAIGN_INVITE for its real purpose.
+  FRIEND_REQUEST
+  // X-Card uses previously hijacked SCENE_CHANGE ("closest existing type"
+  // — see safety-service.ts) for the same reason. A dedicated type keeps
+  // safety alerts distinguishable from an eventual real SCENE_CHANGE use.
+  SAFETY_ALERT
 }
 
 enum NotificationStatus {
@@ -210,6 +219,13 @@ model Campaign {
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  // Read-only public share link for the story log — off by default (a GM
+  // opts in from the admin Settings tab). The token is only set once
+  // enabled; disabling clears it rather than just flipping the flag, so a
+  // previously-shared link can't be silently re-enabled by guessing state.
+  chronicleShareEnabled Boolean @default(false)
+  chronicleShareToken   String? @unique
 
   // Player-text input moderation strictness (see lib/ai/moderation.ts).
   // "standard" (default) doesn't block plain violence — expected content
@@ -1137,6 +1153,15 @@ model WorldMeta {
   // worldTurnHours (null = default, see lib/game/tick/pacing.ts).
   hoursSinceWorldTurn Float @default(0)
   worldTurnHours      Int?
+
+  // Real-time heartbeat (see lib/game/cronHeartbeat.ts): the daily cron
+  // sweep banks real elapsed hours into hoursSinceWorldTurn at a 1
+  // in-game-hour-per-real-hour rate, on top of whatever play itself
+  // banked, so a campaign nobody visits still eventually crosses
+  // worldTurnHours instead of freezing at whatever it was when everyone
+  // left. Null the first time a campaign is swept — no backlog is banked
+  // for time before the cron existed.
+  lastRealTimeTickAt DateTime?
 
   // World Sim Phase 8: per-tick simulation caps (how many factions/NPCs the
   // tick handlers simulate each turn — see src/lib/game/tick/caps.ts).

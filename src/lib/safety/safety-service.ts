@@ -473,7 +473,7 @@ export class SafetyService {
     for (const notifyUserId of uniqueUserIds) {
       await prisma.notification.create({
         data: {
-          type: 'SCENE_CHANGE', // Closest existing type
+          type: 'SAFETY_ALERT',
           title: 'X-Card Used',
           message: settings.anonymousXCard
             ? 'A player has used the X-Card. Please pause and check in with everyone.'

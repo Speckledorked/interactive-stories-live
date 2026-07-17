@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
+import { notifyNoteShared } from '@/lib/notifications/noteShared';
 
 // GET /api/campaigns/[id]/notes/[noteId] - Get specific note
 export async function GET(
@@ -187,6 +188,13 @@ export async function PUT(
         }
       },
     });
+
+    // Only fire when visibility just BECAME shared — editing an
+    // already-shared note's content shouldn't re-notify everyone.
+    if (visibility === 'SHARED' && existingNote.visibility !== 'SHARED') {
+      const authorLabel = updatedNote.author.name || updatedNote.author.email;
+      notifyNoteShared(params.id, user.userId, authorLabel, updatedNote.title);
+    }
 
     return NextResponse.json(updatedNote);
 

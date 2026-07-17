@@ -420,7 +420,7 @@ export class NotificationService {
   // Helper: Send friend request notification
   static async sendFriendRequest(receiverId: string, senderId: string, senderName: string) {
     return await this.createNotification({
-      type: 'CAMPAIGN_INVITE', // We'll use this for now since FRIEND_REQUEST doesn't exist yet
+      type: 'FRIEND_REQUEST',
       title: 'New Friend Request',
       message: `${senderName} sent you a friend request`,
       userId: receiverId,
@@ -437,7 +437,7 @@ export class NotificationService {
   // Helper: Send friend request accepted notification
   static async sendFriendRequestAccepted(userId: string, accepterId: string, accepterName: string) {
     return await this.createNotification({
-      type: 'CAMPAIGN_INVITE', // We'll use this for now
+      type: 'FRIEND_REQUEST',
       title: 'Friend Request Accepted',
       message: `${accepterName} accepted your friend request`,
       userId,

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { SafetyService } from '@/lib/safety/safety-service'
+import { NotificationService } from '@/lib/notifications/notification-service'
 
 export async function POST(
   request: NextRequest,
@@ -89,6 +90,37 @@ export async function POST(
         data: { uses: { increment: 1 } },
       }),
     ])
+
+    // The one place a real campaign-invite notification actually fires —
+    // previously this type existed only as a hijacked stand-in for friend
+    // requests (see notification-service.ts), so joining via an invite
+    // link notified nobody at all.
+    try {
+      const [joiner, admins] = await Promise.all([
+        prisma.user.findUnique({ where: { id: user.userId }, select: { name: true, email: true } }),
+        prisma.campaignMembership.findMany({
+          where: { campaignId: invite.campaignId, role: 'ADMIN' },
+          select: { userId: true },
+        }),
+      ])
+      const joinerName = joiner?.name || joiner?.email || 'A new player'
+      await Promise.all(
+        admins
+          .filter(a => a.userId !== user.userId)
+          .map(a =>
+            NotificationService.createNotification({
+              type: 'CAMPAIGN_INVITE',
+              title: 'New Member Joined',
+              message: `${joinerName} joined ${invite.campaign.title} via your invite link`,
+              userId: a.userId,
+              campaignId: invite.campaignId,
+              actionUrl: `/campaigns/${invite.campaignId}?tab=members`,
+            })
+          )
+      )
+    } catch (notifyError) {
+      console.error('Failed to notify admins of new member (non-critical):', notifyError)
+    }
 
     return NextResponse.json({
       message: 'Successfully joined campaign',

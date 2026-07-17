@@ -169,7 +169,50 @@ export default function AdminPage() {
     if (activeTab === 'safety' && !safetyLoaded && !reportsLoading) {
       fetchSafetyData()
     }
+    if (activeTab === 'settings' && chronicleShare === null && !chronicleShareLoading) {
+      fetchChronicleShare()
+    }
   }, [activeTab])
+
+  const [chronicleShare, setChronicleShare] = useState<{ enabled: boolean; token: string | null } | null>(null)
+  const [chronicleShareLoading, setChronicleShareLoading] = useState(false)
+
+  const fetchChronicleShare = async () => {
+    setChronicleShareLoading(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/chronicle-share`)
+      if (response.ok) setChronicleShare(await response.json())
+    } catch (err) {
+      setError('Failed to load chronicle share state')
+    } finally {
+      setChronicleShareLoading(false)
+    }
+  }
+
+  const handleEnableChronicleShare = async () => {
+    setChronicleShareLoading(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/chronicle-share`, { method: 'POST' })
+      if (response.ok) setChronicleShare(await response.json())
+    } catch (err) {
+      setError('Failed to enable chronicle share')
+    } finally {
+      setChronicleShareLoading(false)
+    }
+  }
+
+  const handleDisableChronicleShare = async () => {
+    if (!confirm('Disable the public chronicle link? The current link will stop working immediately.')) return
+    setChronicleShareLoading(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/chronicle-share`, { method: 'DELETE' })
+      if (response.ok) setChronicleShare(await response.json())
+    } catch (err) {
+      setError('Failed to disable chronicle share')
+    } finally {
+      setChronicleShareLoading(false)
+    }
+  }
 
   const fetchSafetyData = async () => {
     setReportsLoading(true)
@@ -2390,6 +2433,54 @@ export default function AdminPage() {
                       {saving ? 'Saving...' : 'Save Campaign Information'}
                     </button>
                   </div>
+                </div>
+
+                {/* Public Chronicle Link Section */}
+                <div className="border-b pb-6">
+                  <h3 className="text-lg font-semibold text-ember-100 mb-2">
+                    Public Chronicle Link
+                  </h3>
+                  <p className="text-sm text-ember-300/60 mb-4">
+                    A read-only, no-login-required page showing every resolved scene in order — nothing else (no character sheets, no admin data). Off by default; share it as far as you like once on.
+                  </p>
+                  {chronicleShare?.enabled ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={typeof window !== 'undefined' ? `${window.location.origin}/chronicle/${chronicleShare.token}` : ''}
+                          className="flex-1 px-3 py-2 border rounded-md border-ember-900/40 bg-black/30 text-ember-100 text-sm font-mono"
+                          onFocus={(e) => e.target.select()}
+                        />
+                        <button
+                          onClick={() => {
+                            if (typeof window !== 'undefined') {
+                              navigator.clipboard.writeText(`${window.location.origin}/chronicle/${chronicleShare.token}`)
+                            }
+                          }}
+                          className="px-3 py-2 bg-black/30 border border-ember-900/40 text-ember-200 rounded-md hover:bg-black/40 text-sm flex-shrink-0"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <button
+                        onClick={handleDisableChronicleShare}
+                        disabled={chronicleShareLoading}
+                        className="px-4 py-2 bg-black/30 border border-wine-700/50 text-wine-300 rounded-md hover:bg-wine-900/20 disabled:opacity-50 text-sm"
+                      >
+                        Disable Public Link
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleEnableChronicleShare}
+                      disabled={chronicleShareLoading}
+                      className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50 text-sm"
+                    >
+                      {chronicleShareLoading ? 'Enabling...' : 'Enable Public Link'}
+                    </button>
+                  )}
                 </div>
 
                 {/* Export & Backup Section */}

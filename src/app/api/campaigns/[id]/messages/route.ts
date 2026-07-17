@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
 import PusherServer from '@/lib/realtime/pusher-server';
+import { detectMentions } from '@/lib/notifications/mentions';
+import { NotificationService } from '@/lib/notifications/notification-service';
 
 // GET /api/campaigns/[id]/messages - Get messages for campaign
 export async function GET(
@@ -164,6 +166,22 @@ export async function POST(
       }
     }
 
+    // Only public/OOC/IC messages get @mentions — a whisper's "audience"
+    // is already just its one target, and system messages have no author
+    // worth mentioning around.
+    let mentionedUserIds: string[] = []
+    if (type !== 'WHISPER' && type !== 'SYSTEM') {
+      const campaignMembers = await prisma.campaignMembership.findMany({
+        where: { campaignId: params.id },
+        include: { user: { select: { id: true, name: true, email: true } } },
+      })
+      mentionedUserIds = detectMentions(
+        content.trim(),
+        campaignMembers.map(m => ({ userId: m.user.id, name: m.user.name, email: m.user.email })),
+        user.userId
+      )
+    }
+
     // Create message
     const message = await prisma.message.create({
       data: {
@@ -174,6 +192,8 @@ export async function POST(
         sceneId: sceneId || null,
         targetUserId: type === 'WHISPER' ? targetUserId : null,
         characterId: type === 'IN_CHARACTER' ? characterId : null,
+        hasMentions: mentionedUserIds.length > 0,
+        mentionsUserIds: mentionedUserIds,
       },
       include: {
         author: {
@@ -187,6 +207,35 @@ export async function POST(
         }
       },
     });
+
+    // Notify — best-effort, never blocks the message from sending.
+    const authorName = message.author.name || message.author.email
+    Promise.all([
+      ...mentionedUserIds.map(userId =>
+        NotificationService.createNotification({
+          type: 'MENTION',
+          title: 'You were mentioned',
+          message: `${authorName} mentioned you: "${content.trim().slice(0, 140)}"`,
+          userId,
+          campaignId: params.id,
+          sceneId: sceneId || undefined,
+          triggerSound: 'mention',
+        })
+      ),
+      ...(type === 'WHISPER' && targetUserId
+        ? [
+            NotificationService.createNotification({
+              type: 'WHISPER_RECEIVED',
+              title: 'New Whisper',
+              message: `${authorName} whispered to you`,
+              userId: targetUserId,
+              campaignId: params.id,
+              sceneId: sceneId || undefined,
+              triggerSound: 'whisper',
+            }),
+          ]
+        : []),
+    ]).catch(err => console.error('Failed to send message notifications (non-critical):', err))
 
     // Broadcast message via Pusher
     const pusher = PusherServer()

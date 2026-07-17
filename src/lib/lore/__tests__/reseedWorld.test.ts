@@ -4,6 +4,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { planFactionMerge, planFrontMerge, reseedWorldFromLore } from '../reseedWorld'
+import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
+import { createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 
 const db = vi.hoisted(() => ({
   campaign: { findUnique: vi.fn(), update: vi.fn() },
@@ -12,6 +14,8 @@ const db = vi.hoisted(() => ({
   campaignCapability: { deleteMany: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), updateMany: vi.fn() },
   clock: { findMany: vi.fn() },
   campaignArchetype: { count: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
+  nPC: { findMany: vi.fn() },
+  location: { findMany: vi.fn() },
   $transaction: vi.fn(),
 }))
 
@@ -21,7 +25,7 @@ vi.mock('../loreDigest', () => ({
 }))
 vi.mock('@/lib/ai/worldGenerator', () => ({
   generateWorldFromTemplate: vi.fn().mockResolvedValue({
-    factions: [], capabilities: [], statLabels: undefined, fronts: [],
+    factions: [], capabilities: [], statLabels: undefined, fronts: [], npcs: [], locations: [],
   }),
 }))
 vi.mock('@/lib/ai/worldExtras', () => ({
@@ -41,6 +45,8 @@ vi.mock('@/lib/ai/worldExtras', () => ({
 }))
 vi.mock('@/lib/templates/campaign-templates', () => ({
   createFactionsForCampaign: vi.fn(),
+  createNPCsForCampaign: vi.fn(),
+  createLocationsForCampaign: vi.fn(),
 }))
 
 describe('planFactionMerge', () => {
@@ -103,6 +109,8 @@ describe('reseedWorldFromLore — archetype regeneration', () => {
     db.campaignCapability.createMany.mockResolvedValue({ count: 0 })
     db.campaignCapability.updateMany.mockResolvedValue({ count: 0 })
     db.clock.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([])
+    db.location.findMany.mockResolvedValue([])
     db.campaignArchetype.deleteMany.mockResolvedValue({ count: 0 })
     db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
     // Real prisma $transaction([p1, p2]) resolves to [result1, result2].
@@ -164,5 +172,87 @@ describe('reseedWorldFromLore — archetype regeneration', () => {
       expect.any(Promise),
       expect.any(Promise),
     ])
+  })
+})
+
+describe('reseedWorldFromLore — NPCs and locations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'Test', description: '', universe: 'Original',
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null,
+    })
+    db.character.count.mockResolvedValue(2) // live mode — irrelevant to NPC/location additivity
+    db.faction.findMany.mockResolvedValue([])
+    db.faction.updateMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.findMany.mockResolvedValue([])
+    db.campaignCapability.deleteMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.createMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.updateMany.mockResolvedValue({ count: 0 })
+    db.clock.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([])
+    db.location.findMany.mockResolvedValue([])
+    db.campaignArchetype.count.mockResolvedValue(4) // already seeded, not this test's concern
+    db.campaignArchetype.deleteMany.mockResolvedValue({ count: 0 })
+    db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
+    db.$transaction.mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops))
+
+    vi.mocked(generateWorldFromTemplate).mockResolvedValue({
+      worldSeed: 'seed',
+      factions: [],
+      capabilities: [],
+      statLabels: undefined,
+      fronts: [],
+      npcs: [
+        { name: 'Lord Kessler', description: 'x', importance: 4 },
+        { name: 'Existing Elder', description: 'y', importance: 2 },
+      ],
+      locations: [
+        { name: 'Ashveil Keep', description: 'x' },
+        { name: 'Old Market', description: 'y' },
+      ],
+    })
+  })
+
+  it('adds only newly-canon NPCs/locations, deduped case-insensitively against what already exists', async () => {
+    db.nPC.findMany.mockResolvedValue([{ name: 'existing elder' }])
+    db.location.findMany.mockResolvedValue([{ name: 'OLD MARKET' }])
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.summary.npcsAdded).toEqual(['Lord Kessler'])
+      expect(result.summary.locationsAdded).toEqual(['Ashveil Keep'])
+    }
+    expect(createNPCsForCampaign).toHaveBeenCalledWith('camp1', db, [
+      expect.objectContaining({ name: 'Lord Kessler' }),
+    ])
+    expect(createLocationsForCampaign).toHaveBeenCalledWith('camp1', db, [
+      expect.objectContaining({ name: 'Ashveil Keep' }),
+    ])
+  })
+
+  it('is a no-op when every generated NPC/location already exists', async () => {
+    db.nPC.findMany.mockResolvedValue([{ name: 'Lord Kessler' }, { name: 'Existing Elder' }])
+    db.location.findMany.mockResolvedValue([{ name: 'Ashveil Keep' }, { name: 'Old Market' }])
+
+    await reseedWorldFromLore('camp1')
+
+    expect(createNPCsForCampaign).not.toHaveBeenCalled()
+    expect(createLocationsForCampaign).not.toHaveBeenCalled()
+  })
+
+  it('adds NPCs/locations even in fresh mode, alongside factions — purely additive, no retiring', async () => {
+    db.character.count.mockResolvedValue(0)
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.summary.fresh).toBe(true)
+      expect(result.summary.npcsAdded).toEqual(['Lord Kessler', 'Existing Elder'])
+      expect(result.summary.locationsAdded).toEqual(['Ashveil Keep', 'Old Market'])
+    }
   })
 })

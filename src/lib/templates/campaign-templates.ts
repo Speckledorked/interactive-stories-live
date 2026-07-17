@@ -615,6 +615,89 @@ export async function createFactionsForCampaign(
   }
 }
 
+export interface GeneratedNPCOverride {
+  name: string
+  description: string
+  pronouns?: string
+  importance: number
+  goals?: string
+  factionName?: string
+}
+
+export interface GeneratedLocationOverride {
+  name: string
+  description: string
+  locationType?: string
+  ownerFactionName?: string
+}
+
+/**
+ * Persist notable NPCs for a new (or reseeded) campaign, resolving each
+ * one's optional factionName against the campaign's already-created
+ * factions by exact name (case-insensitive) — same pattern front-style
+ * threats use for sourceFactionName. Unmatched names are simply dropped;
+ * the NPC still gets created, just unaffiliated.
+ */
+export async function createNPCsForCampaign(
+  campaignId: string,
+  prisma: any,
+  npcs: GeneratedNPCOverride[]
+): Promise<void> {
+  for (const npc of npcs) {
+    let factionId: string | undefined
+    if (npc.factionName) {
+      const faction = await prisma.faction.findFirst({
+        where: { campaignId, name: { equals: npc.factionName, mode: 'insensitive' } },
+        select: { id: true },
+      })
+      factionId = faction?.id
+    }
+    await prisma.nPC.create({
+      data: {
+        campaignId,
+        name: npc.name,
+        description: npc.description,
+        pronouns: npc.pronouns ?? null,
+        importance: npc.importance,
+        goals: npc.goals ?? null,
+        factionId,
+        factionRole: factionId ? 'MEMBER' : undefined,
+      }
+    })
+  }
+}
+
+/**
+ * Persist notable locations for a new (or reseeded) campaign, resolving
+ * each one's optional ownerFactionName the same way createNPCsForCampaign
+ * resolves factionName.
+ */
+export async function createLocationsForCampaign(
+  campaignId: string,
+  prisma: any,
+  locations: GeneratedLocationOverride[]
+): Promise<void> {
+  for (const location of locations) {
+    let ownerFactionId: string | undefined
+    if (location.ownerFactionName) {
+      const faction = await prisma.faction.findFirst({
+        where: { campaignId, name: { equals: location.ownerFactionName, mode: 'insensitive' } },
+        select: { id: true },
+      })
+      ownerFactionId = faction?.id
+    }
+    await prisma.location.create({
+      data: {
+        campaignId,
+        name: location.name,
+        description: location.description,
+        locationType: location.locationType ?? null,
+        ownerFactionId,
+      }
+    })
+  }
+}
+
 /**
  * Apply template to a new campaign.
  * If generatedFactions is provided, those are used instead of the template's

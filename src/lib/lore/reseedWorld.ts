@@ -22,13 +22,17 @@
 // still (re)generated so the "Reseed from lore" admin button is a real
 // recovery path even after characters exist, not just a fresh-mode-only
 // escape hatch.
+//
+// NPCs and locations are purely additive in BOTH modes, like fronts — they
+// have no stable canon identity to dedupe cleanly against a "provisional
+// vs canon" distinction, so fresh mode doesn't retire existing ones here.
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
 import { buildLoreDigest } from './loreDigest'
-import { createFactionsForCampaign } from '@/lib/templates/campaign-templates'
+import { createFactionsForCampaign, createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 
 // The extras call already carries factions + capability keys, so it needs
@@ -44,6 +48,8 @@ export interface ReseedSummary {
   factionsAlreadyPresent: number
   capabilitiesAdded: string[]
   frontsAdded: string[]
+  npcsAdded: string[]
+  locationsAdded: string[]
   statLabelsSet: boolean
   corruptionThemeSet: boolean
   archetypesReplaced: number
@@ -214,6 +220,38 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
     }
   }
 
+  // --- NPCs + Locations: purely additive in both modes ------------------------
+  // Same reasoning as fronts above — no clean provisional-vs-canon identity
+  // to retire by, so this only ever adds name-deduped new ones. Previously
+  // world generation never produced NPCs/Locations at all (only factions,
+  // capabilities, and fronts), so even a campaign built entirely from a
+  // lore import had nothing but faction/front stubs in its wiki until
+  // actual play introduced anyone — this closes that gap on every reseed,
+  // not just at creation.
+  const existingNpcs = await prisma.nPC.findMany({
+    where: { campaignId },
+    select: { name: true },
+  })
+  const newNpcNames = new Set(
+    planFrontMerge(existingNpcs.map(n => n.name), generated.npcs.map(n => n.name))
+  )
+  const newNpcs = generated.npcs.filter(n => newNpcNames.has(n.name))
+  if (newNpcs.length > 0) {
+    await createNPCsForCampaign(campaignId, prisma, newNpcs)
+  }
+
+  const existingLocations = await prisma.location.findMany({
+    where: { campaignId },
+    select: { name: true },
+  })
+  const newLocationNames = new Set(
+    planFrontMerge(existingLocations.map(l => l.name), generated.locations.map(l => l.name))
+  )
+  const newLocations = generated.locations.filter(l => newLocationNames.has(l.name))
+  if (newLocations.length > 0) {
+    await createLocationsForCampaign(campaignId, prisma, newLocations)
+  }
+
   // --- Stat labels -----------------------------------------------------------
   // Fresh: canon replaces the provisional labels. Live: fill-only.
   let statLabelsSet = false
@@ -336,6 +374,8 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
     factionsAlreadyPresent: generated.factions.length - newFactions.length,
     capabilitiesAdded: newCaps.map(c => c.name),
     frontsAdded: newFronts.map(f => f.name),
+    npcsAdded: newNpcs.map(n => n.name),
+    locationsAdded: newLocations.map(l => l.name),
     statLabelsSet,
     corruptionThemeSet,
     archetypesReplaced,
@@ -345,7 +385,8 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
   console.log(
     `🌍 Reseeded world from lore for ${campaignId} (${fresh ? 'fresh — replaced' : 'live — additive'}):` +
     ` +${summary.factionsAdded.length} factions (${summary.factionsRetired.length} retired),` +
-    ` +${summary.capabilitiesAdded.length} capabilities, +${summary.frontsAdded.length} fronts` +
+    ` +${summary.capabilitiesAdded.length} capabilities, +${summary.frontsAdded.length} fronts,` +
+    ` +${summary.npcsAdded.length} NPCs, +${summary.locationsAdded.length} locations` +
     ` (sampled ${lore.sampledEntries}/${lore.totalEntries} lore entries)`
   )
 

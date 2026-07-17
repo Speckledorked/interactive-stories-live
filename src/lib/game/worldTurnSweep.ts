@@ -29,7 +29,10 @@ export async function sweepWorldTurnsForAllCampaigns(): Promise<WorldTurnSweepRe
   const now = new Date()
   const campaigns = await prisma.campaign.findMany({
     where: { isActive: true, worldMeta: { isNot: null } },
-    select: { id: true, worldMeta: { select: { lastRealTimeTickAt: true } } },
+    select: {
+      id: true,
+      worldMeta: { select: { lastRealTimeTickAt: true, hoursBankedSinceLastHeartbeat: true } },
+    },
   })
 
   let ticked = 0
@@ -39,12 +42,17 @@ export async function sweepWorldTurnsForAllCampaigns(): Promise<WorldTurnSweepRe
 
   for (const campaign of campaigns) {
     try {
-      const bankedHours = computeHeartbeatBankedHours(campaign.worldMeta?.lastRealTimeTickAt ?? null, now)
+      const bankedHours = computeHeartbeatBankedHours(
+        campaign.worldMeta?.lastRealTimeTickAt ?? null,
+        now,
+        campaign.worldMeta?.hoursBankedSinceLastHeartbeat ?? 0
+      )
       await prisma.worldMeta.update({
         where: { campaignId: campaign.id },
         data: {
           hoursSinceWorldTurn: bankedHours > 0 ? { increment: bankedHours } : undefined,
           lastRealTimeTickAt: now,
+          hoursBankedSinceLastHeartbeat: 0,
         },
       })
 

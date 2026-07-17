@@ -205,12 +205,16 @@ describe('Scene Resolver', () => {
       // data and worldMeta.currentInGameDate isn't set on the fixture).
       // hoursSinceWorldTurn banks this exchange's in-game time toward the
       // next world turn — 0 here since the fixture has no time_passage.
+      // hoursBankedSinceLastHeartbeat tracks the same amount, so the cron
+      // heartbeat sweep knows how much of the real-time gap play already
+      // covered (see lib/game/cronHeartbeat.ts).
       expect(prisma.worldMeta.update).toHaveBeenCalledWith({
         where: { id: mockWorldMeta.id },
         data: {
           currentTurnNumber: 6,
           currentInGameDate: 'Day 1',
           hoursSinceWorldTurn: { increment: 0 },
+          hoursBankedSinceLastHeartbeat: { increment: 0 },
         },
       });
     });

@@ -29,8 +29,11 @@ beforeEach(() => {
 describe('sweepWorldTurnsForAllCampaigns', () => {
   it('banks hours and checks every active campaign', async () => {
     db.campaign.findMany.mockResolvedValue([
-      { id: 'c1', worldMeta: { lastRealTimeTickAt: new Date('2026-07-16T12:00:00Z') } },
-      { id: 'c2', worldMeta: { lastRealTimeTickAt: null } },
+      {
+        id: 'c1',
+        worldMeta: { lastRealTimeTickAt: new Date('2026-07-16T12:00:00Z'), hoursBankedSinceLastHeartbeat: 0 },
+      },
+      { id: 'c2', worldMeta: { lastRealTimeTickAt: null, hoursBankedSinceLastHeartbeat: 0 } },
     ])
     ;(runWorldTurnIfDue as any).mockResolvedValue({ ran: false })
 
@@ -38,19 +41,41 @@ describe('sweepWorldTurnsForAllCampaigns', () => {
 
     expect(result.campaignsChecked).toBe(2)
     expect(db.worldMeta.update).toHaveBeenCalledTimes(2)
-    // c1 had a prior tick, so it banks a real increment
+    // c1 had a prior tick and nothing banked by play, so it tops up the full gap
     expect(db.worldMeta.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { campaignId: 'c1' },
-        data: expect.objectContaining({ hoursSinceWorldTurn: { increment: expect.any(Number) } }),
+        data: expect.objectContaining({
+          hoursSinceWorldTurn: { increment: expect.any(Number) },
+          hoursBankedSinceLastHeartbeat: 0,
+        }),
       })
     )
     // c2 has never been swept, so nothing is banked (increment key omitted)
     expect(db.worldMeta.update).toHaveBeenCalledWith({
       where: { campaignId: 'c2' },
-      data: { hoursSinceWorldTurn: undefined, lastRealTimeTickAt: expect.any(Date) },
+      data: { hoursSinceWorldTurn: undefined, lastRealTimeTickAt: expect.any(Date), hoursBankedSinceLastHeartbeat: 0 },
     })
     expect(runWorldTurnIfDue).toHaveBeenCalledTimes(2)
+  })
+
+  it('tops up only the unplayed remainder when play already banked part of the gap', async () => {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    db.campaign.findMany.mockResolvedValue([
+      {
+        id: 'c1',
+        worldMeta: { lastRealTimeTickAt: twentyFourHoursAgo, hoursBankedSinceLastHeartbeat: 100 },
+      },
+    ])
+    ;(runWorldTurnIfDue as any).mockResolvedValue({ ran: false })
+
+    await sweepWorldTurnsForAllCampaigns()
+
+    // ~24h real elapsed, play already banked more than that — nothing left to top up
+    expect(db.worldMeta.update).toHaveBeenCalledWith({
+      where: { campaignId: 'c1' },
+      data: { hoursSinceWorldTurn: undefined, lastRealTimeTickAt: expect.any(Date), hoursBankedSinceLastHeartbeat: 0 },
+    })
   })
 
   it('counts a ticked campaign when the turn actually ran', async () => {

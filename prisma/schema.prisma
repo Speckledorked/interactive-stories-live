@@ -1154,14 +1154,17 @@ model WorldMeta {
   hoursSinceWorldTurn Float @default(0)
   worldTurnHours      Int?
 
-  // Real-time heartbeat (see lib/game/cronHeartbeat.ts): the daily cron
-  // sweep banks real elapsed hours into hoursSinceWorldTurn at a 1
-  // in-game-hour-per-real-hour rate, on top of whatever play itself
-  // banked, so a campaign nobody visits still eventually crosses
-  // worldTurnHours instead of freezing at whatever it was when everyone
-  // left. Null the first time a campaign is swept — no backlog is banked
-  // for time before the cron existed.
-  lastRealTimeTickAt DateTime?
+  // Real-time heartbeat (see lib/game/cronHeartbeat.ts): a pure idle
+  // backstop, not an add-on to active play. The daily cron sweep tops
+  // hoursSinceWorldTurn up to real elapsed time — banking the GAP between
+  // real hours passed and hoursBankedSinceLastHeartbeat (what play itself
+  // already banked since the last sweep), never both in full. A quiet
+  // campaign gets real time banked outright; an actively-played one gets
+  // nothing extra once play has already kept pace with (or outrun) the
+  // real clock. lastRealTimeTickAt null means never swept — no backlog
+  // banked for time before the cron existed.
+  lastRealTimeTickAt            DateTime?
+  hoursBankedSinceLastHeartbeat Float     @default(0)
 
   // World Sim Phase 8: per-tick simulation caps (how many factions/NPCs the
   // tick handlers simulate each turn — see src/lib/game/tick/caps.ts).

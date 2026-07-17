@@ -10,5 +10,11 @@
   },
   "github": {
     "silent": true
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/internal/cron/world-tick-sweep",
+      "schedule": "0 6 * * *"
+    }
+  ]
 }

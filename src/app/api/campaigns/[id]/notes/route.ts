@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
+import { notifyNoteShared } from '@/lib/notifications/noteShared';
 
 // GET /api/campaigns/[id]/notes - Get notes for campaign
 export async function GET(
@@ -210,6 +211,11 @@ export async function POST(
         }
       },
     });
+
+    if (note.visibility === 'SHARED') {
+      const authorLabel = note.author.name || note.author.email;
+      notifyNoteShared(params.id, user.userId, authorLabel, note.title);
+    }
 
     return NextResponse.json(note);
 

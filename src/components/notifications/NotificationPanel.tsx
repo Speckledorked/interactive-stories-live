@@ -189,7 +189,9 @@ export default function NotificationPanel({
       'CAMPAIGN_INVITE': '🎲',
       'SCENE_RESOLVED': '✅',
       'AI_RESPONSE_READY': '🤖',
-      'WORLD_EVENT': '🌍'
+      'WORLD_EVENT': '🌍',
+      'FRIEND_REQUEST': '👋',
+      'SAFETY_ALERT': '✋'
     };
     return icons[type] || '📢';
   };

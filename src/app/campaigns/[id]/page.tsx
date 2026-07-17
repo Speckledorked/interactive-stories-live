@@ -63,6 +63,8 @@ export default function CampaignLobbyPage() {
   const [logsLoading, setLogsLoading] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [awayRecap, setAwayRecap] = useState<{ awayLabel: string; events: Array<{ id: string; title: string; summary: string }> } | null>(null)
+  const [blockedUserIds, setBlockedUserIds] = useState<string[]>([])
+  const [blockingUserId, setBlockingUserId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -71,6 +73,7 @@ export default function CampaignLobbyPage() {
     }
 
     loadCampaign()
+    loadBlocks()
 
     // Dedicated endpoint, not the main campaign GET: this page is the "I
     // came back and looked" checkpoint. The story page reloads via this
@@ -81,6 +84,44 @@ export default function CampaignLobbyPage() {
       .then(json => setAwayRecap(json?.recap ?? null))
       .catch(() => {})
   }, [campaignId])
+
+  const loadBlocks = async () => {
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/block`)
+      if (response.ok) {
+        const json = await response.json()
+        setBlockedUserIds(json.blockedUserIds || [])
+      }
+    } catch {
+      // Non-critical — the block toggle just won't reflect current state.
+    }
+  }
+
+  const toggleBlock = async (targetUserId: string) => {
+    setBlockingUserId(targetUserId)
+    const isBlocked = blockedUserIds.includes(targetUserId)
+    try {
+      const response = await authenticatedFetch(
+        isBlocked
+          ? `/api/campaigns/${campaignId}/block?blockedUserId=${targetUserId}`
+          : `/api/campaigns/${campaignId}/block`,
+        isBlocked
+          ? { method: 'DELETE' }
+          : {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ blockedUserId: targetUserId }),
+            }
+      )
+      if (response.ok) {
+        setBlockedUserIds(prev =>
+          isBlocked ? prev.filter(id => id !== targetUserId) : [...prev, targetUserId]
+        )
+      }
+    } finally {
+      setBlockingUserId(null)
+    }
+  }
 
   const loadCampaign = async () => {
     try {
@@ -464,21 +505,40 @@ export default function CampaignLobbyPage() {
               )}
             </div>
             <div className="space-y-2">
-              {campaign.memberships.map((member: any) => (
-                <div key={member.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`h-2 w-2 rounded-full ${member.user.isOnline ? 'bg-green-500' : 'bg-ember-900/60'}`} />
-                    <span className="text-sm text-ember-200/80">{member.user.name || member.user.email}</span>
+              {campaign.memberships.map((member: any) => {
+                const currentUserId = getUser()?.id
+                const isSelf = member.user.id === currentUserId
+                const isBlocked = blockedUserIds.includes(member.user.id)
+                return (
+                  <div key={member.id} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`h-2 w-2 rounded-full flex-shrink-0 ${member.user.isOnline ? 'bg-green-500' : 'bg-ember-900/60'}`} />
+                      <span className="text-sm text-ember-200/80 truncate">{member.user.name || member.user.email}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        member.role === 'ADMIN'
+                          ? 'bg-ember-900/30 text-ember-300'
+                          : 'bg-black/30 text-ember-200/80'
+                      }`}>
+                        {member.role}
+                      </span>
+                      {!isSelf && (
+                        <button
+                          onClick={() => toggleBlock(member.user.id)}
+                          disabled={blockingUserId === member.user.id}
+                          title={isBlocked ? 'Unblock — show their messages again' : 'Block — hide their messages from you'}
+                          className={`text-xs px-1.5 py-1 rounded transition-colors disabled:opacity-50 ${
+                            isBlocked ? 'text-wine-400 hover:text-wine-300' : 'text-ember-400/40 hover:text-ember-300/70'
+                          }`}
+                        >
+                          {isBlocked ? 'Unblock' : 'Block'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    member.role === 'ADMIN'
-                      ? 'bg-ember-900/30 text-ember-300'
-                      : 'bg-black/30 text-ember-200/80'
-                  }`}>
-                    {member.role}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 

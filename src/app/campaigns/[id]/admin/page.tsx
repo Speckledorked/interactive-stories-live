@@ -116,10 +116,10 @@ export default function AdminPage() {
   const campaignId = params.id as string
 
   // Read tab from URL parameter, default to 'dashboard'
-  const initialTab = searchParams?.get('tab') as 'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'lore' | 'map' | 'debug' | 'invites' | 'members' | 'settings' || 'dashboard'
+  const initialTab = searchParams?.get('tab') as 'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'lore' | 'map' | 'debug' | 'invites' | 'members' | 'safety' | 'settings' || 'dashboard'
 
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'lore' | 'map' | 'debug' | 'invites' | 'members' | 'settings'>(initialTab)
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ai' | 'npcs' | 'factions' | 'locations' | 'clocks' | 'lore' | 'map' | 'debug' | 'invites' | 'members' | 'safety' | 'settings'>(initialTab)
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [npcs, setNpcs] = useState<NPC[]>([])
   const [factions, setFactions] = useState<Faction[]>([])
@@ -152,6 +152,11 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [reports, setReports] = useState<any[]>([])
+  const [reportsLoading, setReportsLoading] = useState(false)
+  const [bans, setBans] = useState<any[]>([])
+  const [xcardHistory, setXcardHistory] = useState<any[]>([])
+  const [safetyLoaded, setSafetyLoaded] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -161,7 +166,106 @@ export default function AdminPage() {
     if (activeTab === 'debug' && worldEvents.length === 0 && !worldEventsLoading) {
       fetchWorldEvents(worldEventsTurn)
     }
+    if (activeTab === 'safety' && !safetyLoaded && !reportsLoading) {
+      fetchSafetyData()
+    }
   }, [activeTab])
+
+  const fetchSafetyData = async () => {
+    setReportsLoading(true)
+    try {
+      const [reportsRes, bansRes, xcardRes] = await Promise.all([
+        authenticatedFetch(`/api/campaigns/${campaignId}/reports`),
+        authenticatedFetch(`/api/campaigns/${campaignId}/bans`),
+        authenticatedFetch(`/api/campaigns/${campaignId}/xcard`),
+      ])
+      if (reportsRes.ok) setReports((await reportsRes.json()).reports || [])
+      if (bansRes.ok) setBans((await bansRes.json()).bans || [])
+      if (xcardRes.ok) setXcardHistory(await xcardRes.json() || [])
+      setSafetyLoaded(true)
+    } catch (err) {
+      setError('Failed to load safety data')
+    } finally {
+      setReportsLoading(false)
+    }
+  }
+
+  const handleResolveReport = async (reportId: string, actionTaken?: string) => {
+    const resolution = prompt('Resolution note for this report:')
+    if (resolution === null) return
+    setSaving(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/reports/${reportId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resolve', resolution, actionTaken }),
+      })
+      if (!response.ok) throw new Error('Failed to resolve report')
+      setSafetyLoaded(false)
+      await fetchSafetyData()
+    } catch (err) {
+      setError('Failed to resolve report')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDismissReport = async (reportId: string) => {
+    setSaving(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/reports/${reportId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'dismiss', resolution: 'Dismissed — no action needed' }),
+      })
+      if (!response.ok) throw new Error('Failed to dismiss report')
+      setSafetyLoaded(false)
+      await fetchSafetyData()
+    } catch (err) {
+      setError('Failed to dismiss report')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleBanMember = async (userId: string) => {
+    const reason = prompt('Reason for banning this member (they will be removed and unable to rejoin):')
+    if (!reason || !reason.trim()) return
+    setSaving(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/members/${userId}/ban`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason, isPermanent: true }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to ban member')
+      }
+      setSafetyLoaded(false)
+      await fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to ban member')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUnbanMember = async (userId: string) => {
+    setSaving(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/members/${userId}/ban`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) throw new Error('Failed to unban member')
+      setSafetyLoaded(false)
+      await fetchSafetyData()
+    } catch (err) {
+      setError('Failed to unban member')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const fetchData = async () => {
     try {
@@ -659,7 +763,7 @@ export default function AdminPage() {
         isAdmin
         subrow={
           <nav className="max-w-7xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
-            {(['dashboard', 'ai', 'npcs', 'factions', 'locations', 'clocks', 'lore', 'map', 'debug', 'invites', 'members', 'settings'] as const).map((tab) => (
+            {(['dashboard', 'ai', 'npcs', 'factions', 'locations', 'clocks', 'lore', 'map', 'debug', 'invites', 'members', 'safety', 'settings'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -2100,13 +2204,129 @@ export default function AdminPage() {
                             onClick={() => handleRemoveMember(member.user.id)}
                             disabled={saving}
                             className="px-3 py-1 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50 text-sm"
+                            title="Remove from campaign — they can rejoin with a new invite"
                           >
                             Remove
                           </button>
+                          {member.role !== 'ADMIN' && (
+                            <button
+                              onClick={() => handleBanMember(member.user.id)}
+                              disabled={saving}
+                              className="px-3 py-1 bg-black/40 border border-wine-700/50 text-wine-300 rounded-md hover:bg-wine-900/30 disabled:opacity-50 text-sm"
+                              title="Ban — removes them and blocks rejoining via invite link"
+                            >
+                              Ban
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Safety Tab */}
+            {activeTab === 'safety' && (
+              <div className="space-y-8">
+                {reportsLoading && <div className="text-sm text-ember-300/60">Loading safety data...</div>}
+
+                <div>
+                  <h3 className="text-lg font-semibold text-ember-100 mb-3">Content Reports</h3>
+                  {reports.filter(r => r.status === 'PENDING' || r.status === 'REVIEWING').length === 0 ? (
+                    <p className="text-sm text-ember-300/50">No open reports.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {reports.filter(r => r.status === 'PENDING' || r.status === 'REVIEWING').map((report) => (
+                        <div key={report.id} className="border border-ember-900/30 rounded-lg p-4">
+                          <div className="flex justify-between items-start gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded text-xs font-medium bg-ember-900/25 text-ember-300">
+                                  {report.contentType}
+                                </span>
+                                <span className="px-2 py-0.5 rounded text-xs font-medium bg-wine-800/25 text-wine-300">
+                                  {report.severity}
+                                </span>
+                              </div>
+                              <p className="text-sm text-ember-200 mt-2">{report.reason}</p>
+                              {report.contentText && (
+                                <p className="text-xs text-ember-300/50 mt-1 italic">&ldquo;{report.contentText}&rdquo;</p>
+                              )}
+                              <p className="text-xs text-ember-400/50 mt-1">
+                                Reported {new Date(report.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="flex gap-2 flex-shrink-0">
+                              <button
+                                onClick={() => handleResolveReport(report.id)}
+                                disabled={saving}
+                                className="px-3 py-1 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50 text-sm"
+                              >
+                                Resolve
+                              </button>
+                              <button
+                                onClick={() => handleDismissReport(report.id)}
+                                disabled={saving}
+                                className="px-3 py-1 bg-black/30 border border-ember-900/40 text-ember-200 rounded-md hover:bg-black/40 disabled:opacity-50 text-sm"
+                              >
+                                Dismiss
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-ember-100 mb-3">X-Card History</h3>
+                  {xcardHistory.length === 0 ? (
+                    <p className="text-sm text-ember-300/50">No X-Card uses recorded.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {xcardHistory.map((use: any) => (
+                        <div key={use.id} className="border border-ember-900/30 rounded-lg p-3 text-sm">
+                          <span className="text-ember-200 font-medium">{use.trigger}</span>
+                          {use.reason && <span className="text-ember-300/60"> — {use.reason}</span>}
+                          <span className="text-xs text-ember-400/50 block mt-1">
+                            {new Date(use.createdAt).toLocaleString()}
+                            {use.acknowledged ? ' • acknowledged' : ' • unacknowledged'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-ember-100 mb-3">Banned Users</h3>
+                  {bans.length === 0 ? (
+                    <p className="text-sm text-ember-300/50">No one is banned from this campaign.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {bans.map((ban: any) => (
+                        <div key={ban.id} className="border border-ember-900/30 rounded-lg p-4 flex justify-between items-start gap-4">
+                          <div>
+                            <p className="text-ember-200 font-medium">{ban.user?.name || ban.user?.email || ban.userId}</p>
+                            <p className="text-sm text-ember-300/60">{ban.reason}</p>
+                            <p className="text-xs text-ember-400/50 mt-1">
+                              Banned {new Date(ban.createdAt).toLocaleDateString()}
+                              {ban.isPermanent ? ' • permanent' : ban.expiresAt ? ` • until ${new Date(ban.expiresAt).toLocaleDateString()}` : ''}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleUnbanMember(ban.userId)}
+                            disabled={saving}
+                            className="px-3 py-1 bg-black/30 border border-ember-900/40 text-ember-200 rounded-md hover:bg-black/40 disabled:opacity-50 text-sm flex-shrink-0"
+                          >
+                            Unban
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

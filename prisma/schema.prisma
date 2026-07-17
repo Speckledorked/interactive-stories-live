@@ -583,7 +583,6 @@ model Character {
 
   // PbtA specific fields
   harm       Int      @default(0) // 0-6 harm track
-  experience Int      @default(0) // XP counter
   // Corruption marks (0..5) toward this campaign's corruption theme.
   // Only meaningful when Campaign.corruptionTheme is set; never decreases
   // (the whole point is irreversibility) — see lib/game/corruption.ts.

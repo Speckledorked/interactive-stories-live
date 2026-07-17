@@ -702,20 +702,6 @@ export default function CharacterSheetDisplay({
                 </div>
               </div>
 
-              {/* XP bar */}
-              <div className="card">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide">Experience</h3>
-                  <span className="text-lg font-bold text-ember-300">{character.experience || 0} XP</span>
-                </div>
-                <div className="w-full bg-black/30 rounded-full h-2">
-                  <div
-                    className="bg-gradient-to-r from-ember-500 to-wine-600 h-2 rounded-full transition-all"
-                    style={{ width: `${Math.min(((character.experience || 0) % 100), 100)}%` }}
-                  />
-                </div>
-              </div>
-
               {/* History */}
               <div className="card">
                 <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide mb-4">Growth History</h3>

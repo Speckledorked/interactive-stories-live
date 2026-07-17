@@ -75,7 +75,6 @@ Player Description: "${playerDescription}"
 
 Character Context:
 - Name: ${character.name}
-- Experience: ${character.experience} XP
 - Background: ${character.backstory || 'Unknown'}
 - Current Location: ${character.currentLocation || campaignContext?.currentLocation || 'Campaign setting'}
 - Available Gold: ${gold}

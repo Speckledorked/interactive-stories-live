@@ -3,6 +3,96 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------- *
+ * MythOS redesign tokens — neutral surfaces + one brass accent + a
+ * semantic palette, expressed as "R G B" triples so Tailwind's
+ * rgb(var(...) / <alpha-value>) pattern can apply opacity on top.
+ * Defaults to light (warm parchment); flips to dark (warm near-black)
+ * on system preference, or via an explicit [data-theme] for a future
+ * manual toggle.
+ * ---------------------------------------------------------------------- */
+:root {
+  --myth-canvas: 247 243 236;
+  --myth-surface: 251 248 242;
+  --myth-surface-raised: 255 253 249;
+  --myth-surface-sunken: 239 233 221;
+  --myth-border: 222 212 192;
+  --myth-border-strong: 199 185 152;
+  --myth-ink: 36 31 24;
+  --myth-ink-muted: 92 83 68;
+  --myth-ink-faint: 118 109 88;
+
+  --myth-accent: 138 106 31;
+  --myth-accent-hover: 111 85 24;
+  --myth-accent-ink: 251 248 242;
+
+  --myth-good: 42 111 61;
+  --myth-warn: 143 93 14;
+  --myth-danger: 158 42 42;
+  --myth-info: 45 90 130;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --myth-canvas: 20 17 13;
+    --myth-surface: 28 24 17;
+    --myth-surface-raised: 36 31 23;
+    --myth-surface-sunken: 14 12 9;
+    --myth-border: 52 45 33;
+    --myth-border-strong: 74 64 48;
+    --myth-ink: 242 236 224;
+    --myth-ink-muted: 184 173 152;
+    --myth-ink-faint: 142 132 110;
+
+    --myth-accent: 201 162 39;
+    --myth-accent-hover: 220 181 72;
+    --myth-accent-ink: 28 24 17;
+
+    --myth-good: 106 168 108;
+    --myth-warn: 214 158 74;
+    --myth-danger: 214 100 90;
+    --myth-info: 122 165 199;
+  }
+}
+
+[data-theme='light'] {
+  --myth-canvas: 247 243 236;
+  --myth-surface: 251 248 242;
+  --myth-surface-raised: 255 253 249;
+  --myth-surface-sunken: 239 233 221;
+  --myth-border: 222 212 192;
+  --myth-border-strong: 199 185 152;
+  --myth-ink: 36 31 24;
+  --myth-ink-muted: 92 83 68;
+  --myth-ink-faint: 118 109 88;
+  --myth-accent: 138 106 31;
+  --myth-accent-hover: 111 85 24;
+  --myth-accent-ink: 251 248 242;
+  --myth-good: 42 111 61;
+  --myth-warn: 143 93 14;
+  --myth-danger: 158 42 42;
+  --myth-info: 45 90 130;
+}
+
+[data-theme='dark'] {
+  --myth-canvas: 20 17 13;
+  --myth-surface: 28 24 17;
+  --myth-surface-raised: 36 31 23;
+  --myth-surface-sunken: 14 12 9;
+  --myth-border: 52 45 33;
+  --myth-border-strong: 74 64 48;
+  --myth-ink: 242 236 224;
+  --myth-ink-muted: 184 173 152;
+  --myth-ink-faint: 142 132 110;
+  --myth-accent: 201 162 39;
+  --myth-accent-hover: 220 181 72;
+  --myth-accent-ink: 28 24 17;
+  --myth-good: 106 168 108;
+  --myth-warn: 214 158 74;
+  --myth-danger: 214 100 90;
+  --myth-info: 122 165 199;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 10px;

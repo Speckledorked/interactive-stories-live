@@ -119,6 +119,42 @@ module.exports = {
           700: '#3f1717',
           800: '#2b0f0f',
         },
+        // MythOS redesign tokens (2026) — CSS-variable-backed so they flip
+        // between light/dark automatically. Prefixed "myth-" so they can
+        // land page-by-page without touching ember/tavern/wine consumers.
+        // The rgb(var(...) / <alpha-value>) pattern gives every one of
+        // these free opacity variants, e.g. bg-myth-accent/10.
+        'myth-canvas': 'rgb(var(--myth-canvas) / <alpha-value>)',
+        'myth-surface': {
+          DEFAULT: 'rgb(var(--myth-surface) / <alpha-value>)',
+          raised: 'rgb(var(--myth-surface-raised) / <alpha-value>)',
+          sunken: 'rgb(var(--myth-surface-sunken) / <alpha-value>)',
+        },
+        'myth-border': {
+          DEFAULT: 'rgb(var(--myth-border) / <alpha-value>)',
+          strong: 'rgb(var(--myth-border-strong) / <alpha-value>)',
+        },
+        'myth-ink': {
+          DEFAULT: 'rgb(var(--myth-ink) / <alpha-value>)',
+          muted: 'rgb(var(--myth-ink-muted) / <alpha-value>)',
+          faint: 'rgb(var(--myth-ink-faint) / <alpha-value>)',
+        },
+        // The one accent: primary buttons, active nav state, "public" badges.
+        'myth-accent': {
+          DEFAULT: 'rgb(var(--myth-accent) / <alpha-value>)',
+          hover: 'rgb(var(--myth-accent-hover) / <alpha-value>)',
+          ink: 'rgb(var(--myth-accent-ink) / <alpha-value>)',
+        },
+        // Semantic palette — separate from the accent, never reused for it.
+        'myth-good': 'rgb(var(--myth-good) / <alpha-value>)',
+        'myth-warn': 'rgb(var(--myth-warn) / <alpha-value>)',
+        'myth-danger': 'rgb(var(--myth-danger) / <alpha-value>)',
+        'myth-info': 'rgb(var(--myth-info) / <alpha-value>)',
+      },
+      fontFamily: {
+        display: ['var(--font-display)', 'Georgia', 'serif'],
+        sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',

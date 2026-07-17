@@ -6,6 +6,7 @@ import './globals.css'
 import { CommandPaletteProvider } from '@/contexts/CommandPaletteContext'
 import { ErrorHandlerInit } from './ErrorHandlerInit'
 import { getAppUrl } from '@/lib/appUrl'
+import { fontDisplay, fontSans, fontMono } from '@/lib/fonts'
 
 export const metadata: Metadata = {
   metadataBase: new URL(getAppUrl()),
@@ -34,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable}`}>
       <body className="min-h-screen bg-tavern-950">
         <ErrorHandlerInit />
         <CommandPaletteProvider>

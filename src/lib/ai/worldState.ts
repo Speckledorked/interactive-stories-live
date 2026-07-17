@@ -906,6 +906,31 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
     orderBy: { sceneNumber: 'desc' }
   })
 
+  // Offscreen fallout since the last scene resolved — the world keeps
+  // ticking between scenes (world turns, faction ambitions, NPC moves) but
+  // nothing forces it into view unless the opener reaches for it.
+  // buildWorldSummaryForAI's recent_timeline_events mixes onscreen and
+  // offscreen together with no distinction; this is a dedicated,
+  // offscreen-only fetch so the opener can be told specifically "this
+  // happened while nobody was looking."
+  const offscreenFallout = lastScene
+    ? await prisma.timelineEvent.findMany({
+        where: {
+          campaignId,
+          isOffscreen: true,
+          visibility: { in: ['PUBLIC', 'MIXED'] },
+          createdAt: { gt: lastScene.updatedAt },
+        },
+        orderBy: { turnNumber: 'desc' },
+        take: 3,
+        select: { title: true, summaryPublic: true },
+      })
+    : []
+
+  const offscreenFalloutText = offscreenFallout.length > 0
+    ? `\n\nOFFSCREEN DEVELOPMENTS (happened in the world since the last scene, unseen by the party - the characters don't know these outright, but the atmosphere can carry a hint: a rumor overheard, a changed mood in the street, smoke where there wasn't any before):\n${offscreenFallout.map(e => `- ${e.title}: ${e.summaryPublic || 'details unclear'}`).join('\n')}`
+    : ''
+
   const apiKey = process.env.OPENAI_API_KEY
   const startTime = Date.now()
   if (!apiKey) {
@@ -1013,7 +1038,7 @@ Example: Instead of opening on a mid-swing sword fight, write "The tavern's back
 - "Your character feels/thinks/remembers" - stay external and immersive
 
 **APPROACH:**
-If they have a location, start there mid-scene. If they have enemies, maybe hint at danger. If they have goals, drop them into a situation that challenges those goals. But do it all through ATMOSPHERE and ACTION, not explanation.
+If they have a location, start there mid-scene. If they have enemies, maybe hint at danger. If they have goals, drop them into a situation that challenges those goals. But do it all through ATMOSPHERE and ACTION, not explanation.${offscreenFallout.length > 0 ? ' If any OFFSCREEN DEVELOPMENTS are listed below, let one of them color this scene\'s atmosphere - a detail, a mood, something glimpsed or overheard - so the world visibly moved while the party was elsewhere. Don\'t announce it as news; the characters don\'t know it as fact yet.' : ''}
 
 Example: Instead of "You check your sword as you remember your oath of vengeance," write "The blade catches firelight from the distant campfires. Three days of tracking, and finally, smoke on the horizon."`
 
@@ -1027,6 +1052,7 @@ ${characterContext}
 
 LAST SCENE RESOLUTION:
 ${lastScene?.sceneResolutionText || 'This is the first scene of the campaign. There is no prior action to continue from - the character has not yet set foot in the story.'}
+${offscreenFalloutText}
 
 Generate an engaging, atmospheric scene introduction that:
 

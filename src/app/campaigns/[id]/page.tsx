@@ -62,6 +62,7 @@ export default function CampaignLobbyPage() {
   const [campaignLogs, setCampaignLogs] = useState<any[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [awayRecap, setAwayRecap] = useState<{ awayLabel: string; events: Array<{ id: string; title: string; summary: string }> } | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -70,6 +71,15 @@ export default function CampaignLobbyPage() {
     }
 
     loadCampaign()
+
+    // Dedicated endpoint, not the main campaign GET: this page is the "I
+    // came back and looked" checkpoint. The story page reloads via this
+    // same GET constantly on Pusher events and would reset the away-window
+    // before a returning player ever saw it.
+    authenticatedFetch(`/api/campaigns/${campaignId}/away-recap`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(json => setAwayRecap(json?.recap ?? null))
+      .catch(() => {})
   }, [campaignId])
 
   const loadCampaign = async () => {
@@ -242,6 +252,43 @@ export default function CampaignLobbyPage() {
                 This page updates automatically.
               </p>
             </div>
+          </div>
+        )}
+
+        {/* "While you were away" — offscreen world-turn fallout the player
+            missed since they last opened this lobby. Dismissible; not
+            persisted as dismissed (it naturally won't reappear once
+            lastViewedAt advances past these events). */}
+        {awayRecap && (
+          <div className="mb-6 rounded-xl bg-gradient-to-r from-tavern-800/60 to-tavern-900/60 border border-ember-900/30 px-5 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className={`font-semibold text-ember-100 ${displayFont.className}`}>
+                  🌍 While you were away ({awayRecap.awayLabel})…
+                </p>
+                <p className="text-xs text-ember-300/50 mt-0.5">The world kept moving without you.</p>
+              </div>
+              <button
+                onClick={() => setAwayRecap(null)}
+                className="text-ember-300/40 hover:text-ember-300/80 text-sm flex-shrink-0"
+                aria-label="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+            <ul className="mt-3 space-y-2">
+              {awayRecap.events.map((e) => (
+                <li key={e.id} className="text-sm text-ember-300/70 pl-3 border-l-2 border-ember-700/40">
+                  <span className="text-ember-200 font-medium">{e.title}.</span> {e.summary}
+                </li>
+              ))}
+            </ul>
+            <Link
+              href={`/campaigns/${campaignId}/wiki?type=RUMORS`}
+              className="inline-block mt-3 text-xs text-ember-400 hover:text-ember-300 underline"
+            >
+              See everything that's happened →
+            </Link>
           </div>
         )}
 

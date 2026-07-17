@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { planFactionMerge, planFrontMerge, reseedWorldFromLore } from '../reseedWorld'
-import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
+import { generateWorldExtras } from '@/lib/ai/worldExtras'
 import { createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 
 const db = vi.hoisted(() => ({
@@ -25,7 +25,7 @@ vi.mock('../loreDigest', () => ({
 }))
 vi.mock('@/lib/ai/worldGenerator', () => ({
   generateWorldFromTemplate: vi.fn().mockResolvedValue({
-    factions: [], capabilities: [], statLabels: undefined, fronts: [], npcs: [], locations: [],
+    factions: [], capabilities: [], statLabels: undefined, fronts: [],
   }),
 }))
 vi.mock('@/lib/ai/worldExtras', () => ({
@@ -41,6 +41,8 @@ vi.mock('@/lib/ai/worldExtras', () => ({
       glimpseCapabilityKeys: [],
     }],
     corruptionTheme: null,
+    npcs: [],
+    locations: [],
   }),
 }))
 vi.mock('@/lib/templates/campaign-templates', () => ({
@@ -197,12 +199,9 @@ describe('reseedWorldFromLore — NPCs and locations', () => {
     db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
     db.$transaction.mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops))
 
-    vi.mocked(generateWorldFromTemplate).mockResolvedValue({
-      worldSeed: 'seed',
-      factions: [],
-      capabilities: [],
-      statLabels: undefined,
-      fronts: [],
+    vi.mocked(generateWorldExtras).mockResolvedValue({
+      archetypes: [],
+      corruptionTheme: null,
       npcs: [
         { name: 'Lord Kessler', description: 'x', importance: 4 },
         { name: 'Existing Elder', description: 'y', importance: 2 },

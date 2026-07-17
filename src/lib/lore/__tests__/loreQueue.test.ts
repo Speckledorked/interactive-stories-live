@@ -15,10 +15,19 @@ vi.mock('@/lib/prisma', () => ({
     loreEntry: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
+    reseedJob: {
+      create: vi.fn().mockResolvedValue({ id: 'reseed1' }),
+    },
   },
 }))
 vi.mock('../loreImportService', () => ({
   runLoreImport: vi.fn(),
+}))
+vi.mock('../reseedWorld', () => ({
+  clearPendingWorldSeed: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('../reseedQueue', () => ({
+  kickReseedJob: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/lib/game/resolutionQueue', () => ({
   internalJobSecret: vi.fn().mockReturnValue('test-secret'),
@@ -26,6 +35,8 @@ vi.mock('@/lib/game/resolutionQueue', () => ({
 
 import { prisma } from '@/lib/prisma'
 import { runLoreImport } from '../loreImportService'
+import { clearPendingWorldSeed } from '../reseedWorld'
+import { kickReseedJob } from '../reseedQueue'
 import {
   processLoreImportJob,
   classifyStaleLoreJob,
@@ -62,6 +73,45 @@ describe('processLoreImportJob', () => {
       expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) })
     )
     expect(result.status).toBe('completed')
+  })
+
+  it('does not auto-reseed when autoReseedOnComplete is false', async () => {
+    db.loreImportJob.updateMany.mockResolvedValue({ count: 1 })
+    db.loreImportJob.findUnique.mockResolvedValue({
+      id: 'job1', campaignId: 'camp1', sourceType: 'PASTE', attempts: 1, autoReseedOnComplete: false,
+    })
+    await processLoreImportJob('job1')
+    expect(db.reseedJob.create).not.toHaveBeenCalled()
+    expect(kickReseedJob).not.toHaveBeenCalled()
+    expect(clearPendingWorldSeed).not.toHaveBeenCalled()
+  })
+
+  it('creates and kicks a play-lock-releasing ReseedJob when autoReseedOnComplete is true', async () => {
+    db.loreImportJob.updateMany.mockResolvedValue({ count: 1 })
+    db.loreImportJob.findUnique.mockResolvedValue({
+      id: 'job1', campaignId: 'camp1', sourceType: 'PASTE', attempts: 1, autoReseedOnComplete: true,
+    })
+
+    await processLoreImportJob('job1')
+
+    expect(db.reseedJob.create).toHaveBeenCalledWith({
+      data: { campaignId: 'camp1', releasesPlayLock: true },
+    })
+    expect(kickReseedJob).toHaveBeenCalledWith('reseed1')
+    // The ReseedJob itself owns releasing the lock now, not this path.
+    expect(clearPendingWorldSeed).not.toHaveBeenCalled()
+  })
+
+  it('releases the play lock directly if starting the ReseedJob itself throws', async () => {
+    db.loreImportJob.updateMany.mockResolvedValue({ count: 1 })
+    db.loreImportJob.findUnique.mockResolvedValue({
+      id: 'job1', campaignId: 'camp1', sourceType: 'PASTE', attempts: 1, autoReseedOnComplete: true,
+    })
+    db.reseedJob.create.mockRejectedValue(new Error('db unavailable'))
+
+    await processLoreImportJob('job1')
+
+    expect(clearPendingWorldSeed).toHaveBeenCalledWith('camp1')
   })
 
   it('does not clear prior entries on a first attempt', async () => {

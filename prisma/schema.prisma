@@ -313,6 +313,12 @@ model Campaign {
   loreImportJobs LoreImportJob[]
   loreEntries    LoreEntry[]
 
+  // World reseed: regenerating world structure from imported lore runs
+  // off the request path too (see lib/lore/reseedQueue.ts) — a large
+  // corpus makes two sequential AI calls that can outrun a single
+  // serverless invocation's time budget.
+  reseedJobs ReseedJob[]
+
   // Quest tracking: named objectives the AI GM opens/progresses/closes
   // through play (quest_changes in world_updates — see lib/game/stateUpdater.ts).
   quests Quest[]
@@ -2106,6 +2112,50 @@ model LoreEntry {
   @@index([campaignId])
   @@index([jobId])
   @@map("lore_entries")
+}
+
+enum ReseedJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// One attempt at reseedWorldFromLore (lib/lore/reseedWorld.ts), run off
+// the request path like lore import itself — see lib/lore/reseedQueue.ts
+// for why. reseedWorldFromLore's writes are incremental against current
+// DB state, so an attempt whose invocation gets killed mid-run and gets
+// retried doesn't redo finished work.
+model ReseedJob {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  status    ReseedJobStatus @default(PENDING)
+  attempts  Int             @default(0)
+  lastError String?
+
+  // Set once a global stuck-job sweep (lib/jobs/stuckJobAlert.ts) has
+  // fired an alert for this job — mirrors the identical field on
+  // LoreImportJob/ResolutionJob.
+  alertedStuckAt DateTime?
+
+  // Set when this job exists to satisfy the creation-time auto-reseed
+  // (Campaign.pendingWorldSeed) rather than a manual admin re-run —
+  // mirrors LoreImportJob.autoReseedOnComplete. Either way, the play lock
+  // is released once this job reaches a terminal state.
+  releasesPlayLock Boolean @default(false)
+
+  // The completed run's summary (ReseedSummary), so the admin UI can
+  // render exactly what changed without re-deriving it.
+  summary Json?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@index([campaignId, status])
 }
 
 //

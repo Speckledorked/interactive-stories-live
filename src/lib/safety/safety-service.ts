@@ -206,6 +206,21 @@ export class SafetyService {
   }
 
   /**
+   * Get reports for a campaign, optionally filtered by status. Unlike
+   * getPendingReports, this also surfaces resolved/dismissed reports so an
+   * admin panel can show a full moderation history, not just the queue.
+   */
+  static async getReports(campaignId: string, status?: ReportStatus) {
+    return await prisma.contentReport.findMany({
+      where: {
+        campaignId,
+        ...(status && { status }),
+      },
+      orderBy: [{ status: 'asc' }, { severity: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  /**
    * Review and resolve a report
    */
   static async resolveReport(

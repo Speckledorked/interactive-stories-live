@@ -1754,12 +1754,24 @@ enum ContentWarningType {
   CUSTOM
 }
 
+// Content-category taxonomy — what kind of content triggered the X-Card,
+// not what surface it appeared on (XCardUse.targetId already records the
+// specific message/scene/action id when that's known). Must stay in sync
+// with the trigger <select> in src/components/safety/SimpleXCard.tsx —
+// previously drifted (5 enum values vs. 11 UI options), silently 400ing
+// 10 of 11 reasons.
 enum XCardTrigger {
-  SCENE_CONTENT
-  MESSAGE
-  CHARACTER_ACTION
-  NPC_BEHAVIOR
   GENERAL
+  VIOLENCE
+  GORE
+  TRAUMA
+  ABUSE
+  DEATH
+  PHOBIA
+  SEXUAL
+  SUBSTANCE
+  MENTAL_HEALTH
+  OTHER
 }
 
 enum ReportStatus {

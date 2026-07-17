@@ -128,9 +128,9 @@ the world's *structure*, not just its narration.
 ### Hardening backlog (known gaps from a full codebase audit)
 
 - [ ] Tutorial completion triggers are never sent from the app — every new user's onboarding is permanently stuck at 0%
-- [ ] X-Card safety dropdown offers 11 trigger reasons but the API's enum accepts 5 — 10 of 11 options fail with a 400 (safety-critical, cheap fix)
+- [x] **X-Card safety dropdown/enum mismatch fixed**: `XCardTrigger` was a 5-value "where" taxonomy (`SCENE_CONTENT`/`MESSAGE`/...) while the UI offered 11 "what kind of content" options — 10 of 11 silently 400'd. The enum now matches the UI exactly (`GENERAL`/`VIOLENCE`/`GORE`/`TRAUMA`/`ABUSE`/`DEATH`/`PHOBIA`/`SEXUAL`/`SUBSTANCE`/`MENTAL_HEALTH`/`OTHER`) — the more useful axis for a GM to actually act on, and no UI changes were needed
+- [x] **Safety admin wired up** (was a self-declared stub — full service, zero routes/UI): content reporting (`POST/GET .../reports`, resolve/dismiss), campaign bans (`POST/DELETE .../members/[userId]/ban`, `GET .../bans`, enforced on invite-link rejoin), and self-service per-campaign blocking (`POST/DELETE/GET .../block`, filters the blocked user's messages out of `GET .../messages`). New admin **Safety tab** (reports queue, X-Card history — previously fetched by nothing, banned users), a **Ban** button next to Remove in Members, a **Report** button next to the X-Card in-scene, and a **Block**/Unblock toggle per player in the campaign lobby's roster
 - [ ] Mention/whisper/note-share notifications have a fully built read side (panel, filters, sounds) and no writer
-- [ ] Safety admin panel is a self-declared stub — content reporting, user blocking, and campaign banning exist as a service with no routes or UI
 - [ ] Dead schema surface to clean or wire: `Session*` models + orphaned transcript-export route, `Campaign.mentionsEnabled`/`soundEffectsEnabled`, `Character.experience` (an XP counter nothing increments)
 
 ## Product Roadmap (PbtA × Urban Shadows fusion)

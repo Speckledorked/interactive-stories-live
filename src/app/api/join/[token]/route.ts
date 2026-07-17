@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
+import { SafetyService } from '@/lib/safety/safety-service'
 
 export async function POST(
   request: NextRequest,
@@ -43,6 +44,14 @@ export async function POST(
       return NextResponse.json(
         { error: 'This invite link has reached its maximum uses' },
         { status: 400 }
+      )
+    }
+
+    // A GM-issued ban blocks rejoining via any invite link, expired or not.
+    if (await SafetyService.isUserBanned(invite.campaignId, user.userId)) {
+      return NextResponse.json(
+        { error: 'You have been banned from this campaign' },
+        { status: 403 }
       )
     }
 

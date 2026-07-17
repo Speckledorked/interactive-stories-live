@@ -34,6 +34,18 @@ export async function GET(
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 });
     }
 
+    // Users this member has blocked (campaign-scoped or global) never show
+    // up in their own message list — blocking doesn't remove anyone from
+    // the campaign, it just hides them for the blocker.
+    const blocks = await prisma.userBlock.findMany({
+      where: {
+        userId: user.userId,
+        OR: [{ campaignId: params.id }, { campaignId: null }],
+      },
+      select: { blockedUserId: true },
+    });
+    const blockedUserIds = blocks.map(b => b.blockedUserId);
+
     // Build where clause
     const where: any = {
       campaignId: params.id,
@@ -46,6 +58,10 @@ export async function GET(
         { authorId: user.userId }
       ]
     };
+
+    if (blockedUserIds.length > 0) {
+      where.authorId = { notIn: blockedUserIds };
+    }
 
     if (sceneId) {
       where.sceneId = sceneId;

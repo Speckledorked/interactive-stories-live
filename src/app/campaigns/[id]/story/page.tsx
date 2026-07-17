@@ -22,6 +22,7 @@ import { useCommandPalette } from '@/contexts/CommandPaletteContext'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal'
 import SimpleXCard from '@/components/safety/SimpleXCard'
+import ReportContentModal from '@/components/safety/ReportContentModal'
 import { Home, Scroll, StickyNote, Map as MapIcon, MessageSquare, Settings as SettingsIcon, Keyboard, Eye } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
@@ -669,6 +670,7 @@ export default function StoryPage() {
             </nav>
             <div className="flex items-center gap-1 flex-shrink-0 pb-1.5">
               <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
+              <ReportContentModal campaignId={campaignId} />
               <button
                 onClick={() => setShowKeyboardShortcuts(true)}
                 className="p-1.5 text-ember-300/60 hover:text-ember-100 transition-colors"

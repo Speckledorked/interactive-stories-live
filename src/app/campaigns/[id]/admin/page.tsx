@@ -157,6 +157,17 @@ export default function AdminPage() {
   const [bans, setBans] = useState<any[]>([])
   const [xcardHistory, setXcardHistory] = useState<any[]>([])
   const [safetyLoaded, setSafetyLoaded] = useState(false)
+  const [safetySettings, setSafetySettings] = useState<{
+    xCardEnabled: boolean
+    anonymousXCard: boolean
+    pauseOnXCard: boolean
+    xCardNotifyGMOnly: boolean
+    lines: string[]
+    veils: string[]
+  } | null>(null)
+  const [linesText, setLinesText] = useState('')
+  const [veilsText, setVeilsText] = useState('')
+  const [savingSafetySettings, setSavingSafetySettings] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -217,19 +228,51 @@ export default function AdminPage() {
   const fetchSafetyData = async () => {
     setReportsLoading(true)
     try {
-      const [reportsRes, bansRes, xcardRes] = await Promise.all([
+      const [reportsRes, bansRes, xcardRes, settingsRes] = await Promise.all([
         authenticatedFetch(`/api/campaigns/${campaignId}/reports`),
         authenticatedFetch(`/api/campaigns/${campaignId}/bans`),
         authenticatedFetch(`/api/campaigns/${campaignId}/xcard`),
+        authenticatedFetch(`/api/campaigns/${campaignId}/safety-settings`),
       ])
       if (reportsRes.ok) setReports((await reportsRes.json()).reports || [])
       if (bansRes.ok) setBans((await bansRes.json()).bans || [])
       if (xcardRes.ok) setXcardHistory(await xcardRes.json() || [])
+      if (settingsRes.ok) {
+        const settings = await settingsRes.json()
+        setSafetySettings(settings)
+        setLinesText((settings.lines || []).join('\n'))
+        setVeilsText((settings.veils || []).join('\n'))
+      }
       setSafetyLoaded(true)
     } catch (err) {
       setError('Failed to load safety data')
     } finally {
       setReportsLoading(false)
+    }
+  }
+
+  const handleSaveSafetySettings = async () => {
+    if (!safetySettings) return
+    setSavingSafetySettings(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/safety-settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...safetySettings,
+          lines: linesText.split('\n').map(l => l.trim()).filter(Boolean),
+          veils: veilsText.split('\n').map(v => v.trim()).filter(Boolean),
+        }),
+      })
+      if (!response.ok) throw new Error('Failed to save safety settings')
+      const settings = await response.json()
+      setSafetySettings(settings)
+      setLinesText((settings.lines || []).join('\n'))
+      setVeilsText((settings.veils || []).join('\n'))
+    } catch (err) {
+      setError('Failed to save safety settings')
+    } finally {
+      setSavingSafetySettings(false)
     }
   }
 
@@ -2273,6 +2316,80 @@ export default function AdminPage() {
             {activeTab === 'safety' && (
               <div className="space-y-8">
                 {reportsLoading && <div className="text-sm text-ember-300/60">Loading safety data...</div>}
+
+                {safetySettings && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-ember-100 mb-1">Safety Settings</h3>
+                    <p className="text-xs text-ember-300/50 mb-3">
+                      Lines are enforced in every scene the AI narrates — never included, not even implied. Veils may happen off-page but are never described directly.
+                    </p>
+                    <div className="border border-ember-900/30 rounded-lg p-4 space-y-4">
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        <label className="flex items-center gap-2 text-sm text-ember-200">
+                          <input
+                            type="checkbox"
+                            checked={safetySettings.xCardEnabled}
+                            onChange={(e) => setSafetySettings({ ...safetySettings, xCardEnabled: e.target.checked })}
+                          />
+                          X-Card enabled
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-ember-200">
+                          <input
+                            type="checkbox"
+                            checked={safetySettings.pauseOnXCard}
+                            onChange={(e) => setSafetySettings({ ...safetySettings, pauseOnXCard: e.target.checked })}
+                          />
+                          Pause the scene when the X-Card is used
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-ember-200">
+                          <input
+                            type="checkbox"
+                            checked={safetySettings.anonymousXCard}
+                            onChange={(e) => setSafetySettings({ ...safetySettings, anonymousXCard: e.target.checked })}
+                          />
+                          Keep who used the X-Card anonymous
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-ember-200">
+                          <input
+                            type="checkbox"
+                            checked={safetySettings.xCardNotifyGMOnly}
+                            onChange={(e) => setSafetySettings({ ...safetySettings, xCardNotifyGMOnly: e.target.checked })}
+                          />
+                          Notify GM only (not the whole table)
+                        </label>
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Lines (hard limits, one per line)</label>
+                          <textarea
+                            value={linesText}
+                            onChange={(e) => setLinesText(e.target.value)}
+                            placeholder={'e.g. sexual violence\nharm to children'}
+                            className="w-full px-3 py-2 bg-black/30 border border-ember-900/40 rounded-lg text-ember-100 placeholder-ember-500/40 focus:outline-none focus:border-ember-500 resize-none text-sm"
+                            rows={4}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-ember-200/80 mb-1">Veils (soft limits, one per line)</label>
+                          <textarea
+                            value={veilsText}
+                            onChange={(e) => setVeilsText(e.target.value)}
+                            placeholder={'e.g. torture\ngraphic injury detail'}
+                            className="w-full px-3 py-2 bg-black/30 border border-ember-900/40 rounded-lg text-ember-100 placeholder-ember-500/40 focus:outline-none focus:border-ember-500 resize-none text-sm"
+                            rows={4}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleSaveSafetySettings}
+                        disabled={savingSafetySettings}
+                        className="px-4 py-2 bg-wine-600 hover:bg-wine-500 text-white rounded-md disabled:opacity-50 text-sm"
+                      >
+                        {savingSafetySettings ? 'Saving...' : 'Save Safety Settings'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <h3 className="text-lg font-semibold text-ember-100 mb-3">Content Reports</h3>

@@ -178,8 +178,26 @@ If the request seems impossible, suggest a viable alternative.`
 
     const interpretation = interpretationResult.interpretation
 
-    // Note: Character gold tracking removed - can be added back if needed
-    // For now, we assume the activity is affordable
+    // Charge the gold cost now, at commitment — the UI shows "Cost: X gold"
+    // as a real cost, not flavor text, so it needs to actually be one.
+    // Previously nothing here ever touched Character.resources: every
+    // downtime activity was free regardless of what it claimed to cost.
+    const goldCost = interpretation.costs.gold || 0
+    if (goldCost > 0) {
+      const character = await prisma.character.findUnique({
+        where: { id: characterId },
+        select: { resources: true },
+      })
+      const currentResources: any = (character?.resources as any) || {}
+      const currentGold = currentResources.gold || 0
+      if (currentGold < goldCost) {
+        throw new Error(`Not enough gold for this activity (needs ${goldCost}, have ${currentGold})`)
+      }
+      await prisma.character.update({
+        where: { id: characterId },
+        data: { resources: { ...currentResources, gold: currentGold - goldCost } },
+      })
+    }
 
     // Create the activity using the correct schema fields
     const activity = await prisma.downtimeActivity.create({

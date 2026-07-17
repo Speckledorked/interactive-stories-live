@@ -549,6 +549,14 @@ export async function buildSceneResolutionRequest(
     throw new Error('Campaign not found')
   }
 
+  // Lines and veils (see lib/safety/safety-service.ts) — a plain findUnique,
+  // not getCampaignSafety, so a campaign that's never touched its safety
+  // settings doesn't get a settings row created as a side effect of playing.
+  const safetySettings = await prisma.campaignSafetySettings.findUnique({
+    where: { campaignId },
+    select: { lines: true, veils: true },
+  })
+
   // Get current scene with all actions
   const scene = await prisma.scene.findUnique({
     where: { id: sceneId },
@@ -844,6 +852,8 @@ export async function buildSceneResolutionRequest(
     world_summary: worldSummaryWithMemories,
     current_scene_intro: sceneContext,
     corruption_theme: corruptionThemeForPrompt,
+    safety_lines: safetySettings?.lines ?? [],
+    safety_veils: safetySettings?.veils ?? [],
     player_actions: playerActions,
     action_mechanics: actionMechanics
   }
@@ -858,6 +868,23 @@ export async function buildSceneResolutionRequest(
  */
 export async function generateNewSceneIntro(campaignId: string): Promise<string> {
   console.log('🎭 Generating new scene intro')
+
+  // Lines and veils (see lib/safety/safety-service.ts) — this prompt is
+  // built independently of buildSceneResolutionRequest's client.ts <safety>
+  // section, so it needs its own instruction text below.
+  const safetySettings = await prisma.campaignSafetySettings.findUnique({
+    where: { campaignId },
+    select: { lines: true, veils: true },
+  })
+  const lines = safetySettings?.lines ?? []
+  const veils = safetySettings?.veils ?? []
+  const safetyText = lines.length > 0 || veils.length > 0
+    ? `\n\nCONTENT BOUNDARIES (override everything else, including genre conventions):${
+        lines.length > 0 ? `\nHARD LINES — never include or approach, even obliquely: ${lines.join('; ')}` : ''
+      }${
+        veils.length > 0 ? `\nSOFT VEILS — may happen off-page, never described directly: ${veils.join('; ')}` : ''
+      }`
+    : ''
 
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
@@ -1050,7 +1077,7 @@ ${characterContext}
 
 LAST SCENE RESOLUTION:
 ${lastScene?.sceneResolutionText || 'This is the first scene of the campaign. There is no prior action to continue from - the character has not yet set foot in the story.'}
-${offscreenFalloutText}
+${offscreenFalloutText}${safetyText}
 
 Generate an engaging, atmospheric scene introduction that:
 

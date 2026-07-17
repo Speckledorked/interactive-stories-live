@@ -234,6 +234,15 @@ describe('Scene Resolver', () => {
       );
     });
 
+    it('should throw error if scene is paused by an X-Card', async () => {
+      const pausedScene = { ...mockScene, isPaused: true };
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(pausedScene as any);
+
+      await expect(resolveScene(mockCampaignId, mockSceneId)).rejects.toThrow(
+        'Scene is paused'
+      );
+    });
+
     it('should throw error if no player actions submitted', async () => {
       const sceneWithoutActions = { ...mockScene, playerActions: [] };
       vi.mocked(prisma.scene.findUnique).mockResolvedValue(sceneWithoutActions as any);

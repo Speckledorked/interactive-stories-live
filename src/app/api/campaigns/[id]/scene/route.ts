@@ -197,6 +197,15 @@ export async function POST(
       )
     }
 
+    // X-Card pause (see lib/safety/safety-service.ts) blocks new actions
+    // until a GM/admin resumes the scene.
+    if (scene.isPaused) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'This scene is paused for a safety check-in. A GM must resume it before play continues.' },
+        { status: 423 }
+      )
+    }
+
     // Check if character is already in another active scene
     const otherActiveScenes = await prisma.scene.findMany({
       where: {

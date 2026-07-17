@@ -6,40 +6,23 @@
 
 import { prisma } from '@/lib/prisma';
 import { XCardTrigger, ReportStatus, ReportSeverity } from '@prisma/client';
-
-// ContentWarningType enum - matches prisma schema but not exported by Prisma client
-// because it's stored as Json in the database
-export enum ContentWarningType {
-  VIOLENCE = 'VIOLENCE',
-  SEXUAL_CONTENT = 'SEXUAL_CONTENT',
-  GORE = 'GORE',
-  HORROR = 'HORROR',
-  SUBSTANCE_ABUSE = 'SUBSTANCE_ABUSE',
-  MENTAL_HEALTH = 'MENTAL_HEALTH',
-  DISCRIMINATION = 'DISCRIMINATION',
-  DEATH = 'DEATH',
-  TRAUMA = 'TRAUMA',
-  CUSTOM = 'CUSTOM',
-}
+import PusherServer from '@/lib/realtime/pusher-server';
 
 export interface SafetySettings {
   xCardEnabled?: boolean;
   anonymousXCard?: boolean;
   pauseOnXCard?: boolean;
   xCardNotifyGMOnly?: boolean;
-  contentWarningsEnabled?: boolean;
-  activeWarnings?: ContentWarningType[];
   lines?: string[];
   veils?: string[];
-  autoModeration?: boolean;
-  moderationLevel?: 'low' | 'medium' | 'high';
 }
 
 export class SafetyService {
   /**
-   * Initialize safety settings for a campaign
+   * Create or update a campaign's safety settings. Upserts, so this is
+   * safe to call whether or not a settings row exists yet for this campaign.
    */
-  static async initializeCampaignSafety(campaignId: string, settings: SafetySettings = {}) {
+  static async updateSafetySettings(campaignId: string, settings: SafetySettings = {}) {
     return await prisma.campaignSafetySettings.upsert({
       where: { campaignId },
       update: settings,
@@ -49,40 +32,21 @@ export class SafetyService {
         anonymousXCard: settings.anonymousXCard ?? true,
         pauseOnXCard: settings.pauseOnXCard ?? true,
         xCardNotifyGMOnly: settings.xCardNotifyGMOnly ?? false,
-        contentWarningsEnabled: settings.contentWarningsEnabled ?? true,
-        activeWarnings: settings.activeWarnings ?? [],
         lines: settings.lines ?? [],
         veils: settings.veils ?? [],
-        autoModeration: settings.autoModeration ?? false,
-        moderationLevel: settings.moderationLevel ?? 'medium',
       },
     });
   }
 
   /**
-   * Get campaign safety settings
+   * Get campaign safety settings, creating the default row on first read.
    */
   static async getCampaignSafety(campaignId: string) {
-    let settings = await prisma.campaignSafetySettings.findUnique({
+    const settings = await prisma.campaignSafetySettings.findUnique({
       where: { campaignId },
     });
 
-    if (!settings) {
-      // Create default settings if they don't exist
-      settings = await this.initializeCampaignSafety(campaignId);
-    }
-
-    return settings;
-  }
-
-  /**
-   * Update campaign safety settings
-   */
-  static async updateSafetySettings(campaignId: string, settings: SafetySettings) {
-    return await prisma.campaignSafetySettings.update({
-      where: { campaignId },
-      data: settings,
-    });
+    return settings ?? (await this.updateSafetySettings(campaignId));
   }
 
   /**
@@ -120,7 +84,7 @@ export class SafetyService {
 
     // If pauseOnXCard is enabled, pause the scene
     if (settings.pauseOnXCard && sceneId) {
-      await this.pauseScene(sceneId);
+      await this.pauseScene(sceneId, `X-Card called (${trigger})`);
     }
 
     return xCardUse;
@@ -368,77 +332,6 @@ export class SafetyService {
     return true;
   }
 
-  /**
-   * Content moderation check (basic implementation)
-   * In production, this would integrate with OpenAI Moderation API or similar
-   */
-  static async moderateContent(text: string, campaignId: string): Promise<{
-    flagged: boolean;
-    categories: string[];
-    severity: ReportSeverity;
-  }> {
-    const settings = await this.getCampaignSafety(campaignId);
-
-    if (!settings.autoModeration) {
-      return { flagged: false, categories: [], severity: ReportSeverity.LOW };
-    }
-
-    // Basic keyword-based moderation (placeholder)
-    // In production, use OpenAI Moderation API or similar service
-    const flaggedKeywords = {
-      high: ['extreme_violence', 'hate_speech', 'illegal'],
-      medium: ['sexual_explicit', 'graphic_violence'],
-      low: ['profanity', 'mild_violence'],
-    };
-
-    const lowerText = text.toLowerCase();
-    const foundCategories: string[] = [];
-    let maxSeverity: ReportSeverity = ReportSeverity.LOW;
-
-    // Check against lines (hard boundaries)
-    for (const line of settings.lines) {
-      if (lowerText.includes(line.toLowerCase())) {
-        foundCategories.push(`line_crossed:${line}`);
-        maxSeverity = ReportSeverity.HIGH;
-      }
-    }
-
-    // Basic keyword check (very simplified)
-    if (foundCategories.length === 0) {
-      // No violations found in this basic check
-      return { flagged: false, categories: [], severity: ReportSeverity.LOW };
-    }
-
-    return {
-      flagged: foundCategories.length > 0,
-      categories: foundCategories,
-      severity: maxSeverity,
-    };
-  }
-
-  /**
-   * Set up Session Zero (pre-game safety discussion)
-   */
-  static async completeSessionZero(
-    campaignId: string,
-    lines: string[],
-    veils: string[],
-    activeWarnings: ContentWarningType[],
-    notes?: string
-  ) {
-    return await prisma.campaignSafetySettings.update({
-      where: { campaignId },
-      data: {
-        sessionZeroCompleted: true,
-        sessionZeroDate: new Date(),
-        sessionZeroNotes: notes,
-        lines,
-        veils,
-        activeWarnings,
-      },
-    });
-  }
-
   // Private helper methods
 
   private static async notifyXCardUse(
@@ -491,16 +384,61 @@ export class SafetyService {
     }
   }
 
-  private static async pauseScene(sceneId: string) {
-    // Set scene status to a paused state
-    // Note: We don't have a PAUSED status, so we'll use AWAITING_ACTIONS
-    // In a full implementation, add a PAUSED status to SceneStatus enum
-    await prisma.scene.update({
+  // Sets Scene.isPaused (see schema comment) and broadcasts it so every
+  // connected client reacts immediately — the story page blocks new action
+  // submissions and resolution while paused (see scene/route.ts,
+  // sceneResolver.ts resolveScene) regardless of which of these two entry
+  // points set the flag.
+  private static async pauseScene(sceneId: string, reason: string) {
+    const scene = await prisma.scene.update({
       where: { id: sceneId },
       data: {
-        // Add a flag or use existing status
-        // For now, we'll just record it in the database
+        isPaused: true,
+        pausedAt: new Date(),
+        pausedReason: reason,
       },
     });
+
+    try {
+      const pusher = PusherServer();
+      if (pusher) {
+        await pusher.trigger(`campaign-${scene.campaignId}`, 'scene:paused', {
+          sceneId,
+          campaignId: scene.campaignId,
+          reason,
+        });
+      }
+    } catch (pusherError) {
+      console.error('⚠️ Failed to broadcast Pusher scene:paused event:', pusherError);
+    }
+  }
+
+  /**
+   * Resume a scene paused by an X-Card (GM/admin action, see
+   * scenes/[sceneId]/resume route).
+   */
+  static async resumeScene(sceneId: string) {
+    const scene = await prisma.scene.update({
+      where: { id: sceneId },
+      data: {
+        isPaused: false,
+        pausedAt: null,
+        pausedReason: null,
+      },
+    });
+
+    try {
+      const pusher = PusherServer();
+      if (pusher) {
+        await pusher.trigger(`campaign-${scene.campaignId}`, 'scene:resumed', {
+          sceneId,
+          campaignId: scene.campaignId,
+        });
+      }
+    } catch (pusherError) {
+      console.error('⚠️ Failed to broadcast Pusher scene:resumed event:', pusherError);
+    }
+
+    return scene;
   }
 }

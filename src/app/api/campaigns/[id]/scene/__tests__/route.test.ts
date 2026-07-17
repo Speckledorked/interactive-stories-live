@@ -144,6 +144,13 @@ describe('POST /api/campaigns/[id]/scene', () => {
     expect(response.status).toBe(400)
   })
 
+  it('rejects submitting to a scene paused by an X-Card', async () => {
+    db.scene.findUnique.mockResolvedValue({ ...makeBaseScene(), isPaused: true })
+    const response = await call()
+    expect(response.status).toBe(423)
+    expect(db.playerAction.create).not.toHaveBeenCalled()
+  })
+
   it('creates the action and enqueues resolution immediately for an open scene', async () => {
     const response = await call()
 

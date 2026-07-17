@@ -373,6 +373,12 @@ export interface AIGMRequest {
     // unlock (required_marks = the node's tier; enforced by the engine).
     shadow_arts?: Array<{ name: string; domain: string; required_marks: number }>
   } | null
+  // Lines and veils (see lib/safety/safety-service.ts) — hard/soft content
+  // boundaries the table set. Empty arrays when unset; gates the <safety>
+  // prompt section entirely so campaigns that never touched this incur no
+  // prompt cost.
+  safety_lines?: string[]
+  safety_veils?: string[]
   player_actions: Array<{
     character_name: string
     character_id: string
@@ -886,6 +892,17 @@ SHADOW ARTS — this world's forbidden arts, wieldable only by the marked:
 ${request.corruption_theme.shadow_arts.map(s => `- ${s.name} (${s.domain})`).join('\n')}
 These may be glimpsed by anyone — rumors, forbidden texts, witnessing one used — but they refuse the unmarked. Only a character already carrying enough of ${request.corruption_theme.name} can unlock one; the engine enforces this, downgrading premature unlocks to glimpses. Narrate a premature attempt as the art itself resisting: it wants more of them first. Never present learning one as safe or free.` : ''}
 </corruption>
+` : ''}
+${(request.safety_lines && request.safety_lines.length > 0) || (request.safety_veils && request.safety_veils.length > 0) ? `
+<safety>
+This table set explicit content boundaries. These override everything else in this prompt, including genre conventions and dramatic instinct.
+${request.safety_lines && request.safety_lines.length > 0 ? `
+LINES — HARD limits. NEVER include, reference, or approach these, even obliquely, even for a single sentence. If the scene is heading toward one, steer it elsewhere before it arrives — do not "fade to black" on a line, avoid it entirely:
+${request.safety_lines.map(l => `- ${l}`).join('\n')}` : ''}
+${request.safety_veils && request.safety_veils.length > 0 ? `
+VEILS — soft limits. These may happen OFF-PAGE: acknowledge that something occurred, then cut away before any detail. Never describe them directly:
+${request.safety_veils.map(v => `- ${v}`).join('\n')}` : ''}
+</safety>
 ` : ''}
 
 <npc_tracking>

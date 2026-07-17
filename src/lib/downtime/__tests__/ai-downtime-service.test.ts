@@ -5,15 +5,18 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { findUniqueMock, findFirstMock } = vi.hoisted(() => ({
+const { findUniqueMock, findFirstMock, updateMock, activityCreateMock } = vi.hoisted(() => ({
   findUniqueMock: vi.fn(),
   findFirstMock: vi.fn(),
+  updateMock: vi.fn(),
+  activityCreateMock: vi.fn(),
 }))
 
 vi.mock('@prisma/client', () => ({
   PrismaClient: class {
-    character = { findUnique: findUniqueMock }
+    character = { findUnique: findUniqueMock, update: updateMock }
     scene = { findFirst: findFirstMock }
+    downtimeActivity = { create: activityCreateMock }
   },
 }))
 
@@ -105,5 +108,70 @@ describe('getPersonalizedSuggestions', () => {
 
     const result = await AIDrivenDowntimeService.getPersonalizedSuggestions('char1')
     expect(result.length).toBeGreaterThan(0)
+  })
+})
+
+describe('createDynamicActivity — gold cost', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    activityCreateMock.mockResolvedValue({ id: 'activity1' })
+    // generateInitialEvents is a full AI-call pipeline unrelated to what
+    // this suite covers (gold charging) — treated as a black box, same
+    // pattern used elsewhere in this codebase for sibling subsystems.
+    vi.spyOn(AIDrivenDowntimeService as any, 'generateInitialEvents').mockResolvedValue(undefined)
+  })
+
+  function stubInterpretation(gold: number) {
+    return vi.spyOn(AIDrivenDowntimeService, 'interpretDowntimeActivity').mockResolvedValue({
+      success: true,
+      interpretation: {
+        summary: 'Train at the local guild',
+        estimatedDuration: 3,
+        costs: { gold, resources: [] },
+        requirements: [],
+        skillsInvolved: [],
+        riskLevel: 'low',
+        potentialOutcomes: [],
+        potentialComplications: [],
+        isViable: true,
+        aiNotes: '',
+      },
+    } as any)
+  }
+
+  it('charges gold and creates the activity when affordable — previously nothing ever deducted it', async () => {
+    stubInterpretation(20)
+    findUniqueMock.mockResolvedValue({ resources: { gold: 50 } })
+    updateMock.mockResolvedValue({})
+
+    await AIDrivenDowntimeService.createDynamicActivity('char1', 'I train at the guild')
+
+    expect(updateMock).toHaveBeenCalledWith({
+      where: { id: 'char1' },
+      data: { resources: { gold: 30 } },
+    })
+    expect(activityCreateMock).toHaveBeenCalled()
+  })
+
+  it('rejects the activity when the character cannot afford it, without creating it', async () => {
+    stubInterpretation(100)
+    findUniqueMock.mockResolvedValue({ resources: { gold: 10 } })
+
+    await expect(
+      AIDrivenDowntimeService.createDynamicActivity('char1', 'I hire mercenaries')
+    ).rejects.toThrow('Not enough gold')
+
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(activityCreateMock).not.toHaveBeenCalled()
+  })
+
+  it('skips the gold check entirely for free activities', async () => {
+    stubInterpretation(0)
+    findUniqueMock.mockResolvedValue({ resources: { gold: 0 } })
+
+    await AIDrivenDowntimeService.createDynamicActivity('char1', 'I rest at the inn')
+
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(activityCreateMock).toHaveBeenCalled()
   })
 })

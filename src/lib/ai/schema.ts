@@ -220,11 +220,17 @@ export const PerkSchema = z.object({
   tags: z.array(z.string()).optional()
 })
 
+export const MoveSchema = z.object({
+  name: z.string(),
+  trigger: z.string(),
+  description: z.string()
+})
+
 export const OrganicAdvancementSchema = z.object({
   character_id: z.string(),
   stat_increases: z.array(StatIncreaseSchema).optional(),
   new_perks: z.array(PerkSchema).optional(),
-  new_moves: z.array(z.string()).optional()
+  new_moves: z.array(MoveSchema).optional()
 })
 
 // Location changes schema

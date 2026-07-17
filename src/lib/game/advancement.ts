@@ -3,15 +3,21 @@
 // NO manual level-ups or player-facing menus
 
 import { Character } from '@prisma/client'
+import { ARC_LENGTH_TURNS, slugifyCapabilityKey } from './capabilities'
 
 /**
- * Stat usage tracking structure
+ * Stat usage tracking structure. lastGrowthTurn gates re-proposing a +1 for
+ * the same stat within ARC_LENGTH_TURNS — without it, a stat that's crossed
+ * the growth threshold would re-propose +1 on every future resolution that
+ * uses it, throttled only by the PbtA sum/cap constraints silently
+ * rejecting the proposal once the math can't fit.
  */
 export interface StatUsage {
   [statKey: string]: {
     uses: number
     successes: number
     failures: number
+    lastGrowthTurn?: number
   }
 }
 
@@ -26,6 +32,36 @@ export interface Perk {
 }
 
 /**
+ * Move structure. Moves are rare, narratively-earned signature tricks —
+ * distinct from capabilities (skill-tree systems the fiction reveals) and
+ * perks (small bonuses from a repeated pattern of actions). id is derived
+ * server-side from name via slugifyCapabilityKey, not trusted from the AI,
+ * so the same conceptual move reported with slightly different phrasing
+ * across scenes still dedupes correctly.
+ */
+export interface Move {
+  id: string
+  name: string
+  trigger: string
+  description: string
+}
+
+/**
+ * Build a Move from what the AI reports (name/trigger/description) — the id
+ * is always derived here, never taken from the AI, so the same conceptual
+ * move dedupes correctly even if the AI phrases it slightly differently
+ * across scenes.
+ */
+export function buildMoveFromAI(aiMove: { name: string; trigger: string; description: string }): Move {
+  return {
+    id: slugifyCapabilityKey(aiMove.name),
+    name: aiMove.name,
+    trigger: aiMove.trigger,
+    description: aiMove.description
+  }
+}
+
+/**
  * Organic growth instruction structure
  */
 export interface OrganicGrowthInstruction {
@@ -35,7 +71,7 @@ export interface OrganicGrowthInstruction {
     reason: string
   }>
   newPerks: Perk[]
-  newMoves: string[]
+  newMoves: Move[]
 }
 
 /**
@@ -64,6 +100,7 @@ export interface AdvancementLogEntry {
     perkId?: string
     perkName?: string
     moveId?: string
+    moveName?: string
     reason: string
   }
 }
@@ -111,13 +148,17 @@ export function recordStatUsage(
  * This is a heuristic system that looks for patterns in:
  * - Repeated stat usage with success
  * - Action tags suggesting training or practice
- * - Total experience accumulated
+ *
+ * currentTurn gates stat growth to at most once per ARC_LENGTH_TURNS per
+ * stat (via each stat's statUsage.lastGrowthTurn) — the same arc cadence
+ * capabilities.ts uses, so both growth systems pace at a comparable rate.
  *
  * Returns suggestions; does not apply them directly
  */
 export function computeOrganicGrowth(
   character: Character,
-  recentActions: RecentAction[]
+  recentActions: RecentAction[],
+  currentTurn: number
 ): OrganicGrowthInstruction {
   const instruction: OrganicGrowthInstruction = {
     statIncreases: [],
@@ -142,6 +183,13 @@ export function computeOrganicGrowth(
   for (const [statKey, usage] of Object.entries(statUsage)) {
     // Threshold: 10+ uses with at least 60% success rate
     if (usage.uses >= 10 && usage.successes / usage.uses >= 0.6) {
+      // Already grew this stat within the current arc — the cumulative
+      // usage counter never resets, so without this the same threshold
+      // would re-propose +1 on every future resolution that uses this
+      // stat until the PbtA sum/cap constraints start silently rejecting it.
+      const lastGrowthTurn = usage.lastGrowthTurn ?? -Infinity
+      if (currentTurn - lastGrowthTurn < ARC_LENGTH_TURNS) continue
+
       // Suggest a +1 increase (will be validated by applyOrganicGrowth)
       instruction.statIncreases.push({
         statKey,
@@ -264,12 +312,12 @@ export function applyOrganicGrowth(
 ): {
   updatedStats: any
   updatedPerks: any
-  updatedMoves: string[]
+  updatedMoves: Move[]
 } {
   // Start with current values
   let stats = character.stats ? { ...(character.stats as any as Record<string, number>) } : {}
   let perks = character.perks ? [...(character.perks as any as Perk[])] : []
-  let moves = character.moves ? [...character.moves] : []
+  let moves = character.moves ? [...(character.moves as any as Move[])] : []
 
   // Apply stat increases
   for (const statIncrease of instructions.statIncreases) {
@@ -295,11 +343,12 @@ export function applyOrganicGrowth(
     }
   }
 
-  // Apply new moves (deduplicate)
-  for (const moveId of instructions.newMoves) {
-    if (!moves.includes(moveId)) {
-      moves.push(moveId)
-      console.log(`✅ Granted move: ${moveId}`)
+  // Apply new moves (deduplicate by id)
+  for (const newMove of instructions.newMoves) {
+    const exists = moves.some(m => m.id === newMove.id)
+    if (!exists) {
+      moves.push(newMove)
+      console.log(`✅ Granted move: ${newMove.name}`)
     }
   }
 
@@ -392,6 +441,7 @@ export function logPerkGained(
 export function logMoveLearned(
   log: AdvancementLog,
   moveId: string,
+  moveName: string,
   reason: string,
   turnNumber?: number,
   sceneId?: string
@@ -403,6 +453,7 @@ export function logMoveLearned(
     type: 'move_learned',
     details: {
       moveId,
+      moveName,
       reason
     }
   }
@@ -445,7 +496,7 @@ export function formatAdvancementEntry(entry: AdvancementLogEntry): string {
     case 'perk_gained':
       return `${date}${turnInfo}: Gained perk "${entry.details.perkName}" - ${entry.details.reason}`
     case 'move_learned':
-      return `${date}${turnInfo}: Learned move "${entry.details.moveId}" - ${entry.details.reason}`
+      return `${date}${turnInfo}: Learned move "${entry.details.moveName || entry.details.moveId}" - ${entry.details.reason}`
     default:
       return `${date}${turnInfo}: Unknown advancement type`
   }

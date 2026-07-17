@@ -593,11 +593,11 @@ model Character {
   // Shape: { offer: string, offeredTurn: number }
   pendingBargain Json?
   conditions Json? // { conditions: [{ id, name, category, description, mechanicalEffect?, appliedAt? }] }
-  moves      String[] // Character move IDs they've unlocked
+  moves      Json? // [{ id, name, trigger, description }] — rare, narratively-earned signature tricks (see lib/game/advancement.ts). Distinct from capabilities (skill-tree systems) and perks (repeated-pattern bonuses).
   holds      Json? // Temporary holds/forward from moves
 
   // Organic growth tracking
-  statUsage      Json? // { [statKey: string]: { uses: Int, successes: Int, failures: Int } }
+  statUsage      Json? // { [statKey: string]: { uses: Int, successes: Int, failures: Int, lastGrowthTurn?: Int } } — lastGrowthTurn gates re-proposing a +1 within the same arc (see ARC_LENGTH_TURNS in lib/game/capabilities.ts)
   perks          Json? // [{ id, name, description, tags? }]
   advancementLog Json? // { entries: [], totalStatIncreases, totalPerksGained, totalMovesLearned }
 

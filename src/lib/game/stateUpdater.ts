@@ -769,75 +769,12 @@ export async function applyWorldUpdates(
         }
       }
 
-      // 5. Process organic character advancement
-      if (world_updates.organic_advancement) {
-        console.log(`📈 Processing ${world_updates.organic_advancement.length} character advancement(s)`)
-
-        for (const advancement of world_updates.organic_advancement) {
-          const character = await tx.character.findUnique({
-            where: { id: advancement.character_id }
-          })
-
-          if (character) {
-            const updateData: any = {}
-
-            // Process stat increases
-            if (advancement.stat_increases && advancement.stat_increases.length > 0) {
-              const currentStats: any = (character.stats as any) || {}
-
-              for (const statIncrease of advancement.stat_increases) {
-                const currentValue = currentStats[statIncrease.stat_key] || 0
-                const newValue = Math.min(3, currentValue + statIncrease.delta) // Cap at +3
-                currentStats[statIncrease.stat_key] = newValue
-                console.log(`  📊 ${character.name} ${statIncrease.stat_key}: ${currentValue} → ${newValue} (${statIncrease.reason})`)
-              }
-
-              updateData.stats = currentStats
-            }
-
-            // Process new perks
-            if (advancement.new_perks && advancement.new_perks.length > 0) {
-              const currentPerks: any[] = (character.perks as any) || []
-
-              for (const newPerk of advancement.new_perks) {
-                // Check if perk already exists
-                const exists = currentPerks.some((p: any) => p.id === newPerk.id)
-                if (!exists) {
-                  currentPerks.push(newPerk)
-                  console.log(`  ✨ ${character.name} gained perk: ${newPerk.name}`)
-                }
-              }
-
-              updateData.perks = currentPerks
-            }
-
-            // Process new moves
-            if (advancement.new_moves && advancement.new_moves.length > 0) {
-              const currentMoves: string[] = (character.moves as any) || []
-
-              for (const newMove of advancement.new_moves) {
-                if (!currentMoves.includes(newMove)) {
-                  currentMoves.push(newMove)
-                  console.log(`  🎯 ${character.name} learned move: ${newMove}`)
-                }
-              }
-
-              updateData.moves = currentMoves
-            }
-
-            if (Object.keys(updateData).length > 0) {
-              await tx.character.update({
-                where: { id: character.id },
-                data: updateData
-              })
-
-              console.log(`  📈 Advanced character: ${character.name}`)
-            }
-          } else {
-            console.warn(`  ⚠️ Character not found for advancement: ${advancement.character_id}`)
-          }
-        }
-      }
+      // organic_advancement (stat_increases/new_perks/new_moves) is deliberately
+      // NOT processed here — applyOrganicCharacterGrowth in sceneResolver.ts is
+      // the single writer for it (merges this with system-computed growth,
+      // validates PbtA stat constraints, dedupes perks/moves by id). Processing
+      // it here too would double-apply every stat increase, perk, and move the
+      // AI reports, since both run in the same resolution.
 
       // 6. Update factions
       if (world_updates.faction_changes) {

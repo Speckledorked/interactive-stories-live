@@ -268,10 +268,23 @@ Rules for locations:
       }
     }
 
+    // Dedupe by case-insensitive name WITHIN this response, not just
+    // against what's already in the DB (that dedup happens later, at the
+    // call site) — the model can and does name the same notable place
+    // twice across a rich lore digest (e.g. "Whiterun" mentioned in
+    // several sampled entries). Location has a real DB unique constraint
+    // on (campaignId, name); two same-named locations in one response
+    // meant the second create() threw and crashed the whole call — inside
+    // the campaign-creation transaction at creation time, that took the
+    // entire campaign create down with it, not just the location.
     const npcs: GeneratedNPC[] = []
+    const seenNpcNames = new Set<string>()
     if (Array.isArray(raw.npcs)) {
       for (const n of raw.npcs) {
         if (!n?.name) continue
+        const key = String(n.name).toLowerCase()
+        if (seenNpcNames.has(key)) continue
+        seenNpcNames.add(key)
         npcs.push({
           name: String(n.name),
           description: String(n.description || ''),
@@ -284,9 +297,13 @@ Rules for locations:
     }
 
     const locations: GeneratedLocation[] = []
+    const seenLocationNames = new Set<string>()
     if (Array.isArray(raw.locations)) {
       for (const l of raw.locations) {
         if (!l?.name) continue
+        const key = String(l.name).toLowerCase()
+        if (seenLocationNames.has(key)) continue
+        seenLocationNames.add(key)
         locations.push({
           name: String(l.name),
           description: String(l.description || ''),

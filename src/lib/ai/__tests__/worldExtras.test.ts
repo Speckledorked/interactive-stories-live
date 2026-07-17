@@ -161,4 +161,41 @@ describe('generateWorldExtras', () => {
     const result = await generateWorldExtras('T', '', 'U', factions, capabilities)
     expect(result?.locations).toEqual([])
   })
+
+  it('drops a duplicate location name within the same response (case-insensitive) — Location has a real DB unique constraint that a repeat would crash', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({
+      archetypes: [],
+      corruption_theme: null,
+      locations: [
+        { name: 'Whiterun', description: 'first mention' },
+        { name: 'whiterun', description: 'same place, different case, mentioned again' },
+        { name: 'Riverwood', description: 'a different place' },
+      ],
+    }))
+
+    const result = await generateWorldExtras('T', '', 'U', factions, capabilities)
+
+    expect(result?.locations).toEqual([
+      { name: 'Whiterun', description: 'first mention', locationType: undefined, ownerFactionName: undefined },
+      { name: 'Riverwood', description: 'a different place', locationType: undefined, ownerFactionName: undefined },
+    ])
+  })
+
+  it('drops a duplicate npc name within the same response (case-insensitive)', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({
+      archetypes: [],
+      corruption_theme: null,
+      npcs: [
+        { name: 'Lord Kessler', description: 'first mention', importance: 3 },
+        { name: 'LORD KESSLER', description: 'mentioned again', importance: 4 },
+      ],
+    }))
+
+    const result = await generateWorldExtras('T', '', 'U', factions, capabilities)
+
+    expect(result?.npcs).toHaveLength(1)
+    expect(result?.npcs[0]).toMatchObject({ name: 'Lord Kessler', description: 'first mention' })
+  })
 })

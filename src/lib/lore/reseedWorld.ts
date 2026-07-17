@@ -16,7 +16,12 @@
 //
 // LIVE (characters exist): strictly non-destructive. Factions and
 // capabilities are additive, stat labels and the corruption theme fill in
-// only if absent, archetypes are left alone.
+// only if absent, archetypes are left alone — UNLESS the campaign
+// currently has zero (a previous generation attempt failed/timed out
+// partway through and never recovered), in which case archetypes are
+// still (re)generated so the "Reseed from lore" admin button is a real
+// recovery path even after characters exist, not just a fresh-mode-only
+// escape hatch.
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -221,7 +226,13 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
   }
 
   // --- Extras: archetypes + corruption theme ---------------------------------
-  const wantArchetypes = fresh
+  // A live campaign with zero archetypes means a previous generation
+  // attempt (fresh-mode, at creation or an earlier reseed) failed or was
+  // interrupted partway through and never recovered — regenerate them here
+  // too, so the admin "Reseed from lore" button is a real fix for that,
+  // not just a fresh-mode-only escape hatch.
+  const existingArchetypeCount = await prisma.campaignArchetype.count({ where: { campaignId } })
+  const wantArchetypes = fresh || existingArchetypeCount === 0
   const wantTheme = fresh || !campaign.corruptionTheme
 
   let archetypesReplaced = 0
@@ -273,20 +284,28 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
         }
       }
       if (wantArchetypes && extras.archetypes.length > 0) {
-        await prisma.campaignArchetype.deleteMany({ where: { campaignId } })
-        const created = await prisma.campaignArchetype.createMany({
-          data: extras.archetypes.map(a => ({
-            campaignId,
-            name: a.name,
-            description: a.description,
-            originFamiliarity: a.originFamiliarity,
-            suggestedStats: (a.suggestedStats as object | null) || undefined,
-            startingGear: (a.startingGear as object | null) || undefined,
-            startingTie: (a.startingTie as object | null) || undefined,
-            backstoryPrompts: a.backstoryPrompts,
-            glimpseCapabilityKeys: a.glimpseCapabilityKeys,
-          })),
-        })
+        // Atomic: delete-then-recreate as two separate calls left a real
+        // gap — a timeout or crash between them (this runs alongside two
+        // sequential AI calls and a run of other DB writes, well within
+        // reach of the request-handling reseed route's time budget) wiped
+        // every archetype and never replaced them, silently and
+        // permanently, with no error visible to the GM.
+        const [, created] = await prisma.$transaction([
+          prisma.campaignArchetype.deleteMany({ where: { campaignId } }),
+          prisma.campaignArchetype.createMany({
+            data: extras.archetypes.map(a => ({
+              campaignId,
+              name: a.name,
+              description: a.description,
+              originFamiliarity: a.originFamiliarity,
+              suggestedStats: (a.suggestedStats as object | null) || undefined,
+              startingGear: (a.startingGear as object | null) || undefined,
+              startingTie: (a.startingTie as object | null) || undefined,
+              backstoryPrompts: a.backstoryPrompts,
+              glimpseCapabilityKeys: a.glimpseCapabilityKeys,
+            })),
+          }),
+        ])
         archetypesReplaced = created.count
       }
     }

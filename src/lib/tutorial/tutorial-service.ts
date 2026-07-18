@@ -255,16 +255,21 @@ export class TutorialService {
         isOptional: true,
       },
       {
+        // stepKey stays 'zones' so the upsert updates existing DB rows in
+        // place instead of orphaning them — the content is what changed:
+        // the old copy promised zone-gated actions, a mechanic that
+        // doesn't exist (positioning is narrative; see the fake-depth
+        // audit and README #43).
         stepKey: 'zones',
-        title: 'Zone Positioning',
-        description: 'Understand tactical positioning',
+        title: 'Scene Maps & Positioning',
+        description: 'See the scene laid out',
         category: 'combat',
         orderIndex: 12,
         prerequisites: ['combat_intro'],
         contentBlocks: [
           {
             type: 'text',
-            content: 'Characters occupy zones: Close, Near, Far, Distant. Your zone affects what actions you can take.',
+            content: 'Scenes can generate maps that visualize where everyone is. Positioning is narrative — describe where your character moves in your action, and the AI GM takes it into account.',
           },
         ],
         completionTrigger: 'zone_changed',
@@ -298,7 +303,7 @@ export class TutorialService {
         contentBlocks: [
           {
             type: 'text',
-            content: 'Gain XP by rolling 6- (failures) or achieving session objectives. Use XP to increase stats or gain perks.',
+            content: 'There are no levels or XP to spend — your character grows organically from what they actually do. Stats increase through consistent use, and perks appear when a repeated pattern of actions earns them.',
           },
         ],
         completionTrigger: 'xp_gained',

@@ -135,7 +135,7 @@ export default function HelpPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-wine-400 font-bold">6-:</span>
-                  <span>Failure with complications (but you gain XP!)</span>
+                  <span>Failure with complications — the story takes a hard turn</span>
                 </li>
               </ul>
             </div>
@@ -160,11 +160,12 @@ export default function HelpPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                <h3 className="font-bold text-ember-100 text-lg">Zone Positioning</h3>
+                <h3 className="font-bold text-ember-100 text-lg">Scene Maps</h3>
               </div>
               <p className="text-sm text-ember-300/60 leading-relaxed">
-                Characters occupy tactical zones: Close, Near, Far, Distant. Your zone affects
-                what actions you can take (melee requires Close, ranged works at Near/Far, etc.)
+                Scenes can generate maps that visualize where everyone is. Positioning is
+                narrative — describe where your character moves in your action, and the AI GM
+                takes it into account when resolving.
               </p>
             </div>
           </div>

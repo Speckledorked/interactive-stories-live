@@ -119,12 +119,13 @@ found has since been fixed; this is what's still actually true today.
    outcome than today's lenient mode. Needs either a live-testable
    environment or an explicit decision to accept that risk before
    attempting it blind.
-2. **Zone positioning is a claim, not a mechanic.** The help page and
-   tutorial promise "Your zone affects what actions you can take" — but
-   nothing in `computeMechanics` or `stateUpdater.ts` reads a zone; zones
-   exist only as drawing data in `lib/maps/map-service.ts`. The one place
-   the product currently overclaims. Fix is `#43`: enforce it or delete
-   the copy.
+2. **Zones are drawing data, not a mechanic.** The false help/tutorial
+   copy ("your zone affects what actions you can take") has been removed,
+   but two dead zone implementations remain in the codebase — the
+   Close/Near/Far/Distant `currentZone` machinery in
+   `lib/game/exchange-manager.ts:451-501` (zero callers) and the zone
+   rectangles in `lib/maps/map-service.ts` (render-only). `#43`: make one
+   of them real or delete both.
 3. **Entity resolution is fuzzy name matching.** The AI→state write-back
    resolves NPCs/characters/clocks by `contains`-mode name match
    (`stateUpdater.ts`), and a misspelled NPC name auto-creates a duplicate
@@ -132,6 +133,23 @@ found has since been fixed; this is what's still actually true today.
 4. **`stateUpdater.ts` (1,438 lines) has no direct tests.** The
    transactional heart of the write-back path is verified only indirectly
    through route tests — see `#41`.
+5. **A prompt-as-rules periphery.** Condition `mechanicalEffect` text
+   ("Stunned: -1 to all rolls"), perk bonuses ("+1 ongoing…"), and earned
+   Abilities all reach the player and the narrator prompt but are never
+   applied by `computeMechanics` — enforcement is delegated to whether the
+   LLM honors its own prose. The enforcement code partly exists, dead
+   (`harm.ts`'s `getTotalConditionPenalty`/`canAct` have zero callers).
+   See `#49`–`#51`.
+6. **The turn-order countdown enforces nothing.** `TurnTracker` renders a
+   live deadline timer, but `checkExpiredTurns`/`sendPeriodicReminders`
+   (`lib/notifications/turn-tracker.ts`) have zero callers and
+   `autoAdvanceTurn` is never set true — nothing fires at 0:00. See `#52`.
+7. **Write-only state.** `appearance`/`personality` changes never re-enter
+   any prompt after being written; `resources.reputation`/`contacts` are
+   written by the AI contract and read by nothing (`reputation` silently
+   duplicates the real `FactionStanding` system); `NPC.impulses`/`NPC.moves`
+   are admin-writable and consumed nowhere; inventory `slots` is tracked
+   but never enforced. See `#53`–`#56`.
 
 ## Roadmap
 
@@ -155,12 +173,33 @@ regression risks in the codebase:
 - [ ] **#40 Entity-resolution layer for the AI write-back.** `stateUpdater.ts` resolves NPCs/characters/clocks via `contains`-mode name matching, and a misspelled name auto-creates a duplicate stub NPC. Replace with exact-match → alias table → fuzzy-with-confirmation, and stop `contains` writes entirely. Kills the #1 corruption vector for long campaigns.
 - [ ] **#41 Decompose `stateUpdater.ts` (1,438 lines, zero direct tests) into per-domain appliers**, each unit-tested — the fixture shapes already exist in the route tests. This is the transactional heart of the product running on indirect coverage.
 - [ ] **#42 Make `Location` a real foreign key** (nullable, backfilled by name once) on Character/NPC. Weather modifiers, NPC prompt relevance, and split-party grouping all currently join on free-text `currentLocation` strings — one AI-written "the Docks" vs "The Docks District" silently decouples three systems.
-- [ ] **#43 Zones: enforce or delete.** Either gate melee/ranged actions on zone distance in `computeMechanics` (the position data already exists in `lib/maps/map-service.ts`) or remove the help-page/tutorial claim. Currently the one place the product promises a mechanic that doesn't exist.
+- [ ] **#43 Zones: make them real or delete both dead implementations.** The false help/tutorial copy is already removed (see the fake-depth pass below); what remains is the decision — either gate melee/ranged actions on zone distance in `computeMechanics` (the `currentZone` machinery in `exchange-manager.ts` and the position data in `lib/maps/map-service.ts` already exist, unwired) or delete both dead systems.
 - [ ] **#44 Give Debts roll-time weight.** A called-in debt should shift the roll (±1) the way standing already does (`effectiveStandingModifier`) — completing the social economy's second half. Today debts are prompt leverage only.
 - [ ] **#45 Structured quest objectives.** Add `objective_key` + preconditions so quests can gate content availability and chain — today a quest is a tracked narrative thread (status + progress log + reward grant), not a rules object.
 - [ ] **#46 Consolidation for append-only text.** `NPC.gmNotes`, `Quest.progressLog`, and the advancement log grow unboundedly via string appends; give them the same era-summary treatment `memoryConsolidation.ts` already gives campaign memory.
 - [ ] **#47 Connect the economy's two halves.** `Character.resources.gold` has real sinks (downtime costs, reward grants) but no prices or scarcity, and never touches `Faction.resources`. Route downtime costs and reward grants through faction-state-aware pricing so the offscreen economy reaches the player's purse the way standing reaches their rolls.
 - [ ] **#48 Fix the 5 chronically flaky orchestrator tests** (`sceneResolver.test.ts` ×3, `safety-service.test.ts` ×2 — mock-wiring timeouts, failing since before this work began). A suite that's red-by-default normalizes ignoring red.
+
+### 🔧 Fake-depth pass — from the stricter second audit
+
+A call-graph-verified sweep for places where the product implies simulation
+but the code only performs presentation, CRUD, or prompt formatting. The
+two outright copy lies were **fixed immediately, not backlogged**: the
+help page and tutorial claimed an XP system ("Use XP to increase stats or
+gain perks") that has never existed, and zone-gated actions that were
+never enforced — both rewritten to describe what the engine actually does.
+What remains is tracked here. A shared theme: several fixes are cheap
+because the enforcement code already exists, dead.
+
+- [ ] **#49 Enforce condition penalties — or strip the numbers.** `COMMON_CONDITIONS` promise mechanical effects ("Stunned: -1 to all rolls") that `computeMechanics` never applies; `harm.ts`'s `getTotalConditionPenalty()` and `canAct()` implement exactly this and have zero callers. Wire them into the roll (a 7th modifier, same pattern as weather) or reword conditions as purely narrative.
+- [ ] **#50 Make perks mechanical or honest.** Perk text promises roll bonuses ("+1 ongoing…", "guaranteed strong hit") the server-rolled engine structurally cannot honor. Either add a structured `perk.effect` consumed by `computeMechanics`, or reword perks as narrative traits with no numeric claims.
+- [ ] **#51 Decide what earned Abilities are worth.** The advancement system's rarest reward (`organic_advancement.new_moves`) grants entries that reach the sheet and the prompt but never affect a roll — resolution only ever rolls the 7 fixed `BASIC_MOVES`. Give them a mechanical hook (e.g. a situational +1 the classifier can match, like capabilities) or present them explicitly as narrative signatures.
+- [ ] **#52 Make the turn timer real.** Call `checkExpiredTurns()`/`sendPeriodicReminders()` from the existing heartbeat cron (the functions are fully built — reminders at 15/5/1 minutes, auto-skip on timeout — just never invoked), or remove the countdown UI. A timer that visibly counts to zero and does nothing is theater.
+- [ ] **#53 Delete the duplicate reputation system.** `resource_changes.reputation_changes` and `contacts_add/remove` write to `Character.resources` blobs that nothing reads; `reputation` shadows the real, roll-feeding `FactionStanding` system. Remove them from the AI contract (`schema.ts`, `client.ts`) and `stateUpdater.ts` — same two-sources-of-truth cleanup `#38` did for moves.
+- [ ] **#54 Feed appearance/personality back into the prompt.** `appearance_changes`/`personality_changes` are written durably ("Make changes MATTER," the prompt insists) but neither field is included in any prompt's character block afterward — the narrator that wrote the scar is never told about it again. One-line fix in both world-summary builders + `generateNewSceneIntro`'s character context.
+- [ ] **#55 Enforce inventory slots or remove them.** `slots` is tracked, AI-adjustable (`slots_delta`), and displayed; `hasInventorySpace()` implements the check and has zero callers — items are added unconditionally.
+- [ ] **#56 Dead-weight deletion pass.** Remove what implies systems that don't exist: `campaign-templates.ts`'s `defaultPerks` + `startingItems` (zero consumers — the `defaultMoves` cleanup in `#38` missed them), `inventory.ts`'s unused CRUD half (`addItemToInventory`/`removeItemFromInventory`/`findItem` — `stateUpdater` reimplements all of it inline), `NPC.impulses`/`NPC.moves` (admin-writable, read by nothing), and `Scene.turnDeadline` (written, never read).
+- [ ] **#57 Give `CampaignHealthMonitor` an audience or delete it.** 359 lines compute a health score, issues, and recommendations every 5 turns — and `console.warn` them to the server log. No UI reads it, nothing acts on it. Surface it as a lobby/admin card, or remove it.
 
 ### 🎯 Next — Product & Market
 

@@ -632,7 +632,7 @@ export async function buildSceneResolutionRequest(
   if (scene.playerActions.length > 3) {
     console.log('🔀 Complex exchange detected - generating narrative sequence')
     const resolver = new ComplexExchangeResolver(campaignId, sceneId)
-    const complexExchange = await resolver.resolveComplexExchange()
+    const complexExchange = await resolver.resolveComplexExchange(mechanicsByActionId)
 
     exchangeGuidance = complexExchange.narrativeSequence
 

@@ -4,6 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { ExchangeManager, ActionPriority } from './exchange-manager'
+import type { ActionMechanics } from './resolution'
 
 /**
  * Micro-exchange structure for breaking down complex exchanges
@@ -24,6 +25,56 @@ export interface ActionConflict {
   actions: any[]
   resolution: string
   needsGMIntervention: boolean
+  // Deterministic precedence — see rankActionsByOutcome below. Character
+  // names in the order their actions actually take effect. Always present;
+  // a single-action "conflict" (shouldn't occur, but defensively) is just
+  // that one name.
+  resolutionOrder: string[]
+}
+
+/** The subset of a computed roll actually needed to rank precedence. */
+type MechanicsForRanking = Pick<ActionMechanics, 'outcome' | 'total'>
+
+const OUTCOME_RANK: Record<ActionMechanics['outcome'], number> = { strongHit: 2, weakHit: 1, miss: 0 }
+
+/**
+ * Deterministic precedence between two actions competing for the same
+ * target: the dice already decided how well each one went (see
+ * lib/game/resolution.ts) — a strong hit takes effect before a weak hit,
+ * which takes effect before a miss, with the numeric total breaking ties
+ * within the same band. An action nobody rolled for (no_roll, or a
+ * classification/roll failure) sorts after every rolled action — real
+ * mechanical success in the fiction outranks an unrolled attempt, not the
+ * other way around. Returns negative if `a` precedes `b`, matching
+ * Array.prototype.sort's contract; stable-sorts to original array order
+ * (already priority-bucketed) as the final, deterministic tiebreak — never
+ * "the AI decides by fictional timing."
+ */
+export function compareActionsByOutcome(
+  a: { id: string },
+  b: { id: string },
+  mechanicsByActionId: Map<string, MechanicsForRanking>
+): number {
+  const ma = mechanicsByActionId.get(a.id)
+  const mb = mechanicsByActionId.get(b.id)
+  if (!ma && !mb) return 0
+  if (!ma) return 1
+  if (!mb) return -1
+  const rankDiff = OUTCOME_RANK[mb.outcome] - OUTCOME_RANK[ma.outcome]
+  if (rankDiff !== 0) return rankDiff
+  return mb.total - ma.total
+}
+
+/**
+ * Rank a set of competing actions into their deterministic resolution
+ * order. Pure given the mechanics lookup — no DB access, unit-testable
+ * directly.
+ */
+export function rankActionsByOutcome(
+  actions: Array<{ id: string; character?: { name?: string } }>,
+  mechanicsByActionId: Map<string, MechanicsForRanking>
+): Array<{ id: string; character?: { name?: string } }> {
+  return [...actions].sort((a, b) => compareActionsByOutcome(a, b, mechanicsByActionId))
 }
 
 /**
@@ -99,9 +150,17 @@ export class ComplexExchangeResolver {
   }
 
   /**
-   * Detect conflicts between actions in the same micro-exchange
+   * Detect conflicts between actions in the same micro-exchange, and
+   * deterministically resolve their precedence via rankActionsByOutcome
+   * when roll mechanics are available (see resolution.ts) — the dice
+   * already decided how well each action went; this decides which one's
+   * effect on a shared target actually lands first, rather than leaving
+   * that entirely to the AI's judgment.
    */
-  detectConflicts(microExchange: MicroExchange): ActionConflict[] {
+  detectConflicts(
+    microExchange: MicroExchange,
+    mechanicsByActionId: Map<string, MechanicsForRanking> = new Map()
+  ): ActionConflict[] {
     const conflicts: ActionConflict[] = []
     const actions = microExchange.actions
 
@@ -126,24 +185,34 @@ export class ComplexExchangeResolver {
     targetMap.forEach((targetActions, target) => {
       if (targetActions.length > 1) {
         const types = targetActions.map(a => this.classifyActionIntent(a.actionText))
+        const ranked = rankActionsByOutcome(targetActions, mechanicsByActionId)
+        const resolutionOrder = ranked.map(a => a.character?.name || 'Unknown')
 
         // Check for contradictory actions (e.g., attack vs negotiate)
         const hasAttack = types.some(t => t === 'attack')
         const hasNegotiate = types.some(t => t === 'negotiate')
 
         if (hasAttack && hasNegotiate) {
+          const winner = ranked[0]
+          const winnerMechanics = mechanicsByActionId.get(winner.id)
+          const winnerName = winner.character?.name || 'Unknown'
+          const others = resolutionOrder.slice(1).join(', ')
           conflicts.push({
             type: 'contradictory',
             actions: targetActions,
-            resolution: `Some characters are trying to attack ${target} while others negotiate. AI will prioritize by timing and fiction.`,
-            needsGMIntervention: true
+            resolution: winnerMechanics
+              ? `${winnerName}'s action against ${target} takes precedence (${winnerMechanics.outcome}, roll total ${winnerMechanics.total}) — narrate ${others}'s attempt as overtaken by it.`
+              : `${winnerName}'s action against ${target} takes precedence (no roll on record for the others) — narrate ${others}'s attempt as overtaken by it.`,
+            needsGMIntervention: true,
+            resolutionOrder,
           })
         } else if (types.every(t => t === 'attack')) {
           conflicts.push({
             type: 'simultaneous',
             actions: targetActions,
-            resolution: `Multiple characters attacking ${target} simultaneously. Combined effect will be narrated.`,
-            needsGMIntervention: false
+            resolution: `Multiple characters attacking ${target} simultaneously — resolved in order of decisive effect (${resolutionOrder.join(' -> ')}); narrate their combined effect as landing together.`,
+            needsGMIntervention: false,
+            resolutionOrder,
           })
         }
       }
@@ -156,7 +225,10 @@ export class ComplexExchangeResolver {
    * Generate coherent narrative sequence from complex exchange
    * This provides context to the AI GM for proper resolution
    */
-  async generateNarrativeSequence(microExchanges: MicroExchange[]): Promise<string> {
+  async generateNarrativeSequence(
+    microExchanges: MicroExchange[],
+    mechanicsByActionId: Map<string, MechanicsForRanking> = new Map()
+  ): Promise<string> {
     let narrative = '## Complex Exchange Breakdown\n\n'
 
     narrative += `This exchange contains ${microExchanges.length} phases of action:\n\n`
@@ -169,7 +241,7 @@ export class ComplexExchangeResolver {
       }
 
       // Add detected conflicts
-      const conflicts = this.detectConflicts(micro)
+      const conflicts = this.detectConflicts(micro, mechanicsByActionId)
       if (conflicts.length > 0) {
         narrative += `\n**⚠️ Conflicts Detected:**\n`
         conflicts.forEach(conflict => {
@@ -184,9 +256,9 @@ export class ComplexExchangeResolver {
     narrative += '**AI GM Instructions:**\n'
     narrative += '1. Resolve each phase in sequence order\n'
     narrative += '2. Earlier phases may affect outcomes of later phases\n'
-    narrative += '3. Use fictional timing to determine exact order within each phase\n'
+    narrative += '3. Within a phase, follow the resolution order already determined above (by roll outcome, not guesswork)\n'
     narrative += '4. Narrate a coherent, flowing sequence that honors player intent\n'
-    narrative += '5. If conflicts exist, resolve them based on the fiction and PbtA principles\n\n'
+    narrative += '5. Conflicts above are already resolved mechanically — narrate the stated outcome, don\'t re-decide who prevails\n\n'
 
     return narrative
   }
@@ -245,20 +317,28 @@ export class ComplexExchangeResolver {
   /**
    * Resolve complex exchange with micro-exchange breakdown
    * Returns structured data for AI GM processing
+   *
+   * @param mechanicsByActionId - already-computed roll mechanics for this
+   *   exchange's actions (see resolveActionMechanics in resolution.ts) —
+   *   when provided, conflicting actions on the same target are ranked by
+   *   actual roll outcome (see rankActionsByOutcome) instead of being left
+   *   for the AI to arbitrate freeform.
    */
-  async resolveComplexExchange(): Promise<{
+  async resolveComplexExchange(
+    mechanicsByActionId: Map<string, MechanicsForRanking> = new Map()
+  ): Promise<{
     microExchanges: MicroExchange[]
     narrativeSequence: string
     conflicts: ActionConflict[]
     totalActions: number
   }> {
     const microExchanges = await this.createMicroExchanges()
-    const narrativeSequence = await this.generateNarrativeSequence(microExchanges)
+    const narrativeSequence = await this.generateNarrativeSequence(microExchanges, mechanicsByActionId)
 
     // Collect all conflicts
     const allConflicts: ActionConflict[] = []
     microExchanges.forEach(micro => {
-      const conflicts = this.detectConflicts(micro)
+      const conflicts = this.detectConflicts(micro, mechanicsByActionId)
       allConflicts.push(...conflicts)
     })
 

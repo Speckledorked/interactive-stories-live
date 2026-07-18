@@ -78,7 +78,7 @@ export default function StoryPage() {
   // Turn order — an opt-in, advisory queue layered on top of the scene's
   // real (simultaneous) action collection; see TurnTracker's doc comment.
   // null = no turn tracker exists for this scene (the default/only state
-  // until a GM enables one).
+  // until a player enables one).
   const [sceneTurnInfo, setSceneTurnInfo] = useState<any>(null)
   const [enablingTurnOrder, setEnablingTurnOrder] = useState(false)
   const [endingTurnOrder, setEndingTurnOrder] = useState(false)
@@ -107,10 +107,10 @@ export default function StoryPage() {
   // Split-party detection: living characters not already tied up in an
   // active scene, grouped by currentLocation. A character with no
   // location set is excluded from auto-grouping entirely — there's
-  // nothing to cluster them by, so they're left for the GM to place
+  // nothing to cluster them by, so they're left for the table to place
   // manually via the existing Character-Focused option. 2+ groups means
   // the party is genuinely split; the location engine never routes this
-  // automatically (see help copy) — it's always a GM's explicit choice.
+  // automatically (see help copy) — a player has to explicitly choose it.
   const locationGroups = useMemo(() => {
     const busyIds = new Set(
       activeScenes.flatMap(scene => (scene.participants as any)?.characterIds || [])
@@ -296,7 +296,7 @@ export default function StoryPage() {
       loadData()
     })
 
-    // Turn order updates — null means a GM just ended tracking for the
+    // Turn order updates — null means a player just ended tracking for the
     // scene (hides the widget); otherwise the fresh turn state for
     // whichever scene is active. Also drives whether the "Enable turn
     // order" prompt shows at all, so every connected client agrees on
@@ -451,13 +451,16 @@ export default function StoryPage() {
       }
     },
     onResolveExchange: () => {
+      // Force-resolve is a host-only rescue tool; normal resolution
+      // fires automatically once everyone has acted.
       if (currentScene && isAdmin) handleResolveScene(currentScene.id)
     },
     onEndScene: () => {
-      if (currentScene && isAdmin) handleEndScene(currentScene.id)
+      // Any player — story pacing belongs to the table, not a human GM.
+      if (currentScene) handleEndScene(currentScene.id)
     },
     onStartScene: () => {
-      if (isAdmin) handleStartNewScene()
+      handleStartNewScene()
     },
     onShowShortcuts: () => {
       setShowKeyboardShortcuts(true)
@@ -873,10 +876,11 @@ export default function StoryPage() {
             </div>
           )}
 
-          {/* Split party — a GM-only nudge, independent of whichever
-              character is selected: the party can be split even when the
-              viewer's own character already has a scene to look at. */}
-          {isAdmin && locationGroups.size >= 2 && (
+          {/* Split party — shown to every player (there is no human GM;
+              anyone can start scenes), independent of whichever character
+              is selected: the party can be split even when the viewer's
+              own character already has a scene to look at. */}
+          {locationGroups.size >= 2 && (
             <div className="rounded-xl bg-gradient-to-br from-wine-800/20 to-wine-800/10 border border-wine-700/40 shadow-lg shadow-black/30 p-5">
               <h3 className="font-bold text-ember-100 mb-1">Your party is split</h3>
               <p className="text-sm text-ember-300/60 mb-3">
@@ -949,7 +953,7 @@ export default function StoryPage() {
                         <div>
                           <p className="text-red-300 font-medium">This scene is paused for a safety check-in.</p>
                           <p className="text-red-200/60 text-sm mt-1">
-                            {scene.pausedReason || 'A player used the X-Card.'} No new actions can be submitted until a GM resumes play.
+                            {scene.pausedReason || 'A player used the X-Card.'} No new actions can be submitted until the campaign host resumes play.
                           </p>
                         </div>
                         {isAdmin && (
@@ -1198,8 +1202,11 @@ export default function StoryPage() {
                     </div>
                   )}
 
-                  {/* GM Controls (Admin Only) */}
-                  {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && isAdmin && (() => {
+                  {/* Scene controls — visible to every player: there is no
+                      human GM, the AI narrates and the table drives pacing.
+                      Only force-resolve (a rescue tool for a lost
+                      auto-resolve) stays host-only. */}
+                  {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && (() => {
                     const participants = scene.participants as any
                     const hasDefinedParticipants = participants?.characterIds && participants.characterIds.length > 0
                     const submittedUserIds = new Set((scene.playerActions || []).map((a: any) => a.userId))
@@ -1211,7 +1218,7 @@ export default function StoryPage() {
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                           <div className="flex-1">
                             <p className={`text-sm font-medium mb-1 ${hasDefinedParticipants && allParticipantsSubmitted ? 'text-success-400' : 'text-ember-300'}`}>
-                              🎲 GM Controls
+                              🎲 Scene Controls
                             </p>
                             <p className="text-ember-300/60 text-xs mb-2">
                               {(scene.playerActions || []).length} action(s) submitted. Current exchange: {scene.currentExchange ?? 0}
@@ -1219,47 +1226,51 @@ export default function StoryPage() {
                             {hasDefinedParticipants ? (
                               allParticipantsSubmitted ? (
                                 <p className="text-success-400 text-xs mb-1">
-                                  ✓ All participants have submitted — resolution should start on its own. If nothing happens within a minute, resolve manually.
+                                  ✓ Everyone has submitted — resolution starts on its own.
                                 </p>
                               ) : (
                                 <p className="text-ember-400/50 text-xs">
-                                  ⏳ Waiting for {participantUserIds.length - submittedUserIds.size} more participant(s). Scene will auto-resolve when all submit.
+                                  ⏳ Waiting for {participantUserIds.length - submittedUserIds.size} more player(s). The scene resolves automatically when everyone has acted.
                                 </p>
                               )
                             ) : (
                               <p className="text-ember-400/50 text-xs">
-                                This is an open scene. Manually resolve when ready or end the scene when the story concludes.
+                                This is an open scene — each action resolves as it lands. End the scene when the story concludes.
                               </p>
                             )}
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                            {/* Always available to the admin: for open scenes it's the normal
-                                resolve, before everyone submits it's a force, and after everyone
-                                submits it's the rescue path for a lost auto-resolve — hiding it
-                                in that state left stuck scenes with no way out. */}
-                            <button
-                              onClick={() => handleResolveScene(scene.id)}
-                              disabled={resolving}
-                              className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
-                              title={
-                                !hasDefinedParticipants
-                                  ? 'Manually resolve this exchange'
-                                  : allParticipantsSubmitted
-                                    ? 'Kick off resolution if auto-resolve did not start'
-                                    : 'Force resolution before all participants submit'
-                              }
-                            >
-                              {resolving
-                                ? 'Resolving...'
-                                : !hasDefinedParticipants
-                                  ? 'Resolve Exchange'
-                                  : allParticipantsSubmitted
-                                    ? 'Resolve Now'
-                                    : 'Force Resolve'}
-                            </button>
+                            {/* Host-only rescue: for open scenes it's a manual
+                                re-kick, before everyone submits it's a force,
+                                and after everyone submits it's the recovery
+                                path for a lost auto-resolve — hiding it in
+                                that state left stuck scenes with no way out. */}
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleResolveScene(scene.id)}
+                                disabled={resolving}
+                                className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
+                                title={
+                                  !hasDefinedParticipants
+                                    ? 'Manually resolve this exchange'
+                                    : allParticipantsSubmitted
+                                      ? 'Kick off resolution if auto-resolve did not start'
+                                      : 'Force resolution before all participants submit'
+                                }
+                              >
+                                {resolving
+                                  ? 'Resolving...'
+                                  : !hasDefinedParticipants
+                                    ? 'Resolve Exchange'
+                                    : allParticipantsSubmitted
+                                      ? 'Resolve Now'
+                                      : 'Force Resolve'}
+                              </button>
+                            )}
                             <button
                               onClick={() => handleEndScene(scene.id)}
                               disabled={endingScene}
+                              title="Ends this scene for everyone. The player who ends a scene pays its AI cost."
                               className="bg-wine-600 hover:bg-wine-500 text-ember-100 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
                             >
                               {endingScene ? 'Ending...' : 'End Scene'}
@@ -1283,7 +1294,7 @@ export default function StoryPage() {
                   {resolvedScenes.length > 0 ? (
                     <>The adventure continues... What happens next?</>
                   ) : (
-                    <>{isAdmin ? 'Start a new scene to begin the adventure' : 'Waiting for the GM to start a scene'}</>
+                    <>Start a new scene to begin the adventure</>
                   )}
                 </p>
               </div>
@@ -1313,8 +1324,9 @@ export default function StoryPage() {
                 </div>
               )}
 
-              {/* Action buttons */}
-              {isAdmin && (
+              {/* Action buttons — every player can start the next scene:
+                  the AI is the GM, the table drives pacing. */}
+              {(
                 <div className="max-w-2xl mx-auto space-y-4">
                   {!showSceneOptions ? (
                     <>
@@ -1455,12 +1467,6 @@ export default function StoryPage() {
                   )}
                 </div>
               )}
-
-              {!isAdmin && (
-                <p className="text-center text-ember-400/50 text-sm">
-                  Waiting for the GM to start the next scene...
-                </p>
-              )}
             </div>
           )}
         </div>
@@ -1524,28 +1530,28 @@ export default function StoryPage() {
             </div>
           )}
 
-          {/* Turn Order — opt-in advisory queue, see TurnTracker's doc
-              comment for why it never gates action submission. */}
+          {/* Turn Order — opt-in advisory queue any player can enable or
+              end (a table-level convention, not a GM power — there is no
+              human GM). See TurnTracker's doc comment for why it never
+              gates action submission. */}
           {currentScene && sceneTurnInfo && (
             <div className="space-y-2">
               <TurnTracker
                 campaignId={campaignId}
                 sceneId={currentScene.id}
                 currentUserId={user?.id || ''}
-                isGM={isAdmin}
+                isHost={isAdmin}
               />
-              {isAdmin && (
-                <button
-                  onClick={handleEndTurnOrder}
-                  disabled={endingTurnOrder}
-                  className="w-full text-xs text-ember-400/50 hover:text-ember-200 transition-colors disabled:opacity-50"
-                >
-                  {endingTurnOrder ? 'Ending…' : 'End turn order'}
-                </button>
-              )}
+              <button
+                onClick={handleEndTurnOrder}
+                disabled={endingTurnOrder}
+                className="w-full text-xs text-ember-400/50 hover:text-ember-200 transition-colors disabled:opacity-50"
+              >
+                {endingTurnOrder ? 'Ending…' : 'End turn order'}
+              </button>
             </div>
           )}
-          {currentScene && !sceneTurnInfo && isAdmin && (
+          {currentScene && !sceneTurnInfo && (
             <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
               <h3 className="text-sm font-bold text-ember-300/60 uppercase tracking-wide mb-2">Turn Order</h3>
               <p className="text-xs text-ember-400/50 mb-3">

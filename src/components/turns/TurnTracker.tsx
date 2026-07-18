@@ -1,11 +1,14 @@
 // src/components/turns/TurnTracker.tsx
-// Advisory turn-order queue for a scene — a GM opt-in layer alongside the
-// campaign's real action-collection mechanism (ExchangeManager, which
-// tracks who has/hasn't submitted via Scene.waitingOnUsers). This never
-// gates or blocks action submission: anyone can still act anytime, exactly
-// as before. It only shows whose turn the GM/party agreed it is, with a
-// timer and an advance/skip queue — see lib/notifications/turn-tracker.ts's
-// doc comments for why it deliberately never touches Scene.waitingOnUsers.
+// Advisory turn-order queue for a scene — an opt-in layer any player can
+// enable, alongside the campaign's real action-collection mechanism
+// (ExchangeManager, which tracks who has/hasn't submitted via
+// Scene.waitingOnUsers). This never gates or blocks action submission:
+// anyone can still act anytime, exactly as before. It only shows whose
+// turn the table agreed it is, with a timer and an advance queue — see
+// lib/notifications/turn-tracker.ts's doc comments for why it
+// deliberately never touches Scene.waitingOnUsers. isHost (the campaign
+// admin) only gates skipping ANOTHER player's turn — moderation, not
+// GM-ing; there is no human GM in this product.
 
 'use client';
 
@@ -37,14 +40,14 @@ interface TurnTrackerProps {
   campaignId: string;
   sceneId: string;
   currentUserId: string;
-  isGM?: boolean;
+  isHost?: boolean;
 }
 
 export default function TurnTracker({
   campaignId,
   sceneId,
   currentUserId,
-  isGM = false
+  isHost = false
 }: TurnTrackerProps) {
   const [turnInfo, setTurnInfo] = useState<TurnInfo | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -67,7 +70,7 @@ export default function TurnTracker({
   useEffect(() => {
     if (turnInfo) {
       setIsMyTurn(turnInfo.currentPlayer.userId === currentUserId);
-      setShowAdvanceButton(turnInfo.currentPlayer.userId === currentUserId || isGM);
+      setShowAdvanceButton(turnInfo.currentPlayer.userId === currentUserId || isHost);
       setTimeRemaining(turnInfo.timeRemainingMs);
     }
   }, [turnInfo, currentUserId]);
@@ -158,7 +161,7 @@ export default function TurnTracker({
   };
 
   const skipTurn = async () => {
-    if (!isGM) return;
+    if (!isHost) return;
 
     if (!confirm('Skip the current player\'s turn?')) {
       return;
@@ -288,7 +291,7 @@ export default function TurnTracker({
               </button>
             )}
 
-            {isGM && (
+            {isHost && (
               <button
                 onClick={skipTurn}
                 className="btn-secondary py-2 px-4 text-sm"

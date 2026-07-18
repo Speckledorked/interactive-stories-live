@@ -108,8 +108,9 @@ export default function HelpPage() {
                 <h3 className="font-bold text-ember-100 text-lg">Scenes & Exchanges</h3>
               </div>
               <p className="text-sm text-ember-300/60 leading-relaxed">
-                Scenes are continuous until the GM ends them. Each round of actions is called an "exchange."
-                Submit actions, and the AI resolves them as a group to advance the story.
+                Scenes are continuous until a player ends them — any player can start or end a scene.
+                Each round of actions is called an "exchange." Submit actions, and the AI resolves them
+                as a group to advance the story.
               </p>
             </div>
 
@@ -149,7 +150,7 @@ export default function HelpPage() {
               <p className="text-sm text-ember-300/60 leading-relaxed">
                 Combat is narrative by default. Describe your actions naturally, and the AI GM
                 will narrate the outcome. Everyone can act at the same time — no waiting your turn,
-                unless the GM turns on optional turn order for a scene.
+                unless the table turns on optional turn order for a scene.
               </p>
             </div>
 
@@ -175,8 +176,8 @@ export default function HelpPage() {
             {[
               { icon: '👥', title: 'Invite Your Party', desc: 'No cap on how many players can join a campaign — share an invite link from the Players panel and everyone plays together' },
               { icon: '💬', title: 'Chat', desc: 'Real-time in-character (IC) and out-of-character (OOC) chat to talk with the other real players in your campaign' },
-              { icon: '🎲', title: 'Turn Order', desc: 'Play is simultaneous by default — everyone acts anytime. A GM can turn on an optional turn queue for a scene that wants it' },
-              { icon: '📝', title: 'Notes', desc: 'Take private, GM-only, or shared notes to track NPCs, clues, and plot points' },
+              { icon: '🎲', title: 'Turn Order', desc: 'Play is simultaneous by default — everyone acts anytime. Any player can turn on an optional turn queue for a scene that wants it' },
+              { icon: '📝', title: 'Notes', desc: 'Take private or shared notes to track NPCs, clues, and plot points' },
               { icon: '🗺️', title: 'Maps', desc: 'AI-generated tactical maps with zones and character tokens' },
               { icon: '📚', title: 'Wiki', desc: 'Track NPCs, factions, and progress clocks automatically updated by the AI' },
               { icon: '📜', title: 'Story Log', desc: 'Auto-generated chronicle of your adventure with highlights and timeline' },
@@ -210,7 +211,7 @@ export default function HelpPage() {
             <div>
               <h3 className="font-bold text-ember-100 mb-2 text-lg">Content Warnings</h3>
               <p className="text-sm text-ember-300/60 leading-relaxed">
-                GMs can set content warnings for the campaign (violence, trauma, etc.)
+                The campaign host can set content warnings for the campaign (violence, trauma, etc.)
                 in the Safety Settings panel.
               </p>
             </div>
@@ -230,8 +231,8 @@ export default function HelpPage() {
             <div>
               <h3 className="font-bold text-ember-100 mb-2 text-lg">Block & Report</h3>
               <p className="text-sm text-ember-300/60 leading-relaxed">
-                Any player can block another player in a campaign, and report content to admins —
-                on you, not just the GM, to keep the table comfortable.
+                Any player can block another player in a campaign, and report content to the
+                campaign host — keeping the table comfortable is on everyone, not one person.
               </p>
             </div>
           </div>

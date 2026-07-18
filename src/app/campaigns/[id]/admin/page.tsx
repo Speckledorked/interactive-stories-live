@@ -2347,7 +2347,7 @@ export default function AdminPage() {
                           </label>
                           <FieldHelp
                             what="When on, the table sees that someone used the X-Card, but not who."
-                            whoItAffects="What the rest of the table (not the GM) sees in the X-Card notification."
+                            whoItAffects="What the rest of the table (everyone but you) sees in the X-Card notification."
                             whenToUse="Your group wants the safety net without any social pressure about who reached for it."
                           />
                         </div>

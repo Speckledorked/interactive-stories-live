@@ -15,7 +15,7 @@ const CONTENT_TYPES: Array<{ value: string; label: string }> = [
   { value: 'other', label: 'Something else' },
 ]
 
-// Distinct from the X-Card: this is "please have a GM review this," not
+// Distinct from the X-Card: this is "please have the host review this," not
 // "pause, I'm uncomfortable." It always requires a reason and stays queued
 // until an admin resolves or dismisses it (see the campaign admin Safety tab).
 export default function ReportContentModal({ campaignId }: ReportContentModalProps) {
@@ -69,7 +69,7 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
       <button
         onClick={() => setIsOpen(true)}
         className="px-4 py-2 border-2 border-ember-700/50 text-ember-300 hover:bg-ember-900/30 rounded-lg transition-colors font-medium flex items-center gap-2"
-        title="Report content or behavior to the GM"
+        title="Report content or behavior to the campaign host"
       >
         <span className="text-xl">🚩</span>
         Report
@@ -82,7 +82,7 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
               <>
                 <h2 className="text-2xl font-bold mb-4 text-ember-100">Report Content</h2>
                 <p className="text-sm text-ember-300/60 mb-4">
-                  Flag something for the GM to review — this goes to the campaign&apos;s moderation queue, not just the GM&apos;s attention in the moment.
+                  Flag something for the campaign host to review — this goes to the campaign&apos;s moderation queue, not just a chat message in the moment.
                 </p>
 
                 <div className="mb-4">
@@ -116,7 +116,7 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
                   <textarea
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder="Explain what's wrong so the GM can act on it..."
+                    placeholder="Explain what's wrong so the host can act on it..."
                     className="w-full px-3 py-2 bg-black/30 border border-ember-900/40 rounded-lg text-ember-100 placeholder-ember-500/40 focus:outline-none focus:border-ember-500 resize-none"
                     rows={3}
                   />
@@ -147,7 +147,7 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
               <div className="text-center py-8">
                 <div className="text-6xl mb-4">✅</div>
                 <h3 className="text-2xl font-bold text-ember-100 mb-2">Report Submitted</h3>
-                <p className="text-ember-200/70">The GM will review this in their moderation queue.</p>
+                <p className="text-ember-200/70">The campaign host will review this in their moderation queue.</p>
               </div>
             )}
           </div>

@@ -36,7 +36,12 @@ export async function POST(
       return rateLimitExceededResponse(rateLimit)
     }
 
-    // 1. Verify user is admin of this campaign
+    // 1. Verify user is a member of this campaign. Any member: there is
+    // no human GM — every human is a player, and closing out a scene is
+    // story pacing that belongs to the whole table, same as start-scene.
+    // Note the billing consequence, deliberately accepted: the member who
+    // ends the scene pays its metered AI bill (see the preflight/charge
+    // below), so any player can be the payer, not only the admin.
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
@@ -46,9 +51,9 @@ export async function POST(
       }
     })
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership) {
       return NextResponse.json<ErrorResponse>(
-        { error: 'Only campaign admins can end scenes' },
+        { error: 'Not a member of this campaign' },
         { status: 403 }
       )
     }

@@ -518,18 +518,18 @@ export default function CampaignLobbyPage() {
           <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-lg font-semibold text-myth-ink">Campaign Maps</h2>
-              {userRole === 'ADMIN' && (
-                <button
-                  onClick={() => setShowCreateMap(true)}
-                  className="text-sm text-myth-ink-muted hover:text-myth-ink"
-                >
-                  + Create Map
-                </button>
-              )}
+              {/* Any player can create maps — shared table content, not a
+                  GM power (there is no human GM in this product). */}
+              <button
+                onClick={() => setShowCreateMap(true)}
+                className="text-sm text-myth-ink-muted hover:text-myth-ink"
+              >
+                + Create Map
+              </button>
             </div>
 
             {/* Create Map Form */}
-            {showCreateMap && userRole === 'ADMIN' && (
+            {showCreateMap && (
               <div className="mb-4 rounded-md border border-myth-border bg-myth-surface-sunken p-4">
                 <h3 className="mb-3 font-medium text-myth-ink">Create New Map</h3>
                 <form onSubmit={async (e) => {
@@ -620,12 +620,8 @@ export default function CampaignLobbyPage() {
             ) : maps.length === 0 ? (
               <EmptyState
                 title="No maps yet"
-                description={
-                  userRole === 'ADMIN'
-                    ? 'Create a map to visualize locations and track character positions.'
-                    : 'The GM will create maps as the adventure unfolds.'
-                }
-                action={userRole === 'ADMIN' ? { label: 'Create Map', onClick: () => setShowCreateMap(true) } : undefined}
+                description="Create a map to visualize locations and track character positions."
+                action={{ label: 'Create Map', onClick: () => setShowCreateMap(true) }}
               />
             ) : (
               <div className="space-y-4">

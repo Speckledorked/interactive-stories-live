@@ -40,6 +40,12 @@ export interface ActionClassification {
   // Faction whose regard is in play for social/political leverage —
   // standing with it modifies the roll (see lib/game/standing.ts).
   faction_name: string | null
+  // A specific NPC whose personal opinion of the character is in play —
+  // distinct from faction_name (an institution's regard vs. one person's).
+  // Modifies the roll from Character.relationships (trust/tension/respect),
+  // set by relationship_changes in stateUpdater.ts. Optional/null when the
+  // action isn't leaning on a specific relationship.
+  npc_name?: string | null
   // True when this action invokes the character's open corruption bargain
   // (see lib/game/corruption.ts) — grants the surge bonus at roll time.
   // Optional: absent means false.
@@ -57,6 +63,8 @@ export interface ActionMechanics {
   capabilityMod: number
   factionName: string | null
   standingMod: number
+  npcName: string | null
+  relationshipMod: number
   harmPenalty: number
   // CORRUPTION_SURGE_BONUS when this roll invoked an open bargain, else 0.
   // A non-zero value is also the signal that a mark MUST land this scene
@@ -116,6 +124,10 @@ export interface CharacterForRoll {
     framedLabel: string | null
     capability: { key: string; name: string }
   }>
+  // Per-NPC/faction trust/tension/respect/fear, keyed by entity id — see
+  // relationship_changes in lib/ai/client.ts and stateUpdater.ts's writer.
+  // Only the NPC-keyed entries are read here (see RelationshipForRoll).
+  relationships?: Record<string, { trust: number; tension: number; respect: number; fear: number }> | null
 }
 
 // The faction side of a roll, resolved by the orchestrator from the
@@ -128,6 +140,34 @@ export interface FactionForRoll {
   standing: number // this character's standing value, 0 if no row
 }
 
+// The NPC-relationship side of a roll — parallel to FactionForRoll, but for
+// one person's regard rather than an institution's. trust/tension/respect
+// are net socially (goodwill vs. friction); fear is deliberately excluded
+// from the modifier below since it cuts both ways depending on the move
+// (an asset for intimidation, a liability for persuasion) and the
+// classifier doesn't currently signal which — safer to leave it purely
+// narrative than to guess wrong on a mechanical bonus.
+export interface RelationshipForRoll {
+  npcName: string
+  trust: number
+  tension: number
+  respect: number
+}
+
+/**
+ * How much a personal relationship shifts a roll. Same banding philosophy
+ * as effectiveStandingModifier (lib/game/standing.ts): a single deterministic
+ * scalar, capped at ±2 so it stays in line with the other modifiers. Net
+ * goodwill (trust + respect - tension, each -100..100) scaled down by 50 —
+ * a maxed-out warm relationship (trust 100, respect 100, tension 0) hits the
+ * +2 cap; a maxed-out hostile one (tension 100, trust/respect 0) hits -2.
+ */
+export function relationshipModifier(rel: RelationshipForRoll | null | undefined): number {
+  if (!rel) return 0
+  const netGoodwill = rel.trust + rel.respect - rel.tension
+  return Math.max(-2, Math.min(2, Math.round(netGoodwill / 50)))
+}
+
 /**
  * Roll one classified action. Pure given an injected RNG.
  * Returns null for no_roll classifications or unknown moves.
@@ -137,7 +177,8 @@ export function computeMechanics(
   action: { id: string },
   character: CharacterForRoll,
   rng: Rng,
-  faction?: FactionForRoll | null
+  faction?: FactionForRoll | null,
+  relationship?: RelationshipForRoll | null
 ): ActionMechanics | null {
   if (classification.move_name === 'no_roll') return null
   const move = BASIC_MOVES.find(m => m.name === classification.move_name)
@@ -178,6 +219,14 @@ export function computeMechanics(
     standingMod = effectiveStandingModifier(faction.standing, faction.isActive, faction.influence)
   }
 
+  // Personal relationship weight, capped ±2 — see relationshipModifier above.
+  let npcName: string | null = null
+  let relationshipMod = 0
+  if (relationship) {
+    npcName = relationship.npcName
+    relationshipMod = relationshipModifier(relationship)
+  }
+
   // Corruption surge: the classifier says this action invokes the
   // character's open bargain. Only honored when a bargain is actually
   // pending and the character isn't already fully consumed.
@@ -190,7 +239,7 @@ export function computeMechanics(
 
   const harmMod = harmPenalty(character.harm)
   const dice: [number, number] = [rollD6(rng), rollD6(rng)]
-  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + harmMod + corruptionSurgeBonus
+  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + harmMod + corruptionSurgeBonus
   const outcome = calculateOutcome(total)
   const outcomeText = move.outcomes[outcome] || ''
 
@@ -205,6 +254,8 @@ export function computeMechanics(
     capabilityMod,
     factionName,
     standingMod,
+    npcName,
+    relationshipMod,
     harmPenalty: harmMod,
     corruptionSurgeBonus,
     dice,
@@ -238,6 +289,7 @@ export function parseClassifications(raw: any, actionCount: number): ActionClass
       stat_key: typeof c.stat_key === 'string' ? c.stat_key : 'cool',
       capability_key: typeof c.capability_key === 'string' && c.capability_key ? c.capability_key : null,
       faction_name: typeof c.faction_name === 'string' && c.faction_name ? c.faction_name : null,
+      npc_name: typeof c.npc_name === 'string' && c.npc_name ? c.npc_name : null,
       accepts_bargain: c.accepts_bargain === true,
     }))
 }
@@ -247,6 +299,7 @@ async function classifyActions(
   characters: CharacterForRoll[],
   actionCharacterIds: string[],
   factionNames: string[],
+  npcNames: string[],
   campaignId: string,
   sceneId: string
 ): Promise<ActionClassification[]> {
@@ -271,7 +324,7 @@ ${MOVE_LIST_FOR_PROMPT}
 - "no_roll": pure dialogue, planning, observation without pressure, or trivial activity — nothing is risked, so no dice
 
 STATS (pick the one that governs the attempt): cool (nerve/composure), hard (force/violence), hot (charm/manipulation), sharp (perception/wits), weird (the strange/supernatural).
-${factionNames.length > 0 ? `\nFACTIONS in this world: ${factionNames.join(', ')}\n` : ''}
+${factionNames.length > 0 ? `\nFACTIONS in this world: ${factionNames.join(', ')}\n` : ''}${npcNames.length > 0 ? `\nNPCs in this world: ${npcNames.join(', ')}\n` : ''}
 ACTIONS:
 ${actionLines}
 
@@ -279,9 +332,10 @@ Rules:
 - Only classify a move when the fiction has real stakes or opposition. Default to "no_roll" when in doubt.
 - capability_key: if the action leans on one of the character's listed known abilities (or clearly on a specific learnable system, even one they lack), name it; else null.
 - faction_name: if the action is social/political leverage aimed at (or invoking the name/backing of) one of the listed FACTIONS — negotiating with its members, trading on its reputation, moving through its territory openly — name that faction exactly as listed; else null. Physical actions with no social dimension get null.
+- npc_name: if the action is aimed at persuading, appealing to, threatening, or otherwise leveraging ONE SPECIFIC NPC's personal opinion of the character (not their faction's) — name that NPC exactly as listed; else null. An action can name a faction OR an NPC OR neither, but naming both only makes sense if the character is explicitly working an individual within their own institution.
 - accepts_bargain: true ONLY if that action's line shows an [OPEN BARGAIN: ...] AND the action clearly reaches for / accepts / draws on that offered power. Refusing it, ignoring it, or doing something unrelated is false. Actions with no open bargain are always false.
 
-Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null, "accepts_bargain": false}]}`
+Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null, "npc_name": null, "accepts_bargain": false}]}`
 
   const startTime = Date.now()
   try {
@@ -349,7 +403,7 @@ export async function resolveActionMechanics(
   if (pendingActions.length === 0) return []
 
   try {
-    const [characterRows, factionRows] = await Promise.all([
+    const [characterRows, factionRows, npcRows] = await Promise.all([
       prisma.character.findMany({
         where: { id: { in: Array.from(new Set(pendingActions.map(a => a.characterId))) } },
         include: {
@@ -365,6 +419,12 @@ export async function resolveActionMechanics(
         where: { campaignId },
         select: { id: true, name: true, isActive: true, influence: true, isDiscovered: true },
       }),
+      // Discovered NPCs only — same fog-of-war rule as factions below: you
+      // can't knowingly work a relationship with someone the party hasn't met.
+      prisma.nPC.findMany({
+        where: { campaignId, isDiscovered: true },
+        select: { id: true, name: true },
+      }),
     ])
     const characters: CharacterForRoll[] = characterRows.map(c => ({
       id: c.id,
@@ -374,6 +434,7 @@ export async function resolveActionMechanics(
       corruption: c.corruption,
       pendingBargainOffer: (c.pendingBargain as any)?.offer || null,
       capabilities: c.capabilities as any,
+      relationships: (c.relationships as any) || null,
     }))
     const standingsByCharacter = new Map(
       characterRows.map(c => [c.id, new Map(c.factionStandings.map(s => [s.factionId, s.value]))])
@@ -387,6 +448,7 @@ export async function resolveActionMechanics(
       // targets — you can't knowingly trade on the name of a faction the
       // party hasn't met or one that no longer exists.
       factionRows.filter(f => f.isActive && f.isDiscovered).map(f => f.name),
+      npcRows.map(n => n.name),
       campaignId,
       sceneId
     )
@@ -413,7 +475,23 @@ export async function resolveActionMechanics(
         }
       }
 
-      const rolled = computeMechanics(classification, action, character, rng, factionForRoll)
+      let relationshipForRoll: RelationshipForRoll | null = null
+      if (classification.npc_name) {
+        const npc = npcRows.find(n => n.name.toLowerCase() === classification.npc_name!.toLowerCase())
+        const rel = npc ? character.relationships?.[npc.id] : null
+        // No relationship row yet just means neutral (all zeros) — not "no
+        // roll effect vs. an unknown NPC name", which is the null case below.
+        if (npc) {
+          relationshipForRoll = {
+            npcName: npc.name,
+            trust: rel?.trust ?? 0,
+            tension: rel?.tension ?? 0,
+            respect: rel?.respect ?? 0,
+          }
+        }
+      }
+
+      const rolled = computeMechanics(classification, action, character, rng, factionForRoll, relationshipForRoll)
       if (rolled) mechanics.push(rolled)
     }
 
@@ -429,10 +507,10 @@ export async function resolveActionMechanics(
             userId: action?.userId || '',
             rollType: 'move',
             dice: m.dice,
-            modifier: m.statMod + m.capabilityMod + m.standingMod + m.harmPenalty,
+            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.harmPenalty,
             total: m.total,
             outcome: m.outcome,
-            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
+            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
           }
         }),
       })
@@ -501,6 +579,7 @@ export function formatRollReceipt(m: ActionMechanics): string {
     `${m.statMod >= 0 ? '+' : ''}${m.statMod} ${m.statKey}`,
     ...(m.capabilityName ? [`${m.capabilityMod >= 0 ? '+' : ''}${m.capabilityMod} ${m.capabilityName}`] : []),
     ...(m.factionName ? [`${m.standingMod >= 0 ? '+' : ''}${m.standingMod} standing (${m.factionName})`] : []),
+    ...(m.npcName ? [`${m.relationshipMod >= 0 ? '+' : ''}${m.relationshipMod} rapport (${m.npcName})`] : []),
     ...(m.harmPenalty ? [`${m.harmPenalty} impaired`] : []),
     ...(m.corruptionSurgeBonus ? [`+${m.corruptionSurgeBonus} corruption surge (bargain accepted)`] : []),
   ].join(', ')

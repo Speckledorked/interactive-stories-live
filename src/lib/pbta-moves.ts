@@ -1,5 +1,11 @@
 // src/lib/pbta-moves.ts
-// Core PbtA move definitions and mechanics
+// Core PbtA move definitions and mechanics.
+//
+// BASIC_MOVES is the single source of truth live resolution rolls against
+// (see lib/game/resolution.ts) — universal across every campaign regardless
+// of template or universe. This is distinct from the per-campaign `Move` DB
+// table (prisma/schema.prisma), which stores template-specific flavor moves
+// for export/reference only and is never consulted at roll time.
 
 export interface PbtAMove {
   name: string

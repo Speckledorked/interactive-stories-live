@@ -622,7 +622,6 @@ model Character {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   playerActions PlayerAction[]
   diceRolls     DiceRoll[]
-  turnOrders    TurnOrder[]
   gmClarifications GmClarification[]
 
   // Phase 8: Communication
@@ -1038,7 +1037,6 @@ model Scene {
   campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   playerActions PlayerAction[]
   diceRolls     DiceRoll[]
-  turnOrder     TurnOrder?
   gmClarifications GmClarification[]
 
   // Phase 8: Communication
@@ -1218,6 +1216,16 @@ model CampaignInvite {
 // PHASE 7 ADDITIONS: PbtA System
 //
 
+// Per-template flavor moves (e.g. "Hack and Slash", "Volley" for the fantasy
+// template) — NOT the list live resolution rolls against. That's the fixed,
+// universe-agnostic BASIC_MOVES array in lib/pbta-moves.ts, which every
+// campaign uses regardless of template. This table is seeded once at
+// campaign creation from the template's defaultMoves purely as reference/
+// flavor data, and its only reader is the full campaign export/import
+// (lib/export/campaign-exporter.ts) — nothing player-facing renders it, and
+// DiceRoll.moveId (below) is never populated, since these rows don't
+// correspond 1:1 with what a roll actually resolved against. Do not read
+// this table to determine what a character can roll; use pbta-moves.ts.
 model Move {
   id          String   @id @default(cuid())
   campaignId  String
@@ -1270,26 +1278,6 @@ model DiceRoll {
   @@index([campaignId])
   @@index([sceneId])
   @@index([characterId])
-}
-
-model TurnOrder {
-  id      String @id @default(cuid())
-  sceneId String @unique
-
-  // JSON array of {characterId, initiative, hasActed}
-  order Json // [{characterId: "...", initiative: 12, hasActed: false}]
-
-  currentTurn Int     @default(0) // Index in the order array
-  roundNumber Int     @default(1)
-  isActive    Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  scene      Scene       @relation(fields: [sceneId], references: [id], onDelete: Cascade)
-  characters Character[]
-
-  @@index([sceneId])
 }
 
 //

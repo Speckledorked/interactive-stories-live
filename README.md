@@ -104,9 +104,9 @@ see Known Issues and Shipped.
 ## Known Issues
 
 Confirmed by direct code inspection, not inferred. What's left after the
-July 2026 audit's Depth Hardening pass and its follow-up round (see
-Roadmap) — most of what that audit found has since been fixed; this is
-what's still actually true today.
+July 2026 audit's Depth Hardening pass, its follow-up rounds, and the
+July 2026 **re-audit** (see Roadmap) — most of what the original audit
+found has since been fixed; this is what's still actually true today.
 
 1. **Basic JSON mode, not strict structured outputs.** The AI GM call uses
    `response_format: json_object`, not OpenAI's `json_schema` strict mode.
@@ -119,6 +119,19 @@ what's still actually true today.
    outcome than today's lenient mode. Needs either a live-testable
    environment or an explicit decision to accept that risk before
    attempting it blind.
+2. **Zone positioning is a claim, not a mechanic.** The help page and
+   tutorial promise "Your zone affects what actions you can take" — but
+   nothing in `computeMechanics` or `stateUpdater.ts` reads a zone; zones
+   exist only as drawing data in `lib/maps/map-service.ts`. The one place
+   the product currently overclaims. Fix is `#43`: enforce it or delete
+   the copy.
+3. **Entity resolution is fuzzy name matching.** The AI→state write-back
+   resolves NPCs/characters/clocks by `contains`-mode name match
+   (`stateUpdater.ts`), and a misspelled NPC name auto-creates a duplicate
+   stub. The #1 state-corruption vector for long campaigns — see `#40`.
+4. **`stateUpdater.ts` (1,438 lines) has no direct tests.** The
+   transactional heart of the write-back path is verified only indirectly
+   through route tests — see `#41`.
 
 ## Roadmap
 
@@ -130,6 +143,24 @@ several were near-zero-cost because the surrounding infrastructure already
 existed. One remains, deliberately not attempted blind:
 
 - [ ] **#35 Move to strict structured outputs** (`json_schema`) for the AI GM response, catching shape violations before they reach the fallback ladder. Blocked on live-API verification — see Known Issues #1 for why this specifically wasn't attempted without it.
+
+### 🔧 Depth Hardening, round two — from the July 2026 re-audit
+
+A second full product-depth audit (run after the first round shipped)
+confirmed the simulation core is genuinely deep and compounding, and
+re-drew the backlog around what's still thin at the edges. Ordered
+roughly by ROI; the first two kill the two biggest state-corruption /
+regression risks in the codebase:
+
+- [ ] **#40 Entity-resolution layer for the AI write-back.** `stateUpdater.ts` resolves NPCs/characters/clocks via `contains`-mode name matching, and a misspelled name auto-creates a duplicate stub NPC. Replace with exact-match → alias table → fuzzy-with-confirmation, and stop `contains` writes entirely. Kills the #1 corruption vector for long campaigns.
+- [ ] **#41 Decompose `stateUpdater.ts` (1,438 lines, zero direct tests) into per-domain appliers**, each unit-tested — the fixture shapes already exist in the route tests. This is the transactional heart of the product running on indirect coverage.
+- [ ] **#42 Make `Location` a real foreign key** (nullable, backfilled by name once) on Character/NPC. Weather modifiers, NPC prompt relevance, and split-party grouping all currently join on free-text `currentLocation` strings — one AI-written "the Docks" vs "The Docks District" silently decouples three systems.
+- [ ] **#43 Zones: enforce or delete.** Either gate melee/ranged actions on zone distance in `computeMechanics` (the position data already exists in `lib/maps/map-service.ts`) or remove the help-page/tutorial claim. Currently the one place the product promises a mechanic that doesn't exist.
+- [ ] **#44 Give Debts roll-time weight.** A called-in debt should shift the roll (±1) the way standing already does (`effectiveStandingModifier`) — completing the social economy's second half. Today debts are prompt leverage only.
+- [ ] **#45 Structured quest objectives.** Add `objective_key` + preconditions so quests can gate content availability and chain — today a quest is a tracked narrative thread (status + progress log + reward grant), not a rules object.
+- [ ] **#46 Consolidation for append-only text.** `NPC.gmNotes`, `Quest.progressLog`, and the advancement log grow unboundedly via string appends; give them the same era-summary treatment `memoryConsolidation.ts` already gives campaign memory.
+- [ ] **#47 Connect the economy's two halves.** `Character.resources.gold` has real sinks (downtime costs, reward grants) but no prices or scarcity, and never touches `Faction.resources`. Route downtime costs and reward grants through faction-state-aware pricing so the offscreen economy reaches the player's purse the way standing reaches their rolls.
+- [ ] **#48 Fix the 5 chronically flaky orchestrator tests** (`sceneResolver.test.ts` ×3, `safety-service.test.ts` ×2 — mock-wiring timeouts, failing since before this work began). A suite that's red-by-default normalizes ignoring red.
 
 ### 🎯 Next — Product & Market
 

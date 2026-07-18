@@ -176,6 +176,21 @@ describe('POST /api/campaigns/[id]/scene', () => {
     )
   })
 
+  it("rejects a character that isn't in the scene's explicit participant list (split-party / Character-Focused scene)", async () => {
+    db.scene.findUnique.mockResolvedValue({
+      ...makeBaseScene(),
+      // char1 (the caller's character) deliberately left out — the GM
+      // scoped this scene to char2/char3 only.
+      participants: { characterIds: ['char2', 'char3'], userIds: ['user2', 'user3'] },
+    })
+
+    const response = await call()
+
+    expect(response.status).toBe(403)
+    expect(db.playerAction.create).not.toHaveBeenCalled()
+    expect(db.scene.update).not.toHaveBeenCalled()
+  })
+
   it('enqueues resolution once every defined participant has submitted', async () => {
     db.scene.findUnique.mockResolvedValue({
       ...makeBaseScene(),

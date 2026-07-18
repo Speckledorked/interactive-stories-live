@@ -147,6 +147,38 @@ export default function EnhancedCreateCharacterForm({
     }
   }, [campaignId])
 
+  // Existing party locations — nothing keeps a new character's starting
+  // location in sync with the rest of the party otherwise (each player
+  // fills in this field independently), which is how a party ends up
+  // accidentally split with no one having chosen that on purpose. A
+  // single shared location auto-fills the field; a genuine split is
+  // surfaced so the player can pick deliberately instead of by accident.
+  const [partyLocations, setPartyLocations] = useState<string[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    authenticatedFetch(`/api/campaigns/${campaignId}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (cancelled || !data) return
+        const locations = [...new Set(
+          (data.campaign?.characters || [])
+            .map((c: any) => (c.currentLocation || '').trim())
+            .filter(Boolean)
+        )] as string[]
+        setPartyLocations(locations)
+        if (locations.length === 1) {
+          setFormData(prev => (prev.currentLocation ? prev : { ...prev, currentLocation: locations[0] }))
+        }
+      })
+      .catch(() => {
+        // No hint is a fully supported state — the field just stays blank.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [campaignId])
+
   const applyArchetype = (archetype: ArchetypeCard) => {
     setSelectedArchetypeId(archetype.id)
     setFormData(prev => ({
@@ -530,6 +562,14 @@ export default function EnhancedCreateCharacterForm({
                 placeholder="Where does your character begin their journey?"
               />
               <p className="text-xs text-ember-300/60 mt-1">This will be used to personalize the opening scene.</p>
+              {partyLocations.length === 1 && (
+                <p className="text-xs text-ember-400/50 mt-1">Your party is currently at: {partyLocations[0]}</p>
+              )}
+              {partyLocations.length > 1 && (
+                <p className="text-xs text-ember-400/50 mt-1">
+                  Your party isn't in one place right now — pick a location to match one of them, or somewhere new if your character is arriving separately: {partyLocations.join(', ')}
+                </p>
+              )}
             </div>
           </div>
         )}

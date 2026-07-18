@@ -200,37 +200,46 @@ function extractTitle(scene: Scene): string {
 }
 
 /**
- * Determine memory importance based on scene content and AI updates
+ * Determine memory importance based on scene content and AI updates.
+ *
+ * Reads the real `AIGMResponse.world_updates` shape (see lib/ai/client.ts) —
+ * `pc_changes`/`clock_changes`/`faction_changes`/`new_timeline_events`. This
+ * previously read `character_updates`/`clock_updates`/`faction_updates`/
+ * `timeline_events`, none of which exist anywhere in that response: every
+ * scene silently fell through to 'NORMAL' regardless of what actually
+ * happened, with no error since the mismatch fails soft (`?.some` on
+ * `undefined` is just `undefined`, which is falsy).
  */
-function determineImportance(scene: Scene, aiResponse: any): MemoryImportance {
+export function determineImportance(scene: Scene, aiResponse: any): MemoryImportance {
   const updates = aiResponse?.world_updates || {};
+  const pcChanges = updates.pc_changes || [];
 
-  // CRITICAL: Major character death, campaign-changing event
+  // CRITICAL: a character actually died, or took a severe hit
   if (
-    updates.character_updates?.some((u: any) => u.harm >= 5) ||
-    updates.timeline_events?.some((e: any) =>
+    pcChanges.some((u: any) =>
+      u.changes?.death_save_result === 'failure' ||
+      u.changes?.heroic_sacrifice ||
+      (u.changes?.harm_damage ?? 0) >= 5
+    ) ||
+    updates.new_timeline_events?.some((e: any) =>
       e.title?.toLowerCase().includes('death') ||
-      e.title?.toLowerCase().includes('destroyed') ||
-      e.visibility === 'CRITICAL'
+      e.title?.toLowerCase().includes('destroyed')
     )
   ) {
     return 'CRITICAL';
   }
 
-  // MAJOR: Significant faction changes, clock completions, major combat
+  // MAJOR: a clock advanced, a faction changed, or major combat
   if (
-    updates.clock_updates?.some((c: any) => {
-      const isComplete = c.ticks_to_add && (c.new_ticks >= c.max_ticks || c.current_ticks >= c.max_ticks);
-      return isComplete;
-    }) ||
-    updates.faction_updates?.length > 0 ||
+    (updates.clock_changes?.length ?? 0) > 0 ||
+    (updates.faction_changes?.length ?? 0) > 0 ||
     scene.sceneType === 'combat'
   ) {
     return 'MAJOR';
   }
 
-  // MINOR: Downtime scenes with no major consequences
-  if (scene.sceneType === 'downtime' && !updates.timeline_events?.length) {
+  // MINOR: downtime scenes with no notable timeline events
+  if (scene.sceneType === 'downtime' && !(updates.new_timeline_events?.length)) {
     return 'MINOR';
   }
 
@@ -264,11 +273,18 @@ function detectEmotionalTone(text: string): string | undefined {
 }
 
 /**
- * Extract tags from scene content and updates
+ * Extract tags from scene content and updates.
+ *
+ * Same field-name fix as determineImportance() above — the
+ * `pc_changes`/`clock_changes` checks below previously read
+ * `character_updates`/`clock_updates`, which don't exist on
+ * `world_updates`, so the relationships/consequences/clock_progression
+ * tags could never fire.
  */
-function extractTags(scene: Scene, aiResponse: any): string[] {
+export function extractTags(scene: Scene, aiResponse: any): string[] {
   const tags: string[] = [];
   const updates = aiResponse?.world_updates || {};
+  const pcChanges = updates.pc_changes || [];
 
   // Scene type
   if (scene.sceneType) {
@@ -303,17 +319,17 @@ function extractTags(scene: Scene, aiResponse: any): string[] {
   }
 
   // Relationship tags
-  if (updates.character_updates?.some((u: any) => u.relationship_changes?.length > 0)) {
+  if (pcChanges.some((u: any) => u.changes?.relationship_changes?.length > 0)) {
     tags.push('relationships');
   }
 
   // Consequences tags
-  if (updates.character_updates?.some((u: any) => u.consequences)) {
+  if (pcChanges.some((u: any) => u.changes?.consequences_add?.length > 0 || u.changes?.consequences_remove?.length > 0)) {
     tags.push('consequences');
   }
 
   // Clock progression tags
-  if (updates.clock_updates?.length > 0) {
+  if ((updates.clock_changes?.length ?? 0) > 0) {
     tags.push('clock_progression');
   }
 

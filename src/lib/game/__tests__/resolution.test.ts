@@ -7,6 +7,7 @@ import {
   rollD6,
   capabilityModifier,
   harmPenalty,
+  relationshipModifier,
   computeMechanics,
   parseClassifications,
   formatRollReceipt,
@@ -200,6 +201,58 @@ describe('computeMechanics', () => {
   })
 })
 
+describe('relationshipModifier', () => {
+  it('is 0 with no relationship on record', () => {
+    expect(relationshipModifier(null)).toBe(0)
+    expect(relationshipModifier(undefined)).toBe(0)
+  })
+
+  it('caps at +2 for a maxed-out warm relationship', () => {
+    expect(relationshipModifier({ npcName: 'Kessler', trust: 100, tension: 0, respect: 100 })).toBe(2)
+  })
+
+  it('caps at -2 for a maxed-out hostile relationship', () => {
+    expect(relationshipModifier({ npcName: 'Kessler', trust: 0, tension: 100, respect: 0 })).toBe(-2)
+  })
+
+  it('nets trust + respect - tension, scaled down and rounded', () => {
+    // (60 + 20 - 30) / 50 = 1.0 -> +1
+    expect(relationshipModifier({ npcName: 'Kessler', trust: 60, tension: 30, respect: 20 })).toBe(1)
+  })
+
+  it('is 0 for a neutral (all-zero) relationship', () => {
+    expect(relationshipModifier({ npcName: 'Kessler', trust: 0, tension: 0, respect: 0 })).toBe(0)
+  })
+})
+
+describe('computeMechanics — relationship weight', () => {
+  it('adds rapport weight against a specific NPC', () => {
+    // dice 4+4=8, +0 hot, +2 warm relationship = 10 -> strong hit
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Seduce or Manipulate', stat_key: 'hot', capability_key: null, faction_name: null, npc_name: 'Lord Kessler' },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5),
+      null,
+      { npcName: 'Lord Kessler', trust: 100, tension: 0, respect: 100 }
+    )
+    expect(m!.relationshipMod).toBe(2)
+    expect(m!.npcName).toBe('Lord Kessler')
+    expect(m!.total).toBe(10)
+  })
+
+  it('is unaffected when no relationship is passed', () => {
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5)
+    )
+    expect(m!.relationshipMod).toBe(0)
+    expect(m!.npcName).toBeNull()
+  })
+})
+
 describe('parseClassifications', () => {
   it('keeps only valid, in-range classifications', () => {
     const parsed = parseClassifications(
@@ -216,11 +269,12 @@ describe('parseClassifications', () => {
     )
     expect(parsed).toHaveLength(2)
     expect(parsed[0]).toEqual({
-      action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null, accepts_bargain: false,
+      action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null, npc_name: null, accepts_bargain: false,
     })
     expect(parsed[1].move_name).toBe('no_roll')
     expect(parsed[1].capability_key).toBeNull()
     expect(parsed[1].faction_name).toBeNull()
+    expect(parsed[1].npc_name).toBeNull()
   })
 
   it('fails open on garbage', () => {

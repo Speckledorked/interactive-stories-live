@@ -70,10 +70,10 @@ is exactly what the Known Issues and Depth Hardening sections exist to close.
 | Quest lifecycle | 4 | Fixed (`#31`): a structured `reward_grant` is applied deterministically the first time a quest completes, reusing the same standing-change writer `pc_changes` uses — no longer prose-only. |
 | Combat / complex exchange resolution | 4 | Fixed (`#32`): conflicting actions on the same target are now ranked by actual roll outcome (`rankActionsByOutcome`), not left to an AI punt. Still no dedicated combat subsystem beyond PbtA resolution — that's by design, not a gap. |
 | Inventory / items | 3 | Improved (`#33`): a structured `armorValue` is now honored exactly when present, falling back to the keyword heuristic otherwise. Still JSON-blob CRUD with no general item identity beyond armor. |
-| Downtime activities | 3 | Costs (gold/items/favor/quest) are genuinely charged; day-by-day "events" are freeform AI prose with no state machine behind them. |
-| NPC goal/movement simulation | 3 | Real location relevance and goal-completion cascades; the phase-cycle text itself is mostly decorative. |
-| Weather | 2 (cosmetic) | Rigorously deterministic (stable-hash, not `Math.random`) — and confirmed to have zero mechanical consumers anywhere. Pure narration input; unchanged, no consumer added yet. |
-| DB `Move` table | 2 (documented, not fixed) | Seeded and exported for campaign export/import — a real, narrower feature than it first appeared, not dead code. Never read by the live resolver (`pbta-moves.ts` is canonical for that). Documented in-schema (`#34`) so it stops looking like an abandoned duplicate. |
+| Downtime activities | 4 | Fixed: day-by-day events now roll a deterministic, riskLevel-weighted outcome category (`decideDowntimeDayEvent`) before the AI narrates, replacing a bare `Math.random()` coin flip and fully-freeform event nature. Entry costs (gold/items/favor/quest) were already genuinely enforced. |
+| NPC goal/movement simulation | 4 | Fixed: goal progress is now phase-weighted (`acting` 2x, `preparing` 1x, `observing`/`resting` 0.5x baseline) — all four plan phases carry real mechanical weight now, not just `acting`'s joint-scheme gating. Overall completion pace unchanged (weights average to the prior flat rate). |
+| Weather | 4 | Fixed: a deterministic `weatherPenalty` now shifts rolls (-1) in severe non-benign conditions (severity 4+, excluding CLEAR/CLOUDY) at the acting character's location — the first real mechanical consumer of the tick's weather state. |
+| DB `Move` table | 3 (documented + cleaned) | Seeded and exported for campaign export/import — a real, narrower feature than it first appeared, not dead code. Never read by the live resolver (`pbta-moves.ts` is canonical for that); documented in-schema (`#34`) so it stops looking like an abandoned duplicate. `DiceRoll.moveId`, the one FK that structurally could never reference it correctly, has been removed. |
 | `TurnOrder` model | — (removed) | Fixed (`#34`): zero live references anywhere, so the model was dropped from the schema entirely rather than left to imply a feature that doesn't exist. |
 | "Story cards" (as a named concept) | 0 | Confirmed absent — doesn't exist anywhere in the codebase under any name. |
 
@@ -96,18 +96,16 @@ qualitative-stat enforcement, not just formatting) · `lib/ai/validation.ts`
 `lib/game/sceneResolver.ts` (the top-level orchestrator) ·
 `lib/game/consequences.ts` (player choice → persistent world state).
 
-**Surface area** (architecturally dressed like the systems above — see
-Known Issues for what's still actually true today; most of what was found
-here in the July 2026 audit has since been fixed, see Roadmap):
-`lib/game/tick/weatherTick.ts` (a genuinely deterministic engine wired to
-nothing that reads it mechanically — still true, no fix yet).
+**Surface area**: none currently identified — the last confirmed instance
+(`lib/game/tick/weatherTick.ts` having no mechanical consumer) was fixed;
+see Known Issues and Shipped.
 
 ## Known Issues
 
 Confirmed by direct code inspection, not inferred. What's left after the
-July 2026 audit's Depth Hardening pass (`#28`–`#37`, see Roadmap) — most of
-what that audit found has since been fixed; this list is what's still
-actually true today.
+July 2026 audit's Depth Hardening pass and its follow-up round (see
+Roadmap) — most of what that audit found has since been fixed; this is
+what's still actually true today.
 
 1. **Basic JSON mode, not strict structured outputs.** The AI GM call uses
    `response_format: json_object`, not OpenAI's `json_schema` strict mode.
@@ -120,26 +118,12 @@ actually true today.
    outcome than today's lenient mode. Needs either a live-testable
    environment or an explicit decision to accept that risk before
    attempting it blind.
-2. **Weather has zero mechanical consumers.** `lib/game/tick/weatherTick.ts`
-   computes real, deterministic (stable-hash) weather — condition and
-   severity — but nothing reads it for anything beyond narration text. Not
-   yet on the Depth Hardening backlog; a candidate for a future pass if
-   weather-driven mechanics (travel time, encounter chance) become a
-   priority.
-3. **DB `Move` table is a narrower feature than it first looks.** Now
+2. **DB `Move` table is a narrower feature than it first looks.** Now
    documented in-schema (`#34`): it's real, working per-template flavor-move
    storage for campaign export/import, not dead code — but it's still a
    second, disconnected concept from `pbta-moves.ts`'s `BASIC_MOVES`, which
    is what live resolution actually rolls against. Not a bug, just worth
    knowing which one is canonical for what.
-4. **Downtime's day-by-day events are freeform AI prose** with no
-   deterministic state machine behind them — contrast with the activity's
-   *entry* costs (gold/items/favor/quest), which are genuinely enforced.
-   Not yet on the Depth Hardening backlog.
-5. **NPC phase-cycle text is mostly decorative.** The observing → preparing
-   → acting → resting cycle is deterministic, but three of its four phases
-   only ever produce narration text; the one real mechanical hook is gating
-   joint-scheme timing. Not yet on the Depth Hardening backlog.
 
 ## Roadmap
 
@@ -189,6 +173,13 @@ depth audit's highest-ROI backlog:
 - `#36` added a single bounded repair round-trip to AI response validation — a fixable JSON-shape mistake gets one real re-prompt before falling through to the degradation ladder
 - `#37` added `capForPrompt()`, a hard per-category cap (NPCs/factions/locations/clocks/quests) on the live world-state payload, as a backstop against unbounded growth in a maximally active long campaign
 - `#35` (strict structured outputs) remains open — see Known Issues #1
+
+**Depth Hardening, follow-up round** — the remaining items from the first
+round's Known Issues list, all shipped in one pass:
+- Weather: added `weatherPenalty` — a deterministic -1 to rolls in severe non-benign conditions (severity 4+) at the acting character's location, the first real mechanical consumer of `weatherTick.ts`'s state
+- NPCs: goal progress is now phase-weighted (`decideNpcTick`'s `PHASE_PROGRESS_WEIGHT`) — `acting` advances a goal fastest, `preparing` at the baseline rate, `observing`/`resting` slowest, instead of a flat rate regardless of phase; weights average to the original pace over a full cycle
+- Downtime: added `downtimeEventOutcome.ts` — a deterministic, riskLevel-weighted roll (`decideDowntimeDayEvent`) decides whether a day has an event and its category (setback/complication/smooth/opportunity) before the AI narrates, replacing a bare `Math.random() < 0.4` and fully-freeform event nature
+- Schema cleanup: removed `DiceRoll.moveId`, the one FK that structurally could never reference the `Move` table correctly (a real roll's move is always `BASIC_MOVES`, which has no `Move` row) — confirmed zero application-code references before removal
 
 **Mechanical spine (Foundation + Phase 0–1)**
 - Knowledge-relative capability sheets with deterministic arc-capped growth and per-character narration knowledge-gating
@@ -287,10 +278,11 @@ Debug tab (why the tick made a given decision, plus a dry-run preview of the
 next tick), and a Simulation section for tuning per-campaign tick caps and
 pacing.
 
-**Honest caveat** (see Status at a Glance / Known Issues): weather is part of
-this same deterministic tick and computed with the same rigor as everything
-above, but currently has no mechanical consumer — it's narration input only,
-not yet a gameplay variable.
+Weather is part of this same deterministic tick, computed with the same
+rigor as everything above — and now a real gameplay variable, not just
+narration input: severe conditions (STORM/SNOW/RAIN/FOG at severity 4+)
+impose a flat -1 penalty on rolls made at that location, the same way the
+Impaired harm rule works.
 
 ## Prerequisites
 

@@ -1240,11 +1240,18 @@ model Move {
   updatedAt   DateTime @updatedAt
 
   campaign  Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  diceRolls DiceRoll[]
 
   @@index([campaignId])
 }
 
+// DiceRoll.moveId (and Move.diceRolls above) were removed: a real roll's
+// move always comes from BASIC_MOVES (lib/pbta-moves.ts), which has no
+// row in this table at all — Move here is per-template flavor-move
+// storage for campaign export/import (see the Move model's own doc
+// comment) — so the FK could never be populated with a semantically
+// correct value. Confirmed zero application-code references before
+// removal. A roll's move is identified by name in `description` below,
+// which is what's actually read (formatRollReceipt in lib/game/resolution.ts).
 model DiceRoll {
   id          String  @id @default(cuid())
   campaignId  String
@@ -1253,7 +1260,6 @@ model DiceRoll {
   userId      String
 
   rollType String // "move", "custom", "help", "interfere"
-  moveId   String? // If rolling a specific move
 
   dice     Int[] // [6, 4] for 2d6 showing 6 and 4
   modifier Int   @default(0) // Stat modifier or forward
@@ -1273,7 +1279,6 @@ model DiceRoll {
   scene     Scene?    @relation(fields: [sceneId], references: [id], onDelete: Cascade)
   character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  move      Move?     @relation(fields: [moveId], references: [id])
 
   @@index([campaignId])
   @@index([sceneId])
@@ -1594,6 +1599,13 @@ model DowntimeEvent {
   choices     Json? // Available choices
   response    String?   @db.Text // Player response
   outcome     String?   @db.Text // Result of response
+  // Depth-hardening follow-up (see lib/downtime/downtimeEventOutcome.ts):
+  // deterministic, riskLevel-weighted category rolled server-side BEFORE
+  // the AI narrates — "setback" | "complication" | "smooth" | "opportunity".
+  // The AI is constrained to narrate within this category rather than
+  // freely improvising the day's nature; null for events created before
+  // this existed.
+  outcomeCategory String?
   createdAt   DateTime  @default(now())
   respondedAt DateTime?
 

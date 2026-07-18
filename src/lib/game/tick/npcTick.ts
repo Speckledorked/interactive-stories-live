@@ -64,6 +64,24 @@ export function isActingPhase(npcId: string, turnNumber: number): boolean {
 // a realistic playthrough instead of never.
 const PROGRESS_PER_TICK = 4
 
+// Phase weighting: without this, three of the four plan phases
+// (observing/preparing/resting) contributed nothing beyond flavor text —
+// goalProgress accrued identically regardless of what an NPC was
+// nominally doing. Now progress tracks the phase itself: an NPC actually
+// executing their plan ("acting") advances fastest, one laying groundwork
+// ("preparing") advances at the baseline rate, and one gathering intel or
+// recovering (observing/resting) barely advances at all. Weights are
+// chosen to average to exactly 1.0 across a full 4-phase cycle (2+4+8+2)/4
+// = 4), so the ~25-tick completion pace documented above is unchanged for
+// an NPC averaged over time — only the per-tick distribution changed, not
+// the overall cadence.
+const PHASE_PROGRESS_WEIGHT: Record<PlanPhase, number> = {
+  observing: 0.5,
+  preparing: 1,
+  acting: 2,
+  resting: 0.5,
+}
+
 export interface NpcTickDecision {
   phase: PlanPhase
   timeOfDay: TimeOfDay
@@ -114,7 +132,7 @@ export function decideNpcTick(
   // one — see goalCompleted handling below) don't accrue progress toward
   // nothing.
   const hasGoal = !!npc.goals?.trim()
-  const rawProgress = hasGoal ? npc.goalProgress + PROGRESS_PER_TICK : npc.goalProgress
+  const rawProgress = hasGoal ? npc.goalProgress + PROGRESS_PER_TICK * PHASE_PROGRESS_WEIGHT[phase] : npc.goalProgress
   const goalCompleted = rawProgress >= 100
   const newGoalProgress = goalCompleted ? 0 : rawProgress
 

@@ -90,13 +90,16 @@ export class TurnTracker {
       turnTracker.turnTimeoutMinutes
     );
 
-    // Update scene waiting list
+    // Advisory only: turn order is a display/queue layer alongside the
+    // scene's real action-collection mechanism (ExchangeManager), which
+    // owns Scene.waitingOnUsers for simultaneous-submission tracking (see
+    // api/campaigns/[id]/scene/route.ts). Writing to that same field here
+    // would fight the exchange manager's own tracking, so this only
+    // updates the tracker's own deadline, never Scene.waitingOnUsers —
+    // submitting an action is never gated on whose "turn" this shows.
     await prisma.scene.update({
       where: { id: sceneId },
-      data: {
-        turnDeadline: newDeadline,
-        waitingOnUsers: [nextPlayer.userId]
-      }
+      data: { turnDeadline: newDeadline }
     });
 
     return updatedTracker;
@@ -303,13 +306,11 @@ export class TurnTracker {
       where: { campaignId, sceneId }
     });
 
-    // Clear scene waiting list
+    // Advisory only — see advanceTurn's comment above. Never touches
+    // Scene.waitingOnUsers, which the exchange manager owns exclusively.
     await prisma.scene.update({
       where: { id: sceneId },
-      data: {
-        turnDeadline: null,
-        waitingOnUsers: null as unknown as any
-      }
+      data: { turnDeadline: null }
     });
 
     // Notify all participants that scene ended

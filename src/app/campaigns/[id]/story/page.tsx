@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
 import ChatPanel from '@/components/chat/ChatPanel'
+import TurnTracker from '@/components/turns/TurnTracker'
 import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
 import type { MapData } from '@/lib/maps/map-service'
 import AILoadingState from '@/components/scene/AILoadingState'
@@ -61,6 +62,13 @@ export default function StoryPage() {
   const [startingScene, setStartingScene] = useState(false)
   const [endingScene, setEndingScene] = useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
+  // Turn order — an opt-in, advisory queue layered on top of the scene's
+  // real (simultaneous) action collection; see TurnTracker's doc comment.
+  // null = no turn tracker exists for this scene (the default/only state
+  // until a GM enables one).
+  const [sceneTurnInfo, setSceneTurnInfo] = useState<any>(null)
+  const [enablingTurnOrder, setEnablingTurnOrder] = useState(false)
+  const [endingTurnOrder, setEndingTurnOrder] = useState(false)
   const [showSceneOptions, setShowSceneOptions] = useState(false)
   const [selectedSceneCharacters, setSelectedSceneCharacters] = useState<string[]>([])
   const [showInsufficientFunds, setShowInsufficientFunds] = useState(false)
@@ -149,6 +157,75 @@ export default function StoryPage() {
     }
   }
 
+  const loadTurnInfo = async (sceneId: string) => {
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/turns?sceneId=${sceneId}`)
+      if (response.ok) {
+        const json = await response.json()
+        setSceneTurnInfo(json.turnInfo)
+      }
+    } catch {
+      // Non-critical — the "Enable turn order" prompt just won't reflect
+      // an already-active tracker until the next Pusher update or reload.
+    }
+  }
+
+  useEffect(() => {
+    if (currentScene?.id) {
+      loadTurnInfo(currentScene.id)
+    } else {
+      setSceneTurnInfo(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentScene?.id])
+
+  const handleEnableTurnOrder = async () => {
+    if (!currentScene?.id) return
+    setEnablingTurnOrder(true)
+    try {
+      const participants = (campaign?.campaign?.characters || [])
+        .filter((c: any) => c.isAlive !== false)
+        .map((c: any) => ({ userId: c.userId, characterId: c.id, name: c.name }))
+
+      if (participants.length === 0) {
+        setError('No characters to put in turn order yet.')
+        return
+      }
+
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/turns`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'initialize', sceneId: currentScene.id, participants }),
+      })
+
+      if (response.ok) {
+        await loadTurnInfo(currentScene.id)
+      } else {
+        const data = await response.json()
+        setError(data.error || 'Failed to enable turn order')
+      }
+    } catch {
+      setError('Failed to enable turn order')
+    } finally {
+      setEnablingTurnOrder(false)
+    }
+  }
+
+  const handleEndTurnOrder = async () => {
+    if (!currentScene?.id) return
+    setEndingTurnOrder(true)
+    try {
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/turns?sceneId=${currentScene.id}`,
+        { method: 'DELETE' }
+      )
+      if (response.ok) {
+        setSceneTurnInfo(null)
+      }
+    } finally {
+      setEndingTurnOrder(false)
+    }
+  }
+
   // Pusher realtime subscriptions
   useEffect(() => {
     // Check if Pusher is configured
@@ -172,6 +249,15 @@ export default function StoryPage() {
     channel.bind('gm:clarification', (data: any) => {
       console.log('GM clarification:', data)
       loadData()
+    })
+
+    // Turn order updates — null means a GM just ended tracking for the
+    // scene (hides the widget); otherwise the fresh turn state for
+    // whichever scene is active. Also drives whether the "Enable turn
+    // order" prompt shows at all, so every connected client agrees on
+    // whether tracking is on for this scene without a page reload.
+    channel.bind('turn-update', (data: any) => {
+      setSceneTurnInfo(data)
     })
 
     // Listen for scene resolution starting
@@ -1354,6 +1440,43 @@ export default function StoryPage() {
                     )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Turn Order — opt-in advisory queue, see TurnTracker's doc
+              comment for why it never gates action submission. */}
+          {currentScene && sceneTurnInfo && (
+            <div className="space-y-2">
+              <TurnTracker
+                campaignId={campaignId}
+                sceneId={currentScene.id}
+                currentUserId={user?.id || ''}
+                isGM={isAdmin}
+              />
+              {isAdmin && (
+                <button
+                  onClick={handleEndTurnOrder}
+                  disabled={endingTurnOrder}
+                  className="w-full text-xs text-ember-400/50 hover:text-ember-200 transition-colors disabled:opacity-50"
+                >
+                  {endingTurnOrder ? 'Ending…' : 'End turn order'}
+                </button>
+              )}
+            </div>
+          )}
+          {currentScene && !sceneTurnInfo && isAdmin && (
+            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+              <h3 className="text-sm font-bold text-ember-300/60 uppercase tracking-wide mb-2">Turn Order</h3>
+              <p className="text-xs text-ember-400/50 mb-3">
+                Play is freeform by default — anyone can act anytime. Turn this on if you'd rather the party go in order for this scene; it's just a visible queue and timer, submitting an action is never blocked by it.
+              </p>
+              <button
+                onClick={handleEnableTurnOrder}
+                disabled={enablingTurnOrder}
+                className="btn-secondary py-2 px-4 text-sm w-full"
+              >
+                {enablingTurnOrder ? 'Enabling…' : 'Enable turn order'}
+              </button>
             </div>
           )}
 

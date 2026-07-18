@@ -12,7 +12,6 @@ import EnhancedCreateCharacterForm from "@/components/forms/EnhancedCreateCharac
 import ChatPanel from '@/components/chat/ChatPanel'
 import NotesPanel from '@/components/notes/NotesPanel'
 import NotificationPanel from '@/components/notifications/NotificationPanel'
-import TurnTracker from '@/components/turns/TurnTracker'
 import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
 import InviteModal from '@/components/campaigns/InviteModal'
 import { Home, Scroll, MessageSquare, StickyNote, Map as MapIcon } from 'lucide-react'

@@ -77,8 +77,8 @@ export default function HelpPage() {
                 <h3 className="text-xl font-bold text-ember-100">Create Your Character</h3>
               </div>
               <p className="text-ember-300/60 leading-relaxed ml-13">
-                Design your character with a name, pronouns, concept, and description. The system uses
-                Powered by the Apocalypse (PbtA) rules for freeform storytelling.
+                Design your character with a name, pronouns, concept, and description. The system handles
+                dice and stats behind the scenes, so you can focus on freeform storytelling.
               </p>
             </div>
 

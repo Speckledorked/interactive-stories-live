@@ -67,7 +67,7 @@ export class TutorialService {
           },
           {
             type: 'tip',
-            content: 'Your character\'s stats will be automatically assigned based on PbtA (Powered by the Apocalypse) rules.',
+            content: 'Your character\'s stats will be automatically assigned based on your concept and the story\'s needs.',
           },
         ],
         completionTrigger: 'character_created',
@@ -115,7 +115,7 @@ export class TutorialService {
       {
         stepKey: 'dice_roll',
         title: 'Rolling the Dice',
-        description: 'Understand PbtA dice mechanics',
+        description: 'Understand how dice rolls work',
         category: 'basics',
         orderIndex: 5,
         prerequisites: ['submit_action'],

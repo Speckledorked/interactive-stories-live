@@ -220,11 +220,10 @@ export default function CampaignsPage() {
 const TEMPLATES = [
   {
     id: 'pbta-fantasy',
-    name: 'PbtA Fantasy',
-    description: 'Dungeon World-style adventure with ruins, monsters, and rival factions.',
+    name: 'Fantasy Adventure',
+    description: 'Adventure with ruins, monsters, and rival factions.',
     universe: 'High Fantasy',
     tags: ['Fantasy', 'Dungeon Crawl', 'Magic'],
-    moveCount: 6,
     factionCount: 3,
     emoji: '⚔️'
   },
@@ -234,7 +233,6 @@ const TEMPLATES = [
     description: 'Superhero academy under attack. Quirks, villains, and heroic growth.',
     universe: 'Modern Superhero',
     tags: ['Superhero', 'School', 'Anime'],
-    moveCount: 3,
     factionCount: 2,
     emoji: '🦸'
   },
@@ -244,7 +242,6 @@ const TEMPLATES = [
     description: 'Hunters investigating supernatural threats in the modern world.',
     universe: 'Modern Horror',
     tags: ['Horror', 'Investigation', 'Supernatural'],
-    moveCount: 3,
     factionCount: 1,
     emoji: '🔦'
   }
@@ -372,7 +369,7 @@ function CreateCampaignModal({
           {step === 'template' && (
             <div className="space-y-3">
               <p className="text-ember-300/50 text-sm mb-6">
-                Templates pre-configure the AI Game Master, world factions, and moves so you can start playing immediately.
+                Templates pre-configure the AI Game Master, world factions, and starting content so you can start playing immediately.
               </p>
 
               {TEMPLATES.map((tpl) => (
@@ -390,8 +387,6 @@ function CreateCampaignModal({
                       </div>
                       <p className="text-sm text-ember-300/50 mb-3">{tpl.description}</p>
                       <div className="flex items-center gap-3 text-xs text-ember-400/40">
-                        <span>{tpl.moveCount} moves</span>
-                        <span>·</span>
                         <span>{tpl.factionCount} factions</span>
                         <span>·</span>
                         <div className="flex gap-1.5">
@@ -439,7 +434,7 @@ function CreateCampaignModal({
                   <div>
                     <p className="text-sm font-semibold text-ember-200">{selectedTpl.name} template</p>
                     <p className="text-xs text-ember-400/50">
-                      Includes {selectedTpl.moveCount} moves, {selectedTpl.factionCount} factions, AI system prompt, and world seed
+                      Includes {selectedTpl.factionCount} factions, AI system prompt, and world seed
                     </p>
                   </div>
                 </div>

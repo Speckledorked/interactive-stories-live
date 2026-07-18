@@ -197,7 +197,7 @@ export default function EnhancedCreateCharacterForm({
     { key: 'stats' as TabKey, label: 'Stats & Abilities', icon: '⚡' },
     { key: 'equipment' as TabKey, label: 'Equipment & Inventory', icon: '🎒' },
     { key: 'resources' as TabKey, label: 'Resources & Contacts', icon: '💰' },
-    { key: 'consequences' as TabKey, label: 'Debts & Enemies', icon: '⚔️' },
+    { key: 'consequences' as TabKey, label: 'Obligations & Rivals', icon: '⚔️' },
   ]
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -912,7 +912,7 @@ export default function EnhancedCreateCharacterForm({
           </div>
         )}
 
-        {/* Debts & Enemies Tab */}
+        {/* Obligations & Rivals Tab */}
         {activeTab === 'consequences' && (
           <div className="space-y-6">
             <div className="bg-ember-900/15 border border-ember-700/40 rounded-md p-4">
@@ -923,7 +923,7 @@ export default function EnhancedCreateCharacterForm({
 
             {/* Promises */}
             <div>
-              <h3 className="text-lg font-medium text-ember-100 mb-2">Promises & Oaths</h3>
+              <h3 className="text-lg font-medium text-ember-100 mb-2">Promises Made</h3>
               <p className="text-xs text-ember-300/60 mb-4">
                 Commitments your character has made that they must honor.
               </p>
@@ -966,7 +966,7 @@ export default function EnhancedCreateCharacterForm({
 
             {/* Debts */}
             <div className="border-t border-ember-900/30 pt-6">
-              <h3 className="text-lg font-medium text-ember-100 mb-2">Debts & Favors Owed</h3>
+              <h3 className="text-lg font-medium text-ember-100 mb-2">Debts Owed</h3>
               <p className="text-xs text-ember-300/60 mb-4">
                 What does your character owe to others? Money, favors, life debts?
               </p>

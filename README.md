@@ -140,9 +140,8 @@ differentiators are the Debt/standing bridge to a live simulation (no
 comparator in the report does this), fog-of-war enforced at the API layer
 (not just prompted away), and full safety tooling (not benchmarked for any
 platform in the report, MythOS included). Its two genuinely correct findings
-are folded in below.
+are folded in below. `#22` (de-jargon) shipped — see Shipped below.
 
-- [ ] **#22 De-jargon player-facing mechanical language** — rename the "PbtA Fantasy" template, rewrite the help-page PbtA callout in plain language, retitle "Debts & Enemies" / "Promises & Oaths" / "Obligations & Favors" / "Moves" to generic terms that read correctly regardless of universe. Internal code/docs keep the PbtA/Urban Shadows references — they're accurate there. Display strings only, no schema migration.
 - [ ] **#23 Surface the multiplayer story MythOS already tells** — no player cap, a real turn tracker, live chat, per-player block/report already beat the report's read of "Partial." Marketing/onboarding gap, not an engineering one.
 - [ ] **#24 Decide, on purpose, whether dice stay opt-in** — re-run the "mechanics invisible by default" decision against real playtest feedback now that the Debt/standing/harm economy is live.
 - [ ] **#25 Scene illustration** — one generated image per resolved scene; async resolution already keeps cost/latency off the request path.
@@ -188,6 +187,12 @@ round's Known Issues list, all shipped in one pass:
 - `itemType` adds broad categorization (weapon/armor/consumable/quest/currency/misc), surfaced in the wiki's aggregated item entries — purely a display label, nothing keys off it mechanically
 - **Discovered mid-implementation**: `harm_damage` only ever applied to a PC taking damage — NPCs had no harm state at all (`isAlive` was set once at creation and never flipped anywhere), so the dominant real case for a weapon mattering (a PC attacking an NPC) had nowhere honest to write to. Rather than ship a decorative `damageBonus`, added minimal `NPC.harm` (mirrors `Character.harm`, no conditions/death-saves/permanent-injury) and `npc_changes.harm_damage`/`harm_damage_dealt_by` so the attacking PC's weapon bonus has a real target
 - `questRewards.ts`'s `reward_grant.items` carries the same new fields through quest payouts, not just `inventory_changes`
+
+**De-jargoned player-facing language (`#22`)** — display strings only, no schema/internal-code changes (internal naming stays PbtA/Urban Shadows-accurate, e.g. `BASIC_MOVES`, `pbta-fantasy` template id):
+- Renamed the "PbtA Fantasy" template to "Fantasy Adventure" (and dropped its "Dungeon World-style" description wording) in both the server-side template and its client-side mirror on the campaign-creation page
+- Rewrote the help page's and onboarding tutorial's "Powered by the Apocalypse (PbtA)" callouts in plain language
+- Retitled character-sheet/creation-form section labels to read correctly regardless of universe: "Debts & Enemies" → "Obligations & Rivals", "Promises & Oaths" → "Promises Made", "Debts & Favors Owed" → "Debts Owed", "Obligations & Favors" → "Obligations", "Moves"/"Moves Learned" → "Abilities"/"Abilities Learned"
+- Found along the way: the campaign-creation modal's "X moves" badges were stale leftovers from the per-template `defaultMoves` concept `#38` retired — removed them rather than reword them, since the number no longer corresponded to anything real
 
 **Mechanical spine (Foundation + Phase 0–1)**
 - Knowledge-relative capability sheets with deterministic arc-capped growth and per-character narration knowledge-gating

@@ -15,12 +15,17 @@ import NotificationPanel from '@/components/notifications/NotificationPanel'
 import TurnTracker from '@/components/turns/TurnTracker'
 import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
 import InviteModal from '@/components/campaigns/InviteModal'
-import { Home, Scroll, MessageSquare, StickyNote, Map as MapIcon, Settings as SettingsIcon, Plus, MapPin, UserPlus } from 'lucide-react'
-import { displayFont } from '@/lib/tavernTheme'
+import { Home, Scroll, MessageSquare, StickyNote, Map as MapIcon } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernCard, TavernButton, TavernSpinner } from '@/components/tavern/ui'
+import { TavernSpinner } from '@/components/tavern/ui'
+import { EmptyState } from '@/components/ui/empty-state'
+import { CampaignHero } from '@/components/campaigns/lobby/CampaignHero'
+import { CampaignEntryCTA } from '@/components/campaigns/lobby/CampaignEntryCTA'
+import { CharacterRoster } from '@/components/campaigns/lobby/CharacterRoster'
+import { PlayersPanel } from '@/components/campaigns/lobby/PlayersPanel'
+import { WorldSummaryPanel } from '@/components/campaigns/lobby/WorldSummaryPanel'
 
 interface CampaignData {
   campaign: any
@@ -212,7 +217,7 @@ export default function CampaignLobbyPage() {
 
   if (loading) {
     return (
-      <TavernPage>
+      <TavernPage background="myth">
         <TavernHeader backHref="/campaigns" title="Loading…" campaignId={campaignId} />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
           <TavernSpinner className="h-16 w-16" />
@@ -223,15 +228,15 @@ export default function CampaignLobbyPage() {
 
   if (error || !data) {
     return (
-      <TavernPage>
+      <TavernPage background="myth">
         <TavernHeader backHref="/campaigns" title="Campaign" campaignId={campaignId} />
         <main className="max-w-2xl mx-auto px-4 pt-28 pb-16">
-          <TavernCard className="p-6">
-            <p className="text-wine-400">{error || 'Campaign not found'}</p>
-            <Link href="/campaigns" className="text-ember-300 hover:text-ember-200 hover:underline mt-4 inline-block">
+          <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
+            <p className="text-myth-danger">{error || 'Campaign not found'}</p>
+            <Link href="/campaigns" className="mt-4 inline-block text-myth-ink-muted hover:text-myth-ink hover:underline">
               ← Back to campaigns
             </Link>
-          </TavernCard>
+          </div>
         </main>
       </TavernPage>
     )
@@ -246,7 +251,7 @@ export default function CampaignLobbyPage() {
   const tabIcons = { overview: Home, progression: Scroll, chat: MessageSquare, notes: StickyNote, maps: MapIcon } as const
 
   return (
-    <TavernPage>
+    <TavernPage background="myth">
       <TavernHeader
         backHref="/campaigns"
         title={campaign.title}
@@ -283,11 +288,11 @@ export default function CampaignLobbyPage() {
         {/* World-seeding lock: canon lore is still being imported and the
             world rebuilt from it — play opens when this clears. */}
         {worldSeeding && (
-          <div className="mb-6 rounded-xl bg-gradient-to-r from-ember-900/40 to-wine-900/30 border border-ember-600/40 px-5 py-4 flex items-center gap-4">
+          <div className="mb-6 flex items-center gap-4 rounded-lg border border-myth-info/30 bg-myth-info/10 px-5 py-4">
             <div className="spinner h-8 w-8 flex-shrink-0"></div>
             <div>
-              <p className="font-semibold text-ember-100">The world is being forged from your canon lore…</p>
-              <p className="text-sm text-ember-300/60 mt-0.5">
+              <p className="font-medium text-myth-ink">The world is being forged from your canon lore…</p>
+              <p className="mt-0.5 text-sm text-myth-ink-muted">
                 Importing and rebuilding factions, powers, and character archetypes from the source material.
                 Characters and scenes unlock when it finishes — usually a few minutes for a whole wiki.
                 This page updates automatically.
@@ -301,17 +306,17 @@ export default function CampaignLobbyPage() {
             persisted as dismissed (it naturally won't reappear once
             lastViewedAt advances past these events). */}
         {awayRecap && (
-          <div className="mb-6 rounded-xl bg-gradient-to-r from-tavern-800/60 to-tavern-900/60 border border-ember-900/30 px-5 py-4">
+          <div className="mb-6 rounded-lg border border-myth-border bg-myth-surface-sunken px-5 py-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className={`font-semibold text-ember-100 ${displayFont.className}`}>
-                  🌍 While you were away ({awayRecap.awayLabel})…
+                <p className="font-display font-medium text-myth-ink">
+                  While you were away ({awayRecap.awayLabel})…
                 </p>
-                <p className="text-xs text-ember-300/50 mt-0.5">The world kept moving without you.</p>
+                <p className="mt-0.5 text-xs text-myth-ink-faint">The world kept moving without you.</p>
               </div>
               <button
                 onClick={() => setAwayRecap(null)}
-                className="text-ember-300/40 hover:text-ember-300/80 text-sm flex-shrink-0"
+                className="flex-shrink-0 text-sm text-myth-ink-faint hover:text-myth-ink-muted"
                 aria-label="Dismiss"
               >
                 ✕
@@ -319,384 +324,106 @@ export default function CampaignLobbyPage() {
             </div>
             <ul className="mt-3 space-y-2">
               {awayRecap.events.map((e) => (
-                <li key={e.id} className="text-sm text-ember-300/70 pl-3 border-l-2 border-ember-700/40">
-                  <span className="text-ember-200 font-medium">{e.title}.</span> {e.summary}
+                <li key={e.id} className="border-l-2 border-myth-border pl-3 text-sm text-myth-ink-muted">
+                  <span className="font-medium text-myth-ink">{e.title}.</span> {e.summary}
                 </li>
               ))}
             </ul>
             <Link
               href={`/campaigns/${campaignId}/wiki?type=RUMORS`}
-              className="inline-block mt-3 text-xs text-ember-400 hover:text-ember-300 underline"
+              className="mt-3 inline-block text-xs text-myth-ink-muted underline hover:text-myth-ink"
             >
               See everything that's happened →
             </Link>
           </div>
         )}
 
-        {/* Campaign summary */}
-        <div className="mb-8">
-          <p className="text-sm sm:text-base text-ember-300/60 leading-relaxed mb-3">{campaign.description}</p>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-black/30 rounded-lg border border-ember-900/30">
-              <span className="text-ember-400/50">Universe:</span>
-              <span className="text-ember-100 font-medium">{campaign.universe}</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-black/30 rounded-lg border border-ember-900/30">
-              <span className="text-ember-400/50">Turn:</span>
-              <span className="text-ember-300 font-medium">{campaign.worldMeta?.currentTurnNumber || 0}</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-black/30 rounded-lg border border-ember-900/30">
-              <span className="text-ember-400/50">Date:</span>
-              <span className="text-ember-100 font-medium truncate max-w-[150px] sm:max-w-none">{campaign.worldMeta?.currentInGameDate || 'Day 1'}</span>
-            </div>
-            {userRole === 'ADMIN' && (
-              <Link
-                href={`/campaigns/${campaignId}/admin`}
-                className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-300 hover:text-ember-200 hover:border-ember-700/50 transition-colors"
-              >
-                <SettingsIcon className="w-4 h-4" />
-                Settings
-              </Link>
-            )}
-          </div>
-        </div>
+        <CampaignHero
+          title={campaign.title}
+          description={campaign.description}
+          universe={campaign.universe}
+          turnNumber={campaign.worldMeta?.currentTurnNumber || 0}
+          inGameDate={campaign.worldMeta?.currentInGameDate || 'Day 1'}
+        />
 
       {/* Overview Tab - Existing Content */}
       {activeTab === 'overview' && (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Column */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Enter Story Button */}
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-            <h2 className="text-lg font-bold text-ember-100">Ready to Play?</h2>
-            <p className="text-ember-300/60 mb-4">
-              {userCharacters.length === 0
-                ? 'Create a character first to enter the story'
-                : 'Jump into the adventure!'}
-            </p>
-            <Link
-              href={`/campaigns/${campaignId}/story`}
-              className={`px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center inline-block ${
-                userCharacters.length === 0 ? 'opacity-50 pointer-events-none' : ''
-              }`}
-            >
-              🎭 Enter Story
-            </Link>
+      <div className="space-y-6">
+        <CampaignEntryCTA
+          campaignId={campaignId}
+          hasCharacter={userCharacters.length > 0}
+          onCreateCharacter={() => setShowCreateCharacter(true)}
+        />
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <CharacterRoster
+              characters={campaign.characters}
+              currentUserId={currentUser?.id}
+              campaignId={campaignId}
+              activePlayerCount={campaign.memberships.length}
+              onCreateCharacter={() => setShowCreateCharacter(true)}
+              onDeleteCharacter={(characterId) => setDeletingCharacterId(characterId)}
+            />
           </div>
-
-          {/* Your Characters */}
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-ember-100 mb-0">Your Characters</h2>
-              <button
-                type="button"
-                onClick={() => setShowCreateCharacter(true)}
-                className="text-ember-300 hover:text-ember-200 text-sm"
-              >
-                + Create Character
-              </button>
-            </div>
-
-            {userCharacters.length === 0 ? (
-              <p className="text-ember-400/50 text-sm">No characters yet. Create one to play!</p>
-            ) : (
-              <div className="space-y-3">
-                {userCharacters.map((character: any) => (
-                  <div key={character.id} className="bg-black/30 rounded-lg p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-bold text-ember-100">{character.name}</h3>
-                        <p className="text-sm text-ember-300/60">{character.concept}</p>
-                        {character.currentLocation && (
-                          <p className="text-xs text-ember-400/50 mt-1">
-                            📍 {character.currentLocation}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          character.isAlive
-                            ? 'bg-green-500/20 text-green-400'
-                            : 'bg-black/30 text-ember-300/60'
-                        }`}>
-                          {character.isAlive ? 'Alive' : 'Dead'}
-                        </span>
-                        <button
-                          onClick={() => setDeletingCharacterId(character.id)}
-                          className="text-wine-400 hover:text-wine-300 text-xs px-2 py-1 rounded hover:bg-wine-800/20"
-                          title="Delete character"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                    {Array.isArray(character.conditions) && character.conditions.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {character.conditions.map((condition: string, i: number) => (
-                          <span
-                            key={i}
-                            className="px-2 py-1 bg-wine-800/30 text-wine-400 rounded text-xs"
-                          >
-                            {condition}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* All Characters in Campaign */}
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-            <h2 className="text-lg font-bold text-ember-100">All Characters</h2>
-            <div className="space-y-2">
-              {campaign.characters.map((character: any) => {
-                const currentUser = getUser()
-                const isMyCharacter = currentUser && character.userId === currentUser.id
-
-                return (
-                  <Link
-                    key={character.id}
-                    href={`/campaigns/${campaignId}/characters/${character.id}`}
-                    className={`flex items-center justify-between py-2 px-3 rounded transition-colors group ${
-                      isMyCharacter
-                        ? 'bg-wine-800/20 border border-wine-600/40 hover:bg-wine-800/30'
-                        : 'hover:bg-black/30'
-                    }`}
-                  >
-                    <div>
-                      <span className={`font-medium ${isMyCharacter ? 'text-ember-200' : 'text-ember-100'} group-hover:text-ember-200`}>
-                        {character.name}
-                        {isMyCharacter && (
-                          <span className="ml-2 text-xs bg-wine-600 text-ember-100 px-2 py-0.5 rounded">You</span>
-                        )}
-                      </span>
-                      <span className="text-ember-400/50 text-sm ml-2">
-                        ({character.user.name || character.user.email})
-                      </span>
-                    </div>
-                    <span className="text-ember-500/40 group-hover:text-ember-300">→</span>
-                  </Link>
-                )
-              })}
-              {campaign.characters.length === 0 && (
-                <p className="text-ember-400/50 text-sm">No characters in this campaign yet</p>
-              )}
-            </div>
+          <div>
+            <PlayersPanel
+              memberships={campaign.memberships}
+              currentUserId={currentUser?.id}
+              blockedUserIds={blockedUserIds}
+              blockingUserId={blockingUserId}
+              onToggleBlock={toggleBlock}
+              isAdmin={userRole === 'ADMIN'}
+              onInvite={() => setShowInviteModal(true)}
+            />
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Players */}
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-ember-100 mb-0">Players ({campaign.memberships.length})</h2>
-              {userRole === 'ADMIN' && (
-                <button
-                  onClick={() => setShowInviteModal(true)}
-                  className="text-ember-300 hover:text-ember-200 text-sm"
-                  title="Invite players"
-                >
-                  + Invite
-                </button>
-              )}
-            </div>
-            <div className="space-y-2">
-              {campaign.memberships.map((member: any) => {
-                const currentUserId = getUser()?.id
-                const isSelf = member.user.id === currentUserId
-                const isBlocked = blockedUserIds.includes(member.user.id)
-                return (
-                  <div key={member.id} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`h-2 w-2 rounded-full flex-shrink-0 ${member.user.isOnline ? 'bg-green-500' : 'bg-ember-900/60'}`} />
-                      <span className="text-sm text-ember-200/80 truncate">{member.user.name || member.user.email}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        member.role === 'ADMIN'
-                          ? 'bg-ember-900/30 text-ember-300'
-                          : 'bg-black/30 text-ember-200/80'
-                      }`}>
-                        {member.role}
-                      </span>
-                      {!isSelf && (
-                        <button
-                          onClick={() => toggleBlock(member.user.id)}
-                          disabled={blockingUserId === member.user.id}
-                          title={isBlocked ? 'Unblock — show their messages again' : 'Block — hide their messages from you'}
-                          className={`text-xs px-1.5 py-1 rounded transition-colors disabled:opacity-50 ${
-                            isBlocked ? 'text-wine-400 hover:text-wine-300' : 'text-ember-400/40 hover:text-ember-300/70'
-                          }`}
-                        >
-                          {isBlocked ? 'Unblock' : 'Block'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-            <h2 className="text-lg font-bold text-ember-100">Campaign Stats</h2>
-            <p className="text-xs text-ember-400/50 mb-3">Click to view in wiki</p>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-ember-300/60">Scenes:</span>
-                <span className="text-ember-100 font-medium">{campaign.scenes.length}</span>
-              </div>
-              <Link
-                href={`/campaigns/${campaignId}/characters`}
-                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
-              >
-                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
-                  Characters:
-                </span>
-                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
-                  {campaign.characters.length} →
-                </span>
-              </Link>
-              <Link
-                href={`/campaigns/${campaignId}/wiki?type=NPC`}
-                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
-              >
-                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
-                  NPCs:
-                </span>
-                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
-                  {campaign.npcs.length} →
-                </span>
-              </Link>
-              <Link
-                href={`/campaigns/${campaignId}/wiki?type=FACTION`}
-                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
-              >
-                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
-                  Factions:
-                </span>
-                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
-                  {campaign.factions.length} →
-                </span>
-              </Link>
-              <Link
-                href={`/campaigns/${campaignId}/wiki?type=LOCATION`}
-                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
-              >
-                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
-                  Locations:
-                </span>
-                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
-                  {campaign.locations?.length ?? 0} →
-                </span>
-              </Link>
-              <Link
-                href={`/campaigns/${campaignId}/wiki?type=CLOCK`}
-                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
-              >
-                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
-                  Active Clocks:
-                </span>
-                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
-                  {campaign.clocks.length} →
-                </span>
-              </Link>
-              {/* Items/quests/rumors aren't included in this page's campaign
-                  payload, so these are link-only rows — the wiki tab itself
-                  shows the live list. */}
-              <Link
-                href={`/campaigns/${campaignId}/wiki?type=ITEM`}
-                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
-              >
-                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
-                  Items:
-                </span>
-                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
-                  →
-                </span>
-              </Link>
-              <Link
-                href={`/campaigns/${campaignId}/wiki?type=QUEST`}
-                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
-              >
-                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
-                  Quests:
-                </span>
-                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
-                  →
-                </span>
-              </Link>
-              <Link
-                href={`/campaigns/${campaignId}/wiki?type=RUMORS`}
-                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group"
-              >
-                <span className="text-ember-300/60 group-hover:text-ember-200 transition-colors">
-                  Rumors:
-                </span>
-                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
-                  →
-                </span>
-              </Link>
-              <Link
-                href={`/campaigns/${campaignId}/wiki`}
-                className="flex justify-between hover:bg-black/30 p-2 -m-2 rounded transition-colors group border-t border-ember-900/30 mt-2 pt-3"
-              >
-                <span className="text-ember-300 group-hover:text-ember-200 transition-colors font-medium">
-                  Open full wiki
-                </span>
-                <span className="text-ember-100 font-medium group-hover:text-ember-200 transition-colors">
-                  →
-                </span>
-              </Link>
-            </div>
-          </div>
-        </div>
+        <WorldSummaryPanel
+          campaignId={campaignId}
+          factionCount={campaign.factions.length}
+          clockCount={campaign.clocks.length}
+          inGameDate={campaign.worldMeta?.currentInGameDate || 'Day 1'}
+          characterCount={campaign.characters.length}
+          npcCount={campaign.npcs.length}
+          locationCount={campaign.locations?.length ?? 0}
+        />
       </div>
       )}
 
       {/* Progression/Story Log Tab */}
       {activeTab === 'progression' && data && (
-        <div className="max-w-6xl mx-auto">
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-            <h2 className="text-lg font-bold text-ember-100 mb-4">Campaign Story Log</h2>
-            <p className="text-ember-300/60 mb-6">
-              A chronicle of your adventure, updated after each scene
-            </p>
+        <div className="mx-auto max-w-6xl">
+          <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
+            <h2 className="font-display text-lg font-semibold text-myth-ink">Campaign Story Log</h2>
+            <p className="mb-6 mt-1 text-myth-ink-muted">A chronicle of your adventure, updated after each scene</p>
 
             {logsLoading ? (
               <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ember-400"></div>
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-myth-accent"></div>
               </div>
             ) : campaignLogs.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-6xl mb-4">📜</div>
-                <p className="text-ember-300/60 mb-2">No story entries yet</p>
-                <p className="text-sm text-ember-400/50">
-                  The story log will be automatically updated as scenes are resolved
-                </p>
-              </div>
+              <EmptyState
+                title="No story entries yet"
+                description="The story log will be automatically updated as scenes are resolved."
+              />
             ) : (
               <>
                 {/* Timeline Bar */}
-                <div className="mb-8 bg-black/20 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-ember-300/60">Campaign Progress</span>
-                    <span className="text-sm text-ember-400/50">
+                <div className="mb-8 rounded-md border border-myth-border bg-myth-surface-sunken p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-medium text-myth-ink-muted">Campaign Progress</span>
+                    <span className="font-mono text-sm text-myth-ink-faint">
                       Turn {campaignLogs[campaignLogs.length - 1]?.turnNumber || 0}
                     </span>
                   </div>
-                  <div className="relative h-2 bg-black/30 rounded-full overflow-hidden">
+                  <div className="relative h-1.5 overflow-hidden rounded-full bg-myth-border">
                     <div
-                      className="absolute top-0 left-0 h-full bg-gradient-to-r from-ember-600 to-ember-400 transition-all"
+                      className="absolute left-0 top-0 h-full bg-myth-accent transition-all"
                       style={{ width: `${Math.min((campaignLogs.length / 20) * 100, 100)}%` }}
                     />
                   </div>
-                  <div className="flex justify-between mt-2 text-xs text-ember-400/50">
+                  <div className="mt-2 flex justify-between text-xs text-myth-ink-faint">
                     <span>{campaignLogs.length} scenes completed</span>
                     <span>Milestone at 20 scenes</span>
                   </div>
@@ -704,50 +431,46 @@ export default function CampaignLobbyPage() {
 
                 {/* Log Entries */}
                 <div className="space-y-4">
-                  {campaignLogs.map((log: any, index: number) => (
+                  {campaignLogs.map((log: any) => (
                     <div
                       key={log.id}
-                      className="bg-black/30 rounded-lg p-4 border border-ember-900/30 hover:border-ember-700/40 transition-colors"
+                      className="rounded-md border border-myth-border p-4 transition-colors hover:border-myth-border-strong"
                     >
                       {/* Header */}
-                      <div className="flex items-start justify-between mb-3">
+                      <div className="mb-3 flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-medium text-ember-300">
-                              Turn {log.turnNumber}
-                            </span>
+                          <div className="mb-1 flex items-center gap-2">
+                            <span className="font-mono text-xs text-myth-ink-muted">Turn {log.turnNumber}</span>
                             {log.entryType !== 'scene' && (
-                              <span className="text-xs px-2 py-0.5 bg-black/30 text-ember-200/80 rounded">
+                              <span className="rounded bg-myth-ink/5 px-2 py-0.5 text-xs text-myth-ink-muted">
                                 {log.entryType}
                               </span>
                             )}
                           </div>
-                          <h3 className="text-lg font-bold text-ember-100">{log.title}</h3>
+                          <h3 className="font-display text-lg font-semibold text-myth-ink">{log.title}</h3>
                           {log.inGameDate && (
-                            <p className="text-xs text-ember-400/50 mt-1">
-                              📅 {log.inGameDate}
+                            <p className="mt-1 text-xs text-myth-ink-faint">
+                              {log.inGameDate}
                               {log.duration && ` • Duration: ${log.duration}`}
                             </p>
                           )}
                         </div>
-                        <span className="text-xs text-ember-400/50">
+                        <span className="text-xs text-myth-ink-faint">
                           {new Date(log.createdAt).toLocaleDateString()}
                         </span>
                       </div>
 
                       {/* Summary */}
-                      <p className="text-ember-200/80 mb-3 whitespace-pre-wrap">{log.summary}</p>
+                      <p className="mb-3 whitespace-pre-wrap text-myth-ink-muted">{log.summary}</p>
 
                       {/* Highlights */}
                       {log.highlights && log.highlights.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-ember-900/30">
-                          <h4 className="text-xs font-medium text-ember-300/60 mb-2">
-                            Key Moments:
-                          </h4>
+                        <div className="mt-3 border-t border-myth-border pt-3">
+                          <h4 className="mb-2 text-xs font-medium text-myth-ink-muted">Key Moments:</h4>
                           <ul className="space-y-1">
                             {log.highlights.map((highlight: string, i: number) => (
-                              <li key={i} className="text-sm text-ember-300/60 flex items-start gap-2">
-                                <span className="text-ember-400 mt-1">•</span>
+                              <li key={i} className="flex items-start gap-2 text-sm text-myth-ink-muted">
+                                <span className="mt-1 text-myth-ink-faint">•</span>
                                 <span>{highlight}</span>
                               </li>
                             ))}
@@ -792,14 +515,14 @@ export default function CampaignLobbyPage() {
 
       {/* Maps Tab */}
       {activeTab === 'maps' && data && (
-        <div className="max-w-6xl mx-auto">
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-ember-100 mb-0">Campaign Maps</h2>
+        <div className="mx-auto max-w-6xl">
+          <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-display text-lg font-semibold text-myth-ink">Campaign Maps</h2>
               {userRole === 'ADMIN' && (
                 <button
                   onClick={() => setShowCreateMap(true)}
-                  className="text-ember-300 hover:text-ember-200 text-sm"
+                  className="text-sm text-myth-ink-muted hover:text-myth-ink"
                 >
                   + Create Map
                 </button>
@@ -808,8 +531,8 @@ export default function CampaignLobbyPage() {
 
             {/* Create Map Form */}
             {showCreateMap && userRole === 'ADMIN' && (
-              <div className="bg-black/30 rounded-lg p-4 mb-4 border border-ember-900/30">
-                <h3 className="text-ember-100 font-bold mb-3">Create New Map</h3>
+              <div className="mb-4 rounded-md border border-myth-border bg-myth-surface-sunken p-4">
+                <h3 className="mb-3 font-medium text-myth-ink">Create New Map</h3>
                 <form onSubmit={async (e) => {
                   e.preventDefault()
                   if (!newMapName.trim()) return
@@ -845,22 +568,22 @@ export default function CampaignLobbyPage() {
                 }}>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-sm text-ember-300/60 mb-1">Map Name</label>
+                      <label className="mb-1 block text-sm text-myth-ink-muted">Map Name</label>
                       <input
                         type="text"
                         value={newMapName}
                         onChange={(e) => setNewMapName(e.target.value)}
-                        className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full"
+                        className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                         placeholder="e.g., Tavern Floor Plan, Dungeon Level 1"
                         required
                       />
                     </div>
                     <div>
-                      <label className="block text-sm text-ember-300/60 mb-1">Description</label>
+                      <label className="mb-1 block text-sm text-myth-ink-muted">Description</label>
                       <textarea
                         value={newMapDescription}
                         onChange={(e) => setNewMapDescription(e.target.value)}
-                        className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full"
+                        className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                         rows={2}
                         placeholder="Optional description"
                       />
@@ -869,7 +592,7 @@ export default function CampaignLobbyPage() {
                       <button
                         type="submit"
                         disabled={creatingMap || !newMapName.trim()}
-                        className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center"
+                        className="rounded-md bg-myth-accent px-4 py-2.5 text-center font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover disabled:opacity-50"
                       >
                         {creatingMap ? 'Creating...' : 'Create Map'}
                       </button>
@@ -880,7 +603,7 @@ export default function CampaignLobbyPage() {
                           setNewMapName('')
                           setNewMapDescription('')
                         }}
-                        className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center"
+                        className="rounded-md border border-myth-border px-4 py-2.5 text-center font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
                       >
                         Cancel
                       </button>
@@ -893,36 +616,32 @@ export default function CampaignLobbyPage() {
             {/* Maps List */}
             {mapsLoading ? (
               <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ember-400"></div>
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-myth-accent"></div>
               </div>
             ) : maps.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-6xl mb-4">🗺️</div>
-                <p className="text-ember-300/60 mb-2">No maps yet</p>
-                <p className="text-sm text-ember-400/50">
-                  {userRole === 'ADMIN'
-                    ? 'Create a map to visualize locations and track character positions'
-                    : 'The GM will create maps as the adventure unfolds'}
-                </p>
-              </div>
+              <EmptyState
+                title="No maps yet"
+                description={
+                  userRole === 'ADMIN'
+                    ? 'Create a map to visualize locations and track character positions.'
+                    : 'The GM will create maps as the adventure unfolds.'
+                }
+                action={userRole === 'ADMIN' ? { label: 'Create Map', onClick: () => setShowCreateMap(true) } : undefined}
+              />
             ) : (
               <div className="space-y-4">
                 {maps.map((map: any) => (
-                  <div key={map.id} className="bg-black/30 rounded-lg p-4 border border-ember-900/30">
-                    <div className="flex items-start justify-between mb-4">
+                  <div key={map.id} className="rounded-md border border-myth-border p-4">
+                    <div className="mb-4 flex items-start justify-between">
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-bold text-ember-100">{map.name}</h3>
+                        <div className="mb-1 flex items-center gap-2">
+                          <h3 className="font-medium text-myth-ink">{map.name}</h3>
                           {map.isActive && (
-                            <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">
-                              Active
-                            </span>
+                            <span className="rounded bg-myth-good/10 px-2 py-0.5 text-xs text-myth-good">Active</span>
                           )}
                         </div>
-                        {map.description && (
-                          <p className="text-sm text-ember-300/60">{map.description}</p>
-                        )}
-                        <div className="flex items-center gap-4 text-xs text-ember-400/50 mt-2">
+                        {map.description && <p className="text-sm text-myth-ink-muted">{map.description}</p>}
+                        <div className="mt-2 flex items-center gap-4 font-mono text-xs text-myth-ink-faint">
                           <span>{map.tokens?.length || 0} tokens</span>
                           <span>{map.zones?.length || 0} zones</span>
                           <span>{map.width}×{map.height}</span>
@@ -947,7 +666,7 @@ export default function CampaignLobbyPage() {
                                 console.error('Failed to set active map:', err)
                               }
                             }}
-                            className="text-xs px-3 py-1 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded"
+                            className="rounded border border-myth-border px-3 py-1 text-xs text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                           >
                             Set Active
                           </button>
@@ -956,7 +675,7 @@ export default function CampaignLobbyPage() {
                     </div>
 
                     {/* Map Preview */}
-                    <div className="rounded-lg overflow-hidden border border-ember-900/30 bg-black/20">
+                    <div className="overflow-hidden rounded-md border border-myth-border">
                       <PlayerMapViewer
                         map={map}
                         characterName={userCharacters[0]?.name || ''}
@@ -985,9 +704,9 @@ export default function CampaignLobbyPage() {
 
       {/* Character Creation Modal */}
       {showCreateCharacter && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
-          <div className="bg-tavern-900 border border-ember-900/40 rounded-lg max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 my-auto">
-            <h2 className="text-xl sm:text-2xl font-bold mb-4 text-ember-100">Create New Character</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-2 sm:p-4">
+          <div className="my-auto max-h-[95vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-myth-border bg-myth-surface-raised p-4 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)] sm:max-h-[90vh] sm:p-6">
+            <h2 className="mb-4 font-display text-xl font-semibold text-myth-ink sm:text-2xl">Create New Character</h2>
             <EnhancedCreateCharacterForm
               campaignId={campaignId}
               statLabels={campaign.statLabels}
@@ -1004,31 +723,31 @@ export default function CampaignLobbyPage() {
 
       {/* Delete Character Confirmation Modal */}
       {deletingCharacterId && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-          <div className="bg-tavern-900 border border-ember-900/40 rounded-lg max-w-md w-full p-4 sm:p-6">
-            <h2 className="text-xl sm:text-2xl font-bold mb-4 text-ember-100">Delete Character?</h2>
-            <p className="text-sm sm:text-base text-ember-300/60 mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg border border-myth-border bg-myth-surface-raised p-4 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)] sm:p-6">
+            <h2 className="mb-4 font-display text-xl font-semibold text-myth-ink sm:text-2xl">Delete Character?</h2>
+            <p className="mb-6 text-sm text-myth-ink-muted sm:text-base">
               Are you sure you want to delete this character? This action cannot be undone.
               All associated actions and data will be permanently removed.
             </p>
             {deleteError && (
-              <div className="bg-wine-800/20 border border-wine-600/40 text-wine-400 px-4 py-3 rounded-lg mb-4 text-sm">
+              <div className="mb-4 rounded-md border border-myth-danger/30 bg-myth-danger/10 px-4 py-3 text-sm text-myth-danger">
                 {deleteError}
               </div>
             )}
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 onClick={() => {
                   setDeletingCharacterId(null)
                   setDeleteError('')
                 }}
-                className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center flex-1 touch-manipulation min-h-[44px]"
+                className="min-h-[44px] flex-1 touch-manipulation rounded-md border border-myth-border px-4 py-2.5 text-center font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDeleteCharacter(deletingCharacterId)}
-                className="bg-wine-600 hover:bg-wine-500 text-ember-100 px-4 py-2 rounded-lg transition-colors flex-1 touch-manipulation min-h-[44px]"
+                className="min-h-[44px] flex-1 touch-manipulation rounded-md bg-red-700 px-4 py-2 text-white transition-colors hover:bg-red-800"
               >
                 Delete
               </button>

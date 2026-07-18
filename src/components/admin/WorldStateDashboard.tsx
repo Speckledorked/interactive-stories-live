@@ -1,8 +1,11 @@
 // src/components/admin/WorldStateDashboard.tsx
-// Visual overview dashboard showing world state (NPCs, factions, clocks)
+// Overview's "World Summary" section: a quiet read of the world's current
+// state (NPCs, factions, clocks, notes) — flat surfaces, no iconography
+// beyond plain functional wayfinding icons, semantic color only.
 
 'use client'
 
+import { Users, Landmark, Clock as ClockIcon, StickyNote } from 'lucide-react'
 import { CompactClock } from '@/components/clock/ClockProgress'
 
 interface NPC {
@@ -36,208 +39,136 @@ interface WorldStateDashboardProps {
   worldNotes?: string[]
 }
 
+const NPC_STATUS_LABEL: Record<NPC['status'], { label: string; className: string }> = {
+  alive: { label: 'Alive', className: 'text-myth-good' },
+  dead: { label: 'Dead', className: 'text-myth-danger' },
+  unknown: { label: 'Unknown', className: 'text-myth-ink-faint' },
+}
+
+const RELATIONSHIP_LABEL: Record<'friendly' | 'allied' | 'neutral' | 'hostile', { label: string; className: string }> = {
+  friendly: { label: 'Friendly', className: 'bg-myth-good/10 text-myth-good' },
+  allied: { label: 'Allied', className: 'bg-myth-good/10 text-myth-good' },
+  neutral: { label: 'Neutral', className: 'bg-myth-ink/5 text-myth-ink-muted' },
+  hostile: { label: 'Hostile', className: 'bg-myth-danger/10 text-myth-danger' },
+}
+
+function RelationshipBadge({ relationship }: { relationship?: 'friendly' | 'neutral' | 'hostile' | 'allied' }) {
+  if (!relationship) return null
+  const config = RELATIONSHIP_LABEL[relationship]
+  return <span className={`shrink-0 rounded px-2 py-0.5 text-xs ${config.className}`}>{config.label}</span>
+}
+
+function Panel({ icon: Icon, title, count, children }: { icon: React.ComponentType<{ className?: string }>; title: string; count: number; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
+      <h3 className="mb-4 flex items-center gap-2 font-display text-base font-semibold text-myth-ink">
+        <Icon className="h-4 w-4 text-myth-ink-faint" />
+        {title} ({count})
+      </h3>
+      <div className="max-h-96 space-y-2 overflow-y-auto">{children}</div>
+    </div>
+  )
+}
+
 export default function WorldStateDashboard({
   npcs = [],
   factions = [],
   clocks = [],
   worldNotes = []
 }: WorldStateDashboardProps) {
-
-  // Get NPC status icon and color
-  const getNPCStatusConfig = (status: NPC['status']) => {
-    switch (status) {
-      case 'alive':
-        return { icon: '✓', color: 'text-success-400', bg: 'bg-success-500/10', border: 'border-success-500/30' }
-      case 'dead':
-        return { icon: '✕', color: 'text-wine-400', bg: 'bg-wine-800/20', border: 'border-wine-700/40' }
-      case 'unknown':
-        return { icon: '?', color: 'text-ember-400/60', bg: 'bg-black/25', border: 'border-ember-900/30' }
-    }
-  }
-
-  // Get relationship badge
-  const getRelationshipBadge = (relationship?: 'friendly' | 'neutral' | 'hostile' | 'allied') => {
-    if (!relationship) return null
-
-    const config = {
-      friendly: { text: '🤝 Friendly', color: 'text-success-400', bg: 'bg-success-500/10' },
-      allied: { text: '⚔️ Allied', color: 'text-ember-300', bg: 'bg-ember-900/20' },
-      neutral: { text: '○ Neutral', color: 'text-ember-400/60', bg: 'bg-black/25' },
-      hostile: { text: '⚡ Hostile', color: 'text-wine-400', bg: 'bg-wine-800/20' }
-    }[relationship]
-
-    return (
-      <span className={`text-xs px-2 py-0.5 rounded ${config.bg} ${config.color}`}>
-        {config.text}
-      </span>
-    )
-  }
-
-  // Get influence bar color
-  const getInfluenceColor = (influence: number) => {
-    if (influence >= 8) return 'from-wine-500 to-wine-700'
-    if (influence >= 6) return 'from-ember-400 to-ember-600'
-    if (influence >= 4) return 'from-ember-600 to-ember-800'
-    return 'from-ember-800 to-ember-900'
-  }
+  const criticalClocks = clocks.filter((c) => c.current >= c.max * 0.75).length
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-ember-100 flex items-center gap-2">
-          🌍 World State Dashboard
-        </h2>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* NPCs Section */}
-        <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-          <h3 className="text-lg font-bold text-ember-100 mb-4 flex items-center gap-2">
-            👥 NPCs ({npcs.length})
-          </h3>
-
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {npcs.length === 0 ? (
-              <p className="text-sm text-ember-400/50 italic">No NPCs tracked yet</p>
-            ) : (
-              npcs.map((npc) => {
-                const statusConfig = getNPCStatusConfig(npc.status)
-                return (
-                  <div
-                    key={npc.id}
-                    className={`p-3 rounded-lg border ${statusConfig.border} ${statusConfig.bg} hover:scale-[1.02] transition-all`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`text-sm font-semibold ${statusConfig.color}`}>
-                            {statusConfig.icon}
-                          </span>
-                          <h4 className="font-semibold text-ember-100">{npc.name}</h4>
-                        </div>
-                        <p className="text-xs text-ember-300/60">{npc.role}</p>
-                        {npc.lastSeen && (
-                          <p className="text-xs text-ember-400/50 mt-1">Last seen: {npc.lastSeen}</p>
-                        )}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Panel icon={Users} title="NPCs" count={npcs.length}>
+          {npcs.length === 0 ? (
+            <p className="text-sm italic text-myth-ink-faint">No NPCs tracked yet</p>
+          ) : (
+            npcs.map((npc) => {
+              const status = NPC_STATUS_LABEL[npc.status]
+              return (
+                <div key={npc.id} className="rounded-md border border-myth-border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="truncate font-medium text-myth-ink">{npc.name}</h4>
+                        <span className={`text-xs ${status.className}`}>{status.label}</span>
                       </div>
-                      {getRelationshipBadge(npc.relationship)}
+                      <p className="text-xs text-myth-ink-muted">{npc.role}</p>
+                      {npc.lastSeen && <p className="mt-1 text-xs text-myth-ink-faint">Last seen: {npc.lastSeen}</p>}
                     </div>
-                  </div>
-                )
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Factions Section */}
-        <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-wine-800/10 border border-wine-800/30 shadow-lg shadow-black/30 p-5">
-          <h3 className="text-lg font-bold text-ember-100 mb-4 flex items-center gap-2">
-            🏰 Factions ({factions.length})
-          </h3>
-
-          <div className="space-y-3 max-h-96 overflow-y-auto">
-            {factions.length === 0 ? (
-              <p className="text-sm text-ember-400/50 italic">No factions tracked yet</p>
-            ) : (
-              factions.map((faction) => (
-                <div
-                  key={faction.id}
-                  className="p-3 rounded-lg border border-wine-800/30 bg-wine-800/10 hover:scale-[1.02] transition-all"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h4 className="font-semibold text-ember-100">{faction.name}</h4>
-                    {getRelationshipBadge(faction.relationship)}
-                  </div>
-
-                  {faction.description && (
-                    <p className="text-xs text-ember-300/60 mb-2">{faction.description}</p>
-                  )}
-
-                  {/* Influence bar */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-ember-400/50">Influence</span>
-                      <span className="text-ember-200/70 font-semibold">{faction.influence}/10</span>
-                    </div>
-                    <div className="h-2 bg-black/30 rounded-full overflow-hidden border border-ember-900/30">
-                      <div
-                        className={`h-full bg-gradient-to-r ${getInfluenceColor(faction.influence)} transition-all duration-500`}
-                        style={{ width: `${(faction.influence / 10) * 100}%` }}
-                      />
-                    </div>
+                    <RelationshipBadge relationship={npc.relationship} />
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
+              )
+            })
+          )}
+        </Panel>
 
-        {/* Active Clocks Section */}
-        <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-ember-900/10 border border-ember-800/30 shadow-lg shadow-black/30 p-5">
-          <h3 className="text-lg font-bold text-ember-100 mb-4 flex items-center gap-2">
-            ⏰ Active Clocks ({clocks.length})
-          </h3>
-
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {clocks.length === 0 ? (
-              <p className="text-sm text-ember-400/50 italic">No active clocks</p>
-            ) : (
-              clocks.map((clock) => (
-                <CompactClock
-                  key={clock.id}
-                  name={clock.name}
-                  current={clock.current}
-                  max={clock.max}
-                />
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* World Notes Section */}
-        <div className="rounded-xl bg-gradient-to-br from-black/30 to-tavern-900/40 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-          <h3 className="text-lg font-bold text-ember-100 mb-4 flex items-center gap-2">
-            📝 World Notes ({worldNotes.length})
-          </h3>
-
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {worldNotes.length === 0 ? (
-              <p className="text-sm text-ember-400/50 italic">No world notes yet</p>
-            ) : (
-              worldNotes.map((note, index) => (
-                <div
-                  key={index}
-                  className="p-3 rounded-lg border border-ember-900/30 bg-black/25 hover:bg-black/35 transition-all"
-                >
-                  <p className="text-sm text-ember-200/70">{note}</p>
+        <Panel icon={Landmark} title="Factions" count={factions.length}>
+          {factions.length === 0 ? (
+            <p className="text-sm italic text-myth-ink-faint">No factions tracked yet</p>
+          ) : (
+            factions.map((faction) => (
+              <div key={faction.id} className="rounded-md border border-myth-border p-3">
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <h4 className="font-medium text-myth-ink">{faction.name}</h4>
+                  <RelationshipBadge relationship={faction.relationship} />
                 </div>
-              ))
-            )}
-          </div>
-        </div>
+                {faction.description && <p className="mb-2 text-xs text-myth-ink-muted">{faction.description}</p>}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-myth-ink-faint">Influence</span>
+                    <span className="font-mono text-myth-ink-muted">{faction.influence}/10</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-myth-border">
+                    <div className="h-full bg-myth-ink-muted" style={{ width: `${(faction.influence / 10) * 100}%` }} />
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </Panel>
+
+        <Panel icon={ClockIcon} title="Active Clocks" count={clocks.length}>
+          {clocks.length === 0 ? (
+            <p className="text-sm italic text-myth-ink-faint">No active clocks</p>
+          ) : (
+            clocks.map((clock) => <CompactClock key={clock.id} name={clock.name} current={clock.current} max={clock.max} />)
+          )}
+        </Panel>
+
+        <Panel icon={StickyNote} title="World Notes" count={worldNotes.length}>
+          {worldNotes.length === 0 ? (
+            <p className="text-sm italic text-myth-ink-faint">No world notes yet</p>
+          ) : (
+            worldNotes.map((note, index) => (
+              <div key={index} className="rounded-md border border-myth-border p-3">
+                <p className="text-sm text-myth-ink-muted">{note}</p>
+              </div>
+            ))
+          )}
+        </Panel>
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="rounded-xl bg-black/25 border border-success-500/20 shadow-lg shadow-black/30 p-5 text-center">
-          <div className="text-3xl font-bold text-success-400">{npcs.filter(n => n.status === 'alive').length}</div>
-          <div className="text-xs text-ember-400/50 mt-1">Active NPCs</div>
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="rounded-lg border border-myth-border p-5 text-center">
+          <div className="font-display text-3xl font-semibold text-myth-good">{npcs.filter((n) => n.status === 'alive').length}</div>
+          <div className="mt-1 text-xs text-myth-ink-faint">Active NPCs</div>
         </div>
-
-        <div className="rounded-xl bg-black/25 border border-wine-800/30 shadow-lg shadow-black/30 p-5 text-center">
-          <div className="text-3xl font-bold text-ember-300">{factions.length}</div>
-          <div className="text-xs text-ember-400/50 mt-1">Factions</div>
+        <div className="rounded-lg border border-myth-border p-5 text-center">
+          <div className="font-display text-3xl font-semibold text-myth-ink">{factions.length}</div>
+          <div className="mt-1 text-xs text-myth-ink-faint">Factions</div>
         </div>
-
-        <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-ember-900/10 border border-ember-800/30 shadow-lg shadow-black/30 p-5 text-center">
-          <div className="text-3xl font-bold text-wine-400">{clocks.filter(c => c.current >= c.max * 0.75).length}</div>
-          <div className="text-xs text-ember-400/50 mt-1">Critical Clocks</div>
+        <div className={`rounded-lg border p-5 text-center ${criticalClocks > 0 ? 'border-myth-warn/40' : 'border-myth-border'}`}>
+          <div className={`font-display text-3xl font-semibold ${criticalClocks > 0 ? 'text-myth-warn' : 'text-myth-ink'}`}>{criticalClocks}</div>
+          <div className="mt-1 text-xs text-myth-ink-faint">Critical Clocks</div>
         </div>
-
-        <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5 text-center">
-          <div className="text-3xl font-bold text-ember-300">{worldNotes.length}</div>
-          <div className="text-xs text-ember-400/50 mt-1">Notes</div>
+        <div className="rounded-lg border border-myth-border p-5 text-center">
+          <div className="font-display text-3xl font-semibold text-myth-ink">{worldNotes.length}</div>
+          <div className="mt-1 text-xs text-myth-ink-faint">Notes</div>
         </div>
       </div>
     </div>

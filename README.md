@@ -145,7 +145,118 @@ the world's *structure*, not just its narration.
 - [x] **Remaining dead schema surface cleaned up**: `Session`/`SessionParticipant`/`SessionScene`/`SessionNote` — nothing anywhere ever called `.create()` on any of the four, so the "group scenes into a session" concept had no write path at all, not just a missing UI; the one reader, `CampaignExporter.exportSessionTranscript`, would always see an empty table. Removed the models, `exportSessions`/`exportSessionTranscript`/`generateTranscript` from `campaign-exporter.ts`, and the orphaned `GET /api/campaigns/[id]/export/session/[sessionId]` route it served — nothing in the UI ever linked to it (the help page advertised "readable text transcripts" that nothing delivered; copy fixed to describe the JSON export that actually works). `Campaign.mentionsEnabled`/`soundEffectsEnabled` — dead fields with zero reads or writes anywhere, not even a settings checkbox; the real mention/sound-notification system already exists and works per-user (`UserNotificationSettings`, `lib/notifications/notification-service.ts`), so these campaign-level duplicates were pure noise. Also fixed: `lib/downtime/ai-downtime-service.ts` instantiated its own `PrismaClient()` instead of importing the shared singleton from `lib/prisma` — every other file in the codebase uses the shared client, which matters in dev where the singleton is reused across hot-reloads to avoid exhausting connections
 - [x] **Billing switched from a flat per-scene guess to metered real cost**: the old $0.25/$0.50/$0.75 tiers were disconnected from actual AI spend and could over- or under-charge by a wide margin. A new `AICostEntry` row is written per AI call (durable and scene-indexed, unlike `WorldMeta.aiMetrics.requestHistory`'s rolling 50-entry cap shared across the whole campaign) — the action classifier now records its cost too, previously untracked entirely. `resolutionBilling.ts` sums every entry for a scene and charges the real total × a margin multiplier (floor 5¢) when the scene ends, split across participants. Since the exact cost of the scene's *final* resolution call isn't known until after it runs, billing is two-phase: a conservative preflight estimate blocks an unaffordable attempt before that last call is made, and the real metered charge follows once it's done — best-effort at that point, since the AI spend already happened either way
 
-## Product Roadmap (PbtA × Urban Shadows fusion)
+## Competitive Position & Go-Forward Roadmap (July 2026)
+
+A July 2026 competitive-intelligence report benchmarked MythOS against the
+AI-GM market (Friends & Fables, AI Dungeon, NovelAI, Hidden Door, Inworld AI,
+Character.AI, Fable/Showrunner, KoboldAI/SillyTavern, Convai, and a handful of
+2026 newcomers). It was written without deep codebase access, so several of
+its "designed / not yet built" calls and "missing feature" recommendations
+are stale — this section is the corrected scorecard, checked directly against
+the code, plus the roadmap that follows from it. It supersedes the report as
+the source of truth; the report itself is not reproduced here.
+
+### The report undersold what's already shipped
+
+The report marks most of the simulation stack "✅ (designed)" — i.e. planned,
+not built. In production reality, **Phases 1–8 of the Living World roadmap
+above are complete and live**: the deterministic world tick, autonomous
+faction ambitions, wars and coalitions, NPC social ties, fog-of-war-safe RAG
+memory with decay/consolidation, quest and item tracking, and player-faction
+leadership are all shipped. So is the Debt/faction-standing economy that
+bridges player choices to that simulation (Phase 2 of the Product Roadmap
+below) — the report has no visibility into this at all, and it's arguably
+MythOS's single strongest differentiator versus every platform it compared
+against, including Inworld (which does agent-driven NPCs but has no
+player-facing consumer product) and Friends & Fables (which has no world
+simulation of any kind — its world only moves when a GM narrates it).
+
+Two of the report's specific recommendations are flatly wrong today:
+
+| Report claim | Reality |
+|---|---|
+| "Build a Visible Character Sheet" (Recommendation #3, rated "Very High" ROI) | Already shipped: `CharacterSheetDisplay`, live stats, harm tracker, inventory, conditions, moves, advancement log, knowledge-relative capability tree |
+| "Implement Dice Roll UI" (Recommendation #4) | Already shipped, but *deliberately* not the default view: every risky action is server-rolled 2d6 + modifiers, and the receipt (move, dice, modifiers, band) is available in an opt-in `AITransparencyPanel` rather than always inline. This is a considered design choice (mechanics-invisible-by-default), not a gap — worth revisiting only if playtesting shows players don't trust GM rulings without seeing the math |
+| "Map Generation" listed as missing | A real token/zone-based map system already exists (`PlayerMapViewer`, admin map creation, faction territory map) — what's actually missing is *auto-generated map art*, a narrower gap than the report implies |
+| Report lists MythOS "Multiplayer" as Partial, Friends & Fables as the multiplayer leader at "up to 6" | MythOS already has no hard player cap, real-time chat/notifications, a turn/exchange tracker (`TurnTracker`, `waitingOnUsers`), and per-player blocking/reporting — this needs UX polish, not a from-scratch build |
+
+### Confirmed real gaps (report is right)
+
+- **No image generation** — zero scene illustration anywhere in the codebase. Already tracked as `#14 Scene illustration` in the Product Roadmap below, explicitly deferred until the mechanical engine landed.
+- **No native mobile app** — web-responsive only, confirmed no React Native/Expo/Capacitor. Already an explicit, deliberate deferral (see "Explicitly deferred" below) — the report treating this as an oversight rather than a decision is itself informative: it means the deferral isn't visible to an outside observer, which is a real risk if outside observers include reviewers, investors, or App Store search traffic.
+- **No voice/TTS** — confirmed absent, also an explicit deferral.
+- **No public API / developer SDK** — confirmed absent. This is the one report recommendation (its "B2B/SDK layer" item) that isn't already covered by an existing decision either way — genuinely open.
+- **No custom rule-system import** (Pathfinder/OSR/homebrew stat blocks) — confirmed absent, covered by the existing "5e-style crunch" deferral.
+- **Context/cost management at scale** is a real, unverified risk the report is correct to flag — this codebase has metered per-call billing (`AICostEntry`) and tiered context injection is *partially* addressed (fog-of-war stripping, qualitative-not-numeric prompts) but there's no dedicated summarization/compression pass for very long campaigns yet. Worth a real audit before claiming this is solved.
+
+### Confirmed differentiators no comparator in the report has
+
+1. **Autonomous world simulation** (faction ambitions, wars, coalitions, NPC social ties, weather) that runs whether or not a player is present, backstopped by a real cron heartbeat — not "designed," shipped and running in production.
+2. **Mechanically-binding Debt/standing economy** wired to the live simulation — a faction losing a war *actually* changes what a player can roll next session. No competitor in the report does this.
+3. **Fog-of-war-safe by construction** — GM notes, undiscovered entities, and raw simulation numbers are stripped at the API layer, not just prompted away. This is an architectural guarantee, not a narrative convention.
+4. **Full safety tooling** (X-Card with real scene-pause, content reporting, campaign bans, per-player blocking, lines/veils fed into the AI prompt) — not mentioned once in the competitive report's feature matrix for *any* platform, MythOS included, which suggests nobody benchmarked this. It's a real trust-and-safety advantage for a category that skews toward mature/dark content.
+5. **Knowledge-relative character sheets** — a sheet shows only what the character has actually discovered in play, with per-character AI narration knowledge-gating. Distinct from every competitor's "GM knows everything, player sees everything" model.
+
+### Player-facing terminology: PbtA/Urban Shadows leakage (flagged for cleanup)
+
+The mechanical engine is genuinely PbtA/Urban-Shadows-*inspired* under the
+hood, and that's fine as an internal architecture reference. The problem is
+that this lineage leaks into **player-facing copy** as literal jargon a
+tabletop-curious but PbtA-unfamiliar player won't recognize — confirmed
+directly in the code, not assumed:
+
+- Campaign creation template literally named **"PbtA Fantasy"** (`src/app/campaigns/page.tsx`)
+- Help page copy: *"The system uses Powered by the Apocalypse (PbtA) rules for freeform storytelling"* (`src/app/help/page.tsx`)
+- Character creation tab labeled **"Debts & Enemies"**, with **"Promises & Oaths"** and **"Debts"** sub-sections (`EnhancedCreateCharacterForm.tsx`)
+- Character sheet sections labeled **"Harm"**, **"Obligations & Favors"**, **"Promises"**, **"Debts"**, and **"Moves"** / **"Moves Learned"** (`CharacterSheetDisplay.tsx`)
+
+Contrast this with **stats**, which are *already* done right: stat names are
+dynamically relabeled per campaign/universe (`Campaign.statLabels` — "Tonguefire,"
+"Iron Nerve," "The Spark" instead of Apocalypse World's "Hot/Cold/Hard/Sharp/Weird").
+The same treatment needs to extend to the mechanic *categories* themselves, not
+just their values — a player in a hard-sci-fi universe shouldn't see a tab
+called "Promises & Oaths," and nobody outside the PbtA hobby should hit "PbtA
+Fantasy" as their first-ever template choice. This is now `#22` in the roadmap
+below.
+
+### Merged go-forward roadmap
+
+Priorities below are the report's recommendations, filtered against what's
+already shipped, cross-checked against the existing deliberate deferrals, and
+merged with the in-flight Product Roadmap phases so there's one list instead
+of two competing ones.
+
+**Do first (small, high-leverage, unblocks everything else):**
+
+- [ ] **#22 De-jargon player-facing mechanical language** — rename "PbtA Fantasy" template (e.g. "Fantasy Adventure"), rewrite the help-page PbtA callout in plain language, retitle "Debts & Enemies" / "Promises & Oaths" / "Obligations & Favors" / "Moves" to generic terms (e.g. "Ties & Rivals," "Vows," "Owed & Owing," "Techniques/Abilities") that read correctly regardless of universe. Keep the PbtA/Urban Shadows references as internal engineering docs (this README, code comments) — they're accurate and useful there. Do not rename underlying fields/APIs, only display strings, to avoid a schema migration for a copy change
+- [ ] **#23 Surface the multiplayer story MythOS already tells** — the mechanics (no player cap, turn tracker, real-time chat, per-player block/report) already beat the report's read of "Partial." This is a marketing/onboarding gap, not an engineering one: make party play visible in the campaign creation flow and marketing copy
+- [ ] **#24 Decide, on purpose, whether dice stay opt-in** — re-run the "mechanics invisible by default" decision against real playtest feedback now that #6–#11 (Debt/standing/harm) are live. If new players distrust GM rulings without seeing the roll, surface a lightweight always-visible roll indicator (not the full transparency panel) rather than reversing the design philosophy outright
+
+**Near-term (report-informed, not yet in a phase below):**
+
+- [ ] **#25 Scene illustration** — already tracked as `#14` in the Product Roadmap; the report independently flags this as High ROI for social sharing. Re-prioritize above Phase 4 monetization work if a cheap (Replicate/SDXL) integration is feasible before the next external cohort
+- [ ] **#26 Shareable session recaps** — the chronicle-share link (`#15`, shipped) is the raw material; package a single resolved scene or short arc as a social-media-sized image/text card. Low engineering lift on top of what's already there
+- [ ] **#27 Public API / developer access** — the one report recommendation with no existing decision on record. Needs an explicit yes/no before Phase 4 monetization work locks in pricing tiers, since a metered API would need its own cost model
+
+**Reaffirmed as deliberately deferred** (the report treats these as gaps; the
+team already made this call — listed here so the decision is visible instead
+of silently absent from an outside audit):
+
+- Native mobile app, voice/TTS, creator marketplace/UGC, VTT-style grid combat, 5e-style crunch/custom rule import — see "Explicitly deferred" at the end of the Product Roadmap below for the original rationale. Worth a fresh look only if a specific cohort's feedback contradicts the original "wrong stage" call, not on the report's say-so alone
+
+**Explicitly not recommended:** chasing feature parity on things every
+competitor already has cheaply (Lorebook-style canon injection, relationship
+tracking, persistent memory) — MythOS already has all three, at a deeper
+level than most of the report's comparators. The report's own conclusion is
+correct: differentiation lives in the simulation depth and the Debt/standing
+bridge, not in matching table-stakes features one-for-one.
+
+## Product Roadmap (mechanical engine — internal codename: PbtA × Urban Shadows fusion)
+
+*The section below documents the underlying mechanical engine's design
+lineage for engineering reference. "PbtA" and "Urban Shadows" are internal
+architecture terms, not the product's player-facing identity — see `#22`
+above for the cleanup this implies for anything a player actually sees.*
 
 **Thesis:** the first AI GM that actually *runs a game* instead of improvising
 prose — server-rolled moves the narrator must obey, Urban Shadows-style

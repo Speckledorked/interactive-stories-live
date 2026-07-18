@@ -3,10 +3,69 @@
 
 'use client'
 
+import { useEffect, useId, useRef, useState } from 'react'
+
 interface StatBarProps {
   name: string
   value: number // -2 to +3
   description?: string
+}
+
+// The info affordance used to be a bare `title="..."` attribute, which
+// only shows on hover — dead weight on mobile, where there's no hover and
+// tapping it did nothing. This makes it a real tap/click target with a
+// popover, closing on Escape or an outside tap.
+function StatInfo({ description }: { description: string }) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const popoverId = useId()
+
+  useEffect(() => {
+    if (!open) return
+
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
+
+  return (
+    <div ref={containerRef} className="relative inline-flex">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={popoverId}
+        aria-label="What this stat does"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs text-ember-400/50 hover:text-ember-300/80 transition-colors touch-manipulation"
+      >
+        ⓘ
+      </button>
+      {open && (
+        <div
+          id={popoverId}
+          role="tooltip"
+          className="absolute left-1/2 top-full z-20 mt-2 w-56 -translate-x-1/2 rounded-lg border border-ember-900/40 bg-tavern-900 p-3 text-xs text-ember-200/80 shadow-2xl shadow-black/50"
+        >
+          {description}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function StatBar({ name, value, description }: StatBarProps) {
@@ -43,11 +102,7 @@ export default function StatBar({ name, value, description }: StatBarProps) {
           <span className="text-sm font-medium capitalize text-ember-200/70">
             {name}
           </span>
-          {description && (
-            <span className="text-xs text-ember-400/50" title={description}>
-              ⓘ
-            </span>
-          )}
+          {description && <StatInfo description={description} />}
         </div>
         <span className={`text-lg font-bold ${textColor} min-w-[3rem] text-right`}>
           {value >= 0 ? '+' : ''}{value}

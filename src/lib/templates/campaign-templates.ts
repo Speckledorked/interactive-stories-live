@@ -84,7 +84,7 @@ export interface ItemTemplate {
  */
 export const FANTASY_TEMPLATE: CampaignTemplate = {
   id: 'pbta-fantasy',
-  name: 'PbtA Fantasy Adventure',
+  name: 'Fantasy Adventure',
   description: 'Classic fantasy adventure with dungeons, dragons, and magic',
   universe: 'High Fantasy',
   systemPrompt: `You are the Game Master for a PbtA-style fantasy adventure.

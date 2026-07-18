@@ -245,10 +245,12 @@ export default function CharacterSheetDisplay({
               </div>
             )}
 
-            {/* Moves */}
+            {/* Moves — displayed as "Abilities", a generic term that reads
+                correctly regardless of universe (internal naming stays
+                move-based; see pbta-moves.ts). */}
             {moves.length > 0 && (
               <div className="card">
-                <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide mb-3">Moves</h3>
+                <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide mb-3">Abilities</h3>
                 <div className="space-y-2">
                   {moves.map((move: any, idx: number) => (
                     <div key={idx} className="bg-ember-900/20 rounded-lg p-3 border border-ember-700/30">
@@ -425,12 +427,12 @@ export default function CharacterSheetDisplay({
               </div>
             )}
 
-            {/* Obligations & Favors — the Debt economy, in the fiction's
-                own language: who considers whom in whose debt, never a
+            {/* Obligations — the Debt economy, in the fiction's own
+                language: who considers whom in whose debt, never a
                 ledger counter. */}
             {hasDebts && (
               <div className="card md:col-span-2">
-                <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide mb-3">Obligations & Favors</h3>
+                <h3 className="text-sm font-semibold text-ember-400/60 uppercase tracking-wide mb-3">Obligations</h3>
                 <div className="grid md:grid-cols-2 gap-3">
                   {debtSummary!.owedByCharacter.map((d, idx) => (
                     <div key={`ob-${idx}`} className="bg-gradient-to-r from-wine-800/20 to-obsidian-900/20 rounded-lg p-4 border border-wine-800/30">
@@ -699,7 +701,7 @@ export default function CharacterSheetDisplay({
                 </div>
                 <div className="bg-black/20 rounded-lg p-4 border border-white/10 text-center">
                   <div className="text-2xl font-bold text-wine-300">{advLog.totalMovesLearned || 0}</div>
-                  <div className="text-xs text-ember-400/50 uppercase tracking-wide mt-1">Moves Learned</div>
+                  <div className="text-xs text-ember-400/50 uppercase tracking-wide mt-1">Abilities Learned</div>
                 </div>
               </div>
 

@@ -19,7 +19,6 @@ import { Home, Scroll, MessageSquare, StickyNote, Map as MapIcon } from 'lucide-
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernSpinner } from '@/components/tavern/ui'
 import { EmptyState } from '@/components/ui/empty-state'
 import { CampaignHero } from '@/components/campaigns/lobby/CampaignHero'
 import { CampaignEntryCTA } from '@/components/campaigns/lobby/CampaignEntryCTA'
@@ -218,9 +217,9 @@ export default function CampaignLobbyPage() {
   if (loading) {
     return (
       <TavernPage background="myth">
-        <TavernHeader backHref="/campaigns" title="Loading…" campaignId={campaignId} />
-        <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
-          <TavernSpinner className="h-16 w-16" />
+        <TavernHeader backHref="/campaigns" title="Loading…" campaignId={campaignId} variant="myth" />
+        <main className="flex justify-center max-w-6xl mx-auto px-4 pt-28 pb-16">
+          <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
         </main>
       </TavernPage>
     )
@@ -229,7 +228,7 @@ export default function CampaignLobbyPage() {
   if (error || !data) {
     return (
       <TavernPage background="myth">
-        <TavernHeader backHref="/campaigns" title="Campaign" campaignId={campaignId} />
+        <TavernHeader backHref="/campaigns" title="Campaign" campaignId={campaignId} variant="myth" />
         <main className="max-w-2xl mx-auto px-4 pt-28 pb-16">
           <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
             <p className="text-myth-danger">{error || 'Campaign not found'}</p>
@@ -257,8 +256,9 @@ export default function CampaignLobbyPage() {
         title={campaign.title}
         campaignId={campaignId}
         isAdmin={userRole === 'ADMIN'}
+        variant="myth"
         subrow={
-          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
+          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-myth-border pt-2 pb-0">
             {[
               { key: 'overview', label: 'Overview' },
               { key: 'progression', label: 'Story Log' },
@@ -272,7 +272,7 @@ export default function CampaignLobbyPage() {
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key as any)}
                   className={`flex items-center gap-1.5 px-3 py-2 border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
-                    activeTab === tab.key ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
+                    activeTab === tab.key ? 'border-myth-accent text-myth-ink' : 'border-transparent text-myth-ink-faint hover:text-myth-ink-muted'
                   }`}
                 >
                   <TabIcon className="w-3.5 h-3.5" />
@@ -690,7 +690,7 @@ export default function CampaignLobbyPage() {
       )}
       </main>
 
-      <TavernNav campaignId={campaignId} />
+      <TavernNav campaignId={campaignId} variant="myth" />
 
       {/* Notification Panel - Phase 8/9 Communication */}
       {data && (

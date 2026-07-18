@@ -1,4 +1,9 @@
 // Bottom tab bar shared by every redesigned page.
+//
+// variant="myth" (opt-in, used only by the two MythOS-redesign pages)
+// swaps the permanently-dark bar for a flat, theme-adaptive myth-surface
+// one with the brass accent on the active item. Every other consumer
+// keeps the unchanged default.
 
 'use client'
 
@@ -7,7 +12,16 @@ import { Beer, Compass, Users, Scroll, Settings as SettingsIcon } from 'lucide-r
 
 export type TavernNavKey = 'tavern' | 'map' | 'characters' | 'quests' | 'settings'
 
-export function TavernNav({ active, campaignId }: { active?: TavernNavKey; campaignId?: string }) {
+export function TavernNav({
+  active,
+  campaignId,
+  variant = 'tavern',
+}: {
+  active?: TavernNavKey
+  campaignId?: string
+  variant?: 'tavern' | 'myth'
+}) {
+  const myth = variant === 'myth'
   const items = [
     { key: 'tavern' as const, label: 'Tavern', icon: Beer, href: '/campaigns' },
     {
@@ -32,14 +46,23 @@ export function TavernNav({ active, campaignId }: { active?: TavernNavKey; campa
   ]
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-30 bg-black/70 backdrop-blur-md border-t border-ember-900/40 pb-[env(safe-area-inset-bottom)]">
+    <nav
+      className={
+        myth
+          ? 'fixed bottom-0 inset-x-0 z-30 bg-myth-surface/90 backdrop-blur-md border-t border-myth-border pb-[env(safe-area-inset-bottom)]'
+          : 'fixed bottom-0 inset-x-0 z-30 bg-black/70 backdrop-blur-md border-t border-ember-900/40 pb-[env(safe-area-inset-bottom)]'
+      }
+    >
       <div className="max-w-2xl mx-auto grid grid-cols-5">
         {items.map((item) => {
+          const activeClass = myth ? 'text-myth-accent' : 'text-ember-300'
+          const inactiveClass = myth ? 'text-myth-ink-faint' : 'text-ember-500/40'
+          const hoverClass = myth ? 'hover:text-myth-ink-muted' : 'hover:text-ember-200'
           const content = (
             <div
               className={`flex flex-col items-center gap-1 py-3 text-[11px] transition-colors touch-manipulation ${
-                item.key === active ? 'text-ember-300' : 'text-ember-500/40'
-              } ${item.href ? 'hover:text-ember-200' : 'cursor-default'}`}
+                item.key === active ? activeClass : inactiveClass
+              } ${item.href ? hoverClass : 'cursor-default'}`}
             >
               <item.icon className="w-5 h-5" />
               <span>{item.label}</span>

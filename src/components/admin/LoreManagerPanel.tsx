@@ -252,24 +252,24 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
 
   return (
     <div className="space-y-6">
-      <div className="border border-ember-900/30 rounded-lg p-4 bg-black/25">
-        <h3 className="font-semibold mb-3">Import Lore</h3>
-        <p className="text-xs text-ember-300/60 mb-3">
+      <div className="rounded-lg border border-myth-border bg-myth-surface p-4">
+        <h3 className="mb-3 font-medium text-myth-ink">Import Lore</h3>
+        <p className="mb-3 text-xs text-myth-ink-muted">
           Reference material the AI GM can draw on during play — a world bible, faction writeups, a wiki page,
           or an entire fan wiki. Wiki crawling only works for MediaWiki-based sites (Fandom, wiki.gg, Wikipedia, etc);
           give it any page URL on the wiki and it finds the rest itself.
         </p>
 
-        <div className="flex gap-2 mb-3">
+        <div className="mb-3 flex gap-2">
           {SOURCE_TABS.map(tab => (
             <button
               key={tab.value}
               type="button"
               onClick={() => setSourceType(tab.value)}
-              className={`px-3 py-1.5 text-sm rounded-md border ${
+              className={`rounded-md border px-3 py-1.5 text-sm ${
                 sourceType === tab.value
-                  ? 'bg-wine-600 border-wine-500 text-white'
-                  : 'border-ember-900/40 text-ember-300/70 hover:text-ember-200'
+                  ? 'border-myth-accent bg-myth-accent/10 text-myth-accent'
+                  : 'border-myth-border text-myth-ink-muted hover:text-myth-ink'
               }`}
             >
               {tab.label}
@@ -279,30 +279,30 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-ember-200/80 mb-1">Title (optional)</label>
+            <label className="mb-1 block text-sm font-medium text-myth-ink-muted">Title (optional)</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={sourceType === 'PASTE' ? 'e.g. Essence Magic Overview' : undefined}
-              className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+              className="block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
             />
           </div>
 
           {sourceType === 'PASTE' ? (
             <div>
-              <label className="block text-sm font-medium text-ember-200/80 mb-1">Text *</label>
+              <label className="mb-1 block text-sm font-medium text-myth-ink-muted">Text *</label>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 rows={8}
                 placeholder="Paste any chunk of lore — history, factions, magic systems, character bios..."
-                className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                className="block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
               />
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-ember-200/80 mb-1">
+              <label className="mb-1 block text-sm font-medium text-myth-ink-muted">
                 {sourceType === 'WIKI' ? 'Any page URL on the wiki *' : 'URL *'}
               </label>
               <input
@@ -310,26 +310,26 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder={sourceType === 'WIKI' ? 'https://example.fandom.com/wiki/Main_Page' : 'https://example.com/article'}
-                className="block w-full border rounded-md border-ember-900/40 bg-black/30 text-ember-100 shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm px-3 py-2"
+                className="block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
               />
             </div>
           )}
 
-          {formError && <p className="text-sm text-red-400">{formError}</p>}
+          {formError && <p className="text-sm text-myth-danger">{formError}</p>}
 
           <button
             type="submit"
             disabled={submitting}
-            className="px-4 py-2 bg-success-600 text-white rounded-md hover:bg-success-500 disabled:opacity-50"
+            className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
           >
             {submitting ? 'Starting import...' : 'Import'}
           </button>
         </form>
       </div>
 
-      <div className="border border-ember-900/30 rounded-lg p-4 bg-black/25">
-        <h3 className="font-semibold mb-2">World from Lore</h3>
-        <p className="text-xs text-ember-300/60 mb-3">
+      <div className="rounded-lg border border-myth-border bg-myth-surface p-4">
+        <h3 className="mb-2 font-medium text-myth-ink">World from Lore</h3>
+        <p className="mb-3 text-xs text-myth-ink-muted">
           Campaigns created with a lore source do this automatically when the import finishes. Use this button
           to re-run it — after adding more sources, or on a campaign whose lore came later. While no characters
           exist the generated world is replaced by the canon one; once characters exist, canon factions and
@@ -339,33 +339,33 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
           type="button"
           onClick={handleReseed}
           disabled={reseedInFlight || jobs.every(j => j.status !== 'COMPLETED')}
-          className="px-4 py-2 bg-wine-600 text-white rounded-md hover:bg-wine-500 disabled:opacity-50"
+          className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
         >
           {reseedInFlight ? 'Reseeding world…' : 'Reseed world from imported lore'}
         </button>
         {jobs.length > 0 && jobs.every(j => j.status !== 'COMPLETED') && (
-          <p className="text-xs text-ember-400/50 mt-2">Available once an import has completed.</p>
+          <p className="mt-2 text-xs text-myth-ink-faint">Available once an import has completed.</p>
         )}
         {reseedInFlight && (
-          <p className="text-xs text-ember-300/60 mt-3">
+          <p className="mt-3 text-xs text-myth-ink-muted">
             Running in the background — this page checks in every few seconds, safe to navigate away and come back.
           </p>
         )}
-        {reseedStartError && <p className="text-sm text-red-400 mt-3">{reseedStartError}</p>}
+        {reseedStartError && <p className="mt-3 text-sm text-myth-danger">{reseedStartError}</p>}
         {!reseedInFlight && reseedJob?.status === 'COMPLETED' && reseedJob.summary && (
-          <p className="text-sm text-success-400 mt-3">{formatReseedSummary(reseedJob.summary)}</p>
+          <p className="mt-3 text-sm text-myth-good">{formatReseedSummary(reseedJob.summary)}</p>
         )}
         {!reseedInFlight && reseedJob?.status === 'FAILED' && (
-          <p className="text-sm text-red-400 mt-3">{reseedJob.lastError || 'Reseed failed'}</p>
+          <p className="mt-3 text-sm text-myth-danger">{reseedJob.lastError || 'Reseed failed'}</p>
         )}
       </div>
 
       <div className="space-y-3">
-        <h3 className="font-semibold">Imported Sources</h3>
-        {loading && <p className="text-sm text-ember-300/60">Loading...</p>}
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        <h3 className="font-medium text-myth-ink">Imported Sources</h3>
+        {loading && <p className="text-sm text-myth-ink-muted">Loading...</p>}
+        {error && <p className="text-sm text-myth-danger">{error}</p>}
         {!loading && jobs.length === 0 && (
-          <p className="text-sm text-ember-300/60">No lore imported yet.</p>
+          <p className="text-sm text-myth-ink-muted">No lore imported yet.</p>
         )}
         {jobs.map(job => (
           <LoreJobRow key={job.id} job={job} onDelete={() => handleDelete(job.id)} />
@@ -380,33 +380,33 @@ function LoreJobRow({ job, onDelete }: { job: LoreJob; onDelete: () => void }) {
   const progressPct = job.pagesFound > 0 ? Math.round((job.pagesDone / job.pagesFound) * 100) : null
 
   return (
-    <div className="border border-ember-900/30 rounded-lg p-4 flex justify-between items-start gap-4">
+    <div className="flex items-start justify-between gap-4 rounded-lg border border-myth-border p-4">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-mono uppercase text-ember-400/60">{job.sourceType}</span>
-          <h4 className="font-medium truncate">{label}</h4>
+          <span className="font-mono text-xs uppercase text-myth-ink-faint">{job.sourceType}</span>
+          <h4 className="truncate font-medium text-myth-ink">{label}</h4>
           <StatusBadge status={job.status} />
         </div>
         {(job.status === 'PENDING' || job.status === 'RUNNING') && job.sourceType === 'WIKI' && (
-          <p className="text-xs text-ember-300/60 mt-1">
+          <p className="mt-1 text-xs text-myth-ink-muted">
             {job.pagesFound > 0
               ? `Crawling ${job.pagesDone}/${job.pagesFound} pages${progressPct !== null ? ` (${progressPct}%)` : ''}`
               : 'Finding pages...'}
           </p>
         )}
         {job.status === 'COMPLETED' && (
-          <p className="text-xs text-ember-300/60 mt-1">
+          <p className="mt-1 text-xs text-myth-ink-muted">
             {job.entriesCreated} {job.entriesCreated === 1 ? 'entry' : 'entries'} imported
             {job.pagesFound > 1 ? ` from ${job.pagesFound} pages` : ''}
           </p>
         )}
         {job.status === 'FAILED' && job.lastError && (
-          <p className="text-xs text-red-400 mt-1">{job.lastError}</p>
+          <p className="mt-1 text-xs text-myth-danger">{job.lastError}</p>
         )}
       </div>
       <button
         onClick={onDelete}
-        className="px-3 py-1 text-sm bg-black/40 text-ember-300/80 rounded-md hover:bg-black/50 hover:text-red-400 shrink-0"
+        className="shrink-0 rounded-md border border-myth-border px-3 py-1 text-sm text-myth-ink-muted hover:border-myth-danger/40 hover:text-myth-danger"
       >
         Delete
       </button>
@@ -416,10 +416,10 @@ function LoreJobRow({ job, onDelete }: { job: LoreJob; onDelete: () => void }) {
 
 function StatusBadge({ status }: { status: JobStatus }) {
   const styles: Record<JobStatus, string> = {
-    PENDING: 'text-ember-300/70 border-ember-400/30',
-    RUNNING: 'text-blue-300 border-blue-400/40',
-    COMPLETED: 'text-success-400 border-success-500/40',
-    FAILED: 'text-red-400 border-red-500/40',
+    PENDING: 'text-myth-ink-muted border-myth-border',
+    RUNNING: 'text-myth-info border-myth-info/40',
+    COMPLETED: 'text-myth-good border-myth-good/40',
+    FAILED: 'text-myth-danger border-myth-danger/40',
   }
   return (
     <span className={`text-xs border rounded px-1.5 py-0.5 ${styles[status]}`}>

@@ -7,6 +7,7 @@ import { PusherServer } from '@/lib/realtime/pusher-server'
 import { AI_MODELS } from '@/lib/ai/models'
 import { applyCapabilityChanges, CapabilityChange } from '@/lib/game/capabilities'
 import { applyDebtChanges } from '@/lib/game/debts'
+import { decideDowntimeDayEvent, decideDowntimeOutcomeCategory, describeOutcomeConstraint, DowntimeEventOutcome } from './downtimeEventOutcome'
 
 // What a downtime activity actually costs — not always gold. The AI picks
 // whichever of these genuinely fit the described activity (any subset, or
@@ -323,13 +324,20 @@ If the request seems impossible, suggest a viable alternative.`
     return { extraRequirements, linkedQuestId }
   }
 
-  // Generate AI events for any type of activity
+  // Generate AI events for any type of activity. forcedOutcome — decided
+  // server-side by decideDowntimeDayEvent/decideDowntimeOutcomeCategory
+  // BEFORE this is called — constrains what the AI is allowed to narrate,
+  // the same "dice decide how well, AI decides how" split scene resolution
+  // already uses. Falls back to unconstrained generation only if the
+  // caller genuinely has no roll (shouldn't happen via the real call
+  // sites below, but keeps this function safe to call standalone).
   static async generateDynamicEvent(
     activityId: string,
     day: number,
     interpretation: any,
     character?: any,
-    campaignContext?: any
+    campaignContext?: any,
+    forcedOutcome?: DowntimeEventOutcome | null
   ) {
     try {
       const activity = await prisma.downtimeActivity.findUnique({
@@ -337,6 +345,8 @@ If the request seems impossible, suggest a viable alternative.`
       })
 
       if (!activity) return null
+
+      const outcome = forcedOutcome ?? decideDowntimeOutcomeCategory(activityId, day, activity.riskLevel)
 
       const prompt = `Generate a downtime event for day ${day} of this activity:
 
@@ -347,11 +357,13 @@ AI Interpretation: ${JSON.stringify(interpretation)}
 Character: ${character?.name || 'Adventurer'}
 Campaign Context: ${JSON.stringify(campaignContext) || 'Standard fantasy'}
 
+${describeOutcomeConstraint(outcome)}
+
 Create an engaging event that:
 1. Relates to the specific activity the player described
 2. Feels natural and realistic for day ${day} of ${activity.estimatedDays}
 3. May require player input or be purely narrative
-4. Advances the story or creates interesting complications/opportunities
+4. Fits the required outcome category above — the category is fixed, not a suggestion
 5. Respects player agency and the AI's interpretation
 
 Return a JSON object:
@@ -397,7 +409,8 @@ Return a JSON object:
           choices: eventData.requiresPlayerChoice ? {
             choices: eventData.choices || [],
             automaticOutcome: eventData.automaticOutcome
-          } : undefined
+          } : undefined,
+          outcomeCategory: outcome
         }
       })
 
@@ -415,7 +428,8 @@ Return a JSON object:
           activityId,
           dayNumber: day,
           eventText: `You continue working on your activity: ${activity?.summary || 'your downtime'}`,
-          choices: undefined
+          choices: undefined,
+          outcomeCategory: forcedOutcome ?? null
         }
       })
     }
@@ -547,9 +561,10 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
             data: { currentDay: Math.max(activity.currentDay, blockedDay) },
           })
           for (let day = activity.currentDay + 1; day <= blockedDay; day++) {
-            if (Math.random() < 0.4) {
+            const dayDecision = decideDowntimeDayEvent(activity.id, day, activity.riskLevel)
+            if (dayDecision.hasEvent) {
               const aiInterpretation = (activity.outcomes as any)?.aiInterpretation || {}
-              const event = await this.generateDynamicEvent(activity.id, day, aiInterpretation, null, null)
+              const event = await this.generateDynamicEvent(activity.id, day, aiInterpretation, null, null, dayDecision.outcome)
               if (event) {
                 results.push({ activityId: activity.id, activityName: activity.summary, day, event })
               }
@@ -580,15 +595,19 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
 
       // Process each day that advanced
       for (let day = activity.currentDay + 1; day <= newCurrentDay; day++) {
-        // 40% chance of an event each day (adjustable)
-        if (Math.random() < 0.4) {
+        // Deterministic (riskLevel-weighted) chance of an event each day —
+        // see decideDowntimeDayEvent. Same ~40% base rate as before, now
+        // reproducible instead of a bare Math.random() coin flip.
+        const dayDecision = decideDowntimeDayEvent(activity.id, day, activity.riskLevel)
+        if (dayDecision.hasEvent) {
           const aiInterpretation = (activity.outcomes as any)?.aiInterpretation || {}
           const event = await this.generateDynamicEvent(
             activity.id,
             day,
             aiInterpretation,
             null,
-            null
+            null,
+            dayDecision.outcome
           )
 
           if (event) {
@@ -787,7 +806,11 @@ Based on the player's original intent and what happened during the activity, gen
     }
 
     for (const day of eventDays) {
-      await this.generateDynamicEvent(activityId, day, interpretation)
+      // Guaranteed events (not chance-gated like advanceDynamicDowntime's
+      // day-by-day ones) still deserve a real, deterministic category
+      // rather than defaulting to whatever the AI feels like.
+      const outcome = decideDowntimeOutcomeCategory(activityId, day, activity.riskLevel)
+      await this.generateDynamicEvent(activityId, day, interpretation, null, null, outcome)
     }
   }
 

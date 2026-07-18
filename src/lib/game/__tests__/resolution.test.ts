@@ -8,6 +8,7 @@ import {
   capabilityModifier,
   harmPenalty,
   relationshipModifier,
+  weatherPenalty,
   computeMechanics,
   parseClassifications,
   formatRollReceipt,
@@ -250,6 +251,64 @@ describe('computeMechanics — relationship weight', () => {
     )
     expect(m!.relationshipMod).toBe(0)
     expect(m!.npcName).toBeNull()
+  })
+})
+
+describe('weatherPenalty', () => {
+  it('is 0 with no weather on record', () => {
+    expect(weatherPenalty(null)).toBe(0)
+    expect(weatherPenalty(undefined)).toBe(0)
+  })
+
+  it('never penalizes CLEAR or CLOUDY regardless of severity', () => {
+    expect(weatherPenalty({ condition: 'CLEAR', severity: 5 })).toBe(0)
+    expect(weatherPenalty({ condition: 'CLOUDY', severity: 5 })).toBe(0)
+  })
+
+  it('penalizes a severe (4+) non-benign condition', () => {
+    expect(weatherPenalty({ condition: 'STORM', severity: 4 })).toBe(-1)
+    expect(weatherPenalty({ condition: 'SNOW', severity: 5 })).toBe(-1)
+    expect(weatherPenalty({ condition: 'FOG', severity: 4 })).toBe(-1)
+  })
+
+  it('does not penalize a mild non-benign condition', () => {
+    expect(weatherPenalty({ condition: 'RAIN', severity: 2 })).toBe(0)
+    expect(weatherPenalty({ condition: 'STORM', severity: 3 })).toBe(0)
+  })
+})
+
+describe('computeMechanics — weather weight', () => {
+  it('applies a penalty in severe weather', () => {
+    // dice 4+4=8, +1 cool, -1 severe storm = 8 -> weak hit
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5),
+      null,
+      null,
+      { condition: 'STORM', severity: 5 }
+    )
+    expect(m!.weatherMod).toBe(-1)
+    expect(m!.weatherCondition).toBe('STORM')
+    expect(m!.total).toBe(8)
+    expect(m!.outcome).toBe('weakHit')
+  })
+
+  it('is unaffected by clear weather or no weather at all', () => {
+    const clear = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' }, baseCharacter, seq(0.5, 0.5), null, null, { condition: 'CLEAR', severity: 3 }
+    )
+    expect(clear!.weatherMod).toBe(0)
+    expect(clear!.weatherCondition).toBeNull()
+
+    const none = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' }, baseCharacter, seq(0.5, 0.5)
+    )
+    expect(none!.weatherMod).toBe(0)
+    expect(none!.weatherCondition).toBeNull()
   })
 })
 

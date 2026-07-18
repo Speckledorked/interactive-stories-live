@@ -317,6 +317,57 @@ describe('decideNpcTick', () => {
     expect(decision.goalCompleted).toBe(false)
   })
 
+  // Depth-hardening: phase-weighted goal progress. npc-1's tempo is 3
+  // ticks/phase (stableHash-derived), so turns 0-2 = observing, 3-5 =
+  // preparing, 6-8 = acting, 9-11 = resting, then the cycle repeats.
+  describe('phase-weighted goal progress', () => {
+    it('advances slowly while observing (0.5x baseline)', () => {
+      const decision = decideNpcTick(npc, 0, ['Harborview'])
+      expect(decision.phase).toBe('observing')
+      expect(decision.newGoalProgress).toBe(2)
+    })
+
+    it('advances at the baseline rate while preparing (1x)', () => {
+      const decision = decideNpcTick(npc, 3, ['Harborview'])
+      expect(decision.phase).toBe('preparing')
+      expect(decision.newGoalProgress).toBe(4)
+    })
+
+    it('advances fastest while acting (2x baseline)', () => {
+      const decision = decideNpcTick(npc, 6, ['Harborview'])
+      expect(decision.phase).toBe('acting')
+      expect(decision.newGoalProgress).toBe(8)
+    })
+
+    it('advances slowly while resting (0.5x baseline)', () => {
+      const decision = decideNpcTick(npc, 9, ['Harborview'])
+      expect(decision.phase).toBe('resting')
+      expect(decision.newGoalProgress).toBe(2)
+    })
+
+    it('averages to the same overall pace as the old flat rate across one full cycle', () => {
+      // One full cycle = 4 phases * tempo(3) ticks = 12 ticks. Sum of
+      // per-tick progress across the cycle should equal 4 * 12 = 48 —
+      // identical to the old flat PROGRESS_PER_TICK rate averaged over
+      // the same span, even though individual ticks now vary.
+      let progress = 0
+      let npcState = { ...npc, goalProgress: 0 }
+      for (let turn = 0; turn < 12; turn++) {
+        const decision = decideNpcTick(npcState, turn, ['Harborview'])
+        progress += decision.newGoalProgress - npcState.goalProgress
+        npcState = { ...npcState, goalProgress: decision.newGoalProgress }
+      }
+      expect(progress).toBe(48)
+    })
+
+    it('never advances a goalless NPC regardless of phase', () => {
+      const goalless = { ...npc, goals: null }
+      for (const turn of [0, 3, 6, 9]) {
+        expect(decideNpcTick(goalless, turn, ['Harborview']).newGoalProgress).toBe(0)
+      }
+    })
+  })
+
   it('does not advance progress for a goalless NPC', () => {
     const goalless = { ...npc, goals: null }
     const decision = decideNpcTick(goalless, 5, ['Harborview'])

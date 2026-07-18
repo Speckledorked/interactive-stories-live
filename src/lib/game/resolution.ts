@@ -65,6 +65,8 @@ export interface ActionMechanics {
   standingMod: number
   npcName: string | null
   relationshipMod: number
+  weatherCondition: string | null
+  weatherMod: number
   harmPenalty: number
   // CORRUPTION_SURGE_BONUS when this roll invoked an open bargain, else 0.
   // A non-zero value is also the signal that a mark MUST land this scene
@@ -168,6 +170,36 @@ export function relationshipModifier(rel: RelationshipForRoll | null | undefined
   return Math.max(-2, Math.min(2, Math.round(netGoodwill / 50)))
 }
 
+// The weather side of a roll — resolved by the orchestrator from the
+// acting character's currentLocation against the deterministic world tick's
+// live weather state (see lib/game/tick/weatherTick.ts). condition is the
+// raw WeatherCondition enum value (CLEAR/CLOUDY/RAIN/STORM/SNOW/FOG).
+export interface WeatherForRoll {
+  condition: string
+  severity: number
+}
+
+const BENIGN_WEATHER_CONDITIONS = new Set(['CLEAR', 'CLOUDY'])
+const SEVERE_WEATHER_SEVERITY_THRESHOLD = 4
+
+/**
+ * How much harsh weather shifts a roll — a flat Impaired-style penalty
+ * (same magnitude and philosophy as harmPenalty above), not a per-move
+ * judgment call about which moves weather "should" affect. Deciding that
+ * from a move name would be exactly the kind of keyword-classification
+ * guesswork this codebase avoids everywhere else (see the audit note on
+ * ComplexExchangeResolver) — a flat, universal penalty when conditions are
+ * genuinely bad is simpler and no less honest. CLEAR/CLOUDY never penalize
+ * regardless of severity; anything else only bites at severity 4+, the
+ * same bar weatherTick.ts's own SEVERE_CONDITIONS uses for MAJOR-worthy
+ * weather history entries.
+ */
+export function weatherPenalty(weather: WeatherForRoll | null | undefined): number {
+  if (!weather) return 0
+  if (BENIGN_WEATHER_CONDITIONS.has(weather.condition)) return 0
+  return weather.severity >= SEVERE_WEATHER_SEVERITY_THRESHOLD ? -1 : 0
+}
+
 /**
  * Roll one classified action. Pure given an injected RNG.
  * Returns null for no_roll classifications or unknown moves.
@@ -178,7 +210,8 @@ export function computeMechanics(
   character: CharacterForRoll,
   rng: Rng,
   faction?: FactionForRoll | null,
-  relationship?: RelationshipForRoll | null
+  relationship?: RelationshipForRoll | null,
+  weather?: WeatherForRoll | null
 ): ActionMechanics | null {
   if (classification.move_name === 'no_roll') return null
   const move = BASIC_MOVES.find(m => m.name === classification.move_name)
@@ -237,9 +270,14 @@ export function computeMechanics(
       ? CORRUPTION_SURGE_BONUS
       : 0
 
+  // Weather weight from the character's current location — flat penalty,
+  // capped at -1, see weatherPenalty above.
+  const weatherCondition = weather && !BENIGN_WEATHER_CONDITIONS.has(weather.condition) ? weather.condition : null
+  const weatherMod = weatherPenalty(weather)
+
   const harmMod = harmPenalty(character.harm)
   const dice: [number, number] = [rollD6(rng), rollD6(rng)]
-  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + harmMod + corruptionSurgeBonus
+  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + weatherMod + harmMod + corruptionSurgeBonus
   const outcome = calculateOutcome(total)
   const outcomeText = move.outcomes[outcome] || ''
 
@@ -256,6 +294,8 @@ export function computeMechanics(
     standingMod,
     npcName,
     relationshipMod,
+    weatherCondition,
+    weatherMod,
     harmPenalty: harmMod,
     corruptionSurgeBonus,
     dice,
@@ -403,7 +443,7 @@ export async function resolveActionMechanics(
   if (pendingActions.length === 0) return []
 
   try {
-    const [characterRows, factionRows, npcRows] = await Promise.all([
+    const [characterRows, factionRows, npcRows, locationRows] = await Promise.all([
       prisma.character.findMany({
         where: { id: { in: Array.from(new Set(pendingActions.map(a => a.characterId))) } },
         include: {
@@ -425,6 +465,12 @@ export async function resolveActionMechanics(
         where: { campaignId, isDiscovered: true },
         select: { id: true, name: true },
       }),
+      // Live weather per location (see lib/game/tick/weatherTick.ts) —
+      // matched against each acting character's currentLocation below.
+      prisma.location.findMany({
+        where: { campaignId },
+        select: { name: true, weather: true, weatherSeverity: true },
+      }),
     ])
     const characters: CharacterForRoll[] = characterRows.map(c => ({
       id: c.id,
@@ -438,6 +484,10 @@ export async function resolveActionMechanics(
     }))
     const standingsByCharacter = new Map(
       characterRows.map(c => [c.id, new Map(c.factionStandings.map(s => [s.factionId, s.value]))])
+    )
+    const currentLocationByCharacter = new Map(characterRows.map(c => [c.id, c.currentLocation]))
+    const weatherByLocationName = new Map(
+      locationRows.map(l => [l.name.toLowerCase(), { condition: l.weather as string, severity: l.weatherSeverity }])
     )
 
     const classifications = await classifyActions(
@@ -491,7 +541,12 @@ export async function resolveActionMechanics(
         }
       }
 
-      const rolled = computeMechanics(classification, action, character, rng, factionForRoll, relationshipForRoll)
+      const currentLocation = currentLocationByCharacter.get(character.id)
+      const weatherForRoll: WeatherForRoll | null = currentLocation
+        ? weatherByLocationName.get(currentLocation.toLowerCase()) ?? null
+        : null
+
+      const rolled = computeMechanics(classification, action, character, rng, factionForRoll, relationshipForRoll, weatherForRoll)
       if (rolled) mechanics.push(rolled)
     }
 
@@ -507,10 +562,10 @@ export async function resolveActionMechanics(
             userId: action?.userId || '',
             rollType: 'move',
             dice: m.dice,
-            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.harmPenalty,
+            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.weatherMod + m.harmPenalty,
             total: m.total,
             outcome: m.outcome,
-            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
+            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.weatherCondition ? `, ${m.weatherCondition.toLowerCase()}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
           }
         }),
       })
@@ -580,6 +635,7 @@ export function formatRollReceipt(m: ActionMechanics): string {
     ...(m.capabilityName ? [`${m.capabilityMod >= 0 ? '+' : ''}${m.capabilityMod} ${m.capabilityName}`] : []),
     ...(m.factionName ? [`${m.standingMod >= 0 ? '+' : ''}${m.standingMod} standing (${m.factionName})`] : []),
     ...(m.npcName ? [`${m.relationshipMod >= 0 ? '+' : ''}${m.relationshipMod} rapport (${m.npcName})`] : []),
+    ...(m.weatherCondition ? [`${m.weatherMod} ${m.weatherCondition.toLowerCase()}`] : []),
     ...(m.harmPenalty ? [`${m.harmPenalty} impaired`] : []),
     ...(m.corruptionSurgeBonus ? [`+${m.corruptionSurgeBonus} corruption surge (bargain accepted)`] : []),
   ].join(', ')

@@ -3,7 +3,7 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from '@/lib/clientAuth'
@@ -29,13 +29,26 @@ import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 
+// Whether `characterId` may act in `scene` — participants is null for a
+// genuinely open scene (anyone can act; membership grows dynamically as
+// people do, see scene/route.ts); a non-empty characterIds list means the
+// GM scoped this scene to specific characters at creation (a
+// Character-Focused scene, or one half of a split party) — see
+// start-scene/route.ts.
+function canParticipateInScene(scene: any, characterId: string): boolean {
+  const participants = scene.participants as any
+  if (!participants || !participants.characterIds || participants.characterIds.length === 0) {
+    return true
+  }
+  return participants.characterIds.includes(characterId)
+}
+
 export default function StoryPage() {
   const router = useRouter()
   const params = useParams()
   const campaignId = params.id as string
 
   const [campaign, setCampaign] = useState<any>(null)
-  const [currentScene, setCurrentScene] = useState<any>(null)
   const [activeScenes, setActiveScenes] = useState<any[]>([])
   const [resolvedScenes, setResolvedScenes] = useState<any[]>([])
   const [userCharacters, setUserCharacters] = useState<any[]>([])
@@ -80,6 +93,39 @@ export default function StoryPage() {
   const user = getUser()
   const isAdmin = campaign?.userRole === 'ADMIN'
 
+  // The scene(s) the viewer's selected character can actually act in.
+  // Picking activeScenes[0] unconditionally (the old behavior) broke down
+  // the moment more than one scene could be active at once (a split
+  // party): a player would see chat/turn-order/map for whichever scene
+  // happened to be created first, not the one their own character is in.
+  const availableScenes = useMemo(
+    () => activeScenes.filter(scene => selectedCharacterId && canParticipateInScene(scene, selectedCharacterId)),
+    [activeScenes, selectedCharacterId]
+  )
+  const currentScene = availableScenes[0] ?? null
+
+  // Split-party detection: living characters not already tied up in an
+  // active scene, grouped by currentLocation. A character with no
+  // location set is excluded from auto-grouping entirely — there's
+  // nothing to cluster them by, so they're left for the GM to place
+  // manually via the existing Character-Focused option. 2+ groups means
+  // the party is genuinely split; the location engine never routes this
+  // automatically (see help copy) — it's always a GM's explicit choice.
+  const locationGroups = useMemo(() => {
+    const busyIds = new Set(
+      activeScenes.flatMap(scene => (scene.participants as any)?.characterIds || [])
+    )
+    const groups = new Map<string, any[]>()
+    for (const c of campaign?.characters || []) {
+      if (c.isAlive === false || busyIds.has(c.id)) continue
+      const loc = (c.currentLocation || '').trim()
+      if (!loc) continue
+      if (!groups.has(loc)) groups.set(loc, [])
+      groups.get(loc)!.push(c)
+    }
+    return groups
+  }, [activeScenes, campaign])
+
   // Command palette context
   const { setContext, registerAction } = useCommandPalette()
 
@@ -105,7 +151,6 @@ export default function StoryPage() {
       const sceneResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/scene`)
       if (!sceneResponse.ok) throw new Error('Failed to load scenes')
       const sceneData = await sceneResponse.json()
-      setCurrentScene(sceneData.scene)
       setActiveScenes(sceneData.scenes || [])
 
       // Load all scenes to find resolved ones
@@ -553,6 +598,37 @@ export default function StoryPage() {
     }
   }
 
+  // One scene per location group — each group is disjoint by construction
+  // (locationGroups already excludes anyone already in an active scene),
+  // so these calls never conflict with each other or with start-scene's
+  // own overlap check.
+  const handleStartSplitPartyScenes = async () => {
+    setError('')
+    setSuccess('')
+    setStartingScene(true)
+    try {
+      for (const characters of locationGroups.values()) {
+        const response = await authenticatedFetch(
+          `/api/campaigns/${campaignId}/start-scene`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ characterIds: characters.map((c: any) => c.id) })
+          }
+        )
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || 'Failed to start a split scene')
+        }
+      }
+      setSuccess(`Started ${locationGroups.size} scenes, one per location.`)
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start split scenes')
+    } finally {
+      setStartingScene(false)
+    }
+  }
+
   const handleAddFundsFromModal = async () => {
     setAddFundsLoading(true)
     setAddFundsError('')
@@ -702,17 +778,6 @@ export default function StoryPage() {
 
   const selectedCharacter = userCharacters.find(c => c.id === selectedCharacterId)
 
-  // Helper to check if a character can participate in a scene
-  const canParticipateInScene = (scene: any, characterId: string) => {
-    const participants = scene.participants as any
-    // If no participants set, it's an open scene (backwards compatibility)
-    if (!participants || !participants.characterIds || participants.characterIds.length === 0) {
-      return true
-    }
-    // Check if character is in the participant list
-    return participants.characterIds.includes(characterId)
-  }
-
   // Helper to check if user has already submitted action in the current exchange
   const hasUserSubmitted = (scene: any) => {
     // currentExchange is 0 on a scene's first-ever exchange — `|| 1` here
@@ -726,11 +791,6 @@ export default function StoryPage() {
       action.exchangeNumber === currentExchange
     )
   }
-
-  // Filter scenes where the selected character can participate
-  const availableScenes = activeScenes.filter(scene =>
-    selectedCharacterId && canParticipateInScene(scene, selectedCharacterId)
-  )
 
   const getCurrentStageText = (scene: any) => {
     // Only show intro text here - resolutions are displayed in the dedicated resolutions section
@@ -810,6 +870,27 @@ export default function StoryPage() {
             <div className="bg-ember-900/20 border border-ember-700/40 text-ember-300 px-4 py-3 rounded-lg flex items-center gap-3">
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-ember-600/40"></div>
               <span>{resolvingMessage}</span>
+            </div>
+          )}
+
+          {/* Split party — a GM-only nudge, independent of whichever
+              character is selected: the party can be split even when the
+              viewer's own character already has a scene to look at. */}
+          {isAdmin && locationGroups.size >= 2 && (
+            <div className="rounded-xl bg-gradient-to-br from-wine-800/20 to-wine-800/10 border border-wine-700/40 shadow-lg shadow-black/30 p-5">
+              <h3 className="font-bold text-ember-100 mb-1">Your party is split</h3>
+              <p className="text-sm text-ember-300/60 mb-3">
+                {Array.from(locationGroups.entries())
+                  .map(([loc, characters]) => `${characters.map((c: any) => c.name).join(', ')} at ${loc}`)
+                  .join(' · ')}
+              </p>
+              <button
+                onClick={handleStartSplitPartyScenes}
+                disabled={startingScene}
+                className="btn-secondary py-2 px-4 text-sm"
+              >
+                {startingScene ? 'Starting…' : `Start ${locationGroups.size} scenes, one per location`}
+              </button>
             </div>
           )}
 

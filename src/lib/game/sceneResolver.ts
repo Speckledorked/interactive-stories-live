@@ -551,10 +551,13 @@ export async function createNewScene(campaignId: string, characterIds?: string[]
     console.log(`📋 Scene participants: ${characterIds.length} characters, ${userIds.length} users`)
   }
 
-  // Generate scene intro using AI (imported from worldState.ts)
+  // Generate scene intro using AI (imported from worldState.ts) — scoped
+  // to this scene's own participants when it has an explicit list (a
+  // split-party or Character-Focused scene), so it doesn't introduce
+  // characters who aren't actually part of it.
   const { generateNewSceneIntro } = await import('@/lib/ai/worldState')
   console.log('🤖 Generating scene intro...')
-  const sceneIntro = await generateNewSceneIntro(campaignId)
+  const sceneIntro = await generateNewSceneIntro(campaignId, characterIds)
 
   // Create the scene
   const newScene = await prisma.scene.create({

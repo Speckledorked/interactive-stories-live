@@ -58,6 +58,24 @@ function lastProgressBeat(progressLog: string | null): string | null {
 }
 
 /**
+ * Scene-participant scoping (split-party support): a scene the GM created
+ * for specific characters (Character-Focused, or one half of a split
+ * party) should only put those characters' sheets in front of the AI —
+ * otherwise a sibling concurrent scene's party leaks into this one's
+ * context. `participantCharacterIds` is Scene.participants.characterIds;
+ * null/empty (a genuinely open scene) returns the full roster unchanged.
+ * Pure and exported so it's unit-testable without a DB.
+ */
+export function scopeCharactersToParticipants<T extends { id: string }>(
+  characters: T[],
+  participantCharacterIds?: string[] | null
+): T[] {
+  return participantCharacterIds && participantCharacterIds.length > 0
+    ? characters.filter(c => participantCharacterIds.includes(c.id))
+    : characters
+}
+
+/**
  * Build optimized world summary using context manager
  * Reduces token usage for large campaigns (10+ scenes)
  *
@@ -67,7 +85,15 @@ function lastProgressBeat(progressLog: string | null): string | null {
  */
 async function buildOptimizedWorldSummary(
   campaignId: string,
-  currentSceneNumber: number
+  currentSceneNumber: number,
+  // Scene.participants.characterIds, when the active scene has an explicit
+  // participant list (a GM-scoped "Character-Focused" scene, or a split-
+  // party scene) — narrows the character roster (and the location-based
+  // NPC/faction relevance derived from it below) to just this scene's
+  // characters, so a sibling concurrent scene's party doesn't leak into
+  // this one's context. null/undefined (an open scene) keeps the full
+  // living roster, exactly as before this parameter existed.
+  participantCharacterIds?: string[] | null
 ): Promise<{ worldSummary: AIGMRequest['world_summary'], entities: { characters: any[], npcs: any[], factions: any[] } }> {
   console.log('🎯 Building optimized world summary with location filtering')
 
@@ -119,9 +145,18 @@ async function buildOptimizedWorldSummary(
     throw new Error('WorldMeta not found')
   }
 
-  // Extract character locations for filtering
+  // Scene-participant scoping — see scopeCharactersToParticipants' doc
+  // comment above. entities.characters (returned below) stays the full
+  // unfiltered list for memory/lore continuity, matching the existing
+  // fog-of-war precedent for NPCs/factions (relevance filtering only ever
+  // touches worldSummary, never entities).
+  const promptCharacters = scopeCharactersToParticipants(characters, participantCharacterIds)
+
+  // Extract character locations for filtering — scoped to this scene's
+  // characters, so an NPC only "nearby" a sibling scene's location isn't
+  // pulled into this one's context.
   const characterLocations = new Set(
-    characters.map(c => c.currentLocation).filter(Boolean)
+    promptCharacters.map(c => c.currentLocation).filter(Boolean)
   )
 
   console.log('📍 Character locations:', Array.from(characterLocations))
@@ -139,7 +174,7 @@ async function buildOptimizedWorldSummary(
   })
 
   // Filter factions: only include active threats (4-5/5) or those mentioned in character consequences
-  const characterConsequences = characters.flatMap(c => {
+  const characterConsequences = promptCharacters.flatMap(c => {
     const cons = c.consequences as any
     return [
       ...(cons?.enemies || []),
@@ -196,7 +231,7 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
     // Include campaign summary in a special field (we'll handle this in the prompt)
     _campaignSummary: campaignSummaryText,
 
-    characters: characters.map(c => ({
+    characters: promptCharacters.map(c => ({
       id: c.id,
       name: c.name,
       description: c.description,
@@ -343,7 +378,12 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
  * @param campaignId - The campaign to summarize
  * @returns Formatted world state ready for AI and fetched entities
  */
-export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worldSummary: AIGMRequest['world_summary'], entities: { characters: any[], npcs: any[], factions: any[] } }> {
+export async function buildWorldSummaryForAI(
+  campaignId: string,
+  // See buildOptimizedWorldSummary's doc comment above for what this
+  // scopes and why.
+  participantCharacterIds?: string[] | null
+): Promise<{ worldSummary: AIGMRequest['world_summary'], entities: { characters: any[], npcs: any[], factions: any[] } }> {
   console.log('📊 Building world summary for campaign:', campaignId)
 
   // Fetch all relevant data in parallel for speed
@@ -424,12 +464,17 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
   const discoveredFactionIds = new Set(allDiscoveredFactions.map(f => f.id))
   const discoveredFactions = capForPrompt(allDiscoveredFactions, MAX_FACTIONS_IN_PROMPT, f => f.threatLevel)
 
+  // Scene-participant scoping — see scopeCharactersToParticipants' doc
+  // comment. entities (returned below) stays the full unfiltered
+  // characters list.
+  const promptCharacters = scopeCharactersToParticipants(characters, participantCharacterIds)
+
   // Format everything for the AI
   const worldSummary = {
     turn_number: worldMeta.currentTurnNumber,
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
 
-    characters: characters.map(c => ({
+    characters: promptCharacters.map(c => ({
       id: c.id,
       name: c.name,
       description: c.description,
@@ -601,6 +646,14 @@ export async function buildSceneResolutionRequest(
     throw new Error('Scene not found')
   }
 
+  // Split-party scoping: a scene the GM created for specific characters
+  // (Character-Focused, or one half of a split party) carries that list
+  // in participants — null means a genuinely open scene, which still sees
+  // the full living roster exactly as before. See buildOptimizedWorldSummary's
+  // doc comment for what this prevents (sibling concurrent scenes leaking
+  // into each other's context).
+  const participantCharacterIds: string[] | null = (scene.participants as any)?.characterIds ?? null
+
   // Phase 14.6: Use optimized context for campaigns with 10+ scenes
   const sceneCount = await prisma.scene.count({ where: { campaignId } })
   let worldSummary: AIGMRequest['world_summary']
@@ -608,12 +661,12 @@ export async function buildSceneResolutionRequest(
 
   if (sceneCount >= 10) {
     console.log('📉 Using optimized context (campaign has', sceneCount, 'scenes)')
-    const result = await buildOptimizedWorldSummary(campaignId, scene.sceneNumber)
+    const result = await buildOptimizedWorldSummary(campaignId, scene.sceneNumber, participantCharacterIds)
     worldSummary = result.worldSummary
     entities = result.entities
   } else {
     console.log('📊 Using full context (campaign has', sceneCount, 'scenes)')
-    const result = await buildWorldSummaryForAI(campaignId)
+    const result = await buildWorldSummaryForAI(campaignId, participantCharacterIds)
     worldSummary = result.worldSummary
     entities = result.entities
   }
@@ -893,8 +946,14 @@ export async function buildSceneResolutionRequest(
  * @param campaignId - Campaign ID
  * @returns AI-generated scene intro text
  */
-export async function generateNewSceneIntro(campaignId: string): Promise<string> {
+export async function generateNewSceneIntro(campaignId: string, characterIds?: string[]): Promise<string> {
   console.log('🎭 Generating new scene intro')
+  // A split-party or Character-Focused scene only introduces the
+  // characters actually in it — otherwise every living character's
+  // location/goals/threats bleed into an opener that's only supposed to
+  // ground a subset of the party (see the doc comment on
+  // buildOptimizedWorldSummary for the matching fix on ongoing resolution).
+  const hasParticipants = Boolean(characterIds && characterIds.length > 0)
 
   // Lines and veils (see lib/safety/safety-service.ts) — this prompt is
   // built independently of buildSceneResolutionRequest's client.ts <safety>
@@ -917,7 +976,7 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
     where: { id: campaignId },
     include: {
       characters: {
-        where: { isAlive: true },
+        where: hasParticipants ? { isAlive: true, id: { in: characterIds } } : { isAlive: true },
         select: {
           name: true,
           pronouns: true,
@@ -944,7 +1003,7 @@ export async function generateNewSceneIntro(campaignId: string): Promise<string>
     throw new Error('Campaign not found')
   }
 
-  const { worldSummary: worldSummaryData } = await buildWorldSummaryForAI(campaignId)
+  const { worldSummary: worldSummaryData } = await buildWorldSummaryForAI(campaignId, hasParticipants ? characterIds! : null)
 
   // Get the last scene for context (could be RESOLVED or AWAITING_ACTIONS with resolutions)
   const lastScene = await prisma.scene.findFirst({

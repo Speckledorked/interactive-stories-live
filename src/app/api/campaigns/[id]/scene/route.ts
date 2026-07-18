@@ -229,8 +229,25 @@ export async function POST(
       }
     }
 
-    // Add character to scene participants if not already there
+    // Enforce the GM's explicit participant list, if this scene was
+    // scoped to specific characters at creation (a Character-Focused or
+    // split-party scene — see start-scene/route.ts). scene.participants
+    // is null for a genuinely open scene, where the dynamic "add as they
+    // act" behavior below is correct and intended; only a scene created
+    // WITH a non-empty characterIds list is closed to anyone else.
     const sceneParticipants = (scene.participants as any) || { characterIds: [], userIds: [] }
+    if (scene.participants && sceneParticipants.characterIds.length > 0 && !sceneParticipants.characterIds.includes(characterId)) {
+      return NextResponse.json<ErrorResponse>(
+        {
+          error: 'This character is not part of this scene',
+          details: 'The GM started this scene for specific characters only.'
+        },
+        { status: 403 }
+      )
+    }
+
+    // Add character to scene participants if not already there (open
+    // scenes only — a closed scene's membership was just enforced above)
     if (!sceneParticipants.characterIds.includes(characterId)) {
       sceneParticipants.characterIds.push(characterId)
       if (!sceneParticipants.userIds.includes(user.userId)) {

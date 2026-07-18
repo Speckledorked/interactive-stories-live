@@ -11,7 +11,6 @@ export interface CampaignTemplate {
   universe: string
   systemPrompt: string
   initialWorldSeed: string
-  defaultMoves: MoveTemplate[]
   defaultPerks: PerkTemplate[]
   factionTemplates: FactionTemplate[]
   startingItems: ItemTemplate[]
@@ -57,19 +56,6 @@ export interface StartingDebtTemplate {
   description: string
   direction: 'owed_by_character' | 'owed_to_character'
   counterpartyFactionName: string
-}
-
-export interface MoveTemplate {
-  name: string
-  trigger: string
-  description: string
-  rollType: string
-  outcomes: {
-    success: string
-    partial: string
-    miss: string
-  }
-  category: string
 }
 
 export interface PerkTemplate {
@@ -131,81 +117,6 @@ export const FANTASY_TEMPLATE: CampaignTemplate = {
   initialWorldSeed: `The campaign begins in the frontier town of Thornhaven, nestled at the edge of the Whisperwood Forest. Strange lights have been seen in the ruins of the old wizard's tower to the north, and merchants report that the road to the capital has become dangerous.
 
 The town council is worried, and adventurers are needed to investigate the threats and protect the town's interests.`,
-
-  defaultMoves: [
-    {
-      name: 'Defy Danger',
-      trigger: 'When you act despite an imminent threat or suffer a calamity',
-      description: 'Say how you deal with the danger. Roll+relevant stat.',
-      rollType: 'variable',
-      outcomes: {
-        success: 'You do what you set out to do, and the threat doesn\'t come to bear.',
-        partial: 'You stumble, hesitate, or flinch: the GM will offer you a worse outcome, hard bargain, or ugly choice.',
-        miss: 'The danger manifests fully, and you may make things worse.'
-      },
-      category: 'basic'
-    },
-    {
-      name: 'Hack and Slash',
-      trigger: 'When you attack an enemy in melee',
-      description: 'Roll+STR. You inflict your damage, but the enemy also makes an attack against you.',
-      rollType: 'roll+STR',
-      outcomes: {
-        success: 'You deal your damage to the enemy and avoid their attack.',
-        partial: 'You deal your damage, but the enemy also deals damage to you.',
-        miss: 'The enemy makes an attack against you.'
-      },
-      category: 'basic'
-    },
-    {
-      name: 'Volley',
-      trigger: 'When you take aim and shoot at an enemy at range',
-      description: 'Roll+DEX to attack from a distance.',
-      rollType: 'roll+DEX',
-      outcomes: {
-        success: 'You have a clear shot - deal your damage.',
-        partial: 'Choose one: You have to move to get the shot, placing yourself in danger; You have to take what you can get (reduce damage); You need several shots (use extra ammo).',
-        miss: 'Your shot goes awry or puts you in danger.'
-      },
-      category: 'basic'
-    },
-    {
-      name: 'Parley',
-      trigger: 'When you press or entice an NPC',
-      description: 'Roll+CHA to negotiate or persuade.',
-      rollType: 'roll+CHA',
-      outcomes: {
-        success: 'They either do what you want or reveal the easiest way to convince them.',
-        partial: 'They will do it, but need concrete assurance, corroboration, or evidence.',
-        miss: 'They refuse, and may make demands or threats of their own.'
-      },
-      category: 'basic'
-    },
-    {
-      name: 'Spout Lore',
-      trigger: 'When you consult your accumulated knowledge about something',
-      description: 'Roll+INT to recall useful information.',
-      rollType: 'roll+INT',
-      outcomes: {
-        success: 'The GM will tell you something interesting and useful about the subject.',
-        partial: 'The GM will tell you something interesting—it\'s on you to make it useful.',
-        miss: 'The GM might tell you something interesting, but it comes with complications.'
-      },
-      category: 'basic'
-    },
-    {
-      name: 'Discern Realities',
-      trigger: 'When you closely study a situation or person',
-      description: 'Roll+WIS to gain insight about your surroundings.',
-      rollType: 'roll+WIS',
-      outcomes: {
-        success: 'Ask the GM 3 questions from the list.',
-        partial: 'Ask 1 question from the list.',
-        miss: 'Your investigation reveals something dangerous.'
-      },
-      category: 'basic'
-    }
-  ],
 
   defaultPerks: [
     { name: 'Battle-Hardened', description: '+1 ongoing when fighting creatures you\'ve defeated before', tags: ['combat'] },
@@ -324,45 +235,6 @@ export const MHA_UA_TEMPLATE: CampaignTemplate = {
 
 But as you prepare for the exercise, alarms blare throughout the school. Real villains have somehow breached U.A.'s security. This is no longer a drill.`,
 
-  defaultMoves: [
-    {
-      name: 'Use Your Quirk',
-      trigger: 'When you activate your quirk to overcome an obstacle',
-      description: 'Roll+the stat most relevant to your quirk.',
-      rollType: 'variable',
-      outcomes: {
-        success: 'Your quirk works perfectly. Achieve your goal with flair.',
-        partial: 'It works, but choose 1: Your quirk has an unexpected side effect; You push yourself too hard (take 1 harm); The situation escalates.',
-        miss: 'Your quirk fails or backfires. The GM makes a hard move.'
-      },
-      category: 'basic'
-    },
-    {
-      name: 'Save Someone',
-      trigger: 'When you put yourself at risk to protect someone',
-      description: 'Roll+Heart to heroically save another.',
-      rollType: 'roll+Heart',
-      outcomes: {
-        success: 'You save them without consequences. The crowd is inspired.',
-        partial: 'You save them, but you take harm or damage meant for them.',
-        miss: 'You both end up in worse danger.'
-      },
-      category: 'basic'
-    },
-    {
-      name: 'Read the Situation',
-      trigger: 'When you assess a threat or tactical situation',
-      description: 'Roll+Mind to analyze the battlefield.',
-      rollType: 'roll+Mind',
-      outcomes: {
-        success: 'Ask 3 questions from the list: What\'s my best way in/out? Who\'s the biggest threat? What should I be on the lookout for?',
-        partial: 'Ask 1 question.',
-        miss: 'You misread the situation badly.'
-      },
-      category: 'basic'
-    }
-  ],
-
   defaultPerks: [
     { name: 'Quirk Evolution', description: 'Your quirk has developed a new application or aspect', tags: ['power'] },
     { name: 'Plus Ultra', description: 'Once per session, push past your limits for a guaranteed strong hit', tags: ['heroic'] },
@@ -460,45 +332,6 @@ export const MOTW_TEMPLATE: CampaignTemplate = {
   initialWorldSeed: `Strange deaths have been reported in the small town of Millbrook. The victims all died in their sleep, their faces frozen in expressions of terror. The local police are baffled, attributing the deaths to a rare cardiac condition.
 
 But you know better. Something supernatural is hunting in Millbrook, and it's your job to stop it before more people die.`,
-
-  defaultMoves: [
-    {
-      name: 'Investigate a Mystery',
-      trigger: 'When you investigate a supernatural mystery',
-      description: 'Roll+Sharp to uncover clues.',
-      rollType: 'roll+Sharp',
-      outcomes: {
-        success: 'Ask the Keeper 2 questions from the investigation list.',
-        partial: 'Ask 1 question, but you expose yourself to danger or attract attention.',
-        miss: 'You find nothing useful, or you trigger a trap or alert.'
-      },
-      category: 'basic'
-    },
-    {
-      name: 'Kick Some Ass',
-      trigger: 'When you attack a monster or minion',
-      description: 'Roll+Tough to fight the supernatural.',
-      rollType: 'roll+Tough',
-      outcomes: {
-        success: 'You trade harm with the target. Choose effects: inflict terrible harm (+1 harm); suffer little harm (-1 harm received); force them where you want.',
-        partial: 'You both take harm and it fights back.',
-        miss: 'You are beaten up, captured, or put at the monster\'s mercy.'
-      },
-      category: 'basic'
-    },
-    {
-      name: 'Protect Someone',
-      trigger: 'When you prevent harm to another person',
-      description: 'Roll+Tough to shield someone from danger.',
-      rollType: 'roll+Tough',
-      outcomes: {
-        success: 'They are unharmed, and you suffer little harm.',
-        partial: 'You protect them but suffer the harm in their place.',
-        miss: 'You fail to protect them and you both suffer.'
-      },
-      category: 'basic'
-    }
-  ],
 
   defaultPerks: [
     { name: 'Monster Hunter', description: '+1 when tracking or fighting supernatural creatures', tags: ['combat'] },
@@ -728,20 +561,10 @@ export async function applyCampaignTemplate(
     throw new Error(`Template ${templateId} not found`)
   }
 
-  // Always create the system moves — these define the game mechanics
-  for (const moveTemplate of template.defaultMoves) {
-    await prisma.move.create({
-      data: {
-        campaignId,
-        name: moveTemplate.name,
-        trigger: moveTemplate.trigger,
-        description: moveTemplate.description,
-        rollType: moveTemplate.rollType,
-        outcomes: moveTemplate.outcomes,
-        category: moveTemplate.category
-      }
-    })
-  }
+  // Move flavor is no longer a template concept: it's generated per campaign
+  // (templated or not) by lib/ai/moveFlavor.ts and persisted directly by the
+  // caller (api/campaigns/route.ts) — see that generator's doc comment for
+  // why a static per-template moveset was retired in favor of it.
 
   // Use AI-generated factions if available, otherwise fall back to template defaults
   const factionsToCreate = generatedFactions ?? template.factionTemplates.map(f => ({

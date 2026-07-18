@@ -42,6 +42,7 @@ interface ReseedSummary {
   corruptionThemeSet: boolean
   archetypesReplaced: number
   archetypesSkipped: boolean
+  movesFlavored: number
 }
 
 interface ReseedJob {
@@ -81,6 +82,7 @@ function formatReseedSummary(s: ReseedSummary): string {
   if (s.statLabelsSet) parts.push('Stat labels set from canon')
   if (s.corruptionThemeSet) parts.push('Corruption theme set from canon')
   if (s.archetypesReplaced > 0) parts.push(`${s.archetypesReplaced} origin archetypes regenerated from canon`)
+  if (s.movesFlavored > 0) parts.push(`${s.movesFlavored} moves flavored from canon`)
   parts.push(`(grounded in ${s.loreEntriesSampled} of ${s.loreEntriesTotal} imported lore entries)`)
   return parts.join('. ')
 }

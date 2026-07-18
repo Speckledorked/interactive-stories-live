@@ -312,6 +312,52 @@ describe('computeMechanics — weather weight', () => {
   })
 })
 
+describe('computeMechanics — per-campaign move flavor', () => {
+  it('overrides moveName and outcomeText when flavor is supplied, leaving the math untouched', () => {
+    // dice 4+4=8, +1 cool = 9 -> weak hit
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5),
+      null,
+      null,
+      null,
+      { name: 'Face the Storm', outcomes: { strongHit: 'You weather it cleanly.', weakHit: 'You weather it, but the storm exacts its due.', miss: 'The storm takes what it wants.' } }
+    )
+    expect(m!.total).toBe(9)
+    expect(m!.outcome).toBe('weakHit')
+    expect(m!.moveName).toBe('Face the Storm')
+    expect(m!.outcomeText).toBe('You weather it, but the storm exacts its due.')
+  })
+
+  it('falls back to the generic band text when flavor omits that specific band', () => {
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5),
+      null,
+      null,
+      null,
+      { name: 'Face the Storm', outcomes: {} }
+    )
+    expect(m!.moveName).toBe('Face the Storm')
+    expect(m!.outcomeText).toBe('You do it, but there\'s a complication or cost.')
+  })
+
+  it('uses the generic BASIC_MOVES name and text when no flavor is supplied', () => {
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5)
+    )
+    expect(m!.moveName).toBe('Act Under Fire')
+    expect(m!.outcomeText).toBe('You do it, but there\'s a complication or cost.')
+  })
+})
+
 describe('parseClassifications', () => {
   it('keeps only valid, in-range classifications', () => {
     const parsed = parseClassifications(

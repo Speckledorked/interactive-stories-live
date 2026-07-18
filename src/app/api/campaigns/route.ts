@@ -10,6 +10,8 @@ import { CreateCampaignRequest, ErrorResponse } from '@/types/api'
 import { getTemplate, applyCampaignTemplate, createFactionsForCampaign, createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels, GeneratedFront, GeneratedNPC, GeneratedLocation } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
+import { generateMoveFlavor, GeneratedMoveFlavor } from '@/lib/ai/moveFlavor'
+import { BASIC_MOVES } from '@/lib/pbta-moves'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 import { kickLoreImportJob } from '@/lib/lore/loreQueue'
 import { clearPendingWorldSeed } from '@/lib/lore/reseedWorld'
@@ -174,15 +176,25 @@ export async function POST(request: NextRequest) {
     // wizard, no corruption track, wiki without NPCs/locations until play
     // introduces them).
     let worldExtras: GeneratedWorldExtras | null = null
+    let generatedMoveFlavor: GeneratedMoveFlavor[] | null = null
     try {
-      worldExtras = await generateWorldExtras(
-        title,
-        description || '',
-        resolvedUniverse,
-        (generatedFactions || []).map(f => ({ name: f.name, description: f.description })),
-        generatedCapabilities || [],
-        generatedStatLabels
-      )
+      // Independent calls, run together: move flavor doesn't need factions/
+      // capabilities as input (only stat labels), so there's no ordering
+      // dependency between the two — see lib/ai/moveFlavor.ts's doc comment
+      // for why this is a separate call rather than folded into either.
+      const [extrasResult, moveFlavorResult] = await Promise.all([
+        generateWorldExtras(
+          title,
+          description || '',
+          resolvedUniverse,
+          (generatedFactions || []).map(f => ({ name: f.name, description: f.description })),
+          generatedCapabilities || [],
+          generatedStatLabels
+        ),
+        generateMoveFlavor(title, description || '', resolvedUniverse, generatedStatLabels),
+      ])
+      worldExtras = extrasResult
+      generatedMoveFlavor = moveFlavorResult
       if (worldExtras) {
         generatedNpcs = worldExtras.npcs
         generatedLocations = worldExtras.locations
@@ -252,10 +264,9 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      // Apply template moves + factions (AI-generated factions if available).
+      // Apply template factions (AI-generated factions if available).
       // Template-less/custom-universe campaigns still get their AI-generated
-      // factions persisted directly — factions aren't a template-only
-      // concept, only the default Move records are.
+      // factions persisted directly — factions aren't a template-only concept.
       if (template) {
         await applyCampaignTemplate(
           newCampaign.id, template.id, tx, generatedFactions,
@@ -265,6 +276,27 @@ export async function POST(request: NextRequest) {
       } else if (generatedFactions && generatedFactions.length > 0) {
         await createFactionsForCampaign(newCampaign.id, tx, generatedFactions)
         console.log(`✅ Persisted ${generatedFactions.length} AI-generated factions (no template)`)
+      }
+
+      // Per-campaign move flavor (see lib/ai/moveFlavor.ts) — every campaign
+      // gets this, templated or not, unlike the retired per-template
+      // defaultMoves. Absence (no API key, generation failed) just means
+      // resolution.ts falls back to BASIC_MOVES' own generic display text.
+      if (generatedMoveFlavor && generatedMoveFlavor.length > 0) {
+        const rollTypeByKey = new Map(BASIC_MOVES.map(m => [m.key, m.rollType]))
+        await tx.move.createMany({
+          data: generatedMoveFlavor.map(m => ({
+            campaignId: newCampaign.id,
+            baseMoveKey: m.baseMoveKey,
+            name: m.name,
+            trigger: m.trigger,
+            description: m.description,
+            rollType: rollTypeByKey.get(m.baseMoveKey) || null,
+            outcomes: m.outcomes,
+            category: 'basic',
+          })),
+        })
+        console.log(`🎲 Flavored ${generatedMoveFlavor.length} moves for "${title}"`)
       }
 
       // Knowledge-relative sheets: persist the universe's capability

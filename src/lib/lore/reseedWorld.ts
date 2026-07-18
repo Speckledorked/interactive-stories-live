@@ -38,9 +38,11 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
+import { generateMoveFlavor } from '@/lib/ai/moveFlavor'
 import { buildLoreDigest } from './loreDigest'
 import { createFactionsForCampaign, createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
+import { BASIC_MOVES } from '@/lib/pbta-moves'
 
 // The extras call already carries factions + capability keys, so it needs
 // less raw canon than base world generation does.
@@ -61,6 +63,7 @@ export interface ReseedSummary {
   corruptionThemeSet: boolean
   archetypesReplaced: number
   archetypesSkipped: boolean
+  movesFlavored: number
 }
 
 export type ReseedResult =
@@ -246,6 +249,54 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
     statLabelsSet = true
   }
 
+  // --- Move flavor -----------------------------------------------------------
+  // Same recovery reasoning as archetypes below: a live campaign missing
+  // flavor for one or more of the fixed BASIC_MOVES means a previous
+  // generation attempt failed/was interrupted, so "Reseed from lore" is a
+  // real fix for that too, not just a fresh-mode escape hatch. Fresh mode
+  // replaces provisional flavor with canon-grounded flavor (same as
+  // archetypes' atomic delete+recreate); live mode only fills in whichever
+  // canonical keys are still missing, never overwriting existing flavor a
+  // GM or earlier generation already gave this campaign.
+  const existingMoveFlavor = await prisma.move.findMany({
+    where: { campaignId, baseMoveKey: { not: null } },
+    select: { baseMoveKey: true },
+  })
+  const existingMoveFlavorKeys = new Set(existingMoveFlavor.map(m => m.baseMoveKey as string))
+  const wantMoves = fresh || existingMoveFlavorKeys.size < BASIC_MOVES.length
+  let movesFlavored = 0
+  if (wantMoves) {
+    const moveFlavor = await generateMoveFlavor(
+      campaign.title,
+      campaign.description || '',
+      campaign.universe || 'Original',
+      (statLabelsSet ? generated.statLabels : (campaign.statLabels as any)) || undefined,
+      lore.digest.slice(0, EXTRAS_DIGEST_CHARS)
+    )
+    if (moveFlavor && moveFlavor.length > 0) {
+      const rollTypeByKey = new Map(BASIC_MOVES.map(m => [m.key, m.rollType]))
+      const toCreate = fresh ? moveFlavor : moveFlavor.filter(m => !existingMoveFlavorKeys.has(m.baseMoveKey))
+      if (toCreate.length > 0) {
+        if (fresh && existingMoveFlavorKeys.size > 0) {
+          await prisma.move.deleteMany({ where: { campaignId, baseMoveKey: { not: null } } })
+        }
+        await prisma.move.createMany({
+          data: toCreate.map(m => ({
+            campaignId,
+            baseMoveKey: m.baseMoveKey,
+            name: m.name,
+            trigger: m.trigger,
+            description: m.description,
+            rollType: rollTypeByKey.get(m.baseMoveKey) || null,
+            outcomes: m.outcomes,
+            category: 'basic',
+          })),
+        })
+        movesFlavored = toCreate.length
+      }
+    }
+  }
+
   // --- Extras: archetypes + corruption theme + NPCs/locations -----------------
   // A live campaign with zero archetypes means a previous generation
   // attempt (fresh-mode, at creation or an earlier reseed) failed or was
@@ -385,13 +436,15 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
     corruptionThemeSet,
     archetypesReplaced,
     archetypesSkipped: !wantArchetypes,
+    movesFlavored,
   }
 
   console.log(
     `🌍 Reseeded world from lore for ${campaignId} (${fresh ? 'fresh — replaced' : 'live — additive'}):` +
     ` +${summary.factionsAdded.length} factions (${summary.factionsRetired.length} retired),` +
     ` +${summary.capabilitiesAdded.length} capabilities, +${summary.frontsAdded.length} fronts,` +
-    ` +${summary.npcsAdded.length} NPCs, +${summary.locationsAdded.length} locations` +
+    ` +${summary.npcsAdded.length} NPCs, +${summary.locationsAdded.length} locations,` +
+    ` ${summary.movesFlavored} moves flavored` +
     ` (sampled ${lore.sampledEntries}/${lore.totalEntries} lore entries)`
   )
 

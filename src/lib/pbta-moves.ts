@@ -2,12 +2,18 @@
 // Core PbtA move definitions and mechanics.
 //
 // BASIC_MOVES is the single source of truth live resolution rolls against
-// (see lib/game/resolution.ts) — universal across every campaign regardless
-// of template or universe. This is distinct from the per-campaign `Move` DB
-// table (prisma/schema.prisma), which stores template-specific flavor moves
-// for export/reference only and is never consulted at roll time.
-
+// (see lib/game/resolution.ts) — the mechanics (rollType, stat, outcome
+// bands) are fixed and universal across every campaign, exactly like the 5
+// stat keys (cool/hard/hot/sharp/weird) never change. What DOES vary per
+// campaign is the DISPLAY layer: each move's `key` is a stable identifier
+// (Move.baseMoveKey in prisma/schema.prisma) that a campaign's AI-generated
+// flavor text (lib/ai/moveFlavor.ts) attaches to, the same relationship
+// statLabels has to the fixed stat keys. resolution.ts's computeMechanics
+// looks up flavor by key and overrides only the display name/outcome text
+// it presents to the narrator and the transparency panel — the roll math
+// itself never reads flavor.
 export interface PbtAMove {
+  key: string // stable id — matches Move.baseMoveKey for per-campaign flavor
   name: string
   trigger: string
   description: string
@@ -23,6 +29,7 @@ export interface PbtAMove {
 // Basic Moves (Apocalypse World inspired, but generic)
 export const BASIC_MOVES: PbtAMove[] = [
   {
+    key: "act_under_fire",
     name: "Act Under Fire",
     trigger: "When you do something under fire or follow through despite opposition",
     description: "Roll+cool. On a 10+, you do it. On a 7-9, you flinch, hesitate, or stall: the GM can offer you a worse outcome, a hard bargain, or an ugly choice.",
@@ -35,6 +42,7 @@ export const BASIC_MOVES: PbtAMove[] = [
     category: 'basic'
   },
   {
+    key: "go_aggro",
     name: "Go Aggro",
     trigger: "When you use violence or the threat of violence to make someone do what you want",
     description: "Roll+hard. On a 10+, they have to choose: force your hand or do what you want. On a 7-9, they can choose from additional options.",
@@ -47,6 +55,7 @@ export const BASIC_MOVES: PbtAMove[] = [
     category: 'basic'
   },
   {
+    key: "seduce_or_manipulate",
     name: "Seduce or Manipulate",
     trigger: "When you try to seduce, manipulate, or bluff someone",
     description: "Roll+hot. On a 10+, they'll do what you want if you promise them something. On a 7-9, they'll do it, but need something concrete first.",
@@ -59,6 +68,7 @@ export const BASIC_MOVES: PbtAMove[] = [
     category: 'basic'
   },
   {
+    key: "read_a_situation",
     name: "Read a Situation",
     trigger: "When you assess a charged situation",
     description: "Roll+sharp. On a 10+, ask 3 questions. On a 7-9, ask 1. Take +1 when acting on answers.",
@@ -71,6 +81,7 @@ export const BASIC_MOVES: PbtAMove[] = [
     category: 'basic'
   },
   {
+    key: "read_a_person",
     name: "Read a Person",
     trigger: "When you study someone during a charged interaction",
     description: "Roll+sharp. On a 10+, ask 3 questions. On a 7-9, ask 1. They must answer truthfully.",
@@ -83,6 +94,7 @@ export const BASIC_MOVES: PbtAMove[] = [
     category: 'basic'
   },
   {
+    key: "open_your_brain",
     name: "Open Your Brain",
     trigger: "When you open your brain to the world's psychic maelstrom",
     description: "Roll+weird. On a 10+, the GM tells you something new and interesting. On a 7-9, the information comes at a cost.",
@@ -95,6 +107,7 @@ export const BASIC_MOVES: PbtAMove[] = [
     category: 'basic'
   },
   {
+    key: "help_or_interfere",
     name: "Help or Interfere",
     trigger: "When you help or interfere with someone",
     description: "Roll+Hx (relationship). On a 10+, they take +2 or -2 to their roll. On a 7-9, you also expose yourself to risk.",
@@ -111,6 +124,7 @@ export const BASIC_MOVES: PbtAMove[] = [
 // Peripheral Moves (happen automatically)
 export const PERIPHERAL_MOVES: PbtAMove[] = [
   {
+    key: "take_harm",
     name: "Take Harm",
     trigger: "When you take harm",
     description: "Mark harm on your sheet. At 3+ harm, roll+harm. On a 10+, choose 1 from a bad list. On a 7-9, the GM chooses 1.",
@@ -123,6 +137,7 @@ export const PERIPHERAL_MOVES: PbtAMove[] = [
     category: 'peripheral'
   },
   {
+    key: "end_of_session",
     name: "End of Session",
     trigger: "At the end of each session",
     description: "Mark XP if you hit your highlighted stats. Discuss what happened and what's coming.",

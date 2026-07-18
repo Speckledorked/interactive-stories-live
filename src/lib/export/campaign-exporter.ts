@@ -354,6 +354,11 @@ export class CampaignExporter {
       await prisma.move.create({
         data: {
           campaignId,
+          // Preserved so an imported campaign's flavor stays wired into
+          // live resolution (resolution.ts looks these rows up by
+          // baseMoveKey) — omitted entirely on older exports predating this
+          // field, which just import as flavor-only, same as before.
+          baseMoveKey: move.baseMoveKey ?? null,
           name: move.name,
           trigger: move.trigger,
           description: move.description,

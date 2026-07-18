@@ -5,7 +5,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { planFactionMerge, planFrontMerge, reseedWorldFromLore } from '../reseedWorld'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
+import { generateMoveFlavor } from '@/lib/ai/moveFlavor'
 import { createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
+import { BASIC_MOVES } from '@/lib/pbta-moves'
 
 const db = vi.hoisted(() => ({
   campaign: { findUnique: vi.fn(), update: vi.fn() },
@@ -16,6 +18,7 @@ const db = vi.hoisted(() => ({
   campaignArchetype: { count: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   nPC: { findMany: vi.fn() },
   location: { findMany: vi.fn() },
+  move: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   $transaction: vi.fn(),
 }))
 
@@ -44,6 +47,9 @@ vi.mock('@/lib/ai/worldExtras', () => ({
     npcs: [],
     locations: [],
   }),
+}))
+vi.mock('@/lib/ai/moveFlavor', () => ({
+  generateMoveFlavor: vi.fn().mockResolvedValue(null),
 }))
 vi.mock('@/lib/templates/campaign-templates', () => ({
   createFactionsForCampaign: vi.fn(),
@@ -113,6 +119,9 @@ describe('reseedWorldFromLore — archetype regeneration', () => {
     db.clock.findMany.mockResolvedValue([])
     db.nPC.findMany.mockResolvedValue([])
     db.location.findMany.mockResolvedValue([])
+    db.move.findMany.mockResolvedValue([])
+    db.move.deleteMany.mockResolvedValue({ count: 0 })
+    db.move.createMany.mockResolvedValue({ count: 0 })
     db.campaignArchetype.deleteMany.mockResolvedValue({ count: 0 })
     db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
     // Real prisma $transaction([p1, p2]) resolves to [result1, result2].
@@ -194,6 +203,9 @@ describe('reseedWorldFromLore — NPCs and locations', () => {
     db.clock.findMany.mockResolvedValue([])
     db.nPC.findMany.mockResolvedValue([])
     db.location.findMany.mockResolvedValue([])
+    db.move.findMany.mockResolvedValue([])
+    db.move.deleteMany.mockResolvedValue({ count: 0 })
+    db.move.createMany.mockResolvedValue({ count: 0 })
     db.campaignArchetype.count.mockResolvedValue(4) // already seeded, not this test's concern
     db.campaignArchetype.deleteMany.mockResolvedValue({ count: 0 })
     db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
@@ -253,5 +265,83 @@ describe('reseedWorldFromLore — NPCs and locations', () => {
       expect(result.summary.npcsAdded).toEqual(['Lord Kessler', 'Existing Elder'])
       expect(result.summary.locationsAdded).toEqual(['Ashveil Keep', 'Old Market'])
     }
+  })
+})
+
+describe('reseedWorldFromLore — move flavor regeneration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'Test', description: '', universe: 'Original',
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null,
+    })
+    db.faction.findMany.mockResolvedValue([])
+    db.faction.updateMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.findMany.mockResolvedValue([])
+    db.campaignCapability.deleteMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.createMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.updateMany.mockResolvedValue({ count: 0 })
+    db.clock.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([])
+    db.location.findMany.mockResolvedValue([])
+    db.campaignArchetype.count.mockResolvedValue(4) // not this test's concern
+    db.campaignArchetype.deleteMany.mockResolvedValue({ count: 0 })
+    db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
+    db.$transaction.mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops))
+    vi.mocked(generateMoveFlavor).mockResolvedValue([
+      { baseMoveKey: 'act_under_fire', name: 'Face the Storm', trigger: 't', description: 'd', outcomes: { strongHit: 's', weakHit: 'w', miss: 'm' } },
+      { baseMoveKey: 'go_aggro', name: 'Break Them', trigger: 't', description: 'd', outcomes: { strongHit: 's', weakHit: 'w', miss: 'm' } },
+    ])
+  })
+
+  it('skips generation in live mode when every canonical move already has flavor', async () => {
+    db.character.count.mockResolvedValue(2)
+    db.move.findMany.mockResolvedValue(BASIC_MOVES.map(m => ({ baseMoveKey: m.key })))
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(generateMoveFlavor).not.toHaveBeenCalled()
+    if (result.ok) expect(result.summary.movesFlavored).toBe(0)
+  })
+
+  it('fills in only the missing canonical keys in live mode, without touching existing flavor', async () => {
+    db.character.count.mockResolvedValue(2)
+    db.move.findMany.mockResolvedValue([{ baseMoveKey: 'act_under_fire' }]) // 1 of 7 present
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(generateMoveFlavor).toHaveBeenCalled()
+    expect(db.move.deleteMany).not.toHaveBeenCalled()
+    expect(db.move.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ baseMoveKey: 'go_aggro', name: 'Break Them' })],
+    })
+    if (result.ok) expect(result.summary.movesFlavored).toBe(1)
+  })
+
+  it('fresh mode replaces existing provisional flavor with the regenerated set', async () => {
+    db.character.count.mockResolvedValue(0)
+    db.move.findMany.mockResolvedValue([{ baseMoveKey: 'act_under_fire' }])
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(db.move.deleteMany).toHaveBeenCalledWith({ where: { campaignId: 'camp1', baseMoveKey: { not: null } } })
+    expect(db.move.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({ baseMoveKey: 'act_under_fire', name: 'Face the Storm' }),
+        expect.objectContaining({ baseMoveKey: 'go_aggro', name: 'Break Them' }),
+      ],
+    })
+    if (result.ok) expect(result.summary.movesFlavored).toBe(2)
+  })
+
+  it('regenerates in live mode when flavor is missing entirely, even with characters already present', async () => {
+    db.character.count.mockResolvedValue(2)
+    db.move.findMany.mockResolvedValue([])
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(generateMoveFlavor).toHaveBeenCalled()
+    expect(db.move.deleteMany).not.toHaveBeenCalled()
+    if (result.ok) expect(result.summary.movesFlavored).toBe(2)
   })
 })

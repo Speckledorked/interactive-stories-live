@@ -1216,24 +1216,27 @@ model CampaignInvite {
 // PHASE 7 ADDITIONS: PbtA System
 //
 
-// Per-template flavor moves (e.g. "Hack and Slash", "Volley" for the fantasy
-// template) — NOT the list live resolution rolls against. That's the fixed,
-// universe-agnostic BASIC_MOVES array in lib/pbta-moves.ts, which every
-// campaign uses regardless of template. This table is seeded once at
-// campaign creation from the template's defaultMoves purely as reference/
-// flavor data, and its only reader is the full campaign export/import
-// (lib/export/campaign-exporter.ts) — nothing player-facing renders it, and
-// DiceRoll.moveId (below) is never populated, since these rows don't
-// correspond 1:1 with what a roll actually resolved against. Do not read
-// this table to determine what a character can roll; use pbta-moves.ts.
+// Per-campaign flavor text for the fixed BASIC_MOVES set (lib/pbta-moves.ts).
+// The mechanics (rollType, stat, outcome bands) never vary — only the name/
+// trigger/description/outcome PROSE does, generated once per campaign by
+// lib/ai/moveFlavor.ts the same way statLabels/archetypes/corruptionTheme
+// are, and falling back to BASIC_MOVES' own generic text when absent (no
+// API key, generation failed, or a legacy row predating this feature).
+// baseMoveKey ties a row back to the canonical move it flavors — see
+// PbtAMove.key — and IS read at roll time: resolution.ts's computeMechanics
+// looks a classified move up by this key to override its display name and
+// outcome text before handing it to the narrator and the transparency
+// panel. A row with baseMoveKey null is legacy flavor-only content (e.g. an
+// older export) with no live effect beyond export/import round-tripping.
 model Move {
   id          String   @id @default(cuid())
   campaignId  String
+  baseMoveKey String? // matches PbtAMove.key in lib/pbta-moves.ts, e.g. "act_under_fire"
   name        String
   trigger     String // "When you..."
   description String   @db.Text
   rollType    String? // "roll+cool", "roll+hard", "act under fire", null for no roll
-  outcomes    Json // {success: "...", partial: "...", miss: "..."}
+  outcomes    Json // {strongHit: "...", weakHit: "...", miss: "..."}
   category    String   @default("basic") // "basic", "special", "custom"
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -1242,16 +1245,19 @@ model Move {
   campaign  Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
+  @@index([campaignId, baseMoveKey])
 }
 
 // DiceRoll.moveId (and Move.diceRolls above) were removed: a real roll's
-// move always comes from BASIC_MOVES (lib/pbta-moves.ts), which has no
-// row in this table at all — Move here is per-template flavor-move
-// storage for campaign export/import (see the Move model's own doc
-// comment) — so the FK could never be populated with a semantically
-// correct value. Confirmed zero application-code references before
-// removal. A roll's move is identified by name in `description` below,
-// which is what's actually read (formatRollReceipt in lib/game/resolution.ts).
+// move always comes from BASIC_MOVES (lib/pbta-moves.ts) — a fixed set with
+// no 1:1 row in this table, even now that Move.baseMoveKey lets resolution
+// look up per-campaign flavor text for one (see the Move model's own doc
+// comment) — a roll is never "the same row" as a Move, just optionally
+// flavored by one, so a per-roll FK could never be populated with a
+// semantically correct value. Confirmed zero application-code references
+// before removal. A roll's move is identified by name in `description`
+// below, which is what's actually read (formatRollReceipt in
+// lib/game/resolution.ts).
 model DiceRoll {
   id          String  @id @default(cuid())
   campaignId  String

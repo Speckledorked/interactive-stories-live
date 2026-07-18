@@ -45,7 +45,13 @@ export const InventoryItemSchema = z.object({
   id: z.string(),
   name: z.string(),
   quantity: z.number(),
-  tags: z.array(z.string())
+  tags: z.array(z.string()),
+  // Structured mechanical identity (depth-hardening #33 — see README): when
+  // set, this is the exact armor reduction (0-3) the item grants, used in
+  // place of guessing one from the name string — see
+  // lib/game/inventory.ts's resolveArmorValue. Optional; most items (and
+  // all non-armor items) simply omit it.
+  armorValue: z.number().min(0).max(3).optional()
 })
 
 // Knowledge-relative capability change schema. The AI signals WHAT the

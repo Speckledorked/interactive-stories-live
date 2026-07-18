@@ -101,6 +101,10 @@ export interface AIGMResponse {
             name: string
             quantity: number
             tags: string[]
+            // Exact armor reduction (0-3) this item grants, if it's armor —
+            // used in place of guessing one from the name string when this
+            // item is equipped (see lib/game/inventory.ts's resolveArmorValue).
+            armorValue?: number
           }>
           items_remove?: string[] // Item IDs or names to remove
           items_modify?: Array<{
@@ -213,7 +217,7 @@ export interface AIGMResponse {
         reward_grant?: {
           character_names?: string[] // recipients; absent/empty = every living party member
           gold?: number
-          items?: Array<{ id: string; name: string; quantity: number; tags: string[] }>
+          items?: Array<{ id: string; name: string; quantity: number; tags: string[]; armorValue?: number }>
           standing_changes?: Array<{ faction_name: string; delta: number; reason: string }>
         }
       }
@@ -825,6 +829,7 @@ EQUIPMENT: Track significant narrative items (lucky sword, ancestral armor)
 
 INVENTORY: items_add, items_remove, items_modify (quantity_delta)
 - Track quest items, consumables, companions
+- If an added item is armor, set armorValue to the exact protection it grants (0-3: 1 light/leather, 2 medium/chain, 3 heavy/plate) — this is what the engine actually uses when it's equipped, instead of guessing from the name. Omit for anything that isn't armor
 
 RESOURCES: gold_delta, contacts_add/remove, reputation_changes
 - Example: {"gold_delta": -50, "reputation_changes": [{"faction": "Thieves Guild", "delta": 10}]}

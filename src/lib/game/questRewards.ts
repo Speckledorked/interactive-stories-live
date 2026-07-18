@@ -20,6 +20,7 @@ export interface RewardGrantItem {
   name: string
   quantity: number
   tags?: string[]
+  armorValue?: number
 }
 
 export interface RewardGrant {
@@ -30,7 +31,7 @@ export interface RewardGrant {
 }
 
 interface InventoryForMerge {
-  items?: Array<{ id: string; name: string; quantity: number; tags?: string[] }>
+  items?: Array<{ id: string; name: string; quantity: number; tags?: string[]; armorValue?: number }>
   slots?: number
 }
 
@@ -42,7 +43,7 @@ interface InventoryForMerge {
 export function mergeGrantedItems(
   currentInventory: InventoryForMerge | null | undefined,
   granted: RewardGrantItem[] | undefined
-): { items: Array<{ id: string; name: string; quantity: number; tags: string[] }>; slots: number } {
+): { items: Array<{ id: string; name: string; quantity: number; tags: string[]; armorValue?: number }>; slots: number } {
   const items = (currentInventory?.items || []).map(i => ({ ...i, tags: i.tags || [] }))
   for (const item of granted || []) {
     const existing = items.find(i => i.id === item.id)

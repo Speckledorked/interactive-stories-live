@@ -9,6 +9,13 @@ export interface InventoryItem {
   name: string
   quantity?: number
   tags?: string[]
+  // Structured mechanical identity (depth-hardening #33 — see README):
+  // when the AI reports a specific numeric armor value for an item, that's
+  // used exactly instead of guessed from the name string (see
+  // resolveArmorValue below). Absent/undefined falls back to the existing
+  // keyword heuristic — an item with no structured value behaves exactly
+  // as it did before this field existed.
+  armorValue?: number
 }
 
 /**
@@ -134,4 +141,26 @@ export function getArmorReduction(armorName: string | null | undefined): number 
   if (/\barmor\b/.test(lower)) return 1
 
   return 0
+}
+
+/**
+ * Resolve the armor reduction actually worn, preferring a structured
+ * armorValue on the matching inventory item over guessing from the name
+ * string. This is the real mechanical payoff of InventoryItem.armorValue
+ * above: an item the AI (or a future admin/player item-editor) gave an
+ * exact value to is honored exactly, clamped to the same 0–3 PbtA range
+ * getArmorReduction uses; anything else — no matching item, or a matching
+ * item with no armorValue set — falls back to the existing keyword
+ * heuristic, so legacy/freeform armor strings behave exactly as before.
+ */
+export function resolveArmorValue(
+  inv: CharacterInventory | null | undefined,
+  armorName: string | null | undefined
+): number {
+  if (!armorName) return 0
+  const item = inv?.items?.find(i => i.name.toLowerCase() === armorName.toLowerCase())
+  if (item && typeof item.armorValue === 'number' && Number.isFinite(item.armorValue)) {
+    return Math.max(0, Math.min(3, item.armorValue))
+  }
+  return getArmorReduction(armorName)
 }

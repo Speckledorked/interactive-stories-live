@@ -21,7 +21,7 @@ import {
   HarmLevel,
   PermanentInjury
 } from './harm'
-import { getArmorReduction } from './inventory'
+import { resolveArmorValue } from './inventory'
 import { applyCapabilityChanges } from './capabilities'
 import { applyDebtChanges } from './debts'
 import { applyStandingChanges } from './standing'
@@ -241,10 +241,12 @@ export async function applyWorldUpdates(
             let newIsAlive: boolean | undefined
             let harmMessages: string[] = []
 
-            // Apply harm damage (armor mitigates incoming damage)
+            // Apply harm damage (armor mitigates incoming damage) — prefers
+            // a structured armorValue on the matching inventory item over
+            // guessing from the equipped name string (see resolveArmorValue).
             if (pcChange.changes.harm_damage && pcChange.changes.harm_damage > 0) {
               const armorName = (character.equipment as any)?.armor || ''
-              const armorReduction = getArmorReduction(armorName)
+              const armorReduction = resolveArmorValue(character.inventory as any, armorName)
               const harmResult = applyHarm(
                 currentHarm as HarmLevel,
                 pcChange.changes.harm_damage,

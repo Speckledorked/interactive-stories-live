@@ -2,6 +2,10 @@
 // page. Surfaces everything that doesn't fit on the 5-item bottom nav:
 // Help, Tutorial, contextual Wiki/Admin links, and Log Out (previously
 // there was no reachable logout button anywhere in the redesigned app).
+//
+// variant="myth" (opt-in, used only by the two MythOS-redesign pages)
+// swaps the dark gradient drawer for a flat myth-surface one. Every other
+// consumer (via TavernHeader) keeps the unchanged default.
 
 'use client'
 
@@ -16,9 +20,12 @@ interface TavernMobileMenuProps {
   onClose: () => void
   campaignId?: string
   isAdmin?: boolean
+  variant?: 'tavern' | 'myth'
 }
 
-export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false }: TavernMobileMenuProps) {
+export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false, variant = 'tavern' }: TavernMobileMenuProps) {
+  const myth = variant === 'myth'
+
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -46,11 +53,21 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false 
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] bg-gradient-to-br from-tavern-800 to-tavern-950 border-r border-ember-900/40 shadow-2xl shadow-black/50 flex flex-col animate-slide-up">
-        <div className="flex items-center justify-between p-4 border-b border-ember-900/30">
-          <h2 className={`${displayFont.className} text-lg text-ember-100`}>Menu</h2>
-          <button onClick={onClose} className="p-2 -mr-2 text-ember-300/60 hover:text-ember-100 transition-colors" aria-label="Close menu">
+      <div className={myth ? 'absolute inset-0 bg-black/50 backdrop-blur-sm' : 'absolute inset-0 bg-black/70 backdrop-blur-sm'} onClick={onClose} />
+      <div
+        className={
+          myth
+            ? 'absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] bg-myth-surface-raised border-r border-myth-border shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)] flex flex-col animate-slide-up'
+            : 'absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] bg-gradient-to-br from-tavern-800 to-tavern-950 border-r border-ember-900/40 shadow-2xl shadow-black/50 flex flex-col animate-slide-up'
+        }
+      >
+        <div className={myth ? 'flex items-center justify-between p-4 border-b border-myth-border' : 'flex items-center justify-between p-4 border-b border-ember-900/30'}>
+          <h2 className={myth ? 'font-display text-lg text-myth-ink' : `${displayFont.className} text-lg text-ember-100`}>Menu</h2>
+          <button
+            onClick={onClose}
+            className={myth ? 'p-2 -mr-2 text-myth-ink-faint hover:text-myth-ink transition-colors' : 'p-2 -mr-2 text-ember-300/60 hover:text-ember-100 transition-colors'}
+            aria-label="Close menu"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -61,7 +78,11 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false 
               key={link.href}
               href={link.href}
               onClick={onClose}
-              className="flex items-center gap-3 px-4 py-3 text-ember-200/80 hover:text-ember-100 hover:bg-white/5 transition-colors"
+              className={
+                myth
+                  ? 'flex items-center gap-3 px-4 py-3 text-myth-ink-muted hover:text-myth-ink hover:bg-myth-surface-sunken transition-colors'
+                  : 'flex items-center gap-3 px-4 py-3 text-ember-200/80 hover:text-ember-100 hover:bg-white/5 transition-colors'
+              }
             >
               <link.icon className="w-5 h-5 flex-shrink-0" />
               <span>{link.label}</span>
@@ -69,10 +90,14 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false 
           ))}
         </nav>
 
-        <div className="border-t border-ember-900/30 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+        <div className={myth ? 'border-t border-myth-border p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]' : 'border-t border-ember-900/30 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]'}>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-wine-400 hover:text-wine-300 hover:bg-wine-900/10 transition-colors rounded-lg"
+            className={
+              myth
+                ? 'w-full flex items-center gap-3 px-4 py-3 text-myth-danger hover:bg-myth-danger/10 transition-colors rounded-lg'
+                : 'w-full flex items-center gap-3 px-4 py-3 text-wine-400 hover:text-wine-300 hover:bg-wine-900/10 transition-colors rounded-lg'
+            }
           >
             <LogOut className="w-5 h-5 flex-shrink-0" />
             <span>Log Out</span>

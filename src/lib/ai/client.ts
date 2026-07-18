@@ -204,9 +204,18 @@ export interface AIGMResponse {
         description?: string // what this quest is, for new quests
         objective?: string   // what "done" looks like
         given_by?: string    // NPC/faction that issued it
-        reward?: string      // what was promised, if anything
+        reward?: string      // what was promised, if anything (flavor text only — see reward_grant)
         status?: 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'ABANDONED'
         progress_append?: string // one beat of progress made THIS scene
+        // Structured payout, applied deterministically when status becomes
+        // COMPLETED this turn — the actual mechanism behind `reward` above.
+        // Only meaningful alongside status: 'COMPLETED'.
+        reward_grant?: {
+          character_names?: string[] // recipients; absent/empty = every living party member
+          gold?: number
+          items?: Array<{ id: string; name: string; quantity: number; tags: string[] }>
+          standing_changes?: Array<{ faction_name: string; delta: number; reason: string }>
+        }
       }
     }>
     organic_advancement?: Array<{
@@ -747,7 +756,7 @@ You MUST respond with a JSON object matching this structure:
     "quest_changes": [
       {"name": "The Missing Caravan", "is_new": true, "changes": {"description": "Merchants vanished on the north road", "objective": "Find the caravan and learn what took it", "given_by": "Guildmaster Oren", "reward": "200 gold and guild favor"}},
       {"name": "EXISTING_QUEST", "changes": {"progress_append": "Found wolf tracks that turn to bootprints at the river"}},
-      {"name": "ANOTHER_EXISTING_QUEST", "changes": {"status": "COMPLETED", "progress_append": "Delivered the ledger to the magistrate"}}
+      {"name": "ANOTHER_EXISTING_QUEST", "changes": {"status": "COMPLETED", "progress_append": "Delivered the ledger to the magistrate", "reward_grant": {"gold": 200, "standing_changes": [{"faction_name": "Merchants Guild", "delta": 1, "reason": "Delivered the ledger as promised"}]}}}
     ],
     "organic_advancement": [
       {"character_id": "CHARACTER_NAME", "new_moves": [{"name": "Read the Room", "trigger": "When you enter a tense negotiation", "description": "You always get one honest tell from the room before anyone speaks."}]}
@@ -933,6 +942,7 @@ REGISTER LOCATIONS: Whenever the characters visit or you describe a named place,
 TRACK QUESTS: Whenever the fiction hands the party a concrete job, goal, or promise with a "done" state — an NPC asks for help, a faction offers work, the party commits to a rescue/heist/investigation — register it in quest_changes with is_new: true (name, description, objective, given_by, reward if promised). Check the ACTIVE QUESTS list below first; only register genuinely new undertakings.
 - Every scene that meaningfully advances an active quest, add a progress_append beat for it (one sentence, concrete: what was learned/gained/lost)
 - When a quest resolves — success, failure, or the party walking away — set status to COMPLETED, FAILED, or ABANDONED, with a final progress_append saying how
+- When a quest is COMPLETED and a reward was promised, include reward_grant with the actual payout (gold, items, standing_changes) — this is what mechanically pays it out; the reward text alone is flavor and grants nothing by itself. Only include what was genuinely promised; omit reward_grant entirely if nothing concrete was owed
 - Vague ambitions ("get stronger", "explore the city") are NOT quests; only track things with a specific fictional endpoint
 
 TRACK PC LOCATION: Whenever a player character's physical location changes during this scene — walks into another room, leaves a building, travels to a new place, is moved/carried/dragged somewhere — set changes.location in that character's pc_changes entry to where they are NOW, matching the name you used in location_changes.

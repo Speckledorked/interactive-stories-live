@@ -217,7 +217,7 @@ export default function CampaignLobbyPage() {
 
   if (loading) {
     return (
-      <TavernPage>
+      <TavernPage background="myth">
         <TavernHeader backHref="/campaigns" title="Loading…" campaignId={campaignId} />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
           <TavernSpinner className="h-16 w-16" />
@@ -228,7 +228,7 @@ export default function CampaignLobbyPage() {
 
   if (error || !data) {
     return (
-      <TavernPage>
+      <TavernPage background="myth">
         <TavernHeader backHref="/campaigns" title="Campaign" campaignId={campaignId} />
         <main className="max-w-2xl mx-auto px-4 pt-28 pb-16">
           <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
@@ -251,7 +251,7 @@ export default function CampaignLobbyPage() {
   const tabIcons = { overview: Home, progression: Scroll, chat: MessageSquare, notes: StickyNote, maps: MapIcon } as const
 
   return (
-    <TavernPage>
+    <TavernPage background="myth">
       <TavernHeader
         backHref="/campaigns"
         title={campaign.title}

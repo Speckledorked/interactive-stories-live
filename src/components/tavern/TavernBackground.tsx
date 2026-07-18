@@ -1,9 +1,18 @@
-// Full-bleed candlelit-tavern backdrop shared by every redesigned page.
-// Background art lives at public/images/tavern-bg.jpg; the gradient
-// overlays stay on top of it to keep foreground text legible regardless
-// of how the image crops on a given viewport.
+// Full-bleed backdrop shared by every redesigned page.
+//
+// - 'tavern' (default): the candlelit-tavern art backdrop. Background art
+//   lives at public/images/tavern-bg.jpg; the gradient overlays stay on
+//   top of it to keep foreground text legible regardless of how the image
+//   crops on a given viewport. Always dark — every page still using it
+//   hardcodes ember-toned text tuned for that.
+// - 'myth': flat myth-canvas fill for pages migrated to the MythOS token
+//   system (src/app/campaigns/[id]/{page,admin/page}.tsx) — theme-adaptive
+//   instead of permanently dark, no image, no gradient (flat surfaces).
+export function TavernBackground({ variant = 'tavern' }: { variant?: 'tavern' | 'myth' }) {
+  if (variant === 'myth') {
+    return <div className="fixed inset-0 -z-10 bg-myth-canvas" />
+  }
 
-export function TavernBackground() {
   return (
     <div
       className="fixed inset-0 -z-10 bg-tavern-950 bg-cover bg-center"

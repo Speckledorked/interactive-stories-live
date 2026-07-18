@@ -841,7 +841,7 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <TavernPage>
+      <TavernPage background="myth">
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Admin" campaignId={campaignId} isAdmin />
         <main className="max-w-7xl mx-auto px-4 pt-28 pb-16 flex items-center justify-center">
           <AILoadingState />
@@ -884,7 +884,7 @@ export default function AdminPage() {
   ]
 
   return (
-    <TavernPage>
+    <TavernPage background="myth">
       <TavernHeader backHref={`/campaigns/${campaignId}`} title="Campaign Admin" campaignId={campaignId} isAdmin />
 
       <main className="max-w-7xl mx-auto px-4 pt-28 pb-28">

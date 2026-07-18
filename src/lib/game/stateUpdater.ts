@@ -25,6 +25,7 @@ import { getArmorReduction } from './inventory'
 import { applyCapabilityChanges } from './capabilities'
 import { applyDebtChanges } from './debts'
 import { applyStandingChanges } from './standing'
+import { applyQuestRewardGrant } from './questRewards'
 import {
   parseCorruptionTheme,
   applyCorruptionMarks,
@@ -951,6 +952,7 @@ export async function applyWorldUpdates(
                 ? `${existing.progressLog}\n${progressLine}`
                 : progressLine
             }
+            const justCompleted = changes.status === 'COMPLETED' && existing.status !== 'COMPLETED'
             if (changes.status && changes.status !== existing.status) {
               updateData.status = changes.status
               if (changes.status !== 'ACTIVE') updateData.resolvedAt = new Date()
@@ -958,6 +960,13 @@ export async function applyWorldUpdates(
             if (Object.keys(updateData).length > 0) {
               await tx.quest.update({ where: { id: existing.id }, data: updateData })
               console.log(`  🎯 Updated quest: ${existing.name}${changes.status ? ` (${changes.status})` : ''}`)
+            }
+            // Deterministic reward payout: only fires the first time this
+            // quest transitions to COMPLETED, never on a repeated report of
+            // an already-completed quest — see lib/game/questRewards.ts.
+            if (justCompleted && changes.reward_grant) {
+              const rewardLog = await applyQuestRewardGrant(tx, campaignId, existing.name, changes.reward_grant)
+              for (const line of rewardLog) console.log(`  🎁 ${line}`)
             }
           } else {
             await tx.quest.create({
@@ -974,6 +983,12 @@ export async function applyWorldUpdates(
               }
             })
             console.log(`  🎯 Registered quest: ${questChange.name}`)
+            // A quest can (rarely) be registered already-resolved in the same
+            // turn it's introduced — same deterministic payout either way.
+            if (changes.status === 'COMPLETED' && changes.reward_grant) {
+              const rewardLog = await applyQuestRewardGrant(tx, campaignId, questChange.name, changes.reward_grant)
+              for (const line of rewardLog) console.log(`  🎁 ${line}`)
+            }
           }
         }
       }

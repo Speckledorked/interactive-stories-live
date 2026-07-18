@@ -242,6 +242,18 @@ export const LocationChangesSchema = z.object({
   gm_notes_append: z.string().optional()
 })
 
+// Structured payout applied deterministically when a quest's status becomes
+// COMPLETED this turn (see lib/game/stateUpdater.ts) — `reward` above stays
+// free-form flavor text; this is what actually gets granted, the same way
+// pc_changes' resource/inventory/standing changes are structured rather than
+// left to a free-text description the code would have to guess at.
+export const RewardGrantSchema = z.object({
+  character_names: z.array(z.string()).optional(), // recipients; absent/empty = every living party member
+  gold: z.number().optional(),
+  items: z.array(InventoryItemSchema).optional(),
+  standing_changes: z.array(StandingChangeSchema).optional()
+})
+
 // Quest lifecycle schema (see lib/game/stateUpdater.ts quest handling)
 export const QuestChangeSchema = z.object({
   name: z.string(),
@@ -252,7 +264,8 @@ export const QuestChangeSchema = z.object({
     given_by: z.string().optional(),
     reward: z.string().optional(),
     status: z.enum(['ACTIVE', 'COMPLETED', 'FAILED', 'ABANDONED']).optional(),
-    progress_append: z.string().optional()
+    progress_append: z.string().optional(),
+    reward_grant: RewardGrantSchema.optional()
   })
 })
 

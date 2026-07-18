@@ -32,7 +32,11 @@ export async function POST(
       return rateLimitExceededResponse(rateLimit)
     }
 
-    // 1. Verify user is admin of this campaign
+    // 1. Verify user is a member of this campaign. Any member, not just
+    // the admin: there is no human GM in this product — the AI narrates,
+    // every human is a player, and story pacing (starting the next scene)
+    // belongs to the whole table. The admin role is reserved for genuine
+    // hosting duties (safety settings, bans, lore import, rescue tools).
     const membership = await prisma.campaignMembership.findUnique({
       where: {
         userId_campaignId: {
@@ -42,9 +46,9 @@ export async function POST(
       }
     })
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership) {
       return NextResponse.json<ErrorResponse>(
-        { error: 'Only campaign admins can start new scenes' },
+        { error: 'Not a member of this campaign' },
         { status: 403 }
       )
     }

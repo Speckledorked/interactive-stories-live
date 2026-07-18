@@ -131,7 +131,7 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
                 <div className="text-6xl mb-4">✅</div>
                 <h3 className="text-2xl font-bold text-ember-100 mb-2">X-Card Used</h3>
                 <p className="text-ember-200/70">
-                  The GM and other players have been notified. The scene will be adjusted.
+                  The rest of the table has been notified. The scene will be adjusted.
                 </p>
               </div>
             )}

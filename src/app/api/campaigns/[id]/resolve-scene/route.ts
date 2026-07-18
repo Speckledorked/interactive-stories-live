@@ -61,7 +61,7 @@ export async function POST(
     const userMembership = campaign.memberships.find(m => m.userId === user.userId)
     if (!userMembership || userMembership.role !== 'ADMIN') {
       return NextResponse.json<ErrorResponse>(
-        { error: 'Only campaign admins can resolve scenes' },
+        { error: 'Only the campaign host can force-resolve a scene (normal resolution happens automatically once everyone has acted)' },
         { status: 403 }
       )
     }
@@ -126,7 +126,7 @@ export async function POST(
       success: true,
       message: deduped
         ? 'Scene resolution already in progress'
-        : 'Scene resolution started — results will appear when the GM finishes',
+        : 'Scene resolution started — results will appear when the AI GM finishes',
       jobId,
       sceneNumber: currentScene.sceneNumber
     }, { status: 202 })

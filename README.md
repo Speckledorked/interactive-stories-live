@@ -209,6 +209,13 @@ round's Known Issues list, all shipped in one pass:
 - Character creation now shows the existing party's current location(s) next to the Starting Location field and defaults to match when they agree, instead of an unprompted blank field with nothing keeping a new character in sync with the rest of the party
 - No new schema and no "merge scenes" mechanic: ending both split scenes and starting a Full Party one already works with the existing creation flow
 
+**Everyone's a player — removed the accidental human-GM role** — the product's design is AI-GM-only, but the codebase had quietly grown a second, human GM out of the ADMIN membership flag: only admins could start scenes, end scenes, enable turn order, use the split-party prompt, or create maps, and non-admins saw "Waiting for the GM to start a scene."
+- Story pacing now belongs to the whole table: any member can start the next scene, end a scene, enable/end turn order, use the split-party prompt, and create maps — the AI is the only GM
+- Deliberate billing consequence, accepted and surfaced in the UI: the member who ends a scene pays its metered AI bill, so any player can be the payer, not only the admin
+- The admin role shrank to genuine **hosting**: safety settings, bans, reports queue, lore import, AI/simulation settings, invites, and rescue tools (force-resolve, reset stuck scenes, resume after an X-Card, skipping *another* player's turn) — things that override or protect other players, not story control
+- All player-facing copy rewritten so "GM" only ever means the AI and the human role is "the campaign host" ("Waiting for the GM…" is gone entirely; "GM Controls" → "Scene Controls"; `TurnTracker`'s `isGM` prop → `isHost`)
+- Found along the way: help/tutorial copy advertised "GM-only" notes, a visibility tier the notes UI doesn't actually offer (it's private/shared only) — copy corrected to match reality
+
 **Mechanical spine (Foundation + Phase 0–1)**
 - Knowledge-relative capability sheets with deterministic arc-capped growth and per-character narration knowledge-gating
 - Server-rolled 2d6 move resolution binding the narration; opt-in transparency panel

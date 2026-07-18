@@ -60,17 +60,17 @@ export async function POST(
 
     const campaignId = params.id
 
-    // Verify user is admin of the campaign (only admins can create maps)
+    // Any member can create maps — shared table content, not a GM power
+    // (there is no human GM in this product; every human is a player).
     const membership = await prisma.campaignMembership.findFirst({
       where: {
         campaignId,
         userId: user.userId,
-        role: 'ADMIN'
       }
     })
 
     if (!membership) {
-      return NextResponse.json({ error: 'Only campaign admins can create maps' }, { status: 403 })
+      return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
     }
 
     const body = await request.json()

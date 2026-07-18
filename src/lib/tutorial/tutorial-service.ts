@@ -226,7 +226,7 @@ export class TutorialService {
         contentBlocks: [
           {
             type: 'text',
-            content: 'Create notes to remember NPCs, clues, or plot points. Notes can be private, GM-only, or shared.',
+            content: 'Create notes to remember NPCs, clues, or plot points. Notes can be private or shared with the whole campaign.',
           },
         ],
         completionTrigger: 'note_created',
@@ -248,7 +248,7 @@ export class TutorialService {
           },
           {
             type: 'tip',
-            content: 'The GM can turn on an optional turn order for a scene that wants it, without changing how you submit actions.',
+            content: 'Any player can turn on an optional turn order for a scene that wants it, without changing how you submit actions.',
           },
         ],
         completionTrigger: 'combat_action_submitted',

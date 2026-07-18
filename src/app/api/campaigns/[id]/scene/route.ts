@@ -201,7 +201,7 @@ export async function POST(
     // until a GM/admin resumes the scene.
     if (scene.isPaused) {
       return NextResponse.json<ErrorResponse>(
-        { error: 'This scene is paused for a safety check-in. A GM must resume it before play continues.' },
+        { error: 'This scene is paused for a safety check-in. The campaign host must resume it before play continues.' },
         { status: 423 }
       )
     }
@@ -229,18 +229,19 @@ export async function POST(
       }
     }
 
-    // Enforce the GM's explicit participant list, if this scene was
-    // scoped to specific characters at creation (a Character-Focused or
-    // split-party scene — see start-scene/route.ts). scene.participants
-    // is null for a genuinely open scene, where the dynamic "add as they
-    // act" behavior below is correct and intended; only a scene created
-    // WITH a non-empty characterIds list is closed to anyone else.
+    // Enforce the scene's explicit participant list, if it was scoped to
+    // specific characters at creation (a Character-Focused or split-party
+    // scene — see start-scene/route.ts; any player can start one).
+    // scene.participants is null for a genuinely open scene, where the
+    // dynamic "add as they act" behavior below is correct and intended;
+    // only a scene created WITH a non-empty characterIds list is closed
+    // to anyone else.
     const sceneParticipants = (scene.participants as any) || { characterIds: [], userIds: [] }
     if (scene.participants && sceneParticipants.characterIds.length > 0 && !sceneParticipants.characterIds.includes(characterId)) {
       return NextResponse.json<ErrorResponse>(
         {
           error: 'This character is not part of this scene',
-          details: 'The GM started this scene for specific characters only.'
+          details: 'This scene was started for specific characters only.'
         },
         { status: 403 }
       )

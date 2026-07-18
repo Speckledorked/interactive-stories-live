@@ -100,11 +100,13 @@ export async function POST(
         break;
 
       case 'skip':
-        // Only allow GMs/admins to skip turns
+        // Skipping someone ELSE'S turn stays host-only — it's the one
+        // turn-order control that overrides another player rather than
+        // driving your own participation, i.e. moderation, not GM-ing.
         if (membership.role !== 'ADMIN') {
-          return NextResponse.json({ error: 'Only campaign admins can skip turns' }, { status: 403 });
+          return NextResponse.json({ error: 'Only the campaign host can skip another player\'s turn' }, { status: 403 });
         }
-        result = await TurnTracker.skipTurn(params.id, sceneId, 'Skipped by GM');
+        result = await TurnTracker.skipTurn(params.id, sceneId, 'Skipped by the host');
         break;
     }
 
@@ -159,17 +161,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Scene ID required' }, { status: 400 });
     }
 
-    // Verify user is admin of campaign
+    // Any member can end turn tracking, matching who can enable it —
+    // turn order is an advisory table-level convention, not a GM power
+    // (there is no human GM in this product; every human is a player).
     const membership = await prisma.campaignMembership.findFirst({
       where: {
         userId: user.userId,
         campaignId: params.id,
-        role: 'ADMIN'
       },
     });
 
     if (!membership) {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+      return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 });
     }
 
     await TurnTracker.endScene(params.id, sceneId);

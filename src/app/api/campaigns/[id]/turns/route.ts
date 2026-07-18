@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
 import { TurnTracker } from '@/lib/notifications/turn-tracker';
+import { pusherServer } from '@/lib/pusher';
 
 // GET /api/campaigns/[id]/turns - Get current turn info
 export async function GET(
@@ -107,9 +108,20 @@ export async function POST(
         break;
     }
 
-    return NextResponse.json({ 
+    // Broadcast the fresh turn state so every connected client's turn
+    // tracker updates live, the same real-time pattern action:created and
+    // the other campaign channel events already use — without this, a
+    // player only sees whose turn it is after reloading the page.
+    try {
+      const freshTurnInfo = await TurnTracker.getCurrentTurn(params.id, sceneId);
+      await pusherServer.trigger(`campaign-${params.id}`, 'turn-update', freshTurnInfo);
+    } catch (pusherError) {
+      console.error('Failed to broadcast turn update (non-critical):', pusherError);
+    }
+
+    return NextResponse.json({
       message: `Turn ${action}d successfully`,
-      result 
+      result
     });
 
   } catch (error) {
@@ -161,6 +173,14 @@ export async function DELETE(
     }
 
     await TurnTracker.endScene(params.id, sceneId);
+
+    // Null payload tells every connected client's turn tracker there's
+    // nothing to show anymore — see the POST handler's broadcast above.
+    try {
+      await pusherServer.trigger(`campaign-${params.id}`, 'turn-update', null);
+    } catch (pusherError) {
+      console.error('Failed to broadcast turn end (non-critical):', pusherError);
+    }
 
     return NextResponse.json({ message: 'Turn tracking ended for scene' });
 

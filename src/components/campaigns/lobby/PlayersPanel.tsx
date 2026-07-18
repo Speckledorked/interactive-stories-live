@@ -26,7 +26,7 @@ export function PlayersPanel({
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-display text-lg font-semibold text-myth-ink">Players ({memberships.length})</h2>
         {isAdmin && (
-          <button type="button" onClick={onInvite} className="text-sm text-myth-ink-muted hover:text-myth-ink" title="Invite players">
+          <button id="invite-button" type="button" onClick={onInvite} className="text-sm text-myth-ink-muted hover:text-myth-ink" title="Invite players">
             + Invite
           </button>
         )}

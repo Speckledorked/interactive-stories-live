@@ -148,7 +148,8 @@ export default function HelpPage() {
               </div>
               <p className="text-sm text-ember-300/60 leading-relaxed">
                 Combat is narrative by default. Describe your actions naturally, and the AI GM
-                will narrate the outcome. No strict turn order—actions happen simultaneously.
+                will narrate the outcome. Everyone can act at the same time — no waiting your turn,
+                unless the GM turns on optional turn order for a scene.
               </p>
             </div>
 
@@ -172,7 +173,9 @@ export default function HelpPage() {
           <h2 className="text-3xl font-bold text-ember-100 mb-6">Features</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
-              { icon: '💬', title: 'Chat', desc: 'In-character (IC) and out-of-character (OOC) chat to communicate with other players' },
+              { icon: '👥', title: 'Invite Your Party', desc: 'No cap on how many players can join a campaign — share an invite link from the Players panel and everyone plays together' },
+              { icon: '💬', title: 'Chat', desc: 'Real-time in-character (IC) and out-of-character (OOC) chat to talk with the other real players in your campaign' },
+              { icon: '🎲', title: 'Turn Order', desc: 'Play is simultaneous by default — everyone acts anytime. A GM can turn on an optional turn queue for a scene that wants it' },
               { icon: '📝', title: 'Notes', desc: 'Take private, GM-only, or shared notes to track NPCs, clues, and plot points' },
               { icon: '🗺️', title: 'Maps', desc: 'AI-generated tactical maps with zones and character tokens' },
               { icon: '📚', title: 'Wiki', desc: 'Track NPCs, factions, and progress clocks automatically updated by the AI' },
@@ -219,6 +222,16 @@ export default function HelpPage() {
               <p className="text-sm text-ember-300/60 leading-relaxed">
                 Define hard boundaries (lines - won't appear) and soft boundaries
                 (veils - happen off-screen) in campaign safety settings.
+              </p>
+            </div>
+
+            <div className="h-px bg-ember-900/30"></div>
+
+            <div>
+              <h3 className="font-bold text-ember-100 mb-2 text-lg">Block & Report</h3>
+              <p className="text-sm text-ember-300/60 leading-relaxed">
+                Any player can block another player in a campaign, and report content to admins —
+                on you, not just the GM, to keep the table comfortable.
               </p>
             </div>
           </div>

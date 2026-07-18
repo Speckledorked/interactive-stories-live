@@ -1,4 +1,11 @@
 // src/components/turns/TurnTracker.tsx
+// Advisory turn-order queue for a scene — a GM opt-in layer alongside the
+// campaign's real action-collection mechanism (ExchangeManager, which
+// tracks who has/hasn't submitted via Scene.waitingOnUsers). This never
+// gates or blocks action submission: anyone can still act anytime, exactly
+// as before. It only shows whose turn the GM/party agreed it is, with a
+// timer and an advance/skip queue — see lib/notifications/turn-tracker.ts's
+// doc comments for why it deliberately never touches Scene.waitingOnUsers.
 
 'use client';
 
@@ -33,9 +40,9 @@ interface TurnTrackerProps {
   isGM?: boolean;
 }
 
-export default function TurnTracker({ 
-  campaignId, 
-  sceneId, 
+export default function TurnTracker({
+  campaignId,
+  sceneId,
   currentUserId,
   isGM = false
 }: TurnTrackerProps) {
@@ -47,10 +54,10 @@ export default function TurnTracker({
   useEffect(() => {
     fetchTurnInfo();
     setupRealtimeSubscription();
-    
+
     // Update timer every second
     const timer = setInterval(updateTimeRemaining, 1000);
-    
+
     return () => {
       clearInterval(timer);
       cleanup();
@@ -115,11 +122,11 @@ export default function TurnTracker({
 
   const updateTimeRemaining = () => {
     if (!turnInfo?.turnDeadline) return;
-    
+
     const deadline = new Date(turnInfo.turnDeadline).getTime();
     const now = new Date().getTime();
     const remaining = Math.max(0, deadline - now);
-    
+
     setTimeRemaining(remaining);
   };
 
@@ -152,7 +159,7 @@ export default function TurnTracker({
 
   const skipTurn = async () => {
     if (!isGM) return;
-    
+
     if (!confirm('Skip the current player\'s turn?')) {
       return;
     }
@@ -191,58 +198,66 @@ export default function TurnTracker({
 
   const getUrgencyColor = (ms: number): string => {
     const minutes = ms / (1000 * 60);
-    if (minutes <= 1) return 'text-red-600 bg-red-50 border-red-200';
-    if (minutes <= 5) return 'text-orange-600 bg-orange-50 border-orange-200';
-    if (minutes <= 15) return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-    return 'text-green-600 bg-green-50 border-green-200';
+    if (minutes <= 1) return 'text-wine-400';
+    if (minutes <= 5) return 'text-orange-400';
+    if (minutes <= 15) return 'text-yellow-400';
+    return 'text-success-400';
+  };
+
+  const getProgressBarColor = (ms: number): string => {
+    const minutes = ms / (1000 * 60);
+    if (minutes <= 1) return 'bg-wine-500';
+    if (minutes <= 5) return 'bg-orange-500';
+    if (minutes <= 15) return 'bg-yellow-500';
+    return 'bg-success-500';
   };
 
   const getProgressPercentage = (): number => {
     if (!turnInfo?.turnDeadline || !turnInfo?.turnStartedAt) return 100;
-    
+
     const start = new Date(turnInfo.turnStartedAt).getTime();
     const end = new Date(turnInfo.turnDeadline).getTime();
     const now = new Date().getTime();
     const total = end - start;
     const elapsed = now - start;
-    
+
     return Math.min(100, Math.max(0, (elapsed / total) * 100));
   };
 
   if (!turnInfo) {
     return (
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <div className="text-center text-gray-500">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400 mx-auto mb-2"></div>
-          <p className="text-sm">Loading turn information...</p>
+      <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+        <div className="text-center text-ember-400/50">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-ember-600/40 mx-auto mb-2"></div>
+          <p className="text-sm">Loading turn order…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-5 border-b border-ember-900/30">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Turn Tracker</h3>
-          <div className="text-sm text-gray-500">
+          <h3 className="text-sm font-bold text-ember-300/60 uppercase tracking-wide">Turn Order</h3>
+          <div className="text-xs text-ember-400/50">
             Turn {turnInfo.turnIndex + 1} of {turnInfo.totalPlayers}
           </div>
         </div>
       </div>
 
       {/* Current Turn Info */}
-      <div className="p-4">
+      <div className="p-5">
         <div className={`border rounded-lg p-4 mb-4 ${
-          isMyTurn ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+          isMyTurn ? 'bg-ember-600/15 border-ember-500/40' : 'bg-black/20 border-ember-900/20'
         }`}>
           <div className="flex items-center justify-between mb-3">
             <div>
-              <div className="font-medium text-gray-900">
+              <div className="font-medium text-ember-100">
                 {isMyTurn ? '🎯 Your Turn!' : `Waiting for ${turnInfo.currentPlayer.name}`}
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-ember-300/60">
                 {turnInfo.currentPlayer.name}
               </div>
             </div>
@@ -250,18 +265,14 @@ export default function TurnTracker({
               <div className="font-mono text-lg font-bold">
                 {formatTimeRemaining(timeRemaining)}
               </div>
-              <div className="text-xs">remaining</div>
+              <div className="text-xs opacity-70">remaining</div>
             </div>
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-            <div 
-              className={`h-2 rounded-full transition-all duration-1000 ${
-                timeRemaining <= 60000 ? 'bg-red-500' :
-                timeRemaining <= 300000 ? 'bg-orange-500' :
-                timeRemaining <= 900000 ? 'bg-yellow-500' : 'bg-green-500'
-              }`}
+          <div className="w-full bg-black/30 rounded-full h-2 mb-3">
+            <div
+              className={`h-2 rounded-full transition-all duration-1000 ${getProgressBarColor(timeRemaining)}`}
               style={{ width: `${100 - getProgressPercentage()}%` }}
             />
           </div>
@@ -271,20 +282,16 @@ export default function TurnTracker({
             {showAdvanceButton && (
               <button
                 onClick={advanceTurn}
-                className={`px-4 py-2 rounded-md text-sm font-medium ${
-                  isMyTurn 
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-gray-600 text-white hover:bg-gray-700'
-                }`}
+                className="btn-primary py-2 px-4 text-sm"
               >
                 {isMyTurn ? 'End My Turn' : 'Advance Turn'}
               </button>
             )}
-            
+
             {isGM && (
               <button
                 onClick={skipTurn}
-                className="px-4 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700"
+                className="btn-secondary py-2 px-4 text-sm"
               >
                 Skip Turn
               </button>
@@ -294,32 +301,32 @@ export default function TurnTracker({
 
         {/* Turn Order */}
         <div>
-          <h4 className="font-medium text-gray-900 mb-2">Turn Order</h4>
+          <h4 className="text-xs font-bold text-ember-300/60 uppercase tracking-wide mb-2">Order</h4>
           <div className="space-y-1">
             {turnInfo.turnOrder.map((player, index) => (
               <div
                 key={`${player.userId}-${index}`}
                 className={`flex items-center justify-between p-2 rounded ${
-                  index === turnInfo.turnIndex 
-                    ? 'bg-blue-100 border border-blue-200'
-                    : 'bg-gray-50'
+                  index === turnInfo.turnIndex
+                    ? 'bg-ember-600/15 border border-ember-500/30'
+                    : 'bg-black/15'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${
-                    index === turnInfo.turnIndex ? 'bg-blue-500' : 'bg-gray-300'
+                  <div className={`w-2 h-2 rounded-full ${
+                    index === turnInfo.turnIndex ? 'bg-ember-400' : 'bg-ember-900/50'
                   }`} />
-                  <span className="text-sm font-medium text-gray-900">
+                  <span className="text-sm font-medium text-ember-100">
                     {player.name}
                   </span>
                   {player.isNPC && (
-                    <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">
+                    <span className="text-xs bg-black/30 text-ember-400/60 px-2 py-0.5 rounded">
                       NPC
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-gray-500">
-                  {index < turnInfo.turnIndex ? '✓' : 
+                <div className="text-xs text-ember-400/50">
+                  {index < turnInfo.turnIndex ? '✓' :
                    index === turnInfo.turnIndex ? '⏳' : '⏸️'}
                 </div>
               </div>

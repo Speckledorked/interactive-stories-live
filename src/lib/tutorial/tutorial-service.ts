@@ -179,11 +179,29 @@ export class TutorialService {
 
       // Chat & Communication
       {
+        stepKey: 'invite_players',
+        title: 'Invite Your Party',
+        description: 'Bring other players into your campaign',
+        category: 'social',
+        orderIndex: 8,
+        prerequisites: ['scene_resolution'],
+        targetElement: '#invite-button',
+        tooltipPosition: 'bottom',
+        contentBlocks: [
+          {
+            type: 'text',
+            content: 'No cap on how many players can join. Click "+ Invite" in the Players panel to generate a shareable link — anyone who opens it can join your campaign.',
+          },
+        ],
+        completionTrigger: 'invite_created',
+        isOptional: true,
+      },
+      {
         stepKey: 'chat_basics',
         title: 'Using Chat',
         description: 'Communicate with other players',
         category: 'social',
-        orderIndex: 8,
+        orderIndex: 9,
         prerequisites: ['scene_resolution'],
         targetElement: '#chat-panel',
         tooltipPosition: 'left',
@@ -201,7 +219,7 @@ export class TutorialService {
         title: 'Taking Notes',
         description: 'Keep track of important information',
         category: 'social',
-        orderIndex: 9,
+        orderIndex: 10,
         prerequisites: ['scene_resolution'],
         targetElement: '#notes-panel',
         tooltipPosition: 'left',
@@ -221,16 +239,16 @@ export class TutorialService {
         title: 'Combat Basics',
         description: 'Learn how combat works',
         category: 'combat',
-        orderIndex: 10,
+        orderIndex: 11,
         prerequisites: ['scene_resolution'],
         contentBlocks: [
           {
             type: 'text',
-            content: 'Combat is freeform by default - no strict turn order. Describe your actions naturally.',
+            content: 'Combat is simultaneous by default - everyone acts at once, no waiting your turn. Describe your actions naturally.',
           },
           {
             type: 'tip',
-            content: 'The AI GM can switch to structured combat if needed for complex battles.',
+            content: 'The GM can turn on an optional turn order for a scene that wants it, without changing how you submit actions.',
           },
         ],
         completionTrigger: 'combat_action_submitted',
@@ -241,7 +259,7 @@ export class TutorialService {
         title: 'Zone Positioning',
         description: 'Understand tactical positioning',
         category: 'combat',
-        orderIndex: 11,
+        orderIndex: 12,
         prerequisites: ['combat_intro'],
         contentBlocks: [
           {
@@ -259,7 +277,7 @@ export class TutorialService {
         title: 'Character Moves',
         description: 'Learn about special moves',
         category: 'advanced',
-        orderIndex: 12,
+        orderIndex: 13,
         prerequisites: ['dice_roll'],
         contentBlocks: [
           {
@@ -275,7 +293,7 @@ export class TutorialService {
         title: 'Character Growth',
         description: 'Understand experience and advancement',
         category: 'advanced',
-        orderIndex: 13,
+        orderIndex: 14,
         prerequisites: ['scene_resolution'],
         contentBlocks: [
           {

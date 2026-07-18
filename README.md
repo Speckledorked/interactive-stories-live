@@ -140,9 +140,8 @@ differentiators are the Debt/standing bridge to a live simulation (no
 comparator in the report does this), fog-of-war enforced at the API layer
 (not just prompted away), and full safety tooling (not benchmarked for any
 platform in the report, MythOS included). Its two genuinely correct findings
-are folded in below. `#22` (de-jargon) shipped — see Shipped below.
+are folded in below. `#22` (de-jargon) and `#23` (surface multiplayer) shipped — see Shipped below.
 
-- [ ] **#23 Surface the multiplayer story MythOS already tells** — no player cap, a real turn tracker, live chat, per-player block/report already beat the report's read of "Partial." Marketing/onboarding gap, not an engineering one.
 - [ ] **#24 Decide, on purpose, whether dice stay opt-in** — re-run the "mechanics invisible by default" decision against real playtest feedback now that the Debt/standing/harm economy is live.
 - [ ] **#25 Scene illustration** — one generated image per resolved scene; async resolution already keeps cost/latency off the request path.
 - [ ] **#26 Shareable session recaps** — package a resolved scene or short arc as a social-media-sized card, building on the existing chronicle share link.
@@ -193,6 +192,13 @@ round's Known Issues list, all shipped in one pass:
 - Rewrote the help page's and onboarding tutorial's "Powered by the Apocalypse (PbtA)" callouts in plain language
 - Retitled character-sheet/creation-form section labels to read correctly regardless of universe: "Debts & Enemies" → "Obligations & Rivals", "Promises & Oaths" → "Promises Made", "Debts & Favors Owed" → "Debts Owed", "Obligations & Favors" → "Obligations", "Moves"/"Moves Learned" → "Abilities"/"Abilities Learned"
 - Found along the way: the campaign-creation modal's "X moves" badges were stale leftovers from the per-template `defaultMoves` concept `#38` retired — removed them rather than reword them, since the number no longer corresponded to anything real
+
+**Surfaced the multiplayer story, and fixed one that wasn't real (`#23`)** — investigating turned up something bigger than the "marketing gap" the roadmap assumed:
+- **Discovered mid-investigation**: the "real turn tracker" the scorecard referenced was dead code — `TurnTracker.initializeScene()` was never called from any UI, `<TurnTracker/>` was imported but never rendered anywhere, and the component's server-side Pusher events (`turn-update`, `turn-reminder`) were never triggered by anything. No player could ever have used it.
+- Wired it up for real, advisory-only: a GM can now enable an opt-in turn queue for a scene (`story/page.tsx`'s "Enable turn order"), rendered live via `<TurnTracker/>` — but it never gates or blocks action submission, which stays exactly as simultaneous as it's always been. `lib/notifications/turn-tracker.ts` no longer writes to `Scene.waitingOnUsers`, the field the real (and separate) `ExchangeManager` simultaneous-submission tracker owns — the two systems could otherwise have overwritten each other's state
+- Added the missing `pusher.trigger('turn-update', ...)` broadcasts to the `/turns` API route so every connected client's turn tracker actually updates live instead of only on page reload
+- Restyled `TurnTracker.tsx` from its original light-mode palette (`bg-white`, `text-gray-900`) to the app's dark tavern theme — it had never been touched since being built, so it visually didn't match anything else in the product
+- Help page and onboarding tutorial: added Invite/Turn Order feature callouts, fixed the now-inaccurate "no strict turn order" copy, documented block/report under Safety Tools, added an `invite_players` tutorial step
 
 **Mechanical spine (Foundation + Phase 0–1)**
 - Knowledge-relative capability sheets with deterministic arc-capped growth and per-character narration knowledge-gating

@@ -40,6 +40,16 @@ export const EquipmentChangeSchema = z.object({
   value: z.string()
 })
 
+// A consumable item's mechanical payoff when used — see
+// InventoryItem.effect's doc comment in lib/game/inventory.ts. 'heal' is
+// the only kind the engine enforces (via resolveConsumableHeal); 'custom'
+// is deliberately flavor-only.
+export const InventoryItemEffectSchema = z.object({
+  kind: z.enum(['heal', 'custom']),
+  amount: z.number().min(0).max(6).optional(), // required for 'heal', ignored for 'custom'
+  description: z.string()
+})
+
 // Inventory item schema
 export const InventoryItemSchema = z.object({
   id: z.string(),
@@ -51,7 +61,13 @@ export const InventoryItemSchema = z.object({
   // place of guessing one from the name string — see
   // lib/game/inventory.ts's resolveArmorValue. Optional; most items (and
   // all non-armor items) simply omit it.
-  armorValue: z.number().min(0).max(3).optional()
+  armorValue: z.number().min(0).max(3).optional(),
+  // Broad display categorization — purely informational, see
+  // lib/game/inventory.ts's doc comment.
+  itemType: z.enum(['weapon', 'armor', 'consumable', 'quest', 'currency', 'misc']).optional(),
+  // Symmetric to armorValue, for weapons — see resolveDamageBonus.
+  damageBonus: z.number().min(0).max(3).optional(),
+  effect: InventoryItemEffectSchema.optional()
 })
 
 // Knowledge-relative capability change schema. The AI signals WHAT the
@@ -189,7 +205,18 @@ export const NPCChangesSchema = z.object({
     // New or updated long-term goal. Set this for a new NPC's starting goal,
     // or to give an existing major NPC a fresh direction after their
     // previous goal completed (see the "goalCompleted" world event).
-    goals: z.string().optional()
+    goals: z.string().optional(),
+    // Minimal harm tracking (see NPC.harm in schema.prisma) — mirrors
+    // pc_changes.harm_damage, applied via the same applyHarm(). This is
+    // the only place a PC's weapon damageBonus has an honest target: an
+    // NPC has no equivalent of a defender's armor, so there's no
+    // reduction side to this, only the attacker's bonus.
+    harm_damage: z.number().min(0).max(6).optional(),
+    // Optional: names the PC whose action dealt this damage, so their
+    // equipped weapon's damage bonus (lib/game/inventory.ts's
+    // resolveDamageBonus) applies. Omitted just means no weapon bonus —
+    // never a broken update.
+    harm_damage_dealt_by: z.string().optional()
   })
 })
 

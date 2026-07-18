@@ -16,6 +16,33 @@ export interface InventoryItem {
   // keyword heuristic — an item with no structured value behaves exactly
   // as it did before this field existed.
   armorValue?: number
+  // Broad display categorization — surfaced by itemRegistry.ts's wiki
+  // aggregation. Purely informational: nothing below keys off itemType
+  // itself, only off armorValue/damageBonus/effect directly, so a
+  // miscategorized item never breaks a mechanic, just a label.
+  itemType?: 'weapon' | 'armor' | 'consumable' | 'quest' | 'currency' | 'misc'
+  // Structured mechanical identity for weapons, symmetric to armorValue:
+  // when set, the exact damage bonus (0-3) this item grants when equipped,
+  // used in place of guessing one from the name string (see
+  // resolveDamageBonus below).
+  damageBonus?: number
+  // A consumable's mechanical payoff when it's actually consumed (see
+  // resolveConsumableHeal and its call site in stateUpdater.ts's
+  // inventory_changes handling). 'heal' is the only kind currently
+  // enforced by the engine — its amount is applied deterministically the
+  // instant the item is used (items_remove, or a negative items_modify
+  // delta), regardless of what the AI separately narrates. 'custom' is
+  // deliberately NOT enforced: it lets an item carry flavor text for an
+  // effect that doesn't fit 'heal' (a charm against one specific curse, a
+  // key that opens one specific door) without implying the engine acts on
+  // it — only `description` is ever shown. Don't add a new `kind` here
+  // without also adding real enforcement for it; an inert kind is exactly
+  // the "looks wired, isn't" problem this field exists to avoid.
+  effect?: {
+    kind: 'heal' | 'custom'
+    amount?: number // required for 'heal'; ignored (and may be omitted) for 'custom'
+    description: string
+  }
 }
 
 /**
@@ -163,4 +190,64 @@ export function resolveArmorValue(
     return Math.max(0, Math.min(3, item.armorValue))
   }
   return getArmorReduction(armorName)
+}
+
+/**
+ * Derive a rough damage bonus (0-3) from a weapon name string, mirroring
+ * getArmorReduction's keyword heuristic. Most ordinary weapons get no
+ * bonus at all — this only rewards names that clearly signal something
+ * exceptional, so a plain "sword" or "bow" behaves exactly as it did
+ * before this field existed:
+ *   0 – ordinary/unrecognised weapon
+ *   1 – heavy or two-handed weapon (greatsword, warhammer, maul, ...)
+ *   2 – masterwork, enchanted, or legendary craftsmanship
+ */
+export function getWeaponDamageBonus(weaponName: string | null | undefined): number {
+  if (!weaponName) return 0
+  const lower = weaponName.toLowerCase()
+
+  // Explicit "(+X damage)" description pattern takes priority
+  const explicit = lower.match(/\(\+?(\d+)\s*damage\)/)
+  if (explicit) return Math.min(3, parseInt(explicit[1], 10))
+
+  // Masterwork/magical/legendary craftsmanship
+  if (/\b(legendary|artifact|masterwork|enchanted|magical?)\b/.test(lower)) return 2
+  // Heavy or two-handed weapons
+  if (/\b(greatsword|great[\s-]axe|warhammer|maul|zweihander|two[\s-]handed|heavy)\b/.test(lower)) return 1
+
+  return 0
+}
+
+/**
+ * Resolve the damage bonus a character's equipped weapon actually grants,
+ * preferring a structured damageBonus on the matching inventory item over
+ * guessing from the name string — same relationship resolveArmorValue has
+ * to getArmorReduction.
+ */
+export function resolveDamageBonus(
+  inv: CharacterInventory | null | undefined,
+  weaponName: string | null | undefined
+): number {
+  if (!weaponName) return 0
+  const item = inv?.items?.find(i => i.name.toLowerCase() === weaponName.toLowerCase())
+  if (item && typeof item.damageBonus === 'number' && Number.isFinite(item.damageBonus)) {
+    return Math.max(0, Math.min(3, item.damageBonus))
+  }
+  return getWeaponDamageBonus(weaponName)
+}
+
+/**
+ * How much harm a consumable's 'heal' effect actually restores, scaled by
+ * how many units were consumed at once (e.g. drinking 2 potions from a
+ * stack in one action — see stateUpdater.ts's items_modify handling).
+ * Returns 0 for anything that isn't a 'heal' effect, including 'custom',
+ * which is deliberately flavor-only (see InventoryItem.effect's doc
+ * comment) — this function is the one and only place 'heal' is enforced.
+ */
+export function resolveConsumableHeal(
+  item: InventoryItem | null | undefined,
+  unitsUsed: number = 1
+): number {
+  if (!item?.effect || item.effect.kind !== 'heal' || !item.effect.amount) return 0
+  return Math.max(0, item.effect.amount) * Math.max(1, unitsUsed)
 }

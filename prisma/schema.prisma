@@ -662,6 +662,16 @@ model NPC {
   importance      Int     @default(1)
   gmNotes         String?
 
+  // Minimal harm tracking (depth-hardening item-scope follow-up — see
+  // README), mirroring Character.harm's 0-6 track but without the fuller
+  // PC machinery (conditions/death-saves/permanent-injury): a weapon's
+  // damage only has somewhere honest to land if the target it's dealt to
+  // can actually take damage. stateUpdater.ts applies npc_changes'
+  // harm_damage here via the same applyHarm() PCs use, and flips isAlive
+  // false at 6 (Taken Out) — never flips it back true; NPC "recovery" is
+  // narrative, not tracked.
+  harm Int @default(0)
+
   // Fog of war: defaults true so existing/starting-world NPCs and any NPC
   // the AI introduces mid-scene (which is itself the discovery event) stay
   // visible without extra steps. Set false to build an NPC into the world

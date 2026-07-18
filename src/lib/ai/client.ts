@@ -46,6 +46,13 @@ export interface AIGMResponse {
         // fresh direction for an existing major NPC whose previous goal
         // just completed.
         goals?: string
+        // Minimal harm tracking (see NPC.harm in schema.prisma) — mirrors
+        // pc_changes.harm_damage below, applied via the same engine harm math.
+        harm_damage?: number
+        // Names the PC whose action dealt this damage, so their equipped
+        // weapon's damage bonus applies. Omit for damage with no clear
+        // attacking PC (a trap, another NPC, an environmental hazard).
+        harm_damage_dealt_by?: string
       }
     }>
     pc_changes?: Array<{
@@ -105,6 +112,14 @@ export interface AIGMResponse {
             // used in place of guessing one from the name string when this
             // item is equipped (see lib/game/inventory.ts's resolveArmorValue).
             armorValue?: number
+            // Broad display categorization — purely informational.
+            itemType?: 'weapon' | 'armor' | 'consumable' | 'quest' | 'currency' | 'misc'
+            // Exact damage bonus (0-3) this item grants, if it's a weapon —
+            // symmetric to armorValue (see resolveDamageBonus).
+            damageBonus?: number
+            // A consumable's mechanical payoff when used — 'heal' is
+            // enforced (see resolveConsumableHeal), 'custom' is flavor-only.
+            effect?: { kind: 'heal' | 'custom'; amount?: number; description: string }
           }>
           items_remove?: string[] // Item IDs or names to remove
           items_modify?: Array<{
@@ -217,7 +232,13 @@ export interface AIGMResponse {
         reward_grant?: {
           character_names?: string[] // recipients; absent/empty = every living party member
           gold?: number
-          items?: Array<{ id: string; name: string; quantity: number; tags: string[]; armorValue?: number }>
+          items?: Array<{
+            id: string; name: string; quantity: number; tags: string[]
+            armorValue?: number
+            itemType?: 'weapon' | 'armor' | 'consumable' | 'quest' | 'currency' | 'misc'
+            damageBonus?: number
+            effect?: { kind: 'heal' | 'custom'; amount?: number; description: string }
+          }>
           standing_changes?: Array<{ faction_name: string; delta: number; reason: string }>
         }
       }
@@ -803,7 +824,8 @@ You MUST respond with a JSON object matching this structure:
     "clock_changes": [...],
     "npc_changes": [
       {"npc_name_or_id": "EXISTING_NPC", "changes": {"notes_append": "New development..."}},
-      {"npc_name_or_id": "New Character Name", "is_new": true, "changes": {"description": "Brief 1-sentence description of who they are", "notes_append": "Introduced as..."}}
+      {"npc_name_or_id": "New Character Name", "is_new": true, "changes": {"description": "Brief 1-sentence description of who they are", "notes_append": "Introduced as..."}},
+      {"npc_name_or_id": "Bandit Leader", "changes": {"harm_damage": 3, "harm_damage_dealt_by": "CHARACTER_NAME", "notes_append": "Wounded in the ambush"}}
     ],
     "faction_changes": [
       {"faction_name_or_id": "EXISTING_FACTION", "changes": {"gm_notes_append": "New development..."}},
@@ -832,6 +854,7 @@ HARM SYSTEM:
 - Apply harm_damage when hurt in combat/danger, harm_healing when resting/treated
 - Add conditions: Physical (Bleeding, Stunned), Emotional (Terrified), Special (Cursed)
 - Remove conditions when narratively appropriate
+- NPCs have the same 0-6 harm track for real physical harm (see NPC HARM under REGISTER NEW NPCs below) — but no conditions/death-saves/dying state; they're just fine, impaired, or taken out
 
 MEDICAL TREATMENT: When someone (PC or NPC) tends a hurt character's
 wounds — bandaging, healing magic, a field medic, anything more deliberate
@@ -886,6 +909,9 @@ EQUIPMENT: Track significant narrative items (lucky sword, ancestral armor)
 INVENTORY: items_add, items_remove, items_modify (quantity_delta)
 - Track quest items, consumables, companions
 - If an added item is armor, set armorValue to the exact protection it grants (0-3: 1 light/leather, 2 medium/chain, 3 heavy/plate) — this is what the engine actually uses when it's equipped, instead of guessing from the name. Omit for anything that isn't armor
+- If an added item is a weapon that's clearly exceptional (masterwork, enchanted, legendary, or notably heavy/two-handed), set damageBonus (0-3) the same way — an ordinary weapon just omits it
+- Set itemType (weapon/armor/consumable/quest/currency/misc) on every added item — purely a display label, costs nothing to include
+- If an added item is a consumable that should actually heal when used (a real healing potion, not just flavor), set effect: {"kind": "heal", "amount": N, "description": "..."} — the engine applies N harm healed automatically the moment the item is consumed (items_remove, or items_modify with a negative delta), you don't also need to set harm_healing for it. For any other kind of item effect (a charm, a specific-use key, anything that doesn't heal), use effect: {"kind": "custom", "description": "..."} — this is flavor text only, nothing mechanical happens, so still narrate its effect yourself in scene_text
 
 RESOURCES: gold_delta, contacts_add/remove, reputation_changes
 - Example: {"gold_delta": -50, "reputation_changes": [{"faction": "Thieves Guild", "delta": 10}]}
@@ -982,6 +1008,8 @@ REGISTER NEW NPCs: Whenever you introduce a named character who doesn't already 
 - Example: Guard captain you just named for the first time → register them
 - Example: A faction leader already in the world state → just use notes_append
 - Good description: "A grizzled dwarven blacksmith with a prosthetic left hand. Owns the Ember & Iron forge."
+
+NPC HARM: When a PC's action deals real physical harm to an NPC (a fight, a wound, a killing blow), set harm_damage on that NPC's npc_changes entry — same 0-6 scale as pc_changes.harm_damage (0-3 fine, 4-5 impaired, 6 taken out — the engine flips them non-alive automatically at 6, don't set that yourself). Set harm_damage_dealt_by to the attacking PC's name when there is one, so their weapon's damage bonus applies; leave it unset for damage from a trap, another NPC, or anything with no clear PC attacker. Don't set harm_damage for damage that's purely narrative flavor (a glancing blow that changes nothing) — only for harm that should actually move them toward being taken out of the fight.
 
 REGISTER NEW FACTIONS: Whenever you name an organization, gang, guild, house, or group that isn't already in the FACTIONS list below, add them to faction_changes with is_new: true — same rule as NPCs: check the list, not whether it "feels" pre-established. A major house that's obviously part of the setting's lore but has never actually appeared in the FACTIONS list still needs registering the first time you name it, or it will never exist as a real faction the party can interact with, build standing with, or see tracked.
 - Include a description (who they are), goals (what they want), and current_plan (what they're doing right now)

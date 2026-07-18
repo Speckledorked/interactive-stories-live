@@ -5,7 +5,14 @@
 // (getArmorReduction) when no structured value is on record.
 
 import { describe, it, expect } from 'vitest'
-import { getArmorReduction, resolveArmorValue, CharacterInventory } from '../inventory'
+import {
+  getArmorReduction,
+  resolveArmorValue,
+  getWeaponDamageBonus,
+  resolveDamageBonus,
+  resolveConsumableHeal,
+  CharacterInventory,
+} from '../inventory'
 
 describe('getArmorReduction (keyword heuristic, unchanged)', () => {
   it('reads an explicit "(X armor)" pattern first', () => {
@@ -62,5 +69,105 @@ describe('resolveArmorValue', () => {
   it('is 0 with no armor name', () => {
     expect(resolveArmorValue({ items: [] }, '')).toBe(0)
     expect(resolveArmorValue({ items: [] }, null)).toBe(0)
+  })
+})
+
+describe('getWeaponDamageBonus (keyword heuristic)', () => {
+  it('reads an explicit "(+X damage)" pattern first', () => {
+    expect(getWeaponDamageBonus('Mystery Blade (+2 damage)')).toBe(2)
+  })
+
+  it('gives ordinary weapons no bonus', () => {
+    expect(getWeaponDamageBonus('Sword')).toBe(0)
+    expect(getWeaponDamageBonus('Hunting Bow')).toBe(0)
+    expect(getWeaponDamageBonus('Dagger')).toBe(0)
+  })
+
+  it('rewards masterwork/enchanted/legendary craftsmanship', () => {
+    expect(getWeaponDamageBonus('Masterwork Longsword')).toBe(2)
+    expect(getWeaponDamageBonus('Enchanted Rapier')).toBe(2)
+    expect(getWeaponDamageBonus('The Legendary Doomblade')).toBe(2)
+  })
+
+  it('rewards heavy/two-handed weapons', () => {
+    expect(getWeaponDamageBonus('Greatsword')).toBe(1)
+    expect(getWeaponDamageBonus('Warhammer')).toBe(1)
+    expect(getWeaponDamageBonus('Two-Handed Axe')).toBe(1)
+  })
+
+  it('returns 0 for no weapon or unrecognized text', () => {
+    expect(getWeaponDamageBonus('')).toBe(0)
+    expect(getWeaponDamageBonus(null)).toBe(0)
+  })
+})
+
+describe('resolveDamageBonus', () => {
+  it('prefers a structured damageBonus on the matching inventory item', () => {
+    const inv: CharacterInventory = {
+      items: [{ id: 'w1', name: 'Old Kitchen Knife', quantity: 1, damageBonus: 3 }],
+    }
+    // The name alone gives no keyword hint (would resolve to 0) — the
+    // structured value is what actually applies.
+    expect(resolveDamageBonus(inv, 'Old Kitchen Knife')).toBe(3)
+  })
+
+  it('clamps a structured damageBonus to the 0-3 range', () => {
+    const inv: CharacterInventory = {
+      items: [{ id: 'w1', name: 'Overtuned Blade', quantity: 1, damageBonus: 99 }],
+    }
+    expect(resolveDamageBonus(inv, 'Overtuned Blade')).toBe(3)
+  })
+
+  it('falls back to the keyword heuristic when the item has no damageBonus', () => {
+    const inv: CharacterInventory = {
+      items: [{ id: 'w1', name: 'Greatsword', quantity: 1 }],
+    }
+    expect(resolveDamageBonus(inv, 'Greatsword')).toBe(1)
+  })
+
+  it('falls back to the keyword heuristic when no matching item is found', () => {
+    const inv: CharacterInventory = { items: [] }
+    expect(resolveDamageBonus(inv, 'Masterwork Longsword')).toBe(2)
+  })
+
+  it('falls back cleanly with no inventory at all', () => {
+    expect(resolveDamageBonus(null, 'Masterwork Longsword')).toBe(2)
+    expect(resolveDamageBonus(undefined, '')).toBe(0)
+  })
+
+  it('is 0 with no weapon name', () => {
+    expect(resolveDamageBonus({ items: [] }, '')).toBe(0)
+    expect(resolveDamageBonus({ items: [] }, null)).toBe(0)
+  })
+})
+
+describe('resolveConsumableHeal', () => {
+  it('returns the heal amount for a heal-effect item', () => {
+    const item = { id: 'p1', name: 'Healing Potion', quantity: 1, effect: { kind: 'heal' as const, amount: 2, description: 'Restores vigor' } }
+    expect(resolveConsumableHeal(item)).toBe(2)
+  })
+
+  it('scales by units used', () => {
+    const item = { id: 'p1', name: 'Healing Potion', quantity: 3, effect: { kind: 'heal' as const, amount: 2, description: 'Restores vigor' } }
+    expect(resolveConsumableHeal(item, 2)).toBe(4)
+  })
+
+  it('is 0 for a custom effect (deliberately not enforced)', () => {
+    const item = { id: 'c1', name: 'Warding Charm', quantity: 1, effect: { kind: 'custom' as const, description: 'Wards off the curse' } }
+    expect(resolveConsumableHeal(item)).toBe(0)
+  })
+
+  it('is 0 for an item with no effect', () => {
+    expect(resolveConsumableHeal({ id: 'x1', name: 'Rope', quantity: 1 })).toBe(0)
+  })
+
+  it('is 0 for a heal effect with no amount', () => {
+    const item = { id: 'p1', name: 'Broken Potion', quantity: 1, effect: { kind: 'heal' as const, description: 'Fizzles uselessly' } }
+    expect(resolveConsumableHeal(item)).toBe(0)
+  })
+
+  it('falls back cleanly with no item at all', () => {
+    expect(resolveConsumableHeal(null)).toBe(0)
+    expect(resolveConsumableHeal(undefined)).toBe(0)
   })
 })

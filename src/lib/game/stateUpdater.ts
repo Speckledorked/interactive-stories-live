@@ -21,7 +21,7 @@ import {
   HarmLevel,
   PermanentInjury
 } from './harm'
-import { resolveArmorValue } from './inventory'
+import { resolveArmorValue, resolveDamageBonus, resolveConsumableHeal } from './inventory'
 import { applyCapabilityChanges } from './capabilities'
 import { applyDebtChanges } from './debts'
 import { applyStandingChanges } from './standing'
@@ -168,6 +168,41 @@ export async function applyWorldUpdates(
             if (npcChange.changes.goals) {
               updateData.goals = npcChange.changes.goals
               updateData.goalProgress = 0
+            }
+
+            // Minimal harm tracking (see NPC.harm's doc comment in
+            // schema.prisma) — mirrors pc_changes.harm_damage below via the
+            // same applyHarm(), but with no armor-reduction side (NPCs
+            // don't carry equipment) and no conditions/death-saves: just a
+            // harm number and a one-way Taken Out flip.
+            if (npcChange.changes.harm_damage && npcChange.changes.harm_damage > 0) {
+              let weaponBonus = 0
+              if (npcChange.changes.harm_damage_dealt_by) {
+                const attacker = await tx.character.findFirst({
+                  where: {
+                    campaignId,
+                    OR: [
+                      { id: npcChange.changes.harm_damage_dealt_by },
+                      { name: { contains: npcChange.changes.harm_damage_dealt_by, mode: 'insensitive' } }
+                    ]
+                  },
+                  select: { equipment: true, inventory: true }
+                })
+                if (attacker) {
+                  const weaponName = (attacker.equipment as any)?.weapon || ''
+                  weaponBonus = resolveDamageBonus(attacker.inventory as any, weaponName)
+                }
+              }
+              const harmResult = applyHarm(
+                ((npc.harm as number) || 0) as HarmLevel,
+                npcChange.changes.harm_damage + weaponBonus,
+                0
+              )
+              updateData.harm = harmResult.newHarm
+              if (harmResult.newHarm >= 6) {
+                updateData.isAlive = false
+              }
+              console.log(`  💥 ${npc.name}: ${harmResult.message}`)
             }
 
             // Fog of war: the party witnessing this NPC in a live scene is
@@ -635,6 +670,19 @@ export async function applyWorldUpdates(
                     const removedItem = currentInventory.items[indexToRemove]
                     currentInventory.items.splice(indexToRemove, 1)
                     console.log(`  📦 ${character.name} lost ${removedItem.name}`)
+
+                    // A consumed item's 'heal' effect is enforced here,
+                    // deterministically — not left to the AI to separately
+                    // remember via harm_healing. See resolveConsumableHeal's
+                    // doc comment in lib/game/inventory.ts.
+                    const healAmount = resolveConsumableHeal(removedItem)
+                    if (healAmount > 0) {
+                      const healResult = healHarm(currentHarm as HarmLevel, healAmount)
+                      currentHarm = healResult.newHarm
+                      harmMessages.push(`${character.name} uses ${removedItem.name}: ${healResult.message}`)
+                      updateData.harm = currentHarm
+                      updateData.conditions = { conditions: currentConditions, permanentInjuries, deathSaves }
+                    }
                   }
                 }
               }
@@ -644,6 +692,21 @@ export async function applyWorldUpdates(
                 for (const modify of invChange.items_modify) {
                   const item = currentInventory.items.find((item: any) => item.id === modify.id)
                   if (item) {
+                    // A negative delta is "used" — apply as many units'
+                    // worth of 'heal' effect as were actually consumed
+                    // (e.g. drinking 2 potions from a stack at once),
+                    // before quantity drops below.
+                    if (modify.quantity_delta < 0) {
+                      const healAmount = resolveConsumableHeal(item, Math.abs(modify.quantity_delta))
+                      if (healAmount > 0) {
+                        const healResult = healHarm(currentHarm as HarmLevel, healAmount)
+                        currentHarm = healResult.newHarm
+                        harmMessages.push(`${character.name} uses ${Math.abs(modify.quantity_delta)}x ${item.name}: ${healResult.message}`)
+                        updateData.harm = currentHarm
+                        updateData.conditions = { conditions: currentConditions, permanentInjuries, deathSaves }
+                      }
+                    }
+
                     item.quantity += modify.quantity_delta
                     console.log(`  📦 ${character.name} ${modify.quantity_delta > 0 ? 'gained' : 'used'} ${Math.abs(modify.quantity_delta)}x ${item.name} (now ${item.quantity})`)
 

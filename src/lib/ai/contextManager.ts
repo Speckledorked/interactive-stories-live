@@ -347,6 +347,24 @@ export async function buildOptimizedContext(
 }
 
 /**
+ * Depth-hardening #37 (see README): a hard, deterministic cap on how many
+ * entities of a given kind ever reach the prompt, regardless of how many
+ * exist in a maximally active campaign. The existing relevance/fog-of-war
+ * filtering (see buildOptimizedWorldSummary in worldState.ts) narrows the
+ * field for a typical campaign, but nothing previously bounded the worst
+ * case — a campaign with enough discovered NPCs/factions/locations could
+ * grow the prompt unboundedly. This is the backstop: under the cap,
+ * ordering and content are completely unchanged (the common case); only
+ * once a list exceeds the cap does it sort by priority (descending) and
+ * keep the top N, so the items dropped are always the least-relevant ones
+ * by that measure, never an arbitrary truncation.
+ */
+export function capForPrompt<T>(items: T[], maxCount: number, priority: (item: T) => number): T[] {
+  if (items.length <= maxCount) return items
+  return [...items].sort((a, b) => priority(b) - priority(a)).slice(0, maxCount)
+}
+
+/**
  * Monitor campaign health and scale
  * Warns if campaign is approaching limits
  */

@@ -6,7 +6,7 @@ import { reportError } from '@/lib/monitoring'
 import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
-import { buildOptimizedContext } from './contextManager' // Phase 14.6: Context optimization
+import { buildOptimizedContext, capForPrompt } from './contextManager' // Phase 14.6: Context optimization
 import { retrieveRelevantHistory, retrieveNpcHistory, retrieveCrossEntityHistory, generateEntityPairs, buildSearchQuery } from './memoryRetrieval' // Campaign Memory RAG
 import { retrieveRelevantLore } from './loreRetrieval' // Imported lore RAG (see lib/lore/)
 import { AI_MODELS } from './models'
@@ -18,6 +18,18 @@ import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
 import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
 import { parseFactionRelationships } from '@/lib/game/tick/types'
+
+// Depth-hardening #37 (see README): hard per-category caps on the live
+// world-state payload, applied via capForPrompt below — a backstop against
+// unbounded prompt/token growth in a maximally active long campaign. Under
+// each cap, nothing changes; only an excess triggers priority-ordered
+// trimming. Numbers are generous relative to what a typical scene actually
+// needs narrated in detail.
+const MAX_NPCS_IN_PROMPT = 15
+const MAX_FACTIONS_IN_PROMPT = 10
+const MAX_LOCATIONS_IN_PROMPT = 12
+const MAX_CLOCKS_IN_PROMPT = 10
+const MAX_QUESTS_IN_PROMPT = 8
 
 /**
  * Phase 9 NPC society: resolve NPC.socialTies into AI-facing lines, naming
@@ -149,10 +161,13 @@ async function buildOptimizedWorldSummary(
   // the party has never actually encountered them. Only affects what goes
   // into worldSummary below, not `entities` at the bottom of this
   // function, which stays unfiltered on purpose for memory-recall lookups.
-  const discoveredNpcs = relevantNpcs.filter(npc => npc.isDiscovered)
-  const discoveredNpcNameById = new Map(discoveredNpcs.map(n => [n.id, n.name]))
+  // capForPrompt: a hard backstop on top of the relevance filtering above —
+  // keeps the most important entities by that same signal if the filtered
+  // set is still too large for a maximally active campaign.
+  const discoveredNpcNameById = new Map(relevantNpcs.filter(npc => npc.isDiscovered).map(n => [n.id, n.name]))
+  const discoveredNpcs = capForPrompt(relevantNpcs.filter(npc => npc.isDiscovered), MAX_NPCS_IN_PROMPT, n => n.importance)
   const discoveredFactionIds = new Set(allFactions.filter(f => f.isDiscovered).map(f => f.id))
-  const discoveredFactions = relevantFactions.filter(f => f.isDiscovered)
+  const discoveredFactions = capForPrompt(relevantFactions.filter(f => f.isDiscovered), MAX_FACTIONS_IN_PROMPT, f => f.threatLevel)
 
   console.log(`🔍 Filtered entities: ${discoveredNpcs.length}/${allNpcs.length} NPCs, ${discoveredFactions.length}/${allFactions.length} factions`)
 
@@ -245,7 +260,10 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       leader_character_id: f.leaderCharacterId
     })),
 
-    locations: locations.map(l => ({
+    // capForPrompt: contested locations are the ones actually worth
+    // narrating in a crowded world — kept preferentially if there's an
+    // excess.
+    locations: capForPrompt(locations, MAX_LOCATIONS_IN_PROMPT, l => (l.isContested ? 1 : 0)).map(l => ({
       name: l.name,
       description: l.description || '',
       type: l.locationType || 'unknown',
@@ -262,7 +280,9 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       is_contested: l.isContested
     })),
 
-    clocks: clocks.map(cl => ({
+    // capForPrompt: clocks closest to firing are the most narratively
+    // urgent — kept preferentially if there's an excess.
+    clocks: capForPrompt(clocks, MAX_CLOCKS_IN_PROMPT, cl => cl.maxTicks > 0 ? cl.currentTicks / cl.maxTicks : 0).map(cl => ({
       id: cl.id,
       name: cl.name,
       current_ticks: cl.currentTicks,
@@ -392,10 +412,17 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
   // it" and "the AI is allowed to narrate it." `entities` below stays
   // unfiltered on purpose (memory-recall lookups need the full set); only
   // worldSummary — what actually reaches the prompt — is filtered.
-  const discoveredNpcs = npcs.filter(n => n.isDiscovered)
-  const discoveredNpcNameById = new Map(discoveredNpcs.map(n => [n.id, n.name]))
-  const discoveredFactions = factions.filter(f => f.isDiscovered)
-  const discoveredFactionIds = new Set(discoveredFactions.map(f => f.id))
+  // capForPrompt: a hard backstop on top of fog-of-war filtering (see
+  // MAX_*_IN_PROMPT above) — this builder has no location/threat
+  // relevance filtering at all (unlike buildOptimizedWorldSummary above),
+  // so it's the more exposed of the two to unbounded growth in a
+  // long-running, highly discovered campaign.
+  const allDiscoveredNpcs = npcs.filter(n => n.isDiscovered)
+  const discoveredNpcNameById = new Map(allDiscoveredNpcs.map(n => [n.id, n.name]))
+  const discoveredNpcs = capForPrompt(allDiscoveredNpcs, MAX_NPCS_IN_PROMPT, n => n.importance)
+  const allDiscoveredFactions = factions.filter(f => f.isDiscovered)
+  const discoveredFactionIds = new Set(allDiscoveredFactions.map(f => f.id))
+  const discoveredFactions = capForPrompt(allDiscoveredFactions, MAX_FACTIONS_IN_PROMPT, f => f.threatLevel)
 
   // Format everything for the AI
   const worldSummary = {
@@ -457,7 +484,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       leader_character_id: f.leaderCharacterId
     })),
 
-    clocks: clocks.map(cl => ({
+    clocks: capForPrompt(clocks, MAX_CLOCKS_IN_PROMPT, cl => cl.maxTicks > 0 ? cl.currentTicks / cl.maxTicks : 0).map(cl => ({
       id: cl.id,
       name: cl.name,
       current_ticks: cl.currentTicks,
@@ -466,7 +493,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       consequence: cl.consequence || ''
     })),
 
-    quests: activeQuests.map(q => ({
+    quests: capForPrompt(activeQuests, MAX_QUESTS_IN_PROMPT, q => q.createdAt.getTime()).map(q => ({
       name: q.name,
       description: q.description,
       objective: q.objective,
@@ -474,7 +501,7 @@ export async function buildWorldSummaryForAI(campaignId: string): Promise<{ worl
       recent_progress: lastProgressBeat(q.progressLog)
     })),
 
-    locations: locations.map(l => ({
+    locations: capForPrompt(locations, MAX_LOCATIONS_IN_PROMPT, l => (l.isContested ? 1 : 0)).map(l => ({
       name: l.name,
       description: l.description || '',
       type: l.locationType || 'unknown',

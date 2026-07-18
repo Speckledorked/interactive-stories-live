@@ -12,12 +12,14 @@ not to invent it from scratch each time.
 **Where this actually stands** (full audit below): the deterministic core —
 dice resolution, faction simulation, wars/territory, capability progression,
 the Debt/standing economy — is genuinely deep and compounding, not a thin
-wrapper around a chatbot. A handful of systems that *look* equally systemic
-currently aren't — most notably a confirmed dead-logic bug in memory
-importance scoring, and a couple of places where real-looking deterministic
-machinery is wired to nothing (see [Known Issues](#known-issues) and the
-[Depth Hardening](#-now--depth-hardening-highest-roi) backlog). Nothing below
-overstates what's shipped; where something is cosmetic, it's labeled that way.
+wrapper around a chatbot. A July 2026 depth audit found several systems that
+*looked* equally systemic but weren't (a dead-logic bug in memory importance
+scoring, write-only relationships, random-chance clock advancement, a
+conflict "resolver" that only punted to the AI, and more) — nine of the ten
+highest-ROI fixes are now shipped (see [Known Issues](#known-issues) and the
+[Roadmap](#-now--depth-hardening-highest-roi) for what's still actually
+open). Nothing below overstates what's shipped; where something is cosmetic,
+it's labeled that way.
 
 ## What MythOS Is
 
@@ -55,24 +57,24 @@ is exactly what the Known Issues and Depth Hardening sections exist to close.
 | World tick orchestration | 5 | Nine deterministic handlers, genuinely sequenced same-tick dependencies, zero AI calls. |
 | Debt economy | 4 | Directional, persisted, and actually consumed as a roll modifier — not just a label. |
 | Faction standing | 4 | Same — feeds `computeMechanics()` directly. |
+| Relationships (trust/tension/respect/fear) | 4 | Fixed (`#29`): now feeds `computeMechanics()` via a banded `relationshipModifier`, the same way standing does — no longer write-only. |
 | Capability / skill-tree progression | 4 | Glimpse→unlock→progress state machine, feeds roll modifiers directly. |
 | Character harm/death state machine | 4 | Full model: auto-conditions, death saves, permanent injury, engine-arbitrated recovery. |
 | Corruption track | 4 | Theme-gated, irreversible, force-applied backstop even if the AI forgets to narrate it. |
 | Consequence engine (player action → faction/NPC state) | 4 | Deterministic per-action deltas, same rigor as faction tick. |
 | Character progression (advancement) | 4 | Usage-gated growth with real PbtA constraint validation, not a level-up button. |
 | Memory retrieval (RAG) | 4 | Genuine pgvector cosine search, cost-tracked, well-designed consolidation. |
-| AI response validation | 4 | Real 4-level fallback — but degrades silently rather than repairing (see Known Issues). |
-| Quest lifecycle | 3 | Real state transitions and progress log; completion doesn't code-enforce any reward/consequence. |
+| Memory importance/tag classification | 4 | Fixed (`#28`): field-name mismatch corrected, exported, regression-tested — no longer silently dead. |
+| AI response validation | 4 | Improved (`#36`): one bounded repair round-trip is attempted before falling through to the degradation ladder — no longer purely silent. Still basic JSON mode, not strict structured outputs (`#35`, open — see Known Issues). |
+| Clock advancement (non-ambition clocks) | 4 | Fixed (`#30`): deterministic, faction/relation-driven pacing (`decideClockAdvancement`) in place of the random-chance coin flip. |
+| Quest lifecycle | 4 | Fixed (`#31`): a structured `reward_grant` is applied deterministically the first time a quest completes, reusing the same standing-change writer `pc_changes` uses — no longer prose-only. |
+| Combat / complex exchange resolution | 4 | Fixed (`#32`): conflicting actions on the same target are now ranked by actual roll outcome (`rankActionsByOutcome`), not left to an AI punt. Still no dedicated combat subsystem beyond PbtA resolution — that's by design, not a gap. |
+| Inventory / items | 3 | Improved (`#33`): a structured `armorValue` is now honored exactly when present, falling back to the keyword heuristic otherwise. Still JSON-blob CRUD with no general item identity beyond armor. |
 | Downtime activities | 3 | Costs (gold/items/favor/quest) are genuinely charged; day-by-day "events" are freeform AI prose with no state machine behind them. |
 | NPC goal/movement simulation | 3 | Real location relevance and goal-completion cascades; the phase-cycle text itself is mostly decorative. |
-| **Memory importance/tag classification** | **2 (confirmed bug)** | Reads AI-response field names that don't exist in the actual schema — silently dead on every call. See Known Issues #1. |
-| Relationships (trust/tension/respect/fear) | 2 | Real, clamped, persisted numbers — never read by the resolution engine. Narrative-only. |
-| Clock advancement (non-ambition clocks) | 2 | Weighted coin flip; the code's own comment says the intended faction-relation-driven design was never implemented. |
-| Inventory / items | 2 | JSON-blob CRUD; one narrow real mechanic (armor damage reduction), no general item identity. |
-| Weather | 2 (cosmetic) | Rigorously deterministic (stable-hash, not `Math.random`) — and confirmed to have zero mechanical consumers anywhere. Pure narration input. |
-| Combat / complex exchange resolution | 2 | No dedicated combat system; conflict "detection" is keyword matching that hands off to an AI prompt instead of resolving anything. |
-| DB `Move` table | 1 | Seeded and exported, never read by the live resolver (which uses a static file instead). Duplicated concept, no single source of truth. |
-| `TurnOrder` model | 0 | Zero live references anywhere in the codebase. Fully dead schema. |
+| Weather | 2 (cosmetic) | Rigorously deterministic (stable-hash, not `Math.random`) — and confirmed to have zero mechanical consumers anywhere. Pure narration input; unchanged, no consumer added yet. |
+| DB `Move` table | 2 (documented, not fixed) | Seeded and exported for campaign export/import — a real, narrower feature than it first appeared, not dead code. Never read by the live resolver (`pbta-moves.ts` is canonical for that). Documented in-schema (`#34`) so it stops looking like an abandoned duplicate. |
+| `TurnOrder` model | — (removed) | Fixed (`#34`): zero live references anywhere, so the model was dropped from the schema entirely rather than left to imply a feature that doesn't exist. |
 | "Story cards" (as a named concept) | 0 | Confirmed absent — doesn't exist anywhere in the codebase under any name. |
 
 ## Architecture: Where the Depth Actually Lives
@@ -94,77 +96,61 @@ qualitative-stat enforcement, not just formatting) · `lib/ai/validation.ts`
 `lib/game/sceneResolver.ts` (the top-level orchestrator) ·
 `lib/game/consequences.ts` (player choice → persistent world state).
 
-**Surface area** (architecturally dressed like the systems above; the
-substance doesn't hold up on inspection — see Known Issues):
-`lib/game/complex-exchange-resolver.ts` (a keyword classifier that hands
-conflicts to a prompt, not a resolver) · `lib/ai/memoryCreation.ts` (real
-embedding call, but the importance/tag classifier reads nonexistent field
-names) · `lib/game/tick/weatherTick.ts` (a genuinely deterministic engine
-wired to nothing that reads it mechanically).
+**Surface area** (architecturally dressed like the systems above — see
+Known Issues for what's still actually true today; most of what was found
+here in the July 2026 audit has since been fixed, see Roadmap):
+`lib/game/tick/weatherTick.ts` (a genuinely deterministic engine wired to
+nothing that reads it mechanically — still true, no fix yet).
 
 ## Known Issues
 
-Confirmed by direct code inspection, not inferred. Ranked by how easy an
-outside reader would be to fool by them, since that's also roughly the order
-they're worth fixing.
+Confirmed by direct code inspection, not inferred. What's left after the
+July 2026 audit's Depth Hardening pass (`#28`–`#37`, see Roadmap) — most of
+what that audit found has since been fixed; this list is what's still
+actually true today.
 
-1. **Memory importance/tagging is silently dead.** `lib/ai/memoryCreation.ts`'s
-   `determineImportance()`/`extractTags()` branch on `updates.character_updates`,
-   `updates.clock_updates`, `updates.faction_updates` — field names that appear
-   nowhere else in the codebase. The real `AIGMResponse.world_updates` shape
-   uses `pc_changes`/`clock_changes`/`faction_changes`. Every call silently
-   falls through to `'NORMAL'` importance; several tag categories never fire.
-   No test catches it because it fails soft, not with an error.
-2. **No repair/retry on malformed AI JSON.** `lib/ai/validation.ts`'s 4-level
-   fallback degrades gracefully (full schema → minimal → loose extraction →
-   canned template) but never re-prompts. Below Level 1, `world_updates`
-   becomes `{}` and a scene's mechanical consequences vanish with only a
-   console warning as evidence.
-3. **Clock advancement is a coin flip**, not faction-driven, despite the
-   schema already having the fields (`Clock.sourceFactionId`/`relatedFactionId`)
-   to do it properly — the code's own comment admits the intended design was
-   never wired up.
-4. **`ComplexExchangeResolver` doesn't resolve anything.** It classifies
-   action text by keyword match and hands the AI a formatted instruction
-   paragraph. There is no dedicated combat system in this codebase — combat
-   uses the same PbtA resolution as any other action.
-5. **Relationships are write-only.** `trust`/`tension`/`respect`/`fear` are
-   real, clamped, persisted deltas — but nothing in the resolution engine
-   reads them. Contrast with Debt/Standing, which are consumed identically in
-   shape but actually feed roll modifiers.
-6. **Quest completion doesn't propagate.** The lifecycle is real; nothing
-   code-enforces `reward` when a quest closes — it depends entirely on the AI
-   separately remembering to narrate a matching change the same turn.
-7. **Inventory has almost no item identity** beyond one narrow, string-matched
-   armor-reduction heuristic. There is no `Item` table (`itemRegistry.ts` is
-   explicit about this — it aggregates per-character JSON blobs for wiki
-   display, nothing more).
-8. **`TurnOrder` and the DB `Move` table are dead/vestigial** and should be
-   either wired up or removed — right now they imply features to anyone
-   reading the schema that the live resolver doesn't use.
-9. **Basic JSON mode, not strict structured outputs.** The AI GM call uses
-   `response_format: json_object`, not OpenAI's `json_schema` strict mode —
-   more room for shape violations to reach the fallback ladder in #2 than
-   necessary.
+1. **Basic JSON mode, not strict structured outputs.** The AI GM call uses
+   `response_format: json_object`, not OpenAI's `json_schema` strict mode.
+   **Deliberately not yet attempted** (`#35`): a strict-mode migration needs
+   every optional field in the (large, deeply nested) `WorldUpdatesSchema`
+   restructured into OpenAI's required-but-nullable shape, and there is no
+   way to verify a hand-rolled JSON Schema actually validates against
+   OpenAI's strict-mode rules without a live API round-trip — getting it
+   wrong would mean every AI GM call starts failing in production, a worse
+   outcome than today's lenient mode. Needs either a live-testable
+   environment or an explicit decision to accept that risk before
+   attempting it blind.
+2. **Weather has zero mechanical consumers.** `lib/game/tick/weatherTick.ts`
+   computes real, deterministic (stable-hash) weather — condition and
+   severity — but nothing reads it for anything beyond narration text. Not
+   yet on the Depth Hardening backlog; a candidate for a future pass if
+   weather-driven mechanics (travel time, encounter chance) become a
+   priority.
+3. **DB `Move` table is a narrower feature than it first looks.** Now
+   documented in-schema (`#34`): it's real, working per-template flavor-move
+   storage for campaign export/import, not dead code — but it's still a
+   second, disconnected concept from `pbta-moves.ts`'s `BASIC_MOVES`, which
+   is what live resolution actually rolls against. Not a bug, just worth
+   knowing which one is canonical for what.
+4. **Downtime's day-by-day events are freeform AI prose** with no
+   deterministic state machine behind them — contrast with the activity's
+   *entry* costs (gold/items/favor/quest), which are genuinely enforced.
+   Not yet on the Depth Hardening backlog.
+5. **NPC phase-cycle text is mostly decorative.** The observing → preparing
+   → acting → resting cycle is deterministic, but three of its four phases
+   only ever produce narration text; the one real mechanical hook is gating
+   joint-scheme timing. Not yet on the Depth Hardening backlog.
 
 ## Roadmap
 
 ### 🔧 Now — Depth Hardening (highest ROI, from the audit)
 
 Small, mostly mechanical fixes that close the gap between "looks systemic"
-and "is systemic" — several are near-zero-cost because the surrounding
-infrastructure already exists.
+and "is systemic." Nine of ten shipped in one pass (see Shipped below) —
+several were near-zero-cost because the surrounding infrastructure already
+existed. One remains, deliberately not attempted blind:
 
-- [ ] **#28 Fix the memory-importance field-name bug** — point `determineImportance()`/`extractTags()` at the real `world_updates` field names (`pc_changes`/`clock_changes`/`faction_changes`/`new_timeline_events`). Restores an entire subsystem for the cost of a rename.
-- [ ] **#29 Wire relationships into roll math** — add a small trust/fear-derived modifier to `computeMechanics()`, parallel to `standingMod`, so the data structure becomes a mechanic instead of narrative color.
-- [ ] **#30 Faction-driven clock advancement** — replace the random-chance rate with logic keyed off `Clock.sourceFactionId`/`relatedFactionId`, finishing what the schema already implies.
-- [ ] **#31 Deterministic quest-completion consequence hook** — auto-apply `reward` (parsed into gold/item/standing) on `status: COMPLETED`, the same way corruption surge is force-applied regardless of AI narration.
-- [ ] **#32 Real conflict resolution for complex exchanges** — replace keyword-classify-and-punt with actual priority/roll-order rules; this is the single biggest gap between "PbtA-style freeform combat" as described and what the code does.
-- [ ] **#33 Minimal item-type schema** — `damageBonus`/`armorValue`/`consumable` fields so inventory items carry mechanical identity beyond the one existing armor heuristic.
-- [ ] **#34 Retire or activate dead schema** — `TurnOrder` and the DB `Move` table.
-- [ ] **#35 Move to strict structured outputs** (`json_schema`) for the AI GM response, catching shape violations before they reach the fallback ladder.
-- [ ] **#36 Add a repair/retry pass to `validation.ts`** — re-prompt with the validation error on Level 2/3 fallback instead of silently accepting world-update loss.
-- [ ] **#37 Bound worst-case prompt/context size explicitly** — a hard cap/summarization pass on the *live* world-state payload (context filtering exists; nothing bounds the worst case for a maximally active long campaign).
+- [ ] **#35 Move to strict structured outputs** (`json_schema`) for the AI GM response, catching shape violations before they reach the fallback ladder. Blocked on live-API verification — see Known Issues #1 for why this specifically wasn't attempted without it.
 
 ### 🎯 Next — Product & Market
 
@@ -190,6 +176,19 @@ are folded in below.
 Full narrative detail for everything below (including specific bug
 postmortems) is preserved in this file's git history — this is the condensed
 ledger.
+
+**Depth Hardening (`#28`–`#37`, 9 of 10)** — from the July 2026 codebase
+depth audit's highest-ROI backlog:
+- `#28` fixed the memory-importance field-name mismatch (`memoryCreation.ts` was reading response fields that don't exist) — regression-tested so it can't silently break again
+- `#29` wired `Character.relationships` (trust/tension/respect) into `computeMechanics()` via a banded `relationshipModifier`, parallel to faction standing
+- `#30` replaced clock advancement's random-chance coin flip with deterministic, faction/relation-driven pacing (`decideClockAdvancement`)
+- `#31` added a structured `reward_grant` on quest completion, applied deterministically the first time a quest transitions to `COMPLETED` — reuses the same standing-change writer `pc_changes` already uses
+- `#32` gave `ComplexExchangeResolver` a real deterministic conflict-resolution mechanism (`rankActionsByOutcome`, ranked by actual roll outcome) instead of only flagging conflicts and punting to the AI
+- `#33` added a structured `armorValue` to inventory items, honored exactly when present and falling back to the existing keyword heuristic otherwise
+- `#34` removed the fully-dead `TurnOrder` model and documented the DB `Move` table's real (narrower) role instead of removing it, since campaign export/import genuinely depends on it
+- `#36` added a single bounded repair round-trip to AI response validation — a fixable JSON-shape mistake gets one real re-prompt before falling through to the degradation ladder
+- `#37` added `capForPrompt()`, a hard per-category cap (NPCs/factions/locations/clocks/quests) on the live world-state payload, as a backstop against unbounded growth in a maximally active long campaign
+- `#35` (strict structured outputs) remains open — see Known Issues #1
 
 **Mechanical spine (Foundation + Phase 0–1)**
 - Knowledge-relative capability sheets with deterministic arc-capped growth and per-character narration knowledge-gating

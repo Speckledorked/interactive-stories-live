@@ -4,7 +4,7 @@ import { openaiFetch } from '@/lib/ai/openaiCompat'
 // This handles all communication with the AI model
 // Phase 15: Enhanced with strict validation, error handling, and cost tracking
 
-import { validateAIResponse } from './validation'
+import { validateAIResponseWithRepair } from './validation'
 import { circuitBreakerManager } from './circuit-breaker'
 import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
 import { aiResponseCache } from './response-cache'
@@ -543,8 +543,64 @@ export async function callAIGM(
       throw new Error('AI returned invalid JSON')
     }
 
-    // Phase 15.2: Validate response with progressive fallback
-    const validationResult = validateAIResponse(parsedResponse, request.current_scene_intro)
+    // Phase 15.2: Validate response with progressive fallback.
+    // Depth-hardening #36: one bounded repair round-trip is attempted
+    // first (see validateAIResponseWithRepair) before falling through to
+    // the existing degradation ladder — a fixable shape mistake gets a
+    // real chance to be fixed instead of immediately discarding all
+    // mechanical content for the scene.
+    const validationResult = await validateAIResponseWithRepair(
+      parsedResponse,
+      request.current_scene_intro,
+      async (repairPrompt: string) => {
+        const repairStartTime = Date.now()
+        const repairResponse = await openaiFetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: AI_MODELS.FLAGSHIP,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+              { role: 'assistant', content },
+              { role: 'user', content: repairPrompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 4000,
+            response_format: { type: 'json_object' }
+          })
+        })
+
+        if (!repairResponse.ok) {
+          throw new Error(`Repair call failed: ${repairResponse.status}`)
+        }
+
+        const repairData = await repairResponse.json()
+        const repairContent = repairData.choices[0].message.content
+        const repairUsage = repairData.usage || {}
+
+        // A real API call with real spend — tracked distinctly from the
+        // main resolution call so it's visible in cost breakdowns, not
+        // silently folded into 'scene_resolution'.
+        if (campaignId) {
+          const repairCostTracker = new AICostTracker(campaignId, AI_MODELS.FLAGSHIP)
+          await repairCostTracker.recordRequest({
+            inputTokens: repairUsage.prompt_tokens || estimateTokenCount(systemPrompt + userPrompt + content + repairPrompt),
+            outputTokens: repairUsage.completion_tokens || estimateTokenCount(repairContent),
+            responseTimeMs: Date.now() - repairStartTime,
+            success: true,
+            cacheHit: false,
+            sceneId,
+            requestType: 'scene_resolution_repair'
+          }).catch(console.error)
+        }
+
+        return JSON.parse(repairContent)
+      }
+    )
 
     if (!validationResult.success) {
       console.error('❌ AI response validation failed completely')

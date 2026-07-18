@@ -37,6 +37,67 @@ const EMERGENCY_TEMPLATES = {
 }
 
 /**
+ * Build the repair prompt for a failed Level-1 validation: names the
+ * specific structural problems (capped at 8, matching the console-log
+ * summary elsewhere in this file) so the re-prompt is a targeted fix
+ * rather than "try again" — a model that produced valid prose but wrong
+ * JSON shape usually just needs to be told exactly what shape was wrong.
+ */
+export function buildRepairPrompt(zodError: z.ZodError): string {
+  const issues = zodError.errors
+    .slice(0, 8)
+    .map(e => `- ${e.path.join('.') || '(root)'}: ${e.message}`)
+    .join('\n')
+  return `Your previous response was not valid JSON matching the required schema. Specific problems:\n${issues}\n\nReturn a corrected JSON response preserving the same scene content and world updates you intended — fix only the structural issues above. Respond with JSON only, matching the original response_format (scene_text, time_passage, world_updates).`
+}
+
+/**
+ * Depth-hardening #36 (see README): a single bounded repair round-trip
+ * before falling all the way through to progressive degradation. Below
+ * Level 1, validateAIResponse silently zeroes world_updates — real
+ * mechanical consequences vanish with only a console warning as evidence.
+ * This re-prompts the model with the exact Zod errors and re-validates its
+ * corrected response, giving a fixable shape mistake one real chance to
+ * actually get fixed instead of immediately discarding all mechanical
+ * content for the scene.
+ *
+ * Bounded to exactly one attempt — a persistently malformed model falls
+ * through to the existing ladder (validateAIResponse) exactly as before
+ * this existed, so a bad repair can never hang scene resolution or loop.
+ * `repair` is injected so this is testable without a network call; the
+ * caller (client.ts) supplies the actual re-prompt-and-parse logic.
+ */
+export async function validateAIResponseWithRepair(
+  rawResponse: any,
+  sceneContext: string | undefined,
+  repair: (repairPrompt: string) => Promise<any>
+): Promise<ValidationResult> {
+  const firstAttempt = AIGMResponseSchema.safeParse(rawResponse)
+  if (firstAttempt.success) {
+    console.log('✅ Full schema validation passed')
+    return { success: true, data: firstAttempt.data, level: 'full' }
+  }
+
+  console.warn('⚠️ Full schema validation failed:', firstAttempt.error.errors)
+  console.log('Attempting one repair round-trip...')
+
+  try {
+    const repairedRaw = await repair(buildRepairPrompt(firstAttempt.error))
+    const repairedAttempt = AIGMResponseSchema.safeParse(repairedRaw)
+    if (repairedAttempt.success) {
+      console.log('✅ Repair round-trip succeeded — full schema validation now passes')
+      return { success: true, data: repairedAttempt.data, level: 'full' }
+    }
+    console.warn('⚠️ Repair round-trip still failed validation:', repairedAttempt.error.errors)
+  } catch (error) {
+    console.error('❌ Repair round-trip errored:', error)
+  }
+
+  console.log('Falling back to progressive degradation...')
+  return validateAIResponse(rawResponse, sceneContext)
+}
+
+/**
  * Phase 15.2: Validate AI output with strict schema
  * Phase 15.3: Progressive fallback on validation failure
  */

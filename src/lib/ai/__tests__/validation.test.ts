@@ -1,8 +1,9 @@
 // src/lib/ai/__tests__/validation.test.ts
 // Phase 15: Tests for AI response validation and fallback system
 
-import { describe, it, expect } from 'vitest'
-import { validateAIResponse } from '../validation'
+import { describe, it, expect, vi } from 'vitest'
+import { z } from 'zod'
+import { validateAIResponse, validateAIResponseWithRepair, buildRepairPrompt } from '../validation'
 
 describe('AI Response Validation (Phase 15)', () => {
   describe('Full Schema Validation', () => {
@@ -251,5 +252,65 @@ describe('AI Response Validation (Phase 15)', () => {
       if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('partial')
     })
+  })
+})
+
+describe('buildRepairPrompt', () => {
+  it('names the specific structural problems, capped at 8', () => {
+    const { error } = z.object({ a: z.string(), b: z.string() }).safeParse({ a: 1, b: 2 }) as { error: z.ZodError }
+    const prompt = buildRepairPrompt(error)
+    expect(prompt).toContain('a:')
+    expect(prompt).toContain('b:')
+    expect(prompt).toContain('Respond with JSON only')
+  })
+})
+
+describe('validateAIResponseWithRepair (depth-hardening #36)', () => {
+  const validResponse = {
+    scene_text: 'The heroes burst through the door, weapons drawn. The villain turns to face them with a cruel smile.',
+    world_updates: { pc_changes: [{ character_name_or_id: 'character_123', changes: { harm_damage: 2 } }] },
+  }
+  const invalidResponse = {
+    scene_text: 'You take massive damage.',
+    world_updates: { pc_changes: [{ character_name_or_id: 'hero_001', changes: { harm_damage: 10 } }] },
+  }
+
+  it('returns full immediately without calling repair when the first attempt already validates', async () => {
+    const repair = vi.fn()
+    const result = await validateAIResponseWithRepair(validResponse, undefined, repair)
+    expect(repair).not.toHaveBeenCalled()
+    if (!result.success) throw new Error('Expected validation to succeed')
+    expect(result.level).toBe('full')
+  })
+
+  it('calls repair with the specific errors and uses the corrected response when it now validates', async () => {
+    const repair = vi.fn().mockResolvedValue(validResponse)
+    const result = await validateAIResponseWithRepair(invalidResponse, undefined, repair)
+    expect(repair).toHaveBeenCalledTimes(1)
+    expect(repair.mock.calls[0][0]).toContain('harm_damage')
+    if (!result.success) throw new Error('Expected validation to succeed')
+    expect(result.level).toBe('full')
+    expect(result.data.scene_text).toBe(validResponse.scene_text)
+  })
+
+  it('falls back to progressive degradation when the repair response still fails validation', async () => {
+    const repair = vi.fn().mockResolvedValue(invalidResponse)
+    const result = await validateAIResponseWithRepair(invalidResponse, undefined, repair)
+    expect(repair).toHaveBeenCalledTimes(1)
+    if (!result.success) throw new Error('Expected validation to succeed')
+    expect(result.level).toBe('partial')
+  })
+
+  it('falls back to progressive degradation when the repair call itself throws', async () => {
+    const repair = vi.fn().mockRejectedValue(new Error('network down'))
+    const result = await validateAIResponseWithRepair(invalidResponse, undefined, repair)
+    if (!result.success) throw new Error('Expected validation to succeed')
+    expect(result.level).toBe('partial')
+  })
+
+  it('never calls repair more than once even when it keeps failing', async () => {
+    const repair = vi.fn().mockResolvedValue({ scene_text: 'x' }) // still invalid (too short, no world_updates)
+    await validateAIResponseWithRepair(invalidResponse, undefined, repair)
+    expect(repair).toHaveBeenCalledTimes(1)
   })
 })

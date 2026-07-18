@@ -57,6 +57,21 @@ describe('aggregateInventoryItems', () => {
     ])
     expect(result.map(i => i.name)).toEqual(['Amulet', 'Zweihander'])
   })
+
+  it('surfaces the first non-empty itemType seen across carriers', () => {
+    const result = aggregateInventoryItems([
+      { name: 'Helios', inventory: { items: [{ id: 'i1', name: 'Rope', quantity: 1, itemType: 'misc' }] } },
+      { name: 'Mara', inventory: { items: [{ id: 'i2', name: 'rope', quantity: 1 }] } },
+    ])
+    expect(result[0].itemType).toBe('misc')
+  })
+
+  it('leaves itemType unset when no carrier provides one', () => {
+    const result = aggregateInventoryItems([
+      { name: 'Helios', inventory: { items: [{ id: 'i1', name: 'Rope', quantity: 1 }] } },
+    ])
+    expect(result[0].itemType).toBeUndefined()
+  })
 })
 
 describe('describeAggregatedItem', () => {
@@ -74,5 +89,26 @@ describe('describeAggregatedItem', () => {
     expect(text).toContain('Mara')
     expect(text).not.toContain('Mara (x1)')
     expect(text).toContain('Tags: magic, consumable')
+  })
+
+  it('leads with the item type when present', () => {
+    const text = describeAggregatedItem({
+      name: 'Healing Potion',
+      totalQuantity: 1,
+      holders: [{ characterName: 'Helios', quantity: 1 }],
+      tags: [],
+      itemType: 'consumable',
+    })
+    expect(text.split('\n\n')[0]).toBe('Type: consumable')
+  })
+
+  it('omits the type line entirely when absent', () => {
+    const text = describeAggregatedItem({
+      name: 'Rope',
+      totalQuantity: 1,
+      holders: [{ characterName: 'Helios', quantity: 1 }],
+      tags: [],
+    })
+    expect(text).not.toContain('Type:')
   })
 })

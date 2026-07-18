@@ -15,6 +15,10 @@ export interface AggregatedItem {
   totalQuantity: number
   holders: Array<{ characterName: string; quantity: number }>
   tags: string[]
+  // First non-empty itemType seen across every carrier — purely a display
+  // label (see InventoryItem.itemType's doc comment in inventory.ts), not
+  // something this module reconciles if carriers disagree.
+  itemType?: string
 }
 
 /**
@@ -43,6 +47,10 @@ export function aggregateInventoryItems(
         byKey.set(key, entry)
       }
 
+      if (!entry.itemType && typeof item.itemType === 'string' && item.itemType) {
+        entry.itemType = item.itemType
+      }
+
       entry.totalQuantity += quantity
       const holder = entry.holders.find(h => h.characterName === character.name)
       if (holder) {
@@ -68,7 +76,9 @@ export function describeAggregatedItem(item: AggregatedItem): string {
   const holderLine = item.holders
     .map(h => (h.quantity > 1 ? `${h.characterName} (x${h.quantity})` : h.characterName))
     .join(', ')
-  const parts = [`Carried by: ${holderLine}`]
+  const parts: string[] = []
+  if (item.itemType) parts.push(`Type: ${item.itemType}`)
+  parts.push(`Carried by: ${holderLine}`)
   if (item.tags.length > 0) parts.push(`Tags: ${item.tags.join(', ')}`)
   return parts.join('\n\n')
 }

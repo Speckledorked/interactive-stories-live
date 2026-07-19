@@ -36,6 +36,7 @@ import {
 } from './corruption'
 import { AI_MODELS } from '@/lib/ai/models'
 import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
+import { resolveEntityByNameOrId } from './entityResolution'
 
 /**
  * Apply all world updates from an AI GM response to the database
@@ -100,21 +101,35 @@ export async function applyWorldUpdates(
         }
       }
 
+      // Fetched once per batch and resolved against in-memory (exact -> a
+      // single confident fuzzy match) rather than a per-item `contains`
+      // query — see entityResolution.ts. `contains` could both cross-match
+      // an unrelated entity whose name merely contained the search string,
+      // and fail on a trivial AI-side typo, silently auto-creating a
+      // duplicate stub instead of updating the real one. Known Bugs P0.
+      const clocksForResolution = world_updates.clock_changes?.length
+        ? await tx.clock.findMany({ where: { campaignId } })
+        : []
+      const npcsForResolution = world_updates.npc_changes?.length
+        ? await tx.nPC.findMany({ where: { campaignId } })
+        : []
+      const charactersForResolution = (world_updates.npc_changes?.length || world_updates.pc_changes?.length)
+        ? await tx.character.findMany({ where: { campaignId } })
+        : []
+      const factionsForResolution = world_updates.faction_changes?.length
+        ? await tx.faction.findMany({ where: { campaignId } })
+        : []
+
       // 2. Update clocks
       if (world_updates.clock_changes) {
         console.log(`⏰ Updating ${world_updates.clock_changes.length} clocks`)
-        
+
         for (const clockChange of world_updates.clock_changes) {
-          // Try to find clock by ID first, then by name
-          const clock = await tx.clock.findFirst({
-            where: {
-              campaignId,
-              OR: [
-                { id: clockChange.clock_name_or_id },
-                { name: { contains: clockChange.clock_name_or_id, mode: 'insensitive' } }
-              ]
-            }
-          })
+          const clockResolution = resolveEntityByNameOrId(clocksForResolution, clockChange.clock_name_or_id)
+          const clock = clockResolution.kind === 'found' ? clockResolution.entity : null
+          if (clockResolution.kind === 'ambiguous') {
+            console.warn(`  ⚠️ Ambiguous clock name "${clockChange.clock_name_or_id}" — matches ${clockResolution.candidates.map(c => c.name).join(', ')}, skipping rather than guessing`)
+          }
 
           if (clock) {
             const newTicks = Math.max(0, Math.min(
@@ -139,15 +154,11 @@ export async function applyWorldUpdates(
         console.log(`👤 Updating ${world_updates.npc_changes.length} NPCs`)
         
         for (const npcChange of world_updates.npc_changes) {
-          const npc = await tx.nPC.findFirst({
-            where: {
-              campaignId,
-              OR: [
-                { id: npcChange.npc_name_or_id },
-                { name: { contains: npcChange.npc_name_or_id, mode: 'insensitive' } }
-              ]
-            }
-          })
+          const npcResolution = resolveEntityByNameOrId(npcsForResolution, npcChange.npc_name_or_id)
+          const npc = npcResolution.kind === 'found' ? npcResolution.entity : null
+          if (npcResolution.kind === 'ambiguous') {
+            console.warn(`  ⚠️ Ambiguous NPC name "${npcChange.npc_name_or_id}" — matches ${npcResolution.candidates.map(c => c.name).join(', ')}, skipping rather than guessing or creating a duplicate`)
+          }
 
           if (npc) {
             involvedNpcIds.add(npc.id)
@@ -178,16 +189,8 @@ export async function applyWorldUpdates(
             if (npcChange.changes.harm_damage && npcChange.changes.harm_damage > 0) {
               let weaponBonus = 0
               if (npcChange.changes.harm_damage_dealt_by) {
-                const attacker = await tx.character.findFirst({
-                  where: {
-                    campaignId,
-                    OR: [
-                      { id: npcChange.changes.harm_damage_dealt_by },
-                      { name: { contains: npcChange.changes.harm_damage_dealt_by, mode: 'insensitive' } }
-                    ]
-                  },
-                  select: { equipment: true, inventory: true }
-                })
+                const attackerResolution = resolveEntityByNameOrId(charactersForResolution, npcChange.changes.harm_damage_dealt_by)
+                const attacker = attackerResolution.kind === 'found' ? attackerResolution.entity : null
                 if (attacker) {
                   const weaponName = (attacker.equipment as any)?.weapon || ''
                   weaponBonus = resolveDamageBonus(attacker.inventory as any, weaponName)
@@ -219,7 +222,7 @@ export async function applyWorldUpdates(
 
               console.log(`  👤 Updated NPC: ${npc.name}`)
             }
-          } else if (npcChange.is_new || npcChange.changes.description) {
+          } else if (npcResolution.kind === 'not_found' && (npcChange.is_new || npcChange.changes.description)) {
             // Auto-create a stub NPC when the AI introduces a new character mid-scene
             const newNPC = await tx.nPC.create({
               data: {
@@ -236,9 +239,12 @@ export async function applyWorldUpdates(
                 isDiscovered: sceneOrigin
               }
             })
+            // So a later npc_change in this same batch referencing the same
+            // new name resolves to it instead of creating a second stub.
+            npcsForResolution.push(newNPC)
             involvedNpcIds.add(newNPC.id)
             console.log(`  👤 Created new NPC: ${newNPC.name}`)
-          } else {
+          } else if (npcResolution.kind === 'not_found') {
             console.warn(`  ⚠️ NPC not found and no stub info provided: ${npcChange.npc_name_or_id}`)
           }
         }
@@ -249,15 +255,11 @@ export async function applyWorldUpdates(
         console.log(`🦸 Updating ${world_updates.pc_changes.length} characters`)
 
         for (const pcChange of world_updates.pc_changes) {
-          const character = await tx.character.findFirst({
-            where: {
-              campaignId,
-              OR: [
-                { id: pcChange.character_name_or_id },
-                { name: { contains: pcChange.character_name_or_id, mode: 'insensitive' } }
-              ]
-            }
-          })
+          const pcResolution = resolveEntityByNameOrId(charactersForResolution, pcChange.character_name_or_id)
+          const character = pcResolution.kind === 'found' ? pcResolution.entity : null
+          if (pcResolution.kind === 'ambiguous') {
+            console.warn(`  ⚠️ Ambiguous character name "${pcChange.character_name_or_id}" — matches ${pcResolution.candidates.map(c => c.name).join(', ')}, skipping rather than guessing`)
+          }
 
           if (character) {
             const updateData: any = {}
@@ -829,7 +831,7 @@ export async function applyWorldUpdates(
 
               console.log(`  🦸 Updated character: ${character.name}`)
             }
-          } else {
+          } else if (pcResolution.kind === 'not_found') {
             console.warn(`  ⚠️ Character not found: ${pcChange.character_name_or_id}`)
           }
         }
@@ -847,15 +849,11 @@ export async function applyWorldUpdates(
         console.log(`🏛️ Updating ${world_updates.faction_changes.length} factions`)
         
         for (const factionChange of world_updates.faction_changes) {
-          const faction = await tx.faction.findFirst({
-            where: {
-              campaignId,
-              OR: [
-                { id: factionChange.faction_name_or_id },
-                { name: { contains: factionChange.faction_name_or_id, mode: 'insensitive' } }
-              ]
-            }
-          })
+          const factionResolution = resolveEntityByNameOrId(factionsForResolution, factionChange.faction_name_or_id)
+          const faction = factionResolution.kind === 'found' ? factionResolution.entity : null
+          if (factionResolution.kind === 'ambiguous') {
+            console.warn(`  ⚠️ Ambiguous faction name "${factionChange.faction_name_or_id}" — matches ${factionResolution.candidates.map(c => c.name).join(', ')}, skipping rather than guessing or creating a duplicate`)
+          }
 
           if (faction) {
             involvedFactionIds.add(faction.id)
@@ -906,7 +904,7 @@ export async function applyWorldUpdates(
 
               console.log(`  🏛️ Updated faction: ${faction.name}`)
             }
-          } else if (factionChange.is_new || factionChange.changes.description) {
+          } else if (factionResolution.kind === 'not_found' && (factionChange.is_new || factionChange.changes.description)) {
             // Auto-create a stub faction when the AI introduces a new group mid-campaign
             const threatLevelMap: Record<string, number> = {
               'LOW': 1, 'MEDIUM': 2, 'HIGH': 3, 'EXTREME': 4
@@ -929,9 +927,12 @@ export async function applyWorldUpdates(
                 isDiscovered: sceneOrigin
               }
             })
+            // So a later faction_change in this same batch referencing the
+            // same new name resolves to it instead of creating a duplicate.
+            factionsForResolution.push(newFaction)
             involvedFactionIds.add(newFaction.id)
             console.log(`  🏛️ Created new faction: ${newFaction.name}`)
-          } else {
+          } else if (factionResolution.kind === 'not_found') {
             console.warn(`  ⚠️ Faction not found and no stub info provided: ${factionChange.faction_name_or_id}`)
           }
         }

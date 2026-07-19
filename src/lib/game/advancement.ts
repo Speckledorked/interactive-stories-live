@@ -22,13 +22,33 @@ export interface StatUsage {
 }
 
 /**
- * Perk structure
+ * Perk structure. Like Move, perks are AI-authored — grounded in what this
+ * specific character has actually done in this specific campaign, not drawn
+ * from a fixed list (an early version of this engine granted one of 4 fixed
+ * templates by tag-frequency; that made every character in every campaign
+ * converge on the same handful of perks regardless of genre or backstory).
+ * id is derived server-side from name via buildPerkFromAI, never trusted
+ * from the AI, so the same conceptual perk reported with slightly different
+ * phrasing across scenes still dedupes correctly — same reasoning as Move.
  */
 export interface Perk {
   id: string
   name: string
   description: string
   tags?: string[]
+}
+
+/**
+ * Build a Perk from what the AI reports (name/description/tags) — the id is
+ * always derived here, never taken from the AI. Mirrors buildMoveFromAI.
+ */
+export function buildPerkFromAI(aiPerk: { name: string; description: string; tags?: string[] }): Perk {
+  return {
+    id: slugifyCapabilityKey(aiPerk.name),
+    name: aiPerk.name,
+    description: aiPerk.description,
+    tags: aiPerk.tags,
+  }
 }
 
 /**
@@ -75,11 +95,10 @@ export interface OrganicGrowthInstruction {
 }
 
 /**
- * Recent action summary for growth computation
+ * Recent action summary, used to update stat usage tracking
  */
 export interface RecentAction {
   actionId: string
-  tags?: string[]
   statUsed?: string | null
   outcome?: 'success' | 'mixed' | 'failure'
 }
@@ -144,10 +163,14 @@ export function recordStatUsage(
 }
 
 /**
- * Compute organic growth based on character usage patterns
- * This is a heuristic system that looks for patterns in:
- * - Repeated stat usage with success
- * - Action tags suggesting training or practice
+ * Compute deterministic organic growth from character usage patterns —
+ * stat increases only. Perks and Moves are NOT computed here: both are
+ * AI-authored (organic_advancement.new_perks/new_moves), grounded in what
+ * this specific character actually did in this specific campaign, rather
+ * than assigned from a fixed engine-side list — see Perk's doc comment for
+ * why. This function's only job is the one kind of growth that's genuinely
+ * a flat numeric fact rather than invented content: a stat crossing its
+ * usage/success threshold.
  *
  * currentTurn gates stat growth to at most once per ARC_LENGTH_TURNS per
  * stat (via each stat's statUsage.lastGrowthTurn) — the same arc cadence
@@ -157,7 +180,6 @@ export function recordStatUsage(
  */
 export function computeOrganicGrowth(
   character: Character,
-  recentActions: RecentAction[],
   currentTurn: number
 ): OrganicGrowthInstruction {
   const instruction: OrganicGrowthInstruction = {
@@ -167,19 +189,8 @@ export function computeOrganicGrowth(
   }
 
   const statUsage = (character.statUsage as any as StatUsage) || {}
-  const existingPerks = (character.perks as any as Perk[]) || []
 
-  // Count tag frequencies in recent actions
-  const tagCounts: Record<string, number> = {}
-  for (const action of recentActions) {
-    if (action.tags) {
-      for (const tag of action.tags) {
-        tagCounts[tag] = (tagCounts[tag] || 0) + 1
-      }
-    }
-  }
-
-  // 1. Check for stat improvements based on usage
+  // Check for stat improvements based on usage
   for (const [statKey, usage] of Object.entries(statUsage)) {
     // Threshold: 10+ uses with at least 60% success rate
     if (usage.uses >= 10 && usage.successes / usage.uses >= 0.6) {
@@ -200,64 +211,6 @@ export function computeOrganicGrowth(
       // Only suggest one stat increase per growth event
       break
     }
-  }
-
-  // 2. Check for perk awards based on tags
-  // Training/practice perks
-  if (tagCounts['training'] >= 3 || tagCounts['practice'] >= 3) {
-    const hasDisciplinedPerk = existingPerks.some(p => p.id === 'disciplined')
-    if (!hasDisciplinedPerk) {
-      instruction.newPerks.push({
-        id: 'disciplined',
-        name: 'Disciplined',
-        description: 'Your training shows. +1 forward when you have time to prepare.',
-        tags: ['training', 'bonus']
-      })
-    }
-  }
-
-  // Combat/fighting perks
-  if (tagCounts['combat'] >= 4 || tagCounts['fighting'] >= 4) {
-    const hasBattleHardenedPerk = existingPerks.some(p => p.id === 'battle_hardened')
-    if (!hasBattleHardenedPerk) {
-      instruction.newPerks.push({
-        id: 'battle_hardened',
-        name: 'Battle Hardened',
-        description: 'You\'ve seen real combat. Take +1 ongoing when fighting multiple foes.',
-        tags: ['combat', 'bonus']
-      })
-    }
-  }
-
-  // Stealth/spying perks
-  if (tagCounts['stealth'] >= 3 || tagCounts['spying'] >= 3 || tagCounts['infiltration'] >= 3) {
-    const hasShadowOperatorPerk = existingPerks.some(p => p.id === 'shadow_operator')
-    if (!hasShadowOperatorPerk) {
-      instruction.newPerks.push({
-        id: 'shadow_operator',
-        name: 'Shadow Operator',
-        description: 'You know how to move unseen. When you act under pressure to avoid detection, take +1.',
-        tags: ['stealth', 'bonus']
-      })
-    }
-  }
-
-  // Social/investigation perks
-  if (tagCounts['investigation'] >= 3 || tagCounts['social'] >= 3) {
-    const hasKeenEyePerk = existingPerks.some(p => p.id === 'keen_eye')
-    if (!hasKeenEyePerk) {
-      instruction.newPerks.push({
-        id: 'keen_eye',
-        name: 'Keen Eye',
-        description: 'You notice things others miss. +1 when reading a situation or person.',
-        tags: ['investigation', 'bonus']
-      })
-    }
-  }
-
-  // Limit to 1 new perk per growth event
-  if (instruction.newPerks.length > 1) {
-    instruction.newPerks = [instruction.newPerks[0]]
   }
 
   return instruction

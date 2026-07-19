@@ -249,8 +249,10 @@ export interface AIGMResponse {
         delta: number
         reason: string
       }>
+      // Small, specific bonuses earned from a repeated pattern in what
+      // this character has actually done — see ORGANIC CHARACTER GROWTH
+      // below. id is derived server-side from name; don't invent one.
       new_perks?: Array<{
-        id: string
         name: string
         description: string
         tags?: string[]
@@ -813,7 +815,7 @@ You MUST respond with a JSON object matching this structure:
       {"name": "ANOTHER_EXISTING_QUEST", "changes": {"status": "COMPLETED", "progress_append": "Delivered the ledger to the magistrate", "reward_grant": {"gold": 200, "standing_changes": [{"faction_name": "Merchants Guild", "delta": 1, "reason": "Delivered the ledger as promised"}]}}}
     ],
     "organic_advancement": [
-      {"character_id": "CHARACTER_NAME", "new_moves": [{"name": "Read the Room", "trigger": "When you enter a tense negotiation", "description": "You always get one honest tell from the room before anyone speaks."}]}
+      {"character_id": "CHARACTER_NAME", "new_perks": [{"name": "Riposte", "description": "You counter, you don't just block. +1 when you strike back at an opponent who's just missed you.", "tags": ["combat"]}], "new_moves": [{"name": "Read the Room", "trigger": "When you enter a tense negotiation", "description": "You always get one honest tell from the room before anyone speaks."}]}
     ],
     "notes_for_gm": "..."
   }
@@ -855,7 +857,7 @@ narrative levers:
 
 ORGANIC CHARACTER GROWTH:
 - Stats grow from -2 to +3 based on consistent use (keep total at +2, max one stat ≥ +2) — the engine detects this on its own from roll outcomes; you don't need to report it.
-- Perks reward a repeated PATTERN of tagged actions (combat, stealth, investigation) — the engine also detects the common ones on its own; propose your own via new_perks only for a pattern its fixed list wouldn't catch.
+- Perks (organic_advancement.new_perks) are small, specific bonuses earned from a repeated PATTERN in what THIS character has actually done — there is no fixed list, and you decide both when one's earned and what it is. Ground it in this campaign's setting and this character's own actions/backstory, never a generic reskin: a duelist who's fought a dozen blade-fights earns something bladed and specific ("Riposte: +1 when you counter an opponent who's just missed you"), not "+1 to combat"; a hacker in a cyberpunk campaign earns something about reading network traffic, not "keen eye." Two different characters who both fight a lot should end up with different perks if their fights actually played out differently. {"name": "Riposte", "description": "You counter, you don't just block. +1 when you strike back at an opponent who's just missed you.", "tags": ["combat"]} — don't invent an id; the engine derives one from name. Reserve for a genuine repeated pattern (roughly once every several sessions per character), not every scene.
 - New moves (organic_advancement.new_moves) are different: a RARE, one-time reward for a genuine narrative turning point, not routine competence — a mentor taught them a signature technique, they survived by exploiting one specific trait, a transformation left them permanently changed. Reserve for maybe once every several sessions per character. {"name": "Read the Room", "trigger": "When you enter a tense negotiation", "description": "You always get one honest tell from the room before anyone speaks."} — trigger names the situation it applies to, description says what it does. Don't invent an id; the engine derives one from name.
 - Growth driven by what characters DO, not player choices
 

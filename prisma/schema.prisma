@@ -1055,7 +1055,6 @@ model Scene {
   consequences Json? // { created?: string[], resolved?: string[], relationshipChanges?: object[] }
 
   // Phase 9: Turn tracking
-  turnDeadline   DateTime?
   waitingOnUsers Json? // Array of user IDs who need to act
 
   createdAt DateTime @default(now())

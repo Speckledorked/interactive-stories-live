@@ -128,17 +128,14 @@ export interface AIGMResponse {
             id: string
             quantity_delta: number // +/- to adjust quantity
           }>
-          slots_delta?: number // Adjust total inventory slots
         }
-        // Resource changes
+        // Resource changes. Faction reputation is tracked through
+        // standing_changes (a real, roll-feeding number), not here —
+        // don't invent a separate reputation field.
         resource_changes?: {
           gold_delta?: number // +/- gold
           contacts_add?: string[]
           contacts_remove?: string[]
-          reputation_changes?: Array<{
-            faction: string
-            delta: number
-          }>
         }
         // Someone treats a Taken Out (harm 6) character's wounds
         medical_attention?: {
@@ -286,6 +283,11 @@ export interface AIGMRequest {
       id: string
       name: string
       description: string | null
+      // Permanent/lasting changes the fiction has already written onto
+      // this character (scars, mutations, trauma, growth) — see
+      // pc_changes.appearance_changes/personality_changes below.
+      appearance: string | null
+      personality: string | null
       stats: any
       backstory: string | null
       goals: string | null
@@ -323,6 +325,11 @@ export interface AIGMRequest {
       // undiscovered, so don't name it in the prompt.
       factionId?: string | null
       factionRole?: string | null
+      // PbtA GM-facing flavor for a significant NPC — only set when the
+      // NPC actually has one (see npcFlavorFields in worldState.ts).
+      threat?: string
+      impulses?: string[]
+      moves?: string[]
     }>
     factions: Array<{
       id: string
@@ -890,8 +897,9 @@ INVENTORY: items_add, items_remove, items_modify (quantity_delta)
 - Set itemType (weapon/armor/consumable/quest/currency/misc) on every added item — purely a display label, costs nothing to include
 - If an added item is a consumable that should actually heal when used (a real healing potion, not just flavor), set effect: {"kind": "heal", "amount": N, "description": "..."} — the engine applies N harm healed automatically the moment the item is consumed (items_remove, or items_modify with a negative delta), you don't also need to set harm_healing for it. For any other kind of item effect (a charm, a specific-use key, anything that doesn't heal), use effect: {"kind": "custom", "description": "..."} — this is flavor text only, nothing mechanical happens, so still narrate its effect yourself in scene_text
 
-RESOURCES: gold_delta, contacts_add/remove, reputation_changes
-- Example: {"gold_delta": -50, "reputation_changes": [{"faction": "Thieves Guild", "delta": 10}]}
+RESOURCES: gold_delta, contacts_add/remove
+- Example: {"gold_delta": -50, "contacts_add": ["Old Marta, the fence"]}
+- Faction reputation goes through standing_changes (see below), not here — there is no separate reputation field.
 
 Make changes MATTER. Reference them in scene_text. Lost eye? Show how it affects vision. Equipment stolen? Show their reaction.
 </character_changes>
@@ -1052,6 +1060,10 @@ ${world_summary.characters.map(c => {
   const parts = [`${c.name}${c.description ? ` - ${c.description}` : ''}`]
   if (c.location) parts.push(`📍 ${c.location}`)
   if (c.backstory) parts.push(`Background: ${c.backstory}`)
+  // Lasting appearance/personality changes already written by the fiction —
+  // keep narrating consistently with them (a scar stays a scar).
+  if (c.appearance) parts.push(`Appearance: ${c.appearance}`)
+  if (c.personality) parts.push(`Personality: ${c.personality}`)
   if (c.goals) parts.push(`Goals: ${c.goals}`)
   parts.push(`Stats: ${JSON.stringify(c.stats)}`)
 
@@ -1104,7 +1116,15 @@ ${world_summary.npcs.filter(n => n.importance >= 3).map(n => {
   // affiliation with a hidden faction stays out of the prompt entirely.
   const npcFaction = n.factionId ? world_summary.factions.find(f => f.id === n.factionId) : null
   const factionPart = npcFaction ? ` | ${npcFaction.name} (${n.factionRole === 'LEADER' ? 'leader' : 'member'})` : ''
-  return `• ${n.name} - ${n.relationship || 'Neutral'} | Goals: ${n.goals || 'Unknown'} | Importance: ${n.importance}/5${factionPart}`
+  // PbtA GM-facing flavor — only set for NPCs built with it (usually the
+  // more significant ones). threat is their archetype, impulses are what
+  // drives their behavior, moves are custom things they can trigger in
+  // fiction (like a monster's signature attack) — play these, don't just
+  // decorate with them.
+  const threatPart = n.threat ? ` | Threat: ${n.threat}` : ''
+  const impulsesPart = n.impulses && n.impulses.length > 0 ? ` | Impulses: ${n.impulses.join(', ')}` : ''
+  const movesPart = n.moves && n.moves.length > 0 ? ` | Moves: ${n.moves.join(', ')}` : ''
+  return `• ${n.name} - ${n.relationship || 'Neutral'} | Goals: ${n.goals || 'Unknown'} | Importance: ${n.importance}/5${factionPart}${threatPart}${impulsesPart}${movesPart}`
 }).join('\n')}
 
 FACTIONS:

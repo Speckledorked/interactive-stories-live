@@ -45,12 +45,10 @@ interface CreateCharacterBody {
       quantity: number
       tags: string[]
     }>
-    slots?: number
   }
   resources?: {
     gold?: number
     contacts?: string[]
-    reputation?: Record<string, number>
   }
   consequences?: {
     promises?: string[]

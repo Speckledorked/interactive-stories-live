@@ -44,7 +44,6 @@ interface InventoryForMerge {
     damageBonus?: number
     effect?: { kind: 'heal' | 'custom'; amount?: number; description: string }
   }>
-  slots?: number
 }
 
 /**
@@ -55,7 +54,7 @@ interface InventoryForMerge {
 export function mergeGrantedItems(
   currentInventory: InventoryForMerge | null | undefined,
   granted: RewardGrantItem[] | undefined
-): { items: Array<NonNullable<InventoryForMerge['items']>[number] & { tags: string[] }>; slots: number } {
+): { items: Array<NonNullable<InventoryForMerge['items']>[number] & { tags: string[] }> } {
   const items = (currentInventory?.items || []).map(i => ({ ...i, tags: i.tags || [] }))
   for (const item of granted || []) {
     const existing = items.find(i => i.id === item.id)
@@ -65,7 +64,7 @@ export function mergeGrantedItems(
       items.push({ ...item, tags: item.tags || [] })
     }
   }
-  return { items, slots: currentInventory?.slots ?? 10 }
+  return { items }
 }
 
 interface RecipientCharacter {

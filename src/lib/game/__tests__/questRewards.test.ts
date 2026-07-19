@@ -8,18 +8,16 @@ describe('mergeGrantedItems', () => {
   it('adds a brand-new item to an empty inventory', () => {
     const result = mergeGrantedItems(null, [{ id: 'sword-1', name: 'Iron Sword', quantity: 1, tags: ['weapon'] }])
     expect(result.items).toEqual([{ id: 'sword-1', name: 'Iron Sword', quantity: 1, tags: ['weapon'] }])
-    expect(result.slots).toBe(10)
   })
 
   it('accumulates quantity when the item id already exists', () => {
-    const current = { items: [{ id: 'gold-coin', name: 'Gold Coin', quantity: 5, tags: [] }], slots: 12 }
+    const current = { items: [{ id: 'gold-coin', name: 'Gold Coin', quantity: 5, tags: [] }] }
     const result = mergeGrantedItems(current, [{ id: 'gold-coin', name: 'Gold Coin', quantity: 3, tags: [] }])
     expect(result.items).toEqual([{ id: 'gold-coin', name: 'Gold Coin', quantity: 8, tags: [] }])
-    expect(result.slots).toBe(12)
   })
 
   it('preserves existing items untouched when nothing is granted', () => {
-    const current = { items: [{ id: 'a', name: 'A', quantity: 1, tags: [] }], slots: 10 }
+    const current = { items: [{ id: 'a', name: 'A', quantity: 1, tags: [] }] }
     const result = mergeGrantedItems(current, undefined)
     expect(result.items).toEqual(current.items)
   })
@@ -80,14 +78,14 @@ describe('applyQuestRewardGrant', () => {
   it('grants items via mergeGrantedItems semantics', async () => {
     const db = makeDb()
     db.character.findMany.mockResolvedValue([
-      { id: 'c1', name: 'Jason', resources: {}, inventory: { items: [], slots: 10 } },
+      { id: 'c1', name: 'Jason', resources: {}, inventory: { items: [] } },
     ])
     await applyQuestRewardGrant(db as any, 'camp1', 'The Missing Caravan', {
       items: [{ id: 'ledger', name: 'Merchant Ledger', quantity: 1, tags: [] }],
     })
     expect(db.character.update).toHaveBeenCalledWith({
       where: { id: 'c1' },
-      data: { inventory: { items: [{ id: 'ledger', name: 'Merchant Ledger', quantity: 1, tags: [] }], slots: 10 } },
+      data: { inventory: { items: [{ id: 'ledger', name: 'Merchant Ledger', quantity: 1, tags: [] }] } },
     })
   })
 

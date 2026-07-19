@@ -142,17 +142,19 @@ export const PCChangesSchema = z.object({
       items_modify: z.array(z.object({
         id: z.string(),
         quantity_delta: z.number()
-      })).optional(),
-      slots_delta: z.number().optional()
+      })).optional()
     }).optional(),
+    // contacts_add/remove is real, lightweight flavor — displayed on the
+    // character sheet (CharacterSheetDisplay.tsx). There used to also be a
+    // reputation_changes field here, a per-faction number that shadowed
+    // the real, roll-feeding FactionStanding system (standing_changes
+    // below) and was read by nothing — removed rather than fixed, since
+    // standing_changes already is the mechanically-real version of the
+    // same idea.
     resource_changes: z.object({
       gold_delta: z.number().optional(),
       contacts_add: z.array(z.string()).optional(),
-      contacts_remove: z.array(z.string()).optional(),
-      reputation_changes: z.array(z.object({
-        faction: z.string(),
-        delta: z.number()
-      })).optional()
+      contacts_remove: z.array(z.string()).optional()
     }).optional(),
     // Only meaningful once a character is Taken Out (harm 6) — see the
     // dying-state note in the prompt. Someone treating their wounds.

@@ -48,6 +48,23 @@ function describeNpcSocialTies(rawTies: unknown, discoveredNpcNameById: Map<stri
 }
 
 /**
+ * PbtA-style GM-facing flavor for a significant NPC (threat archetype,
+ * what drives them, custom moves they can trigger) — set by admins/AI at
+ * creation but previously never read by anything, so an NPC built as a
+ * "grotesque" with real impulses/moves narrated exactly like a blank one.
+ * Only returns keys that are actually set, so the vast majority of minor
+ * NPCs (which never populate these) don't bloat every prompt with empty
+ * arrays/nulls.
+ */
+function npcFlavorFields(n: { threat: string | null; impulses: string[]; moves: string[] }) {
+  const fields: { threat?: string; impulses?: string[]; moves?: string[] } = {}
+  if (n.threat) fields.threat = n.threat
+  if (n.impulses.length > 0) fields.impulses = n.impulses
+  if (n.moves.length > 0) fields.moves = n.moves
+  return fields
+}
+
+/**
  * Last appended beat of a quest's progress log — the prompt only needs
  * "where this quest currently stands", not its whole history.
  */
@@ -235,6 +252,13 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       id: c.id,
       name: c.name,
       description: c.description,
+      // Permanent/lasting changes the fiction has already written onto this
+      // character (scars, mutations, trauma, growth) — previously written
+      // by pc_changes.appearance_changes/personality_changes but never fed
+      // back into any prompt, so the narrator that wrote a scar was never
+      // told about it again. Read here exactly like description/backstory.
+      appearance: c.appearance,
+      personality: c.personality,
       stats: c.stats,
       backstory: c.backstory,
       goals: c.goals,
@@ -274,7 +298,10 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       factionId: n.factionId,
       factionRole: n.factionRole,
       // Phase 9 NPC society: this NPC's own web of allies/rivals.
-      social_ties: describeNpcSocialTies(n.socialTies, discoveredNpcNameById)
+      social_ties: describeNpcSocialTies(n.socialTies, discoveredNpcNameById),
+      // PbtA GM-facing flavor (threat archetype, drives, custom moves) —
+      // only present for NPCs where it's actually set (see npcFlavorFields).
+      ...npcFlavorFields(n)
     })),
 
     // Only relevant, discovered factions. Numeric stats are deliberately
@@ -478,6 +505,13 @@ export async function buildWorldSummaryForAI(
       id: c.id,
       name: c.name,
       description: c.description,
+      // Permanent/lasting changes the fiction has already written onto this
+      // character (scars, mutations, trauma, growth) — previously written
+      // by pc_changes.appearance_changes/personality_changes but never fed
+      // back into any prompt, so the narrator that wrote a scar was never
+      // told about it again. Read here exactly like description/backstory.
+      appearance: c.appearance,
+      personality: c.personality,
       stats: c.stats,
       backstory: c.backstory,
       goals: c.goals,
@@ -512,7 +546,10 @@ export async function buildWorldSummaryForAI(
       factionId: n.factionId,
       factionRole: n.factionRole,
       // Phase 9 NPC society: this NPC's own web of allies/rivals.
-      social_ties: describeNpcSocialTies(n.socialTies, discoveredNpcNameById)
+      social_ties: describeNpcSocialTies(n.socialTies, discoveredNpcNameById),
+      // PbtA GM-facing flavor (threat archetype, drives, custom moves) —
+      // only present for NPCs where it's actually set (see npcFlavorFields).
+      ...npcFlavorFields(n)
     })),
 
     // Numeric stats are deliberately qualitative here, not exact — see
@@ -1059,6 +1096,18 @@ export async function generateNewSceneIntro(campaignId: string, characterIds?: s
       // Only include the most story-relevant details
       if (c.backstory && c.backstory.length > 20) {
         parts.push(`Background hint: ${c.backstory.substring(0, 80)}${c.backstory.length > 80 ? '...' : ''}`)
+      }
+
+      // Lasting appearance/personality changes the fiction already wrote
+      // (a scar, a trauma) are exactly the kind of hook a scene opener
+      // should be able to reach for — surfaced here the same truncated way
+      // backstory is above, not the full text.
+      if (c.appearance && c.appearance.length > 20) {
+        parts.push(`Appearance: ${c.appearance.substring(0, 80)}${c.appearance.length > 80 ? '...' : ''}`)
+      }
+
+      if (c.personality && c.personality.length > 20) {
+        parts.push(`Personality: ${c.personality.substring(0, 80)}${c.personality.length > 80 ? '...' : ''}`)
       }
 
       if (c.goals) {

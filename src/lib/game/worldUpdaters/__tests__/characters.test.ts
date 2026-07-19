@@ -34,7 +34,7 @@ afterEach(() => {
 const character = (over: Partial<Character> = {}): Character =>
   ({
     id: 'char1', name: 'Jason', harm: 0, conditions: null,
-    equipment: {}, inventory: { items: [], slots: 10 },
+    equipment: {}, inventory: { items: [] },
     relationships: null, consequences: null,
     appearance: null, personality: null, resources: null,
     corruption: 0,
@@ -94,7 +94,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
   it('applies harm damage reduced by a structured armor value', async () => {
     const roster = [character({
       equipment: { armor: 'reinforced coat' },
-      inventory: { items: [{ id: 'a1', name: 'reinforced coat', armorValue: 1 }], slots: 10 },
+      inventory: { items: [{ id: 'a1', name: 'reinforced coat', armorValue: 1 }] },
     })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { harm_damage: 3 } } as PcChange,
@@ -229,7 +229,7 @@ describe('applyCharacterChanges — appearance, personality, equipment', () => {
 
 describe('applyCharacterChanges — inventory', () => {
   it('stacks a newly-added item onto an existing one by id', async () => {
-    const roster = [character({ inventory: { items: [{ id: 'p1', name: 'Healing Potion', quantity: 1 }], slots: 10 } })]
+    const roster = [character({ inventory: { items: [{ id: 'p1', name: 'Healing Potion', quantity: 1 }] } })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { inventory_changes: { items_add: [{ id: 'p1', name: 'Healing Potion', quantity: 2 }] } } } as PcChange,
     ], roster, noTheme, true)
@@ -240,7 +240,7 @@ describe('applyCharacterChanges — inventory', () => {
   it("enforces a consumed item's heal effect deterministically, independent of narration", async () => {
     const roster = [character({
       harm: 4,
-      inventory: { items: [{ id: 'p1', name: 'Healing Potion', quantity: 1, effect: { kind: 'heal', amount: 2, description: 'Mends wounds.' } }], slots: 10 },
+      inventory: { items: [{ id: 'p1', name: 'Healing Potion', quantity: 1, effect: { kind: 'heal', amount: 2, description: 'Mends wounds.' } }] },
     })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { inventory_changes: { items_remove: ['p1'] } } } as PcChange,
@@ -253,7 +253,7 @@ describe('applyCharacterChanges — inventory', () => {
   it('heals proportionally to the quantity consumed via items_modify', async () => {
     const roster = [character({
       harm: 5,
-      inventory: { items: [{ id: 'p1', name: 'Healing Potion', quantity: 3, effect: { kind: 'heal', amount: 1, description: 'x' } }], slots: 10 },
+      inventory: { items: [{ id: 'p1', name: 'Healing Potion', quantity: 3, effect: { kind: 'heal', amount: 1, description: 'x' } }] },
     })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { inventory_changes: { items_modify: [{ id: 'p1', quantity_delta: -2 }] } } } as PcChange,
@@ -266,7 +266,7 @@ describe('applyCharacterChanges — inventory', () => {
   it('never enforces a heal effect for a custom-kind item', async () => {
     const roster = [character({
       harm: 4,
-      inventory: { items: [{ id: 'c1', name: 'Warding Charm', quantity: 1, effect: { kind: 'custom', description: 'Wards off one curse.' } }], slots: 10 },
+      inventory: { items: [{ id: 'c1', name: 'Warding Charm', quantity: 1, effect: { kind: 'custom', description: 'Wards off one curse.' } }] },
     })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { inventory_changes: { items_remove: ['c1'] } } } as PcChange,
@@ -275,14 +275,6 @@ describe('applyCharacterChanges — inventory', () => {
     expect(data.harm).toBeUndefined()
   })
 
-  it('adjusts inventory slots, floored at 0', async () => {
-    const roster = [character({ inventory: { items: [], slots: 2 } })]
-    await applyCharacterChanges(tx as any, 'camp1', 1, [
-      { character_name_or_id: 'char1', changes: { inventory_changes: { slots_delta: -5 } } } as PcChange,
-    ], roster, noTheme, true)
-    const data = tx.character.update.mock.calls[0][0].data
-    expect(data.inventory.slots).toBe(0)
-  })
 })
 
 describe('applyCharacterChanges — resources and relationships', () => {

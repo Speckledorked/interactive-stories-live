@@ -9,6 +9,7 @@ import {
   harmPenalty,
   relationshipModifier,
   weatherPenalty,
+  conditionPenalty,
   computeMechanics,
   parseClassifications,
   formatRollReceipt,
@@ -254,6 +255,99 @@ describe('computeMechanics — relationship weight', () => {
   })
 })
 
+describe('conditionPenalty', () => {
+  it('is 0 with no conditions', () => {
+    expect(conditionPenalty(null)).toBe(0)
+    expect(conditionPenalty(undefined)).toBe(0)
+    expect(conditionPenalty([])).toBe(0)
+  })
+
+  it('sums flat rollModifiers across active conditions', () => {
+    expect(conditionPenalty([{ rollModifier: -1 }, { rollModifier: -1 }])).toBe(-2)
+  })
+
+  it('ignores conditions with no rollModifier (directional/freeform ones)', () => {
+    expect(conditionPenalty([{}, { rollModifier: undefined }])).toBe(0)
+  })
+
+  it('floors at -3 even if several stack lower', () => {
+    expect(conditionPenalty([{ rollModifier: -2 }, { rollModifier: -2 }])).toBe(-3)
+  })
+
+  it('never applies a positive net (only ever a penalty)', () => {
+    expect(conditionPenalty([{ rollModifier: 2 }])).toBe(0)
+  })
+})
+
+describe('computeMechanics — condition weight', () => {
+  it('applies a flat penalty from active conditions with a rollModifier', () => {
+    // dice 4+4=8, +1 cool, -1 stunned = 8 -> weak hit
+    const stunned = { ...baseCharacter, conditions: [{ rollModifier: -1 }] }
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' },
+      stunned,
+      seq(0.5, 0.5)
+    )
+    expect(m!.conditionMod).toBe(-1)
+    expect(m!.total).toBe(8)
+    expect(m!.outcome).toBe('weakHit')
+  })
+
+  it('is unaffected when no conditions are set', () => {
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5)
+    )
+    expect(m!.conditionMod).toBe(0)
+  })
+})
+
+describe('computeMechanics — matched signature (perk/Ability) bonus', () => {
+  const withSignature: CharacterForRoll = {
+    ...baseCharacter,
+    signatures: [{ id: 'perk:battle_hardened', name: 'Battle Hardened', trigger: 'Fighting multiple foes' }],
+  }
+
+  it('applies the signature bonus when the classifier matches an id the character actually has', () => {
+    // dice 4+4=8, +1 cool, +1 signature = 10 -> strong hit
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null, matched_signature_id: 'perk:battle_hardened' },
+      { id: 'a1' },
+      withSignature,
+      seq(0.5, 0.5)
+    )
+    expect(m!.signatureMod).toBe(1)
+    expect(m!.signatureName).toBe('Battle Hardened')
+    expect(m!.total).toBe(10)
+    expect(m!.outcome).toBe('strongHit')
+  })
+
+  it('never trusts the classifier blindly — an id not on the character is ignored', () => {
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null, matched_signature_id: 'perk:made_up' },
+      { id: 'a1' },
+      withSignature,
+      seq(0.5, 0.5)
+    )
+    expect(m!.signatureMod).toBe(0)
+    expect(m!.signatureName).toBeNull()
+  })
+
+  it('is unaffected when the classifier returns no match', () => {
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' },
+      withSignature,
+      seq(0.5, 0.5)
+    )
+    expect(m!.signatureMod).toBe(0)
+    expect(m!.signatureName).toBeNull()
+  })
+})
+
 describe('weatherPenalty', () => {
   it('is 0 with no weather on record', () => {
     expect(weatherPenalty(null)).toBe(0)
@@ -374,7 +468,7 @@ describe('parseClassifications', () => {
     )
     expect(parsed).toHaveLength(2)
     expect(parsed[0]).toEqual({
-      action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null, npc_name: null, accepts_bargain: false,
+      action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null, npc_name: null, accepts_bargain: false, matched_signature_id: null,
     })
     expect(parsed[1].move_name).toBe('no_roll')
     expect(parsed[1].capability_key).toBeNull()

@@ -50,6 +50,17 @@ export interface ActionClassification {
   // (see lib/game/corruption.ts) — grants the surge bonus at roll time.
   // Optional: absent means false.
   accepts_bargain?: boolean
+  // The id of a listed perk/signature-ability whose trigger the classifier
+  // judged this action clearly matches, or null. Perks ("+1 forward when
+  // you have time to prepare") and earned Abilities
+  // (organic_advancement.new_moves' trigger text) are both situational —
+  // there's no deterministic way to tell whether THIS action qualifies
+  // without asking something that can read the fiction, so this reuses
+  // the same classifier that already reads capability_key/faction_name/
+  // npc_name off the action text (see SignatureForRoll below). computeMechanics
+  // never trusts this id blindly — it's re-checked against the acting
+  // character's actual perks/moves before any bonus applies.
+  matched_signature_id?: string | null
 }
 
 export interface ActionMechanics {
@@ -68,6 +79,13 @@ export interface ActionMechanics {
   weatherCondition: string | null
   weatherMod: number
   harmPenalty: number
+  // Sum of active conditions' rollModifier (see conditionPenalty below).
+  conditionMod: number
+  // Name of the perk/signature-ability the classifier matched to this
+  // action, if any — for display alongside signatureMod.
+  signatureName: string | null
+  // SIGNATURE_BONUS when a listed perk/ability's trigger matched, else 0.
+  signatureMod: number
   // CORRUPTION_SURGE_BONUS when this roll invoked an open bargain, else 0.
   // A non-zero value is also the signal that a mark MUST land this scene
   // (see ensureSurgeCorruptionChanges in corruption.ts).
@@ -112,6 +130,40 @@ export function harmPenalty(harm: number): number {
   return harm >= 4 ? -1 : 0
 }
 
+// A flat, undirected roll penalty summed across every active condition —
+// same simplification philosophy as weatherPenalty/harmPenalty. Floored
+// rather than left uncapped so a pile of conditions can't zero out (or
+// invert) a roll outright; -3 already stacks with harm/weather to make a
+// battered character's rolls genuinely worse without being unplayable.
+// Only conditions with a real (non-directional) rollModifier contribute —
+// see COMMON_CONDITIONS in harm.ts for which ones that is and why.
+const CONDITION_PENALTY_FLOOR = -3
+
+export function conditionPenalty(conditions: Array<{ rollModifier?: number }> | null | undefined): number {
+  if (!conditions || conditions.length === 0) return 0
+  const total = conditions.reduce((sum, c) => sum + (c.rollModifier || 0), 0)
+  return Math.max(CONDITION_PENALTY_FLOOR, Math.min(0, total))
+}
+
+// A perk or earned Ability (organic_advancement.new_moves) offered to the
+// classifier as a possible situational match for an action — see
+// matched_signature_id on ActionClassification. `trigger` is what the
+// classifier reads to decide relevance: a perk's own description text
+// (perks don't have a separate trigger field) or an Ability's dedicated
+// trigger text. id is prefixed by kind so a same-named perk and Ability
+// can never collide.
+export interface SignatureForRoll {
+  id: string
+  name: string
+  trigger: string
+}
+
+// Every perk/ability read from prose is written as "+1" in its own
+// flavor text — matching that number here keeps the mechanic honest to
+// what players were told it does, without pretending finer-grained
+// tuning exists.
+export const SIGNATURE_BONUS = 1
+
 export interface CharacterForRoll {
   id: string
   name: string
@@ -130,6 +182,12 @@ export interface CharacterForRoll {
   // relationship_changes in lib/ai/client.ts and stateUpdater.ts's writer.
   // Only the NPC-keyed entries are read here (see RelationshipForRoll).
   relationships?: Record<string, { trust: number; tension: number; respect: number; fear: number }> | null
+  // Conditions currently marked on this character's sheet (see harm.ts) —
+  // read for conditionPenalty above.
+  conditions?: Array<{ rollModifier?: number }> | null
+  // This character's perks + earned Abilities, offered to the classifier
+  // as possible situational matches — see SignatureForRoll.
+  signatures?: SignatureForRoll[]
 }
 
 // The faction side of a roll, resolved by the orchestrator from the
@@ -289,9 +347,27 @@ export function computeMechanics(
   const weatherCondition = weather && !BENIGN_WEATHER_CONDITIONS.has(weather.condition) ? weather.condition : null
   const weatherMod = weatherPenalty(weather)
 
+  // Active conditions' flat roll penalty — see conditionPenalty above.
+  const conditionMod = conditionPenalty(character.conditions)
+
+  // Perk/Ability situational bonus: never trust the classifier's pick
+  // blindly — re-check it against the character's actual signatures
+  // first, same discipline capability_key gets above. An id the
+  // character doesn't actually have (hallucinated, or granted to a
+  // different character) contributes nothing.
+  let signatureName: string | null = null
+  let signatureMod = 0
+  if (classification.matched_signature_id) {
+    const matched = character.signatures?.find(s => s.id === classification.matched_signature_id)
+    if (matched) {
+      signatureName = matched.name
+      signatureMod = SIGNATURE_BONUS
+    }
+  }
+
   const harmMod = harmPenalty(character.harm)
   const dice: [number, number] = [rollD6(rng), rollD6(rng)]
-  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + weatherMod + harmMod + corruptionSurgeBonus
+  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + weatherMod + conditionMod + signatureMod + harmMod + corruptionSurgeBonus
   const outcome = calculateOutcome(total)
   // Flavor overrides display only, and only where it actually supplied text
   // for this band — a partially-flavored move (AI omitted one outcome)
@@ -313,6 +389,9 @@ export function computeMechanics(
     relationshipMod,
     weatherCondition,
     weatherMod,
+    conditionMod,
+    signatureName,
+    signatureMod,
     harmPenalty: harmMod,
     corruptionSurgeBonus,
     dice,
@@ -348,6 +427,7 @@ export function parseClassifications(raw: any, actionCount: number): ActionClass
       faction_name: typeof c.faction_name === 'string' && c.faction_name ? c.faction_name : null,
       npc_name: typeof c.npc_name === 'string' && c.npc_name ? c.npc_name : null,
       accepts_bargain: c.accepts_bargain === true,
+      matched_signature_id: typeof c.matched_signature_id === 'string' && c.matched_signature_id ? c.matched_signature_id : null,
     }))
 }
 
@@ -370,7 +450,10 @@ async function classifyActions(
         .filter(r => r.state === 'UNLOCKED')
         .map(r => r.framedLabel || r.capability.name)
         .join(', ')
-      return `${i}. ${character?.name || 'Unknown'}: "${a.actionText}"${knownCaps ? ` [known abilities: ${knownCaps}]` : ''}${character?.pendingBargainOffer ? ` [OPEN BARGAIN: ${character.pendingBargainOffer}]` : ''}`
+      const signatures = character?.signatures
+        ?.map(s => `${s.id} (${s.name}: ${s.trigger})`)
+        .join('; ')
+      return `${i}. ${character?.name || 'Unknown'}: "${a.actionText}"${knownCaps ? ` [known abilities: ${knownCaps}]` : ''}${signatures ? ` [perks/signature abilities: ${signatures}]` : ''}${character?.pendingBargainOffer ? ` [OPEN BARGAIN: ${character.pendingBargainOffer}]` : ''}`
     })
     .join('\n')
 
@@ -391,8 +474,9 @@ Rules:
 - faction_name: if the action is social/political leverage aimed at (or invoking the name/backing of) one of the listed FACTIONS — negotiating with its members, trading on its reputation, moving through its territory openly — name that faction exactly as listed; else null. Physical actions with no social dimension get null.
 - npc_name: if the action is aimed at persuading, appealing to, threatening, or otherwise leveraging ONE SPECIFIC NPC's personal opinion of the character (not their faction's) — name that NPC exactly as listed; else null. An action can name a faction OR an NPC OR neither, but naming both only makes sense if the character is explicitly working an individual within their own institution.
 - accepts_bargain: true ONLY if that action's line shows an [OPEN BARGAIN: ...] AND the action clearly reaches for / accepts / draws on that offered power. Refusing it, ignoring it, or doing something unrelated is false. Actions with no open bargain are always false.
+- matched_signature_id: if that action's line lists [perks/signature abilities] and this action clearly and specifically matches ONE of their trigger descriptions, return that exact id; else null. Be conservative — most actions match none, and an action can match at most one. Never invent an id not listed for that character.
 
-Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null, "npc_name": null, "accepts_bargain": false}]}`
+Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null, "npc_name": null, "accepts_bargain": false, "matched_signature_id": null}]}`
 
   const startTime = Date.now()
   try {
@@ -499,16 +583,30 @@ export async function resolveActionMechanics(
     const moveFlavorByKey = new Map(
       moveFlavorRows.map(m => [m.baseMoveKey as string, { name: m.name, outcomes: m.outcomes as MoveFlavorForRoll['outcomes'] }])
     )
-    const characters: CharacterForRoll[] = characterRows.map(c => ({
-      id: c.id,
-      name: c.name,
-      stats: (c.stats as Record<string, number> | null) || null,
-      harm: c.harm,
-      corruption: c.corruption,
-      pendingBargainOffer: (c.pendingBargain as any)?.offer || null,
-      capabilities: c.capabilities as any,
-      relationships: (c.relationships as any) || null,
-    }))
+    const characters: CharacterForRoll[] = characterRows.map(c => {
+      const perks = ((c.perks as any) || []) as Array<{ id: string; name: string; description: string }>
+      const moves = ((c.moves as any) || []) as Array<{ id: string; name: string; trigger: string }>
+      const signatures: SignatureForRoll[] = [
+        // A perk has no separate trigger field — its own description IS
+        // the trigger text (e.g. "+1 forward when you have time to
+        // prepare"). id prefixed by kind so a same-named perk and earned
+        // Ability can never collide in the classifier's flat id space.
+        ...perks.map(p => ({ id: `perk:${p.id}`, name: p.name, trigger: p.description })),
+        ...moves.map(m => ({ id: `move:${m.id}`, name: m.name, trigger: m.trigger })),
+      ]
+      return {
+        id: c.id,
+        name: c.name,
+        stats: (c.stats as Record<string, number> | null) || null,
+        harm: c.harm,
+        corruption: c.corruption,
+        pendingBargainOffer: (c.pendingBargain as any)?.offer || null,
+        capabilities: c.capabilities as any,
+        relationships: (c.relationships as any) || null,
+        conditions: ((c.conditions as any)?.conditions || []) as Array<{ rollModifier?: number }>,
+        signatures,
+      }
+    })
     const standingsByCharacter = new Map(
       characterRows.map(c => [c.id, new Map(c.factionStandings.map(s => [s.factionId, s.value]))])
     )
@@ -608,10 +706,10 @@ export async function resolveActionMechanics(
             userId: action?.userId || '',
             rollType: 'move',
             dice: m.dice,
-            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.weatherMod + m.harmPenalty,
+            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.weatherMod + m.conditionMod + m.signatureMod + m.harmPenalty,
             total: m.total,
             outcome: m.outcome,
-            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.weatherCondition ? `, ${m.weatherCondition.toLowerCase()}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
+            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.weatherCondition ? `, ${m.weatherCondition.toLowerCase()}` : ''}${m.conditionMod ? `, ${m.conditionMod} condition penalty` : ''}${m.signatureName ? `, ${m.signatureName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
           }
         }),
       })

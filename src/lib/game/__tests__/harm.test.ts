@@ -6,7 +6,7 @@
 // depends on their exact threshold behavior.
 
 import { describe, it, expect } from 'vitest'
-import { applyHarm, healHarm } from '../harm'
+import { applyHarm, healHarm, canAct, Condition } from '../harm'
 
 describe('applyHarm', () => {
   it('adds damage minus armor reduction, floored at 0', () => {
@@ -65,5 +65,39 @@ describe('healHarm', () => {
     const result = healHarm(6, 0)
     expect(result.newHarm).toBe(6)
     expect(result.message).not.toContain('no longer')
+  })
+})
+
+describe('canAct', () => {
+  it('allows action at harm below 6 with no conditions', () => {
+    expect(canAct(0, [])).toBe(true)
+    expect(canAct(5, [])).toBe(true)
+  })
+
+  it('forbids action at harm 6 (Taken Out)', () => {
+    expect(canAct(6, [])).toBe(false)
+  })
+
+  it('forbids action under a "cannot act" condition even at low harm', () => {
+    const stabilized: Condition = {
+      id: 'stabilized_1',
+      name: 'Stabilized',
+      category: 'Physical',
+      description: 'No longer dying, but still critically injured',
+      mechanicalEffect: 'Cannot act until harm reduced below 6',
+    }
+    expect(canAct(6, [stabilized])).toBe(false)
+  })
+
+  it('allows action under conditions with a merely mechanical penalty', () => {
+    const stunned: Condition = {
+      id: 'stunned_1',
+      name: 'Stunned',
+      category: 'Physical',
+      description: 'Dazed and disoriented.',
+      mechanicalEffect: '-1 to all rolls until end of scene',
+      rollModifier: -1,
+    }
+    expect(canAct(0, [stunned])).toBe(true)
   })
 })

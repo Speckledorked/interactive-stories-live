@@ -31,7 +31,13 @@ export const ConditionSchema = z.object({
   name: z.string(),
   category: z.enum(['Physical', 'Emotional', 'Special']),
   description: z.string(),
-  mechanicalEffect: z.string().optional()
+  mechanicalEffect: z.string().optional(),
+  // Flat, universal roll modifier actually applied by computeMechanics
+  // (see conditionPenalty in resolution.ts). Only set this for conditions
+  // whose real effect is genuinely undirected — a bidirectional or
+  // situational condition (e.g. "+1 combat/-2 social") should leave this
+  // unset rather than force an inaccurate flat number.
+  rollModifier: z.number().int().min(-2).max(2).optional()
 })
 
 // Equipment change schema

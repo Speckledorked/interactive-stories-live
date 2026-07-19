@@ -23,7 +23,24 @@ export interface Condition {
   name: string
   category: ConditionCategory
   description: string
+  // Display-only flavor text — never parsed for enforcement (a
+  // freeform string like "-2 to rolls using that limb" can't be
+  // reliably turned into a number, and several COMMON_CONDITIONS below
+  // are deliberately directional/situational in exactly this text).
+  // See rollModifier for the deterministic side.
   mechanicalEffect?: string // e.g., "-1 to social rolls"
+  // The actual number computeMechanics applies to every roll while this
+  // condition is active (see conditionPenalty in resolution.ts) — a flat,
+  // universal modifier, the same simplification weatherPenalty/harmPenalty
+  // already make elsewhere in this engine. Only set for conditions whose
+  // real-world effect is genuinely flat/undirected; a condition whose
+  // flavor text is inherently situational (Enraged's "+1 combat/-2
+  // social", Terrified's "vs. the source of fear") is left unset here
+  // rather than force a number that would be wrong half the time — see
+  // COMMON_CONDITIONS below for which is which. The AI can also set this
+  // directly on a custom condition it authors (schema.ts clamps it to
+  // -2..2), not just the fixed templates.
+  rollModifier?: number
   appliedAt?: number // Turn number when applied
 }
 
@@ -199,24 +216,6 @@ export function clearCondition(
 }
 
 /**
- * Get total penalty from all conditions
- */
-export function getTotalConditionPenalty(conditions: Condition[]): number {
-  let penalty = 0
-
-  for (const condition of conditions) {
-    // Parse mechanical effects for penalties
-    const effect = condition.mechanicalEffect?.toLowerCase() || ''
-    const match = effect.match(/-(\d+)/)
-    if (match) {
-      penalty += parseInt(match[1])
-    }
-  }
-
-  return penalty
-}
-
-/**
  * Check if a character can act
  */
 export function canAct(harm: HarmLevel, conditions: Condition[]): boolean {
@@ -249,6 +248,19 @@ export function createDefaultHarmState(): HarmState {
 /**
  * Common condition templates
  */
+// rollModifier is only ever set below for a condition whose real effect is
+// genuinely flat/undirected. Several are deliberately left unset instead
+// of forcing a number that would misrepresent the fiction half the time:
+//   - bleeding: a per-turn harm tick, not a roll modifier — that's a
+//     different, still-unbuilt mechanic (see mechanicalEffect), not one
+//     this fix pretends to add.
+//   - enraged: genuinely bidirectional (+1 combat / -2 social) — no single
+//     flat number is honest here without knowing which side a roll falls
+//     on, and this file has no roll-type classification (see
+//     resolution.ts's identical reasoning for excluding relationship
+//     "fear" from its modifier).
+//   - cursed/marked/unstable: freeform GM-adjudicated or a wholly separate
+//     sub-mechanic (a 1d6 side-roll), not a flat roll penalty.
 export const COMMON_CONDITIONS: Record<string, Omit<Condition, 'id' | 'appliedAt'>> = {
   // Physical Conditions
   bleeding: {
@@ -261,19 +273,26 @@ export const COMMON_CONDITIONS: Record<string, Omit<Condition, 'id' | 'appliedAt
     name: 'Stunned',
     category: 'Physical',
     description: 'Dazed and disoriented.',
-    mechanicalEffect: '-1 to all rolls until end of scene'
+    mechanicalEffect: '-1 to all rolls until end of scene',
+    rollModifier: -1
   },
   poisoned: {
     name: 'Poisoned',
     category: 'Physical',
     description: 'Toxins coursing through the body.',
-    mechanicalEffect: '-1 to physical rolls'
+    mechanicalEffect: '-1 to physical rolls',
+    rollModifier: -1
   },
   broken_limb: {
     name: 'Broken Limb',
     category: 'Physical',
     description: 'A limb is fractured or broken.',
-    mechanicalEffect: '-2 to rolls using that limb'
+    // Flavor text says -2 "to rolls using that limb" — flattened to a
+    // lighter -1 applied to every roll rather than -2 to only some,
+    // since this engine has no per-roll "does this use the limb" signal
+    // (same flat-simplification tradeoff weatherPenalty documents).
+    mechanicalEffect: '-2 to rolls using that limb',
+    rollModifier: -1
   },
 
   // Emotional Conditions
@@ -281,7 +300,8 @@ export const COMMON_CONDITIONS: Record<string, Omit<Condition, 'id' | 'appliedAt
     name: 'Terrified',
     category: 'Emotional',
     description: 'Overwhelmed by fear.',
-    mechanicalEffect: '-2 to rolls against the source of fear'
+    mechanicalEffect: '-2 to rolls against the source of fear',
+    rollModifier: -1
   },
   enraged: {
     name: 'Enraged',
@@ -293,13 +313,15 @@ export const COMMON_CONDITIONS: Record<string, Omit<Condition, 'id' | 'appliedAt
     name: 'Despair',
     category: 'Emotional',
     description: 'Lost all hope.',
-    mechanicalEffect: '-1 to all rolls'
+    mechanicalEffect: '-1 to all rolls',
+    rollModifier: -1
   },
   confused: {
     name: 'Confused',
     category: 'Emotional',
     description: 'Cannot think clearly.',
-    mechanicalEffect: '-1 to investigation and planning rolls'
+    mechanicalEffect: '-1 to investigation and planning rolls',
+    rollModifier: -1
   },
 
   // Special Conditions

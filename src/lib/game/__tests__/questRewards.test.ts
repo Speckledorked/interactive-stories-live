@@ -102,6 +102,25 @@ describe('applyQuestRewardGrant', () => {
     expect(db.factionStanding.upsert).toHaveBeenCalled()
   })
 
+  it('clamps an absurd/hallucinated gold amount to the shared magnitude cap', async () => {
+    const db = makeDb()
+    db.character.findMany.mockResolvedValue([
+      { id: 'c1', name: 'Jason', resources: { gold: 0 }, inventory: null },
+    ])
+    const log = await applyQuestRewardGrant(db as any, 'camp1', 'The Missing Caravan', { gold: 99_999_999 })
+    expect(db.character.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { resources: { gold: 100_000 } } })
+    expect(log.some(l => l.includes('100000 gold'))).toBe(true)
+  })
+
+  it('never grants negative gold, even if the AI reports a negative reward', async () => {
+    const db = makeDb()
+    db.character.findMany.mockResolvedValue([
+      { id: 'c1', name: 'Jason', resources: { gold: 10 }, inventory: null },
+    ])
+    await applyQuestRewardGrant(db as any, 'camp1', 'The Missing Caravan', { gold: -50 })
+    expect(db.character.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { resources: { gold: 10 } } })
+  })
+
   it('skips silently when named recipients cannot be resolved', async () => {
     const db = makeDb()
     db.character.findFirst.mockResolvedValue(null)

@@ -33,6 +33,7 @@ import { resolveArmorValue, resolveConsumableHeal } from '../inventory'
 import { applyCapabilityChanges } from '../capabilities'
 import { applyDebtChanges } from '../debts'
 import { applyStandingChanges } from '../standing'
+import { clampGoldDelta } from '../economy'
 import {
   applyCorruptionMarks,
   corruptionStage,
@@ -544,10 +545,12 @@ export async function applyCharacterChanges(
       const currentResources: any = (character.resources as any) || { gold: 0, contacts: [], reputation: {} }
       const resChange = pcChange.changes.resource_changes
 
-      // Gold changes
+      // Gold changes — clamped to a sane magnitude (see economy.ts) before
+      // ever touching the balance, same discipline standing/corruption use.
       if (resChange.gold_delta !== undefined) {
-        currentResources.gold = Math.max(0, (currentResources.gold || 0) + resChange.gold_delta)
-        console.log(`  💰 ${character.name} ${resChange.gold_delta > 0 ? 'gained' : 'spent'} ${Math.abs(resChange.gold_delta)} gold (now ${currentResources.gold})`)
+        const goldDelta = clampGoldDelta(resChange.gold_delta)
+        currentResources.gold = Math.max(0, (currentResources.gold || 0) + goldDelta)
+        console.log(`  💰 ${character.name} ${goldDelta > 0 ? 'gained' : 'spent'} ${Math.abs(goldDelta)} gold (now ${currentResources.gold})`)
       }
 
       // Contact changes

@@ -332,11 +332,15 @@ export const WorldUpdatesSchema = z.object({
   notes_for_gm: z.string().optional()
 })
 
-// Time passage schema
+// Time passage schema. days/hours drive the actual date/world-turn math
+// (elapsedInGameHours in lib/game/tick/pacing.ts, clamped there against an
+// absurd single-scene report) — there is no free-text date override field;
+// one existed previously but was never read consistently (a report using
+// it alone banked zero hours toward the world-turn clock while still
+// jumping the displayed date), so it's not part of the contract.
 export const TimePassageSchema = z.object({
   days: z.number().optional(),
   hours: z.number().optional(),
-  new_date: z.string().optional(),
   description: z.string().optional()
 })
 

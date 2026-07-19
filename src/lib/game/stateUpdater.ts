@@ -1,47 +1,36 @@
-import { openaiFetch } from '@/lib/ai/openaiCompat'
 // src/lib/game/stateUpdater.ts
-// Apply AI GM world updates to the database
-// This is where the AI's narrative decisions become persistent game state
+// Apply AI GM world updates to the database.
+// This is where the AI's narrative decisions become persistent game state.
+//
+// This file is the orchestrator only: it fetches the shared per-batch
+// entity rosters once (see entityResolution.ts) and calls one domain
+// applier per world_updates field, in the same order the original
+// monolithic implementation did. Each domain applier lives in
+// ./worldUpdaters/ and is independently unit-tested — see README Known
+// Bugs P1 (stateUpdater decomposition, #4/#41) for why this file used to
+// be ~1,400 lines with no direct test coverage.
 
+import { openaiFetch } from '@/lib/ai/openaiCompat'
 import { prisma } from '@/lib/prisma'
 import { AIGMResponse } from '@/lib/ai/client'
-import { EventVisibility } from '@prisma/client'
-import {
-  applyHarm,
-  healHarm,
-  markCondition,
-  clearCondition,
-  performRecoveryRoll,
-  makeDeathSave,
-  applyMedicalAttention,
-  performHeroicSacrifice,
-  isDying,
-  HarmState,
-  Condition,
-  HarmLevel,
-  PermanentInjury
-} from './harm'
-import { resolveArmorValue, resolveDamageBonus, resolveConsumableHeal } from './inventory'
-import { applyCapabilityChanges } from './capabilities'
-import { applyDebtChanges } from './debts'
-import { applyStandingChanges } from './standing'
-import { applyQuestRewardGrant } from './questRewards'
-import {
-  parseCorruptionTheme,
-  applyCorruptionMarks,
-  corruptionStage,
-  CONSUMED_CONDITION_NAME,
-  MAX_CORRUPTION,
-  CorruptionTheme
-} from './corruption'
 import { AI_MODELS } from '@/lib/ai/models'
 import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
-import { resolveEntityByNameOrId } from './entityResolution'
+import { parseCorruptionTheme, CorruptionTheme } from './corruption'
+
+import { applyTimelineEventChanges } from './worldUpdaters/timelineEvents'
+import { applyClockChanges } from './worldUpdaters/clocks'
+import { applyNpcChanges } from './worldUpdaters/npcs'
+import { applyCharacterChanges } from './worldUpdaters/characters'
+import { applyFactionChanges } from './worldUpdaters/factions'
+import { applyLocationChanges, autoRegisterLocationsFromMovement } from './worldUpdaters/locations'
+import { applyQuestChanges } from './worldUpdaters/quests'
+import { applyBargainOffers } from './worldUpdaters/bargainOffers'
+import { storeGmNotesForTurn } from './worldUpdaters/worldMetaNotes'
 
 /**
  * Apply all world updates from an AI GM response to the database
  * This is transactional - if any update fails, all are rolled back
- * 
+ *
  * @param campaignId - Campaign to update
  * @param aiResponse - AI GM's response with world_updates
  * @param currentTurnNumber - The turn number being resolved
@@ -69,36 +58,29 @@ export async function applyWorldUpdates(
 
   const { world_updates } = aiResponse
 
-  // Populated as NPC/Faction records are resolved below — this is the only
-  // reliable record of which entities this scene actually touched (npc_changes/
-  // faction_changes reference entities by free-text npc_name_or_id/faction_name_or_id,
-  // resolved to real IDs here and nowhere else).
-  const involvedNpcIds = new Set<string>()
-  const involvedFactionIds = new Set<string>()
-
-  // Lazily fetched the first time a corruption_change appears — undefined
-  // means "not looked up yet", null means "this campaign has no theme".
-  let corruptionTheme: CorruptionTheme | null | undefined = undefined
+  let involvedNpcIds: string[] = []
+  let involvedFactionIds: string[] = []
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Lazily fetched the first time a corruption_change or bargain_offer
+      // appears, and shared between the two — undefined means "not looked
+      // up yet", null means "this campaign has no theme".
+      let corruptionTheme: CorruptionTheme | null | undefined = undefined
+      const getCorruptionTheme = async (): Promise<CorruptionTheme | null> => {
+        if (corruptionTheme === undefined) {
+          const campaignRow = await tx.campaign.findUnique({
+            where: { id: campaignId },
+            select: { corruptionTheme: true }
+          })
+          corruptionTheme = parseCorruptionTheme(campaignRow?.corruptionTheme)
+        }
+        return corruptionTheme
+      }
+
       // 1. Create timeline events
       if (world_updates.new_timeline_events) {
-        console.log(`📜 Creating ${world_updates.new_timeline_events.length} timeline events`)
-        
-        for (const event of world_updates.new_timeline_events) {
-          await tx.timelineEvent.create({
-            data: {
-              campaignId,
-              turnNumber: currentTurnNumber,
-              title: event.title,
-              summaryPublic: event.summary_public,
-              summaryGM: event.summary_gm,
-              isOffscreen: event.is_offscreen,
-              visibility: event.visibility.toUpperCase() as EventVisibility
-            }
-          })
-        }
+        await applyTimelineEventChanges(tx, campaignId, currentTurnNumber, world_updates.new_timeline_events)
       }
 
       // Fetched once per batch and resolved against in-memory (exact -> a
@@ -122,719 +104,22 @@ export async function applyWorldUpdates(
 
       // 2. Update clocks
       if (world_updates.clock_changes) {
-        console.log(`⏰ Updating ${world_updates.clock_changes.length} clocks`)
-
-        for (const clockChange of world_updates.clock_changes) {
-          const clockResolution = resolveEntityByNameOrId(clocksForResolution, clockChange.clock_name_or_id)
-          const clock = clockResolution.kind === 'found' ? clockResolution.entity : null
-          if (clockResolution.kind === 'ambiguous') {
-            console.warn(`  ⚠️ Ambiguous clock name "${clockChange.clock_name_or_id}" — matches ${clockResolution.candidates.map(c => c.name).join(', ')}, skipping rather than guessing`)
-          }
-
-          if (clock) {
-            const newTicks = Math.max(0, Math.min(
-              clock.currentTicks + clockChange.delta,
-              clock.maxTicks
-            ))
-
-            await tx.clock.update({
-              where: { id: clock.id },
-              data: { currentTicks: newTicks }
-            })
-
-            console.log(`  ⏰ ${clock.name}: ${clock.currentTicks} → ${newTicks}`)
-          } else {
-            console.warn(`  ⚠️ Clock not found: ${clockChange.clock_name_or_id}`)
-          }
-        }
+        await applyClockChanges(tx, world_updates.clock_changes, clocksForResolution)
       }
 
       // 3. Update NPCs
       if (world_updates.npc_changes) {
-        console.log(`👤 Updating ${world_updates.npc_changes.length} NPCs`)
-        
-        for (const npcChange of world_updates.npc_changes) {
-          const npcResolution = resolveEntityByNameOrId(npcsForResolution, npcChange.npc_name_or_id)
-          const npc = npcResolution.kind === 'found' ? npcResolution.entity : null
-          if (npcResolution.kind === 'ambiguous') {
-            console.warn(`  ⚠️ Ambiguous NPC name "${npcChange.npc_name_or_id}" — matches ${npcResolution.candidates.map(c => c.name).join(', ')}, skipping rather than guessing or creating a duplicate`)
-          }
-
-          if (npc) {
-            involvedNpcIds.add(npc.id)
-            const updateData: any = {}
-
-            // Append to GM notes if provided
-            if (npcChange.changes.notes_append) {
-              updateData.gmNotes = (npc.gmNotes || '') + '\n\n' + npcChange.changes.notes_append
-            }
-
-            // Update description if AI provided one and NPC has none yet
-            if (npcChange.changes.description && !npc.description) {
-              updateData.description = npcChange.changes.description
-            }
-
-            // New/updated goal — a fresh goal starts its progress over,
-            // regardless of what was left on the previous one.
-            if (npcChange.changes.goals) {
-              updateData.goals = npcChange.changes.goals
-              updateData.goalProgress = 0
-            }
-
-            // Minimal harm tracking (see NPC.harm's doc comment in
-            // schema.prisma) — mirrors pc_changes.harm_damage below via the
-            // same applyHarm(), but with no armor-reduction side (NPCs
-            // don't carry equipment) and no conditions/death-saves: just a
-            // harm number and a one-way Taken Out flip.
-            if (npcChange.changes.harm_damage && npcChange.changes.harm_damage > 0) {
-              let weaponBonus = 0
-              if (npcChange.changes.harm_damage_dealt_by) {
-                const attackerResolution = resolveEntityByNameOrId(charactersForResolution, npcChange.changes.harm_damage_dealt_by)
-                const attacker = attackerResolution.kind === 'found' ? attackerResolution.entity : null
-                if (attacker) {
-                  const weaponName = (attacker.equipment as any)?.weapon || ''
-                  weaponBonus = resolveDamageBonus(attacker.inventory as any, weaponName)
-                }
-              }
-              const harmResult = applyHarm(
-                ((npc.harm as number) || 0) as HarmLevel,
-                npcChange.changes.harm_damage + weaponBonus,
-                0
-              )
-              updateData.harm = harmResult.newHarm
-              if (harmResult.newHarm >= 6) {
-                updateData.isAlive = false
-              }
-              console.log(`  💥 ${npc.name}: ${harmResult.message}`)
-            }
-
-            // Fog of war: the party witnessing this NPC in a live scene is
-            // what reveals them — never on an offscreen background update.
-            if (sceneOrigin && !npc.isDiscovered) {
-              updateData.isDiscovered = true
-            }
-
-            if (Object.keys(updateData).length > 0) {
-              await tx.nPC.update({
-                where: { id: npc.id },
-                data: updateData
-              })
-
-              console.log(`  👤 Updated NPC: ${npc.name}`)
-            }
-          } else if (npcResolution.kind === 'not_found' && (npcChange.is_new || npcChange.changes.description)) {
-            // Auto-create a stub NPC when the AI introduces a new character mid-scene
-            const newNPC = await tx.nPC.create({
-              data: {
-                campaignId,
-                name: npcChange.npc_name_or_id,
-                description: npcChange.changes.description || null,
-                gmNotes: npcChange.changes.notes_append || null,
-                goals: npcChange.changes.goals || null,
-                importance: 1,
-                isAlive: true,
-                // Fog of war: an NPC introduced offscreen (e.g. a tournament
-                // winner) exists but isn't "met" yet — undiscovered until a
-                // live scene actually involves them.
-                isDiscovered: sceneOrigin
-              }
-            })
-            // So a later npc_change in this same batch referencing the same
-            // new name resolves to it instead of creating a second stub.
-            npcsForResolution.push(newNPC)
-            involvedNpcIds.add(newNPC.id)
-            console.log(`  👤 Created new NPC: ${newNPC.name}`)
-          } else if (npcResolution.kind === 'not_found') {
-            console.warn(`  ⚠️ NPC not found and no stub info provided: ${npcChange.npc_name_or_id}`)
-          }
-        }
+        const result = await applyNpcChanges(
+          tx, campaignId, world_updates.npc_changes, npcsForResolution, charactersForResolution, sceneOrigin
+        )
+        involvedNpcIds = result.involvedNpcIds
       }
 
       // 4. Update player characters
       if (world_updates.pc_changes) {
-        console.log(`🦸 Updating ${world_updates.pc_changes.length} characters`)
-
-        for (const pcChange of world_updates.pc_changes) {
-          const pcResolution = resolveEntityByNameOrId(charactersForResolution, pcChange.character_name_or_id)
-          const character = pcResolution.kind === 'found' ? pcResolution.entity : null
-          if (pcResolution.kind === 'ambiguous') {
-            console.warn(`  ⚠️ Ambiguous character name "${pcChange.character_name_or_id}" — matches ${pcResolution.candidates.map(c => c.name).join(', ')}, skipping rather than guessing`)
-          }
-
-          if (character) {
-            const updateData: any = {}
-
-            // Update location
-            if (pcChange.changes.location) {
-              updateData.currentLocation = pcChange.changes.location
-            }
-
-            // Process harm and conditions
-            const previousHarm = (character.harm as number) || 0
-            let currentHarm = previousHarm
-            let currentConditions: Condition[] = (character.conditions as any)?.conditions || []
-            let permanentInjuries: PermanentInjury[] = (character.conditions as any)?.permanentInjuries || []
-            let deathSaves: number = (character.conditions as any)?.deathSaves || 0
-            let newIsAlive: boolean | undefined
-            let harmMessages: string[] = []
-
-            // Apply harm damage (armor mitigates incoming damage) — prefers
-            // a structured armorValue on the matching inventory item over
-            // guessing from the equipped name string (see resolveArmorValue).
-            if (pcChange.changes.harm_damage && pcChange.changes.harm_damage > 0) {
-              const armorName = (character.equipment as any)?.armor || ''
-              const armorReduction = resolveArmorValue(character.inventory as any, armorName)
-              const harmResult = applyHarm(
-                currentHarm as HarmLevel,
-                pcChange.changes.harm_damage,
-                armorReduction
-              )
-              currentHarm = harmResult.newHarm
-              harmMessages.push(harmResult.message)
-
-              // Auto-add conditions from harm
-              for (const autoCondition of harmResult.autoConditions) {
-                const condResult = markCondition(currentConditions, autoCondition)
-                currentConditions = condResult.updatedConditions
-              }
-            }
-
-            // Apply harm healing
-            if (pcChange.changes.harm_healing && pcChange.changes.harm_healing > 0) {
-              const healResult = healHarm(
-                currentHarm as HarmLevel,
-                pcChange.changes.harm_healing
-              )
-              currentHarm = healResult.newHarm
-              harmMessages.push(healResult.message)
-            }
-
-            // Add conditions
-            if (pcChange.changes.conditions_add && pcChange.changes.conditions_add.length > 0) {
-              for (const conditionData of pcChange.changes.conditions_add) {
-                const newCondition: Condition = {
-                  id: conditionData.id || `condition_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                  name: conditionData.name,
-                  category: conditionData.category,
-                  description: conditionData.description,
-                  mechanicalEffect: conditionData.mechanicalEffect,
-                  appliedAt: currentTurnNumber
-                }
-                const condResult = markCondition(currentConditions, newCondition)
-                currentConditions = condResult.updatedConditions
-                harmMessages.push(condResult.message)
-              }
-            }
-
-            // Remove conditions
-            if (pcChange.changes.conditions_remove && pcChange.changes.conditions_remove.length > 0) {
-              for (const conditionIdOrName of pcChange.changes.conditions_remove) {
-                // Try to find by ID first, then by name
-                const conditionToRemove = currentConditions.find(c =>
-                  c.id === conditionIdOrName ||
-                  c.name.toLowerCase() === conditionIdOrName.toLowerCase()
-                )
-
-                if (conditionToRemove) {
-                  const clearResult = clearCondition(currentConditions, conditionToRemove.id)
-                  currentConditions = clearResult.updatedConditions
-                  harmMessages.push(clearResult.message)
-                }
-              }
-            }
-
-            // Taken Out for the first time this turn (was under 6, now at 6):
-            // resolve the outcome server-side, the same way a GM would roll
-            // behind the screen — stabilized, a lasting injury, captured, or
-            // critical. Not something the AI decides.
-            if (previousHarm < 6 && currentHarm === 6) {
-              const roll = (Math.floor(Math.random() * 6) + 1) + (Math.floor(Math.random() * 6) + 1)
-              const recovery = performRecoveryRoll(roll, harmMessages.join('; ') || 'Taken Out', currentTurnNumber)
-              currentHarm = recovery.newHarm
-
-              // The generic "Taken Out" condition from applyHarm's auto-add is
-              // superseded by whichever specific outcome the recovery roll gives.
-              currentConditions = currentConditions.filter(c => c.name !== 'Taken Out')
-
-              if (recovery.outcome === 'permanent_injury' && recovery.permanentInjury) {
-                permanentInjuries = [...permanentInjuries, recovery.permanentInjury]
-                currentConditions = markCondition(currentConditions, {
-                  id: recovery.permanentInjury.id,
-                  name: recovery.permanentInjury.name,
-                  category: 'Physical',
-                  description: recovery.permanentInjury.description,
-                  mechanicalEffect: recovery.permanentInjury.mechanicalEffect,
-                  appliedAt: currentTurnNumber
-                }).updatedConditions
-              } else if (recovery.outcome === 'captured') {
-                currentConditions = markCondition(currentConditions, {
-                  id: `captured_${Date.now()}`,
-                  name: 'Captured',
-                  category: 'Physical',
-                  description: 'Taken prisoner while unconscious.',
-                  mechanicalEffect: 'Cannot act until freed',
-                  appliedAt: currentTurnNumber
-                }).updatedConditions
-              } else if (recovery.outcome === 'dead') {
-                // performRecoveryRoll's worst outcome is critical, not final —
-                // it still takes intervention or repeated death saves.
-                deathSaves = 2
-                currentConditions = markCondition(currentConditions, {
-                  id: `dying_${Date.now()}`,
-                  name: 'Critically Dying',
-                  category: 'Physical',
-                  description: 'Unconscious and fading fast. Someone must intervene.',
-                  mechanicalEffect: 'Cannot act',
-                  appliedAt: currentTurnNumber
-                }).updatedConditions
-              }
-
-              harmMessages.push(recovery.message)
-            }
-
-            // Skill-scaled treatment, usable any time a character is hurt.
-            // applyMedicalAttention itself refuses to touch someone still at
-            // harm 6 (unconscious/dying) — they need to be stabilized via a
-            // death save first, same as the harm.ts module's own design.
-            if (pcChange.changes.medical_attention) {
-              const { skill, has_supplies } = pcChange.changes.medical_attention
-              const treatment = applyMedicalAttention(currentHarm as HarmLevel, skill, has_supplies)
-              currentHarm = treatment.newHarm
-              harmMessages.push(treatment.message)
-              if (treatment.success && currentHarm < 6) {
-                currentConditions = currentConditions.filter(
-                  c => !['Taken Out', 'Captured', 'Critically Dying', 'Stabilized'].includes(c.name)
-                )
-                deathSaves = 0
-              }
-            }
-
-            // Already critically dying: apply whatever the AI narrated this turn.
-            const wasDying = isDying(currentHarm as HarmLevel, currentConditions)
-            if (wasDying && pcChange.changes.death_save_result) {
-              const save = makeDeathSave(deathSaves, pcChange.changes.death_save_result === 'success')
-              deathSaves = save.newDeathSaves
-              harmMessages.push(save.message)
-
-              if (save.status === 'stable') {
-                currentConditions = currentConditions.filter(c => c.name !== 'Critically Dying')
-                currentConditions = markCondition(currentConditions, {
-                  id: `stabilized_${Date.now()}`,
-                  name: 'Stabilized',
-                  category: 'Physical',
-                  description: 'No longer dying, but still critically injured.',
-                  mechanicalEffect: 'Cannot act until harm reduced below 6',
-                  appliedAt: currentTurnNumber
-                }).updatedConditions
-              } else if (save.status === 'dead') {
-                newIsAlive = false
-                currentConditions = currentConditions.filter(c => c.name !== 'Critically Dying')
-                currentConditions = markCondition(currentConditions, {
-                  id: `deceased_${Date.now()}`,
-                  name: 'Deceased',
-                  category: 'Physical',
-                  description: 'Died from their wounds.',
-                  mechanicalEffect: 'Cannot act',
-                  appliedAt: currentTurnNumber
-                }).updatedConditions
-              }
-            }
-
-            if (pcChange.changes.heroic_sacrifice) {
-              const { circumstances, effect } = pcChange.changes.heroic_sacrifice
-              const sacrifice = performHeroicSacrifice(character.id, character.name, circumstances, effect, currentTurnNumber)
-              newIsAlive = false
-              currentConditions = markCondition(currentConditions, {
-                id: `sacrifice_${Date.now()}`,
-                name: 'Fallen',
-                category: 'Physical',
-                description: sacrifice.legacy || `${character.name} gave their life.`,
-                mechanicalEffect: 'Cannot act',
-                appliedAt: currentTurnNumber
-              }).updatedConditions
-              harmMessages.push(sacrifice.legacy || `${character.name} makes the ultimate sacrifice.`)
-            }
-
-            // Corruption marks — only when this campaign actually has a
-            // corruption theme (a universe without one ignores the field
-            // entirely). Clamped to one mark per scene, never decreases;
-            // reaching the cap adds the Consumed condition (see
-            // lib/game/corruption.ts).
-            if (pcChange.changes.corruption_change) {
-              if (corruptionTheme === undefined) {
-                const campaignRow = await tx.campaign.findUnique({
-                  where: { id: campaignId },
-                  select: { corruptionTheme: true }
-                })
-                corruptionTheme = parseCorruptionTheme(campaignRow?.corruptionTheme)
-              }
-              if (corruptionTheme) {
-                const marks = Number(pcChange.changes.corruption_change.marks) || 0
-                const result = applyCorruptionMarks(character.corruption, marks)
-                if (result.applied > 0) {
-                  updateData.corruption = result.newValue
-                  const stage = corruptionStage(corruptionTheme, result.newValue)
-                  harmMessages.push(`${corruptionTheme.name} deepens${stage ? `: ${stage}` : ''} (${pcChange.changes.corruption_change.reason || 'no reason given'})`)
-                  if (result.reachedMax) {
-                    currentConditions = markCondition(currentConditions, {
-                      id: `consumed_${Date.now()}`,
-                      name: CONSUMED_CONDITION_NAME,
-                      category: 'Special',
-                      description: `${corruptionTheme.name} has taken all there was to take. This character is slipping beyond the player's control.`,
-                      mechanicalEffect: 'The final stage of corruption — irreversible',
-                      appliedAt: currentTurnNumber
-                    }).updatedConditions
-                  }
-                }
-              }
-            }
-
-            // Update harm and conditions if changed
-            if (harmMessages.length > 0) {
-              updateData.harm = currentHarm
-              updateData.conditions = {
-                conditions: currentConditions,
-                permanentInjuries,
-                deathSaves
-              }
-              if (newIsAlive !== undefined) {
-                updateData.isAlive = newIsAlive
-              }
-              console.log(`  💔 ${character.name}: ${harmMessages.join(', ')}`)
-            }
-
-            // Phase 14: Process relationship changes
-            if (pcChange.changes.relationship_changes && pcChange.changes.relationship_changes.length > 0) {
-              const currentRelationships: any = (character.relationships as any) || {}
-
-              for (const relChange of pcChange.changes.relationship_changes) {
-                const entityId = relChange.entity_id
-                const currentRel = currentRelationships[entityId] || {
-                  trust: 0,
-                  tension: 0,
-                  respect: 0,
-                  fear: 0
-                }
-
-                // Apply deltas and clamp between -100 and 100
-                const clamp = (value: number) => Math.max(-100, Math.min(100, value))
-
-                currentRelationships[entityId] = {
-                  trust: relChange.trust_delta !== undefined ? clamp(currentRel.trust + relChange.trust_delta) : currentRel.trust,
-                  tension: relChange.tension_delta !== undefined ? clamp(currentRel.tension + relChange.tension_delta) : currentRel.tension,
-                  respect: relChange.respect_delta !== undefined ? clamp(currentRel.respect + relChange.respect_delta) : currentRel.respect,
-                  fear: relChange.fear_delta !== undefined ? clamp(currentRel.fear + relChange.fear_delta) : currentRel.fear
-                }
-
-                console.log(`  🤝 ${character.name} → ${relChange.entity_name}: ${relChange.reason}`)
-              }
-
-              updateData.relationships = currentRelationships
-            }
-
-            // Phase 14: Process consequence changes
-            if (pcChange.changes.consequences_add || pcChange.changes.consequences_remove) {
-              const currentConsequences: any = (character.consequences as any) || {
-                promises: [],
-                debts: [],
-                enemies: [],
-                longTermThreats: []
-              }
-
-              // Add new consequences
-              if (pcChange.changes.consequences_add) {
-                for (const newConseq of pcChange.changes.consequences_add) {
-                  const typeKey = newConseq.type === 'longTermThreat' ? 'longTermThreats' : newConseq.type + 's'
-                  if (!currentConsequences[typeKey]) {
-                    currentConsequences[typeKey] = []
-                  }
-                  currentConsequences[typeKey].push(newConseq.description)
-                  console.log(`  ⚠️ ${character.name} gained ${newConseq.type}: ${newConseq.description}`)
-                }
-              }
-
-              // Remove consequences
-              if (pcChange.changes.consequences_remove) {
-                for (const toRemove of pcChange.changes.consequences_remove) {
-                  // Search all consequence arrays for matching description
-                  for (const key of Object.keys(currentConsequences)) {
-                    if (Array.isArray(currentConsequences[key])) {
-                      currentConsequences[key] = currentConsequences[key].filter(
-                        (item: string) => !item.toLowerCase().includes(toRemove.toLowerCase())
-                      )
-                    }
-                  }
-                  console.log(`  ✅ ${character.name} resolved consequence: ${toRemove}`)
-                }
-              }
-
-              updateData.consequences = currentConsequences
-            }
-
-            // Process appearance changes
-            if (pcChange.changes.appearance_changes) {
-              const appearanceChange = pcChange.changes.appearance_changes
-              if (appearanceChange.append) {
-                const currentAppearance = character.appearance || ''
-                updateData.appearance = currentAppearance
-                  ? `${currentAppearance} ${appearanceChange.description}`
-                  : appearanceChange.description
-              } else {
-                updateData.appearance = appearanceChange.description
-              }
-              console.log(`  👁️ ${character.name} appearance changed: ${appearanceChange.description}`)
-            }
-
-            // Process personality changes
-            if (pcChange.changes.personality_changes) {
-              const personalityChange = pcChange.changes.personality_changes
-              if (personalityChange.append) {
-                const currentPersonality = character.personality || ''
-                updateData.personality = currentPersonality
-                  ? `${currentPersonality} ${personalityChange.description}`
-                  : personalityChange.description
-              } else {
-                updateData.personality = personalityChange.description
-              }
-              console.log(`  🧠 ${character.name} personality changed: ${personalityChange.description}`)
-            }
-
-            // Process equipment changes
-            if (pcChange.changes.equipment_changes) {
-              const currentEquipment: any = (character.equipment as any) || {}
-              const equipChange = pcChange.changes.equipment_changes
-
-              if (equipChange.weapon) {
-                if (equipChange.weapon.action === 'add' || equipChange.weapon.action === 'replace') {
-                  currentEquipment.weapon = equipChange.weapon.value
-                  console.log(`  ⚔️ ${character.name} equipped weapon: ${equipChange.weapon.value}`)
-                } else if (equipChange.weapon.action === 'remove') {
-                  console.log(`  ⚔️ ${character.name} lost weapon: ${currentEquipment.weapon || equipChange.weapon.value}`)
-                  currentEquipment.weapon = ''
-                }
-              }
-
-              if (equipChange.armor) {
-                if (equipChange.armor.action === 'add' || equipChange.armor.action === 'replace') {
-                  currentEquipment.armor = equipChange.armor.value
-                  console.log(`  🛡️ ${character.name} equipped armor: ${equipChange.armor.value}`)
-                } else if (equipChange.armor.action === 'remove') {
-                  console.log(`  🛡️ ${character.name} lost armor: ${currentEquipment.armor || equipChange.armor.value}`)
-                  currentEquipment.armor = ''
-                }
-              }
-
-              if (equipChange.misc) {
-                if (equipChange.misc.action === 'add' || equipChange.misc.action === 'replace') {
-                  currentEquipment.misc = equipChange.misc.value
-                  console.log(`  🎒 ${character.name} equipped misc: ${equipChange.misc.value}`)
-                } else if (equipChange.misc.action === 'remove') {
-                  console.log(`  🎒 ${character.name} lost misc: ${currentEquipment.misc || equipChange.misc.value}`)
-                  currentEquipment.misc = ''
-                }
-              }
-
-              updateData.equipment = currentEquipment
-            }
-
-            // Process inventory changes
-            if (pcChange.changes.inventory_changes) {
-              const currentInventory: any = (character.inventory as any) || { items: [], slots: 10 }
-              const invChange = pcChange.changes.inventory_changes
-
-              // Ensure items array exists
-              if (!currentInventory.items) {
-                currentInventory.items = []
-              }
-
-              // Add items
-              if (invChange.items_add) {
-                for (const newItem of invChange.items_add) {
-                  // Check if item already exists, if so increase quantity
-                  const existingItem = currentInventory.items.find((item: any) => item.id === newItem.id)
-                  if (existingItem) {
-                    existingItem.quantity += newItem.quantity
-                    console.log(`  📦 ${character.name} gained ${newItem.quantity}x ${newItem.name} (now ${existingItem.quantity})`)
-                  } else {
-                    currentInventory.items.push(newItem)
-                    console.log(`  📦 ${character.name} gained ${newItem.quantity}x ${newItem.name}`)
-                  }
-                }
-              }
-
-              // Remove items
-              if (invChange.items_remove) {
-                for (const itemIdOrName of invChange.items_remove) {
-                  const indexToRemove = currentInventory.items.findIndex((item: any) =>
-                    item.id === itemIdOrName || item.name.toLowerCase() === itemIdOrName.toLowerCase()
-                  )
-                  if (indexToRemove !== -1) {
-                    const removedItem = currentInventory.items[indexToRemove]
-                    currentInventory.items.splice(indexToRemove, 1)
-                    console.log(`  📦 ${character.name} lost ${removedItem.name}`)
-
-                    // A consumed item's 'heal' effect is enforced here,
-                    // deterministically — not left to the AI to separately
-                    // remember via harm_healing. See resolveConsumableHeal's
-                    // doc comment in lib/game/inventory.ts.
-                    const healAmount = resolveConsumableHeal(removedItem)
-                    if (healAmount > 0) {
-                      const healResult = healHarm(currentHarm as HarmLevel, healAmount)
-                      currentHarm = healResult.newHarm
-                      harmMessages.push(`${character.name} uses ${removedItem.name}: ${healResult.message}`)
-                      updateData.harm = currentHarm
-                      updateData.conditions = { conditions: currentConditions, permanentInjuries, deathSaves }
-                    }
-                  }
-                }
-              }
-
-              // Modify item quantities
-              if (invChange.items_modify) {
-                for (const modify of invChange.items_modify) {
-                  const item = currentInventory.items.find((item: any) => item.id === modify.id)
-                  if (item) {
-                    // A negative delta is "used" — apply as many units'
-                    // worth of 'heal' effect as were actually consumed
-                    // (e.g. drinking 2 potions from a stack at once),
-                    // before quantity drops below.
-                    if (modify.quantity_delta < 0) {
-                      const healAmount = resolveConsumableHeal(item, Math.abs(modify.quantity_delta))
-                      if (healAmount > 0) {
-                        const healResult = healHarm(currentHarm as HarmLevel, healAmount)
-                        currentHarm = healResult.newHarm
-                        harmMessages.push(`${character.name} uses ${Math.abs(modify.quantity_delta)}x ${item.name}: ${healResult.message}`)
-                        updateData.harm = currentHarm
-                        updateData.conditions = { conditions: currentConditions, permanentInjuries, deathSaves }
-                      }
-                    }
-
-                    item.quantity += modify.quantity_delta
-                    console.log(`  📦 ${character.name} ${modify.quantity_delta > 0 ? 'gained' : 'used'} ${Math.abs(modify.quantity_delta)}x ${item.name} (now ${item.quantity})`)
-
-                    // Remove item if quantity reaches 0 or below
-                    if (item.quantity <= 0) {
-                      const index = currentInventory.items.findIndex((i: any) => i.id === modify.id)
-                      currentInventory.items.splice(index, 1)
-                      console.log(`  📦 ${character.name} ran out of ${item.name}`)
-                    }
-                  }
-                }
-              }
-
-              // Adjust slots
-              if (invChange.slots_delta) {
-                currentInventory.slots = Math.max(0, (currentInventory.slots || 10) + invChange.slots_delta)
-                console.log(`  🎒 ${character.name} inventory slots: ${invChange.slots_delta > 0 ? '+' : ''}${invChange.slots_delta} (now ${currentInventory.slots})`)
-              }
-
-              updateData.inventory = currentInventory
-            }
-
-            // Process resource changes
-            if (pcChange.changes.resource_changes) {
-              const currentResources: any = (character.resources as any) || { gold: 0, contacts: [], reputation: {} }
-              const resChange = pcChange.changes.resource_changes
-
-              // Gold changes
-              if (resChange.gold_delta !== undefined) {
-                currentResources.gold = Math.max(0, (currentResources.gold || 0) + resChange.gold_delta)
-                console.log(`  💰 ${character.name} ${resChange.gold_delta > 0 ? 'gained' : 'spent'} ${Math.abs(resChange.gold_delta)} gold (now ${currentResources.gold})`)
-              }
-
-              // Contact changes
-              if (resChange.contacts_add) {
-                if (!currentResources.contacts) currentResources.contacts = []
-                for (const contact of resChange.contacts_add) {
-                  if (!currentResources.contacts.includes(contact)) {
-                    currentResources.contacts.push(contact)
-                    console.log(`  🤝 ${character.name} gained contact: ${contact}`)
-                  }
-                }
-              }
-
-              if (resChange.contacts_remove) {
-                if (currentResources.contacts) {
-                  for (const contact of resChange.contacts_remove) {
-                    currentResources.contacts = currentResources.contacts.filter((c: string) => c !== contact)
-                    console.log(`  🤝 ${character.name} lost contact: ${contact}`)
-                  }
-                }
-              }
-
-              // Reputation changes
-              if (resChange.reputation_changes) {
-                if (!currentResources.reputation) currentResources.reputation = {}
-                for (const repChange of resChange.reputation_changes) {
-                  const current = currentResources.reputation[repChange.faction] || 0
-                  currentResources.reputation[repChange.faction] = current + repChange.delta
-                  console.log(`  ⭐ ${character.name} reputation with ${repChange.faction}: ${repChange.delta > 0 ? '+' : ''}${repChange.delta} (now ${currentResources.reputation[repChange.faction]})`)
-                }
-              }
-
-              updateData.resources = currentResources
-            }
-
-            // Debt economy: favors incurred or settled by this scene's
-            // fiction — see lib/game/debts.ts for matching semantics.
-            if (pcChange.changes.debt_changes && pcChange.changes.debt_changes.length > 0) {
-              const debtLog = await applyDebtChanges(
-                tx,
-                campaignId,
-                character.id,
-                character.name,
-                pcChange.changes.debt_changes,
-                currentTurnNumber
-              )
-              for (const line of debtLog) {
-                console.log(`  🤝 ${line}`)
-              }
-            }
-
-            // Faction standing: social-position shifts earned this scene —
-            // clamped to ±1 per scene, bounded ±3 in the writer.
-            if (pcChange.changes.standing_changes && pcChange.changes.standing_changes.length > 0) {
-              const standingLog = await applyStandingChanges(
-                tx,
-                campaignId,
-                character.id,
-                character.name,
-                pcChange.changes.standing_changes
-              )
-              for (const line of standingLog) {
-                console.log(`  ⭐ ${line}`)
-              }
-            }
-
-            // Knowledge-relative sheet: glimpse/unlock/progress signals from
-            // the fiction. Deterministic gain math + arc caps live in the
-            // writer; the AI only says WHAT happened, never how much.
-            if (pcChange.changes.capability_changes && pcChange.changes.capability_changes.length > 0) {
-              const capabilityLog = await applyCapabilityChanges(
-                tx,
-                campaignId,
-                character.id,
-                pcChange.changes.capability_changes,
-                currentTurnNumber,
-                'scene'
-              )
-              for (const line of capabilityLog) {
-                console.log(`  📖 ${character.name} — ${line}`)
-              }
-            }
-
-            if (Object.keys(updateData).length > 0) {
-              await tx.character.update({
-                where: { id: character.id },
-                data: updateData
-              })
-
-              console.log(`  🦸 Updated character: ${character.name}`)
-            }
-          } else if (pcResolution.kind === 'not_found') {
-            console.warn(`  ⚠️ Character not found: ${pcChange.character_name_or_id}`)
-          }
-        }
+        await applyCharacterChanges(
+          tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, getCorruptionTheme
+        )
       }
 
       // organic_advancement (stat_increases/new_perks/new_moves) is deliberately
@@ -846,217 +131,21 @@ export async function applyWorldUpdates(
 
       // 6. Update factions
       if (world_updates.faction_changes) {
-        console.log(`🏛️ Updating ${world_updates.faction_changes.length} factions`)
-        
-        for (const factionChange of world_updates.faction_changes) {
-          const factionResolution = resolveEntityByNameOrId(factionsForResolution, factionChange.faction_name_or_id)
-          const faction = factionResolution.kind === 'found' ? factionResolution.entity : null
-          if (factionResolution.kind === 'ambiguous') {
-            console.warn(`  ⚠️ Ambiguous faction name "${factionChange.faction_name_or_id}" — matches ${factionResolution.candidates.map(c => c.name).join(', ')}, skipping rather than guessing or creating a duplicate`)
-          }
-
-          if (faction) {
-            involvedFactionIds.add(faction.id)
-            const updateData: any = {}
-
-            if (factionChange.changes.current_plan) {
-              updateData.currentPlan = factionChange.changes.current_plan
-            }
-
-            if (factionChange.changes.threat_level) {
-              // Map threat level string to number
-              const threatLevelMap: Record<string, number> = {
-                'LOW': 1,
-                'MEDIUM': 2,
-                'HIGH': 3,
-                'EXTREME': 4
-              }
-              const level = factionChange.changes.threat_level.toUpperCase()
-              updateData.threatLevel = threatLevelMap[level] || faction.threatLevel
-            }
-
-            // World Sim Phase 6: only a player-led faction's goal is
-            // settable this way — for any other faction the deterministic
-            // tick (factionTick.ts) owns goal reassessment, and honoring
-            // an AI-set goal here would just get silently overwritten (or
-            // worse, fought over) on the next tick. Enforced server-side,
-            // not just by prompt instruction, since AI output isn't
-            // trustworthy enough to be the only guard.
-            if (factionChange.changes.goal && faction.leaderCharacterId) {
-              updateData.goal = factionChange.changes.goal
-            }
-
-            if (factionChange.changes.gm_notes_append) {
-              updateData.gmNotes = faction.gmNotes + '\n\n' + factionChange.changes.gm_notes_append
-            }
-
-            // Fog of war: the party witnessing this faction in a live scene
-            // is what reveals it — never on an offscreen background update.
-            if (sceneOrigin && !faction.isDiscovered) {
-              updateData.isDiscovered = true
-            }
-
-            if (Object.keys(updateData).length > 0) {
-              await tx.faction.update({
-                where: { id: faction.id },
-                data: updateData
-              })
-
-              console.log(`  🏛️ Updated faction: ${faction.name}`)
-            }
-          } else if (factionResolution.kind === 'not_found' && (factionChange.is_new || factionChange.changes.description)) {
-            // Auto-create a stub faction when the AI introduces a new group mid-campaign
-            const threatLevelMap: Record<string, number> = {
-              'LOW': 1, 'MEDIUM': 2, 'HIGH': 3, 'EXTREME': 4
-            }
-            const initialThreat = factionChange.changes.threat_level
-              ? (threatLevelMap[factionChange.changes.threat_level.toUpperCase()] || 1)
-              : 1
-            const newFaction = await tx.faction.create({
-              data: {
-                campaignId,
-                name: factionChange.faction_name_or_id,
-                description: factionChange.changes.description || '',
-                goals: factionChange.changes.goals || '',
-                currentPlan: factionChange.changes.current_plan || '',
-                threatLevel: initialThreat,
-                gmNotes: factionChange.changes.gm_notes_append || '',
-                // Fog of war: a faction introduced offscreen exists but
-                // isn't "known" yet — undiscovered until a live scene
-                // actually involves it.
-                isDiscovered: sceneOrigin
-              }
-            })
-            // So a later faction_change in this same batch referencing the
-            // same new name resolves to it instead of creating a duplicate.
-            factionsForResolution.push(newFaction)
-            involvedFactionIds.add(newFaction.id)
-            console.log(`  🏛️ Created new faction: ${newFaction.name}`)
-          } else if (factionResolution.kind === 'not_found') {
-            console.warn(`  ⚠️ Faction not found and no stub info provided: ${factionChange.faction_name_or_id}`)
-          }
-        }
+        const result = await applyFactionChanges(
+          tx, campaignId, world_updates.faction_changes, factionsForResolution, sceneOrigin
+        )
+        involvedFactionIds = result.involvedFactionIds
       }
 
       // 7. Upsert locations
       if (world_updates.location_changes) {
-        console.log(`📍 Syncing ${world_updates.location_changes.length} location(s)`)
-
-        for (const locChange of world_updates.location_changes) {
-          const existing = await tx.location.findUnique({
-            where: { campaignId_name: { campaignId, name: locChange.name } }
-          })
-
-          if (existing) {
-            const updateData: any = {}
-            if (locChange.description && !existing.description) {
-              updateData.description = locChange.description
-            }
-            if (locChange.location_type && !existing.locationType) {
-              updateData.locationType = locChange.location_type
-            }
-            if (locChange.gm_notes_append) {
-              updateData.gmNotes = (existing.gmNotes || '') + '\n\n' + locChange.gm_notes_append
-            }
-            // Fog of war: same reveal-on-mention rule as NPC/Faction — a live
-            // scene touching this location means the party is there, so it's
-            // discovered; an offscreen tick mentioning it must not out it.
-            if (sceneOrigin && !existing.isDiscovered) {
-              updateData.isDiscovered = true
-            }
-            if (Object.keys(updateData).length > 0) {
-              await tx.location.update({
-                where: { id: existing.id },
-                data: updateData
-              })
-              console.log(`  📍 Updated location: ${locChange.name}`)
-            }
-          } else {
-            await tx.location.create({
-              data: {
-                campaignId,
-                name: locChange.name,
-                description: locChange.description || null,
-                locationType: locChange.location_type || null,
-                gmNotes: locChange.gm_notes_append || null,
-                isDiscovered: sceneOrigin
-              }
-            })
-            console.log(`  📍 Created location: ${locChange.name}`)
-          }
-        }
+        await applyLocationChanges(tx, campaignId, world_updates.location_changes, sceneOrigin)
       }
 
       // 7a. Quest lifecycle: open/progress/close named undertakings from
       // the fiction. Matched by name (case-insensitive) like NPCs/factions.
       if (world_updates.quest_changes) {
-        console.log(`🎯 Applying ${world_updates.quest_changes.length} quest change(s)`)
-
-        for (const questChange of world_updates.quest_changes) {
-          if (!questChange?.name) continue
-          const changes = questChange.changes || {}
-
-          const existing = await tx.quest.findFirst({
-            where: {
-              campaignId,
-              name: { equals: questChange.name, mode: 'insensitive' }
-            }
-          })
-
-          const progressLine = changes.progress_append
-            ? `Turn ${currentTurnNumber}: ${changes.progress_append}`
-            : null
-
-          if (existing) {
-            const updateData: any = {}
-            if (changes.description) updateData.description = changes.description
-            if (changes.objective) updateData.objective = changes.objective
-            if (changes.given_by) updateData.givenBy = changes.given_by
-            if (changes.reward) updateData.reward = changes.reward
-            if (progressLine) {
-              updateData.progressLog = existing.progressLog
-                ? `${existing.progressLog}\n${progressLine}`
-                : progressLine
-            }
-            const justCompleted = changes.status === 'COMPLETED' && existing.status !== 'COMPLETED'
-            if (changes.status && changes.status !== existing.status) {
-              updateData.status = changes.status
-              if (changes.status !== 'ACTIVE') updateData.resolvedAt = new Date()
-            }
-            if (Object.keys(updateData).length > 0) {
-              await tx.quest.update({ where: { id: existing.id }, data: updateData })
-              console.log(`  🎯 Updated quest: ${existing.name}${changes.status ? ` (${changes.status})` : ''}`)
-            }
-            // Deterministic reward payout: only fires the first time this
-            // quest transitions to COMPLETED, never on a repeated report of
-            // an already-completed quest — see lib/game/questRewards.ts.
-            if (justCompleted && changes.reward_grant) {
-              const rewardLog = await applyQuestRewardGrant(tx, campaignId, existing.name, changes.reward_grant)
-              for (const line of rewardLog) console.log(`  🎁 ${line}`)
-            }
-          } else {
-            await tx.quest.create({
-              data: {
-                campaignId,
-                name: questChange.name,
-                description: changes.description || questChange.name,
-                objective: changes.objective || null,
-                givenBy: changes.given_by || null,
-                reward: changes.reward || null,
-                status: changes.status || 'ACTIVE',
-                progressLog: progressLine,
-                ...(changes.status && changes.status !== 'ACTIVE' ? { resolvedAt: new Date() } : {})
-              }
-            })
-            console.log(`  🎯 Registered quest: ${questChange.name}`)
-            // A quest can (rarely) be registered already-resolved in the same
-            // turn it's introduced — same deterministic payout either way.
-            if (changes.status === 'COMPLETED' && changes.reward_grant) {
-              const rewardLog = await applyQuestRewardGrant(tx, campaignId, questChange.name, changes.reward_grant)
-              for (const line of rewardLog) console.log(`  🎁 ${line}`)
-            }
-          }
-        }
+        await applyQuestChanges(tx, campaignId, currentTurnNumber, world_updates.quest_changes)
       }
 
       // 7a-bis. Corruption bargain offers: persist so the character's NEXT
@@ -1064,103 +153,23 @@ export async function applyWorldUpdates(
       // Live scenes only — an offscreen tick can't put an offer in front
       // of a player — and only in campaigns that actually have a theme.
       if (sceneOrigin && world_updates.bargain_offers && world_updates.bargain_offers.length > 0) {
-        if (corruptionTheme === undefined) {
-          const campaignRow = await tx.campaign.findUnique({
-            where: { id: campaignId },
-            select: { corruptionTheme: true }
-          })
-          corruptionTheme = parseCorruptionTheme(campaignRow?.corruptionTheme)
-        }
-        if (corruptionTheme) {
-          for (const offer of world_updates.bargain_offers) {
-            if (!offer?.character_name_or_id || !offer?.offer) continue
-            const character = await tx.character.findFirst({
-              where: {
-                campaignId,
-                OR: [
-                  { id: offer.character_name_or_id },
-                  { name: { equals: offer.character_name_or_id, mode: 'insensitive' } }
-                ]
-              },
-              select: { id: true, name: true, corruption: true }
-            })
-            // No offers to the already-consumed — there's nothing left to spend.
-            if (!character || character.corruption >= MAX_CORRUPTION) continue
-            await tx.character.update({
-              where: { id: character.id },
-              data: { pendingBargain: { offer: offer.offer, offeredTurn: currentTurnNumber } }
-            })
-            console.log(`😈 Bargain offered to ${character.name}: ${offer.offer}`)
-          }
-        }
+        await applyBargainOffers(tx, campaignId, currentTurnNumber, world_updates.bargain_offers, getCorruptionTheme)
       }
 
       // 7b. Auto-register locations from character movement
       if (world_updates.pc_changes) {
-        for (const pcChange of world_updates.pc_changes) {
-          if (pcChange.changes.location) {
-            const locationName = pcChange.changes.location
-            try {
-              await tx.location.upsert({
-                where: { campaignId_name: { campaignId, name: locationName } },
-                create: {
-                  campaignId,
-                  name: locationName,
-                  isDiscovered: sceneOrigin
-                },
-                // A PC standing there is itself a discovery event, so reveal
-                // on update too — same reveal-on-mention rule as section 7.
-                update: sceneOrigin ? { isDiscovered: true } : {}
-              })
-            } catch {
-              // Ignore if upsert fails (e.g., concurrent write) — non-critical
-            }
-          }
-        }
+        await autoRegisterLocationsFromMovement(tx, campaignId, world_updates.pc_changes, sceneOrigin)
       }
 
       // 8. Store GM notes in WorldMeta if provided
       if (world_updates.notes_for_gm) {
-        const worldMeta = await tx.worldMeta.findUnique({
-          where: { campaignId }
-        })
-
-        if (worldMeta) {
-          const currentMeta = worldMeta.otherMeta as any || {}
-          const gmNotes = currentMeta.gm_notes_history || []
-          
-          gmNotes.push({
-            turn: currentTurnNumber,
-            notes: world_updates.notes_for_gm,
-            timestamp: new Date().toISOString()
-          })
-
-          // Keep only last 20 notes to avoid bloat
-          if (gmNotes.length > 20) {
-            gmNotes.shift()
-          }
-
-          await tx.worldMeta.update({
-            where: { id: worldMeta.id },
-            data: {
-              otherMeta: {
-                ...currentMeta,
-                gm_notes_history: gmNotes
-              }
-            }
-          })
-
-          console.log('📝 Stored GM notes')
-        }
+        await storeGmNotesForTurn(tx, campaignId, currentTurnNumber, world_updates.notes_for_gm)
       }
     })
 
     console.log('✅ All world updates applied successfully')
 
-    return {
-      involvedNpcIds: [...involvedNpcIds],
-      involvedFactionIds: [...involvedFactionIds]
-    }
+    return { involvedNpcIds, involvedFactionIds }
   } catch (error) {
     console.error('❌ Failed to apply world updates:', error)
     throw new Error(`Failed to apply world updates: ${error}`)
@@ -1170,7 +179,7 @@ export async function applyWorldUpdates(
 /**
  * Check for completed clocks and create consequence events
  * Called during world turns
- * 
+ *
  * @param campaignId - Campaign to check
  * @returns Array of completed clocks
  */

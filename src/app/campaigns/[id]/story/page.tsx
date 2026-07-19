@@ -115,13 +115,20 @@ export default function StoryPage() {
     const busyIds = new Set(
       activeScenes.flatMap(scene => (scene.participants as any)?.characterIds || [])
     )
-    const groups = new Map<string, any[]>()
+    // Grouped by the stable locationId when a character has one resolved,
+    // falling back to the trimmed currentLocation string otherwise — two
+    // characters whose location text merely differs in casing/wording
+    // ("the Docks" vs "The Docks District") but share the same resolved
+    // Location row are still recognized as being in the same place. See
+    // README Known Bugs P1 — Location stored as free text, not an FK.
+    const groups = new Map<string, { label: string; characters: any[] }>()
     for (const c of campaign?.characters || []) {
       if (c.isAlive === false || busyIds.has(c.id)) continue
       const loc = (c.currentLocation || '').trim()
       if (!loc) continue
-      if (!groups.has(loc)) groups.set(loc, [])
-      groups.get(loc)!.push(c)
+      const key = c.locationId || loc
+      if (!groups.has(key)) groups.set(key, { label: loc, characters: [] })
+      groups.get(key)!.characters.push(c)
     }
     return groups
   }, [activeScenes, campaign])
@@ -610,7 +617,7 @@ export default function StoryPage() {
     setSuccess('')
     setStartingScene(true)
     try {
-      for (const characters of locationGroups.values()) {
+      for (const { characters } of locationGroups.values()) {
         const response = await authenticatedFetch(
           `/api/campaigns/${campaignId}/start-scene`,
           {
@@ -884,8 +891,8 @@ export default function StoryPage() {
             <div className="rounded-xl bg-gradient-to-br from-wine-800/20 to-wine-800/10 border border-wine-700/40 shadow-lg shadow-black/30 p-5">
               <h3 className="font-bold text-ember-100 mb-1">Your party is split</h3>
               <p className="text-sm text-ember-300/60 mb-3">
-                {Array.from(locationGroups.entries())
-                  .map(([loc, characters]) => `${characters.map((c: any) => c.name).join(', ')} at ${loc}`)
+                {Array.from(locationGroups.values())
+                  .map(({ label, characters }) => `${characters.map((c: any) => c.name).join(', ')} at ${label}`)
                   .join(' · ')}
               </p>
               <button

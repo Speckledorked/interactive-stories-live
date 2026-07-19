@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { applyLocationChanges, autoRegisterLocationsFromMovement, LocationChange, PcChangeForMovement } from '../locations'
+import { applyLocationChanges, resolveOrCreateLocationId, LocationChange } from '../locations'
 
 const makeTx = () => ({
   location: {
     findUnique: vi.fn(),
-    update: vi.fn(async () => ({})),
-    create: vi.fn(async () => ({})),
-    upsert: vi.fn(async () => ({})),
+    findFirst: vi.fn(),
+    update: vi.fn(async (_args: any) => ({})),
+    create: vi.fn(async ({ data }: any) => ({ id: 'new-loc', ...data })),
   },
 })
 
@@ -61,40 +61,54 @@ describe('applyLocationChanges', () => {
   })
 })
 
-describe('autoRegisterLocationsFromMovement', () => {
-  it('upserts a location for every pc_change carrying a location', async () => {
-    const pcChanges: PcChangeForMovement[] = [
-      { character_name_or_id: 'Jason', changes: { location: 'The Rookery' } } as PcChangeForMovement,
-    ]
-    await autoRegisterLocationsFromMovement(tx as any, 'camp1', pcChanges, true)
-    expect(tx.location.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { campaignId_name: { campaignId: 'camp1', name: 'The Rookery' } },
-        create: expect.objectContaining({ name: 'The Rookery', isDiscovered: true }),
-        update: { isDiscovered: true },
-      })
+describe('resolveOrCreateLocationId', () => {
+  it('returns null for a blank/missing name without touching the DB', async () => {
+    expect(await resolveOrCreateLocationId(tx as any, 'camp1', '', true)).toBeNull()
+    expect(await resolveOrCreateLocationId(tx as any, 'camp1', undefined, true)).toBeNull()
+    expect(tx.location.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('resolves to an existing location, matching case/whitespace-insensitively', async () => {
+    tx.location.findFirst.mockResolvedValue({ id: 'loc1', isDiscovered: true })
+    const id = await resolveOrCreateLocationId(tx as any, 'camp1', '  the docks  ', true)
+    expect(tx.location.findFirst).toHaveBeenCalledWith({
+      where: { campaignId: 'camp1', name: { equals: 'the docks', mode: 'insensitive' } },
+    })
+    expect(id).toBe('loc1')
+  })
+
+  it('creates a new location when nothing matches, and returns its id', async () => {
+    tx.location.findFirst.mockResolvedValue(null)
+    const id = await resolveOrCreateLocationId(tx as any, 'camp1', 'The Rookery', true)
+    expect(tx.location.create).toHaveBeenCalledWith({
+      data: { campaignId: 'camp1', name: 'The Rookery', isDiscovered: true },
+    })
+    expect(id).toBe('new-loc')
+  })
+
+  it('creates an offscreen-introduced location as undiscovered', async () => {
+    tx.location.findFirst.mockResolvedValue(null)
+    await resolveOrCreateLocationId(tx as any, 'camp1', 'The Rookery', false)
+    expect(tx.location.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isDiscovered: false }) })
     )
   })
 
-  it('skips pc_changes with no location', async () => {
-    const pcChanges: PcChangeForMovement[] = [{ character_name_or_id: 'Jason', changes: {} } as PcChangeForMovement]
-    await autoRegisterLocationsFromMovement(tx as any, 'camp1', pcChanges, true)
-    expect(tx.location.upsert).not.toHaveBeenCalled()
+  it('reveals an existing undiscovered location on a live scene', async () => {
+    tx.location.findFirst.mockResolvedValue({ id: 'loc1', isDiscovered: false })
+    await resolveOrCreateLocationId(tx as any, 'camp1', 'The Rookery', true)
+    expect(tx.location.update).toHaveBeenCalledWith({ where: { id: 'loc1' }, data: { isDiscovered: true } })
   })
 
-  it('does not force-reveal on an offscreen update (empty update payload)', async () => {
-    const pcChanges: PcChangeForMovement[] = [
-      { character_name_or_id: 'Jason', changes: { location: 'The Rookery' } } as PcChangeForMovement,
-    ]
-    await autoRegisterLocationsFromMovement(tx as any, 'camp1', pcChanges, false)
-    expect(tx.location.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: {} }))
+  it('does not reveal an existing undiscovered location from an offscreen update', async () => {
+    tx.location.findFirst.mockResolvedValue({ id: 'loc1', isDiscovered: false })
+    await resolveOrCreateLocationId(tx as any, 'camp1', 'The Rookery', false)
+    expect(tx.location.update).not.toHaveBeenCalled()
   })
 
-  it('swallows a concurrent-write failure rather than throwing', async () => {
-    tx.location.upsert.mockRejectedValue(new Error('unique constraint'))
-    const pcChanges: PcChangeForMovement[] = [
-      { character_name_or_id: 'Jason', changes: { location: 'The Rookery' } } as PcChangeForMovement,
-    ]
-    await expect(autoRegisterLocationsFromMovement(tx as any, 'camp1', pcChanges, true)).resolves.toBeUndefined()
+  it('swallows a concurrent-write failure rather than throwing, returning null', async () => {
+    tx.location.findFirst.mockRejectedValue(new Error('connection reset'))
+    const id = await resolveOrCreateLocationId(tx as any, 'camp1', 'The Rookery', true)
+    expect(id).toBeNull()
   })
 })

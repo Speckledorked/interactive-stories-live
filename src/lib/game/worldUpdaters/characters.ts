@@ -14,6 +14,7 @@
 import { Prisma, Character } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { resolveEntityByNameOrId } from '../entityResolution'
+import { resolveOrCreateLocationId } from './locations'
 import {
   applyHarm,
   healHarm,
@@ -53,7 +54,8 @@ export async function applyCharacterChanges(
   currentTurnNumber: number,
   pcChanges: PcChange[],
   charactersForResolution: Character[],
-  getCorruptionTheme: () => Promise<CorruptionTheme | null>
+  getCorruptionTheme: () => Promise<CorruptionTheme | null>,
+  sceneOrigin: boolean
 ): Promise<void> {
   console.log(`🦸 Updating ${pcChanges.length} characters`)
 
@@ -73,9 +75,14 @@ export async function applyCharacterChanges(
 
     const updateData: any = {}
 
-    // Update location
+    // Update location. Also resolves/creates the matching Location row and
+    // links it via locationId — the same auto-register-on-movement
+    // behavior a separate later pass used to do, now done inline since we
+    // need the id anyway (see README Known Bugs P1 — Location stored as
+    // free text, not an FK).
     if (pcChange.changes.location) {
       updateData.currentLocation = pcChange.changes.location
+      updateData.locationId = await resolveOrCreateLocationId(tx, campaignId, pcChange.changes.location, sceneOrigin)
     }
 
     // Process harm and conditions

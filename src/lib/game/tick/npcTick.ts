@@ -157,23 +157,31 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
     }),
     prisma.location.findMany({
       where: { campaignId: ctx.campaignId, isDiscovered: true },
-      select: { name: true },
+      select: { id: true, name: true },
     }),
   ])
 
   const discoveredLocationNames = locations.map((l) => l.name)
+  // The tick only ever moves an NPC to a name drawn from this same
+  // `locations` fetch, so the id is always known here — keeps
+  // NPC.locationId in sync with currentLocation the moment the tick moves
+  // someone, the same as the AI write-back path does for PCs (see
+  // README Known Bugs P1 — Location stored as free text, not an FK).
+  const locationIdByName = new Map(locations.map((l) => [l.name, l.id]))
   const changes: WorldChange[] = []
 
   for (const npc of npcs) {
     const factionContext = npc.faction?.isActive ? { name: npc.faction.name, goal: npc.faction.goal } : null
     const decision = decideNpcTick(npc, ctx.turnNumber, discoveredLocationNames, factionContext)
 
-    const updateData: { currentPlan: string; currentLocation?: string; goalProgress: number } = {
+    const updateData: { currentPlan: string; currentLocation?: string; locationId?: string; goalProgress: number } = {
       currentPlan: decision.currentPlan,
       goalProgress: decision.newGoalProgress,
     }
     if (decision.nextLocation) {
       updateData.currentLocation = decision.nextLocation
+      const locationId = locationIdByName.get(decision.nextLocation)
+      if (locationId) updateData.locationId = locationId
     }
 
     if (!ctx.dryRun) {

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
+import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
 
 export async function PATCH(
   request: NextRequest,
@@ -33,9 +34,20 @@ export async function PATCH(
       )
     }
 
+    // Resolve/create the matching Location row and link it via locationId
+    // alongside the free-text field (see README Known Bugs P1 — Location
+    // stored as free text, not an FK) — only when currentLocation is
+    // actually part of this PATCH; `undefined` here means "leave as is",
+    // matching every other field's semantics in this same update. A blank
+    // currentLocation resolves to null, clearing the FK along with the
+    // text field.
+    const locationId = body.currentLocation !== undefined
+      ? await resolveOrCreateLocationId(prisma, campaignId, body.currentLocation, body.isDiscovered !== false)
+      : undefined
+
     // Update NPC
     const npc = await prisma.nPC.update({
-      where: { 
+      where: {
         id: npcId,
         campaignId, // Ensure NPC belongs to this campaign
       },
@@ -43,6 +55,7 @@ export async function PATCH(
         name: body.name,
         description: body.description,
         currentLocation: body.currentLocation,
+        locationId,
         goals: body.goals,
         relationship: body.relationship,
         isAlive: body.isAlive,

@@ -189,11 +189,11 @@ model User {
 }
 
 model CampaignMembership {
-  id         String   @id @default(cuid())
-  userId     String
-  campaignId String
-  role       UserRole @default(PLAYER)
-  joinedAt   DateTime @default(now())
+  id           String    @id @default(cuid())
+  userId       String
+  campaignId   String
+  role         UserRole  @default(PLAYER)
+  joinedAt     DateTime  @default(now())
   // Last time this member loaded the campaign lobby page — the checkpoint
   // "While you were away" recaps diff offscreen fallout against. Null means
   // they've never landed on the lobby yet (no recap to show).
@@ -265,20 +265,20 @@ model Campaign {
   // need a real characterId, which doesn't exist yet at campaign creation).
   templateId String?
 
-  memberships CampaignMembership[]
-  characters  Character[]
-  npcs        NPC[]
-  factions    Faction[]
-  locations   Location[]
-  clocks      Clock[]
-  scenes      Scene[]
-  timeline    TimelineEvent[]
-  worldMeta   WorldMeta?
-  invites     CampaignInvite[]
-  moves       Move[]
-  diceRolls   DiceRoll[]
+  memberships      CampaignMembership[]
+  characters       Character[]
+  npcs             NPC[]
+  factions         Faction[]
+  locations        Location[]
+  clocks           Clock[]
+  scenes           Scene[]
+  timeline         TimelineEvent[]
+  worldMeta        WorldMeta?
+  invites          CampaignInvite[]
+  moves            Move[]
+  diceRolls        DiceRoll[]
   gmClarifications GmClarification[]
-  aiCostEntries AICostEntry[]
+  aiCostEntries    AICostEntry[]
 
   // Phase 8: Communication
   messages Message[]    @relation("CampaignMessages")
@@ -345,20 +345,20 @@ model CampaignArchetype {
   name        String // "Newly Awakened Outworlder"
   description String @db.Text // 1-2 sentence pitch shown on the card
 
-  originFamiliarity OriginFamiliarity @default(NATIVE)
+  originFamiliarity     OriginFamiliarity @default(NATIVE)
   // Valid PbtA stat array (sum +2, each -2..+3, at most one >= +2) keyed by
   // the 5 fixed stat keys; null = leave the wizard's defaults alone.
-  suggestedStats Json?
+  suggestedStats        Json?
   // { weapon, armor, misc, items: [{ name, quantity, tags }] }
-  startingGear Json?
+  startingGear          Json?
   // One starting tie into the living world:
   // { kind: 'debt_owed_by_character' | 'debt_owed_to_character' | 'faction_standing',
   //   counterparty_type: 'npc' | 'faction', counterparty_name, description, standing_value? }
-  startingTie Json?
+  startingTie           Json?
   // Questions shown as backstory guidance when the card is picked.
-  backstoryPrompts String[] @default([])
+  backstoryPrompts      String[]          @default([])
   // CampaignCapability keys to seed as GLIMPSED on top of familiarity seeding.
-  glimpseCapabilityKeys String[] @default([])
+  glimpseCapabilityKeys String[]          @default([])
 
   createdAt DateTime @default(now())
 
@@ -564,7 +564,7 @@ model CharacterCapability {
 //
 
 model Character {
-  id              String  @id @default(cuid())
+  id              String    @id @default(cuid())
   campaignId      String
   userId          String
   name            String
@@ -575,8 +575,16 @@ model Character {
   stats           Json? // For PbtA: {cool: 1, hard: 2, hot: -1, sharp: 1, weird: 0}
   backstory       String?
   goals           String?
-  isAlive         Boolean @default(true)
+  isAlive         Boolean   @default(true)
+  // currentLocation is still the source of truth the AI/creation form
+  // write directly (free text) — locationId is a nullable FK alongside it,
+  // resolved via the same exact-name-match Location already keys on
+  // (campaignId+name), so location-identity comparisons (weather, split-
+  // party grouping) can join on a stable id instead of raw string equality.
+  // See README Known Bugs P1 — Location stored as free text, not an FK.
   currentLocation String?
+  locationId      String?
+  location        Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
   gmNotes         String?
 
   // Knowledge-relative sheet: how familiar this character is with the
@@ -584,18 +592,18 @@ model Character {
   originFamiliarity OriginFamiliarity @default(NATIVE)
 
   // PbtA specific fields
-  harm       Int      @default(0) // 0-6 harm track
+  harm           Int   @default(0) // 0-6 harm track
   // Corruption marks (0..5) toward this campaign's corruption theme.
   // Only meaningful when Campaign.corruptionTheme is set; never decreases
   // (the whole point is irreversibility) — see lib/game/corruption.ts.
-  corruption Int      @default(0)
+  corruption     Int   @default(0)
   // An open corruption bargain narrated to this character last scene —
   // their NEXT action can invoke it for an engine-enforced surge bonus
   // (and the mark). Cleared after that action, accepted or not.
   // Shape: { offer: string, offeredTurn: number }
   pendingBargain Json?
-  conditions Json? // { conditions: [{ id, name, category, description, mechanicalEffect?, appliedAt? }] }
-  moves      Json? // [{ id, name, trigger, description }] — rare, narratively-earned signature tricks (see lib/game/advancement.ts). Distinct from capabilities (skill-tree systems) and perks (repeated-pattern bonuses).
+  conditions     Json? // { conditions: [{ id, name, category, description, mechanicalEffect?, appliedAt? }] }
+  moves          Json? // [{ id, name, trigger, description }] — rare, narratively-earned signature tricks (see lib/game/advancement.ts). Distinct from capabilities (skill-tree systems) and perks (repeated-pattern bonuses).
 
   // Organic growth tracking
   statUsage      Json? // { [statKey: string]: { uses: Int, successes: Int, failures: Int, lastGrowthTurn?: Int } } — lastGrowthTurn gates re-proposing a +1 within the same arc (see ARC_LENGTH_TURNS in lib/game/capabilities.ts)
@@ -618,10 +626,10 @@ model Character {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  playerActions PlayerAction[]
-  diceRolls     DiceRoll[]
+  campaign         Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playerActions    PlayerAction[]
+  diceRolls        DiceRoll[]
   gmClarifications GmClarification[]
 
   // Phase 8: Communication
@@ -643,6 +651,7 @@ model Character {
 
   @@index([campaignId])
   @@index([userId])
+  @@index([locationId])
 }
 
 //
@@ -650,16 +659,19 @@ model Character {
 //
 
 model NPC {
-  id              String  @id @default(cuid())
+  id              String    @id @default(cuid())
   campaignId      String
   name            String
   pronouns        String?
   description     String?
+  // See Character.currentLocation/locationId's doc comment — same pattern.
   currentLocation String?
+  locationId      String?
+  location        Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
   goals           String?
   relationship    String?
-  isAlive         Boolean @default(true)
-  importance      Int     @default(1)
+  isAlive         Boolean   @default(true)
+  importance      Int       @default(1)
   gmNotes         String?
 
   // Minimal harm tracking (depth-hardening item-scope follow-up — see
@@ -721,6 +733,7 @@ model NPC {
 
   @@index([campaignId])
   @@index([factionId])
+  @@index([locationId])
 }
 
 model Faction {
@@ -848,6 +861,10 @@ model Location {
   isContested    Boolean  @default(false)
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  // Reverse side of Character.locationId / NPC.locationId.
+  characters Character[]
+  npcs       NPC[]
 
   @@unique([campaignId, name])
   @@index([campaignId])
@@ -1044,9 +1061,9 @@ model Scene {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  campaign      Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  playerActions PlayerAction[]
-  diceRolls     DiceRoll[]
+  campaign         Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  playerActions    PlayerAction[]
+  diceRolls        DiceRoll[]
   gmClarifications GmClarification[]
 
   // Phase 8: Communication
@@ -1252,7 +1269,7 @@ model Move {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  campaign  Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
   @@index([campaignId, baseMoveKey])
@@ -1576,8 +1593,8 @@ model DowntimeActivity {
   status      ActivityStatus @default(ACTIVE)
 
   // AI-determined properties
-  estimatedDays Int
-  currentDay    Int @default(0)
+  estimatedDays  Int
+  currentDay     Int      @default(0)
   // {gold?: number, items?: [{name, quantity}], favor?: {counterparty_name,
   // counterparty_type, description}, requiresQuest?: {name, description,
   // givenBy}} — see lib/downtime/ai-downtime-service.ts. Each present cost
@@ -1608,13 +1625,13 @@ model DowntimeActivity {
 }
 
 model DowntimeEvent {
-  id          String    @id @default(cuid())
-  activityId  String
-  dayNumber   Int
-  eventText   String    @db.Text // AI-generated event
-  choices     Json? // Available choices
-  response    String?   @db.Text // Player response
-  outcome     String?   @db.Text // Result of response
+  id              String    @id @default(cuid())
+  activityId      String
+  dayNumber       Int
+  eventText       String    @db.Text // AI-generated event
+  choices         Json? // Available choices
+  response        String?   @db.Text // Player response
+  outcome         String?   @db.Text // Result of response
   // Depth-hardening follow-up (see lib/downtime/downtimeEventOutcome.ts):
   // deterministic, riskLevel-weighted category rolled server-side BEFORE
   // the AI narrates — "setback" | "complication" | "smooth" | "opportunity".
@@ -1622,8 +1639,8 @@ model DowntimeEvent {
   // freely improvising the day's nature; null for events created before
   // this existed.
   outcomeCategory String?
-  createdAt   DateTime  @default(now())
-  respondedAt DateTime?
+  createdAt       DateTime  @default(now())
+  respondedAt     DateTime?
 
   activity DowntimeActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
 
@@ -2076,10 +2093,10 @@ model LoreImportJob {
   sourceType  LoreSourceType
   sourceUrl   String? // for URL / WIKI
   sourceTitle String? // display name shown in the admin UI
-  rawText     String? @db.Text // for PASTE
+  rawText     String?        @db.Text // for PASTE
 
-  status   LoreImportJobStatus @default(PENDING)
-  attempts Int                 @default(0)
+  status    LoreImportJobStatus @default(PENDING)
+  attempts  Int                 @default(0)
   lastError String?
 
   // Set once a global stuck-job sweep (lib/jobs/stuckJobAlert.ts) has fired

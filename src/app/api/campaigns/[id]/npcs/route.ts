@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
+import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
 
 // GET /api/campaigns/:id/npcs - List all NPCs for a campaign
 export async function GET(
@@ -92,6 +93,15 @@ export async function POST(
       )
     }
 
+    const isDiscovered = body.isDiscovered !== undefined ? body.isDiscovered : true
+    // Resolve/create the matching Location row and link it via locationId
+    // alongside the free-text field (see README Known Bugs P1 — Location
+    // stored as free text, not an FK). Mirrors this NPC's own discovery
+    // intent rather than assuming true: an admin building in an
+    // undiscovered NPC as background lore shouldn't force-reveal the
+    // location either.
+    const locationId = await resolveOrCreateLocationId(prisma, campaignId, body.currentLocation, isDiscovered)
+
     // Create NPC
     const npc = await prisma.nPC.create({
       data: {
@@ -100,6 +110,7 @@ export async function POST(
         pronouns: body.pronouns || null,
         description: body.description || null,
         currentLocation: body.currentLocation || null,
+        locationId,
         goals: body.goals || null,
         relationship: body.relationship || null,
         isAlive: body.isAlive !== undefined ? body.isAlive : true,
@@ -110,7 +121,7 @@ export async function POST(
         moves: body.moves || [],
         factionId: body.factionId || null,
         factionRole: body.factionId ? (body.factionRole || 'MEMBER') : null,
-        isDiscovered: body.isDiscovered !== undefined ? body.isDiscovered : true,
+        isDiscovered,
       },
     })
 

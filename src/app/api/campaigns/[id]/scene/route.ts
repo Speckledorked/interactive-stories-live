@@ -11,6 +11,7 @@ import { pusherServer } from '@/lib/pusher'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { moderatePlayerText } from '@/lib/ai/moderation'
 import { recordEvent } from '@/lib/analytics/events'
+import { canAct, Condition, HarmLevel } from '@/lib/game/harm'
 
 // POST can trigger a full scene resolution (AI GM call + world tick) inline
 // before responding. 60s is the Vercel Hobby-tier ceiling — safe on every
@@ -181,6 +182,17 @@ export async function POST(
       return NextResponse.json<ErrorResponse>(
         { error: 'Character not found or does not belong to you' },
         { status: 403 }
+      )
+    }
+
+    // A character at harm 6 (Taken Out) or under an incapacitating
+    // condition ("Cannot act"/"Cannot take actions") can't submit actions
+    // until stabilized/healed/cleared.
+    const characterConditions = ((character.conditions as any)?.conditions || []) as Condition[]
+    if (!canAct(character.harm as HarmLevel, characterConditions)) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'This character cannot act right now (Taken Out or incapacitated) and cannot submit actions until stabilized.' },
+        { status: 409 }
       )
     }
 

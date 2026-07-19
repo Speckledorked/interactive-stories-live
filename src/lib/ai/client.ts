@@ -17,10 +17,13 @@ import { AMBITION_CATEGORY_OPTIONS } from '@/lib/game/tick/ambitionTick'
 export interface AIGMResponse {
   scene_text: string // The narrated resolution
   time_passage?: {
-    // How much in-game time has passed in this exchange
+    // How much in-game time has passed in this exchange — the engine
+    // derives the new date and banks world-turn hours from days/hours
+    // alone (see elapsedInGameHours in lib/game/tick/pacing.ts, which
+    // clamps a single scene to MAX_TIME_PASSAGE_HOURS_PER_SCENE); there is
+    // no separate date-string override field.
     days?: number // Days elapsed
     hours?: number // Hours elapsed (in addition to days)
-    new_date?: string // Optional: AI can provide a formatted date/time string
     description?: string // Optional: describe the time passage (e.g., "Several hours later", "The next morning")
   }
   world_updates: {

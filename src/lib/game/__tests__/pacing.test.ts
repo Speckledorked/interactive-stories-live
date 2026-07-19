@@ -5,6 +5,7 @@ import {
   resolveWorldTurnHours,
   elapsedInGameHours,
   decideWorldTurnPacing,
+  MAX_TIME_PASSAGE_HOURS_PER_SCENE,
 } from '../tick/pacing'
 
 describe('resolveWorldTurnHours', () => {
@@ -36,6 +37,15 @@ describe('elapsedInGameHours', () => {
   it('never returns negative and ignores non-numeric junk', () => {
     expect(elapsedInGameHours({ days: -1 })).toBe(0)
     expect(elapsedInGameHours({ days: 'soon' as any, hours: 2 })).toBe(2)
+  })
+
+  it('clamps a single scene to MAX_TIME_PASSAGE_HOURS_PER_SCENE, however large the AI reports', () => {
+    expect(elapsedInGameHours({ days: 9000 })).toBe(MAX_TIME_PASSAGE_HOURS_PER_SCENE)
+    expect(elapsedInGameHours({ days: Infinity })).toBe(MAX_TIME_PASSAGE_HOURS_PER_SCENE)
+  })
+
+  it('does not clamp a reasonable value under the ceiling', () => {
+    expect(elapsedInGameHours({ days: 2, hours: 3 })).toBe(51)
   })
 })
 

@@ -406,24 +406,20 @@ async function performResolution(
 
     // 8. Increment turn number and update in-game date based on AI time passage
     const timePassage = aiResponse.time_passage || {}
-    let newInGameDate = worldMeta.currentInGameDate || 'Day 1'
 
-    // Calculate new date based on AI's determination
-    if (timePassage.new_date) {
-      newInGameDate = timePassage.new_date
-    } else if (timePassage.days || timePassage.hours) {
-      // Parse current date and add time
-      newInGameDate = calculateNewDate(
-        worldMeta.currentInGameDate || 'Day 1',
-        timePassage.days || 0,
-        timePassage.hours || 0
-      )
-    }
+    // hoursThisExchange is the single source of truth for how much in-game
+    // time this scene advanced — clamped by elapsedInGameHours (see
+    // tick/pacing.ts) so the displayed date and the banked world-turn clock
+    // can never desync, and a single scene can't jump either one an
+    // absurd amount.
+    const hoursThisExchange = elapsedInGameHours(timePassage)
+    const newInGameDate = hoursThisExchange > 0
+      ? calculateNewDate(worldMeta.currentInGameDate || 'Day 1', hoursThisExchange)
+      : (worldMeta.currentInGameDate || 'Day 1')
 
     // Bank this exchange's in-game time toward the next world turn — the
     // faction/NPC simulation advances with fiction time, not per action
     // (see lib/game/tick/pacing.ts and runWorldTurnIfDue).
-    const hoursThisExchange = elapsedInGameHours(timePassage)
 
     await prisma.worldMeta.update({
       where: { id: worldMeta.id },
@@ -890,15 +886,16 @@ async function generateCampaignLog(
 }
 
 /**
- * Calculate new in-game date based on time passage
- * Handles simple date formats like "Day X" or more complex dates
+ * Calculate new in-game date from an already-clamped total hour count (see
+ * elapsedInGameHours in tick/pacing.ts — this never receives raw AI input).
+ * Handles simple date formats like "Day X" or more complex dates.
  */
-function calculateNewDate(currentDate: string, daysToAdd: number, hoursToAdd: number): string {
+function calculateNewDate(currentDate: string, hoursToAdd: number): string {
   // Handle "Day X" format
   const dayMatch = currentDate.match(/Day (\d+)/)
   if (dayMatch) {
     const currentDay = parseInt(dayMatch[1])
-    const totalDays = currentDay + daysToAdd + Math.floor(hoursToAdd / 24)
+    const totalDays = currentDay + Math.floor(hoursToAdd / 24)
     const remainingHours = hoursToAdd % 24
 
     if (remainingHours > 0) {
@@ -911,10 +908,9 @@ function calculateNewDate(currentDate: string, daysToAdd: number, hoursToAdd: nu
   const dayTimeMatch = currentDate.match(/Day (\d+), (\d+):(\d+)/)
   if (dayTimeMatch) {
     const currentDay = parseInt(dayTimeMatch[1])
-    const currentHour = parseInt(dayTimeMatch[2])
     const currentMinute = parseInt(dayTimeMatch[3])
 
-    const totalHours = currentHour + hoursToAdd + (daysToAdd * 24)
+    const totalHours = parseInt(dayTimeMatch[2]) + hoursToAdd
     const newDay = currentDay + Math.floor(totalHours / 24)
     const newHour = totalHours % 24
 
@@ -922,10 +918,8 @@ function calculateNewDate(currentDate: string, daysToAdd: number, hoursToAdd: nu
   }
 
   // Fallback: just append time passage description
-  if (daysToAdd > 0 && hoursToAdd > 0) {
-    return `${currentDate} + ${daysToAdd}d ${hoursToAdd}h`
-  } else if (daysToAdd > 0) {
-    return `${currentDate} + ${daysToAdd} days`
+  if (hoursToAdd >= 24 && hoursToAdd % 24 === 0) {
+    return `${currentDate} + ${hoursToAdd / 24} days`
   } else if (hoursToAdd > 0) {
     return `${currentDate} + ${hoursToAdd} hours`
   }

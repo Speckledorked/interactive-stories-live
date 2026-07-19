@@ -8,10 +8,13 @@
 // reward_grant is the structured payload this module actually applies when
 // a quest's status becomes COMPLETED, the same discipline pc_changes'
 // resource/inventory/standing changes already use — the code applies
-// exactly what's reported, it never guesses at amounts from prose.
+// exactly what's reported (never guessing at amounts from prose), clamped
+// to a sane magnitude the same way every other reported number in this
+// engine is (see economy.ts's clampGoldDelta).
 
 import { Prisma } from '@prisma/client'
 import { applyStandingChanges, StandingChange } from './standing'
+import { clampGoldDelta } from './economy'
 
 type Db = Prisma.TransactionClient
 
@@ -122,10 +125,13 @@ export async function applyQuestRewardGrant(
     const updateData: Record<string, unknown> = {}
 
     if (hasGold) {
+      // A reward is always a payout, never a debit — floor at 0 on top of
+      // the shared magnitude clamp (see economy.ts).
+      const goldGrant = Math.max(0, clampGoldDelta(grant.gold))
       const resources = (recipient.resources as any) || { gold: 0, contacts: [], reputation: {} }
-      resources.gold = Math.max(0, (resources.gold || 0) + (grant.gold || 0))
+      resources.gold = Math.max(0, (resources.gold || 0) + goldGrant)
       updateData.resources = resources
-      log.push(`${recipient.name} received ${grant.gold} gold from completing "${questName}"`)
+      log.push(`${recipient.name} received ${goldGrant} gold from completing "${questName}"`)
     }
 
     if (hasItems) {

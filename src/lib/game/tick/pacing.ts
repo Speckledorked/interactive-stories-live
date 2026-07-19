@@ -19,10 +19,23 @@ export function resolveWorldTurnHours(
   return configured && configured > 0 ? configured : DEFAULT_WORLD_TURN_HOURS
 }
 
+// A scene can narrate a long rest or a multi-day journey inline, but a
+// genuine weeks/months skip belongs to the dedicated downtime system
+// (lib/downtime/ai-downtime-service.ts, which resolves up to 365 days
+// day-by-day with real events/costs/outcomes instead of one freeform
+// number). This is a backstop against a single scene's time_passage being
+// absurdly large — a misjudged narrative beat or an outright hallucinated
+// number — not a design ceiling on how much time a campaign can cover;
+// the accumulator this feeds (WorldMeta.hoursSinceWorldTurn) can still
+// legitimately grow past this over many turns, same as it always could.
+export const MAX_TIME_PASSAGE_HOURS_PER_SCENE = 14 * 24 // 336 hours
+
 /**
- * In-game hours elapsed in one AI response's time_passage. Only days/hours
- * count — a bare new_date string carries no computable duration and the
- * prompt's own examples always use days/hours.
+ * In-game hours elapsed in one AI response's time_passage, clamped to
+ * MAX_TIME_PASSAGE_HOURS_PER_SCENE. Only days/hours count — a bare
+ * new_date string carries no computable duration and the prompt's own
+ * examples always use days/hours (see time_passage's doc comment in
+ * lib/ai/client.ts for why new_date isn't read at all).
  */
 export function elapsedInGameHours(
   timePassage: { days?: number; hours?: number } | null | undefined
@@ -30,7 +43,8 @@ export function elapsedInGameHours(
   if (!timePassage) return 0
   const days = Number(timePassage.days) || 0
   const hours = Number(timePassage.hours) || 0
-  return Math.max(0, days * 24 + hours)
+  const raw = Math.max(0, days * 24 + hours)
+  return Math.min(raw, MAX_TIME_PASSAGE_HOURS_PER_SCENE)
 }
 
 export interface WorldTurnPacingDecision {

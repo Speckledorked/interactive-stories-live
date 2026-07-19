@@ -91,14 +91,12 @@ export default function EnhancedCreateCharacterForm({
     },
     inventory: {
       items: [] as Array<{ id: string; name: string; quantity: number; tags: string[] }>,
-      slots: 10,
     },
 
     // Resources
     resources: {
       gold: 100,
       contacts: [] as string[],
-      reputation: {} as Record<string, number>,
     },
 
     // Consequences
@@ -751,7 +749,7 @@ export default function EnhancedCreateCharacterForm({
             <div className="border-t border-ember-900/30 pt-6">
               <h3 className="text-lg font-medium text-ember-100 mb-2">Starting Inventory</h3>
               <p className="text-xs text-ember-300/60 mb-4">
-                Add items your character starts with. Inventory slots: {formData.inventory.slots}
+                Add items your character starts with.
               </p>
 
               {/* Quick Add Buttons */}
@@ -869,22 +867,6 @@ export default function EnhancedCreateCharacterForm({
                 >
                   Add Item
                 </button>
-              </div>
-
-              <div className="mt-4">
-                <label htmlFor="inventorySlots" className="block text-sm font-medium text-ember-100 mb-1">
-                  Inventory Capacity (Slots)
-                </label>
-                <input
-                  type="number"
-                  id="inventorySlots"
-                  min="5"
-                  max="20"
-                  value={formData.inventory.slots}
-                  onChange={(e) => setFormData({ ...formData, inventory: { ...formData.inventory, slots: parseInt(e.target.value) || 10 } })}
-                  className="input-field w-32"
-                />
-                <p className="text-xs text-ember-300/60 mt-1">Maximum number of items you can carry.</p>
               </div>
             </div>
           </div>

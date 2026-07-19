@@ -11,9 +11,7 @@ export interface CampaignTemplate {
   universe: string
   systemPrompt: string
   initialWorldSeed: string
-  defaultPerks: PerkTemplate[]
   factionTemplates: FactionTemplate[]
-  startingItems: ItemTemplate[]
   // #13: front-style threats (Apocalypse World "fronts" — a ticking danger
   // clock with a stated consequence). sourceFactionName, when set, must
   // match a name in factionTemplates above — applyCampaignTemplate resolves
@@ -58,12 +56,6 @@ export interface StartingDebtTemplate {
   counterpartyFactionName: string
 }
 
-export interface PerkTemplate {
-  name: string
-  description: string
-  tags: string[]
-}
-
 export interface FactionTemplate {
   name: string
   description: string
@@ -71,12 +63,6 @@ export interface FactionTemplate {
   resources: number
   influence: number
   threatLevel: number
-}
-
-export interface ItemTemplate {
-  name: string
-  description: string
-  tags: string[]
 }
 
 /**
@@ -118,13 +104,6 @@ export const FANTASY_TEMPLATE: CampaignTemplate = {
 
 The town council is worried, and adventurers are needed to investigate the threats and protect the town's interests.`,
 
-  defaultPerks: [
-    { name: 'Battle-Hardened', description: '+1 ongoing when fighting creatures you\'ve defeated before', tags: ['combat'] },
-    { name: 'Lore Master', description: 'When you Spout Lore, on a 12+ you also discover a hidden advantage or opportunity', tags: ['knowledge'] },
-    { name: 'Quick Reflexes', description: 'You always act first when danger strikes suddenly', tags: ['agility'] },
-    { name: 'Silver Tongue', description: '+1 to Parley when you can offer something they want', tags: ['social'] }
-  ],
-
   factionTemplates: [
     {
       name: 'The Circle of Thorns',
@@ -150,15 +129,6 @@ The town council is worried, and adventurers are needed to investigate the threa
       influence: 45,
       threatLevel: 2
     }
-  ],
-
-  startingItems: [
-    { name: 'Sword', description: 'A trusty blade (1d8 damage, close)', tags: ['weapon', 'melee'] },
-    { name: 'Bow', description: 'A hunting bow (1d6 damage, near, far)', tags: ['weapon', 'ranged'] },
-    { name: 'Leather Armor', description: 'Light protection (1 armor)', tags: ['armor'] },
-    { name: 'Healing Potion', description: 'Restores 1d8 HP when consumed', tags: ['consumable', 'healing'] },
-    { name: 'Adventuring Gear', description: 'Rope, torches, rations, and basic tools', tags: ['utility'] },
-    { name: 'Spellbook', description: 'Contains three minor spells', tags: ['magic'] }
   ],
 
   frontTemplates: [
@@ -235,12 +205,6 @@ export const MHA_UA_TEMPLATE: CampaignTemplate = {
 
 But as you prepare for the exercise, alarms blare throughout the school. Real villains have somehow breached U.A.'s security. This is no longer a drill.`,
 
-  defaultPerks: [
-    { name: 'Quirk Evolution', description: 'Your quirk has developed a new application or aspect', tags: ['power'] },
-    { name: 'Plus Ultra', description: 'Once per session, push past your limits for a guaranteed strong hit', tags: ['heroic'] },
-    { name: 'Hero Network', description: 'You have contacts in the pro hero world who can provide assistance', tags: ['social'] }
-  ],
-
   factionTemplates: [
     {
       name: 'League of Villains',
@@ -258,12 +222,6 @@ But as you prepare for the exercise, alarms blare throughout the school. Real vi
       influence: 90,
       threatLevel: 1
     }
-  ],
-
-  startingItems: [
-    { name: 'Hero Costume', description: 'Custom-made to enhance your quirk', tags: ['equipment'] },
-    { name: 'Support Item', description: 'Gadget designed by the support department', tags: ['utility'] },
-    { name: 'Provisional License', description: 'Allows hero work under supervision', tags: ['credential'] }
   ],
 
   frontTemplates: [
@@ -333,12 +291,6 @@ export const MOTW_TEMPLATE: CampaignTemplate = {
 
 But you know better. Something supernatural is hunting in Millbrook, and it's your job to stop it before more people die.`,
 
-  defaultPerks: [
-    { name: 'Monster Hunter', description: '+1 when tracking or fighting supernatural creatures', tags: ['combat'] },
-    { name: 'Occult Library', description: 'You have access to rare lore about monsters', tags: ['knowledge'] },
-    { name: 'Trust No One', description: 'You can sense when someone is lying or under supernatural influence', tags: ['investigation'] }
-  ],
-
   factionTemplates: [
     {
       name: 'The Watchers',
@@ -348,13 +300,6 @@ But you know better. Something supernatural is hunting in Millbrook, and it's yo
       influence: 55,
       threatLevel: 2
     }
-  ],
-
-  startingItems: [
-    { name: 'Silver Knife', description: 'Effective against many supernatural creatures (2 harm, hand)', tags: ['weapon', 'silver'] },
-    { name: 'Research Notes', description: 'Information on common monster types', tags: ['knowledge'] },
-    { name: 'Salt and Iron', description: 'Basic protective materials', tags: ['protection'] },
-    { name: 'Investigation Kit', description: 'Camera, UV light, EMF detector', tags: ['utility'] }
   ],
 
   frontTemplates: [

@@ -7,7 +7,7 @@
 
 export interface CharacterInventoryForAggregation {
   name: string
-  inventory: unknown // Character.inventory Json: { items: [{ id, name, quantity, tags }], slots }
+  inventory: unknown // Character.inventory Json: { items: [{ id, name, quantity, tags }] }
 }
 
 export interface AggregatedItem {

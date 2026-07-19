@@ -449,7 +449,7 @@ export async function applyCharacterChanges(
 
     // Process inventory changes
     if (pcChange.changes.inventory_changes) {
-      const currentInventory: any = (character.inventory as any) || { items: [], slots: 10 }
+      const currentInventory: any = (character.inventory as any) || { items: [] }
       const invChange = pcChange.changes.inventory_changes
 
       // Ensure items array exists
@@ -531,18 +531,12 @@ export async function applyCharacterChanges(
         }
       }
 
-      // Adjust slots
-      if (invChange.slots_delta) {
-        currentInventory.slots = Math.max(0, (currentInventory.slots || 10) + invChange.slots_delta)
-        console.log(`  🎒 ${character.name} inventory slots: ${invChange.slots_delta > 0 ? '+' : ''}${invChange.slots_delta} (now ${currentInventory.slots})`)
-      }
-
       updateData.inventory = currentInventory
     }
 
     // Process resource changes
     if (pcChange.changes.resource_changes) {
-      const currentResources: any = (character.resources as any) || { gold: 0, contacts: [], reputation: {} }
+      const currentResources: any = (character.resources as any) || { gold: 0, contacts: [] }
       const resChange = pcChange.changes.resource_changes
 
       // Gold changes — clamped to a sane magnitude (see economy.ts) before
@@ -570,16 +564,6 @@ export async function applyCharacterChanges(
             currentResources.contacts = currentResources.contacts.filter((c: string) => c !== contact)
             console.log(`  🤝 ${character.name} lost contact: ${contact}`)
           }
-        }
-      }
-
-      // Reputation changes
-      if (resChange.reputation_changes) {
-        if (!currentResources.reputation) currentResources.reputation = {}
-        for (const repChange of resChange.reputation_changes) {
-          const current = currentResources.reputation[repChange.faction] || 0
-          currentResources.reputation[repChange.faction] = current + repChange.delta
-          console.log(`  ⭐ ${character.name} reputation with ${repChange.faction}: ${repChange.delta > 0 ? '+' : ''}${repChange.delta} (now ${currentResources.reputation[repChange.faction]})`)
         }
       }
 

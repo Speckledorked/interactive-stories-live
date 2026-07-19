@@ -7,7 +7,6 @@ import { openaiFetch } from '@/lib/ai/openaiCompat'
 import { validateAIResponseWithRepair } from './validation'
 import { circuitBreakerManager } from './circuit-breaker'
 import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
-import { aiResponseCache } from './response-cache'
 import { AI_MODELS } from './models'
 import { AMBITION_CATEGORY_OPTIONS } from '@/lib/game/tick/ambitionTick'
 
@@ -448,7 +447,6 @@ export async function callAIGM(
   campaignId?: string,
   sceneId?: string,
   options?: {
-    skipCache?: boolean
     debugMode?: boolean
   }
 ): Promise<AIGMResponse> {
@@ -465,27 +463,6 @@ export async function callAIGM(
     if (!circuitBreaker.canAttempt()) {
       console.error('🚫 Circuit breaker OPEN - AI service unavailable')
       throw new Error('AI service temporarily unavailable - too many recent failures. Please try again later.')
-    }
-  }
-
-  // Phase 15.5: Check cache first
-  if (!options?.skipCache) {
-    const cachedResponse = aiResponseCache.get(request)
-    if (cachedResponse) {
-      // Record cache hit in cost tracker
-      if (campaignId) {
-        const costTracker = new AICostTracker(campaignId, AI_MODELS.FLAGSHIP)
-        await costTracker.recordRequest({
-          inputTokens: 0,
-          outputTokens: 0,
-          responseTimeMs: Date.now() - startTime,
-          success: true,
-          cacheHit: true,
-          sceneId,
-          requestType: 'scene_resolution'
-        })
-      }
-      return cachedResponse
     }
   }
 
@@ -645,11 +622,6 @@ export async function callAIGM(
     // Phase 15.3: Record success in circuit breaker
     if (campaignId) {
       circuitBreakerManager.getBreaker(campaignId).recordSuccess()
-    }
-
-    // Phase 15.5: Cache successful response
-    if (validationResult.level === 'full') {
-      aiResponseCache.set(request, validatedResponse, request.current_scene_intro)
     }
 
     // Phase 15.5.1: Track costs

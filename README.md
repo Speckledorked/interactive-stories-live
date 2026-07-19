@@ -113,23 +113,13 @@ against git history and the Shipped ledger.
 
 ### P0
 
-**AI response cache can serve one campaign's narrative to another (#8, #58, #62)**
-- *Why it matters:* the cache is unconditionally live in production, and its key can't tell two different campaigns apart — a real cross-tenant data leak, not a depth complaint.
-- *Evidence:* `lib/ai/response-cache.ts` (`AIResponseCache.normalizeRequest` keys only on `campaign_universe` + action-pattern bucket + two booleans + scene-intro-length bucket — never `campaignId`/`sceneId`); `lib/ai/client.ts`'s `callAIGM`, the one call site, never passes `skipCache: true`. Same file also carries dead code from the same investigation: `sceneContext` is stored by `set()` but never read by `get()`, and `PATTERN_TEMPLATES`/`matchPattern()` have zero callers.
-- *Scope:* AI behavior, persistence/data integrity.
-- *Suggested fix:* Add `campaignId` + `sceneId` to the cache key, or set `skipCache: true` to disable it until re-keyed; delete the dead `sceneContext`/pattern-template code in the same pass.
-
-**Entity resolution corrupts state via fuzzy name matching (#3, #40)**
-- *Why it matters:* the AI→state write-back auto-creates a duplicate stub NPC on any misspelled name — the single largest state-corruption vector in a long-running campaign.
-- *Evidence:* `lib/game/stateUpdater.ts` (NPC/character/clock resolution via `contains`-mode name match).
-- *Scope:* persistence, core gameplay, AI behavior.
-- *Suggested fix:* Replace `contains`-mode matching with exact-match → alias table → fuzzy-with-confirmation; stop all `contains` writes.
+*None currently open.* Both P0s from the consolidated audit are fixed — see Shipped.
 
 ### P1
 
-**`stateUpdater.ts` is a 1,438-line untested transactional core (#4, #41)**
-- *Why it matters:* this is the transactional heart of the entire write-back path — every AI-narrated consequence flows through it — and it's verified only indirectly through route tests, not directly.
-- *Evidence:* `lib/game/stateUpdater.ts`.
+**`stateUpdater.ts` is a 1,439-line mostly-untested transactional core (#4, #41)**
+- *Why it matters:* this is the transactional heart of the entire write-back path — every AI-narrated consequence flows through it — and outside the entity-resolution slice (below), it's verified only indirectly through route tests, not directly.
+- *Evidence:* `lib/game/stateUpdater.ts`. Partial progress: entity resolution was extracted to `lib/game/entityResolution.ts` and is now directly unit-tested (see Shipped) — the remaining ~1,300 lines (harm/condition application, faction/NPC/character update assembly, location/quest/debt/standing/capability write-through) are still not.
 - *Scope:* persistence, maintainability.
 - *Suggested fix:* Decompose into per-domain appliers, each unit-tested, using the fixture shapes that already exist in route tests.
 
@@ -251,6 +241,10 @@ are folded in below. `#22` (de-jargon) and `#23` (surface multiplayer) shipped �
 Full narrative detail for everything below (including specific bug
 postmortems) is preserved in this file's git history — this is the condensed
 ledger.
+
+**Both P0s from the consolidated audit, fixed:**
+- **AI response cache cross-tenant leak (`#8`, `#58`, `#62`)** — rather than re-key a cache whose entire premise (coarse-bucket matching two "similar" requests to the same cached narrative) turns out to be unsafe for any per-scene resolution call — even correctly scoped by `campaignId`+`sceneId`, a scene resolved across multiple exchanges would still replay an earlier exchange's cached text for the same scene — the cache was removed from `callAIGM`'s live call path entirely. `lib/ai/response-cache.ts` (the `AIResponseCache` class, its dead `sceneContext`/`PATTERN_TEMPLATES`/`matchPattern` code included) is deleted; `client.ts` no longer imports or consults it, and the now-meaningless `skipCache` option was removed from `callAIGM`'s signature. Every AI GM call is a real, uncached call.
+- **Entity resolution via `contains`-mode name matching (`#3`, `#40`)** — replaced across all 5 sites in `stateUpdater.ts` (clocks, NPCs, the NPC-harm attacker lookup, player characters, factions) with a new `lib/game/entityResolution.ts`: exact id → exact name (case/whitespace-insensitive) → a single, tightly-gated fuzzy match (Levenshtein distance ≤2 *and* ≤20% of name length — enough to catch a genuine AI typo, never enough to conflate two different short names). A `contains` match's two failure modes are both gone: it could cross-match an unrelated entity whose name merely contained the search string ("Bob" matching "Bobby's Assistant"), and it could fail on a trivial typo and silently spawn a duplicate stub instead. Multiple equally-plausible fuzzy candidates now resolve to a logged "ambiguous, skipping" rather than a guess — the system never picks a side when it's genuinely unsure which entity is meant. Each entity type's full campaign roster is fetched once per batch and resolved in memory rather than one `contains` query per change; newly-created stubs are added to that in-memory roster so a later change in the same batch referencing the same new name doesn't spawn a second stub. `entityResolution.ts`'s pure functions are directly unit-tested — the first direct test coverage any part of `stateUpdater.ts`'s resolution logic has had (partial progress on `#41`; the remaining ~1,300 lines of harm/faction/character update assembly are still untested).
 
 **Depth Hardening (`#28`–`#37`, 9 of 10)** — from the July 2026 codebase
 depth audit's highest-ROI backlog:

@@ -1,17 +1,20 @@
 // src/lib/game/worldUpdaters/locations.ts
-// Domain appliers for world_updates.location_changes, plus the
-// auto-register-from-character-movement pass (former "7b"). Both operate
-// on Location and match by exact (unique) name, not fuzzy resolution — a
+// Domain applier for world_updates.location_changes, plus
+// resolveOrCreateLocationId — the shared helper every Character/NPC
+// location write (AI-reported movement, the world tick's NPC commute,
+// character/NPC creation and admin edits) uses to keep the new
+// Character.locationId / NPC.locationId FK in sync with the free-text
+// currentLocation string. Both operate on Location and match by name — a
 // location's campaignId+name is already a real unique constraint, so this
 // domain never had the `contains`-matching bug the others did.
-// See README Known Bugs P1 (stateUpdater decomposition, #4/#41).
+// See README Known Bugs P1 (stateUpdater decomposition, #4/#41; Location
+// stored as free text, not an FK).
 
 import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 
 type Db = Prisma.TransactionClient
 export type LocationChange = NonNullable<WorldUpdates['location_changes']>[number]
-export type PcChangeForMovement = NonNullable<WorldUpdates['pc_changes']>[number]
 
 export async function applyLocationChanges(
   tx: Db,
@@ -67,33 +70,54 @@ export async function applyLocationChanges(
 }
 
 /**
- * A PC's reported location that doesn't exist yet as a Location row gets
- * one — a PC standing there is itself a discovery event. Non-critical: a
- * concurrent-write failure is swallowed, same as the original inline code.
+ * Resolve a reported location name to its Location row's id — creating
+ * the row if none exists yet, the same "a character standing there is
+ * itself a discovery event" behavior the old auto-register pass had, now
+ * also returning the id so a caller can set `locationId` in the same
+ * write instead of only the free-text field.
+ *
+ * Matches case/whitespace-insensitively before falling back to create:
+ * Location's own campaignId+name uniqueness is exact-string (unchanged,
+ * out of scope here), but nothing requires every *caller* of this
+ * function to be exact-string too — resolving "the Docks" and "The
+ * Docks" to the same row here, before either would otherwise create a
+ * near-duplicate, is a strict improvement with no behavior change for
+ * any caller that already had an exact match.
+ *
+ * Returns null only for a blank/missing name — never throws; a
+ * concurrent-write race is swallowed the same as the original inline
+ * upsert was, since linking the id is a best-effort improvement, not a
+ * required part of persisting the character/NPC's own update.
  */
-export async function autoRegisterLocationsFromMovement(
+export async function resolveOrCreateLocationId(
   tx: Db,
   campaignId: string,
-  pcChanges: PcChangeForMovement[],
+  locationName: string | null | undefined,
   sceneOrigin: boolean
-): Promise<void> {
-  for (const pcChange of pcChanges) {
-    if (!pcChange.changes.location) continue
-    const locationName = pcChange.changes.location
-    try {
-      await tx.location.upsert({
-        where: { campaignId_name: { campaignId, name: locationName } },
-        create: {
-          campaignId,
-          name: locationName,
-          isDiscovered: sceneOrigin
-        },
-        // A PC standing there is itself a discovery event, so reveal on
-        // update too — same reveal-on-mention rule as location_changes.
-        update: sceneOrigin ? { isDiscovered: true } : {}
-      })
-    } catch {
-      // Ignore if upsert fails (e.g., concurrent write) — non-critical
+): Promise<string | null> {
+  const name = locationName?.trim()
+  if (!name) return null
+
+  try {
+    const existing = await tx.location.findFirst({
+      where: { campaignId, name: { equals: name, mode: 'insensitive' } },
+    })
+
+    if (existing) {
+      // A character/NPC standing there is itself a discovery event, same
+      // reveal-on-mention rule as location_changes — never on an
+      // offscreen background update.
+      if (sceneOrigin && !existing.isDiscovered) {
+        await tx.location.update({ where: { id: existing.id }, data: { isDiscovered: true } })
+      }
+      return existing.id
     }
+
+    const created = await tx.location.create({
+      data: { campaignId, name, isDiscovered: sceneOrigin },
+    })
+    return created.id
+  } catch {
+    return null
   }
 }

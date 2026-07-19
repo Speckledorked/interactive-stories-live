@@ -22,7 +22,7 @@ import { applyClockChanges } from './worldUpdaters/clocks'
 import { applyNpcChanges } from './worldUpdaters/npcs'
 import { applyCharacterChanges } from './worldUpdaters/characters'
 import { applyFactionChanges } from './worldUpdaters/factions'
-import { applyLocationChanges, autoRegisterLocationsFromMovement } from './worldUpdaters/locations'
+import { applyLocationChanges } from './worldUpdaters/locations'
 import { applyQuestChanges } from './worldUpdaters/quests'
 import { applyBargainOffers } from './worldUpdaters/bargainOffers'
 import { storeGmNotesForTurn } from './worldUpdaters/worldMetaNotes'
@@ -118,7 +118,7 @@ export async function applyWorldUpdates(
       // 4. Update player characters
       if (world_updates.pc_changes) {
         await applyCharacterChanges(
-          tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, getCorruptionTheme
+          tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, getCorruptionTheme, sceneOrigin
         )
       }
 
@@ -154,11 +154,6 @@ export async function applyWorldUpdates(
       // of a player — and only in campaigns that actually have a theme.
       if (sceneOrigin && world_updates.bargain_offers && world_updates.bargain_offers.length > 0) {
         await applyBargainOffers(tx, campaignId, currentTurnNumber, world_updates.bargain_offers, getCorruptionTheme)
-      }
-
-      // 7b. Auto-register locations from character movement
-      if (world_updates.pc_changes) {
-        await autoRegisterLocationsFromMovement(tx, campaignId, world_updates.pc_changes, sceneOrigin)
       }
 
       // 8. Store GM notes in WorldMeta if provided

@@ -483,10 +483,11 @@ export async function resolveActionMechanics(
         select: { id: true, name: true },
       }),
       // Live weather per location (see lib/game/tick/weatherTick.ts) —
-      // matched against each acting character's currentLocation below.
+      // matched against each acting character's locationId (falling back
+      // to a currentLocation name-string match — see below) below.
       prisma.location.findMany({
         where: { campaignId },
-        select: { name: true, weather: true, weatherSeverity: true },
+        select: { id: true, name: true, weather: true, weatherSeverity: true },
       }),
       // Per-campaign move flavor (see lib/ai/moveFlavor.ts) — rows with no
       // baseMoveKey are legacy/export-only content and never matched here.
@@ -512,6 +513,15 @@ export async function resolveActionMechanics(
       characterRows.map(c => [c.id, new Map(c.factionStandings.map(s => [s.factionId, s.value]))])
     )
     const currentLocationByCharacter = new Map(characterRows.map(c => [c.id, c.currentLocation]))
+    // locationId is the stable join — resolveOrCreateLocationId keeps it
+    // in sync with currentLocation on every write. The name-string map
+    // stays as a fallback for a character whose locationId hasn't
+    // resolved yet (see README Known Bugs P1 — Location stored as free
+    // text, not an FK).
+    const locationIdByCharacter = new Map(characterRows.map(c => [c.id, c.locationId]))
+    const weatherByLocationId = new Map(
+      locationRows.map(l => [l.id, { condition: l.weather as string, severity: l.weatherSeverity }])
+    )
     const weatherByLocationName = new Map(
       locationRows.map(l => [l.name.toLowerCase(), { condition: l.weather as string, severity: l.weatherSeverity }])
     )
@@ -567,10 +577,17 @@ export async function resolveActionMechanics(
         }
       }
 
+      // Prefer the stable locationId join — immune to the free-text drift
+      // ("the Docks" vs "The Docks District") that made the name-string
+      // match silently miss a real location. Fall back to the name match
+      // only for a character whose locationId hasn't resolved yet (see
+      // README Known Bugs P1 — Location stored as free text, not an FK).
+      const locationId = locationIdByCharacter.get(character.id)
       const currentLocation = currentLocationByCharacter.get(character.id)
-      const weatherForRoll: WeatherForRoll | null = currentLocation
-        ? weatherByLocationName.get(currentLocation.toLowerCase()) ?? null
-        : null
+      const weatherForRoll: WeatherForRoll | null =
+        (locationId ? weatherByLocationId.get(locationId) : undefined) ??
+        (currentLocation ? weatherByLocationName.get(currentLocation.toLowerCase()) : undefined) ??
+        null
 
       const move = BASIC_MOVES.find(m => m.name === classification.move_name)
       const moveFlavor = move ? moveFlavorByKey.get(move.key) ?? null : null

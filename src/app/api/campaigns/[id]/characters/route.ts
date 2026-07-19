@@ -8,6 +8,7 @@ import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import { recordEvent } from '@/lib/analytics/events'
 import { getTemplate } from '@/lib/templates/campaign-templates'
 import { OriginFamiliarity } from '@prisma/client'
+import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
 
 interface CreateCharacterBody {
   name: string
@@ -118,6 +119,12 @@ export async function POST(
         ? body.originFamiliarity
         : 'NATIVE'
 
+    // Resolve/create the matching Location row and link it via locationId
+    // alongside the free-text field (see README Known Bugs P1 — Location
+    // stored as free text, not an FK) — same helper the AI write-back path
+    // uses for a PC's reported movement.
+    const locationId = await resolveOrCreateLocationId(prisma, campaignId, body.currentLocation, true)
+
     const character = await prisma.character.create({
       data: {
         campaignId,
@@ -132,6 +139,7 @@ export async function POST(
         backstory: body.backstory,
         goals: body.goals,
         currentLocation: body.currentLocation,
+        locationId,
         moves: body.moves || [],
         equipment: body.equipment || undefined,
         inventory: body.inventory || undefined,

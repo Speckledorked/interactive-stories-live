@@ -27,6 +27,16 @@ chmod +x scripts/setup-pgvector.sh
 
 Database initialization script that automatically enables the pgvector extension when using Docker. This script is automatically run when starting the PostgreSQL container via `docker-compose.yml`.
 
+### `backfill-location-ids.sql`
+
+**Run once, by hand, after deploying.** This project's production build command (`vercel.json`) runs `prisma db push`, not `prisma migrate deploy` — `db push` applies schema changes straight from `schema.prisma` but never executes anything in `prisma/migrations/`. Most schema changes need nothing further, but this one shipped with a one-time data backfill (linking existing `Character`/`NPC` rows to their matching `Location` row by name) that only exists as migration SQL, so it needs to be run manually against the real database once:
+
+```bash
+psql "$DATABASE_URL" -f scripts/backfill-location-ids.sql
+```
+
+Safe to run more than once (it only touches rows where `locationId` is still `NULL`) and safe to run whenever — nothing requires it to happen before traffic resumes, since every consumer already falls back to the pre-existing string match for a row that hasn't backfilled yet.
+
 ## Using Docker
 
 The easiest way to get started with a properly configured database is using Docker:

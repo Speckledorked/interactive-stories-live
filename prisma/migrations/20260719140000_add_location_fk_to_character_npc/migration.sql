@@ -20,6 +20,13 @@ ALTER TABLE "NPC" ADD CONSTRAINT "NPC_locationId_fkey" FOREIGN KEY ("locationId"
 -- campaignId+name unique constraint already keys on. A currentLocation
 -- string that never became a real Location row is left null here rather
 -- than inventing one during a migration.
+--
+-- NOTE: this project's actual deploy build command runs `prisma db push`,
+-- not `prisma migrate deploy` (see vercel.json) — db push never executes
+-- this file. The column/index/FK changes above still land fine (db push
+-- reads schema.prisma directly), but this backfill needs to be run by
+-- hand in production via scripts/backfill-location-ids.sql, which
+-- mirrors it exactly. Keep the two in sync if this ever changes.
 UPDATE "Character" c
 SET "locationId" = l."id"
 FROM "Location" l

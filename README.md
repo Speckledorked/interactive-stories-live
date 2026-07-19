@@ -176,6 +176,27 @@ found has since been fixed; this is what's still actually true today.
    `lib/maps/map-service.ts`, so an unattended campaign accumulates a new
    `Map` + `Zone` set every single scene. This is also the reason `#43`'s
    dead zone system keeps regenerating fresh instances of itself. See `#59`.
+10. **Notification delivery is theater on two of its three channels.**
+    The in-app bell works (`NotificationPanel` genuinely binds
+    `notification-received`). Sound and push do not reach a player:
+    `SoundService` (`sound-service.ts`, 443 lines — a full 20-effect
+    library plus a real Web Audio playback engine) has zero callers beyond
+    a manual preview button in `NotificationSettings.tsx`, its
+    `playNotificationSound`/`playDramaticSound`/`startAmbientSound`
+    dispatch tables are never invoked from any gameplay event despite
+    `triggerSound` being set on real, live notification paths (character
+    level-ups, chat mentions/whispers), the Pusher event that's supposed
+    to carry it (`sound-notification`) has no client-side listener
+    anywhere, and `public/sounds/` doesn't exist as a directory at all.
+    Push notifications are two separate half-built pipelines that never
+    connect to each other: `public/sw.js` has a correct, spec-compliant
+    `push` event listener, but nothing in the codebase ever creates the
+    `PushSubscription` (`pushManager.subscribe`) or sends to it
+    (no `web-push`/VAPID usage anywhere), so that listener can never
+    fire; meanwhile `push-service.ts`'s `PushService.triggerPushNotification`
+    — which *is* wired into every real notification — sends its payload
+    over Pusher's `push-notification` event, which likewise has no
+    client-side listener. See `#63`–`#64`.
 
 ## Roadmap
 
@@ -242,6 +263,17 @@ are new, and `#58` is more severe than anything currently open on this list.
 - [ ] **#60 Finish the "Everyone's a player" copy migration in `admin/page.tsx`.** Five leftover "GM Notes" labels/placeholders (NPC/Faction/Location/Clock edit forms) survived the pass that already reworded this same file's X-Card tooltip and Maps-tab gating — a ~10-minute cleanup to close out that pass for real.
 - [ ] **#61 Remove the dead `getWorldStateChanges()` export.** `world-state-tracker.ts`'s accessor has zero callers — the one real consumer (`story/page.tsx`) reads `scene.consequences?.worldStateChanges` directly instead. Either switch that call site to use it, or delete the export so it stops implying a read path that isn't actually used.
 - [ ] **#62 Delete `response-cache.ts`'s dead `sceneContext`/pattern-template code.** `set()`'s `sceneContext` parameter is stored but never read back by `get()`; `PATTERN_TEMPLATES`/`matchPattern()` are defined and exported but have zero callers anywhere. Fold into whatever `#58` decides for this file rather than fixing in isolation.
+
+### 🔧 Fourth pass — notification delivery is theater
+
+A second exclusion-scoped audit, this time landing entirely outside the
+game/simulation layer: the notification-delivery presentation layer. The
+in-app bell (`NotificationPanel`) genuinely works; sound and push do not
+— both look like real, deliberately-built infrastructure on inspection,
+and both dead-end before reaching a player. See Known Issues #10.
+
+- [ ] **#63 Connect or delete the sound-notification pipeline.** Either bind the Pusher `sound-notification` event client-side and call `SoundService.playNotificationSound`/`playDramaticSound`, and add the actual files to `public/sounds/` — or delete `sound-service.ts`'s dispatch tables, `notification-service.ts`'s `triggerSound` plumbing, and every `triggerSound:` call site, since right now all of it is dead weight on both the sending and receiving end.
+- [ ] **#64 Pick one push-notification implementation and finish it.** Two half-built, mutually unaware pipelines exist: `public/sw.js`'s spec-correct `push` listener has no `PushSubscription` anywhere to invoke it (no `pushManager.subscribe`, no `web-push`/VAPID usage in the whole repo); `push-service.ts`'s `PushService.triggerPushNotification` — wired into every real notification — sends over Pusher's `push-notification` event, which has no client-side listener. Either build the real Web Push subscription flow to use `sw.js`'s listener, or delete `push-service.ts`, its call site in `notification-service.ts`, and the service worker's `push`/`notificationclick` handlers, and rely on in-app + email only.
 
 ### 🎯 Next — Product & Market
 

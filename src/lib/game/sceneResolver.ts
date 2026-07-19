@@ -20,6 +20,7 @@ import {
   logPerkGained,
   logMoveLearned,
   buildMoveFromAI,
+  buildPerkFromAI,
   type RecentAction,
   type StatUsage,
   type AdvancementLog
@@ -693,12 +694,10 @@ async function applyOrganicCharacterGrowth(
   for (const [characterId, actions] of actionsByCharacter.entries()) {
     const character = actions[0].character
 
-    // Build recent action summary
-    // For now, we'll infer tags and outcomes from action text
-    // In a more advanced system, you'd store this with the action
+    // Build recent action summary (for stat usage tracking only — perks
+    // and moves are AI-authored, not inferred from action text here)
     const recentActions: RecentAction[] = actions.map(action => ({
       actionId: action.id,
-      tags: extractTagsFromAction(action.actionText),
       statUsed: (action.rollResult as any)?.stat ?? null,
       outcome: inferOutcomeFromAction(action)
     }))
@@ -718,27 +717,25 @@ async function applyOrganicCharacterGrowth(
     })
     const turnNumber = worldMeta?.currentTurnNumber ?? 0
 
-    // Compute system-based growth suggestions
-    const systemGrowth = computeOrganicGrowth(character, recentActions, turnNumber)
+    // Compute system-based growth suggestions (stat increases only)
+    const systemGrowth = computeOrganicGrowth(character, turnNumber)
 
     // Check if AI suggested growth for this character
     const aiGrowth = aiResponse.world_updates?.organic_advancement?.find(
       (adv: any) => adv.character_id === characterId
     )
 
-    // Merge AI and system suggestions. AI-reported moves arrive as bare
-    // {name, trigger, description} — buildMoveFromAI derives a stable id
-    // from the name so the same conceptual move dedupes across scenes even
-    // if the AI phrases it slightly differently each time.
+    // Merge AI and system suggestions. AI-reported perks/moves arrive as
+    // bare {name, description/trigger, ...} — buildPerkFromAI/
+    // buildMoveFromAI derive a stable id from the name so the same
+    // conceptual perk/move dedupes across scenes even if the AI phrases it
+    // slightly differently each time.
     const mergedGrowth = {
       statIncreases: [
         ...(systemGrowth.statIncreases || []),
         ...(aiGrowth?.stat_increases || [])
       ],
-      newPerks: [
-        ...(systemGrowth.newPerks || []),
-        ...(aiGrowth?.new_perks || [])
-      ],
+      newPerks: (aiGrowth?.new_perks || []).map(buildPerkFromAI),
       newMoves: [
         ...(systemGrowth.newMoves || []),
         ...((aiGrowth?.new_moves || []).map(buildMoveFromAI))
@@ -826,47 +823,6 @@ async function applyOrganicCharacterGrowth(
       })
     }
   }
-}
-
-/**
- * Extract tags from action text using simple keyword matching
- * In production, you might use NLP or have players tag actions explicitly
- */
-function extractTagsFromAction(actionText: string): string[] {
-  const text = actionText.toLowerCase()
-  const tags: string[] = []
-
-  // Combat keywords
-  if (text.match(/\b(attack|fight|combat|battle|strike|hit|shoot|fire)\b/)) {
-    tags.push('combat')
-  }
-
-  // Stealth keywords
-  if (text.match(/\b(sneak|hide|stealth|infiltrate|slip|shadow|quiet)\b/)) {
-    tags.push('stealth')
-  }
-
-  // Investigation keywords
-  if (text.match(/\b(investigate|search|examine|look|study|analyze|inspect)\b/)) {
-    tags.push('investigation')
-  }
-
-  // Social keywords
-  if (text.match(/\b(talk|persuade|convince|negotiate|charm|intimidate|deceive)\b/)) {
-    tags.push('social')
-  }
-
-  // Training keywords
-  if (text.match(/\b(train|practice|study|learn|improve|exercise)\b/)) {
-    tags.push('training')
-  }
-
-  // Spying keywords
-  if (text.match(/\b(spy|surveil|watch|observe|follow|track)\b/)) {
-    tags.push('spying')
-  }
-
-  return tags
 }
 
 /**

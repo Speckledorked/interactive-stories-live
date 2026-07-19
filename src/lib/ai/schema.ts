@@ -252,8 +252,10 @@ export const StatIncreaseSchema = z.object({
   reason: z.string()
 })
 
+// id is never accepted from the AI — the engine derives it from name (see
+// buildPerkFromAI in lib/game/advancement.ts), the same pattern MoveSchema
+// already uses for the same dedup-across-rephrasings reason.
 export const PerkSchema = z.object({
-  id: z.string(),
   name: z.string(),
   description: z.string(),
   tags: z.array(z.string()).optional()

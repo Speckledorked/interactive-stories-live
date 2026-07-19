@@ -150,6 +150,32 @@ found has since been fixed; this is what's still actually true today.
    duplicates the real `FactionStanding` system); `NPC.impulses`/`NPC.moves`
    are admin-writable and consumed nowhere; inventory `slots` is tracked
    but never enforced. See `#53`–`#56`.
+8. **The AI response cache can serve one campaign's narrative to
+   another.** `lib/ai/response-cache.ts`'s cache key
+   (`AIResponseCache.normalizeRequest`) is built only from
+   `campaign_universe` (a short template string — literally `'High
+   Fantasy'`/`'Modern Superhero'`/`'Modern Horror'`, identical across every
+   campaign built from the same template), an action count, a coarse
+   action-pattern bucket (`combat`/`social`/`investigate`/`movement`/
+   `ability`/`other`), two booleans, and scene-intro length rounded to the
+   nearest 100 characters — `campaignId` and `sceneId` are never part of
+   the key, and the one call site (`client.ts`'s `callAIGM`) never passes
+   `skipCache: true`, so caching is unconditionally live in production.
+   Two different campaigns sharing a universe template, both taking a
+   combat action, with similarly-long scene intros, can receive the
+   literal same cached narrative — specific NPC names, specific outcomes —
+   from whichever wrote that slot first, for up to 60 minutes. See `#58`.
+9. **Automatic AI map generation has no off switch.** Every scene
+   resolution (`sceneResolver.ts`, step 7.5) unconditionally calls
+   `AIVisualService.generateMapFromScene` — a second AI call that analyzes
+   the narration and creates/updates a `Map` with `Zone`/`Token` rows and a
+   Pusher broadcast. No opt-in/opt-out setting exists anywhere in the
+   codebase. Reuse of the existing map only happens if the AI's own JSON
+   output happens to set `layoutHints.reuseLocation: true`; there is no
+   deterministic default toward reuse and no cleanup path in
+   `lib/maps/map-service.ts`, so an unattended campaign accumulates a new
+   `Map` + `Zone` set every single scene. This is also the reason `#43`'s
+   dead zone system keeps regenerating fresh instances of itself. See `#59`.
 
 ## Roadmap
 
@@ -200,6 +226,22 @@ because the enforcement code already exists, dead.
 - [ ] **#55 Enforce inventory slots or remove them.** `slots` is tracked, AI-adjustable (`slots_delta`), and displayed; `hasInventorySpace()` implements the check and has zero callers — items are added unconditionally.
 - [ ] **#56 Dead-weight deletion pass.** Remove what implies systems that don't exist: `campaign-templates.ts`'s `defaultPerks` + `startingItems` (zero consumers — the `defaultMoves` cleanup in `#38` missed them), `inventory.ts`'s unused CRUD half (`addItemToInventory`/`removeItemFromInventory`/`findItem` — `stateUpdater` reimplements all of it inline), `NPC.impulses`/`NPC.moves` (admin-writable, read by nothing), and `Scene.turnDeadline` (written, never read).
 - [ ] **#57 Give `CampaignHealthMonitor` an audience or delete it.** 359 lines compute a health score, issues, and recommendations every 5 turns — and `console.warn` them to the server log. No UI reads it, nothing acts on it. Surface it as a lobby/admin card, or remove it.
+
+### 🔧 Third pass — from the iterative, exclusion-aware re-audit
+
+A stricter audit explicitly scoped to exclude everything already listed
+above, focused on files no prior pass had opened: the AI infrastructure
+layer (caching, circuit breaking) and features not yet in this README at
+all. The simulation core (`ambitionTick`, `relationshipTick`,
+`npcSocietyTick`, `leadershipTick`, `territory.ts`, `wikiSync.ts`) held up
+under call-graph verification with no new problems found. Both items below
+are new, and `#58` is more severe than anything currently open on this list.
+
+- [ ] **#58 Re-key or disable the AI response cache.** See Known Issues #8 — `campaignId`/`sceneId` aren't part of the cache key, so two campaigns can receive each other's cached scene narration. Either add both to `AIResponseCache.normalizeRequest`'s key, or turn the cache off (`skipCache: true` at its one call site) until it's re-keyed — given the collision risk, off-by-default is the safer interim state.
+- [ ] **#59 Gate automatic map generation behind a real setting.** See Known Issues #9. Add a per-campaign toggle (default off, or opt-in), cap maps-per-campaign, and default to reusing the previous scene's map when the location name matches instead of leaving reuse entirely up to whether the AI's JSON happens to say so.
+- [ ] **#60 Finish the "Everyone's a player" copy migration in `admin/page.tsx`.** Five leftover "GM Notes" labels/placeholders (NPC/Faction/Location/Clock edit forms) survived the pass that already reworded this same file's X-Card tooltip and Maps-tab gating — a ~10-minute cleanup to close out that pass for real.
+- [ ] **#61 Remove the dead `getWorldStateChanges()` export.** `world-state-tracker.ts`'s accessor has zero callers — the one real consumer (`story/page.tsx`) reads `scene.consequences?.worldStateChanges` directly instead. Either switch that call site to use it, or delete the export so it stops implying a read path that isn't actually used.
+- [ ] **#62 Delete `response-cache.ts`'s dead `sceneContext`/pattern-template code.** `set()`'s `sceneContext` parameter is stored but never read back by `get()`; `PATTERN_TEMPLATES`/`matchPattern()` are defined and exported but have zero callers anywhere. Fold into whatever `#58` decides for this file rather than fixing in isolation.
 
 ### 🎯 Next — Product & Market
 

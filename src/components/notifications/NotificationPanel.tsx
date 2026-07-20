@@ -191,7 +191,8 @@ export default function NotificationPanel({
       'AI_RESPONSE_READY': '🤖',
       'WORLD_EVENT': '🌍',
       'FRIEND_REQUEST': '👋',
-      'SAFETY_ALERT': '✋'
+      'SAFETY_ALERT': '✋',
+      'CAMPAIGN_MILESTONE': '🏆'
     };
     return icons[type] || '📢';
   };

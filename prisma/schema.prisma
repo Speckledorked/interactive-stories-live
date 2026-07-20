@@ -69,6 +69,10 @@ enum NotificationType {
   // — see safety-service.ts) for the same reason. A dedicated type keeps
   // safety alerts distinguishable from an eventual real SCENE_CHANGE use.
   SAFETY_ALERT
+  // Every CAMPAIGN_MILESTONE_INTERVAL scenes (see campaignMilestone.ts) —
+  // distinct from WORLD_EVENT since a milestone is about the party's own
+  // chronicle, not something that happened in the simulated world.
+  CAMPAIGN_MILESTONE
 }
 
 enum NotificationStatus {

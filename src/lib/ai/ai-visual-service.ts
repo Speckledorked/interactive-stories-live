@@ -184,7 +184,12 @@ Return a JSON object with:
     
     // Check if we should update existing map or create new one
     if (previousMapId && this.shouldReuseMap(analysis)) {
-      // Update existing map name/description
+      // Update existing map name/description. Clear its zones/tokens
+      // first — generateZones/generateTokens (called next, by
+      // generateMapFromScene) only ever create, never replace, so
+      // without this every prior scene's markers would just keep piling
+      // up on top of the current scene's instead of being replaced by it.
+      await MapService.clearMapContents(previousMapId)
       return await MapService.updateMap(previousMapId, {
         name: analysis.mapName,
         description: `AI-generated map for: ${analysis.mapName}`

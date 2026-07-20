@@ -354,39 +354,49 @@ async function performResolution(
       console.error('⚠️ Failed to broadcast Pusher event:', pusherError)
     }
 
-    // 7.5. Generate map visualization from scene description
-    // Add timeout to prevent map generation from blocking scene resolution
-    try {
-      console.log('🗺️  Generating map visualization...')
+    // 7.5. Generate map visualization from scene description — only on a
+    // scene's FIRST exchange. A scene can resolve several exchanges
+    // before the party moves on ("Keep scene active for continuous
+    // play"), and the map doesn't need to be re-derived from scratch on
+    // every single one — it was previously called here on every exchange
+    // regardless, which burned an AI call and a batch of zone/token
+    // writes on every action, not just when a genuinely new scene
+    // actually started.
+    if (!isFirstSceneExchange(existingResolutions)) {
+      console.log('🗺️  Skipping map generation — scene already has a map from its first exchange')
+    } else {
+      try {
+        console.log('🗺️  Generating map visualization...')
 
-      // Get the active map for the campaign (if any)
-      const activeMap = await prisma.map.findFirst({
-        where: {
+        // Get the active map for the campaign (if any)
+        const activeMap = await prisma.map.findFirst({
+          where: {
+            campaignId,
+            isActive: true
+          },
+          select: { id: true }
+        })
+
+        // Timeout map generation after 30 seconds
+        const MAP_TIMEOUT_MS = 30 * 1000
+        const mapPromise = AIVisualService.generateMapFromScene(
+          aiResponse.scene_text,
           campaignId,
-          isActive: true
-        },
-        select: { id: true }
-      })
+          activeMap?.id
+        )
 
-      // Timeout map generation after 30 seconds
-      const MAP_TIMEOUT_MS = 30 * 1000
-      const mapPromise = AIVisualService.generateMapFromScene(
-        aiResponse.scene_text,
-        campaignId,
-        activeMap?.id
-      )
+        const mapTimeoutPromise = new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('Map generation timeout')), MAP_TIMEOUT_MS)
+        )
 
-      const mapTimeoutPromise = new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error('Map generation timeout')), MAP_TIMEOUT_MS)
-      )
+        await Promise.race([mapPromise, mapTimeoutPromise])
 
-      await Promise.race([mapPromise, mapTimeoutPromise])
-
-      console.log('✅ Map visualization generated')
-    } catch (visualError) {
-      // Don't fail the entire scene resolution if map generation fails
-      const errorMsg = visualError instanceof Error ? visualError.message : String(visualError)
-      console.error('⚠️  Map generation failed (non-critical):', errorMsg)
+        console.log('✅ Map visualization generated')
+      } catch (visualError) {
+        // Don't fail the entire scene resolution if map generation fails
+        const errorMsg = visualError instanceof Error ? visualError.message : String(visualError)
+        console.error('⚠️  Map generation failed (non-critical):', errorMsg)
+      }
     }
 
     // 7.6. Sync wiki entries for NPCs, factions, and clocks (non-critical)
@@ -944,6 +954,17 @@ async function generateCampaignLog(
     where: { campaignId, entryType: 'scene' }
   })
   await checkAndCreateMilestone(campaignId, sceneLogCount, turnNumber)
+}
+
+/**
+ * Whether this exchange is a scene's first (no prior resolution text
+ * banked yet) — gates map (re)generation to once per scene rather than
+ * once per exchange (see the 7.5 map-generation step above). Pure and
+ * exported so it's unit-testable without mocking the whole resolution
+ * pipeline.
+ */
+export function isFirstSceneExchange(existingResolutions: unknown[]): boolean {
+  return existingResolutions.length === 0
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { resolveScene, createNewScene, getCurrentScene, getRecentScenes, canUserResolveScene, fallbackSummaryFromSceneText, appendSummarySegment } from '../sceneResolver';
+import { resolveScene, createNewScene, getCurrentScene, getRecentScenes, canUserResolveScene, fallbackSummaryFromSceneText, appendSummarySegment, isFirstSceneExchange } from '../sceneResolver';
 
 // Mock modules
 vi.mock('@/lib/prisma', () => ({
@@ -102,6 +102,7 @@ import { prisma } from '@/lib/prisma';
 import { callAIGM } from '@/lib/ai/client';
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState';
 import { applyWorldUpdates } from '../stateUpdater';
+import { AIVisualService } from '@/lib/ai/ai-visual-service';
 
 describe('Scene Resolver', () => {
   beforeEach(() => {
@@ -217,6 +218,10 @@ describe('Scene Resolver', () => {
           hoursBankedSinceLastHeartbeat: { increment: 0 },
         },
       });
+
+      // mockScene.sceneResolutionText is null — this is the scene's first
+      // exchange, so a map should be generated.
+      expect(AIVisualService.generateMapFromScene).toHaveBeenCalled();
     });
 
     it('should throw error if scene not found', async () => {
@@ -486,6 +491,21 @@ describe('Scene Resolver', () => {
 
       expect(result).toBe(false);
     });
+  });
+});
+
+describe('isFirstSceneExchange', () => {
+  // Gates map (re)generation to once per scene (see the 7.5 map step in
+  // sceneResolver.ts) rather than once per exchange — a scene can resolve
+  // several exchanges before the party moves on ("Keep scene active for
+  // continuous play"), and existingResolutions is how the caller already
+  // tracks whether any prior exchange has resolved yet.
+  it('is true when there are no prior resolutions (a scene\'s first exchange)', () => {
+    expect(isFirstSceneExchange([])).toBe(true);
+  });
+
+  it('is false once a scene has at least one prior resolution', () => {
+    expect(isFirstSceneExchange(['The party entered the tavern.'])).toBe(false);
   });
 });
 

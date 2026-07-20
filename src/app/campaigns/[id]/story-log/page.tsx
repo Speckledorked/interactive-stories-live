@@ -241,7 +241,7 @@ export default function StoryLogPage() {
         </div>
       </main>
 
-      <TavernNav active="quests" campaignId={campaignId} />
+      <TavernNav campaignId={campaignId} />
     </TavernPage>
   )
 }

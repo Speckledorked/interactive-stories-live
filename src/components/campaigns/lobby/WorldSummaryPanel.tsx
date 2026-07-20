@@ -51,7 +51,7 @@ export function WorldSummaryPanel({
     { label: 'Locations', href: `/campaigns/${campaignId}/wiki?type=LOCATION`, count: locationCount },
     { label: 'Clocks', href: `/campaigns/${campaignId}/wiki?type=CLOCK`, count: clockCount },
     { label: 'Items', href: `/campaigns/${campaignId}/wiki?type=ITEM`, count: null },
-    { label: 'Quests', href: `/campaigns/${campaignId}/wiki?type=QUEST`, count: null },
+    { label: 'Quests', href: `/campaigns/${campaignId}/quests`, count: null },
     { label: 'Rumors', href: `/campaigns/${campaignId}/wiki?type=RUMORS`, count: null },
   ]
 

@@ -246,17 +246,23 @@ export class ExchangeManager {
    * left orphaned by it, so a scene corrupted before the fix shipped
    * doesn't stay permanently stuck showing "already submitted."
    *
-   * Safety: a genuinely in-flight pending action's owner is always
-   * present in the scene's live exchangeState.playersActed —
-   * recordAction adds it synchronously at submission time. So anything
-   * pending whose owner is missing from that list is either (a) a stale
-   * leftover from an already-resolved exchange that never got swept
-   * (the bug), or (b) a same-exchange action whose recordAction call
-   * failed transiently and hasn't been narrated yet. Only (a) is safe to
-   * sweep, so this is gated on the scene having resolved at least once
-   * — before any resolution, playersActed only ever reflects the one
-   * exchange still being collected, and sweeping there could silently
-   * drop a real, not-yet-resolved action.
+   * Safety: orphaned is judged by exchangeNumber, not by
+   * exchangeState.playersActed. A pending action's exchangeNumber is
+   * stamped atomically in the same `playerAction.create` call that
+   * inserts the row (see scene/route.ts), so it's never observably out
+   * of sync with the row's own existence. playersActed used to be the
+   * signal here, but it's written by a *separate*, later call
+   * (recordAction) — this GET route runs opportunistically on ordinary
+   * page-load/poll traffic, so it could observe a brand-new pending
+   * action in the narrow window after it was created but before
+   * recordAction's own write landed, read playersActed as not yet
+   * containing that action's owner, and sweep a genuinely current,
+   * never-narrated action to 'resolved' — silently discarding it before
+   * anyone (including the submitting player) ever saw it counted.
+   * exchangeNumber has no such window: anything pending whose
+   * exchangeNumber doesn't match the scene's current exchange is a
+   * stale leftover from an already-resolved exchange that completeExchange
+   * failed to sweep, full stop.
    */
   async reconcileOrphanedActions(): Promise<string[]> {
     const scene = await prisma.scene.findUnique({
@@ -267,9 +273,8 @@ export class ExchangeManager {
       return []
     }
 
-    const exchangeState = scene.exchangeState as any as ExchangeState | null
-    const playersActed = new Set(exchangeState?.playersActed || [])
-    const orphaned = scene.playerActions.filter(a => !playersActed.has(a.characterId))
+    const currentExchange = scene.currentExchange ?? 0
+    const orphaned = scene.playerActions.filter(a => a.exchangeNumber !== currentExchange)
     if (orphaned.length === 0) return []
 
     await prisma.playerAction.updateMany({

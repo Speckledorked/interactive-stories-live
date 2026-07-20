@@ -129,8 +129,8 @@ describe('reconcileOrphanedActions', () => {
   it('does nothing when there are no pending actions', async () => {
     db.scene.findUnique.mockResolvedValue({
       sceneResolutionText: 'The scene resolved...',
+      currentExchange: 3,
       playerActions: [],
-      exchangeState: { playersActed: [] },
     })
 
     const swept = await new ExchangeManager('camp1', 'scene1').reconcileOrphanedActions()
@@ -142,11 +142,11 @@ describe('reconcileOrphanedActions', () => {
   it('sweeps pending actions orphaned from a prior resolved exchange', async () => {
     db.scene.findUnique.mockResolvedValue({
       sceneResolutionText: 'The scene resolved...',
+      currentExchange: 3,
       playerActions: [
-        { id: 'orphan1', characterId: 'char1' },
-        { id: 'current1', characterId: 'char2' },
+        { id: 'orphan1', characterId: 'char1', exchangeNumber: 2 },
+        { id: 'current1', characterId: 'char2', exchangeNumber: 3 },
       ],
-      exchangeState: { playersActed: ['char2'] },
     })
     db.playerAction.updateMany.mockResolvedValue({ count: 1 })
 
@@ -159,11 +159,19 @@ describe('reconcileOrphanedActions', () => {
     })
   })
 
-  it('leaves a genuinely in-flight action alone when its owner is in playersActed', async () => {
+  it('leaves a genuinely in-flight action alone even when exchangeState.playersActed has not caught up yet', async () => {
+    // Regression: a brand-new pending action's exchangeNumber is stamped
+    // atomically at creation (scene/route.ts), but exchangeState.playersActed
+    // is written moments later by a separate call (recordAction). A
+    // reconcile sweep that lands in that gap must not treat "not yet in
+    // playersActed" as orphaned — this action's exchangeNumber already
+    // matches the scene's current exchange, so it's current regardless of
+    // what exchangeState says.
     db.scene.findUnique.mockResolvedValue({
       sceneResolutionText: 'The scene resolved...',
-      playerActions: [{ id: 'current1', characterId: 'char2' }],
-      exchangeState: { playersActed: ['char2'] },
+      currentExchange: 3,
+      playerActions: [{ id: 'current1', characterId: 'char2', exchangeNumber: 3 }],
+      exchangeState: { playersActed: [], exchangeNumber: 3, isComplete: false, complexity: 'simple', actionsThisExchange: 0, timestamp: new Date() },
     })
 
     const swept = await new ExchangeManager('camp1', 'scene1').reconcileOrphanedActions()

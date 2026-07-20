@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { resolveScene, createNewScene, getCurrentScene, getRecentScenes, canUserResolveScene } from '../sceneResolver';
+import { resolveScene, createNewScene, getCurrentScene, getRecentScenes, canUserResolveScene, fallbackSummaryFromSceneText } from '../sceneResolver';
 
 // Mock modules
 vi.mock('@/lib/prisma', () => ({
@@ -486,5 +486,33 @@ describe('Scene Resolver', () => {
 
       expect(result).toBe(false);
     });
+  });
+});
+
+describe('fallbackSummaryFromSceneText', () => {
+  // Only exercised when the AI didn't report scene_summary (a repaired/
+  // degraded response) — generateCampaignLog prefers the AI's own recap.
+  it('takes the first three sentences, keeping their punctuation', () => {
+    const text = 'Kairos drew his blade. The guard flinched. Imek shouted a warning. A fourth sentence nobody sees.';
+    expect(fallbackSummaryFromSceneText(text)).toBe(
+      'Kairos drew his blade. The guard flinched. Imek shouted a warning.'
+    );
+  });
+
+  it('does not break mid-quote the way naive splitting on every punctuation mark did', () => {
+    const text = '"Delvin says the chest has reached the eastern routes," Kairos said.';
+    expect(fallbackSummaryFromSceneText(text)).toBe(
+      '"Delvin says the chest has reached the eastern routes," Kairos said.'
+    );
+  });
+
+  it('falls back to a character-limited slice when no sentence boundaries are found', () => {
+    const text = 'a'.repeat(400);
+    const result = fallbackSummaryFromSceneText(text);
+    expect(result).toBe('a'.repeat(300) + '...');
+  });
+
+  it('does not append an ellipsis to short sentence-less text', () => {
+    expect(fallbackSummaryFromSceneText('no punctuation here')).toBe('no punctuation here');
   });
 });

@@ -443,7 +443,14 @@ async function performResolution(
     // 8.5. Generate campaign log entry
     try {
       console.log('📝 Generating campaign log entry...')
-      await generateCampaignLog(campaignId, sceneId, currentTurn + 1, aiResponse.scene_text)
+      await generateCampaignLog(
+        campaignId,
+        sceneId,
+        currentTurn + 1,
+        aiResponse.scene_text,
+        aiResponse.scene_summary,
+        aiResponse.world_updates?.new_timeline_events
+      )
       console.log('✅ Campaign log entry created')
     } catch (logError) {
       // Don't fail the entire scene resolution if log generation fails
@@ -839,30 +846,33 @@ function inferOutcomeFromAction(action: any): 'success' | 'mixed' | 'failure' | 
 }
 
 /**
- * Generate a campaign log entry summarizing the scene
+ * Generate a campaign log entry summarizing the scene.
+ *
+ * Prefers the AI's own genuine recap (scene_summary) and named beats
+ * (new_timeline_events' titles) — both already produced in the same
+ * resolution call, so this costs nothing extra. Falls back to a crude
+ * first-few-sentences truncation of scene_text only when those are
+ * missing (a repaired/degraded response never includes them) — that
+ * truncation used to be the only path, which is why old log entries read
+ * as raw prose cut off mid-quote rather than an actual summary.
  */
 async function generateCampaignLog(
   campaignId: string,
   sceneId: string,
   turnNumber: number,
-  sceneText: string
+  sceneText: string,
+  sceneSummary?: string,
+  timelineEvents?: Array<{ title: string; visibility: string }>
 ): Promise<void> {
-  // Create a simple summary by taking the first few sentences or using a simple format
-  // In a production system, you'd call an AI to generate a proper summary
+  const summary = sceneSummary?.trim() || fallbackSummaryFromSceneText(sceneText)
 
-  const sentences = sceneText.split(/[.!?]+/).filter(s => s.trim().length > 0)
-  const summary = sentences.slice(0, 3).join('. ') + (sentences.length > 3 ? '...' : '')
-
-  // Extract key moments (looking for character actions, significant events)
-  const highlights: string[] = []
-  const actionKeywords = ['fought', 'discovered', 'found', 'defeated', 'rescued', 'escaped', 'learned', 'met', 'confronted']
-
-  sentences.forEach(sentence => {
-    const lowerSentence = sentence.toLowerCase()
-    if (actionKeywords.some(keyword => lowerSentence.includes(keyword))) {
-      highlights.push(sentence.trim())
-    }
-  })
+  // Publicly-visible timeline events the AI named this scene — real,
+  // complete headlines it wrote to mark a notable beat, not sentence
+  // fragments matched by a fixed keyword list.
+  const highlights = (timelineEvents || [])
+    .filter(e => e.visibility !== 'GM_ONLY' && e.title?.trim())
+    .map(e => e.title.trim())
+    .slice(0, 5)
 
   // Get scene info for title
   const scene = await prisma.scene.findUnique({
@@ -879,10 +889,26 @@ async function generateCampaignLog(
       turnNumber,
       title,
       summary,
-      highlights: highlights.slice(0, 5), // Limit to 5 highlights
+      highlights,
       entryType: 'scene'
     }
   })
+}
+
+/**
+ * Last-resort summary when the AI didn't report scene_summary (only
+ * happens on a repaired/degraded response) — a real summary beats
+ * nothing, but this is a truncation, not a summary, so it's the fallback
+ * and never the primary path.
+ */
+export function fallbackSummaryFromSceneText(sceneText: string): string {
+  const sentences = sceneText.match(/[^.!?]+[.!?]+/g) || []
+  // Each match keeps its leading whitespace from the source text (the
+  // regex only excludes .!?), so join on trimmed fragments rather than
+  // raw ones to avoid double spaces between sentences.
+  const summary = sentences.slice(0, 3).map(s => s.trim()).join(' ')
+  if (summary) return summary
+  return sceneText.slice(0, 300) + (sceneText.length > 300 ? '...' : '')
 }
 
 /**

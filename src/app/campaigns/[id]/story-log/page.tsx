@@ -89,6 +89,7 @@ export default function StoryLogPage() {
       const data = await response.json()
       if (response.ok) {
         setRegenerateResult(
+          (data.consolidated > 0 ? `Merged ${data.consolidated} duplicate ${data.consolidated === 1 ? 'entry' : 'entries'}. ` : '') +
           `Regenerated ${data.regenerated} ${data.regenerated === 1 ? 'entry' : 'entries'}` +
           (data.failed > 0 ? `, ${data.failed} failed` : '') +
           (data.remaining > 0 ? ` — ${data.remaining} more left, run again to continue` : '')

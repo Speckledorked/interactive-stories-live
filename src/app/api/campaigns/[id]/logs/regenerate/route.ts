@@ -8,6 +8,13 @@
 // Scene.sceneResolutionText survives — so this makes a fresh, dedicated
 // (cheap, EFFICIENT-model) summarization call per entry.
 //
+// Also consolidates duplicate rows first: a separate, earlier bug in
+// generateCampaignLog created one row per exchange instead of one per
+// scene, and that fix doesn't touch rows already sitting in the table -
+// see storyLogConsolidation.ts. Consolidation is a cheap DB-only pass
+// (no AI calls) run across every duplicate in one request; only the
+// AI-resummarization pass afterward is capped.
+//
 // Admin-gated (unlike regenerate-intro, which any member can trigger):
 // this fans out multiple AI calls in one request, which per-scene
 // regeneration doesn't, so it's a real cost/abuse surface. Capped per
@@ -20,6 +27,7 @@ import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import { prisma } from '@/lib/prisma'
 import { summarizeSceneForLog } from '@/lib/ai/worldState'
+import { planLogConsolidation } from '@/lib/game/storyLogConsolidation'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 
 export const maxDuration = 60
@@ -55,6 +63,24 @@ export async function POST(
       )
     }
 
+    // Consolidate first: cheap (no AI calls), so process every duplicate
+    // in one request regardless of the resummarization cap below.
+    const allSceneEntries = await prisma.campaignLog.findMany({
+      where: { campaignId, entryType: 'scene', sceneId: { not: null } },
+      select: { id: true, sceneId: true, turnNumber: true, highlights: true }
+    })
+
+    const consolidationPlans = planLogConsolidation(allSceneEntries)
+    let consolidated = 0
+    for (const plan of consolidationPlans) {
+      await prisma.campaignLog.deleteMany({ where: { id: { in: plan.deleteIds } } })
+      await prisma.campaignLog.update({
+        where: { id: plan.canonicalId },
+        data: { highlights: plan.mergedHighlights }
+      })
+      consolidated += plan.deleteIds.length
+    }
+
     const entries = await prisma.campaignLog.findMany({
       where: { campaignId, sceneId: { not: null } },
       orderBy: { turnNumber: 'asc' },
@@ -63,7 +89,7 @@ export async function POST(
     })
 
     if (entries.length === 0) {
-      return NextResponse.json({ regenerated: 0, failed: 0, remaining: 0 })
+      return NextResponse.json({ regenerated: 0, failed: 0, remaining: 0, consolidated })
     }
 
     const scenes = await prisma.scene.findMany({
@@ -102,7 +128,8 @@ export async function POST(
     return NextResponse.json({
       regenerated,
       failed,
-      remaining: Math.max(0, remaining)
+      remaining: Math.max(0, remaining),
+      consolidated
     })
   } catch (error) {
     console.error('❌ Story Log regeneration error:', error)

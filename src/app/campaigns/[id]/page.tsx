@@ -225,6 +225,7 @@ export default function CampaignLobbyPage() {
       const result = await response.json()
       if (response.ok) {
         setRegenerateLogsResult(
+          (result.consolidated > 0 ? `Merged ${result.consolidated} duplicate ${result.consolidated === 1 ? 'entry' : 'entries'}. ` : '') +
           `Regenerated ${result.regenerated} ${result.regenerated === 1 ? 'entry' : 'entries'}` +
           (result.failed > 0 ? `, ${result.failed} failed` : '') +
           (result.remaining > 0 ? ` — ${result.remaining} more left, run again to continue` : '')

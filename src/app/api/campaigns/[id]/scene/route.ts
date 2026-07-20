@@ -328,83 +328,77 @@ export async function POST(
       // Don't fail the request if Pusher fails
     }
 
-    // Check if all participants have submitted - auto-resolve if conditions met
+    // Who needs to act before this exchange can resolve. A defined-
+    // participant scene (Character-Focused/split-party) has its own
+    // explicit roster; an open scene doesn't, so it's every living
+    // character in the campaign instead — an open scene is meant to
+    // include the whole party, so resolution shouldn't fire the instant
+    // the first person acts, only once everyone actually has.
     const hasDefinedParticipants = scene.participants &&
                                    (scene.participants as any).characterIds &&
                                    (scene.participants as any).characterIds.length > 0
 
+    let participantUserIds: string[]
     if (hasDefinedParticipants) {
-      // Get all actions for this scene's current exchange (not all exchanges)
-      const allActions = await prisma.playerAction.findMany({
-        where: {
-          sceneId,
-          exchangeNumber: scene.currentExchange,
-          status: 'pending'
-        },
+      participantUserIds = sceneParticipants.userIds || []
+    } else {
+      const livingCharacters = await prisma.character.findMany({
+        where: { campaignId, isAlive: true },
         select: { userId: true }
       })
+      participantUserIds = [...new Set(livingCharacters.map(c => c.userId))]
+    }
 
-      // Get all unique user IDs from submitted actions
-      const submittedUserIds = new Set(allActions.map(a => a.userId))
+    // Get all actions for this scene's current exchange (not all exchanges)
+    const allActions = await prisma.playerAction.findMany({
+      where: {
+        sceneId,
+        exchangeNumber: scene.currentExchange,
+        status: 'pending'
+      },
+      select: { userId: true }
+    })
 
-      const participantUserIds = sceneParticipants.userIds || []
+    // Get all unique user IDs from submitted actions
+    const submittedUserIds = new Set(allActions.map(a => a.userId))
 
-      // Check if all participants have submitted
-      const allParticipantsSubmitted = participantUserIds.every((uid: string) =>
-        submittedUserIds.has(uid)
-      )
+    // Check if all participants have submitted
+    const allParticipantsSubmitted = participantUserIds.length > 0 &&
+      participantUserIds.every((uid: string) => submittedUserIds.has(uid))
 
-      console.log(`📊 Scene ${scene.sceneNumber} participants: ${participantUserIds.length}, submitted: ${submittedUserIds.size}`)
+    console.log(`📊 Scene ${scene.sceneNumber} party: ${participantUserIds.length}, submitted: ${submittedUserIds.size}`)
 
-      if (allParticipantsSubmitted && participantUserIds.length > 0) {
-        console.log(`🎬 All participants submitted! Enqueueing resolution for scene ${scene.sceneNumber}`)
+    if (allParticipantsSubmitted) {
+      console.log(`🎬 Whole party submitted! Enqueueing resolution for scene ${scene.sceneNumber}`)
 
-        // Clear waitingOnUsers so the UI shows everyone has acted,
-        // then let the resolver handle status transitions (it sets RESOLVING internally).
-        await prisma.scene.update({
-          where: { id: sceneId },
-          data: { waitingOnUsers: [] }
-        })
+      // Clear waitingOnUsers so the UI shows everyone has acted,
+      // then let the resolver handle status transitions (it sets RESOLVING internally).
+      await prisma.scene.update({
+        where: { id: sceneId },
+        data: { waitingOnUsers: [] }
+      })
 
-        // Async resolution: enqueue a ResolutionJob and return. The ~150s
-        // AI pipeline runs in the internal worker route's own invocation
-        // (maxDuration 300) instead of inside this player's request; the
-        // UI follows the existing scene:resolving / scene:resolved /
-        // scene:resolution-failed Pusher events exactly as before. Free —
-        // billing only happens once, when the scene actually ends.
-        try {
-          const { enqueueSceneResolution } = await import('@/lib/game/resolutionQueue')
-          await enqueueSceneResolution(campaignId, sceneId)
-        } catch (error) {
-          console.error(`❌ Failed to enqueue resolution for scene ${scene.sceneNumber}:`, error)
-          // Don't fail this response — the action itself already saved.
-          // Stale-job recovery on scene GET traffic retries from here.
-        }
-      } else {
-        // Update waitingOnUsers to track who hasn't submitted yet
-        const stillWaiting = participantUserIds.filter((uid: string) => !submittedUserIds.has(uid))
-        await prisma.scene.update({
-          where: { id: sceneId },
-          data: { waitingOnUsers: stillWaiting }
-        })
-      }
-    } else {
-      // For open scenes (no predefined participants), resolve immediately —
-      // this is how the GM AI responds to player actions in real time.
-      console.log(`🎬 Open scene ${scene.sceneNumber} - enqueueing resolution`)
-
-      // Async resolution — see the participant branch above. The old
-      // 2-minute inline timeout/revert dance is gone: job bookkeeping and
-      // resolveScene's own status-revert handle every failure mode, and
-      // stale jobs are recovered by scene GET traffic. Free — billing
-      // only happens once, when the scene actually ends.
+      // Async resolution: enqueue a ResolutionJob and return. The ~150s
+      // AI pipeline runs in the internal worker route's own invocation
+      // (maxDuration 300) instead of inside this player's request; the
+      // UI follows the existing scene:resolving / scene:resolved /
+      // scene:resolution-failed Pusher events exactly as before. Free —
+      // billing only happens once, when the scene actually ends.
       try {
         const { enqueueSceneResolution } = await import('@/lib/game/resolutionQueue')
         await enqueueSceneResolution(campaignId, sceneId)
       } catch (error) {
         console.error(`❌ Failed to enqueue resolution for scene ${scene.sceneNumber}:`, error)
         // Don't fail this response — the action itself already saved.
+        // Stale-job recovery on scene GET traffic retries from here.
       }
+    } else {
+      // Update waitingOnUsers to track who hasn't submitted yet
+      const stillWaiting = participantUserIds.filter((uid: string) => !submittedUserIds.has(uid))
+      await prisma.scene.update({
+        where: { id: sceneId },
+        data: { waitingOnUsers: stillWaiting }
+      })
     }
 
     return NextResponse.json({ action }, { status: 201 })

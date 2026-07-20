@@ -12,7 +12,7 @@ import { NextRequest } from 'next/server'
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     campaign: { findUnique: vi.fn() },
-    character: { findUnique: vi.fn() },
+    character: { findUnique: vi.fn(), findMany: vi.fn() },
     scene: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     playerAction: { create: vi.fn(), findMany: vi.fn() },
   },
@@ -86,6 +86,11 @@ beforeEach(() => {
   ;(moderatePlayerText as any).mockResolvedValue({ flagged: false, categories: [] })
   db.campaign.findUnique.mockResolvedValue({ contentModerationLevel: 'standard' })
   db.character.findUnique.mockResolvedValue({ id: 'char1', userId: 'user1' })
+  // Default: the caller is the only living character in the campaign, so
+  // an open scene's "whole party" is just them — resolves immediately,
+  // same as before this was made to actually wait. Tests that care about
+  // a bigger living roster override this.
+  db.character.findMany.mockResolvedValue([{ userId: 'user1' }])
   db.scene.findUnique.mockResolvedValue(makeBaseScene())
   db.scene.findMany.mockResolvedValue([])
   db.scene.update.mockResolvedValue({})
@@ -151,11 +156,38 @@ describe('POST /api/campaigns/[id]/scene', () => {
     expect(db.playerAction.create).not.toHaveBeenCalled()
   })
 
-  it('creates the action and enqueues resolution immediately for an open scene', async () => {
+  it('creates the action and resolves immediately for an open scene with only one living character', async () => {
+    // The just-created action now shows up in the current-exchange query.
+    db.playerAction.findMany.mockResolvedValue([{ userId: 'user1' }])
+
     const response = await call()
 
     expect(response.status).toBe(201)
     expect(db.playerAction.create).toHaveBeenCalledTimes(1)
+    expect(enqueueSceneResolution).toHaveBeenCalledWith('camp1', 'scene1')
+  })
+
+  it('waits for the rest of a living party in an open scene instead of resolving on the first action', async () => {
+    // Two living characters, two different owners — only user1 has acted.
+    db.character.findMany.mockResolvedValue([{ userId: 'user1' }, { userId: 'user2' }])
+    db.playerAction.findMany.mockResolvedValue([{ userId: 'user1' }])
+
+    const response = await call()
+
+    expect(response.status).toBe(201)
+    expect(enqueueSceneResolution).not.toHaveBeenCalled()
+    expect(db.scene.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { waitingOnUsers: ['user2'] } })
+    )
+  })
+
+  it('resolves an open scene once every living character has submitted', async () => {
+    db.character.findMany.mockResolvedValue([{ userId: 'user1' }, { userId: 'user2' }])
+    db.playerAction.findMany.mockResolvedValue([{ userId: 'user1' }, { userId: 'user2' }])
+
+    const response = await call()
+
+    expect(response.status).toBe(201)
     expect(enqueueSceneResolution).toHaveBeenCalledWith('camp1', 'scene1')
   })
 

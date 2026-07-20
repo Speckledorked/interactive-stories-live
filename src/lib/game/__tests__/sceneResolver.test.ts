@@ -22,6 +22,12 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(),
       update: vi.fn(),
     },
+    // Looked up by the map-generation step (sceneResolver.ts) to find the
+    // campaign's active map, if any — findFirst resolving to undefined
+    // (the vi.fn() default) is fine, it just means "no active map yet".
+    map: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 

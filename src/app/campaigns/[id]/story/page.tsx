@@ -504,16 +504,7 @@ export default function StoryPage() {
         throw new Error(data.error || 'Failed to submit action')
       }
 
-      // Check if this scene has predefined participants for better success message
-      const scene = activeScenes.find(s => s.id === sceneId)
-      const participants = scene?.participants as any
-      const hasDefinedParticipants = participants?.characterIds && participants.characterIds.length > 0
-
-      setSuccess(
-        hasDefinedParticipants
-          ? '✓ Action submitted! The scene will auto-resolve when all participants submit.'
-          : '✓ Action submitted! Waiting for GM to resolve this exchange.'
-      )
+      setSuccess('✓ Action submitted! The scene will auto-resolve once everyone has acted.')
       setActionText(prev => ({ ...prev, [sceneId]: '' }))
       await loadData() // Reload to show new action
     } catch (err) {
@@ -1264,61 +1255,57 @@ export default function StoryPage() {
                     const participants = scene.participants as any
                     const hasDefinedParticipants = participants?.characterIds && participants.characterIds.length > 0
                     const submittedUserIds = new Set((scene.playerActions || []).map((a: any) => a.userId))
-                    const participantUserIds = participants?.userIds || []
+                    // An open scene has no explicit roster, so its "whole
+                    // party" is every living character in the campaign —
+                    // same rule the backend uses to decide when to
+                    // auto-resolve (see scene/route.ts).
+                    const participantUserIds = hasDefinedParticipants
+                      ? (participants?.userIds || [])
+                      : [...new Set((campaign?.characters || []).filter((c: any) => c.isAlive !== false).map((c: any) => c.userId))]
                     const allParticipantsSubmitted = participantUserIds.length > 0 && participantUserIds.every((uid: string) => submittedUserIds.has(uid))
 
                     return (
-                      <div className={`rounded-xl border shadow-lg shadow-black/30 p-5 ${hasDefinedParticipants && allParticipantsSubmitted ? 'bg-success-500/10 border-success-500/40' : 'bg-ember-900/20 border-ember-700/40'}`}>
+                      <div className={`rounded-xl border shadow-lg shadow-black/30 p-5 ${allParticipantsSubmitted ? 'bg-success-500/10 border-success-500/40' : 'bg-ember-900/20 border-ember-700/40'}`}>
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                           <div className="flex-1">
-                            <p className={`text-sm font-medium mb-1 ${hasDefinedParticipants && allParticipantsSubmitted ? 'text-success-400' : 'text-ember-300'}`}>
+                            <p className={`text-sm font-medium mb-1 ${allParticipantsSubmitted ? 'text-success-400' : 'text-ember-300'}`}>
                               🎲 Scene Controls
                             </p>
                             <p className="text-ember-300/60 text-xs mb-2">
                               {(scene.playerActions || []).length} action(s) submitted. Current exchange: {scene.currentExchange ?? 0}
                             </p>
-                            {hasDefinedParticipants ? (
-                              allParticipantsSubmitted ? (
-                                <p className="text-success-400 text-xs mb-1">
-                                  ✓ Everyone has submitted — resolution starts on its own.
-                                </p>
-                              ) : (
-                                <p className="text-ember-400/50 text-xs">
-                                  ⏳ Waiting for {participantUserIds.length - submittedUserIds.size} more player(s). The scene resolves automatically when everyone has acted.
-                                </p>
-                              )
+                            {allParticipantsSubmitted ? (
+                              <p className="text-success-400 text-xs mb-1">
+                                ✓ Everyone has submitted — resolution starts on its own.
+                              </p>
                             ) : (
                               <p className="text-ember-400/50 text-xs">
-                                This is an open scene — each action resolves as it lands. End the scene when the story concludes.
+                                ⏳ Waiting for {participantUserIds.length - submittedUserIds.size} more player(s). The scene resolves automatically when everyone has acted.
                               </p>
                             )}
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                            {/* Host-only rescue: for open scenes it's a manual
-                                re-kick, before everyone submits it's a force,
-                                and after everyone submits it's the recovery
-                                path for a lost auto-resolve — hiding it in
-                                that state left stuck scenes with no way out. */}
+                            {/* Host-only rescue: before everyone submits it's
+                                a force, and after everyone submits it's the
+                                recovery path for a lost auto-resolve — hiding
+                                it in that state left stuck scenes with no way
+                                out. */}
                             {isAdmin && (
                               <button
                                 onClick={() => handleResolveScene(scene.id)}
                                 disabled={resolving}
                                 className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
                                 title={
-                                  !hasDefinedParticipants
-                                    ? 'Manually resolve this exchange'
-                                    : allParticipantsSubmitted
-                                      ? 'Kick off resolution if auto-resolve did not start'
-                                      : 'Force resolution before all participants submit'
+                                  allParticipantsSubmitted
+                                    ? 'Kick off resolution if auto-resolve did not start'
+                                    : 'Force resolution before everyone submits'
                                 }
                               >
                                 {resolving
                                   ? 'Resolving...'
-                                  : !hasDefinedParticipants
-                                    ? 'Resolve Exchange'
-                                    : allParticipantsSubmitted
-                                      ? 'Resolve Now'
-                                      : 'Force Resolve'}
+                                  : allParticipantsSubmitted
+                                    ? 'Resolve Now'
+                                    : 'Force Resolve'}
                               </button>
                             )}
                             <button

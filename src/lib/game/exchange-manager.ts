@@ -100,53 +100,72 @@ export class ExchangeManager {
       throw new Error('Scene not found')
     }
 
-    const currentState = (scene.exchangeState as any as ExchangeState) || {
-      playersActed: [],
-      // currentExchange is a non-nullable Int (@default(0)) — `|| 1` here
-      // used to treat a real, legitimate 0 (a scene's first-ever exchange)
-      // as falsy and jump to 1, diverging this action's exchangeNumber
-      // from the scene's actual currentExchange counter (which
-      // completeExchange/initializeExchange read directly, uncoerced).
-      // That left the action stuck 'pending' forever — completeExchange's
-      // cleanup filter never matched it — which looked to the player
-      // like the game refusing new actions after a resolution. `?? 0`
-      // preserves a real 0.
-      exchangeNumber: scene.currentExchange ?? 0,
-      isComplete: false,
-      complexity: 'simple',
-      actionsThisExchange: 0,
-      timestamp: new Date()
-    }
+    // currentExchange is a non-nullable Int (@default(0)) — `|| 1` here
+    // used to treat a real, legitimate 0 (a scene's first-ever exchange)
+    // as falsy and jump to 1, diverging this action's exchangeNumber
+    // from the scene's actual currentExchange counter (which
+    // completeExchange/initializeExchange read directly, uncoerced).
+    // That left the action stuck 'pending' forever — completeExchange's
+    // cleanup filter never matched it — which looked to the player
+    // like the game refusing new actions after a resolution. `?? 0`
+    // preserves a real 0.
+    const exchangeNumber = scene.currentExchange ?? 0
 
-    // Add character to acted list if not already there
-    if (!currentState.playersActed.includes(characterId)) {
-      currentState.playersActed.push(characterId)
-    }
-
-    currentState.actionsThisExchange++
-
-    // Determine complexity based on action count
-    if (currentState.actionsThisExchange > 3) {
-      currentState.complexity = 'complex'
-    }
-
-    // Update the action with exchange number
+    // Stamped once, up front — this doesn't change across the retries
+    // below (only the shared exchangeState blob is contended).
     await prisma.playerAction.update({
       where: { id: actionId },
-      data: {
-        exchangeNumber: currentState.exchangeNumber
-      }
+      data: { exchangeNumber }
     })
 
-    // Update scene state
-    await prisma.scene.update({
-      where: { id: this.sceneId },
-      data: {
-        exchangeState: currentState as any
+    // Merge this character into the scene's shared exchangeState.
+    // Two players acting within the same instant would otherwise hit a
+    // classic lost update here: both read the same exchangeState, both
+    // append their own characterId to their own in-memory copy, and
+    // whichever write lands second silently overwrites the first —
+    // dropping that player's action from playersActed even though their
+    // PlayerAction row is still genuinely pending. Guarding the write on
+    // `updatedAt` (optimistic concurrency) makes a losing write retry
+    // against the now-current state instead of clobbering it.
+    const MAX_ATTEMPTS = 5
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const liveScene = attempt === 0 ? scene : await prisma.scene.findUnique({ where: { id: this.sceneId } })
+      if (!liveScene) {
+        throw new Error('Scene not found')
       }
-    })
 
-    return currentState
+      const currentState = (liveScene.exchangeState as any as ExchangeState) || {
+        playersActed: [],
+        exchangeNumber,
+        isComplete: false,
+        complexity: 'simple',
+        actionsThisExchange: 0,
+        timestamp: new Date()
+      }
+
+      if (!currentState.playersActed.includes(characterId)) {
+        currentState.playersActed.push(characterId)
+      }
+
+      currentState.actionsThisExchange++
+
+      if (currentState.actionsThisExchange > 3) {
+        currentState.complexity = 'complex'
+      }
+
+      const result = await prisma.scene.updateMany({
+        where: { id: this.sceneId, updatedAt: liveScene.updatedAt },
+        data: { exchangeState: currentState as any }
+      })
+
+      if (result.count > 0) {
+        return currentState
+      }
+      // Lost the race — someone else updated the scene since liveScene
+      // was read. Retry against the fresh row.
+    }
+
+    throw new Error('Failed to record action: too much contention on scene exchange state')
   }
 
   /**
@@ -211,7 +230,14 @@ export class ExchangeManager {
       currentState.playersActed.includes(charId)
     )
 
-    return allActed || currentState.actionsThisExchange > 0
+    // `|| currentState.actionsThisExchange > 0` used to live here, which
+    // made this true as soon as a SINGLE participant acted (any recorded
+    // action makes actionsThisExchange > 0) — directly contradicting this
+    // function's own contract ("all active players have acted"). That let
+    // a scene auto-resolve off just one player's action while a second,
+    // already-submitted pending action from another player sat unresolved
+    // and unaddressed by the AI GM.
+    return allActed
   }
 
   /**
@@ -220,17 +246,23 @@ export class ExchangeManager {
    * left orphaned by it, so a scene corrupted before the fix shipped
    * doesn't stay permanently stuck showing "already submitted."
    *
-   * Safety: a genuinely in-flight pending action's owner is always
-   * present in the scene's live exchangeState.playersActed —
-   * recordAction adds it synchronously at submission time. So anything
-   * pending whose owner is missing from that list is either (a) a stale
-   * leftover from an already-resolved exchange that never got swept
-   * (the bug), or (b) a same-exchange action whose recordAction call
-   * failed transiently and hasn't been narrated yet. Only (a) is safe to
-   * sweep, so this is gated on the scene having resolved at least once
-   * — before any resolution, playersActed only ever reflects the one
-   * exchange still being collected, and sweeping there could silently
-   * drop a real, not-yet-resolved action.
+   * Safety: orphaned is judged by exchangeNumber, not by
+   * exchangeState.playersActed. A pending action's exchangeNumber is
+   * stamped atomically in the same `playerAction.create` call that
+   * inserts the row (see scene/route.ts), so it's never observably out
+   * of sync with the row's own existence. playersActed used to be the
+   * signal here, but it's written by a *separate*, later call
+   * (recordAction) — this GET route runs opportunistically on ordinary
+   * page-load/poll traffic, so it could observe a brand-new pending
+   * action in the narrow window after it was created but before
+   * recordAction's own write landed, read playersActed as not yet
+   * containing that action's owner, and sweep a genuinely current,
+   * never-narrated action to 'resolved' — silently discarding it before
+   * anyone (including the submitting player) ever saw it counted.
+   * exchangeNumber has no such window: anything pending whose
+   * exchangeNumber doesn't match the scene's current exchange is a
+   * stale leftover from an already-resolved exchange that completeExchange
+   * failed to sweep, full stop.
    */
   async reconcileOrphanedActions(): Promise<string[]> {
     const scene = await prisma.scene.findUnique({
@@ -241,9 +273,8 @@ export class ExchangeManager {
       return []
     }
 
-    const exchangeState = scene.exchangeState as any as ExchangeState | null
-    const playersActed = new Set(exchangeState?.playersActed || [])
-    const orphaned = scene.playerActions.filter(a => !playersActed.has(a.characterId))
+    const currentExchange = scene.currentExchange ?? 0
+    const orphaned = scene.playerActions.filter(a => a.exchangeNumber !== currentExchange)
     if (orphaned.length === 0) return []
 
     await prisma.playerAction.updateMany({

@@ -248,7 +248,7 @@ export async function POST(
     // dynamic "add as they act" behavior below is correct and intended;
     // only a scene created WITH a non-empty characterIds list is closed
     // to anyone else.
-    const sceneParticipants = (scene.participants as any) || { characterIds: [], userIds: [] }
+    let sceneParticipants = (scene.participants as any) || { characterIds: [], userIds: [] }
     if (scene.participants && sceneParticipants.characterIds.length > 0 && !sceneParticipants.characterIds.includes(characterId)) {
       return NextResponse.json<ErrorResponse>(
         {
@@ -260,16 +260,42 @@ export async function POST(
     }
 
     // Add character to scene participants if not already there (open
-    // scenes only — a closed scene's membership was just enforced above)
+    // scenes only — a closed scene's membership was just enforced above).
+    // Retried with optimistic concurrency (guarded on updatedAt): two
+    // players joining the same open scene for the first time within the
+    // same instant would otherwise race this read-modify-write, and
+    // whichever write landed second would silently drop the other
+    // player's characterId/userId from participants — which then made
+    // that player invisible to the "has everyone acted" check below,
+    // exactly the scenario that let a scene auto-resolve on only one of
+    // two already-submitted actions (see the matching fix in
+    // ExchangeManager.recordAction).
     if (!sceneParticipants.characterIds.includes(characterId)) {
-      sceneParticipants.characterIds.push(characterId)
-      if (!sceneParticipants.userIds.includes(user.userId)) {
-        sceneParticipants.userIds.push(user.userId)
+      const MAX_PARTICIPANT_ATTEMPTS = 5
+      for (let attempt = 0; attempt < MAX_PARTICIPANT_ATTEMPTS; attempt++) {
+        const liveScene = attempt === 0 ? scene : await prisma.scene.findUnique({ where: { id: sceneId } })
+        if (!liveScene) break
+
+        const liveParticipants = (liveScene.participants as any) || { characterIds: [], userIds: [] }
+        if (!liveParticipants.characterIds.includes(characterId)) {
+          liveParticipants.characterIds.push(characterId)
+        }
+        if (!liveParticipants.userIds.includes(user.userId)) {
+          liveParticipants.userIds.push(user.userId)
+        }
+
+        const result = await prisma.scene.updateMany({
+          where: { id: sceneId, updatedAt: liveScene.updatedAt },
+          data: { participants: liveParticipants }
+        })
+
+        if (result.count > 0) {
+          sceneParticipants = liveParticipants
+          break
+        }
+        // Lost the race — someone else updated the scene since liveScene
+        // was read. Retry against the fresh row.
       }
-      await prisma.scene.update({
-        where: { id: sceneId },
-        data: { participants: sceneParticipants }
-      })
     }
 
     // Create action - stamp with current exchange number so auto-resolve queries work correctly

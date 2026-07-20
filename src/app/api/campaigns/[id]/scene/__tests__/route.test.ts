@@ -13,7 +13,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     campaign: { findUnique: vi.fn() },
     character: { findUnique: vi.fn(), findMany: vi.fn() },
-    scene: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    scene: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     playerAction: { create: vi.fn(), findMany: vi.fn() },
   },
 }))
@@ -76,6 +76,7 @@ function makeBaseScene() {
     // reads as "defined participants" by the time that branch is checked.
     participants: null as { characterIds: string[]; userIds: string[] } | null,
     playerActions: [],
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
   }
 }
 
@@ -94,6 +95,7 @@ beforeEach(() => {
   db.scene.findUnique.mockResolvedValue(makeBaseScene())
   db.scene.findMany.mockResolvedValue([])
   db.scene.update.mockResolvedValue({})
+  db.scene.updateMany.mockResolvedValue({ count: 1 })
   db.playerAction.create.mockResolvedValue({
     id: 'action1',
     sceneId: 'scene1',

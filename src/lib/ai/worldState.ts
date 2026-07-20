@@ -1147,6 +1147,16 @@ export async function generateNewSceneIntro(campaignId: string, characterIds?: s
   // (brief) establishing beat before the hook.
   const isFirstScene = !lastScene
 
+  // Everything above this point is written singular ("the character") —
+  // fine for a solo opener, but with more than one PC it left the AI with
+  // zero instruction for what to do when their locations/careers/goals
+  // don't line up, and in practice that meant it just picked one character
+  // and wrote an opener that never mentioned the rest at all. Spliced into
+  // APPROACH below in both branches.
+  const multiCharacterGuidance = campaign.characters.length > 1
+    ? `\n\nMULTIPLE CHARACTERS: This scene has ${campaign.characters.length} characters — ground every one of them, not just whichever has the most detail in their sheet. If they share a location, open there together, already in each other's company. If their locations or careers differ, don't default to one and quietly drop the rest — find or invent a concrete, plausible reason they're together for this scene (a meeting arranged between them, a job that's pulled strangers together, a chance encounter that fits the setting and their goals). Every character listed under PLAYER CHARACTERS needs to actually be present and given something to react to by the end of the opening beat, not just be mentioned in passing or left out entirely.`
+    : ''
+
   const openingGuidance = isFirstScene
     ? `**TONE & STYLE:**
 - Open with a brief establishing beat: where the character is, what they're doing, what the place feels like — one or two sentences of real ground beneath their feet before anything else happens
@@ -1172,7 +1182,7 @@ export async function generateNewSceneIntro(campaignId: string, characterIds?: s
 - "Your character feels/thinks/remembers" - stay external and immersive
 
 **APPROACH:**
-Start with the character somewhere concrete and grounded - their location if one is known, otherwise a place that fits their concept and the universe. Let the reader settle into that place for a beat. Then let the hook arrive: a stranger approaches, something goes wrong, a choice presents itself. If they have enemies or goals, let those color what "wrong" or "urgent" looks like. Setup, then stakes - not stakes with no setup.
+Start with the character somewhere concrete and grounded - their location if one is known, otherwise a place that fits their concept and the universe. Let the reader settle into that place for a beat. Then let the hook arrive: a stranger approaches, something goes wrong, a choice presents itself. If they have enemies or goals, let those color what "wrong" or "urgent" looks like. Setup, then stakes - not stakes with no setup.${multiCharacterGuidance}
 
 Example: Instead of opening on a mid-swing sword fight, write "The tavern's back room smells of tallow and spilled ale. Three days he's waited at this table, and now the door creaks open" - then let the hook follow.`
     : `**TONE & STYLE:**
@@ -1198,7 +1208,7 @@ Example: Instead of opening on a mid-swing sword fight, write "The tavern's back
 - "Your character feels/thinks/remembers" - stay external and immersive
 
 **APPROACH:**
-If they have a location, start there mid-scene. If they have enemies, maybe hint at danger. If they have goals, drop them into a situation that challenges those goals. But do it all through ATMOSPHERE and ACTION, not explanation.${offscreenFallout.length > 0 ? ' If any OFFSCREEN DEVELOPMENTS are listed below, let one of them color this scene\'s atmosphere - a detail, a mood, something glimpsed or overheard - so the world visibly moved while the party was elsewhere. Don\'t announce it as news; the characters don\'t know it as fact yet.' : ''}
+If they have a location, start there mid-scene. If they have enemies, maybe hint at danger. If they have goals, drop them into a situation that challenges those goals. But do it all through ATMOSPHERE and ACTION, not explanation.${offscreenFallout.length > 0 ? ' If any OFFSCREEN DEVELOPMENTS are listed below, let one of them color this scene\'s atmosphere - a detail, a mood, something glimpsed or overheard - so the world visibly moved while the party was elsewhere. Don\'t announce it as news; the characters don\'t know it as fact yet.' : ''}${multiCharacterGuidance}
 
 Example: Instead of "You check your sword as you remember your oath of vengeance," write "The blade catches firelight from the distant campfires. Three days of tracking, and finally, smoke on the horizon."`
 

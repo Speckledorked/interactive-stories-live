@@ -74,6 +74,7 @@ export default function StoryPage() {
   const [expandedTransparency, setExpandedTransparency] = useState<Record<string, boolean>>({})
   const [startingScene, setStartingScene] = useState(false)
   const [endingScene, setEndingScene] = useState(false)
+  const [regeneratingSceneId, setRegeneratingSceneId] = useState<string | null>(null)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   // Turn order — an opt-in, advisory queue layered on top of the scene's
   // real (simultaneous) action collection; see TurnTracker's doc comment.
@@ -345,6 +346,12 @@ export default function StoryPage() {
     // Listen for scene resets
     channel.bind('scene:reset', (data: any) => {
       console.log('Scene reset:', data)
+      loadData()
+    })
+
+    // Listen for a regenerated scene intro
+    channel.bind('scene:regenerated', (data: any) => {
+      console.log('Scene intro regenerated:', data)
       loadData()
     })
 
@@ -753,6 +760,35 @@ export default function StoryPage() {
     }
   }
 
+  const handleRegenerateScene = async (sceneId: string) => {
+    if (!confirm('Regenerate this scene\'s opening? This replaces the current text — only available before anyone has acted.')) {
+      return
+    }
+
+    setError('')
+    setSuccess('')
+    setRegeneratingSceneId(sceneId)
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/scenes/${sceneId}/regenerate-intro`,
+        { method: 'POST' }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to regenerate scene')
+      }
+
+      setSuccess('Scene regenerated.')
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate scene')
+    } finally {
+      setRegeneratingSceneId(null)
+    }
+  }
+
   const handleResumeScene = async (sceneId: string) => {
     setError('')
     setSuccess('')
@@ -943,6 +979,17 @@ export default function StoryPage() {
                         }`}>
                           {scene.status.replace('_', ' ')}
                         </span>
+                        {scene.status === 'AWAITING_ACTIONS' && !scene.sceneResolutionText &&
+                          (!scene.playerActions || scene.playerActions.length === 0) && (
+                          <button
+                            onClick={() => handleRegenerateScene(scene.id)}
+                            disabled={regeneratingSceneId === scene.id}
+                            className="text-xs px-2 py-1 bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 rounded transition-colors disabled:opacity-50"
+                            title="Regenerate this scene's opening — only available before anyone has acted"
+                          >
+                            {regeneratingSceneId === scene.id ? 'Regenerating…' : '🔄 Regenerate'}
+                          </button>
+                        )}
                         {scene.status === 'RESOLVING' && isAdmin && (
                           <button
                             onClick={() => handleResetScene(scene.id)}

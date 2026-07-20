@@ -64,6 +64,8 @@ export default function CampaignLobbyPage() {
   const [creatingMap, setCreatingMap] = useState(false)
   const [campaignLogs, setCampaignLogs] = useState<any[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
+  const [regeneratingLogs, setRegeneratingLogs] = useState(false)
+  const [regenerateLogsResult, setRegenerateLogsResult] = useState('')
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [awayRecap, setAwayRecap] = useState<{ awayLabel: string; events: Array<{ id: string; title: string; summary: string }> } | null>(null)
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([])
@@ -210,6 +212,31 @@ export default function CampaignLobbyPage() {
       console.error('Failed to load campaign logs:', err)
     } finally {
       setLogsLoading(false)
+    }
+  }
+
+  const handleRegenerateLogs = async () => {
+    setRegeneratingLogs(true)
+    setRegenerateLogsResult('')
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/logs/regenerate`, {
+        method: 'POST'
+      })
+      const result = await response.json()
+      if (response.ok) {
+        setRegenerateLogsResult(
+          `Regenerated ${result.regenerated} ${result.regenerated === 1 ? 'entry' : 'entries'}` +
+          (result.failed > 0 ? `, ${result.failed} failed` : '') +
+          (result.remaining > 0 ? ` — ${result.remaining} more left, run again to continue` : '')
+        )
+        await loadCampaignLogs()
+      } else {
+        setRegenerateLogsResult(result.error || 'Failed to regenerate entries')
+      }
+    } catch (err) {
+      setRegenerateLogsResult('Failed to regenerate entries')
+    } finally {
+      setRegeneratingLogs(false)
     }
   }
 
@@ -394,8 +421,28 @@ export default function CampaignLobbyPage() {
       {activeTab === 'progression' && data && (
         <div className="mx-auto max-w-6xl">
           <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
-            <h2 className="font-display text-lg font-semibold text-myth-ink">Campaign Story Log</h2>
-            <p className="mb-6 mt-1 text-myth-ink-muted">A chronicle of your adventure, updated after each scene</p>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="font-display text-lg font-semibold text-myth-ink">Campaign Story Log</h2>
+                <p className="mt-1 text-myth-ink-muted">A chronicle of your adventure, updated after each scene</p>
+              </div>
+              {userRole === 'ADMIN' && campaignLogs.length > 0 && (
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    onClick={handleRegenerateLogs}
+                    disabled={regeneratingLogs}
+                    className="rounded border border-myth-border px-3 py-1.5 text-xs text-myth-ink-muted transition-colors hover:border-myth-border-strong disabled:opacity-50"
+                    title="Re-summarize existing entries with a fresh AI pass"
+                  >
+                    {regeneratingLogs ? 'Regenerating…' : '🔄 Regenerate All'}
+                  </button>
+                  {regenerateLogsResult && (
+                    <p className="max-w-xs text-right text-xs text-myth-ink-faint">{regenerateLogsResult}</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="mb-6" />
 
             {logsLoading ? (
               <div className="flex justify-center py-8">

@@ -28,6 +28,7 @@ interface Campaign {
   id: string
   name: string
   description: string | null
+  userRole?: string
 }
 
 export default function StoryLogPage() {
@@ -39,6 +40,10 @@ export default function StoryLogPage() {
   const [logs, setLogs] = useState<CampaignLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [regenerating, setRegenerating] = useState(false)
+  const [regenerateResult, setRegenerateResult] = useState('')
+
+  const isAdmin = campaign?.userRole === 'ADMIN'
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -74,6 +79,31 @@ export default function StoryLogPage() {
     }
   }
 
+  const handleRegenerate = async () => {
+    setRegenerating(true)
+    setRegenerateResult('')
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/logs/regenerate`, {
+        method: 'POST'
+      })
+      const data = await response.json()
+      if (response.ok) {
+        setRegenerateResult(
+          `Regenerated ${data.regenerated} ${data.regenerated === 1 ? 'entry' : 'entries'}` +
+          (data.failed > 0 ? `, ${data.failed} failed` : '') +
+          (data.remaining > 0 ? ` — ${data.remaining} more left, run again to continue` : '')
+        )
+        await loadStoryLog()
+      } else {
+        setRegenerateResult(data.error || 'Failed to regenerate entries')
+      }
+    } catch (err) {
+      setRegenerateResult('Failed to regenerate entries')
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
   if (loading) {
     return (
       <TavernPage>
@@ -103,9 +133,26 @@ export default function StoryLogPage() {
       <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" campaignId={campaignId} />
 
       <main className="max-w-4xl mx-auto px-4 pt-28 pb-28">
-        <p className="text-ember-300/50 text-sm mb-6">
-          {campaign?.name || 'Campaign'} — a chronicle of your adventure, updated after each scene
-        </p>
+        <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
+          <p className="text-ember-300/50 text-sm">
+            {campaign?.name || 'Campaign'} — a chronicle of your adventure, updated after each scene
+          </p>
+          {isAdmin && logs.length > 0 && (
+            <div className="flex flex-col items-end gap-1">
+              <button
+                onClick={handleRegenerate}
+                disabled={regenerating}
+                className="text-xs px-3 py-1.5 rounded border border-ember-800/40 bg-ember-900/20 text-ember-300 hover:border-ember-700/60 transition-colors disabled:opacity-50"
+                title="Re-summarize existing entries with a fresh AI pass"
+              >
+                {regenerating ? 'Regenerating…' : '🔄 Regenerate All'}
+              </button>
+              {regenerateResult && (
+                <p className="text-xs text-ember-400/60 text-right max-w-xs">{regenerateResult}</p>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Stats */}
         <TavernCard className="p-6 mb-8">

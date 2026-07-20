@@ -295,6 +295,16 @@ export const MapService = {
     })
   },
 
+  // Wipes a map's zones/tokens before regenerating them for a new scene
+  // that's reusing the same location — without this, generateZones/
+  // generateTokens (which only ever create, never replace) leave every
+  // prior scene's zones/tokens sitting on the map indefinitely, piling up
+  // stale/duplicate markers instead of reflecting the current scene.
+  async clearMapContents(mapId: string): Promise<void> {
+    await prisma.zone.deleteMany({ where: { mapId } })
+    await prisma.token.deleteMany({ where: { mapId } })
+  },
+
   async deleteMap(mapId: string): Promise<void> {
     await prisma.map.delete({
       where: { id: mapId }

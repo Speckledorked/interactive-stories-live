@@ -366,6 +366,16 @@ describe('Scene Resolver', () => {
         where: { id: { in: characterIds } },
         select: { id: true, userId: true },
       });
+
+      // scoped: true is what tells every downstream consumer (scene/route.ts,
+      // the story page) this roster is a deliberate Character-Focused/
+      // split-party restriction — not an open scene that merely has its
+      // first joiner (see the matching checks in scene/route.ts).
+      expect(prisma.scene.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          participants: { characterIds, userIds: ['user-1', 'user-2'], scoped: true },
+        }),
+      });
     });
   });
 

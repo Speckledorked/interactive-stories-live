@@ -1286,6 +1286,86 @@ Write ONLY the scene introduction. No JSON, no meta-commentary, no character she
 }
 
 /**
+ * Retroactively summarize a scene's resolution text for the Story Log.
+ *
+ * Historical scenes never persisted the AI GM's scene_summary/
+ * new_timeline_events (those only existed transiently in the resolution
+ * response) - sceneResolutionText is the only surviving record. This is a
+ * cheap, dedicated call over that text alone, used by the Story Log
+ * "Regenerate" maintenance action. No internal fallback on purpose: this
+ * module can't import sceneResolver's fallbackSummaryFromSceneText without
+ * risking a circular import, so callers are expected to catch and skip.
+ */
+export async function summarizeSceneForLog(campaignId: string, sceneText: string): Promise<{ summary: string; highlights: string[] }> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY not configured')
+  }
+
+  const startTime = Date.now()
+  const prompt = `Summarize the following scene from a tabletop RPG campaign for a player-facing "Story Log" entry.
+
+SCENE TEXT:
+${sceneText}
+
+Respond with JSON only, in this exact shape:
+{
+  "summary": "2-3 sentence summary of what happened in this scene, written as narrative prose (not bullet points, not truncated).",
+  "highlights": ["short phrase for a key moment", "short phrase for another key moment"]
+}
+
+The summary must be complete sentences that stand alone without the original text. highlights should be 0-5 short phrases (not full sentences) naming the most notable beats - omit it entirely (empty array) if nothing stands out.`
+
+  const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: AI_MODELS.EFFICIENT,
+      messages: [
+        { role: 'system', content: 'You summarize RPG scene text into concise, player-facing recap entries. You always respond with valid JSON.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.5,
+      max_tokens: 300,
+      response_format: { type: 'json_object' }
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`OpenAI API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  const content = data.choices[0].message.content
+
+  const usage = data.usage || {}
+  await recordAICost({
+    campaignId,
+    model: AI_MODELS.EFFICIENT,
+    requestType: 'story_log_summary',
+    inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
+    outputTokens: usage.completion_tokens || estimateTokenCount(content),
+    responseTimeMs: Date.now() - startTime,
+    success: true
+  }).catch(console.error)
+
+  const parsed = JSON.parse(content)
+  const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : ''
+  if (!summary) {
+    throw new Error('Summary generation returned an empty summary')
+  }
+
+  const highlights = Array.isArray(parsed.highlights)
+    ? parsed.highlights.filter((h: unknown): h is string => typeof h === 'string' && h.trim().length > 0).map((h: string) => h.trim())
+    : []
+
+  return { summary, highlights }
+}
+
+/**
  * Helper: Get world state including GM-only information
  * Used for admin views and debugging
  */

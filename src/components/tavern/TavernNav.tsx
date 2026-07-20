@@ -40,7 +40,7 @@ export function TavernNav({
       key: 'quests' as const,
       label: 'Quests',
       icon: Scroll,
-      href: campaignId ? `/campaigns/${campaignId}/story-log` : null,
+      href: campaignId ? `/campaigns/${campaignId}/quests` : null,
     },
     { key: 'settings' as const, label: 'Settings', icon: SettingsIcon, href: '/settings' },
   ]

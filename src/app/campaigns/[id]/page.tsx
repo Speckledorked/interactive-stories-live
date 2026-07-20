@@ -455,25 +455,39 @@ export default function CampaignLobbyPage() {
               />
             ) : (
               <>
-                {/* Timeline Bar */}
-                <div className="mb-8 rounded-md border border-myth-border bg-myth-surface-sunken p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm font-medium text-myth-ink-muted">Campaign Progress</span>
-                    <span className="font-mono text-sm text-myth-ink-faint">
-                      Turn {campaignLogs[campaignLogs.length - 1]?.turnNumber || 0}
-                    </span>
-                  </div>
-                  <div className="relative h-1.5 overflow-hidden rounded-full bg-myth-border">
-                    <div
-                      className="absolute left-0 top-0 h-full bg-myth-accent transition-all"
-                      style={{ width: `${Math.min((campaignLogs.length / 20) * 100, 100)}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 flex justify-between text-xs text-myth-ink-faint">
-                    <span>{campaignLogs.length} scenes completed</span>
-                    <span>Milestone at 20 scenes</span>
-                  </div>
-                </div>
+                {/* Timeline Bar - MILESTONE_INTERVAL must match
+                    CAMPAIGN_MILESTONE_INTERVAL in lib/game/campaignMilestone.ts,
+                    which is what actually generates a "milestone" Story Log
+                    entry + notifies the party every N scenes. Only counts
+                    entryType 'scene' rows, so a milestone entry itself
+                    (entryType 'milestone') doesn't inflate the count it's
+                    measured against. */}
+                {(() => {
+                  const MILESTONE_INTERVAL = 20
+                  const sceneCount = campaignLogs.filter((l: any) => l.entryType === 'scene').length
+                  const nextMilestone = Math.ceil((sceneCount + 1) / MILESTONE_INTERVAL) * MILESTONE_INTERVAL
+                  const cycleProgress = (sceneCount % MILESTONE_INTERVAL) / MILESTONE_INTERVAL * 100
+                  return (
+                    <div className="mb-8 rounded-md border border-myth-border bg-myth-surface-sunken p-4">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-sm font-medium text-myth-ink-muted">Campaign Progress</span>
+                        <span className="font-mono text-sm text-myth-ink-faint">
+                          Turn {campaignLogs[campaignLogs.length - 1]?.turnNumber || 0}
+                        </span>
+                      </div>
+                      <div className="relative h-1.5 overflow-hidden rounded-full bg-myth-border">
+                        <div
+                          className="absolute left-0 top-0 h-full bg-myth-accent transition-all"
+                          style={{ width: `${cycleProgress}%` }}
+                        />
+                      </div>
+                      <div className="mt-2 flex justify-between text-xs text-myth-ink-faint">
+                        <span>{sceneCount} scenes completed</span>
+                        <span>Milestone at {nextMilestone} scenes</span>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Log Entries */}
                 <div className="space-y-4">

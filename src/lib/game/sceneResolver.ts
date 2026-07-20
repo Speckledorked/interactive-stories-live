@@ -39,6 +39,7 @@ import { elapsedInGameHours } from './tick/pacing'
 import { ensureSurgeCorruptionChanges } from './corruption'
 import { aggregateInventoryItems, describeAggregatedItem } from './itemRegistry'
 import { reportError } from '@/lib/monitoring'
+import { checkAndCreateMilestone } from './campaignMilestone'
 
 /**
  * Resolve a scene using the AI GM
@@ -935,6 +936,14 @@ async function generateCampaignLog(
       entryType: 'scene'
     }
   })
+
+  // Only a genuinely new scene entry (not an update extending an ongoing
+  // one) advances the count a milestone is measured against - best-effort,
+  // never allowed to affect the real log entry just created above.
+  const sceneLogCount = await prisma.campaignLog.count({
+    where: { campaignId, entryType: 'scene' }
+  })
+  await checkAndCreateMilestone(campaignId, sceneLogCount, turnNumber)
 }
 
 /**

@@ -1366,6 +1366,75 @@ The summary must be complete sentences that stand alone without the original tex
 }
 
 /**
+ * Write a short retrospective covering the last CAMPAIGN_MILESTONE_INTERVAL
+ * scenes, for the milestone Story Log entry created by
+ * lib/game/campaignMilestone.ts. Takes the already-written per-scene
+ * summaries rather than raw scene text — cheap, and those summaries are
+ * themselves already genuine recaps (see summarizeSceneForLog /
+ * scene_summary), so this is a summary-of-summaries, not a re-read of
+ * everything that happened.
+ */
+export async function generateMilestoneRecap(campaignId: string, sceneSummaries: string[]): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY not configured')
+  }
+
+  const startTime = Date.now()
+  const prompt = `Here are the per-scene summaries from the most recent stretch of a tabletop RPG campaign, in order:
+
+${sceneSummaries.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+Write a short retrospective (3-5 sentences) of this stretch of the campaign for a player-facing "Campaign Milestone" entry — the throughline of what the party has been through, not a scene-by-scene recap. Plain prose, past tense, third person, no dialogue quotes.
+
+Respond with JSON only: { "recap": "..." }`
+
+  const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: AI_MODELS.EFFICIENT,
+      messages: [
+        { role: 'system', content: 'You write short, evocative campaign retrospectives for a tabletop RPG Story Log. You always respond with valid JSON.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.6,
+      max_tokens: 300,
+      response_format: { type: 'json_object' }
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`OpenAI API error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  const content = data.choices[0].message.content
+
+  const usage = data.usage || {}
+  await recordAICost({
+    campaignId,
+    model: AI_MODELS.EFFICIENT,
+    requestType: 'campaign_milestone_recap',
+    inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
+    outputTokens: usage.completion_tokens || estimateTokenCount(content),
+    responseTimeMs: Date.now() - startTime,
+    success: true
+  }).catch(console.error)
+
+  const parsed = JSON.parse(content)
+  const recap = typeof parsed.recap === 'string' ? parsed.recap.trim() : ''
+  if (!recap) {
+    throw new Error('Milestone recap generation returned an empty recap')
+  }
+
+  return recap
+}
+
+/**
  * Helper: Get world state including GM-only information
  * Used for admin views and debugging
  */

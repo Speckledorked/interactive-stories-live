@@ -43,7 +43,7 @@ export async function GET(
         characters: {
           include: {
             user: {
-              select: { id: true, email: true }
+              select: { id: true, email: true, name: true }
             }
           }
         },
@@ -90,7 +90,7 @@ export async function GET(
               include: {
                 character: true,
                 user: {
-                  select: { id: true, email: true }
+                  select: { id: true, email: true, name: true }
                 }
               }
             }
@@ -99,7 +99,7 @@ export async function GET(
         memberships: {
           include: {
             user: {
-              select: { id: true, email: true }
+              select: { id: true, email: true, name: true }
             }
           }
         }

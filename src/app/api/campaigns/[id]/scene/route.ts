@@ -72,7 +72,7 @@ export async function GET(
           include: {
             character: true,
             user: {
-              select: { id: true, email: true }
+              select: { id: true, email: true, name: true }
             }
           }
         },

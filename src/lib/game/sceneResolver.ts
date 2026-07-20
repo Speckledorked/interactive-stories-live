@@ -845,8 +845,25 @@ function inferOutcomeFromAction(action: any): 'success' | 'mixed' | 'failure' | 
   return 'mixed'
 }
 
+// A scene stays open across several exchanges ("Keep scene active for
+// continuous play" above) - the log entry for it should read as one
+// growing recap of the scene, not restart from scratch each exchange.
+// Bounded by sentence count (not raw chars) so a very long-running scene
+// doesn't grow the row forever, and so the cap can never land mid-sentence
+// the way the old truncation bug did - it drops the OLDEST complete
+// sentences first, keeping the most recent context.
+const MAX_SUMMARY_SENTENCES_PER_SCENE = 10
+const MAX_HIGHLIGHTS_PER_SCENE = 8
+
+export function appendSummarySegment(existingSummary: string, newSegment: string): string {
+  const combined = `${existingSummary} ${newSegment}`.trim()
+  const sentences = combined.match(/[^.!?]+[.!?]+/g)
+  if (!sentences || sentences.length <= MAX_SUMMARY_SENTENCES_PER_SCENE) return combined
+  return sentences.slice(-MAX_SUMMARY_SENTENCES_PER_SCENE).map(s => s.trim()).join(' ')
+}
+
 /**
- * Generate a campaign log entry summarizing the scene.
+ * Generate (or extend) the campaign log entry for a scene.
  *
  * Prefers the AI's own genuine recap (scene_summary) and named beats
  * (new_timeline_events' titles) — both already produced in the same
@@ -855,6 +872,14 @@ function inferOutcomeFromAction(action: any): 'success' | 'mixed' | 'failure' | 
  * missing (a repaired/degraded response never includes them) — that
  * truncation used to be the only path, which is why old log entries read
  * as raw prose cut off mid-quote rather than an actual summary.
+ *
+ * One entry per scene, not per exchange: a scene can resolve several
+ * exchanges before the party moves on, and scene_summary only describes
+ * the exchange that just resolved — creating a fresh row every time
+ * produced a wall of near-duplicate "Scene N" entries, each re-narrating
+ * the same ongoing fight/conversation one beat later. An existing entry
+ * for this sceneId is extended (summary appended, highlights merged)
+ * instead of a new row being created.
  */
 async function generateCampaignLog(
   campaignId: string,
@@ -864,17 +889,34 @@ async function generateCampaignLog(
   sceneSummary?: string,
   timelineEvents?: Array<{ title: string; visibility: string }>
 ): Promise<void> {
-  const summary = sceneSummary?.trim() || fallbackSummaryFromSceneText(sceneText)
+  const newSegment = sceneSummary?.trim() || fallbackSummaryFromSceneText(sceneText)
 
   // Publicly-visible timeline events the AI named this scene — real,
   // complete headlines it wrote to mark a notable beat, not sentence
   // fragments matched by a fixed keyword list.
-  const highlights = (timelineEvents || [])
+  const newHighlights = (timelineEvents || [])
     .filter(e => e.visibility !== 'GM_ONLY' && e.title?.trim())
     .map(e => e.title.trim())
-    .slice(0, 5)
 
-  // Get scene info for title
+  const existing = await prisma.campaignLog.findFirst({
+    where: { campaignId, sceneId, entryType: 'scene' }
+  })
+
+  if (existing) {
+    const mergedHighlights = Array.from(new Set([...existing.highlights, ...newHighlights]))
+      .slice(0, MAX_HIGHLIGHTS_PER_SCENE)
+
+    await prisma.campaignLog.update({
+      where: { id: existing.id },
+      data: {
+        turnNumber,
+        summary: appendSummarySegment(existing.summary, newSegment),
+        highlights: mergedHighlights
+      }
+    })
+    return
+  }
+
   const scene = await prisma.scene.findUnique({
     where: { id: sceneId },
     select: { sceneNumber: true }
@@ -888,8 +930,8 @@ async function generateCampaignLog(
       sceneId,
       turnNumber,
       title,
-      summary,
-      highlights,
+      summary: newSegment,
+      highlights: newHighlights.slice(0, MAX_HIGHLIGHTS_PER_SCENE),
       entryType: 'scene'
     }
   })

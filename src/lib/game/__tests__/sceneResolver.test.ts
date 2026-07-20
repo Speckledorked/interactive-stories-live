@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { resolveScene, createNewScene, getCurrentScene, getRecentScenes, canUserResolveScene, fallbackSummaryFromSceneText } from '../sceneResolver';
+import { resolveScene, createNewScene, getCurrentScene, getRecentScenes, canUserResolveScene, fallbackSummaryFromSceneText, appendSummarySegment } from '../sceneResolver';
 
 // Mock modules
 vi.mock('@/lib/prisma', () => ({
@@ -514,5 +514,31 @@ describe('fallbackSummaryFromSceneText', () => {
 
   it('does not append an ellipsis to short sentence-less text', () => {
     expect(fallbackSummaryFromSceneText('no punctuation here')).toBe('no punctuation here');
+  });
+});
+
+describe('appendSummarySegment', () => {
+  // A scene can resolve several exchanges before the party moves on - the
+  // Story Log entry for it grows one segment per exchange instead of a
+  // fresh near-duplicate row being created each time (see
+  // generateCampaignLog's doc comment).
+  it('appends the new segment to the existing summary', () => {
+    expect(appendSummarySegment(
+      'Kairos found a wounded runner in the Ratway.',
+      'Imek recovered the map case as the ambush erupted.'
+    )).toBe('Kairos found a wounded runner in the Ratway. Imek recovered the map case as the ambush erupted.');
+  });
+
+  it('starts fresh when there is no existing summary', () => {
+    expect(appendSummarySegment('', 'The party entered the tavern.')).toBe('The party entered the tavern.');
+  });
+
+  it('drops the oldest complete sentences once the cap is exceeded, never mid-sentence', () => {
+    const manySentences = Array.from({ length: 10 }, (_, i) => `Sentence ${i + 1} happened.`).join(' ');
+    const result = appendSummarySegment(manySentences, 'Sentence 11 happened.');
+    const sentences = result.match(/[^.!?]+[.!?]+/g) || [];
+    expect(sentences).toHaveLength(10);
+    expect(result.startsWith('Sentence 2 happened.')).toBe(true);
+    expect(result.endsWith('Sentence 11 happened.')).toBe(true);
   });
 });

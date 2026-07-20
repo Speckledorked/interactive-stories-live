@@ -349,6 +349,16 @@ export const TimePassageSchema = z.object({
 // Full AI GM response schema
 export const AIGMResponseSchema = z.object({
   scene_text: z.string().min(50, "Scene text must be at least 50 characters"),
+  // A genuine 1-2 sentence past-tense recap of what happened this scene —
+  // NOT scene_text itself. Feeds the Story Log/campaign history view
+  // (generateCampaignLog in sceneResolver.ts), which previously had no
+  // real summary to show and instead naively truncated scene_text by
+  // splitting on punctuation — breaking mid-quote, mid-abbreviation, and
+  // producing sentence fragments instead of an actual summary. Optional
+  // so a response that's otherwise valid doesn't fail validation over a
+  // missing recap; generateCampaignLog falls back to the old truncation
+  // only when this is absent (e.g. a repaired/degraded response).
+  scene_summary: z.string().min(10).optional(),
   time_passage: TimePassageSchema.optional(),
   world_updates: WorldUpdatesSchema
 })

@@ -16,6 +16,10 @@ import { AMBITION_CATEGORY_OPTIONS } from '@/lib/game/tick/ambitionTick'
  */
 export interface AIGMResponse {
   scene_text: string // The narrated resolution
+  // A genuine 1-2 sentence past-tense recap of what happened this scene —
+  // not the same text as scene_text. Feeds the Story Log/campaign history
+  // view (generateCampaignLog in sceneResolver.ts).
+  scene_summary?: string
   time_passage?: {
     // How much in-game time has passed in this exchange — the engine
     // derives the new date and banks world-turn hours from days/hours
@@ -782,6 +786,7 @@ REMEMBER: Players want to make their own choices and speak their own words. Give
 You MUST respond with a JSON object matching this structure:
 {
   "scene_text": "Full narrated resolution (200-400 words MAX, mostly dialogue and action)...",
+  "scene_summary": "One or two plain-prose sentences recapping what actually happened this scene — a real summary, not a shortened copy of scene_text.",
   "time_passage": {"days": 0, "hours": 2, "description": "..."},
   "world_updates": {
     "pc_changes": [
@@ -1210,14 +1215,20 @@ ${player_actions.map(a => {
    • Think "action movie script" or "play-by-play commentary" not "novel"
    • PLAYER CHARACTERS: Only describe their submitted actions - NO dialogue, NO thoughts, NO feelings, NO extra actions
 
-2. WORLD STATE CHANGES (world_updates):
+2. SCENE SUMMARY (scene_summary) — 1-2 sentences:
+   • A genuine, standalone recap of what happened — not a shortened copy or the first few sentences of scene_text
+   • Plain prose, past tense, third person, no direct dialogue quotes
+   • This is what a player skimming their campaign's Story Log later sees — write it so it reads clearly with zero other context
+   • Example: scene_text is 300 words of a tense standoff in a tavern back room; scene_summary is "Kairos intercepted a courier's warning about smuggled goods, then scrambled to secure the evidence when Maldras's men stormed the room."
+
+3. WORLD STATE CHANGES (world_updates):
    • Apply harm, conditions, location changes based on what happened
    • Update relationships through NPC behavior
    • Advance clocks if warranted
    • Create timeline events for significant outcomes
    • Track all character changes (equipment, inventory, resources)
 
-3. scene_text AND world_updates MUST MATCH — never narrate a state change
+4. scene_text AND world_updates MUST MATCH — never narrate a state change
    without also recording it, or vice versa:
    • If scene_text says a character was hit, wounded, or took a blow →
      pc_changes for that character needs harm_damage matching the severity

@@ -558,7 +558,17 @@ export async function createNewScene(campaignId: string, characterIds?: string[]
 
     participants = {
       characterIds,
-      userIds
+      userIds,
+      // Distinguishes a GM-scoped roster (Character-Focused/split-party —
+      // stays closed to everyone else, forever) from an open scene's
+      // participants, which starts null and grows as people act (see
+      // scene/route.ts). Both end up as the same-shaped
+      // {characterIds, userIds} object, so without this flag there was no
+      // way to tell "deliberately closed at creation" from "open scene
+      // that merely has its first joiner" — every downstream check that
+      // reads participants.characterIds treated the two identically,
+      // wrongly locking an open scene closed the moment anyone acted.
+      scoped: true
     }
 
     waitingOnUsers = userIds

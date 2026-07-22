@@ -31,16 +31,21 @@ import { TavernNav } from '@/components/tavern/TavernNav'
 
 // Whether `characterId` may act in `scene` — participants is null for a
 // genuinely open scene (anyone can act; membership grows dynamically as
-// people do, see scene/route.ts); a non-empty characterIds list means the
-// GM scoped this scene to specific characters at creation (a
-// Character-Focused scene, or one half of a split party) — see
-// start-scene/route.ts.
+// people do, see scene/route.ts). scoped: true means the GM scoped this
+// scene to specific characters at creation (a Character-Focused scene, or
+// one half of a split party) — see start-scene/route.ts. Gating on
+// `characterIds.length === 0` alone used to misfire here: an open scene's
+// participants also becomes a non-empty {characterIds, userIds} object
+// the instant its first player acts, which made this return false for
+// every OTHER character from then on — they'd see "No Active Scene" and
+// start a brand-new one instead of joining the existing one, splitting
+// the party into two disconnected stories.
 function canParticipateInScene(scene: any, characterId: string): boolean {
   const participants = scene.participants as any
-  if (!participants || !participants.characterIds || participants.characterIds.length === 0) {
+  if (!participants?.scoped) {
     return true
   }
-  return participants.characterIds.includes(characterId)
+  return (participants.characterIds || []).includes(characterId)
 }
 
 export default function StoryPage() {
@@ -1253,7 +1258,7 @@ export default function StoryPage() {
                       auto-resolve) stays host-only. */}
                   {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && (() => {
                     const participants = scene.participants as any
-                    const hasDefinedParticipants = participants?.characterIds && participants.characterIds.length > 0
+                    const hasDefinedParticipants = participants?.scoped === true
                     const submittedUserIds = new Set((scene.playerActions || []).map((a: any) => a.userId))
                     // An open scene has no explicit roster, so its "whole
                     // party" is every living character in the campaign —

@@ -3,8 +3,6 @@
 import { prisma } from '@/lib/prisma';
 import { NotificationType, NotificationPriority, NotificationStatus } from '@prisma/client';
 import { sendEmail } from './email-service';
-import { triggerPushNotification } from './push-service';
-import { triggerSoundNotification } from '../realtime/pusher-server';
 
 interface CreateNotificationParams {
   type: NotificationType;
@@ -22,8 +20,6 @@ interface CreateNotificationParams {
 
 interface NotificationPreferences {
   emailEnabled: boolean;
-  pushEnabled: boolean;
-  soundEnabled: boolean;
   quietHours?: {
     enabled: boolean;
     start: string;
@@ -85,11 +81,15 @@ export class NotificationService {
       }
     });
 
-    // Send via different channels based on preferences
+    // Send via the channels that actually reach a person: the in-app bell
+    // (realtime) and email. Browser-push and sound pipelines used to be
+    // dispatched here too, each wired at only one end — push published a
+    // Pusher event with no client listener anywhere, and sound published
+    // one to a SoundService whose audio files don't exist — so both
+    // burned a message per notification to deliver nothing. Removed
+    // rather than half-wired; see README (#10/#63/#64).
     await Promise.all([
       this.sendEmailNotification(notification, preferences),
-      this.sendPushNotification(notification, preferences),
-      this.sendSoundNotification(notification, preferences, triggerSound),
       this.sendRealtimeNotification(notification)
     ]);
 
@@ -128,15 +128,11 @@ export class NotificationService {
       
       return {
         emailEnabled: true,
-        pushEnabled: true,
-        soundEnabled: true,
       };
     }
 
     return {
       emailEnabled: settings.emailEnabled,
-      pushEnabled: settings.pushEnabled,
-      soundEnabled: settings.soundEnabled,
       quietHours: settings.quietHoursEnabled ? {
         enabled: true,
         start: settings.quietHoursStart || '22:00',
@@ -217,55 +213,6 @@ export class NotificationService {
         return settings.emailWorldEvents;
       default:
         return true;
-    }
-  }
-
-  // Send push notification
-  private static async sendPushNotification(notification: any, preferences: NotificationPreferences) {
-    if (!preferences.pushEnabled) return;
-
-    try {
-      await triggerPushNotification({
-        userId: notification.userId,
-        title: notification.title,
-        message: notification.message,
-        actionUrl: notification.actionUrl,
-        data: notification.metadata
-      });
-
-      await prisma.notification.update({
-        where: { id: notification.id },
-        data: { pushSent: true }
-      });
-    } catch (error) {
-      console.error('Failed to send push notification:', error);
-    }
-  }
-
-  // Send sound notification
-  private static async sendSoundNotification(
-    notification: any, 
-    preferences: NotificationPreferences,
-    triggerSound?: string
-  ) {
-    if (!preferences.soundEnabled || !triggerSound) return;
-
-    try {
-      await triggerSoundNotification(
-        notification.userId,
-        notification.campaignId || 'global',
-        {
-          sound: triggerSound,
-          volume: 1.0,
-          notification: {
-            id: notification.id,
-            type: notification.type,
-            title: notification.title
-          }
-        }
-      );
-    } catch (error) {
-      console.error('Failed to send sound notification:', error);
     }
   }
 

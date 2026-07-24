@@ -8,7 +8,7 @@
 import { prisma } from '@/lib/prisma'
 import { generateMilestoneRecap } from '@/lib/ai/worldState'
 import { NotificationService } from '@/lib/notifications/notification-service'
-import { pickMostThreateningFaction, decideCrisisEscalation } from './tick/crisisClock'
+import { pickCrisisFaction, decideCrisisEscalation, CRISIS_WORLD_EVENT_TYPE, RECENT_CRISIS_LOOKBACK } from './tick/crisisClock'
 
 export const CAMPAIGN_MILESTONE_INTERVAL = 20
 
@@ -34,7 +34,23 @@ async function triggerMilestoneCrisis(campaignId: string, turnNumber: number): P
     where: { campaignId, isActive: true },
     select: { id: true, name: true, threatLevel: true, military: true, resources: true }
   })
-  const threat = pickMostThreateningFaction(factions)
+  // Read this campaign's own crisis history back before deciding (#79).
+  // Without it the strongest faction stays the strongest, so every
+  // milestone crisis lands on the same organisation forever and "the world
+  // moves against you" becomes the same threat on a loop.
+  const priorCrises = await prisma.worldEvent.findMany({
+    where: { campaignId, type: CRISIS_WORLD_EVENT_TYPE },
+    orderBy: { turnNumber: 'desc' },
+    take: RECENT_CRISIS_LOOKBACK,
+    select: { targetId: true }
+  }).catch((err: unknown) => {
+    // History is an input, not a precondition — a failed read degrades to
+    // the old current-state-only behavior rather than skipping the crisis.
+    console.error('Crisis history lookup failed (non-critical):', err)
+    return [] as Array<{ targetId: string }>
+  })
+
+  const threat = pickCrisisFaction(factions, priorCrises.map(e => e.targetId))
   if (!threat) return null
 
   const existingClock = await prisma.clock.findFirst({
@@ -81,6 +97,30 @@ async function triggerMilestoneCrisis(campaignId: string, turnNumber: number): P
       visibility: 'PUBLIC'
     }
   }).catch((err: unknown) => console.error('Crisis timeline event failed (non-critical):', err))
+
+  // Record the crisis in the structured event stream — this is what the
+  // NEXT milestone reads back above. Writing it here rather than relying on
+  // the TimelineEvent row is deliberate: timeline summaries are free text,
+  // and a deterministic decision should key off a structured, queryable
+  // record rather than parsing prose.
+  await prisma.worldEvent.create({
+    data: {
+      campaignId,
+      turnNumber,
+      type: CRISIS_WORLD_EVENT_TYPE,
+      origin: 'tick',
+      actorType: 'SYSTEM',
+      targetType: 'FACTION',
+      targetId: threat.id,
+      targetName: threat.name,
+      field: 'crisis',
+      previousValue: null,
+      newValue: clockName,
+      reason: blurb,
+      significant: true,
+      importance: 'MAJOR'
+    }
+  }).catch((err: unknown) => console.error('Crisis world event failed (non-critical):', err))
 
   return blurb
 }

@@ -78,29 +78,13 @@ async function syncPendingActions() {
   console.log('Syncing pending actions...');
 }
 
-// Push notifications
-self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : {};
-  const options = {
-    body: data.body || 'New update in your campaign!',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
-    vibrate: [200, 100, 200],
-    data: {
-      url: data.url || '/',
-    },
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(data.title || 'MythOS', options)
-  );
-});
-
-// Notification click handler
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-
-  event.waitUntil(
-    clients.openWindow(event.notification.data.url || '/')
-  );
-});
+// Web push is deliberately NOT implemented here.
+//
+// A correct-looking `push` + `notificationclick` pair used to sit at this
+// spot and could never fire: nothing in the app ever called
+// pushManager.subscribe(), there were no VAPID keys, and no server-side
+// web-push send — so the listener sat waiting for an event that had no
+// way to exist (README #10/#63/#64). Real browser push needs a VAPID
+// keypair, a subscription store, and a genuine push send; it's tracked as
+// a feature rather than left here as scaffolding that reads like a
+// working pipeline. In-app and email notifications both work today.

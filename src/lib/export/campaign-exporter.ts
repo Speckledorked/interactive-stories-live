@@ -378,8 +378,6 @@ export class CampaignExporter {
         currentTurnNumber: 1, // Reset to 1 for new campaign
         currentInGameDate: worldMeta.currentInGameDate,
         currentLocation: worldMeta.currentLocation,
-        tension: worldMeta.tension,
-        phase: worldMeta.phase,
         otherMeta: worldMeta.otherMeta,
         gmNotes: worldMeta.gmNotes,
       },

@@ -31,6 +31,41 @@ export function pickMostThreateningFaction<T extends FactionThreatSnapshot>(fact
   })[0]
 }
 
+/**
+ * Pick the faction this crisis should fall on, given who it has recently
+ * fallen on already.
+ *
+ * This is the one place the deterministic simulation reads its OWN history
+ * back to make a decision, rather than deciding purely from a snapshot of
+ * current state. Every other tick decision — faction goals, war momentum,
+ * clock advancement, pacing — is a pure function of right-now, which means
+ * the world has no way to notice it is repeating itself. The most visible
+ * symptom is here: the strongest faction stays the strongest, so
+ * `pickMostThreateningFaction` alone hands every single milestone crisis to
+ * the same faction forever, and "the world moves against you" degrades into
+ * the same organisation menacing the party every twenty scenes.
+ *
+ * A recently-used faction is demoted, not banned: if every candidate is
+ * recent (a two-faction campaign, say), this still returns the most
+ * threatening one rather than nothing. Escalating the usual suspect is a
+ * far better failure mode than a milestone that quietly does nothing.
+ *
+ * Pure — the caller supplies the history.
+ */
+export function pickCrisisFaction<T extends FactionThreatSnapshot>(
+  factions: T[],
+  recentCrisisFactionIds: string[]
+): T | null {
+  if (factions.length === 0) return null
+
+  const recent = new Set(recentCrisisFactionIds)
+  const unused = factions.filter(f => !recent.has(f.id))
+
+  // Prefer a faction that hasn't had its turn as the crisis lately; fall
+  // back to the full field once everyone has.
+  return pickMostThreateningFaction(unused.length > 0 ? unused : factions)
+}
+
 export interface CrisisClockSnapshot {
   currentTicks: number
   maxTicks: number
@@ -61,3 +96,17 @@ export function decideCrisisEscalation(existingClock: CrisisClockSnapshot | null
   }
   return { action: 'spawn', spawnMaxTicks: CRISIS_SPAWN_MAX_TICKS, spawnStartTicks: CRISIS_SPAWN_START_TICKS }
 }
+
+/**
+ * WorldEvent.type written when a milestone crisis fires, and read back by
+ * the next one (see pickCrisisFaction). Kept here beside the decision
+ * function so the writer and reader can't drift apart.
+ */
+export const CRISIS_WORLD_EVENT_TYPE = 'faction.crisis'
+
+/**
+ * How many past crises count as "recent" for demotion purposes. Small on
+ * purpose: with a handful of factions, a longer memory would demote
+ * everyone and collapse straight back to pure threat ranking.
+ */
+export const RECENT_CRISIS_LOOKBACK = 3

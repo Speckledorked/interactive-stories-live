@@ -19,9 +19,19 @@ export const RelationshipChangeSchema = z.object({
   reason: z.string()
 })
 
-// Consequence schemas
+// Consequence schemas.
+//
+// 'debt' is deliberately NOT a type here. A freeform consequences.debts
+// string array used to sit alongside the real, mechanically-live Debt
+// model — same concept, two unsynced representations, with only one of
+// them carrying direction/counterparty/status or reaching the prompt as
+// leverage. Debts now go exclusively through debt_changes (DebtChangeSchema
+// below), the same call already made for the duplicate reputation system
+// that shadowed FactionStanding: remove the shadow rather than sync it.
+// Pre-existing consequences.debts entries still render; nothing new is
+// written there.
 export const ConsequenceAddSchema = z.object({
-  type: z.enum(['promise', 'debt', 'enemy', 'longTermThreat']),
+  type: z.enum(['promise', 'enemy', 'longTermThreat']),
   description: z.string()
 })
 
@@ -237,7 +247,14 @@ export const NPCChangesSchema = z.object({
     // equipped weapon's damage bonus (lib/game/inventory.ts's
     // resolveDamageBonus) applies. Omitted just means no weapon bonus —
     // never a broken update.
-    harm_damage_dealt_by: z.string().optional()
+    harm_damage_dealt_by: z.string().max(SHORT_TEXT).optional(),
+    // NPC harm was previously a one-way ratchet: damage landed and there
+    // was no path back down at all, so a wounded-but-living NPC could only
+    // ever get worse. PCs get five recovery branches; NPCs now get this
+    // one. Deliberately simple — no conditions, death saves, or
+    // stabilize/capture outcomes — matching how NPC.harm is a thinner
+    // model than Character.harm by design (see schema.prisma).
+    harm_healing: z.number().min(0).max(6).optional()
   })
 })
 

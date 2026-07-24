@@ -46,6 +46,52 @@ type Db = Prisma.TransactionClient
 export type PcChange = NonNullable<WorldUpdates['pc_changes']>[number]
 
 /**
+ * Locate the single consequence entry a `consequences_remove` string means.
+ *
+ * Pure and exported for direct testing. Returns which array and index to
+ * splice, or null if nothing matched.
+ *
+ * The point is that it removes ONE thing. The previous implementation
+ * filtered every consequence array by substring at once, so resolving
+ * "owes Kessler a favor" could simultaneously strike a promise, an enemy
+ * and a long-term threat that merely shared that wording — a silent,
+ * unrecoverable data loss triggered by ordinary AI phrasing.
+ *
+ * An exact (case-insensitive) match anywhere wins outright. Failing that,
+ * the SHORTEST substring match is taken, on the reasoning that the
+ * shortest containing entry is the most specific one rather than an
+ * incidentally longer entry that happens to quote the same phrase.
+ */
+export function findConsequenceToRemove(
+  consequences: Record<string, unknown>,
+  toRemove: string
+): { key: string; index: number; matched: string } | null {
+  const needle = toRemove.trim().toLowerCase()
+  if (!needle) return null
+
+  let fallback: { key: string; index: number; matched: string } | null = null
+
+  for (const key of Object.keys(consequences)) {
+    const list = consequences[key]
+    if (!Array.isArray(list)) continue
+
+    for (let index = 0; index < list.length; index++) {
+      const entry = list[index]
+      if (typeof entry !== 'string') continue
+      const hay = entry.trim().toLowerCase()
+
+      if (hay === needle) return { key, index, matched: entry }
+
+      if (hay.includes(needle) && (!fallback || entry.length < fallback.matched.length)) {
+        fallback = { key, index, matched: entry }
+      }
+    }
+  }
+
+  return fallback
+}
+
+/**
  * Caller passes a memoized getter so the corruption-theme lookup — shared
  * with bargain_offers' handling — happens at most once per batch, and
  * only if actually needed.
@@ -364,18 +410,25 @@ export async function applyCharacterChanges(
         }
       }
 
-      // Remove consequences
+      // Remove consequences.
+      //
+      // Removes at most ONE entry per reported string — the single best
+      // match across the arrays. The previous implementation filtered every
+      // array by substring simultaneously, so resolving "owes Kessler a
+      // favor" could silently strike a promise, an enemy AND a threat that
+      // merely shared that wording. An exact match anywhere wins outright;
+      // otherwise the shortest substring match is taken as the most
+      // specific one, and if nothing matches it's logged rather than
+      // silently doing nothing.
       if (pcChange.changes.consequences_remove) {
         for (const toRemove of pcChange.changes.consequences_remove) {
-          // Search all consequence arrays for matching description
-          for (const key of Object.keys(currentConsequences)) {
-            if (Array.isArray(currentConsequences[key])) {
-              currentConsequences[key] = currentConsequences[key].filter(
-                (item: string) => !item.toLowerCase().includes(toRemove.toLowerCase())
-              )
-            }
+          const removal = findConsequenceToRemove(currentConsequences, toRemove)
+          if (removal) {
+            currentConsequences[removal.key].splice(removal.index, 1)
+            console.log(`  ✅ ${character.name} resolved consequence: ${removal.matched}`)
+          } else {
+            console.warn(`  ⚠️ ${character.name}: no consequence matched "${toRemove}" — nothing removed`)
           }
-          console.log(`  ✅ ${character.name} resolved consequence: ${toRemove}`)
         }
       }
 

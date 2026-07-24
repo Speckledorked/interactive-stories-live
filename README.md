@@ -80,7 +80,7 @@ is exactly what the Known Bugs / Known Issues section exists to close.
 | Quest identity/gating (does anything react to who gave it, or to FAILED/ABANDONED) | 1 | Confirmed zero consumers of `givenBy`; FAILED/ABANDONED are inert outside one narrow downtime-linked case (`#75`). |
 | Downtime completion rewards (gold/items/reputation/contacts) | 4 | Fixed (`#74`): parsed strictly (unparseable entries skipped and logged, never guessed) and applied through the same primitives quest payouts use. The entry-cost/payout asymmetry is closed. |
 | Relationships — player-facing visibility | 3 | Fixed (`#72`, `#73`): the mislabeled tab now says what it actually shows, and the regex-derived disposition badge that could contradict the real mechanic is gone. Still a 3, not higher: the real trust/tension/respect/fear values remain invisible by design — whether they *should* be is an open product call (`#91`). |
-| NPC harm/recovery | 2 | Damage lands (mirrors PC harm) but there is no recovery path at all — PCs get five recovery branches, NPCs get zero (`#71`). |
+| NPC harm/recovery | 4 | Fixed (`#71`): `harm_healing` gives NPCs a real recovery path through the same `healHarm` PCs use. Deliberately thinner than the PC model (no conditions/death saves) by design, not by omission. |
 | World history as a decision input | 2 | `WorldEvent`/`TimelineEvent` are faithfully written chronicles, but no deterministic tick/crisis/pacing decision anywhere queries its own history — every decision is a pure function of current state only (`#79`). |
 | Capability tree (branching prerequisites) | — (removed) | Fixed (`#82`): the unused `parentId`/`children` self-relation is dropped rather than left implying a prerequisite tree that never existed. Capabilities are flat and tier-numbered, and now say so. |
 | Corruption as a content gate | 2 | Gates exactly one thing in code (shadow-capability unlock) beyond a roll bonus and prompt flavor; never gates quests, locations, or NPC reactions despite the "power at a cost" framing (`#83`). |
@@ -169,18 +169,6 @@ against git history and the Shipped ledger.
 - *Evidence:* `lib/ai/client.ts` (`callAIGM`), `lib/ai/schema.ts` (`WorldUpdatesSchema`).
 - *Scope:* AI behavior.
 - *Suggested fix:* Migrate once a live-testable environment is available, or make an explicit decision to accept the current risk.
-
-**Duplicated, unsynced "debt" concept (#69)**
-- *Why it matters:* `Character.consequences.debts` (a free-text string array) exists alongside the real, mechanically-consumed `Debt` model, with no reconciliation between them — the AI schema offers both channels independently, and `consequences_remove`'s substring match filters only on `description`, not `type`, so it can strike across all four consequence arrays (promises/debts/enemies/longTermThreats) at once.
-- *Evidence:* `lib/game/worldUpdaters/characters.ts:346-382`, `lib/ai/schema.ts` (consequence `type: 'debt'`), `lib/game/debts.ts`.
-- *Scope:* data integrity, narrative consistency.
-- *Suggested fix:* Either retire the freeform `debts` consequence type in favor of the real `Debt` model, or have one clearly derive from the other.
-
-**NPC harm is a one-way ratchet (#71)**
-- *Why it matters:* damage lands on NPCs the same way it does on PCs, but there is no recovery/healing path for NPCs anywhere in the codebase — once wounded, an NPC only ever gets worse or dies. PCs get five recovery branches (stabilize, death save, medical attention, heroic sacrifice, permanent injury); NPCs get zero.
-- *Evidence:* `lib/game/worldUpdaters/npcs.ts:63-88` (confirmed: no lower-`harm` write exists anywhere for NPCs).
-- *Scope:* game balance, narrative consistency.
-- *Suggested fix:* Decide on purpose whether NPC harm should ever recover, and if so give it at minimum a single recovery path.
 
 **Quests have no branching or gating logic anywhere (#75)**
 - *Why it matters:* `Quest.givenBy` is pure display text with zero code consumers — no quest is ever hidden, unlocked, or blocked by faction state, standing, or another quest's outcome. FAILED/ABANDONED are functionally inert outside one narrow case (a downtime-linked quest failing fails that activity). This sharpens the already-tracked "no objective chaining" gap (`#45`): it isn't just that objectives don't chain, quest *identity itself* is never mechanically checked against anything.
@@ -295,6 +283,12 @@ are folded in below. `#22` (de-jargon) and `#23` (surface multiplayer) shipped �
 Full narrative detail for everything below (including specific bug
 postmortems) is preserved in this file's git history — this is the condensed
 ledger.
+
+**P2 batch — NPC recovery and the duplicate debt channel:**
+
+- **NPC harm was a one-way ratchet (`#71`)** — damage landed on NPCs through the same `applyHarm` PCs use, but nothing anywhere wrote a *lower* NPC harm value, so a wounded-but-living NPC could only ever get worse. PCs get five recovery branches (stabilize, death save, medical attention, heroic sacrifice, permanent injury); NPCs had none. Added `npc_changes.harm_healing`, mirroring the PC field through the same `healHarm`. Deliberately kept thin — no conditions, death saves, or stabilize/capture outcomes — matching how `NPC.harm` is a lighter model than `Character.harm` by design. It nets correctly against damage reported in the same batch, and never revives an NPC already taken out: recovering from a wound is not resurrection.
+- **A duplicate, unsynced "debt" channel (`#69`)** — `consequences_add` accepted a freeform `'debt'` type writing to a `Character.consequences.debts` string array, alongside the real `Debt` model. Same concept, two representations, only one of them carrying direction/counterparty/status or reaching the prompt later as leverage. Removed the `'debt'` consequence type so `debt_changes` is the single channel — the same call already made for the duplicate reputation system that shadowed `FactionStanding`: remove the shadow rather than sync it. Pre-existing entries still render; nothing new is written there.
+- **`consequences_remove` struck across all four arrays at once (`#69`, found while fixing the above)** — it filtered promises, debts, enemies *and* long-term threats by substring simultaneously, so resolving "owes Kessler a favor" could silently delete an unrelated promise, enemy and threat that merely shared the wording. Now removes exactly one entry per reported string via a new pure `findConsequenceToRemove`: an exact match wins outright, otherwise the shortest containing entry is taken as the most specific, and a miss is logged rather than silently doing nothing.
 
 **P2 batch — misleading UI, dead schema, and lore reconciliation:**
 

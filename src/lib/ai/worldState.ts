@@ -6,7 +6,7 @@ import { reportError } from '@/lib/monitoring'
 import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
-import { buildOptimizedContext, capForPrompt } from './contextManager' // Phase 14.6: Context optimization
+import { buildOptimizedContext, capForPrompt, clampPromptStrings } from './contextManager' // Phase 14.6: Context optimization
 import { retrieveRelevantHistory, retrieveNpcHistory, retrieveCrossEntityHistory, generateEntityPairs, buildSearchQuery } from './memoryRetrieval' // Campaign Memory RAG
 import { retrieveRelevantLore } from './loreRetrieval' // Imported lore RAG (see lib/lore/)
 import { AI_MODELS } from './models'
@@ -387,9 +387,13 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
     recent_timeline_events: compressedTimeline
   } as any
 
-  // Return both world summary and entities for reuse in memory retrieval
+  // Return both world summary and entities for reuse in memory retrieval.
+  // clampPromptStrings applies only to worldSummary — the prompt-bound half.
+  // `entities` deliberately stays unclamped: it feeds memory-retrieval
+  // entity matching, where a truncated name/description would silently
+  // change which memories get recalled.
   return {
-    worldSummary,
+    worldSummary: clampPromptStrings(worldSummary),
     entities: {
       characters,
       npcs: allNpcs, // Return ALL npcs, not filtered ones, for memory retrieval
@@ -625,9 +629,10 @@ export async function buildWorldSummaryForAI(
       })
   } as any
 
-  // Return both world summary and entities for reuse in memory retrieval
+  // Return both world summary and entities for reuse in memory retrieval.
+  // See the sibling builder above for why only worldSummary is clamped.
   return {
-    worldSummary,
+    worldSummary: clampPromptStrings(worldSummary),
     entities: {
       characters,
       npcs,

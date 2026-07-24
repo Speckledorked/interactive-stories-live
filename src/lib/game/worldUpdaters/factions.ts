@@ -5,6 +5,7 @@
 import { Prisma, Faction } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { resolveEntityByNameOrId } from '../entityResolution'
+import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
 
 type Db = Prisma.TransactionClient
 export type FactionChange = NonNullable<WorldUpdates['faction_changes']>[number]
@@ -65,7 +66,7 @@ export async function applyFactionChanges(
       }
 
       if (factionChange.changes.gm_notes_append) {
-        updateData.gmNotes = faction.gmNotes + '\n\n' + factionChange.changes.gm_notes_append
+        updateData.gmNotes = appendBounded(faction.gmNotes, factionChange.changes.gm_notes_append, GM_NOTES_BOUNDS)
       }
 
       // Fog of war: the party witnessing this faction in a live scene

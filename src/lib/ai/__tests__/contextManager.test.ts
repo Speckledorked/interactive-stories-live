@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifySceneImportance, capForPrompt } from '../contextManager'
+import { classifySceneImportance, capForPrompt, clampPromptStrings, MAX_PROMPT_STRING_CHARS } from '../contextManager'
 
 describe('classifySceneImportance', () => {
   it('maps CRITICAL memory importance to critical regardless of text/timeline', () => {
@@ -84,5 +84,71 @@ describe('capForPrompt', () => {
     const items = [{ id: 'a', p: 3 }, { id: 'b', p: 1 }, { id: 'c', p: 2 }]
     const result = capForPrompt(items, 3, i => i.p)
     expect(result).toBe(items)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// clampPromptStrings (#67)
+// ---------------------------------------------------------------------------
+// capForPrompt bounds how MANY entities reach the prompt; this bounds how
+// large each one is. Without it "15 NPCs" is a ceiling on count and no
+// ceiling at all on tokens.
+
+describe('clampPromptStrings (#67)', () => {
+  it('leaves short strings untouched', () => {
+    expect(clampPromptStrings('a short description')).toBe('a short description')
+  })
+
+  it('truncates an oversized string and marks it', () => {
+    const long = 'word '.repeat(1000).trim()
+    const result = clampPromptStrings(long) as unknown as string
+    expect(result.length).toBeLessThanOrEqual(MAX_PROMPT_STRING_CHARS)
+    expect(result).toContain('… (truncated)')
+  })
+
+  it('walks nested objects and arrays', () => {
+    const long = 'x'.repeat(5000)
+    const summary = {
+      turn_number: 12,
+      characters: [{ name: 'Vera', backstory: long, harm: 3 }],
+      npcs: [{ name: 'Duke', description: long, goals: long }],
+    }
+    const result = clampPromptStrings(summary)
+    expect(result.turn_number).toBe(12)
+    expect(result.characters[0].name).toBe('Vera')
+    expect(result.characters[0].harm).toBe(3)
+    expect(result.characters[0].backstory.length).toBeLessThanOrEqual(MAX_PROMPT_STRING_CHARS)
+    expect(result.npcs[0].description.length).toBeLessThanOrEqual(MAX_PROMPT_STRING_CHARS)
+    expect(result.npcs[0].goals.length).toBeLessThanOrEqual(MAX_PROMPT_STRING_CHARS)
+  })
+
+  it('bounds total payload growth driven by field length, not entity count', () => {
+    const long = 'y'.repeat(20_000)
+    const fifteenNpcs = Array.from({ length: 15 }, (_, i) => ({
+      name: `NPC ${i}`,
+      description: long,
+      goals: long,
+    }))
+    const before = JSON.stringify(fifteenNpcs).length
+    const after = JSON.stringify(clampPromptStrings(fifteenNpcs)).length
+    expect(before).toBeGreaterThan(500_000)
+    expect(after).toBeLessThan(30_000)
+  })
+
+  it('passes non-strings through untouched, including null and numbers', () => {
+    const input = { a: null, b: 42, c: true, d: undefined }
+    expect(clampPromptStrings(input)).toEqual({ a: null, b: 42, c: true, d: undefined })
+  })
+
+  it('does not rebuild Date instances into plain objects', () => {
+    const date = new Date('2026-01-01T00:00:00Z')
+    const result = clampPromptStrings({ createdAt: date })
+    expect(result.createdAt).toBeInstanceOf(Date)
+    expect(result.createdAt.getTime()).toBe(date.getTime())
+  })
+
+  it('respects an explicit limit override', () => {
+    const result = clampPromptStrings('abcdefghij'.repeat(10), 40) as unknown as string
+    expect(result.length).toBeLessThanOrEqual(40)
   })
 })

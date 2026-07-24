@@ -365,6 +365,62 @@ export function capForPrompt<T>(items: T[], maxCount: number, priority: (item: T
 }
 
 /**
+ * Companion backstop to capForPrompt, for the other axis of prompt growth.
+ *
+ * capForPrompt bounds HOW MANY entities reach the prompt; it says nothing
+ * about how large each one is. Every long free-text field mapped into the
+ * world summary — a character's backstory, an NPC's description, a
+ * faction's current plan, a quest's objective — was passed through at
+ * whatever length it happened to be, and none of them are length-bounded
+ * in the schema. So "15 NPCs" is a real ceiling on count and no ceiling at
+ * all on tokens: 15 NPCs with multi-paragraph descriptions is a far bigger
+ * payload than 15 with one-liners, and the caps alone can't tell the
+ * difference. That interacts badly with any field that accumulates over a
+ * campaign's life (see textAppend.ts), and there is no pre-send token
+ * budget anywhere — estimateTokenCount is only used for cost logging,
+ * after the request has already gone out.
+ *
+ * Applied to the assembled summary object rather than to each field at its
+ * mapping site, deliberately: there are two near-identical builders in
+ * worldState.ts and a dozen-plus long-text fields between them, so a
+ * per-field approach is something a future field can silently be added
+ * without. A structural pass can't be forgotten.
+ *
+ * Truncation is word-aligned and marked, never silent. Arrays/objects are
+ * walked; non-strings pass through untouched. The limit is generous enough
+ * that no normal field is touched — it exists for the pathological case.
+ */
+export const MAX_PROMPT_STRING_CHARS = 800
+const PROMPT_TRUNCATION_MARKER = '… (truncated)'
+
+export function clampPromptStrings<T>(value: T, maxChars: number = MAX_PROMPT_STRING_CHARS): T {
+  if (typeof value === 'string') {
+    if (value.length <= maxChars) return value
+    const budget = Math.max(0, maxChars - PROMPT_TRUNCATION_MARKER.length)
+    const cut = value.slice(0, budget)
+    const lastSpace = cut.lastIndexOf(' ')
+    const aligned = lastSpace > budget * 0.5 ? cut.slice(0, lastSpace) : cut
+    return `${aligned}${PROMPT_TRUNCATION_MARKER}` as unknown as T
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => clampPromptStrings(item, maxChars)) as unknown as T
+  }
+
+  // Plain objects only — Date, null, and class instances pass through as-is
+  // rather than being rebuilt into a shape their consumer wouldn't expect.
+  if (value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    const out: Record<string, unknown> = {}
+    for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = clampPromptStrings(inner, maxChars)
+    }
+    return out as unknown as T
+  }
+
+  return value
+}
+
+/**
  * Monitor campaign health and scale
  * Warns if campaign is approaching limits
  */

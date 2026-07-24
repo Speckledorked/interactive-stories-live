@@ -2,7 +2,14 @@
 // Phase 15.2 & 15.3: AI Output Validation and Progressive Fallback
 
 import { z } from 'zod'
-import { AIGMResponseSchema, MinimalAIResponseSchema, type AIGMResponseValidated } from './schema'
+import {
+  AIGMResponseSchema,
+  MinimalAIResponseSchema,
+  WorldTurnResponseSchema,
+  WorldTurnNarrativeOnlySchema,
+  type AIGMResponseValidated,
+  type WorldTurnResponseValidated,
+} from './schema'
 import type { AIGMResponse } from './client'
 import { prisma } from '@/lib/prisma'
 
@@ -324,6 +331,61 @@ export async function logValidationFailure(
   } catch (error) {
     console.error('Failed to log validation failure:', error)
   }
+}
+
+/**
+ * Validate the background world-turn response (callAIForWorldTurn).
+ *
+ * That call writes through the same applyWorldUpdates path scene
+ * resolution does, but used to return a bare JSON.parse with no schema —
+ * so a malformed npc_changes/faction_changes entry reached the DB writer
+ * with none of the bounds the main response contract enforces. Its
+ * TypeScript return type was purely a compile-time fiction.
+ *
+ * Two tiers, mirroring the philosophy of the main ladder (degrade, never
+ * crash — this call is a background nicety and must never take down a
+ * world turn):
+ *   full      — everything parsed; events, notes, updates, ambitions all used.
+ *   narrative — the whole parse failed, but events/notes alone are valid.
+ *               Kept (they mutate nothing); world_updates and
+ *               ambition_picks are DROPPED rather than passed through
+ *               unvalidated. A malformed faction change must not reach the
+ *               writer just because the prose around it happened to parse.
+ *   none      — neither parsed; caller falls back to its empty result.
+ *
+ * Pure and synchronous: failure logging is the caller's business (it has
+ * the campaignId), matching how logValidationFailure is already used.
+ */
+export type WorldTurnValidationResult =
+  | { level: 'full'; data: WorldTurnResponseValidated }
+  | { level: 'narrative'; data: WorldTurnResponseValidated; error: z.ZodError }
+  | { level: 'none'; error: z.ZodError }
+
+export function validateWorldTurnResponse(raw: unknown): WorldTurnValidationResult {
+  const full = WorldTurnResponseSchema.safeParse(raw)
+  if (full.success) {
+    return { level: 'full', data: full.data }
+  }
+
+  const narrative = WorldTurnNarrativeOnlySchema.safeParse(raw)
+  if (narrative.success) {
+    console.warn(
+      `⚠️ World-turn response failed full validation (${full.error.errors.length} issue(s)); ` +
+      `keeping ${narrative.data.offscreen_events.length} narrative event(s), dropping world_updates/ambition_picks.`
+    )
+    return {
+      level: 'narrative',
+      // Explicitly reconstructed rather than spread from raw — this is the
+      // line that guarantees no unvalidated state-mutating field survives.
+      data: {
+        offscreen_events: narrative.data.offscreen_events,
+        gm_notes: narrative.data.gm_notes,
+      },
+      error: full.error,
+    }
+  }
+
+  return { level: 'none', error: full.error }
 }
 
 /**

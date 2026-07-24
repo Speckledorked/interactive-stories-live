@@ -95,6 +95,76 @@ export interface OrganicGrowthInstruction {
 }
 
 /**
+ * Per-arc grant guardrail for AI-authored perks and Abilities.
+ *
+ * Perks and Moves are the only two permanent, mechanically-live rewards the
+ * AI authors freely (both feed `matched_signature_id` at roll time — see
+ * resolution.ts's SIGNATURE_BONUS). Everything else the AI reports with a
+ * lasting effect already has a deterministic ceiling independent of the
+ * model behaving: stat growth is gated to once per arc per stat
+ * (computeOrganicGrowth), capability proficiency by MAX_GROWTH_PER_ARC,
+ * corruption by a hard +1/scene cap, standing by ±1/scene.
+ *
+ * Perks/moves had no such ceiling — the *only* thing asking the AI to keep
+ * them rare was prompt text ("reserve for a genuine repeated pattern...
+ * roughly once every several sessions"), and id-based dedup only stops the
+ * SAME perk being re-granted, not a stream of different ones. A model that
+ * ignores that instruction could hand out unlimited permanent +1s.
+ *
+ * Budgets are per ARC_LENGTH_TURNS window and counted from the advancement
+ * log, which already stamps `turnNumber` on every grant — no new schema.
+ * Moves are capped alongside perks (not more tightly) because a move is
+ * already rarer in practice; the point here is a hard ceiling, not a
+ * balance pass.
+ */
+export const MAX_PERKS_PER_ARC = 1
+export const MAX_MOVES_PER_ARC = 1
+
+/**
+ * How many grants of a given kind fall inside the current arc window.
+ *
+ * A legacy entry with no `turnNumber` is deliberately NOT counted: we can't
+ * prove it's recent, and silently consuming a character's budget over an
+ * unprovable timestamp is the more punitive of the two failure modes. Every
+ * live call site stamps turnNumber (see sceneResolver.ts), so this only
+ * affects rows predating that.
+ */
+export function countGrantsInArc(
+  log: AdvancementLog | null | undefined,
+  type: 'perk_gained' | 'move_learned',
+  currentTurn: number
+): number {
+  const entries = log?.entries
+  if (!entries?.length) return 0
+  return entries.filter(entry => {
+    if (entry.type !== type) return false
+    if (typeof entry.turnNumber !== 'number') return false
+    return currentTurn - entry.turnNumber < ARC_LENGTH_TURNS
+  }).length
+}
+
+/** Why a proposed perk/move didn't land. */
+export type GrantSkipReason = 'duplicate' | 'arc_budget'
+
+/**
+ * What applyOrganicGrowth actually did — distinguishing the full updated
+ * arrays (what to persist) from the grants that genuinely landed this call
+ * (what to log). Before this split, the caller logged every *proposed*
+ * perk/move, so a re-reported duplicate still incremented
+ * totalPerksGained and wrote a phantom "gained" entry — which would also
+ * have poisoned the arc budget above, since the budget counts log entries.
+ */
+export interface AppliedGrowth {
+  updatedStats: any
+  updatedPerks: Perk[]
+  updatedMoves: Move[]
+  grantedPerks: Perk[]
+  grantedMoves: Move[]
+  skippedPerks: Array<{ perk: Perk; reason: GrantSkipReason }>
+  skippedMoves: Array<{ move: Move; reason: GrantSkipReason }>
+}
+
+/**
  * Recent action summary, used to update stat usage tracking
  */
 export interface RecentAction {
@@ -261,16 +331,18 @@ export function validateStats(stats: Record<string, number>): { valid: boolean; 
  */
 export function applyOrganicGrowth(
   character: Character,
-  instructions: OrganicGrowthInstruction
-): {
-  updatedStats: any
-  updatedPerks: any
-  updatedMoves: Move[]
-} {
+  instructions: OrganicGrowthInstruction,
+  currentTurn: number
+): AppliedGrowth {
   // Start with current values
   let stats = character.stats ? { ...(character.stats as any as Record<string, number>) } : {}
   let perks = character.perks ? [...(character.perks as any as Perk[])] : []
   let moves = character.moves ? [...(character.moves as any as Move[])] : []
+
+  const grantedPerks: Perk[] = []
+  const grantedMoves: Move[] = []
+  const skippedPerks: Array<{ perk: Perk; reason: GrantSkipReason }> = []
+  const skippedMoves: Array<{ move: Move; reason: GrantSkipReason }> = []
 
   // Apply stat increases
   for (const statIncrease of instructions.statIncreases) {
@@ -287,28 +359,54 @@ export function applyOrganicGrowth(
     }
   }
 
-  // Apply new perks (deduplicate by id)
+  // Remaining per-arc budget, read from what actually landed historically
+  // (see countGrantsInArc / MAX_PERKS_PER_ARC).
+  const log = (character.advancementLog as any as AdvancementLog) || null
+  let perkBudget = Math.max(0, MAX_PERKS_PER_ARC - countGrantsInArc(log, 'perk_gained', currentTurn))
+  let moveBudget = Math.max(0, MAX_MOVES_PER_ARC - countGrantsInArc(log, 'move_learned', currentTurn))
+
+  // Apply new perks (deduplicate by id, then spend arc budget)
   for (const newPerk of instructions.newPerks) {
-    const exists = perks.some(p => p.id === newPerk.id)
-    if (!exists) {
-      perks.push(newPerk)
-      console.log(`✅ Granted perk: ${newPerk.name}`)
+    if (perks.some(p => p.id === newPerk.id)) {
+      skippedPerks.push({ perk: newPerk, reason: 'duplicate' })
+      continue
     }
+    if (perkBudget <= 0) {
+      skippedPerks.push({ perk: newPerk, reason: 'arc_budget' })
+      console.warn(`⚠️ Skipped perk "${newPerk.name}": per-arc grant budget exhausted`)
+      continue
+    }
+    perks.push(newPerk)
+    grantedPerks.push(newPerk)
+    perkBudget--
+    console.log(`✅ Granted perk: ${newPerk.name}`)
   }
 
-  // Apply new moves (deduplicate by id)
+  // Apply new moves (deduplicate by id, then spend arc budget)
   for (const newMove of instructions.newMoves) {
-    const exists = moves.some(m => m.id === newMove.id)
-    if (!exists) {
-      moves.push(newMove)
-      console.log(`✅ Granted move: ${newMove.name}`)
+    if (moves.some(m => m.id === newMove.id)) {
+      skippedMoves.push({ move: newMove, reason: 'duplicate' })
+      continue
     }
+    if (moveBudget <= 0) {
+      skippedMoves.push({ move: newMove, reason: 'arc_budget' })
+      console.warn(`⚠️ Skipped ability "${newMove.name}": per-arc grant budget exhausted`)
+      continue
+    }
+    moves.push(newMove)
+    grantedMoves.push(newMove)
+    moveBudget--
+    console.log(`✅ Granted move: ${newMove.name}`)
   }
 
   return {
     updatedStats: stats,
     updatedPerks: perks,
-    updatedMoves: moves
+    updatedMoves: moves,
+    grantedPerks,
+    grantedMoves,
+    skippedPerks,
+    skippedMoves,
   }
 }
 

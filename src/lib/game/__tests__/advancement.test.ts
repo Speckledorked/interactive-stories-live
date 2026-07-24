@@ -11,10 +11,12 @@ import {
   applyOrganicGrowth,
   buildMoveFromAI,
   buildPerkFromAI,
+  countGrantsInArc,
   logMoveLearned,
   logStatIncrease,
   createAdvancementLog,
   formatAdvancementEntry,
+  MAX_PERKS_PER_ARC,
   type StatUsage,
   type Move,
   type Perk,
@@ -24,14 +26,28 @@ import { ARC_LENGTH_TURNS } from '../capabilities'
 // Valid PbtA stat spread: sum = +2, at most one stat >= +2.
 const baseStats = { cool: 0, hard: 0, hot: 0, sharp: 0, weird: 2 }
 
-function makeCharacter(overrides: Partial<{ statUsage: StatUsage; perks: any; moves: any; stats: any }> = {}) {
+function makeCharacter(
+  overrides: Partial<{ statUsage: StatUsage; perks: any; moves: any; stats: any; advancementLog: any }> = {}
+) {
   return {
     stats: baseStats,
     statUsage: {},
     perks: [],
     moves: [],
+    advancementLog: null,
     ...overrides,
   } as any
+}
+
+// A character whose advancement log already shows a grant of `type` at
+// `turn` — i.e. one that has already spent its per-arc budget.
+function logWithGrantAt(type: 'perk_gained' | 'move_learned', turn: number) {
+  return {
+    entries: [{ timestamp: new Date().toISOString(), turnNumber: turn, type, details: { reason: 'earlier' } }],
+    totalStatIncreases: 0,
+    totalPerksGained: type === 'perk_gained' ? 1 : 0,
+    totalMovesLearned: type === 'move_learned' ? 1 : 0,
+  }
 }
 
 const grownUsage: StatUsage = {
@@ -121,17 +137,21 @@ describe('applyOrganicGrowth — moves', () => {
   it('grants a new move', () => {
     const character = makeCharacter()
     const move = buildMoveFromAI({ name: 'Read the Room', trigger: 'A', description: 'B' })
-    const applied = applyOrganicGrowth(character, { statIncreases: [], newPerks: [], newMoves: [move] })
+    const applied = applyOrganicGrowth(character, { statIncreases: [], newPerks: [], newMoves: [move] }, 1)
     expect(applied.updatedMoves).toEqual([move])
+    expect(applied.grantedMoves).toEqual([move])
   })
 
   it('dedupes by id — reporting the same move again is a no-op', () => {
     const existing: Move = { id: 'read-the-room', name: 'Read the Room', trigger: 'A', description: 'B' }
     const character = makeCharacter({ moves: [existing] })
     const reReported = buildMoveFromAI({ name: 'Read the Room', trigger: 'Reworded trigger', description: 'Reworded description' })
-    const applied = applyOrganicGrowth(character, { statIncreases: [], newPerks: [], newMoves: [reReported] })
+    const applied = applyOrganicGrowth(character, { statIncreases: [], newPerks: [], newMoves: [reReported] }, 1)
     expect(applied.updatedMoves).toHaveLength(1)
     expect(applied.updatedMoves[0]).toEqual(existing)
+    // A duplicate must not be reported as granted — the caller logs off this.
+    expect(applied.grantedMoves).toEqual([])
+    expect(applied.skippedMoves).toEqual([{ move: reReported, reason: 'duplicate' }])
   })
 })
 
@@ -139,17 +159,102 @@ describe('applyOrganicGrowth — perks', () => {
   it('grants a new perk', () => {
     const character = makeCharacter()
     const perk = buildPerkFromAI({ name: 'Riposte', description: 'A' })
-    const applied = applyOrganicGrowth(character, { statIncreases: [], newPerks: [perk], newMoves: [] })
+    const applied = applyOrganicGrowth(character, { statIncreases: [], newPerks: [perk], newMoves: [] }, 1)
     expect(applied.updatedPerks).toEqual([perk])
+    expect(applied.grantedPerks).toEqual([perk])
   })
 
   it('dedupes by id — reporting the same perk again is a no-op', () => {
     const existing: Perk = { id: 'riposte', name: 'Riposte', description: 'A' }
     const character = makeCharacter({ perks: [existing] })
     const reReported = buildPerkFromAI({ name: 'Riposte', description: 'Reworded description entirely' })
-    const applied = applyOrganicGrowth(character, { statIncreases: [], newPerks: [reReported], newMoves: [] })
+    const applied = applyOrganicGrowth(character, { statIncreases: [], newPerks: [reReported], newMoves: [] }, 1)
     expect(applied.updatedPerks).toHaveLength(1)
     expect(applied.updatedPerks[0]).toEqual(existing)
+    expect(applied.grantedPerks).toEqual([])
+    expect(applied.skippedPerks).toEqual([{ perk: reReported, reason: 'duplicate' }])
+  })
+})
+
+describe('applyOrganicGrowth — per-arc grant budget', () => {
+  it('grants only MAX_PERKS_PER_ARC when the AI reports a burst of distinct perks', () => {
+    const character = makeCharacter()
+    const proposed = ['Riposte', 'Iron Guard', 'Silver Tongue', 'Deadeye'].map(name =>
+      buildPerkFromAI({ name, description: 'earned' })
+    )
+    const applied = applyOrganicGrowth(character, { statIncreases: [], newPerks: proposed, newMoves: [] }, 50)
+    expect(applied.grantedPerks).toHaveLength(MAX_PERKS_PER_ARC)
+    expect(applied.updatedPerks).toHaveLength(MAX_PERKS_PER_ARC)
+    expect(applied.skippedPerks.every(s => s.reason === 'arc_budget')).toBe(true)
+    expect(applied.skippedPerks).toHaveLength(proposed.length - MAX_PERKS_PER_ARC)
+  })
+
+  it('grants nothing when the budget was already spent earlier in the same arc', () => {
+    const character = makeCharacter({ advancementLog: logWithGrantAt('perk_gained', 50) })
+    const perk = buildPerkFromAI({ name: 'Riposte', description: 'earned' })
+    const applied = applyOrganicGrowth(
+      character,
+      { statIncreases: [], newPerks: [perk], newMoves: [] },
+      50 + ARC_LENGTH_TURNS - 1
+    )
+    expect(applied.grantedPerks).toEqual([])
+    expect(applied.updatedPerks).toEqual([])
+    expect(applied.skippedPerks).toEqual([{ perk, reason: 'arc_budget' }])
+  })
+
+  it('grants again once a full arc has passed since the last grant', () => {
+    const character = makeCharacter({ advancementLog: logWithGrantAt('perk_gained', 50) })
+    const perk = buildPerkFromAI({ name: 'Riposte', description: 'earned' })
+    const applied = applyOrganicGrowth(
+      character,
+      { statIncreases: [], newPerks: [perk], newMoves: [] },
+      50 + ARC_LENGTH_TURNS
+    )
+    expect(applied.grantedPerks).toEqual([perk])
+  })
+
+  it('budgets perks and abilities independently', () => {
+    const character = makeCharacter({ advancementLog: logWithGrantAt('perk_gained', 50) })
+    const perk = buildPerkFromAI({ name: 'Riposte', description: 'earned' })
+    const move = buildMoveFromAI({ name: 'Read the Room', trigger: 'A', description: 'B' })
+    const applied = applyOrganicGrowth(
+      character,
+      { statIncreases: [], newPerks: [perk], newMoves: [move] },
+      51
+    )
+    // Perk budget spent, ability budget untouched.
+    expect(applied.grantedPerks).toEqual([])
+    expect(applied.grantedMoves).toEqual([move])
+  })
+
+  it('does not count a legacy log entry with no turnNumber against the budget', () => {
+    const character = makeCharacter({
+      advancementLog: {
+        entries: [{ timestamp: new Date().toISOString(), type: 'perk_gained', details: { reason: 'legacy' } }],
+        totalStatIncreases: 0,
+        totalPerksGained: 1,
+        totalMovesLearned: 0,
+      },
+    })
+    const perk = buildPerkFromAI({ name: 'Riposte', description: 'earned' })
+    const applied = applyOrganicGrowth(character, { statIncreases: [], newPerks: [perk], newMoves: [] }, 5)
+    expect(applied.grantedPerks).toEqual([perk])
+  })
+
+  it('countGrantsInArc only counts the matching type inside the window', () => {
+    const log = {
+      entries: [
+        { timestamp: '', turnNumber: 10, type: 'perk_gained' as const, details: { reason: '' } },
+        { timestamp: '', turnNumber: 12, type: 'move_learned' as const, details: { reason: '' } },
+        { timestamp: '', turnNumber: 1, type: 'perk_gained' as const, details: { reason: '' } }, // outside window
+      ],
+      totalStatIncreases: 0,
+      totalPerksGained: 2,
+      totalMovesLearned: 1,
+    }
+    expect(countGrantsInArc(log, 'perk_gained', 15)).toBe(1)
+    expect(countGrantsInArc(log, 'move_learned', 15)).toBe(1)
+    expect(countGrantsInArc(null, 'perk_gained', 15)).toBe(0)
   })
 })
 

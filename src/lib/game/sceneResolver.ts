@@ -762,7 +762,7 @@ async function applyOrganicCharacterGrowth(
       mergedGrowth.newPerks.length > 0 ||
       mergedGrowth.newMoves.length > 0
     ) {
-      const applied = applyOrganicGrowth(character, mergedGrowth)
+      const applied = applyOrganicGrowth(character, mergedGrowth, turnNumber)
 
       // Get or create advancement log
       let advancementLog: AdvancementLog = (character.advancementLog as any) || createAdvancementLog()
@@ -790,8 +790,11 @@ async function applyOrganicCharacterGrowth(
         }
       }
 
-      // Log all new perks
-      for (const perk of mergedGrowth.newPerks) {
+      // Log only perks that genuinely landed — a duplicate re-report or one
+      // refused by the per-arc grant budget must not write a "gained" entry
+      // (it would inflate totalPerksGained and, worse, consume the same arc
+      // budget countGrantsInArc reads back from this log).
+      for (const perk of applied.grantedPerks) {
         advancementLog = logPerkGained(
           advancementLog,
           perk.id,
@@ -802,8 +805,8 @@ async function applyOrganicCharacterGrowth(
         )
       }
 
-      // Log all new moves
-      for (const move of mergedGrowth.newMoves) {
+      // Log only abilities that genuinely landed — same reasoning as perks.
+      for (const move of applied.grantedMoves) {
         advancementLog = logMoveLearned(
           advancementLog,
           move.id,
@@ -820,7 +823,7 @@ async function applyOrganicCharacterGrowth(
         data: {
           statUsage: updatedStatUsage,
           stats: applied.updatedStats,
-          perks: applied.updatedPerks,
+          perks: applied.updatedPerks as any,
           moves: applied.updatedMoves as any,
           advancementLog: advancementLog as any
         }

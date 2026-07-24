@@ -164,12 +164,6 @@ against git history and the Shipped ledger.
 - *Scope:* maintainability, UX (operational visibility).
 - *Suggested fix:* Surface it as a lobby/admin card, or delete it.
 
-**5 chronically flaky orchestrator tests (#48)**
-- *Why it matters:* a suite that's red-by-default normalizes ignoring red; these have been failing since before this backlog began.
-- *Evidence:* `sceneResolver.test.ts` (×3), `safety-service.test.ts` (×2) — mock-wiring timeouts.
-- *Scope:* maintainability.
-- *Suggested fix:* Fix the mock wiring causing the timeouts.
-
 **Basic JSON mode, not strict structured outputs (#1, #35)**
 - *Why it matters:* the AI GM call uses `response_format: json_object`, not OpenAI's `json_schema` strict mode, so shape violations aren't caught before the fallback ladder. Deliberately not yet attempted blind: a strict-mode migration needs a live API round-trip to verify a hand-rolled schema actually validates under strict mode, and getting it wrong would mean every AI GM call starts failing in production.
 - *Evidence:* `lib/ai/client.ts` (`callAIGM`), `lib/ai/schema.ts` (`WorldUpdatesSchema`).
@@ -200,12 +194,6 @@ against git history and the Shipped ledger.
 - *Scope:* UX (actively misleading, not just incomplete), core gameplay legibility.
 - *Suggested fix:* Replace with a real read of `Character.relationships`, or remove — a decoy signal that can contradict the real mechanic is worse than no signal.
 
-**Downtime completion rewards are generated and never applied (#74)**
-- *Why it matters:* AI-narrated downtime completion rewards (`materialRewards.goldGained`, `itemsCreated`, `reputationChanges`, `contactsGained`) are generated, stored verbatim, and never applied to `Character.resources` or `FactionStanding` — every occurrence of these field names in the codebase is inside the prompt-construction block; there is no reader. A code comment even documents the removed application path ("Character model doesn't have these fields"). A downtime activity can narrate "+2 with the Thieves' Guild, gained 300 gold" and the character's actual state never moves. Distinct from the cost side and the linked-quest gate, both of which are genuinely enforced.
-- *Evidence:* `lib/downtime/ai-downtime-service.ts:696-782` (`generateDynamicOutcomes`), specifically lines 726-733 and the dead-application comment at 770-771.
-- *Scope:* core gameplay, player trust in the mechanical layer.
-- *Suggested fix:* Route these fields through the same appliers `pc_changes`/quest rewards already use.
-
 **Quests have no branching or gating logic anywhere (#75)**
 - *Why it matters:* `Quest.givenBy` is pure display text with zero code consumers — no quest is ever hidden, unlocked, or blocked by faction state, standing, or another quest's outcome. FAILED/ABANDONED are functionally inert outside one narrow case (a downtime-linked quest failing fails that activity). This sharpens the already-tracked "no objective chaining" gap (`#45`): it isn't just that objectives don't chain, quest *identity itself* is never mechanically checked against anything.
 - *Evidence:* `lib/game/worldUpdaters/quests.ts:22-86`, `src/app/api/campaigns/[id]/quests/route.ts` (bare read-only `GET`), `lib/downtime/ai-downtime-service.ts:542` (the one real consumer of quest FAILED status).
@@ -235,18 +223,6 @@ against git history and the Shipped ledger.
 - *Evidence:* `prisma/schema.prisma` (`WorldEvent` doc comment), `lib/game/tick/crisisClock.ts`, `lib/game/tick/pacing.ts` (both keyed on current-state snapshots only).
 - *Scope:* core gameplay — a real ceiling on how "alive" the simulation can ever feel.
 - *Suggested fix:* Give at least one deterministic decision (crisis escalation is the natural candidate) a real history-aware input.
-
-**Unbounded query-amplification vector in cross-entity memory recall (#80)**
-- *Why it matters:* `generateEntityPairs` has no size cap — if a player's action text substring-matches many already-discovered NPC/faction names (trivially achievable by name-dropping), the resulting cross-entity-recall pairing is combinatorial (n mentions → up to n(n-1)/2 pairs), each firing its own parallel DB query. Distinct from `capForPrompt` (`#37`), which doesn't touch this recall path at all.
-- *Evidence:* `lib/ai/memoryRetrieval.ts:288-297` (`generateEntityPairs`), `lib/ai/worldState.ts:892-897` (the `Promise.all` fan-out).
-- *Scope:* performance/cost, a real player-text-controlled amplification path.
-- *Suggested fix:* Cap the number of entity pairs generated per request.
-
-**Several free-text AI-reported fields have no length/content constraint (#81)**
-- *Why it matters:* `equipment_changes`/`inventory_changes` values, `appearance_changes`/`personality_changes` text, and faction `current_plan`/`gm_notes_append` are all typed `z.string()` with no bound in the schema and are applied verbatim.
-- *Evidence:* `lib/ai/schema.ts`.
-- *Scope:* AI behavior, compounds with `#67`.
-- *Suggested fix:* Add `.max()` length constraints matching the pattern already used for other capped fields.
 
 **The capability "tree" has no real hierarchy (#82)**
 - *Why it matters:* `CampaignCapability.parentId`/`children` (a self-relation the schema structure implies is a prerequisite tree) has zero application-code consumers anywhere — the only live gating is a flat `tier` integer plus the corruption-gated shadow-node check. The "tree" is a flat list with an unused hierarchy column sitting on top of it.
@@ -342,6 +318,13 @@ are folded in below. `#22` (de-jargon) and `#23` (surface multiplayer) shipped �
 Full narrative detail for everything below (including specific bug
 postmortems) is preserved in this file's git history — this is the condensed
 ledger.
+
+**P2 batch — payouts, input bounds, and a stale flaky-test entry:**
+
+- **Downtime completion rewards were generated and never applied (`#74`)** — `generateDynamicOutcomes` asked the AI for gold, items created, contacts made and faction reputation shifts, stored the payload verbatim on `DowntimeActivity.outcomes`, and applied none of it. The code said so outright ("Character experience/gold rewards removed as Character model doesn't have these fields") — true of an older schema, and long since not: `Character.resources` carries gold and contacts, `FactionStanding` is a real table. That note had quietly become a standing excuse for a dead pipe, and the asymmetry is what made it worth fixing rather than deleting: entry costs were always charged for real, so the engine took the fee and didn't pay out. New `lib/downtime/downtimeRewards.ts` parses the AI's loose payload strictly — anything not matching the documented shape is skipped and logged, never guessed at (`"Guild: 2 or maybe 3"` is rejected rather than read as 2) — and applies it through the same primitives quest payouts use (`mergeGrantedItems`, `clampGoldDelta`, `applyStandingChanges`), so both paths move gold/items/standing through identical, already-tested logic. Deliberately does *not* reuse `applyQuestRewardGrant` itself: its recipient resolution matches names with `contains`, the exact pattern removed elsewhere in this engine (`#3`/`#40`), and downtime already knows the one character by id. Items land as plain quantity-1 misc entries with no inferred `armorValue`/`damageBonus`/`effect` — guessing those from a name string would be the keyword heuristic this codebase rejects.
+- **Player-text-controlled query amplification in cross-entity recall (`#80`)** — `generateEntityPairs` had no cap, and the entity list feeding it comes from substring-matching player-written action text against known entity names. Pairing is combinatorial, so a player could name-drop a dozen known NPCs in one action and turn a single scene resolution into ~66 parallel vector queries purely by typing. Capped at `MAX_ENTITY_PAIRS`; the cap widens its considered prefix one entity at a time, so it exhausts pairs among the most relevant few rather than taking an arbitrary slice of the full pair list. `capForPrompt` (`#37`) never covered this path.
+- **Free-text AI fields had no length constraint (`#81`)** — equipment/inventory values, appearance/personality text, faction `current_plan`/`gm_notes_append`, NPC description/notes, location and quest text were all bare `z.string()` applied verbatim to durable state and then read back into the prompt. Added `SHORT_TEXT`/`MEDIUM_TEXT`/`LONG_TEXT` ceilings across the schema, set generously enough that a rejection means the response was pathological rather than merely wordy. Complements `#67`: that bounds what reaches the prompt, this bounds what reaches the DB in the first place.
+- **The "5 chronically flaky tests" entry (`#48`) was stale** — the named tests (`sceneResolver.test.ts` ×3, `safety-service.test.ts` ×2) pass, and passed on five consecutive isolated runs of just those two files plus every full-suite run across this work. Whatever the mock-wiring timeouts were, they no longer reproduce; the entry is closed as no-longer-applicable rather than fixed. If they resurface, the right move is to capture an actual failing run before re-opening it.
 
 **All six P1s from the two most recent audit passes, fixed:**
 

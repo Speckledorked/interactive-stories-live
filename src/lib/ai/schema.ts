@@ -40,10 +40,23 @@ export const ConditionSchema = z.object({
   rollModifier: z.number().int().min(-2).max(2).optional()
 })
 
+// Length ceilings for AI-reported free text (#81).
+//
+// These fields are applied verbatim to durable state and then read back
+// into the prompt, so an unbounded string is both a storage and a
+// per-call token cost — and unlike the numeric fields, none of them had
+// any ceiling at all. Set generously: normal output is nowhere near
+// these, so a rejection here means the response was genuinely
+// pathological, not merely wordy. clampPromptStrings (#67) bounds what
+// reaches the prompt; this bounds what reaches the DB in the first place.
+const SHORT_TEXT = 300   // names, single values, one-line labels
+const MEDIUM_TEXT = 1000 // a sentence or two of description
+const LONG_TEXT = 2000   // multi-sentence notes and plans
+
 // Equipment change schema
 export const EquipmentChangeSchema = z.object({
   action: z.enum(['add', 'remove', 'replace']),
-  value: z.string()
+  value: z.string().max(SHORT_TEXT)
 })
 
 // A consumable item's mechanical payoff when used — see
@@ -124,11 +137,11 @@ export const PCChangesSchema = z.object({
     consequences_add: z.array(ConsequenceAddSchema).optional(),
     consequences_remove: z.array(z.string()).optional(),
     appearance_changes: z.object({
-      description: z.string(),
+      description: z.string().max(MEDIUM_TEXT),
       append: z.boolean().optional()
     }).optional(),
     personality_changes: z.object({
-      description: z.string(),
+      description: z.string().max(MEDIUM_TEXT),
       append: z.boolean().optional()
     }).optional(),
     equipment_changes: z.object({
@@ -208,8 +221,8 @@ export const NPCChangesSchema = z.object({
   npc_name_or_id: z.string(),
   is_new: z.boolean().optional(), // true when introducing a brand-new NPC mid-scene
   changes: z.object({
-    description: z.string().optional(), // Short description for new NPCs
-    notes_append: z.string().optional(),
+    description: z.string().max(MEDIUM_TEXT).optional(), // Short description for new NPCs
+    notes_append: z.string().max(LONG_TEXT).optional(),
     // New or updated long-term goal. Set this for a new NPC's starting goal,
     // or to give an existing major NPC a fresh direction after their
     // previous goal completed (see the "goalCompleted" world event).
@@ -235,9 +248,9 @@ export const FactionChangesSchema = z.object({
   changes: z.object({
     description: z.string().optional(), // Short description for new factions
     goals: z.string().optional(),       // Long-term goals for new factions
-    current_plan: z.string().optional(),
+    current_plan: z.string().max(MEDIUM_TEXT).optional(),
     threat_level: z.enum(['LOW', 'MEDIUM', 'HIGH', 'EXTREME']).optional(),
-    gm_notes_append: z.string().optional(),
+    gm_notes_append: z.string().max(LONG_TEXT).optional(),
     // World Sim Phase 6: the faction's simulation-tick goal. Only set this
     // when a scene has a player character directing a faction they lead
     // (Faction.leaderCharacterId) — for any other faction the deterministic
@@ -280,9 +293,9 @@ export const OrganicAdvancementSchema = z.object({
 export const LocationChangesSchema = z.object({
   name: z.string(),
   is_new: z.boolean().optional(),       // true when registering a new location
-  description: z.string().optional(),   // what this place looks like / feels like
-  location_type: z.string().optional(), // town, dungeon, wilderness, inn, building, etc.
-  gm_notes_append: z.string().optional()
+  description: z.string().max(MEDIUM_TEXT).optional(),   // what this place looks like / feels like
+  location_type: z.string().max(SHORT_TEXT).optional(), // town, dungeon, wilderness, inn, building, etc.
+  gm_notes_append: z.string().max(LONG_TEXT).optional()
 })
 
 // Structured payout applied deterministically when a quest's status becomes
@@ -302,12 +315,12 @@ export const QuestChangeSchema = z.object({
   name: z.string(),
   is_new: z.boolean().optional(),
   changes: z.object({
-    description: z.string().optional(),
-    objective: z.string().optional(),
-    given_by: z.string().optional(),
-    reward: z.string().optional(),
+    description: z.string().max(MEDIUM_TEXT).optional(),
+    objective: z.string().max(MEDIUM_TEXT).optional(),
+    given_by: z.string().max(SHORT_TEXT).optional(),
+    reward: z.string().max(MEDIUM_TEXT).optional(),
     status: z.enum(['ACTIVE', 'COMPLETED', 'FAILED', 'ABANDONED']).optional(),
-    progress_append: z.string().optional(),
+    progress_append: z.string().max(MEDIUM_TEXT).optional(),
     reward_grant: RewardGrantSchema.optional()
   })
 })

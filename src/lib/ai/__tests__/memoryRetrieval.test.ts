@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filterAndRankMemories } from '../memoryRetrieval'
+import { filterAndRankMemories, generateEntityPairs, MAX_ENTITY_PAIRS } from '../memoryRetrieval'
 import type { RetrievedMemory } from '../memoryRetrieval'
 
 function makeMemory(overrides: Partial<RetrievedMemory> = {}): RetrievedMemory {
@@ -63,5 +63,53 @@ describe('filterAndRankMemories', () => {
     const memories = [makeMemory({ id: 'unknown', similarity: 0.8, importance: 'SOMETHING_NEW' })]
     const result = filterAndRankMemories(memories, { minSimilarity: 0.7, importanceBoost: true, maxMemories: 10 })
     expect(result).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Cross-entity pair cap (#80)
+// ---------------------------------------------------------------------------
+// The entity list feeding this comes from substring-matching PLAYER-WRITTEN
+// action text against known entity names, and pairing is combinatorial —
+// so without a cap a player can inflate one scene resolution into dozens of
+// parallel vector queries purely by name-dropping.
+
+describe('generateEntityPairs — amplification cap (#80)', () => {
+  it('produces all pairs when comfortably under the cap', () => {
+    expect(generateEntityPairs(['a', 'b', 'c'])).toEqual([
+      ['a', 'b'],
+      ['a', 'c'],
+      ['b', 'c'],
+    ])
+  })
+
+  it('caps the pair count no matter how many entities are mentioned', () => {
+    const many = Array.from({ length: 30 }, (_, i) => `e${i}`) // 435 uncapped pairs
+    expect(generateEntityPairs(many)).toHaveLength(MAX_ENTITY_PAIRS)
+  })
+
+  it('degrades toward the earliest-listed (most relevant) entities', () => {
+    const many = Array.from({ length: 30 }, (_, i) => `e${i}`)
+    const pairs = generateEntityPairs(many, 3)
+    // All retained pairs are among the first few entities, not an arbitrary
+    // slice that happens to pin e0 against distant name-drops.
+    expect(pairs).toEqual([
+      ['e0', 'e1'],
+      ['e0', 'e2'],
+      ['e1', 'e2'],
+    ])
+  })
+
+  it('still dedupes before pairing', () => {
+    expect(generateEntityPairs(['a', 'a', 'b'])).toEqual([['a', 'b']])
+  })
+
+  it('returns nothing for zero or one entity', () => {
+    expect(generateEntityPairs([])).toEqual([])
+    expect(generateEntityPairs(['solo'])).toEqual([])
+  })
+
+  it('honors an explicit cap override', () => {
+    expect(generateEntityPairs(['a', 'b', 'c', 'd'], 2)).toHaveLength(2)
   })
 })

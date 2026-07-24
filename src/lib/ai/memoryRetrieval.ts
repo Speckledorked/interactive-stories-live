@@ -281,15 +281,44 @@ export async function retrieveNpcHistory(
 }
 
 /**
- * Pure helper: every unique unordered pair from a list of mentioned entity
- * IDs, for feeding retrieveCrossEntityHistory once per pair. No DB access —
- * kept separate so this combinatorics logic is testable on its own.
+ * Hard ceiling on how many cross-entity recall pairs one scene can generate.
+ *
+ * The entity list this pairs up comes from substring-matching PLAYER-WRITTEN
+ * action text against known entity names (see worldState.ts), and pairing is
+ * combinatorial — n mentions produce n(n-1)/2 pairs, each firing its own DB
+ * query in a Promise.all. So a player could name-drop a dozen known NPCs in
+ * one action and turn a single scene resolution into ~66 parallel vector
+ * queries, purely by typing. That's a player-controlled amplification factor
+ * on someone else's infrastructure, which is exactly the kind of thing that
+ * should have a number attached to it rather than an assumption that nobody
+ * will.
+ *
+ * capForPrompt (#37) doesn't help here: it bounds the world-state entity
+ * lists, not this recall path.
  */
-export function generateEntityPairs(entityIds: string[]): Array<[string, string]> {
+export const MAX_ENTITY_PAIRS = 12
+
+/**
+ * Pure helper: unique unordered pairs from a list of mentioned entity IDs,
+ * for feeding retrieveCrossEntityHistory once per pair. No DB access — kept
+ * separate so this combinatorics logic is testable on its own.
+ *
+ * Capped at MAX_ENTITY_PAIRS. The cap keeps pairs among the EARLIEST-listed
+ * entities rather than taking an arbitrary slice of the full pair list:
+ * callers pass entities in relevance order (the scene's own NPCs/factions
+ * before incidental name-drops), so this degrades toward the mentions that
+ * actually matter instead of whichever pairs the nested loop reached first.
+ */
+export function generateEntityPairs(
+  entityIds: string[],
+  maxPairs: number = MAX_ENTITY_PAIRS
+): Array<[string, string]> {
   const unique = Array.from(new Set(entityIds))
   const pairs: Array<[string, string]> = []
-  for (let i = 0; i < unique.length; i++) {
-    for (let j = i + 1; j < unique.length; j++) {
+  // Widen the considered prefix one entity at a time, so we exhaust all
+  // pairs among the most relevant few before reaching further down the list.
+  for (let j = 1; j < unique.length && pairs.length < maxPairs; j++) {
+    for (let i = 0; i < j && pairs.length < maxPairs; i++) {
       pairs.push([unique[i], unique[j]])
     }
   }

@@ -5,6 +5,7 @@ import { openaiFetch } from '@/lib/ai/openaiCompat'
 // Phase 15: Enhanced with strict validation, error handling, and cost tracking
 
 import { validateAIResponseWithRepair } from './validation'
+import { validateWorldTurnResponse } from './validation'
 import { circuitBreakerManager } from './circuit-breaker'
 import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
 import { AI_MODELS } from './models'
@@ -1425,7 +1426,27 @@ Respond with JSON:
       }).catch(console.error)
     }
 
-    return JSON.parse(content)
+    // Validate rather than trusting the parse. This response feeds the same
+    // applyWorldUpdates writer scene resolution uses, so an unvalidated
+    // npc_changes/faction_changes entry here would bypass every bound the
+    // main contract enforces. Degrades to narrative-only (dropping the
+    // state-mutating halves) before giving up entirely — see
+    // validateWorldTurnResponse.
+    const parsed = JSON.parse(content)
+    const validation = validateWorldTurnResponse(parsed)
+
+    if (validation.level === 'none') {
+      console.error(
+        'World turn response failed validation entirely; skipping this turn\'s offscreen events.',
+        validation.error.errors.slice(0, 3)
+      )
+      return {
+        offscreen_events: [],
+        gm_notes: 'World turn response failed validation - offscreen events skipped'
+      }
+    }
+
+    return validation.data
   } catch (error) {
     console.error('World turn AI call failed:', error)
     // Return empty result rather than crashing

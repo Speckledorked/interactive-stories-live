@@ -3,7 +3,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { z } from 'zod'
-import { validateAIResponse, validateAIResponseWithRepair, buildRepairPrompt } from '../validation'
+import { validateAIResponse, validateAIResponseWithRepair, buildRepairPrompt, validateWorldTurnResponse } from '../validation'
 
 describe('AI Response Validation (Phase 15)', () => {
   describe('Full Schema Validation', () => {
@@ -312,5 +312,94 @@ describe('validateAIResponseWithRepair (depth-hardening #36)', () => {
     const repair = vi.fn().mockResolvedValue({ scene_text: 'x' }) // still invalid (too short, no world_updates)
     await validateAIResponseWithRepair(invalidResponse, undefined, repair)
     expect(repair).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Background world-turn validation (#66)
+// ---------------------------------------------------------------------------
+// The world-turn call writes through the same applyWorldUpdates path scene
+// resolution does, but used to return a bare JSON.parse with no schema at
+// all. The key guarantee under test: a malformed state-mutating field never
+// reaches the writer just because the narrative around it parsed.
+
+describe('validateWorldTurnResponse (#66)', () => {
+  const validEvent = { title: 'The Duke moves', summary_public: 'Rumors spread.', summary_gm: 'He bribed the guard.' }
+
+  it('accepts a well-formed full response including world_updates', () => {
+    const result = validateWorldTurnResponse({
+      offscreen_events: [validEvent],
+      gm_notes: 'Watch the Duke.',
+      world_updates: {
+        npc_changes: [{ npc_name_or_id: 'Duke', changes: { notes_append: 'bribed a guard' } }],
+        faction_changes: [{ faction_name_or_id: 'Crown', changes: { threat_level: 'HIGH' } }],
+      },
+      ambition_picks: [{ faction_id: 'f1', category: 'tournament', name: 'The Ember Trials' }],
+    })
+    expect(result.level).toBe('full')
+    if (result.level !== 'full') throw new Error('expected full')
+    expect(result.data.offscreen_events).toHaveLength(1)
+    expect(result.data.world_updates?.npc_changes).toHaveLength(1)
+    expect(result.data.ambition_picks).toHaveLength(1)
+  })
+
+  it('defaults a missing summary_gm rather than failing the whole turn', () => {
+    const result = validateWorldTurnResponse({
+      offscreen_events: [{ title: 'A', summary_public: 'B' }],
+      gm_notes: '',
+    })
+    expect(result.level).toBe('full')
+    if (result.level !== 'full') throw new Error('expected full')
+    expect(result.data.offscreen_events[0].summary_gm).toBe('')
+  })
+
+  it('degrades to narrative-only when world_updates is malformed, DROPPING the bad updates', () => {
+    const result = validateWorldTurnResponse({
+      offscreen_events: [validEvent],
+      gm_notes: 'notes',
+      world_updates: {
+        // harm_damage is bounded 0-6 by NPCChangesSchema; 9000 must not reach the writer
+        npc_changes: [{ npc_name_or_id: 'Duke', changes: { harm_damage: 9000 } }],
+      },
+    })
+    expect(result.level).toBe('narrative')
+    if (result.level !== 'narrative') throw new Error('expected narrative')
+    expect(result.data.offscreen_events).toHaveLength(1)
+    expect((result.data as any).world_updates).toBeUndefined()
+  })
+
+  it('drops ambition_picks too when the full parse fails', () => {
+    const result = validateWorldTurnResponse({
+      offscreen_events: [validEvent],
+      world_updates: { faction_changes: [{ faction_name_or_id: 'X', changes: { threat_level: 'CATASTROPHIC' } }] },
+      ambition_picks: [{ faction_id: 'f1', category: 'tournament', name: 'Valid Name' }],
+    })
+    expect(result.level).toBe('narrative')
+    if (result.level !== 'narrative') throw new Error('expected narrative')
+    expect((result.data as any).ambition_picks).toBeUndefined()
+  })
+
+  it('strips unknown keys instead of passing them through to the writer', () => {
+    const result = validateWorldTurnResponse({
+      offscreen_events: [validEvent],
+      world_updates: { npc_changes: [{ npc_name_or_id: 'Duke', changes: { notes_append: 'ok' } }] },
+      pc_changes: [{ character_name_or_id: 'hero', changes: { harm_damage: 6 } }], // not part of this contract
+    })
+    expect(result.level).toBe('full')
+    if (result.level !== 'full') throw new Error('expected full')
+    expect((result.data as any).pc_changes).toBeUndefined()
+  })
+
+  it('returns level "none" when nothing usable can be salvaged', () => {
+    const result = validateWorldTurnResponse({ offscreen_events: 'not an array' })
+    expect(result.level).toBe('none')
+  })
+
+  it('treats an empty object as a valid empty turn (all fields optional)', () => {
+    const result = validateWorldTurnResponse({})
+    expect(result.level).toBe('full')
+    if (result.level !== 'full') throw new Error('expected full')
+    expect(result.data.offscreen_events).toEqual([])
+    expect(result.data.gm_notes).toBe('')
   })
 })

@@ -368,6 +368,63 @@ export const MinimalAIResponseSchema = z.object({
   scene_text: z.string().min(10, "Scene text must be at least 10 characters")
 })
 
+// ---------------------------------------------------------------------------
+// Background world-turn response (callAIForWorldTurn)
+// ---------------------------------------------------------------------------
+//
+// The offscreen/world-turn call writes through the SAME applyWorldUpdates
+// path scene resolution does, but historically returned a bare
+// JSON.parse(content) with no schema at all — so every bound the main
+// response contract enforces (harm 0-6, threat_level's enum, etc.) was
+// simply absent on this path. These reuse the identical per-entity schemas
+// rather than redeclaring looser copies, so the two paths can't drift.
+//
+// Deliberately a subset of WorldUpdatesSchema: no pc_changes (offscreen
+// events don't touch player characters) and no clock_changes (clock
+// advancement is worldTurn.ts's own deterministic job, not the AI's).
+
+export const OffscreenEventSchema = z.object({
+  title: z.string(),
+  summary_public: z.string(),
+  // GM-side detail is pure narrative with no mechanical power, so a
+  // response that omits it degrades to an empty string rather than
+  // failing the whole turn over it.
+  summary_gm: z.string().optional().default('')
+})
+
+export const AmbitionPickSchema = z.object({
+  faction_id: z.string(),
+  category: z.string(),
+  name: z.string(),
+  description: z.string().optional()
+})
+
+export const WorldTurnUpdatesSchema = z.object({
+  npc_changes: z.array(NPCChangesSchema).optional(),
+  faction_changes: z.array(FactionChangesSchema).optional(),
+  location_changes: z.array(LocationChangesSchema).optional()
+})
+
+export const WorldTurnResponseSchema = z.object({
+  offscreen_events: z.array(OffscreenEventSchema).optional().default([]),
+  gm_notes: z.string().optional().default(''),
+  world_updates: WorldTurnUpdatesSchema.optional(),
+  ambition_picks: z.array(AmbitionPickSchema).optional()
+})
+
+// Narrative-only degradation tier: if the full parse fails, the events and
+// notes are still safe to keep (they mutate nothing), while the
+// state-mutating halves — world_updates and ambition_picks — are dropped
+// rather than passed through unvalidated. This is the whole point of the
+// ladder: a malformed faction_changes entry must never reach the DB writer
+// just because the narrative around it happened to parse.
+export const WorldTurnNarrativeOnlySchema = z.object({
+  offscreen_events: z.array(OffscreenEventSchema).optional().default([]),
+  gm_notes: z.string().optional().default('')
+})
+
+export type WorldTurnResponseValidated = z.infer<typeof WorldTurnResponseSchema>
+
 // Type exports for TypeScript
 export type AIGMResponseValidated = z.infer<typeof AIGMResponseSchema>
 export type MinimalAIResponse = z.infer<typeof MinimalAIResponseSchema>

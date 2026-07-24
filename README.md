@@ -85,7 +85,7 @@ is exactly what the Known Bugs / Known Issues section exists to close.
 | Capability tree (branching prerequisites) | — (removed) | Fixed (`#82`): the unused `parentId`/`children` self-relation is dropped rather than left implying a prerequisite tree that never existed. Capabilities are flat and tier-numbered, and now say so. |
 | Corruption as a content gate | 2 | Gates exactly one thing in code (shadow-capability unlock) beyond a roll bonus and prompt flavor; never gates quests, locations, or NPC reactions despite the "power at a cost" framing (`#83`). |
 | Cross-system economy (faction wealth ↔ items ↔ downtime ↔ quests) | 1 | Standing→roll modifier is the only broad consumer of faction state; inventory has no rarity/value/price/crafting/trading anywhere; faction wealth has no code path into player resources (`#76`, `#77`). |
-| Admin tooling as simulation design (beyond CRUD) | 2 | Every tab but one is a thin PATCH wrapper; the one genuinely deep feature — the tick dry-run preview — is real but read-only (`#87`). |
+| Admin tooling as simulation design (beyond CRUD) | 2 | Every tab but one is a thin PATCH wrapper; the one genuinely deep feature — the tick dry-run preview — is real but read-only (`#87`). Now also surfaces campaign health (`#57`) and the map-generation toggle (`#9`/`#59`), but both are settings/readouts rather than design tooling. |
 
 ## Architecture: Where the Depth Actually Lives
 
@@ -140,12 +140,6 @@ against git history and the Shipped ledger.
 - *Scope:* core gameplay, UX (misleading).
 - *Suggested fix:* Gate melee/ranged actions on zone distance in `computeMechanics`, or delete both dead implementations.
 
-**Turn-order countdown enforces nothing (#6, #52)**
-- *Why it matters:* `TurnTracker` renders a live deadline timer, but nothing acts on it when it expires — a countdown that visibly hits zero and does nothing.
-- *Evidence:* `lib/notifications/turn-tracker.ts` (`checkExpiredTurns`, `sendPeriodicReminders` — fully built, zero callers), `Scene.autoAdvanceTurn` (never set `true`).
-- *Scope:* UX (misleading).
-- *Suggested fix:* Call the existing functions from the heartbeat cron, or remove the countdown UI.
-
 **Notification delivery is disconnected on the sound and push channels (#10, #63, #64)**
 - *Why it matters:* a full sound-effect library/playback engine and two independent push-notification implementations all exist, each wired at only one end — nothing is ever actually heard or received; only the in-app bell works end-to-end.
 - *Evidence:* `lib/notifications/sound-service.ts` (zero real callers beyond a settings preview button; `public/sounds/` doesn't exist as a directory); `public/sw.js` (a correct `push` listener with no `PushSubscription` flow anywhere — no `pushManager.subscribe`/VAPID/`web-push` usage in the repo); `lib/notifications/push-service.ts` (sends over Pusher's `push-notification` event, which has no client-side listener).
@@ -157,12 +151,6 @@ against git history and the Shipped ledger.
 - *Evidence:* `lib/game/debts.ts` (no roll-time weight; contrast with `lib/game/standing.ts`'s `effectiveStandingModifier`); `Character.resources.gold` has real sinks but no scarcity/pricing tied to `Faction.resources`.
 - *Scope:* core gameplay.
 - *Suggested fix:* Give a called-in debt the same ±1 roll weight Standing gets; route downtime costs/reward grants through faction-state-aware pricing.
-
-**`CampaignHealthMonitor` computes real metrics with no consumer (#57)**
-- *Why it matters:* 359 lines compute a real health score, issues, and recommendations every 5 turns and only `console.warn` them — an operational blind spot, not a UI-facing feature.
-- *Evidence:* `lib/game/campaign-health.ts`.
-- *Scope:* maintainability, UX (operational visibility).
-- *Suggested fix:* Surface it as a lobby/admin card, or delete it.
 
 **Basic JSON mode, not strict structured outputs (#1, #35)**
 - *Why it matters:* the AI GM call uses `response_format: json_object`, not OpenAI's `json_schema` strict mode, so shape violations aren't caught before the fallback ladder. Deliberately not yet attempted blind: a strict-mode migration needs a live API round-trip to verify a hand-rolled schema actually validates under strict mode, and getting it wrong would mean every AI GM call starts failing in production.
@@ -283,6 +271,11 @@ are folded in below. `#22` (de-jargon) and `#23` (surface multiplayer) shipped �
 Full narrative detail for everything below (including specific bug
 postmortems) is preserved in this file's git history — this is the condensed
 ledger.
+
+**P2 batch — two fully-built systems that had no callers:**
+
+- **The turn countdown enforced nothing (`#6`, `#52`)** — `checkExpiredTurns` and `sendPeriodicReminders` were both fully implemented with zero callers anywhere, so the deadline the `TurnTracker` UI renders visibly hit zero and did nothing at all. Both are now called from the existing daily cron. Neither changes the queue's advisory-only design, which is the reason this was safe to wire rather than delete: `checkExpiredTurns` is already gated on `autoAdvanceTurn`, which nothing currently sets true, so it's a no-op today and only ever acts on a tracker that has explicitly opted in; reminders just nudge, which is exactly what an advisory queue should do as a deadline approaches.
+- **`CampaignHealthMonitor` had no consumer (`#57`)** — 359 lines computing a real score, issue list and recommendations every 5 scenes, persisted to `WorldMeta`, and then only ever `console.warn`'d. Genuine analysis whose entire audience was a server log. Added a member-gated `GET /api/campaigns/[id]/health` that reads what's already stored (deliberately does not recompute, so hitting it costs one indexed read and can't trigger AI usage or shift the every-5-scenes cadence) plus a card in the admin panel. Found while wiring it: `recordHealthCheck` persisted `issues` and `metrics` but silently dropped `recommendations` — the actionable half — so that's now stored too, otherwise the new endpoint would have returned an empty list forever.
 
 **P2 batch — NPC recovery and the duplicate debt channel:**
 

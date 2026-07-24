@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sweepWorldTurnsForAllCampaigns } from '@/lib/game/worldTurnSweep'
 import { sweepGloballyStuckResolutionJobs } from '@/lib/game/resolutionQueue'
+import { TurnTracker } from '@/lib/notifications/turn-tracker'
 
 // Hobby-plan-safe. sweepWorldTurnsForAllCampaigns caps how many campaigns
 // get a full (AI-calling) world turn per sweep for the same reason.
@@ -25,6 +26,27 @@ export async function GET(request: NextRequest) {
   await sweepGloballyStuckResolutionJobs().catch(err =>
     console.error('Cron: stuck-job sweep failed (non-fatal):', err)
   )
+
+  // Turn-tracker upkeep (#6/#52). Both functions were fully implemented
+  // with zero callers, so the countdown the TurnTracker UI renders visibly
+  // hit zero and did nothing at all.
+  //
+  // Neither of these changes the turn queue's advisory-only design.
+  // checkExpiredTurns is already gated on `autoAdvanceTurn`, which nothing
+  // currently sets true — so it's a no-op today and only ever acts on a
+  // tracker that has explicitly opted in. sendPeriodicReminders just
+  // nudges; nudging is exactly what an advisory queue should do when a
+  // deadline is approaching.
+  await TurnTracker.sendPeriodicReminders().catch(err =>
+    console.error('Cron: turn reminders failed (non-fatal):', err)
+  )
+  const autoAdvanced = await TurnTracker.checkExpiredTurns().catch(err => {
+    console.error('Cron: expired-turn sweep failed (non-fatal):', err)
+    return 0
+  })
+  if (autoAdvanced) {
+    console.log(`⏭️  Cron: auto-advanced ${autoAdvanced} expired turn(s)`)
+  }
 
   const result = await sweepWorldTurnsForAllCampaigns()
   console.log(

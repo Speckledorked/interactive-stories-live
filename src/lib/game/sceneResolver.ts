@@ -26,6 +26,7 @@ import {
   type AdvancementLog
 } from './advancement'
 import { AIVisualService } from '@/lib/ai/ai-visual-service'
+import { MapService } from '@/lib/maps/map-service'
 import {
   captureWorldStateSnapshot,
   detectWorldStateChanges,
@@ -362,10 +363,26 @@ async function performResolution(
     // regardless, which burned an AI call and a batch of zone/token
     // writes on every action, not just when a genuinely new scene
     // actually started.
-    if (!isFirstSceneExchange(existingResolutions)) {
-      console.log('🗺️  Skipping map generation — scene already has a map from its first exchange')
-    } else {
-      try {
+    // Gated on the per-campaign opt-in as well as the first-exchange check:
+    // this is a second AI call plus a batch of zone/token writes per
+    // qualifying scene, which is real recurring cost for a feature many
+    // campaigns never look at (README Known Bugs #9/#59).
+    //
+    // The settings lookup is inside the same try as generation on purpose:
+    // the whole map step is explicitly non-critical, so a failure reading
+    // whether maps are even ENABLED must degrade to "no map this scene",
+    // never take down an otherwise-successful scene resolution.
+    try {
+      const mapSettings = await prisma.campaign.findUnique({
+        where: { id: campaignId },
+        select: { mapGenerationEnabled: true }
+      })
+
+      if (!mapSettings?.mapGenerationEnabled) {
+        console.log('🗺️  Skipping map generation — disabled for this campaign')
+      } else if (!isFirstSceneExchange(existingResolutions)) {
+        console.log('🗺️  Skipping map generation — scene already has a map from its first exchange')
+      } else {
         console.log('🗺️  Generating map visualization...')
 
         // Get the active map for the campaign (if any)
@@ -392,11 +409,19 @@ async function performResolution(
         await Promise.race([mapPromise, mapTimeoutPromise])
 
         console.log('✅ Map visualization generated')
-      } catch (visualError) {
-        // Don't fail the entire scene resolution if map generation fails
-        const errorMsg = visualError instanceof Error ? visualError.message : String(visualError)
-        console.error('⚠️  Map generation failed (non-critical):', errorMsg)
+
+        // Bound accumulation: generation creates a fresh Map+Zone+Token set
+        // whenever the AI decides a scene isn't reusing a location, and
+        // nothing previously removed old ones.
+        const pruned = await MapService.pruneOldMaps(campaignId)
+        if (pruned > 0) {
+          console.log(`🗺️  Pruned ${pruned} old map(s) past the per-campaign cap`)
+        }
       }
+    } catch (visualError) {
+      // Don't fail the entire scene resolution if map generation fails
+      const errorMsg = visualError instanceof Error ? visualError.message : String(visualError)
+      console.error('⚠️  Map generation failed (non-critical):', errorMsg)
     }
 
     // 7.6. Sync wiki entries for NPCs, factions, and clocks (non-critical)

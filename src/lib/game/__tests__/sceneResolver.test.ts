@@ -27,6 +27,13 @@ vi.mock('@/lib/prisma', () => ({
     // (the vi.fn() default) is fine, it just means "no active map yet".
     map: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    // Battle-map generation is opt-in per campaign (#9/#59) — the resolver
+    // reads this flag before doing any map work.
+    campaign: {
+      findUnique: vi.fn(),
     },
   },
 }));
@@ -181,6 +188,10 @@ describe('Scene Resolver', () => {
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
       vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [] });
+      // Maps are opt-in per campaign and default OFF (#9/#59); this test
+      // asserts the generation path, so enable them for this campaign.
+      vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: true } as any);
+      vi.mocked(prisma.map.findMany).mockResolvedValue([] as any);
 
       // Execute
       const result = await resolveScene(mockCampaignId, mockSceneId);
@@ -228,6 +239,43 @@ describe('Scene Resolver', () => {
       // mockScene.sceneResolutionText is null — this is the scene's first
       // exchange, so a map should be generated.
       expect(AIVisualService.generateMapFromScene).toHaveBeenCalled();
+    });
+
+    it('does not generate a map when the campaign has map generation off (the default)', async () => {
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
+      vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [] });
+      vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false } as any);
+
+      const result = await resolveScene(mockCampaignId, mockSceneId);
+
+      // The scene still resolves normally — maps are an optional extra, and
+      // skipping them costs an AI call and a batch of zone/token writes.
+      expect(result.success).toBe(true);
+      expect(AIVisualService.generateMapFromScene).not.toHaveBeenCalled();
+    });
+
+    it('still resolves the scene when the map-settings lookup itself fails', async () => {
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
+      vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [] });
+      vi.mocked(prisma.campaign.findUnique).mockRejectedValue(new Error('db blip'));
+
+      const result = await resolveScene(mockCampaignId, mockSceneId);
+
+      // The whole map step is non-critical, including reading whether maps
+      // are even enabled — a failure there must never take down an
+      // otherwise-successful scene resolution.
+      expect(result.success).toBe(true);
+      expect(AIVisualService.generateMapFromScene).not.toHaveBeenCalled();
     });
 
     it('should throw error if scene not found', async () => {

@@ -143,6 +143,7 @@ export default function AdminPage() {
     factionCap: number | null
     npcCap: number | null
     worldTurnHours: number | null
+    mapGenerationEnabled: boolean
     defaultFactionCap: number
     defaultNpcCap: number
     defaultWorldTurnHours: number
@@ -505,6 +506,7 @@ export default function AdminPage() {
           factionCap: simulationSettings.factionCap,
           npcCap: simulationSettings.npcCap,
           worldTurnHours: simulationSettings.worldTurnHours,
+          mapGenerationEnabled: simulationSettings.mapGenerationEnabled,
         }),
       })
 
@@ -1064,6 +1066,30 @@ export default function AdminPage() {
                         />
                       </div>
                     </div>
+                    <div className="mt-4 rounded-md border border-myth-border bg-myth-surface/50 p-3">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={simulationSettings.mapGenerationEnabled}
+                          onChange={(e) =>
+                            setSimulationSettings({
+                              ...simulationSettings,
+                              mapGenerationEnabled: e.target.checked,
+                            })
+                          }
+                          className="mt-1 h-4 w-4 rounded border-myth-border bg-myth-surface text-myth-accent focus:ring-myth-accent"
+                        />
+                        <span>
+                          <span className="block text-sm font-medium text-myth-ink">Generate battle maps</span>
+                          <span className="block text-xs text-myth-ink-faint mt-1">
+                            Off by default. When on, the first exchange of each new scene makes an extra AI call to
+                            draw a map of the location — useful for tactical play, and a real cost per scene if your
+                            table never opens the map. Older maps are cleaned up automatically as new ones are made.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-myth-ink-muted mb-1">
                         World advances every N in-game hours (default {simulationSettings.defaultWorldTurnHours})

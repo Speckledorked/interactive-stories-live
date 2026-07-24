@@ -309,5 +309,47 @@ export const MapService = {
     await prisma.map.delete({
       where: { id: mapId }
     })
+  },
+
+  /**
+   * Keep a campaign's map count bounded (README Known Bugs #9/#59 — "no
+   * cleanup path").
+   *
+   * Map generation creates a new Map+Zone+Token set whenever the AI decides
+   * a scene isn't reusing an existing location, and nothing ever removed
+   * old ones — a long campaign accumulates a map per distinct location
+   * forever, each with its own zone/token rows. This prunes the oldest maps
+   * once a campaign exceeds MAX_MAPS_PER_CAMPAIGN, newest kept.
+   *
+   * The currently-active map is never pruned regardless of age: it's the
+   * one a live scene may be rendering right now, and deleting it mid-scene
+   * would blank the player's view. Zones/tokens cascade on Map delete (see
+   * schema.prisma), so removing the Map row is sufficient.
+   *
+   * Returns how many maps were deleted, for logging.
+   */
+  async pruneOldMaps(campaignId: string, maxMaps: number = MAX_MAPS_PER_CAMPAIGN): Promise<number> {
+    const maps = await prisma.map.findMany({
+      where: { campaignId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, isActive: true }
+    })
+
+    if (maps.length <= maxMaps) return 0
+
+    const prunable = maps.slice(maxMaps).filter(m => !m.isActive)
+    if (prunable.length === 0) return 0
+
+    const { count } = await prisma.map.deleteMany({
+      where: { id: { in: prunable.map(m => m.id) } }
+    })
+    return count
   }
 }
+
+/**
+ * How many maps a single campaign retains. Generous relative to how many
+ * distinct locations a campaign actually revisits — this is a backstop
+ * against unbounded accumulation, not a curation policy.
+ */
+export const MAX_MAPS_PER_CAMPAIGN = 20

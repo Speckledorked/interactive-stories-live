@@ -262,6 +262,16 @@ model Campaign {
   // a campaign forever.
   pendingWorldSeed Boolean @default(false)
 
+  // Battle-map generation (see lib/ai/ai-visual-service.ts). Off by
+  // default and opt-in per campaign: every qualifying scene resolution
+  // otherwise makes a second AI call and writes a fresh batch of
+  // zones/tokens, which is real recurring cost for a feature many
+  // campaigns never look at. Existing campaigns default off too — a
+  // campaign that wants maps turns them on once from the admin panel,
+  // which is a cheaper mistake than silently billing every campaign for
+  // something unused. See README Known Bugs (#9, #59).
+  mapGenerationEnabled Boolean @default(false)
+
   // #13 first-party templates: which static template (campaign-templates.ts)
   // this campaign was created from, if any — a compile-time id, not a DB
   // relation, since templates are TypeScript objects. Lets a template's

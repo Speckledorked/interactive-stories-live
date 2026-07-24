@@ -26,15 +26,22 @@ export async function GET(
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
     }
 
-    const worldMeta = await prisma.worldMeta.findUnique({
-      where: { campaignId },
-      select: { factionCap: true, npcCap: true, worldTurnHours: true },
-    })
+    const [worldMeta, campaign] = await Promise.all([
+      prisma.worldMeta.findUnique({
+        where: { campaignId },
+        select: { factionCap: true, npcCap: true, worldTurnHours: true },
+      }),
+      prisma.campaign.findUnique({
+        where: { id: campaignId },
+        select: { mapGenerationEnabled: true },
+      }),
+    ])
 
     return NextResponse.json({
       factionCap: worldMeta?.factionCap ?? null,
       npcCap: worldMeta?.npcCap ?? null,
       worldTurnHours: worldMeta?.worldTurnHours ?? null,
+      mapGenerationEnabled: campaign?.mapGenerationEnabled ?? false,
       defaultFactionCap: DEFAULT_FACTION_CAP,
       defaultNpcCap: DEFAULT_NPC_CAP,
       defaultWorldTurnHours: DEFAULT_WORLD_TURN_HOURS,
@@ -83,6 +90,28 @@ export async function PATCH(
       }
     }
 
+    // Battle-map generation lives on Campaign, not WorldMeta, but belongs
+    // in this same admin surface — it's the same class of per-campaign
+    // simulation-cost knob. Boolean-only; anything else is rejected rather
+    // than coerced, matching the numeric fields above.
+    if (body.mapGenerationEnabled !== undefined && typeof body.mapGenerationEnabled !== 'boolean') {
+      return NextResponse.json(
+        { error: 'mapGenerationEnabled must be a boolean' },
+        { status: 400 }
+      )
+    }
+
+    const updatedCampaign = body.mapGenerationEnabled === undefined
+      ? await prisma.campaign.findUnique({
+          where: { id: campaignId },
+          select: { mapGenerationEnabled: true },
+        })
+      : await prisma.campaign.update({
+          where: { id: campaignId },
+          data: { mapGenerationEnabled: body.mapGenerationEnabled },
+          select: { mapGenerationEnabled: true },
+        })
+
     const worldMeta = await prisma.worldMeta.update({
       where: { campaignId },
       data: {
@@ -97,6 +126,7 @@ export async function PATCH(
       factionCap: worldMeta.factionCap,
       npcCap: worldMeta.npcCap,
       worldTurnHours: worldMeta.worldTurnHours,
+      mapGenerationEnabled: updatedCampaign?.mapGenerationEnabled ?? false,
       defaultFactionCap: DEFAULT_FACTION_CAP,
       defaultNpcCap: DEFAULT_NPC_CAP,
       defaultWorldTurnHours: DEFAULT_WORLD_TURN_HOURS,

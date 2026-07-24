@@ -16,21 +16,8 @@ interface NotificationSettings {
   emailWorldEvents: boolean;
 
   // Push notifications
-  pushEnabled: boolean;
-  pushTurnReminders: boolean;
-  pushSceneChanges: boolean;
-  pushMentions: boolean;
-  pushWhispers: boolean;
-  pushCampaignInvites: boolean;
 
   // Sound notifications
-  soundEnabled: boolean;
-  soundTurnReminders: boolean;
-  soundSceneChanges: boolean;
-  soundMentions: boolean;
-  soundWhispers: boolean;
-  soundCriticalMoments: boolean;
-  soundWorldEvents: boolean;
 
   // Timing preferences
   quietHoursEnabled: boolean;
@@ -47,7 +34,6 @@ export default function NotificationSettings() {
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testingSounds, setTestingSounds] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSettings();
@@ -112,35 +98,6 @@ export default function NotificationSettings() {
   const handleTimeChange = (field: 'quietHoursStart' | 'quietHoursEnd', value: string) => {
     setSettings(prev => prev ? { ...prev, [field]: value } : null);
     updateSettings({ [field]: value });
-  };
-
-  const testSound = async (soundId: string) => {
-    setTestingSounds(soundId);
-    
-    try {
-      // Import sound service dynamically
-      const { SoundService } = await import('@/lib/notifications/sound-service');
-      await SoundService.playSound({ soundId, volume: 0.5 });
-    } catch (error) {
-      console.error('Error testing sound:', error);
-      alert('Failed to play sound. Make sure sound is enabled.');
-    } finally {
-      setTimeout(() => setTestingSounds(null), 1000);
-    }
-  };
-
-  const requestNotificationPermission = async () => {
-    if (!('Notification' in window)) {
-      alert('This browser does not support notifications');
-      return;
-    }
-
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      updateSettings({ pushEnabled: true });
-    } else {
-      alert('Notification permission denied');
-    }
   };
 
   if (loading) {
@@ -245,165 +202,6 @@ export default function NotificationSettings() {
             <ToggleSwitch
               enabled={settings.emailWorldEvents}
               onChange={() => handleToggle('emailWorldEvents')}
-              label="World Events"
-              description="Major story developments"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Push Notifications */}
-      <div className="bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 rounded-lg border border-ember-900/30 p-6">
-        <h2 className="text-lg font-semibold text-ember-100 mb-4">🔔 Browser Notifications</h2>
-        
-        <ToggleSwitch
-          enabled={settings.pushEnabled}
-          onChange={() => settings.pushEnabled ? handleToggle('pushEnabled') : requestNotificationPermission()}
-          label="Enable Browser Notifications"
-          description="Show notifications in your browser"
-        />
-
-        {settings.pushEnabled && (
-          <div className="ml-4 border-l-2 border-ember-900/30 pl-4 space-y-2">
-            <ToggleSwitch
-              enabled={settings.pushTurnReminders}
-              onChange={() => handleToggle('pushTurnReminders')}
-              label="Turn Reminders"
-            />
-            <ToggleSwitch
-              enabled={settings.pushSceneChanges}
-              onChange={() => handleToggle('pushSceneChanges')}
-              label="Scene Changes"
-            />
-            <ToggleSwitch
-              enabled={settings.pushMentions}
-              onChange={() => handleToggle('pushMentions')}
-              label="Mentions"
-            />
-            <ToggleSwitch
-              enabled={settings.pushWhispers}
-              onChange={() => handleToggle('pushWhispers')}
-              label="Private Messages"
-            />
-            <ToggleSwitch
-              enabled={settings.pushCampaignInvites}
-              onChange={() => handleToggle('pushCampaignInvites')}
-              label="Campaign Invites"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Sound Notifications */}
-      <div className="bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 rounded-lg border border-ember-900/30 p-6">
-        <h2 className="text-lg font-semibold text-ember-100 mb-4">🔊 Sound Effects</h2>
-        
-        <ToggleSwitch
-          enabled={settings.soundEnabled}
-          onChange={() => handleToggle('soundEnabled')}
-          label="Enable Sound Effects"
-          description="Play sounds for notifications and dramatic moments"
-        />
-
-        {settings.soundEnabled && (
-          <div className="ml-4 border-l-2 border-ember-900/30 pl-4 space-y-2">
-            <div className="flex items-center justify-between py-2">
-              <div className="flex-1">
-                <div className="font-medium text-ember-100">Turn Reminders</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => testSound('turn-reminder')}
-                  disabled={testingSounds === 'turn-reminder'}
-                  className="text-ember-300 hover:text-ember-200 text-sm"
-                >
-                  {testingSounds === 'turn-reminder' ? '♪' : 'Test'}
-                </button>
-                <button
-                  onClick={() => handleToggle('soundTurnReminders')}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    settings.soundTurnReminders ? 'bg-wine-600' : 'bg-black/30'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-ember-100 transition-transform ${
-                      settings.soundTurnReminders ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between py-2">
-              <div className="flex-1">
-                <div className="font-medium text-ember-100">Scene Changes</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => testSound('scene-change')}
-                  disabled={testingSounds === 'scene-change'}
-                  className="text-ember-300 hover:text-ember-200 text-sm"
-                >
-                  {testingSounds === 'scene-change' ? '♪' : 'Test'}
-                </button>
-                <button
-                  onClick={() => handleToggle('soundSceneChanges')}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    settings.soundSceneChanges ? 'bg-wine-600' : 'bg-black/30'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-ember-100 transition-transform ${
-                      settings.soundSceneChanges ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between py-2">
-              <div className="flex-1">
-                <div className="font-medium text-ember-100">Mentions</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => testSound('mention')}
-                  disabled={testingSounds === 'mention'}
-                  className="text-ember-300 hover:text-ember-200 text-sm"
-                >
-                  {testingSounds === 'mention' ? '♪' : 'Test'}
-                </button>
-                <button
-                  onClick={() => handleToggle('soundMentions')}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    settings.soundMentions ? 'bg-wine-600' : 'bg-black/30'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-ember-100 transition-transform ${
-                      settings.soundMentions ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            <ToggleSwitch
-              enabled={settings.soundWhispers}
-              onChange={() => handleToggle('soundWhispers')}
-              label="Private Messages"
-            />
-            
-            <ToggleSwitch
-              enabled={settings.soundCriticalMoments}
-              onChange={() => handleToggle('soundCriticalMoments')}
-              label="Critical Moments"
-              description="Dramatic events like critical hits, character deaths"
-            />
-            
-            <ToggleSwitch
-              enabled={settings.soundWorldEvents}
-              onChange={() => handleToggle('soundWorldEvents')}
               label="World Events"
               description="Major story developments"
             />

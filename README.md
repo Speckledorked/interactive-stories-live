@@ -81,7 +81,7 @@ is exactly what the Known Bugs / Known Issues section exists to close.
 | Downtime completion rewards (gold/items/reputation/contacts) | 4 | Fixed (`#74`): parsed strictly (unparseable entries skipped and logged, never guessed) and applied through the same primitives quest payouts use. The entry-cost/payout asymmetry is closed. |
 | Relationships — player-facing visibility | 3 | Fixed (`#72`, `#73`): the mislabeled tab now says what it actually shows, and the regex-derived disposition badge that could contradict the real mechanic is gone. Still a 3, not higher: the real trust/tension/respect/fear values remain invisible by design — whether they *should* be is an open product call (`#91`). |
 | NPC harm/recovery | 4 | Fixed (`#71`): `harm_healing` gives NPCs a real recovery path through the same `healHarm` PCs use. Deliberately thinner than the PC model (no conditions/death saves) by design, not by omission. |
-| World history as a decision input | 2 | `WorldEvent`/`TimelineEvent` are faithfully written chronicles, but no deterministic tick/crisis/pacing decision anywhere queries its own history — every decision is a pure function of current state only (`#79`). |
+| World history as a decision input | 3 | Fixed (`#79`): milestone crisis targeting now writes and reads back a structured `faction.crisis` event, so the same faction isn't the crisis forever. Still a 3 — this is one decision reading history, not a general pattern; faction goals, war momentum, clock advancement and pacing all remain current-state-only. |
 | Capability tree (branching prerequisites) | — (removed) | Fixed (`#82`): the unused `parentId`/`children` self-relation is dropped rather than left implying a prerequisite tree that never existed. Capabilities are flat and tier-numbered, and now say so. |
 | Corruption as a content gate | 2 | Gates exactly one thing in code (shadow-capability unlock) beyond a roll bonus and prompt flavor; never gates quests, locations, or NPC reactions despite the "power at a cost" framing (`#83`). |
 | Cross-system economy (faction wealth ↔ items ↔ downtime ↔ quests) | 1 | Standing→roll modifier is the only broad consumer of faction state; inventory has no rarity/value/price/crafting/trading anywhere; faction wealth has no code path into player resources (`#76`, `#77`). |
@@ -134,18 +134,6 @@ against git history and the Shipped ledger.
 
 ### P2
 
-**Zones are dead drawing data, not a mechanic (#2, #43)**
-- *Why it matters:* two separate, unconnected zone implementations exist and neither gates any action — melee/ranged distance isn't enforced anywhere despite the data existing. Less urgent than it was: map generation is now opt-in and pruned (`#9`/`#59`, shipped), so a campaign no longer manufactures fresh non-functional zones on every scene by default — but the two dead implementations are still there.
-- *Evidence:* `lib/game/exchange-manager.ts:451-501` (`currentZone` machinery, zero callers), `lib/maps/map-service.ts` (render-only zone rectangles).
-- *Scope:* core gameplay, UX (misleading).
-- *Suggested fix:* Gate melee/ranged actions on zone distance in `computeMechanics`, or delete both dead implementations.
-
-**Notification delivery is disconnected on the sound and push channels (#10, #63, #64)**
-- *Why it matters:* a full sound-effect library/playback engine and two independent push-notification implementations all exist, each wired at only one end — nothing is ever actually heard or received; only the in-app bell works end-to-end.
-- *Evidence:* `lib/notifications/sound-service.ts` (zero real callers beyond a settings preview button; `public/sounds/` doesn't exist as a directory); `public/sw.js` (a correct `push` listener with no `PushSubscription` flow anywhere — no `pushManager.subscribe`/VAPID/`web-push` usage in the repo); `lib/notifications/push-service.ts` (sends over Pusher's `push-notification` event, which has no client-side listener).
-- *Scope:* UX, maintainability.
-- *Suggested fix:* Pick and finish one push implementation's real subscription flow; either wire the `sound-notification` Pusher event to `SoundService` client-side and add the audio files, or delete both dead pipelines.
-
 **Debt/economy mechanical depth is asymmetric (#44, #47)**
 - *Why it matters:* Debts and `Faction.resources` are treated as flavor/prompt leverage rather than mechanically connected the way Standing already is — the same "looks systemic, isn't" pattern found elsewhere, here in the economy layer.
 - *Evidence:* `lib/game/debts.ts` (no roll-time weight; contrast with `lib/game/standing.ts`'s `effectiveStandingModifier`); `Character.resources.gold` has real sinks but no scarcity/pricing tied to `Faction.resources`.
@@ -182,23 +170,11 @@ against git history and the Shipped ledger.
 - *Scope:* core gameplay.
 - *Suggested fix:* Derive at least one consumer (a roll penalty in contested territory, mirroring how weather already works) from territory state.
 
-**World history is write-only — nothing deterministic reads its own past (#79)**
-- *Why it matters:* `WorldEvent`/`TimelineEvent` are complete, faithfully-written chronicles, but every deterministic decision-maker (`crisisClock.ts`, `pacing.ts`, `factionTick.ts`) is a pure function of *current* state only — none of them ever query their own history to decide anything. The `WorldEvent` model's own doc comment admits this plainly ("future systems... should read from this table instead") — nothing does yet. This is distinct from RAG (the AI's memory, which is real) — the *simulation engine itself* has none.
-- *Evidence:* `prisma/schema.prisma` (`WorldEvent` doc comment), `lib/game/tick/crisisClock.ts`, `lib/game/tick/pacing.ts` (both keyed on current-state snapshots only).
-- *Scope:* core gameplay — a real ceiling on how "alive" the simulation can ever feel.
-- *Suggested fix:* Give at least one deterministic decision (crisis escalation is the natural candidate) a real history-aware input.
-
 **Corruption gates exactly one thing in code beyond roll bonus and prose (#83)**
 - *Why it matters:* despite the "power at a cost" framing, corruption only gates shadow-capability unlocking (`shadowUnlockBlocked`) in code — it never gates quest availability, location access, or NPC reactions anywhere (grepped across `questRewards.ts`, `worldUpdaters/npcs.ts`, `worldUpdaters/locations.ts` — zero references).
 - *Evidence:* `lib/game/capabilities.ts:164-170` (the one real gate).
 - *Scope:* core gameplay, narrative-mechanical alignment.
 - *Suggested fix:* Pick one additional gate (an NPC reaction threshold is the cheapest) to make the theme's promise real beyond capabilities.
-
-**Two disconnected position systems (#85)**
-- *Why it matters:* `Character.currentZone`/`zoneMetadata` (abstract close/near/far/distant, read only by `exchange-manager.ts`) and the literal `Map`/`Zone`/`Token` x/y grid system never reconcile — a character's narrative zone and their token's grid position can silently disagree. Separate from the already-documented dead zone-as-mechanic issue (`#2`/`#43`) — this is about two systems that both work internally but were never designed to agree with each other.
-- *Evidence:* `lib/game/exchange-manager.ts:491,532` vs. `lib/maps/map-service.ts`/`prisma/schema.prisma`'s `Map`/`Zone`/`Token` models.
-- *Scope:* maintainability, hidden coupling risk for any future positioning/combat depth work.
-- *Suggested fix:* Pick one system as canonical before investing further in either.
 
 ### P3
 
@@ -261,6 +237,7 @@ are folded in below. `#22` (de-jargon) and `#23` (surface multiplayer) shipped �
 - [ ] **#24 Decide, on purpose, whether dice stay opt-in** — re-run the "mechanics invisible by default" decision against real playtest feedback now that the Debt/standing/harm economy is live.
 - [ ] **#25 Scene illustration** — one generated image per resolved scene; async resolution already keeps cost/latency off the request path.
 - [ ] **#26 Shareable session recaps** — package a resolved scene or short arc as a social-media-sized card, building on the existing chronicle share link.
+- [ ] **#92 Real browser push notifications** — the previous scaffolding was removed in `#10`/`#63`/`#64` because it could never fire. Doing this properly means a VAPID keypair, a `PushSubscription` store, a client-side `pushManager.subscribe` flow and a real server-side `web-push` send. Worth building; not worth faking.
 - [ ] **#91 Decide whether relationships are player-visible** — `Character.relationships` (trust/tension/respect/fear) drives a real roll modifier but is marked hidden-from-players by design in both the schema and the prompt. `#72` fixed the misleading UI that promised this data and showed something else; it did not settle whether the data *should* be shown. Precedent exists either way: capability proficiency is hidden as a raw number but exposed as a qualitative band. Needs a product call before any UI surfaces it.
 - [ ] **#27 Public API / developer access** — the one open item with no existing decision on record; needs a yes/no before monetization pricing tiers lock in.
 - [ ] **#45 Structured quest objectives** — add `objective_key` + preconditions so quests can gate content availability and chain. Not a bug (today's narrative-thread quest model — status + progress log + reward grant — works as designed), but the highest-ROI remaining depth gap once the Known Bugs list above is clear.
@@ -271,6 +248,12 @@ are folded in below. `#22` (de-jargon) and `#23` (surface multiplayer) shipped �
 Full narrative detail for everything below (including specific bug
 postmortems) is preserved in this file's git history — this is the condensed
 ledger.
+
+**P2 batch — the simulation reads its own history, and two dead pipelines removed:**
+
+- **World history became a real decision input (`#79`)** — every deterministic decision in the engine (faction goals, war momentum, clock advancement, pacing, crisis escalation) was a pure function of *right now*, so the simulation had no way to notice it was repeating itself. `WorldEvent`'s own doc comment describes future systems reading from it; nothing did. The clearest symptom was crisis targeting: the strongest faction stays the strongest, so `pickMostThreateningFaction` handed every milestone crisis to the same faction forever and "the world moves against you" decayed into one organisation menacing the party every twenty scenes. Milestone crises now write a structured `faction.crisis` `WorldEvent`, and the *next* crisis reads the last few back to demote recently-used factions. Deliberately demotion rather than exclusion — with two factions everyone is recent, and escalating the usual suspect is a far better failure mode than a milestone that silently does nothing. A failed history read degrades to the old current-state-only behavior rather than skipping the crisis. Keying off the structured event rather than the `TimelineEvent` prose is the point: a deterministic decision shouldn't parse narration.
+- **The abstract zone system was dead, and was one of the two rival position models (`#2`, `#43`, `#85`)** — `ZoneManager` (close/near/far/distant, plus narrative-advantage and zone-distance math) had *zero* consumers anywhere outside its own file, gated no action, and ran in parallel to the literal x/y `Map`/`Zone`/`Token` grid without the two ever reconciling. Deleted the class and its backing `Character.currentZone`/`zoneMetadata` columns. That resolves `#85` too, by leaving the grid as the single positioning model rather than keeping two that can disagree — which is exactly the "pick one as canonical" that entry asked for.
+- **Both dead notification pipelines removed (`#10`, `#63`, `#64`)** — sound published a Pusher event to a `SoundService` whose audio files don't exist, and push published one with no client listener anywhere, while the service worker's correct-looking `push` handler waited on an event that had no way to fire (no `pushManager.subscribe`, no VAPID, no server-side send). Each burned a message per notification to deliver nothing. Removed both end-to-end — services, dispatch, service-worker handlers, settings UI, and the preference columns backing them — rather than leaving settings for features that don't exist. Email and the in-app bell both work and are untouched. Real browser push needs a VAPID keypair, a subscription store and a genuine send; it's tracked as a feature below rather than left as scaffolding that reads like a working pipeline.
 
 **P2 batch — two fully-built systems that had no callers:**
 

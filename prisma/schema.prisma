@@ -638,10 +638,6 @@ model Character {
   relationships Json? // { [entityId: string]: { trust: Int, tension: Int, respect: Int, fear: Int } }
   consequences  Json? // { promises?: string[], debts?: string[], enemies?: string[], longTermThreats?: string[] }
 
-  // Phase 16: Zone-based positioning
-  currentZone  String? // "close", "near", "far", "distant"
-  zoneMetadata Json? // { customZones?: string[], zoneEffects?: object }
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1461,22 +1457,11 @@ model UserNotificationSettings {
   emailCampaignInvites Boolean @default(true)
   emailWorldEvents     Boolean @default(false)
 
-  // Browser push notification preferences
-  pushEnabled         Boolean @default(true)
-  pushTurnReminders   Boolean @default(true)
-  pushSceneChanges    Boolean @default(true)
-  pushMentions        Boolean @default(true)
-  pushWhispers        Boolean @default(true)
-  pushCampaignInvites Boolean @default(true)
-
-  // Sound notification preferences
-  soundEnabled         Boolean @default(true)
-  soundTurnReminders   Boolean @default(true)
-  soundSceneChanges    Boolean @default(true)
-  soundMentions        Boolean @default(true)
-  soundWhispers        Boolean @default(true)
-  soundCriticalMoments Boolean @default(true)
-  soundWorldEvents     Boolean @default(true)
+  // Browser-push and sound preference columns lived here, backing two
+  // delivery pipelines that were each wired at only one end and could
+  // never reach anyone (README #10/#63/#64). Removed with the pipelines
+  // themselves rather than left as settings for features that don't
+  // exist. Email and in-app notifications are the real channels.
 
   // Timing preferences
   quietHoursEnabled Boolean @default(false)

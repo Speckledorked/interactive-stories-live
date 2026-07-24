@@ -328,6 +328,11 @@ export class CampaignHealthMonitor {
         timestamp: new Date().toISOString(),
         score: health.score,
         issues: health.issues,
+        // Persisted alongside issues so the read side (#57's health
+        // endpoint) can show the actionable half too. Previously computed
+        // every check and then dropped on the floor — the whole result set
+        // only ever reached a console.warn, so nothing noticed.
+        recommendations: health.recommendations,
         metrics: health.metrics
       })
 

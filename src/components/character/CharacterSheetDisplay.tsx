@@ -182,7 +182,7 @@ export default function CharacterSheetDisplay({
           { key: 'overview', label: 'Overview', icon: '📋' },
           { key: 'stats', label: 'Stats & Status', icon: '📊' },
           { key: 'inventory', label: 'Inventory', icon: '🎒' },
-          { key: 'relationships', label: 'Relationships', icon: '💕' },
+          { key: 'relationships', label: 'Ties & Consequences', icon: '💕' },
           { key: 'advancement', label: 'Advancement', icon: '⭐' },
           ...(showDowntimeTab ? [{ key: 'downtime', label: 'Downtime', icon: '🌙' }] : []),
         ].map(tab => (
@@ -607,7 +607,9 @@ export default function CharacterSheetDisplay({
           <div className="space-y-6">
             <div className="card bg-ember-900/10 border-ember-800/30">
               <p className="text-sm text-ember-300/60 italic">
-                Your character's relationships with NPCs and factions. These develop organically through your actions and choices in the story.
+                The promises, debts, enemies and lasting threats your choices have created. These accumulate through
+                play — how any given NPC privately regards you is something you'll have to read from how they treat
+                you in the fiction.
               </p>
             </div>
 
@@ -675,7 +677,7 @@ export default function CharacterSheetDisplay({
               <div className="card">
                 <div className="text-center py-12 text-ember-400/50">
                   <div className="text-6xl mb-4">🌟</div>
-                  <p className="text-lg mb-1">No significant relationships yet</p>
+                  <p className="text-lg mb-1">No lasting ties yet</p>
                   <p className="text-sm">Your actions will shape these over time</p>
                 </div>
               </div>

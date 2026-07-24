@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { applyCharacterChanges, PcChange } from '../characters'
+import { applyCharacterChanges, PcChange, findConsequenceToRemove } from '../characters'
 import type { Character } from '@prisma/client'
 
 vi.mock('../../debts', () => ({ applyDebtChanges: vi.fn(async () => ['debt log line']) }))
@@ -329,5 +329,52 @@ describe('applyCharacterChanges — delegation to debt/standing/capability write
       { character_name_or_id: 'char1', changes: { capability_changes: [{ capability_key: 'lockpicking', change: 'glimpse', reason: 'Watched a master pick a lock' }] } } as PcChange,
     ], roster, noTheme, true)
     expect(applyCapabilityChanges).toHaveBeenCalledWith(tx, 'camp1', 'char1', expect.any(Array), 3, 'scene')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// consequences_remove precision (#69)
+// ---------------------------------------------------------------------------
+// The previous implementation filtered EVERY consequence array by substring
+// simultaneously, so resolving one thing could silently strike unrelated
+// promises, enemies and threats that merely shared the wording.
+
+describe('findConsequenceToRemove (#69)', () => {
+  const consequences = () => ({
+    promises: ['Swore to protect the child', 'Promised Kessler a favor'],
+    enemies: ['Kessler wants him dead'],
+    longTermThreats: ['The Kessler family will retaliate'],
+  })
+
+  it('removes an exact match', () => {
+    const found = findConsequenceToRemove(consequences(), 'Kessler wants him dead')
+    expect(found).toMatchObject({ key: 'enemies', index: 0 })
+  })
+
+  it('is case- and whitespace-insensitive on an exact match', () => {
+    const found = findConsequenceToRemove(consequences(), '  kessler WANTS him dead ')
+    expect(found).toMatchObject({ key: 'enemies' })
+  })
+
+  it('identifies exactly ONE entry even when several share the phrase', () => {
+    // "Kessler" appears in four entries across three arrays. The old code
+    // deleted all of them at once.
+    const found = findConsequenceToRemove(consequences(), 'Kessler')
+    expect(found).not.toBeNull()
+    // Shortest containing entry wins as the most specific.
+    expect(found!.matched).toBe('Kessler wants him dead')
+  })
+
+  it('returns null rather than guessing when nothing matches', () => {
+    expect(findConsequenceToRemove(consequences(), 'a debt to the crown')).toBeNull()
+  })
+
+  it('ignores non-array and non-string members safely', () => {
+    const messy = { promises: ['keep me'], notes: 'not an array', enemies: [42, 'real entry'] }
+    expect(findConsequenceToRemove(messy as any, 'real entry')).toMatchObject({ key: 'enemies', index: 1 })
+  })
+
+  it('returns null for an empty needle instead of matching everything', () => {
+    expect(findConsequenceToRemove(consequences(), '   ')).toBeNull()
   })
 })

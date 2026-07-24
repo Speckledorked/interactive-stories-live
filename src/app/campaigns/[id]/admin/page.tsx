@@ -149,6 +149,15 @@ export default function AdminPage() {
     defaultWorldTurnHours: number
   } | null>(null)
   const [worldEvents, setWorldEvents] = useState<any[]>([])
+  // #57: CampaignHealthMonitor already computed and persisted this every 5
+  // scenes and only ever console.warn'd it. This is the read side.
+  const [health, setHealth] = useState<{
+    assessed: boolean
+    score: number | null
+    lastCheckedAt: string | null
+    issues: string[]
+    recommendations: string[]
+  } | null>(null)
   const [worldEventsTurn, setWorldEventsTurn] = useState<number | null>(null)
   const [worldEventsLoading, setWorldEventsLoading] = useState(false)
   const [tickPreview, setTickPreview] = useState<any[] | null>(null)
@@ -1020,6 +1029,61 @@ export default function AdminPage() {
                     {generatingExtras ? 'Generating...' : 'Generate Archetypes & Corruption Theme'}
                   </button>
                 </div>
+
+                {health && (
+                  <div className="mt-4 rounded-md border border-myth-border bg-myth-surface/50 p-4">
+                    <div className="flex items-baseline justify-between gap-3 mb-2">
+                      <h4 className="text-sm font-semibold text-myth-ink">Campaign health</h4>
+                      {health.assessed && health.score !== null ? (
+                        <span
+                          className={`text-sm font-mono ${
+                            health.score >= 70
+                              ? 'text-emerald-400'
+                              : health.score >= 40
+                                ? 'text-amber-400'
+                                : 'text-red-400'
+                          }`}
+                        >
+                          {health.score}/100
+                        </span>
+                      ) : (
+                        <span className="text-xs text-myth-ink-faint">not yet assessed</span>
+                      )}
+                    </div>
+                    {!health.assessed ? (
+                      <p className="text-xs text-myth-ink-faint">
+                        Checked automatically every 5 scenes — this campaign hasn&apos;t reached its first check yet.
+                      </p>
+                    ) : (
+                      <>
+                        {health.issues.length === 0 ? (
+                          <p className="text-xs text-myth-ink-faint">No issues flagged at the last check.</p>
+                        ) : (
+                          <ul className="text-xs text-myth-ink-muted list-disc pl-4 space-y-1">
+                            {health.issues.map((issue, i) => (
+                              <li key={i}>{issue}</li>
+                            ))}
+                          </ul>
+                        )}
+                        {health.recommendations.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-myth-border">
+                            <p className="text-xs font-medium text-myth-ink-muted mb-1">Suggested</p>
+                            <ul className="text-xs text-myth-ink-faint list-disc pl-4 space-y-1">
+                              {health.recommendations.map((rec, i) => (
+                                <li key={i}>{rec}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {health.lastCheckedAt && (
+                          <p className="text-[11px] text-myth-ink-faint mt-2">
+                            Last checked {new Date(health.lastCheckedAt).toLocaleString()}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {simulationSettings && (
                   <div className="mt-8 pt-6 border-t border-myth-border">

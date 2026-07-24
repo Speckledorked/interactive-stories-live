@@ -417,6 +417,14 @@ model Quest {
 //
 // CAPABILITIES (knowledge-relative character sheets)
 //
+// Flat and tier-numbered, NOT a prerequisite tree. A parentId/children
+// self-relation used to sit here implying one, with zero application code
+// ever reading or writing it — removed rather than left to imply a feature
+// that doesn't exist, same call as the dead TurnOrder model (#34). What
+// actually gates a node today is `tier` (origin seeding), `isSecret`, and
+// `isShadow` + corruption. A real prerequisite tree is a feature worth
+// considering, not something to imply with an unused column.
+//
 // The universe has a latent tree of learnable systems. What a character
 // SEES of that tree depends on what the fiction has shown them:
 //   no row      -> the character doesn't know this exists (sheet: absent)
@@ -447,7 +455,6 @@ model CampaignCapability {
   name        String
   description String?
   domain      String // top-level grouping, e.g. "Essence Magic", "Swordplay"
-  parentId    String?
   tier        Int      @default(1)
   // Secret branches are hidden even from natives until the fiction
   // reveals them (forbidden schools, lost arts).
@@ -461,8 +468,6 @@ model CampaignCapability {
   createdAt   DateTime @default(now())
 
   campaign        Campaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  parent          CampaignCapability?   @relation("CapabilityTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children        CampaignCapability[]  @relation("CapabilityTree")
   characterStates CharacterCapability[]
 
   @@unique([campaignId, key])

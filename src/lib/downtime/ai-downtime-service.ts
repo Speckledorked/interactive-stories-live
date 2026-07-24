@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { NotificationService } from '@/lib/notifications/notification-service'
 import { PusherServer } from '@/lib/realtime/pusher-server'
 import { AI_MODELS } from '@/lib/ai/models'
+import { parseDowntimeRewards, applyDowntimeRewards } from './downtimeRewards'
 import { applyCapabilityChanges, CapabilityChange } from '@/lib/game/capabilities'
 import { applyDebtChanges } from '@/lib/game/debts'
 import { decideDowntimeDayEvent, decideDowntimeOutcomeCategory, describeOutcomeConstraint, DowntimeEventOutcome } from './downtimeEventOutcome'
@@ -708,6 +709,14 @@ Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 pa
 
       if (!activity) return null
 
+      // DowntimeActivity has no campaignId of its own — reward application
+      // (standing changes especially) is campaign-scoped, so resolve it
+      // through the owning character.
+      const owner = await prisma.character.findUnique({
+        where: { id: activity.characterId },
+        select: { campaignId: true }
+      })
+
       const prompt = `Generate completion outcomes for this downtime activity:
 
 Original Player Intent: "${playerDescription}"
@@ -767,8 +776,25 @@ Based on the player's original intent and what happened during the activity, gen
         }
       })
 
-      // Note: Character experience/gold rewards removed as Character model
-      // doesn't have these fields. Can be added back if needed.
+      // Apply what the activity actually earned (#74). This used to be a
+      // dead pipe — the payload above was stored and never read, so a
+      // downtime narrated as "+2 with the Thieves' Guild and 300 gold"
+      // changed nothing on the sheet, even though the entry costs had been
+      // charged for real on the way in. Best-effort: a reward-application
+      // failure logs and leaves the activity completed rather than failing
+      // the whole completion, matching how the rest of this service treats
+      // its non-critical steps.
+      try {
+        if (owner) {
+          const rewards = parseDowntimeRewards(outcomes)
+          const rewardLog = await prisma.$transaction(async (tx) =>
+            applyDowntimeRewards(tx, owner.campaignId, activity.characterId, activity.summary || 'downtime activity', rewards)
+          )
+          for (const line of rewardLog) console.log(`  🎁 ${line}`)
+        }
+      } catch (rewardError) {
+        console.error('⚠️  Failed to apply downtime rewards (non-critical):', rewardError)
+      }
 
       return outcomes
     } catch (error) {

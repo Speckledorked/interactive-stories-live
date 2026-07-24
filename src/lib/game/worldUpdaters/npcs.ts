@@ -5,7 +5,7 @@
 import { Prisma, NPC, Character } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { resolveEntityByNameOrId } from '../entityResolution'
-import { applyHarm, HarmLevel } from '../harm'
+import { applyHarm, healHarm, HarmLevel } from '../harm'
 import { resolveDamageBonus } from '../inventory'
 import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
 
@@ -86,6 +86,25 @@ export async function applyNpcChanges(
           updateData.isAlive = false
         }
         console.log(`  💥 ${npc.name}: ${harmResult.message}`)
+      }
+
+      // Recovery. Mirrors pc_changes.harm_healing via the same healHarm(),
+      // and is the counterpart the damage path above never had: without it
+      // an NPC's harm could only ever climb. Applied on top of any damage
+      // dealt in the same batch, so a scene that both wounds and patches up
+      // the same NPC nets out correctly rather than dropping one of them.
+      if (npcChange.changes.harm_healing && npcChange.changes.harm_healing > 0) {
+        const startingHarm = (updateData.harm ?? (npc.harm as number) ?? 0) as HarmLevel
+        const healResult = healHarm(startingHarm, npcChange.changes.harm_healing)
+        updateData.harm = healResult.newHarm
+        // An NPC below the Taken Out threshold is on their feet again.
+        // isAlive is only ever flipped back true here, never by the damage
+        // path — recovering from a wound is not resurrection, and an NPC
+        // already marked dead stays dead.
+        if (healResult.newHarm < 6 && npc.isAlive) {
+          updateData.isAlive = true
+        }
+        console.log(`  💚 ${npc.name}: ${healResult.message}`)
       }
 
       // Fog of war: the party witnessing this NPC in a live scene is

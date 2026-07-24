@@ -60,6 +60,7 @@ export interface AIGMResponse {
         // weapon's damage bonus applies. Omit for damage with no clear
         // attacking PC (a trap, another NPC, an environmental hazard).
         harm_damage_dealt_by?: string
+        harm_healing?: number
       }
     }>
     pc_changes?: Array<{
@@ -88,7 +89,7 @@ export interface AIGMResponse {
         }>
         // Phase 14: Consequence changes
         consequences_add?: Array<{
-          type: 'promise' | 'debt' | 'enemy' | 'longTermThreat'
+          type: 'promise' | 'enemy' | 'longTermThreat'
           description: string
         }>
         consequences_remove?: string[] // Descriptions of consequences to remove
@@ -799,7 +800,7 @@ You MUST respond with a JSON object matching this structure:
           "conditions_add": [{"name": "Bleeding", "category": "Physical", "description": "...", "mechanicalEffect": "..."}],
           "location": "New location",
           "relationship_changes": [{"entity_id": "npc_123", "entity_name": "Guard Captain", "trust_delta": 10, "reason": "Saved their life"}],
-          "consequences_add": [{"type": "debt", "description": "Owes 50 gold"}],
+          "consequences_add": [{"type": "promise", "description": "Swore to return for the child"}],
           "appearance_changes": {"description": "Deep scar on cheek", "append": true},
           "equipment_changes": {"weapon": {"action": "remove", "value": "Broken sword"}},
           "inventory_changes": {"items_add": [...], "items_remove": [...], "items_modify": [...]},
@@ -815,7 +816,7 @@ You MUST respond with a JSON object matching this structure:
     "npc_changes": [
       {"npc_name_or_id": "EXISTING_NPC", "changes": {"notes_append": "New development..."}},
       {"npc_name_or_id": "New Character Name", "is_new": true, "changes": {"description": "Brief 1-sentence description of who they are", "notes_append": "Introduced as..."}},
-      {"npc_name_or_id": "Bandit Leader", "changes": {"harm_damage": 3, "harm_damage_dealt_by": "CHARACTER_NAME", "notes_append": "Wounded in the ambush"}}
+      {"npc_name_or_id": "Bandit Leader", "changes": {"harm_damage": 3, "harm_damage_dealt_by": "CHARACTER_NAME", "harm_healing": 0, "notes_append": "Wounded in the ambush"}}
     ],
     "faction_changes": [
       {"faction_name_or_id": "EXISTING_FACTION", "changes": {"gm_notes_append": "New development..."}},
@@ -918,7 +919,7 @@ USE DEBTS AS DRAMA:
 - CALL IN: NPCs and factions remember. When it serves the story, have a creditor show up wanting repayment — at the worst possible time is best. A called-in debt is pressure, not a transaction: refusing has social consequences (burned relationships, new enemies, reputation).
 - RESOLVE: when a debt is honored, refused, traded away, or forgiven, resolve it with how it ended.
 
-Report via debt_changes inside that character's pc_changes:
+Report via debt_changes inside that character's pc_changes — this is the ONLY channel for a debt. There is no consequences_add "debt" type; only debt_changes carries direction, counterparty and status, and only it reaches the prompt later as leverage.
 - {"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the burning district", "reason": "Kessler's men saved them at real cost"}
 - {"counterparty_name": "Thieves Guild", "counterparty_type": "faction", "direction": "owed_by_character", "action": "resolve", "description": "Repaid by stealing the ledger for them", "reason": "The job is done"}
 
@@ -1000,7 +1001,7 @@ REGISTER NEW NPCs: Whenever you introduce a named character who doesn't already 
 - Example: A faction leader already in the world state → just use notes_append
 - Good description: "A grizzled dwarven blacksmith with a prosthetic left hand. Owns the Ember & Iron forge."
 
-NPC HARM: When a PC's action deals real physical harm to an NPC (a fight, a wound, a killing blow), set harm_damage on that NPC's npc_changes entry — same 0-6 scale as pc_changes.harm_damage (0-3 fine, 4-5 impaired, 6 taken out — the engine flips them non-alive automatically at 6, don't set that yourself). Set harm_damage_dealt_by to the attacking PC's name when there is one, so their weapon's damage bonus applies; leave it unset for damage from a trap, another NPC, or anything with no clear PC attacker. Don't set harm_damage for damage that's purely narrative flavor (a glancing blow that changes nothing) — only for harm that should actually move them toward being taken out of the fight.
+NPC HARM: When a PC's action deals real physical harm to an NPC (a fight, a wound, a killing blow), set harm_damage on that NPC's npc_changes entry — same 0-6 scale as pc_changes.harm_damage (0-3 fine, 4-5 impaired, 6 taken out — the engine flips them non-alive automatically at 6, don't set that yourself). Set harm_damage_dealt_by to the attacking PC's name when there is one, so their weapon's damage bonus applies; leave it unset for damage from a trap, another NPC, or anything with no clear PC attacker. Don't set harm_damage for damage that's purely narrative flavor (a glancing blow that changes nothing) — only for harm that should actually move them toward being taken out of the fight. Use harm_healing on the same scale when an NPC is genuinely patched up, rests, or is healed — an injured NPC who gets real treatment should recover, not carry the wound forever. Healing never revives an NPC already taken out.
 
 REGISTER NEW FACTIONS: Whenever you name an organization, gang, guild, house, or group that isn't already in the FACTIONS list below, add them to faction_changes with is_new: true — same rule as NPCs: check the list, not whether it "feels" pre-established. A major house that's obviously part of the setting's lore but has never actually appeared in the FACTIONS list still needs registering the first time you name it, or it will never exist as a real faction the party can interact with, build standing with, or see tracked.
 - Include a description (who they are), goals (what they want), and current_plan (what they're doing right now)

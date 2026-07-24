@@ -4,6 +4,7 @@
 
 import { Character } from '@prisma/client'
 import { ARC_LENGTH_TURNS, slugifyCapabilityKey } from './capabilities'
+import { boundAdvancementEntries } from './textAppend'
 
 /**
  * Stat usage tracking structure. lastGrowthTurn gates re-proposing a +1 for
@@ -448,7 +449,7 @@ export function logStatIncrease(
   }
 
   return {
-    entries: [...log.entries, entry],
+    entries: boundAdvancementEntries([...log.entries, entry]),
     totalStatIncreases: log.totalStatIncreases + 1,
     totalPerksGained: log.totalPerksGained,
     totalMovesLearned: log.totalMovesLearned
@@ -479,7 +480,7 @@ export function logPerkGained(
   }
 
   return {
-    entries: [...log.entries, entry],
+    entries: boundAdvancementEntries([...log.entries, entry]),
     totalStatIncreases: log.totalStatIncreases,
     totalPerksGained: log.totalPerksGained + 1,
     totalMovesLearned: log.totalMovesLearned
@@ -510,7 +511,7 @@ export function logMoveLearned(
   }
 
   return {
-    entries: [...log.entries, entry],
+    entries: boundAdvancementEntries([...log.entries, entry]),
     totalStatIncreases: log.totalStatIncreases,
     totalPerksGained: log.totalPerksGained,
     totalMovesLearned: log.totalMovesLearned + 1

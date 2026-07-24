@@ -7,6 +7,7 @@ import type { WorldUpdates } from '@/lib/ai/schema'
 import { resolveEntityByNameOrId } from '../entityResolution'
 import { applyHarm, HarmLevel } from '../harm'
 import { resolveDamageBonus } from '../inventory'
+import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
 
 type Db = Prisma.TransactionClient
 export type NpcChange = NonNullable<WorldUpdates['npc_changes']>[number]
@@ -45,7 +46,7 @@ export async function applyNpcChanges(
 
       // Append to GM notes if provided
       if (npcChange.changes.notes_append) {
-        updateData.gmNotes = (npc.gmNotes || '') + '\n\n' + npcChange.changes.notes_append
+        updateData.gmNotes = appendBounded(npc.gmNotes, npcChange.changes.notes_append, GM_NOTES_BOUNDS)
       }
 
       // Update description if AI provided one and NPC has none yet

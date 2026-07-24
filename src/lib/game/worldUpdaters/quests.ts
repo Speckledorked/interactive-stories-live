@@ -7,6 +7,7 @@
 import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { applyQuestRewardGrant } from '../questRewards'
+import { appendBounded, QUEST_PROGRESS_BOUNDS } from '../textAppend'
 
 type Db = Prisma.TransactionClient
 export type QuestChange = NonNullable<WorldUpdates['quest_changes']>[number]
@@ -41,9 +42,7 @@ export async function applyQuestChanges(
       if (changes.given_by) updateData.givenBy = changes.given_by
       if (changes.reward) updateData.reward = changes.reward
       if (progressLine) {
-        updateData.progressLog = existing.progressLog
-          ? `${existing.progressLog}\n${progressLine}`
-          : progressLine
+        updateData.progressLog = appendBounded(existing.progressLog, progressLine, QUEST_PROGRESS_BOUNDS)
       }
       const justCompleted = changes.status === 'COMPLETED' && existing.status !== 'COMPLETED'
       if (changes.status && changes.status !== existing.status) {

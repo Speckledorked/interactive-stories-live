@@ -34,6 +34,7 @@ import { applyCapabilityChanges } from '../capabilities'
 import { applyDebtChanges } from '../debts'
 import { applyStandingChanges } from '../standing'
 import { clampGoldDelta } from '../economy'
+import { appendBoundedProse, MAX_CHARACTER_DESCRIPTION_CHARS } from '../textAppend'
 import {
   applyCorruptionMarks,
   corruptionStage,
@@ -385,10 +386,11 @@ export async function applyCharacterChanges(
     if (pcChange.changes.appearance_changes) {
       const appearanceChange = pcChange.changes.appearance_changes
       if (appearanceChange.append) {
-        const currentAppearance = character.appearance || ''
-        updateData.appearance = currentAppearance
-          ? `${currentAppearance} ${appearanceChange.description}`
-          : appearanceChange.description
+        updateData.appearance = appendBoundedProse(
+          character.appearance,
+          appearanceChange.description,
+          MAX_CHARACTER_DESCRIPTION_CHARS
+        )
       } else {
         updateData.appearance = appearanceChange.description
       }
@@ -399,10 +401,11 @@ export async function applyCharacterChanges(
     if (pcChange.changes.personality_changes) {
       const personalityChange = pcChange.changes.personality_changes
       if (personalityChange.append) {
-        const currentPersonality = character.personality || ''
-        updateData.personality = currentPersonality
-          ? `${currentPersonality} ${personalityChange.description}`
-          : personalityChange.description
+        updateData.personality = appendBoundedProse(
+          character.personality,
+          personalityChange.description,
+          MAX_CHARACTER_DESCRIPTION_CHARS
+        )
       } else {
         updateData.personality = personalityChange.description
       }

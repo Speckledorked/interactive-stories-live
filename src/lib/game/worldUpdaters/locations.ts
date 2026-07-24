@@ -12,6 +12,7 @@
 
 import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
+import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
 
 type Db = Prisma.TransactionClient
 export type LocationChange = NonNullable<WorldUpdates['location_changes']>[number]
@@ -38,7 +39,7 @@ export async function applyLocationChanges(
         updateData.locationType = locChange.location_type
       }
       if (locChange.gm_notes_append) {
-        updateData.gmNotes = (existing.gmNotes || '') + '\n\n' + locChange.gm_notes_append
+        updateData.gmNotes = appendBounded(existing.gmNotes, locChange.gm_notes_append, GM_NOTES_BOUNDS)
       }
       // Fog of war: same reveal-on-mention rule as NPC/Faction — a live
       // scene touching this location means the party is there, so it's

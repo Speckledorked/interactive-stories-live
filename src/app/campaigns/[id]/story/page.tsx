@@ -18,7 +18,6 @@ import { CompactClock } from '@/components/clock/ClockProgress'
 import { CompactTimeline } from '@/components/scene/VisualTimeline'
 import AITransparencyPanel, { type WorldStateChange } from '@/components/scene/AITransparencyPanel'
 import CharacterSnapshotModal from '@/components/character/CharacterSnapshotModal'
-import NPCRelationshipHints, { extractNPCHintsFromScene } from '@/components/scene/NPCRelationshipHints'
 import { useCommandPalette } from '@/contexts/CommandPaletteContext'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal'
@@ -1025,17 +1024,6 @@ export default function StoryPage() {
                           </p>
                         </div>
 
-                        {/* NPC Relationship Hints */}
-                        {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
-                          <div className="mt-4">
-                            <NPCRelationshipHints
-                              hints={extractNPCHintsFromScene(
-                                currentStageText,
-                                campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
-                              )}
-                            />
-                          </div>
-                        )}
                       </>
                     )}
 
@@ -1057,18 +1045,6 @@ export default function StoryPage() {
                               <p className="text-ember-200/80 whitespace-pre-wrap leading-relaxed">
                                 {resolution}
                               </p>
-
-                              {/* NPC Relationship Hints in Resolution */}
-                              {campaign?.campaign?.npcs && campaign.campaign.npcs.length > 0 && (
-                                <div className="mt-4">
-                                  <NPCRelationshipHints
-                                    hints={extractNPCHintsFromScene(
-                                      resolution,
-                                      campaign.campaign.npcs.map((n: any) => ({ name: n.name, id: n.id }))
-                                    )}
-                                  />
-                                </div>
-                              )}
                             </div>
                           ))}
                         </div>

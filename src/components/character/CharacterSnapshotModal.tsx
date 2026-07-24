@@ -180,7 +180,7 @@ export default function CharacterSnapshotModal({
                 {[
                   { key: 'stats', label: 'Stats & Status', icon: '📊' },
                   { key: 'inventory', label: 'Inventory', icon: '🎒' },
-                  { key: 'relationships', label: 'Relationships', icon: '💕' }
+                  { key: 'relationships', label: 'Ties', icon: '💕' }
                 ].map(tab => (
                   <button
                     key={tab.key}
@@ -352,7 +352,7 @@ export default function CharacterSnapshotModal({
                 {activeTab === 'relationships' && (
                   <div className="space-y-4">
                     <p className="text-sm text-ember-300/60 italic">
-                      Your character's relationships with NPCs and factions. These develop organically through your actions.
+                      The promises, debts, enemies and lasting threats your choices have created.
                     </p>
 
                     {allConsequences.filter(c => c.type === 'enemy').length > 0 && (
@@ -403,7 +403,7 @@ export default function CharacterSnapshotModal({
                     {allConsequences.length === 0 && (
                       <div className="text-center py-8 text-ember-400/50">
                         <div className="text-4xl mb-2">🌟</div>
-                        <p className="text-sm">No significant relationships yet</p>
+                        <p className="text-sm">No lasting ties yet</p>
                         <p className="text-xs mt-1">Your actions will shape these over time</p>
                       </div>
                     )}

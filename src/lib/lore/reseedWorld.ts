@@ -36,6 +36,7 @@
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { isConfidentFuzzyMatch } from '@/lib/game/entityResolution'
 import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
 import { generateMoveFlavor } from '@/lib/ai/moveFlavor'
@@ -81,12 +82,10 @@ export function planFactionMerge(
   generatedNames: string[],
   fresh: boolean
 ): { toAdd: string[]; toRetire: string[] } {
-  const existingLower = new Set(existingNames.map(n => n.toLowerCase()))
-  const generatedLower = new Set(generatedNames.map(n => n.toLowerCase()))
   return {
-    toAdd: generatedNames.filter(n => !existingLower.has(n.toLowerCase())),
+    toAdd: generatedNames.filter(n => !matchesAnyName(n, existingNames)),
     toRetire: fresh
-      ? existingNames.filter(n => !generatedLower.has(n.toLowerCase()))
+      ? existingNames.filter(n => !matchesAnyName(n, generatedNames))
       : [],
   }
 }
@@ -98,8 +97,51 @@ export function planFactionMerge(
  * site for why fronts don't get a fresh-mode "retire" step like factions do.
  */
 export function planFrontMerge(existingClockNames: string[], generatedFrontNames: string[]): string[] {
-  const existingLower = new Set(existingClockNames.map(n => n.toLowerCase()))
-  return generatedFrontNames.filter(n => !existingLower.has(n.toLowerCase()))
+  return generatedFrontNames.filter(n => !matchesAnyName(n, existingClockNames))
+}
+
+/**
+ * Does `name` correspond to something already in `pool`?
+ *
+ * Exact (case/whitespace-insensitive) first, then the same tightly-gated
+ * fuzzy matcher AI-reported entity names already go through
+ * (isConfidentFuzzyMatch — edit distance <=2 AND <=20% of length, built to
+ * catch typos and punctuation drift, never a genuinely different name).
+ *
+ * Matching was previously exact-only, which is a real problem specifically
+ * for lore import: canon routinely names an entity slightly differently
+ * from whatever the world generator invented for it ("The Ashcrown Court"
+ * vs "Ashcrown Court"). Exact-only treated those as unrelated, so in FRESH
+ * mode a reseed could retire the existing faction AND create a near-
+ * duplicate under the canon spelling in the same pass — orphaning
+ * everything already linked to the old row.
+ */
+export function matchesAnyName(name: string, pool: string[]): boolean {
+  const stripped = stripLeadingArticle(name)
+  return pool.some(
+    candidate =>
+      isConfidentFuzzyMatch(name, candidate) ||
+      isConfidentFuzzyMatch(stripped, stripLeadingArticle(candidate))
+  )
+}
+
+/**
+ * Drop a leading English article before comparing.
+ *
+ * isConfidentFuzzyMatch alone is not enough here, and it's worth being
+ * precise about why: it allows an edit distance of 2, which covers typos
+ * and punctuation ("Kesler"/"Kessler", "Thieves' Guild"/"Thieves Guild")
+ * but NOT "The Ashcrown Court" vs "Ashcrown Court" — that's a 4-character
+ * difference and fails the gate. Article drift is the single most common
+ * shape of this collision in lore import, since canon and the world
+ * generator disagree about definite articles constantly.
+ *
+ * Stripping the article is deliberately narrower than loosening the edit
+ * distance would be: it can't collapse two genuinely different short names
+ * the way a bigger distance budget could.
+ */
+export function stripLeadingArticle(name: string): string {
+  return name.trim().replace(/^(the|a|an)\s+/i, '')
 }
 
 /**

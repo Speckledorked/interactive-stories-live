@@ -345,3 +345,57 @@ describe('reseedWorldFromLore — move flavor regeneration', () => {
     if (result.ok) expect(result.summary.movesFlavored).toBe(2)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Fuzzy name reconciliation (#84)
+// ---------------------------------------------------------------------------
+// Matching was exact-only, which is a real problem specifically for lore
+// import: canon routinely names an entity slightly differently from what
+// the world generator invented. In FRESH mode exact-only could retire the
+// existing faction AND create a near-duplicate under the canon spelling in
+// the same pass, orphaning everything linked to the old row.
+
+describe('planFactionMerge — fuzzy reconciliation (#84)', () => {
+  it('treats a cosmetic rename as the same faction, not add + retire', () => {
+    const plan = planFactionMerge(['The Ashcrown Court'], ['Ashcrown Court'], true)
+    expect(plan.toAdd).toEqual([])
+    expect(plan.toRetire).toEqual([])
+  })
+
+  it('tolerates punctuation and typo drift', () => {
+    expect(planFactionMerge(['Kessler Syndicate'], ['Kesler Syndicate'], true).toAdd).toEqual([])
+    expect(planFactionMerge(["Thieves' Guild"], ['Thieves Guild'], true).toAdd).toEqual([])
+  })
+
+  it('still treats a genuinely different faction as new', () => {
+    const plan = planFactionMerge(['Ashcrown Court'], ['Ironhold Legion'], false)
+    expect(plan.toAdd).toEqual(['Ironhold Legion'])
+  })
+
+  it('does not collapse two distinct short names into one', () => {
+    // The fuzzy gate is ratio-based precisely so short names stay distinct.
+    const plan = planFactionMerge(['Ash'], ['Oak'], false)
+    expect(plan.toAdd).toEqual(['Oak'])
+  })
+
+  it('retires a genuinely absent faction in fresh mode', () => {
+    const plan = planFactionMerge(['Old Guard'], ['Ironhold Legion'], true)
+    expect(plan.toRetire).toEqual(['Old Guard'])
+    expect(plan.toAdd).toEqual(['Ironhold Legion'])
+  })
+
+  it('never retires anything in live mode', () => {
+    const plan = planFactionMerge(['Old Guard'], ['Ironhold Legion'], false)
+    expect(plan.toRetire).toEqual([])
+  })
+})
+
+describe('planFrontMerge — fuzzy reconciliation (#84)', () => {
+  it('does not re-add a front whose name drifted cosmetically', () => {
+    expect(planFrontMerge(['The Long Winter'], ['Long Winter'])).toEqual([])
+  })
+
+  it('adds a genuinely new front', () => {
+    expect(planFrontMerge(['The Long Winter'], ['The Iron Tide'])).toEqual(['The Iron Tide'])
+  })
+})

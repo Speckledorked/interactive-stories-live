@@ -270,19 +270,6 @@ export async function storeWorldStateChanges(
 }
 
 /**
- * Retrieve world state changes for a scene
- */
-export async function getWorldStateChanges(sceneId: string): Promise<WorldStateChange[]> {
-  const scene = await prisma.scene.findUnique({
-    where: { id: sceneId },
-    select: { consequences: true }
-  })
-
-  const consequences = scene?.consequences as any
-  return consequences?.worldStateChanges || []
-}
-
-/**
  * Create notifications for character progression changes
  */
 export async function createCharacterProgressionNotifications(

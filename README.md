@@ -134,67 +134,32 @@ against git history and the Shipped ledger.
 
 ### P2
 
-**Debt/economy mechanical depth is asymmetric (#44, #47)**
-- *Why it matters:* Debts and `Faction.resources` are treated as flavor/prompt leverage rather than mechanically connected the way Standing already is — the same "looks systemic, isn't" pattern found elsewhere, here in the economy layer.
-- *Evidence:* `lib/game/debts.ts` (no roll-time weight; contrast with `lib/game/standing.ts`'s `effectiveStandingModifier`); `Character.resources.gold` has real sinks but no scarcity/pricing tied to `Faction.resources`.
-- *Scope:* core gameplay.
-- *Suggested fix:* Give a called-in debt the same ±1 roll weight Standing gets; route downtime costs/reward grants through faction-state-aware pricing.
+*None currently open.* Everything that remained here turned out to need a
+design decision rather than a fix — see the section below.
 
-**Basic JSON mode, not strict structured outputs (#1, #35)**
-- *Why it matters:* the AI GM call uses `response_format: json_object`, not OpenAI's `json_schema` strict mode, so shape violations aren't caught before the fallback ladder. Deliberately not yet attempted blind: a strict-mode migration needs a live API round-trip to verify a hand-rolled schema actually validates under strict mode, and getting it wrong would mean every AI GM call starts failing in production.
-- *Evidence:* `lib/ai/client.ts` (`callAIGM`), `lib/ai/schema.ts` (`WorldUpdatesSchema`).
-- *Scope:* AI behavior.
-- *Suggested fix:* Migrate once a live-testable environment is available, or make an explicit decision to accept the current risk.
+### Needs a product decision, not a bug fix
 
-**Quests have no branching or gating logic anywhere (#75)**
-- *Why it matters:* `Quest.givenBy` is pure display text with zero code consumers — no quest is ever hidden, unlocked, or blocked by faction state, standing, or another quest's outcome. FAILED/ABANDONED are functionally inert outside one narrow case (a downtime-linked quest failing fails that activity). This sharpens the already-tracked "no objective chaining" gap (`#45`): it isn't just that objectives don't chain, quest *identity itself* is never mechanically checked against anything.
-- *Evidence:* `lib/game/worldUpdaters/quests.ts:22-86`, `src/app/api/campaigns/[id]/quests/route.ts` (bare read-only `GET`), `lib/downtime/ai-downtime-service.ts:542` (the one real consumer of quest FAILED status).
-- *Scope:* core gameplay, directly adjacent to `#45`.
-- *Suggested fix:* Give quests at least one real gate (faction standing, or another quest's status) before tackling full objective chaining.
+These were filed as P2 defects, and on working through the rest of the
+backlog they don't belong there: each one is a real depth gap, but closing
+it means *choosing a game design*, not fixing something that's broken.
+Inventing an answer unilaterally would be a worse outcome than leaving the
+gap visible, so they're recorded here honestly rather than sitting in a bug
+list nobody can action.
 
-**Faction simulation is isolated from quests, NPC population, and the economy (#76)**
-- *Why it matters:* the faction tick itself is genuinely deep, but standing→roll-modifier is the only broad external consumer of faction state (three total consumer surfaces, grep-confirmed: roll math, the character-sheet API, the AI prompt). Factions never spawn or despawn NPCs, never gate or create quests, and faction wealth/collapse has no code path into the player economy at all. Sharper and more absolute than the already-tracked Debt/economy asymmetry (`#44`/`#47`), which is about Debt/gold specifically — this is about faction state reaching *anything* outside standing and prose.
-- *Evidence:* grep of `FactionStanding`/`effectiveStandingModifier` usage across `src`; `lib/game/worldUpdaters/npcs.ts` and `quests.ts` (zero faction references in either).
-- *Scope:* core gameplay — the product's single deepest system barely reaches the systems that would make players feel it day-to-day.
-- *Suggested fix:* Pick one reach-out first (faction collapse removing its member NPCs' quests, or faction wealth affecting local prices) rather than all three at once.
+**Corruption gates exactly one thing (#83)** — it gates shadow-capability unlocks, grants a +2 surge, and feeds prompt flavor. It never gates quest availability, location access, or NPC reactions. Making it do so isn't a wiring fix: it's deciding what corruption *costs*, which changes balance. The cheapest credible option is a social-roll penalty for visibly corrupted characters (unsettling to deal with), on the same flat scale as harm/weather/contested ground — but that's a design call.
 
-**Inventory has zero economy connection anywhere (#77)**
-- *Why it matters:* no rarity, value, or price field exists at any layer, and no crafting, trading, or selling logic exists anywhere in the codebase (grepped for `craft`/`trade`/`sell`/`price` — zero hits outside comments describing what's absent). Items can be gained, lost, or consumed for healing; they can never be bought, sold, or valued. Sharper and more absolute than the already-documented "JSON-blob, not relational" scope note.
-- *Evidence:* `lib/game/inventory.ts`, `lib/game/itemRegistry.ts`, `lib/ai/schema.ts`.
-- *Scope:* core gameplay, depth ceiling on the whole economy layer.
-- *Suggested fix:* A product decision, not a quick fix — decide whether items should ever have value before building toward it.
+**Quests have no branching or gating (#75)** — `givenBy` has zero code consumers and FAILED/ABANDONED are inert outside one downtime linkage. Adding "at least one real gate" requires choosing *which* gate (faction standing? a prerequisite quest's status? corruption?) and what happens when it fails. Related to `#45`'s structured objectives, which is already on the roadmap — these two should be designed together rather than one bolted on ahead of the other.
 
-**Location territory control is inert beyond ownership bookkeeping (#78)**
-- *Why it matters:* `ownerFactionId`/`isContested` are real — fought over by the tick, surfaced in narration — but nothing reads them to derive danger level, population, or local pricing/resource effects. A location changing hands has no mechanical consequence for anyone standing in it.
-- *Evidence:* `lib/game/worldUpdaters/locations.ts:19-70` (only ever writes `description`/`locationType`/`gmNotes`/`isDiscovered` — never touches the mechanical fields the tick owns).
-- *Scope:* core gameplay.
-- *Suggested fix:* Derive at least one consumer (a roll penalty in contested territory, mirroring how weather already works) from territory state.
+**The economy doesn't connect (#44, #47, #76, #77)** — four separately-filed entries that are one gap: faction wealth has no path into player resources, Debt carries no roll-time weight the way Standing does, inventory has no rarity/value/price/crafting/trading at any layer, and faction state reaches nothing outside standing and prose. Every individual piece is buildable; what's missing is a decision about whether MythOS *has* an economy in the sense players would expect, or deliberately doesn't. Building one incrementally without that call risks a half-economy that's worse than none.
 
-**Corruption gates exactly one thing in code beyond roll bonus and prose (#83)**
-- *Why it matters:* despite the "power at a cost" framing, corruption only gates shadow-capability unlocking (`shadowUnlockBlocked`) in code — it never gates quest availability, location access, or NPC reactions anywhere (grepped across `questRewards.ts`, `worldUpdaters/npcs.ts`, `worldUpdaters/locations.ts` — zero references).
-- *Evidence:* `lib/game/capabilities.ts:164-170` (the one real gate).
-- *Scope:* core gameplay, narrative-mechanical alignment.
-- *Suggested fix:* Pick one additional gate (an NPC reaction threshold is the cheapest) to make the theme's promise real beyond capabilities.
+**Basic JSON mode, not strict structured outputs (#1, #35)** — unchanged and still correctly blocked: a strict-mode migration needs a live API round-trip to verify the hand-rolled schema actually validates, and getting it wrong means every AI GM call fails in production. `#66` narrowed the blast radius by validating the one path that had no schema at all, but this remains a deploy-environment dependency rather than a code decision.
 
 ### P3
 
-**Leftover "GM Notes" copy after the GM-removal pass (#60)**
-- *Why it matters:* five labels/placeholders in the admin NPC/Faction/Location/Clock edit forms still say "GM Notes," inconsistent with the "campaign host" reframing already shipped everywhere else in the same file.
-- *Evidence:* `src/app/campaigns/[id]/admin/page.tsx` (5 occurrences).
-- *Scope:* UX (copy consistency).
-- *Suggested fix:* Rename to "Host Notes" or similar.
+**Four parallel "what happened" logging models (#86)** — unchanged, and deliberately left open: `CampaignLog`, `TimelineEvent`, `WorldEvent` and `CampaignMemory` each have a defensible individual reason to exist, and consolidating them is a refactor with real regression risk for no user-visible gain. Worth a design pass before a fifth is added, not a change to make speculatively. Note `#79` has since given `WorldEvent` its first deterministic reader, which strengthens the case for it as the canonical structured stream if this is ever revisited.
 
-**Dead `getWorldStateChanges()` export (#61)**
-- *Why it matters:* the one real consumer reads `scene.consequences.worldStateChanges` directly instead of calling this accessor, so the export silently implies a read path nothing actually uses.
-- *Evidence:* `lib/game/world-state-tracker.ts`, `src/app/campaigns/[id]/story/page.tsx:172-173`.
-- *Scope:* maintainability.
-- *Suggested fix:* Switch the call site to use it, or delete the export.
-
-**Four parallel "what happened" logging models (#86)**
-- *Why it matters:* `CampaignLog`, `TimelineEvent`, `WorldEvent`, and `CampaignMemory` each individually make sense (per their own doc comments), but collectively are four write paths for "something happened," with no invariant guaranteeing a significant event lands consistently across all four.
 - *Evidence:* `prisma/schema.prisma` (all four models).
 - *Scope:* maintainability, drift risk.
-- *Suggested fix:* Not urgent — worth a design pass before adding a fifth.
 
 **Admin panel is CRUD, not simulation-design tooling (#87)**
 - *Why it matters:* every admin tab but one is a thin PATCH wrapper — the "Simulation Goal"/"Archetype" controls are bare `<select>` elements over enum values with no preview of tick effect, and the "Map" tab is an unrelated client-computed SVG relationship graph that never touches the real `Map`/`Zone`/`Token` tables used during play (a naming collision, not a data link). The one genuinely deep feature — the tick dry-run preview — is real but read-only.
@@ -213,12 +178,6 @@ against git history and the Shipped ledger.
 - *Evidence:* grep of `socialTies` usage across `src/`.
 - *Scope:* narrative-mechanical alignment.
 - *Suggested fix:* No urgent fix — worth knowing the actual reach before describing NPC society as broadly mechanical.
-
-**Confirmed-dead schema fields (#90)**
-- *Why it matters:* `WorldMeta.tension` and `WorldMeta.phase` are never written or read anywhere except the campaign-export dump; `WikiEntry.relatedEntries` has zero application-code references at all; `WikiEntry.changelog` is initialized empty at creation and never appended to by anything (display code checks `.length > 0`, a condition that can never be true). All four read as real, active systems from the schema alone.
-- *Evidence:* grepped `tension`/`phase`/`relatedEntries`/`changelog` across all of `src/` — confirmed zero writers (`tension`/`phase`/`relatedEntries`) or zero appenders (`changelog`) outside the export path and initial creation.
-- *Scope:* maintainability, misleading to anyone reading the schema as a description of what's implemented.
-- *Suggested fix:* Wire each one to a real reader/writer, or drop the column.
 
 ## Roadmap
 
@@ -248,6 +207,10 @@ are folded in below. `#22` (de-jargon) and `#23` (surface multiplayer) shipped �
 Full narrative detail for everything below (including specific bug
 postmortems) is preserved in this file's git history — this is the condensed
 ledger.
+
+**P3 cleanup — `#60`, `#61`, `#90`:** the five leftover "GM Notes" labels in the admin edit forms are now "Host Notes", matching the campaign-host reframing shipped everywhere else in that file. The dead `getWorldStateChanges()` export is removed — its one would-be consumer reads `scene.consequences.worldStateChanges` directly, so the accessor only ever implied a read path nothing used. And the confirmed-dead fields are resolved: `WorldMeta.tension`/`phase` and `WikiEntry.relatedEntries` are dropped (never written by anything; `tension`/`phase` were read only by the export dump, so every campaign carried the same default forever), while `WikiEntry.changelog` is **wired up instead of dropped** — it describes something genuinely useful, the wiki page's `changelog.length > 0` display guard already existed and could simply never become true, so the tick's wiki sync now appends a turn-stamped entry. Bounded like every other append-only field here, and it won't record the same no-op twice for one turn.
+
+**Contested territory is now a real mechanic (`#78`)** — `Location.isContested` was written by the tick (a rival has moved against a place but hasn't taken it yet) and read by nothing mechanical, so territory changing hands had no consequence for anyone standing on it and the whole war/expansion layer was invisible to players except as narration. Added `contestedPenalty`, resolved off the same id-then-name location join weather already uses, and threaded through the roll total, the persisted `DiceRoll.modifier`, and the transparency-panel receipt ("contested ground"). Flat and universal at -1, matching harm/weather rather than introducing a new scale or making per-move judgments about which actions contested ground "should" affect — that judgment from a move name is the keyword guesswork this codebase avoids. Unknown contested state is neutral, never a penalty: a character whose location hasn't resolved isn't silently punished for it.
 
 **P2 batch — the simulation reads its own history, and two dead pipelines removed:**
 

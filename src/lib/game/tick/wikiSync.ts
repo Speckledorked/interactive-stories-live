@@ -103,7 +103,13 @@ async function syncNpcWikiEntry(
   if (existing) {
     await prisma.wikiEntry.update({
       where: { id: existing.id },
-      data: { description, importance: wikiImportance, lastSeenTurn: turnNumber, updatedAt: new Date() },
+      data: {
+        description,
+        importance: wikiImportance,
+        lastSeenTurn: turnNumber,
+        updatedAt: new Date(),
+        changelog: appendWikiChangelog(existing.changelog, turnNumber, 'Details updated') as any,
+      },
     })
   } else {
     await prisma.wikiEntry.create({
@@ -159,7 +165,13 @@ async function syncFactionWikiEntry(
   if (existing) {
     await prisma.wikiEntry.update({
       where: { id: existing.id },
-      data: { description, importance: wikiImportance, lastSeenTurn: turnNumber, updatedAt: new Date() },
+      data: {
+        description,
+        importance: wikiImportance,
+        lastSeenTurn: turnNumber,
+        updatedAt: new Date(),
+        changelog: appendWikiChangelog(existing.changelog, turnNumber, 'Details updated') as any,
+      },
     })
   } else {
     await prisma.wikiEntry.create({
@@ -177,4 +189,37 @@ async function syncFactionWikiEntry(
       },
     })
   }
+}
+
+/**
+ * Append a turn-stamped entry to a wiki page's changelog.
+ *
+ * WikiEntry.changelog was declared and initialized as an empty array at
+ * creation, and nothing ever appended to it — the wiki page's own display
+ * code guards on `changelog.length > 0`, a condition that could never
+ * become true (README #90). The field describes a genuinely useful thing
+ * (how an entry evolved as the campaign went on) and the UI for it already
+ * existed, so it's wired up rather than dropped.
+ *
+ * Bounded like every other append-only field in this codebase (see
+ * textAppend.ts): oldest entries fall off rather than accumulating for the
+ * life of the campaign. Pure — the caller persists the result.
+ */
+export const MAX_WIKI_CHANGELOG_ENTRIES = 20
+
+export function appendWikiChangelog(
+  existing: unknown,
+  turnNumber: number,
+  change: string
+): Array<{ turn: number; change: string }> {
+  const prior = Array.isArray(existing)
+    ? (existing as Array<{ turn: number; change: string }>).filter(
+        e => e && typeof e.change === 'string'
+      )
+    : []
+  // A tick can re-sync an unchanged entry; don't record a no-op twice in a
+  // row for the same turn.
+  const last = prior[prior.length - 1]
+  if (last && last.turn === turnNumber && last.change === change) return prior
+  return [...prior, { turn: turnNumber, change }].slice(-MAX_WIKI_CHANGELOG_ENTRIES)
 }

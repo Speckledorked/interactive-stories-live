@@ -15,6 +15,7 @@ import {
   formatRollReceipt,
   describeOutcomeBand,
   CharacterForRoll,
+  contestedPenalty,
 } from '../resolution'
 
 // Deterministic RNG factory: yields the given values (0..1) in order.
@@ -518,5 +519,36 @@ describe('parseClassifications accepts_bargain passthrough', () => {
     expect(parsed[0].accepts_bargain).toBe(true)
     expect(parsed[1].accepts_bargain).toBe(false)
     expect(parsed[2].accepts_bargain).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Contested territory (#78)
+// ---------------------------------------------------------------------------
+// Location.isContested was written by the tick and read by nothing
+// mechanical — territory changed hands with no consequence for anyone
+// standing on it, so the whole war/expansion layer was invisible to players
+// except as narration.
+
+describe('contestedPenalty (#78)', () => {
+  it('penalizes contested ground', () => {
+    expect(contestedPenalty(true)).toBe(-1)
+  })
+
+  it('is neutral on uncontested ground', () => {
+    expect(contestedPenalty(false)).toBe(0)
+  })
+
+  it('treats unknown contested state as neutral, never as a penalty', () => {
+    // A character whose location hasn't resolved must not be silently
+    // penalized for it.
+    expect(contestedPenalty(null)).toBe(0)
+    expect(contestedPenalty(undefined)).toBe(0)
+  })
+
+  it('composes with the other flat penalties on the same scale', () => {
+    // Same magnitude as harm/weather so the modifiers stay comparable.
+    expect(contestedPenalty(true)).toBe(harmPenalty(4))
+    expect(contestedPenalty(true)).toBe(weatherPenalty({ condition: 'STORM', severity: 5 }))
   })
 })

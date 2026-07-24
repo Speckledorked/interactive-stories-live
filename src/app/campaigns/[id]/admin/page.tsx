@@ -1320,7 +1320,7 @@ export default function AdminPage() {
                         </label>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-myth-ink-muted mb-1">GM Notes</label>
+                        <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
                         <textarea
                           name="gmNotes"
                           rows={2}
@@ -1615,7 +1615,7 @@ export default function AdminPage() {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-myth-ink-muted mb-1">GM Notes</label>
+                        <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
                         <textarea
                           name="gmNotes"
                           rows={2}
@@ -1873,7 +1873,7 @@ export default function AdminPage() {
                         </label>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-myth-ink-muted mb-1">GM Notes</label>
+                        <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
                         <textarea
                           name="gmNotes"
                           rows={2}
@@ -1952,7 +1952,7 @@ export default function AdminPage() {
                         <textarea
                           value={location.gmNotes || ''}
                           onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, gmNotes: e.target.value } : l))}
-                          placeholder="GM Notes"
+                          placeholder="Host Notes"
                           className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           rows={2}
                         />
@@ -2090,7 +2090,7 @@ export default function AdminPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-myth-ink-muted mb-1">GM Notes</label>
+                        <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
                         <textarea
                           name="gmNotes"
                           rows={2}

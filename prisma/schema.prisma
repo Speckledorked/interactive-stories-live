@@ -1189,8 +1189,11 @@ model WorldMeta {
   currentTurnNumber Int      @default(1)
   currentInGameDate String?
   currentLocation   String?
-  tension           Int      @default(50)
-  phase             String?
+  // `tension` (an 0-100 dramatic-pacing gauge) and `phase` (a story-arc
+  // string) lived here and were confirmed dead: never written by anything,
+  // and read only by the campaign-export dump, so every campaign carried
+  // the same default forever. Removed rather than left implying a pacing
+  // model that doesn't exist (README #90).
   otherMeta         Json?
   gmNotes           String?
   updatedAt         DateTime @updatedAt
@@ -1987,8 +1990,9 @@ model WikiEntry {
   aliases  String[] // Alternative names
   imageUrl String? // Optional image
 
-  // Relationships
-  relatedEntries Json? // Array of {id, type, relationship} to link entries
+  // A `relatedEntries` cross-reference graph was declared here with zero
+  // references anywhere in the application — no writer, no reader, no UI.
+  // Removed (README #90); the wiki's real linking is by entryType + name.
 
   // Status tracking
   isActive     Boolean @default(true)

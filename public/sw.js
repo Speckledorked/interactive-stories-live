@@ -78,13 +78,58 @@ async function syncPendingActions() {
   console.log('Syncing pending actions...');
 }
 
-// Web push is deliberately NOT implemented here.
+// Web push (README #92).
 //
-// A correct-looking `push` + `notificationclick` pair used to sit at this
-// spot and could never fire: nothing in the app ever called
-// pushManager.subscribe(), there were no VAPID keys, and no server-side
-// web-push send — so the listener sat waiting for an event that had no
-// way to exist (README #10/#63/#64). Real browser push needs a VAPID
-// keypair, a subscription store, and a genuine push send; it's tracked as
-// a feature rather than left here as scaffolding that reads like a
-// working pipeline. In-app and email notifications both work today.
+// These handlers previously existed with nothing behind them — no
+// subscription flow, no VAPID keys, no server-side send — so they waited
+// on an event that had no way to be produced. They're live now: the app
+// calls pushManager.subscribe() with the server's VAPID public key and
+// POSTs the result to /api/notifications/push, and push-service.ts signs
+// and sends real Web Push messages to those endpoints.
+self.addEventListener('push', (event) => {
+  // A push with no payload is still worth showing — some services send
+  // an empty "wake up" push — so fall back rather than bailing out.
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (err) {
+    data = {};
+  }
+
+  const options = {
+    body: data.body || 'New activity in your campaign',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    vibrate: [200, 100, 200],
+    // Collapse repeats from the same campaign rather than stacking a
+    // separate banner for every scene resolution.
+    tag: data.notificationId ? `mythos-${data.notificationId}` : 'mythos',
+    data: {
+      url: data.url || '/',
+    },
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'MythOS', options)
+  );
+});
+
+// Focus an existing tab if one is already open rather than piling up new
+// windows every time a notification is clicked.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if ('focus' in client) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      return clients.openWindow(targetUrl);
+    })
+  );
+});

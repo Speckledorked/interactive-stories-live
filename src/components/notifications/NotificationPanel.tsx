@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getPusherClient } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
 
@@ -38,6 +38,9 @@ export default function NotificationPanel({
   const [filter, setFilter] = useState<'all' | 'unread' | 'mentions' | 'turns'>('all');
   const [loading, setLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Cached once per mount so every incoming notification doesn't re-fetch
+  // the user's sound preference. Null means "not looked up yet".
+  const soundPrefsRef = useRef<{ soundEnabled?: boolean } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -98,11 +101,43 @@ export default function NotificationPanel({
       if (notification.status === 'UNREAD') {
         setUnreadCount(prev => prev + 1);
       }
+      // Sound rides along with the realtime event rather than being a
+      // separate server dispatch — the browser is the only place that can
+      // actually make a noise, so sending a second message to ask it to
+      // would be the round trip that made the old sound channel pointless.
+      // Respects the user's own preference; failures are silent by design
+      // (see SoundService).
+      void playNotificationSound(notification.type);
     });
 
     channel.bind('notification-count-update', (counts: any) => {
       setUnreadCount(counts.unread);
     });
+  };
+
+  /**
+   * Play this notification type's cue, if the user has sound on and the
+   * type has one. Preferences are read fresh from the settings endpoint
+   * and cached for the session — a stale toggle is a worse failure than
+   * one extra request on first sound.
+   */
+  const playNotificationSound = async (notificationType: string) => {
+    try {
+      if (soundPrefsRef.current === null) {
+        const token = getToken();
+        const res = await fetch('/api/notifications/settings', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        soundPrefsRef.current = res.ok ? await res.json() : { soundEnabled: false };
+      }
+      if (!soundPrefsRef.current?.soundEnabled) return;
+
+      const { SoundService } = await import('@/lib/notifications/sound-service');
+      await SoundService.playForNotificationType(notificationType, 0.4);
+    } catch {
+      // A notification that arrived but didn't chime is not worth
+      // surfacing to the user.
+    }
   };
 
   const cleanup = () => {

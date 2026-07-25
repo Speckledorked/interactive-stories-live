@@ -3,6 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { isPushSupported, enablePush, disablePush } from '@/lib/notifications/push-client';
 import { getToken } from '@/lib/clientAuth';
 
 interface NotificationSettings {
@@ -16,8 +17,21 @@ interface NotificationSettings {
   emailWorldEvents: boolean;
 
   // Push notifications
+  pushEnabled: boolean;
+  pushTurnReminders: boolean;
+  pushSceneChanges: boolean;
+  pushMentions: boolean;
+  pushWhispers: boolean;
+  pushCampaignInvites: boolean;
 
   // Sound notifications
+  soundEnabled: boolean;
+  soundTurnReminders: boolean;
+  soundSceneChanges: boolean;
+  soundMentions: boolean;
+  soundWhispers: boolean;
+  soundCriticalMoments: boolean;
+  soundWorldEvents: boolean;
 
   // Timing preferences
   quietHoursEnabled: boolean;
@@ -32,12 +46,95 @@ interface NotificationSettings {
 
 export default function NotificationSettings() {
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
+  // Push availability is a property of the deployment (VAPID keys) and the
+  // browser, not a user preference — the toggle is hidden rather than
+  // shown-but-broken when either says no.
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushConfigured, setPushConfigured] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [testingSound, setTestingSound] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchSettings();
+    void detectPushAvailability();
   }, []);
+
+  /**
+   * Push needs both a browser that supports it and a deployment with VAPID
+   * keys. Either missing means the toggle is hidden — a control that can't
+   * work is worse than no control.
+   */
+  const detectPushAvailability = async () => {
+    const supported = isPushSupported();
+    setPushSupported(supported);
+    if (!supported) return;
+
+    try {
+      const token = getToken();
+      const res = await fetch('/api/notifications/push', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const { configured } = await res.json();
+        setPushConfigured(Boolean(configured));
+      }
+    } catch {
+      setPushConfigured(false);
+    }
+  };
+
+  /**
+   * Turning push on is more than a preference flip — it needs browser
+   * permission and a real subscription registered with the server, so the
+   * stored preference only changes once that actually succeeded.
+   */
+  const handlePushToggle = async () => {
+    if (!settings) return;
+    setPushBusy(true);
+    setPushError(null);
+
+    try {
+      if (settings.pushEnabled) {
+        await disablePush();
+        await updateSettings({ pushEnabled: false });
+        setSettings(prev => (prev ? { ...prev, pushEnabled: false } : null));
+        return;
+      }
+
+      const result = await enablePush();
+      if (result.ok) {
+        await updateSettings({ pushEnabled: true });
+        setSettings(prev => (prev ? { ...prev, pushEnabled: true } : null));
+        return;
+      }
+
+      setPushError(
+        result.reason === 'denied'
+          ? 'Your browser blocked notifications. Allow them for this site in your browser settings, then try again.'
+          : result.reason === 'unsupported'
+            ? 'This browser does not support push notifications.'
+            : result.reason === 'unconfigured'
+              ? 'Push notifications are not configured on this server yet.'
+              : `Could not enable push notifications${result.detail ? `: ${result.detail}` : ''}.`
+      );
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  /** Preview a cue so the labels mean something before you pick. */
+  const testSound = async (soundId: string) => {
+    setTestingSound(soundId);
+    try {
+      const { SoundService } = await import('@/lib/notifications/sound-service');
+      await SoundService.playSound({ soundId, volume: 0.5 });
+    } finally {
+      setTimeout(() => setTestingSound(null), 600);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -205,6 +302,107 @@ export default function NotificationSettings() {
               label="World Events"
               description="Major story developments"
             />
+          </div>
+        )}
+      </div>
+
+      {/* Push Notifications */}
+      {pushSupported && pushConfigured && (
+        <div className="bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 rounded-lg border border-ember-900/30 p-6">
+          <h2 className="text-lg font-semibold text-ember-100 mb-4">🔔 Browser Notifications</h2>
+
+          <ToggleSwitch
+            enabled={settings.pushEnabled}
+            onChange={handlePushToggle}
+            label={pushBusy ? 'Working…' : 'Enable Browser Notifications'}
+            description="Get notified even when MythOS isn't the active tab"
+          />
+
+          {pushError && (
+            <p className="mt-2 text-sm text-wine-300">{pushError}</p>
+          )}
+
+          {settings.pushEnabled && (
+            <div className="ml-4 border-l-2 border-ember-900/30 pl-4 space-y-2 mt-2">
+              <ToggleSwitch
+                enabled={settings.pushTurnReminders}
+                onChange={() => handleToggle('pushTurnReminders')}
+                label="Turn Reminders"
+              />
+              <ToggleSwitch
+                enabled={settings.pushSceneChanges}
+                onChange={() => handleToggle('pushSceneChanges')}
+                label="Scene Changes"
+              />
+              <ToggleSwitch
+                enabled={settings.pushMentions}
+                onChange={() => handleToggle('pushMentions')}
+                label="Mentions"
+              />
+              <ToggleSwitch
+                enabled={settings.pushWhispers}
+                onChange={() => handleToggle('pushWhispers')}
+                label="Private Messages"
+              />
+              <ToggleSwitch
+                enabled={settings.pushCampaignInvites}
+                onChange={() => handleToggle('pushCampaignInvites')}
+                label="Campaign Invites"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sound Notifications */}
+      <div className="bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 rounded-lg border border-ember-900/30 p-6">
+        <h2 className="text-lg font-semibold text-ember-100 mb-4">🔊 Sound Effects</h2>
+
+        <ToggleSwitch
+          enabled={settings.soundEnabled}
+          onChange={() => handleToggle('soundEnabled')}
+          label="Enable Sound Effects"
+          description="A short chime when something needs your attention"
+        />
+
+        {settings.soundEnabled && (
+          <div className="ml-4 border-l-2 border-ember-900/30 pl-4 space-y-1 mt-2">
+            {([
+              ['soundTurnReminders', 'Turn Reminders', 'turn-reminder'],
+              ['soundSceneChanges', 'Scene Changes', 'scene-change'],
+              ['soundMentions', 'Mentions', 'mention'],
+              ['soundWhispers', 'Private Messages', 'whisper'],
+              ['soundCriticalMoments', 'Critical Moments', 'critical-moment'],
+              ['soundWorldEvents', 'World Events', 'world-event'],
+            ] as const).map(([key, label, cueId]) => (
+              <div key={key} className="flex items-center justify-between py-1.5">
+                <div className="font-medium text-ember-100 text-sm">{label}</div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => testSound(cueId)}
+                    disabled={testingSound === cueId}
+                    className="text-ember-300 hover:text-ember-200 text-xs disabled:opacity-50"
+                  >
+                    {testingSound === cueId ? '♪ playing' : 'Preview'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggle(key)}
+                    aria-label={label}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      settings[key] ? 'bg-wine-600' : 'bg-black/30'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-ember-100 transition-transform ${
+                        settings[key] ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

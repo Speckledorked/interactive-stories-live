@@ -20,6 +20,8 @@ import { resolveOrCreateLocationId } from '../locations'
 
 const makeTx = () => ({
   character: { update: vi.fn(async (_args: any) => ({})) },
+  // Corruption entry gate (#83) looks the destination up by campaign+name.
+  location: { findUnique: vi.fn(async (): Promise<{ minCorruption: number | null; maxCorruption: number | null } | null> => null) },
 })
 
 let tx: ReturnType<typeof makeTx>
@@ -462,5 +464,117 @@ describe('findConsequenceToRemove (#69)', () => {
 
   it('returns null for an empty needle instead of matching everything', () => {
     expect(findConsequenceToRemove(consequences(), '   ')).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Corruption entry gate (#83)
+// ---------------------------------------------------------------------------
+// The safety property: gates apply at the BOUNDARY. Marks are irreversible
+// and capped at one per scene, so a gate evaluated against where someone
+// already stands would eject them through a door they could never re-enter.
+
+describe('applyCharacterChanges — corruption entry gate', () => {
+  const theme = vi.fn().mockResolvedValue({ name: 'the Rot', stages: ['marked'] })
+
+  it('refuses a move into a location the character is too marked for', async () => {
+    const roster = [character({ corruption: 4 })]
+    tx.location.findUnique.mockResolvedValue({ minCorruption: null, maxCorruption: 2 })
+
+    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'The High Temple' } } as PcChange,
+    ], roster, theme, true)
+
+    expect(refusals).toHaveLength(1)
+    expect(refusals[0]).toContain('The High Temple')
+    // The move did not happen.
+    const data = tx.character.update.mock.calls[0]?.[0]?.data
+    expect(data?.currentLocation).toBeUndefined()
+  })
+
+  it('refuses a move into a place that demands marks the character lacks', async () => {
+    const roster = [character({ corruption: 0 })]
+    tx.location.findUnique.mockResolvedValue({ minCorruption: 3, maxCorruption: null })
+
+    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'The Drowned Shrine' } } as PcChange,
+    ], roster, theme, true)
+
+    expect(refusals).toHaveLength(1)
+  })
+
+  it('allows a move that satisfies the gate', async () => {
+    const roster = [character({ corruption: 3 })]
+    tx.location.findUnique.mockResolvedValue({ minCorruption: 3, maxCorruption: null })
+
+    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'The Drowned Shrine' } } as PcChange,
+    ], roster, theme, true)
+
+    expect(refusals).toEqual([])
+    expect(tx.character.update.mock.calls[0][0].data.currentLocation).toBe('The Drowned Shrine')
+  })
+
+  it('never gates a campaign with no corruption theme', async () => {
+    const roster = [character({ corruption: 5 })]
+    tx.location.findUnique.mockResolvedValue({ minCorruption: null, maxCorruption: 0 })
+
+    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'The High Temple' } } as PcChange,
+    ], roster, noTheme, true)
+
+    expect(refusals).toEqual([])
+    expect(tx.character.update.mock.calls[0][0].data.currentLocation).toBe('The High Temple')
+  })
+
+  it('never checks a gate when the change is not a move', async () => {
+    // This IS the boundary rule: standing state is never re-evaluated, so
+    // gaining a mark can never eject anyone from where they already are.
+    const roster = [character({ corruption: 5 })]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
+    ], roster, theme, true)
+    expect(tx.location.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('allows the move when the gate lookup fails', async () => {
+    // Fails open on purpose: a gate that accidentally refuses movement
+    // strands the party, one that accidentally permits it costs flavor.
+    const roster = [character({ corruption: 5 })]
+    tx.location.findUnique.mockRejectedValue(new Error('db down'))
+
+    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'Anywhere' } } as PcChange,
+    ], roster, theme, true)
+
+    expect(refusals).toEqual([])
+    expect(tx.character.update.mock.calls[0][0].data.currentLocation).toBe('Anywhere')
+  })
+
+  it('allows a move into a place that has no row yet', async () => {
+    // The fiction inventing a location right now has no row to carry a gate.
+    const roster = [character({ corruption: 5 })]
+    tx.location.findUnique.mockResolvedValue(null)
+
+    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'A Nameless Hollow' } } as PcChange,
+    ], roster, theme, true)
+
+    expect(refusals).toEqual([])
+  })
+
+  it('does not write harm state when a move is refused', async () => {
+    // A refusal is not an injury. Routing it through harmMessages would
+    // trigger the harm/conditions write that array doubles as the flag for.
+    const roster = [character({ corruption: 4, harm: 0 })]
+    tx.location.findUnique.mockResolvedValue({ minCorruption: null, maxCorruption: 1 })
+
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'The High Temple' } } as PcChange,
+    ], roster, theme, true)
+
+    const data = tx.character.update.mock.calls[0]?.[0]?.data
+    expect(data?.harm).toBeUndefined()
+    expect(data?.conditions).toBeUndefined()
   })
 })

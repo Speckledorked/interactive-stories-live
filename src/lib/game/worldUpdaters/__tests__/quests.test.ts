@@ -12,6 +12,12 @@ const makeTx = () => ({
     update: vi.fn(async (_args: any) => ({})),
     create: vi.fn(async () => ({})),
   },
+  // Quest-giver rosters (#75), loaded lazily and at most once per batch.
+  nPC: { findMany: vi.fn(async (): Promise<Array<{ id: string; name: string }>> => []) },
+  faction: { findMany: vi.fn(async (): Promise<Array<{ id: string; name: string }>> => []) },
+  // Corruption acquisition gate (#83) context.
+  campaign: { findUnique: vi.fn(async (): Promise<{ corruptionTheme: unknown } | null> => ({ corruptionTheme: { name: 'the Rot' } })) },
+  character: { findMany: vi.fn(async (): Promise<Array<{ corruption: number }>> => []) },
 })
 
 let tx: ReturnType<typeof makeTx>
@@ -49,7 +55,10 @@ describe('applyQuestChanges — new quest', () => {
 
     await applyQuestChanges(tx as any, 'camp1', 3, [change])
 
-    expect(applyQuestRewardGrant).toHaveBeenCalledWith(tx, 'camp1', 'Clear the Warrens', { gold: 50 })
+    // Trailing arg is the quest's resolved giver faction, which funds the
+    // payout when the grant names no payer — null here, since this quest
+    // reported no giver.
+    expect(applyQuestRewardGrant).toHaveBeenCalledWith(tx, 'camp1', 'Clear the Warrens', { gold: 50 }, null)
   })
 
   it('skips a malformed change with no name', async () => {
@@ -102,10 +111,195 @@ describe('applyQuestChanges — existing quest', () => {
   })
 
   it('makes no DB write when nothing actually changed', async () => {
-    tx.quest.findFirst.mockResolvedValue({ ...existing })
+    tx.quest.findFirst.mockResolvedValue({ ...existing, objectiveKey: 'clear-the-warrens' })
     await applyQuestChanges(tx as any, 'camp1', 8, [
       { name: 'Clear the Warrens', changes: {} } as QuestChange,
     ])
     expect(tx.quest.update).not.toHaveBeenCalled()
+  })
+
+  it('backfills the stable handle for a quest that predates it (#45)', async () => {
+    // Legacy quests carry no objectiveKey and the only hook to fill one in
+    // is the fiction touching the quest again — so an otherwise-no-op
+    // report DOES write here, exactly once.
+    tx.quest.findFirst
+      .mockResolvedValueOnce({ ...existing, objectiveKey: null })
+      .mockResolvedValueOnce(null) // key is unclaimed
+    await applyQuestChanges(tx as any, 'camp1', 8, [
+      { name: 'Clear the Warrens', changes: {} } as QuestChange,
+    ])
+    expect(tx.quest.update).toHaveBeenCalledWith({
+      where: { id: 'q1' },
+      data: { objectiveKey: 'clear-the-warrens' },
+    })
+  })
+
+  it('leaves a quest unkeyed rather than colliding with a key another holds', async () => {
+    // objectiveKey is unique per campaign and these writes run inside the
+    // scene-resolution transaction: a collision would abort the whole batch
+    // and take unrelated quest progress with it. Losing a handle is cheap;
+    // losing the turn is not.
+    tx.quest.findFirst
+      .mockResolvedValueOnce({ ...existing, objectiveKey: null })
+      .mockResolvedValueOnce({ id: 'other-quest', name: 'Clear the Warrens!' })
+    await applyQuestChanges(tx as any, 'camp1', 8, [
+      { name: 'Clear the Warrens', changes: {} } as QuestChange,
+    ])
+    expect(tx.quest.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('applyQuestChanges — quest giver resolution (#75)', () => {
+  const existing = { id: 'q1', name: 'Clear the Warrens', status: 'ACTIVE', progressLog: null, objectiveKey: 'clear-the-warrens' }
+
+  it('links a reported giver to the real NPC row', async () => {
+    tx.quest.findFirst.mockResolvedValue({ ...existing })
+    tx.nPC.findMany.mockResolvedValue([{ id: 'n1', name: 'Marek Voss' }])
+    tx.faction.findMany.mockResolvedValue([{ id: 'f1', name: 'Thieves Guild' }])
+
+    await applyQuestChanges(tx as any, 'camp1', 4, [
+      { name: 'Clear the Warrens', changes: { given_by: 'Marek Voss' } } as QuestChange,
+    ])
+
+    const data = tx.quest.update.mock.calls[0][0].data
+    expect(data).toMatchObject({ givenBy: 'Marek Voss', givenByNpcId: 'n1', givenByFactionId: null })
+  })
+
+  it('keeps an unresolvable giver as display text and links nothing', async () => {
+    tx.quest.findFirst.mockResolvedValue({ ...existing })
+    tx.nPC.findMany.mockResolvedValue([])
+    tx.faction.findMany.mockResolvedValue([])
+
+    await applyQuestChanges(tx as any, 'camp1', 4, [
+      { name: 'Clear the Warrens', changes: { given_by: 'A hooded stranger' } } as QuestChange,
+    ])
+
+    const data = tx.quest.update.mock.calls[0][0].data
+    expect(data).toMatchObject({ givenBy: 'A hooded stranger', givenByNpcId: null, givenByFactionId: null })
+  })
+
+  it('fetches the giver rosters at most once for a whole batch', async () => {
+    tx.quest.findFirst.mockResolvedValue({ ...existing })
+    tx.nPC.findMany.mockResolvedValue([{ id: 'n1', name: 'Marek Voss' }])
+    tx.faction.findMany.mockResolvedValue([])
+
+    await applyQuestChanges(tx as any, 'camp1', 4, [
+      { name: 'Clear the Warrens', changes: { given_by: 'Marek Voss' } } as QuestChange,
+      { name: 'Clear the Warrens', changes: { given_by: 'Marek Voss' } } as QuestChange,
+    ])
+
+    expect(tx.nPC.findMany).toHaveBeenCalledTimes(1)
+    expect(tx.faction.findMany).toHaveBeenCalledTimes(1)
+  })
+
+  it('never queries the rosters for a batch that names no giver', async () => {
+    tx.quest.findFirst.mockResolvedValue({ ...existing })
+    await applyQuestChanges(tx as any, 'camp1', 4, [
+      { name: 'Clear the Warrens', changes: { progress_append: 'Found the nest.' } } as QuestChange,
+    ])
+    expect(tx.nPC.findMany).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Corruption acquisition gate (#83)
+// ---------------------------------------------------------------------------
+// The safety property: gates apply at ACQUISITION only. Marks are
+// irreversible, so revoking an active quest — or blocking its completion —
+// would strand a party mid-job with no way back.
+
+describe('applyQuestChanges — corruption acquisition gate', () => {
+  const gated = (over: Record<string, unknown> = {}) => ({
+    id: 'q1', name: 'The Ledger Job', status: 'AVAILABLE', progressLog: null,
+    objectiveKey: 'the-ledger-job', minCorruption: null, maxCorruption: 2, ...over,
+  })
+
+  it('refuses a quest to a party too marked to take it', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated())
+    tx.character.findMany.mockResolvedValue([{ corruption: 0 }, { corruption: 4 }])
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    const data = tx.quest.update.mock.calls[0]?.[0]?.data
+    expect(data?.status).toBeUndefined()
+  })
+
+  it('judges the party by its most-marked member, which is what a giver sees', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated())
+    tx.character.findMany.mockResolvedValue([{ corruption: 0 }, { corruption: 1 }])
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('ACTIVE')
+  })
+
+  it('never revokes a quest already underway', async () => {
+    // The trap this rule exists to prevent: gaining a mark mid-job must
+    // not strand the party on a quest they can no longer touch.
+    tx.quest.findFirst.mockResolvedValue(gated({ status: 'ACTIVE' }))
+    tx.character.findMany.mockResolvedValue([{ corruption: 5 }])
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { progress_append: 'Found the ledger.' } } as QuestChange,
+    ])
+
+    expect(tx.character.findMany).not.toHaveBeenCalled()
+    expect(tx.quest.update).toHaveBeenCalled()
+  })
+
+  it('never blocks completion of a gated quest', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated({ status: 'ACTIVE' }))
+    tx.character.findMany.mockResolvedValue([{ corruption: 5 }])
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'COMPLETED' } } as QuestChange,
+    ])
+
+    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('COMPLETED')
+  })
+
+  it('never gates a campaign with no corruption theme', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated())
+    tx.campaign.findUnique.mockResolvedValue({ corruptionTheme: null })
+    tx.character.findMany.mockResolvedValue([{ corruption: 5 }])
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('ACTIVE')
+  })
+
+  it('never looks up gate context for an ungated quest', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated({ minCorruption: null, maxCorruption: null }))
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+    expect(tx.campaign.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('allows the quest when the gate lookup fails', async () => {
+    // Fails open: refusing a quest the fiction just handed over silently
+    // loses a thread.
+    tx.quest.findFirst.mockResolvedValue(gated())
+    tx.campaign.findUnique.mockRejectedValue(new Error('db down'))
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('ACTIVE')
+  })
+
+  it('persists gates the fiction reports, including lifting one', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated())
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { min_corruption: 2, max_corruption: 5 } } as QuestChange,
+    ])
+    expect(tx.quest.update.mock.calls[0][0].data).toMatchObject({ minCorruption: 2, maxCorruption: 5 })
   })
 })

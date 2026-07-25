@@ -15,6 +15,7 @@
 import { Prisma } from '@prisma/client'
 import { applyStandingChanges, StandingChange } from './standing'
 import { clampGoldDelta } from './economy'
+import { assessPayout, describeDefault } from './factionPayout'
 
 type Db = Prisma.TransactionClient
 
@@ -34,6 +35,8 @@ export interface RewardGrant {
   gold?: number
   items?: RewardGrantItem[]
   standing_changes?: StandingChange[]
+  /** Faction footing the bill — see resolvePayingFaction below. */
+  paid_by_faction?: string
 }
 
 interface InventoryForMerge {
@@ -87,7 +90,12 @@ export async function applyQuestRewardGrant(
   db: Db,
   campaignId: string,
   questName: string,
-  grant: RewardGrant
+  grant: RewardGrant,
+  // The quest's resolved giver faction (#75), used as the payer when the
+  // grant doesn't name one. A resolved FK is a fact, not a guess, which is
+  // why it's an acceptable fallback where inferring a payer from adjacent
+  // fields would not be.
+  giverFactionId?: string | null
 ): Promise<string[]> {
   const log: string[] = []
   const hasGold = (grant.gold ?? 0) !== 0
@@ -120,17 +128,43 @@ export async function applyQuestRewardGrant(
     return log
   }
 
+  // A reward is always a payout, never a debit — floor at 0 on top of the
+  // shared magnitude clamp (see economy.ts).
+  const promisedEach = Math.max(0, clampGoldDelta(grant.gold))
+
+  // Faction-funded payouts are TRANSFERS: what the faction pays, it stops
+  // having, and a faction that can't afford its promise defaults on part
+  // of it. A payout with no identifiable faction payer behaves exactly as
+  // it always did — paid in full, from nowhere.
+  let goldEach = promisedEach
+  if (hasGold && promisedEach > 0) {
+    const payer = await resolvePayingFaction(db, campaignId, grant.paid_by_faction, giverFactionId)
+    if (payer) {
+      // Assessed as a TOTAL across recipients: a five-person party each
+      // paid 200 costs the faction a thousand, not two hundred.
+      const assessment = assessPayout(promisedEach * recipients.length, payer.resources)
+      goldEach = Math.floor(assessment.paid / recipients.length)
+
+      if (assessment.resourceCost > 0) {
+        await db.faction.update({
+          where: { id: payer.id },
+          data: { resources: Math.max(0, payer.resources - assessment.resourceCost) },
+        })
+      }
+      if (assessment.defaulted) {
+        log.push(describeDefault(payer.name, assessment))
+      }
+    }
+  }
+
   for (const recipient of recipients) {
     const updateData: Record<string, unknown> = {}
 
-    if (hasGold) {
-      // A reward is always a payout, never a debit — floor at 0 on top of
-      // the shared magnitude clamp (see economy.ts).
-      const goldGrant = Math.max(0, clampGoldDelta(grant.gold))
+    if (hasGold && goldEach > 0) {
       const resources = (recipient.resources as any) || { gold: 0, contacts: [], reputation: {} }
-      resources.gold = Math.max(0, (resources.gold || 0) + goldGrant)
+      resources.gold = Math.max(0, (resources.gold || 0) + goldEach)
       updateData.resources = resources
-      log.push(`${recipient.name} received ${goldGrant} gold from completing "${questName}"`)
+      log.push(`${recipient.name} received ${goldEach} gold from completing "${questName}"`)
     }
 
     if (hasItems) {
@@ -149,4 +183,53 @@ export async function applyQuestRewardGrant(
   }
 
   return log
+}
+
+interface PayingFaction {
+  id: string
+  name: string
+  resources: number
+}
+
+/**
+ * Who is actually paying, if anyone.
+ *
+ * Order: the grant's explicit `paid_by_faction`, then the quest's resolved
+ * giver faction. Nothing else — in particular NOT `standing_changes`, even
+ * though a reward that shifts standing with a faction is usually paid by
+ * that faction. "Usually" is the problem: deducing a payer from an adjacent
+ * field is the guesswork this engine avoids everywhere else, and being
+ * wrong here drains an institution that was never involved and cascades
+ * into war outcomes and ambition thresholds.
+ *
+ * A named faction that doesn't resolve returns null, so the payout falls
+ * back to the old free-money behavior rather than being silently withheld.
+ * Failing to charge someone is a much cheaper error than failing to pay
+ * the party what the fiction promised them.
+ */
+async function resolvePayingFaction(
+  db: Db,
+  campaignId: string,
+  namedFaction: string | undefined,
+  giverFactionId: string | null | undefined
+): Promise<PayingFaction | null> {
+  const name = namedFaction?.trim()
+  if (name) {
+    const byName = await db.faction.findFirst({
+      where: { campaignId, name: { equals: name, mode: 'insensitive' } },
+      select: { id: true, name: true, resources: true },
+    })
+    if (byName) return byName
+    console.warn(`  ❓ reward_grant paid_by_faction "${name}" matched no faction — paid without a payer`)
+    return null
+  }
+
+  if (giverFactionId) {
+    return db.faction.findUnique({
+      where: { id: giverFactionId },
+      select: { id: true, name: true, resources: true },
+    })
+  }
+
+  return null
 }

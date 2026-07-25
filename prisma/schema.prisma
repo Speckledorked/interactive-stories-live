@@ -399,11 +399,41 @@ model Quest {
   campaignId String
   campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
-  name        String
-  description String      @db.Text
-  objective   String?     @db.Text // what "done" looks like, in-fiction
-  givenBy     String? // NPC or faction name that issued it (free text)
-  reward      String? // what was promised, if anything (free text)
+  name             String
+  description      String   @db.Text
+  objective        String?  @db.Text // what "done" looks like, in-fiction
+  // Stable slug of the quest's name, unique per campaign (#45). The handle
+  // other content refers to a quest BY — free-text names drift as the
+  // fiction re-phrases them, so "this unlocks after the ledger job" needs
+  // something that doesn't. Derived deterministically at creation; see
+  // questObjectiveKey in lib/game/quests.ts.
+  objectiveKey     String?
+  givenBy          String? // NPC or faction name that issued it (free text)
+  // Resolved quest-giver (#75). givenBy stays the authoritative display
+  // string — same free-text-plus-nullable-FK pattern as
+  // Character.currentLocation/locationId — but these are what make the
+  // giver a real entity: without them "the quest-giver remembers you
+  // failed" is unrepresentable, because a name string can't be queried
+  // back to the NPC who is standing in front of you. At most one is set.
+  // SetNull, not Cascade: a dead NPC's quest still exists, it just no
+  // longer has a living giver.
+  givenByNpcId     String?
+  givenByNpc       NPC?     @relation("QuestGiverNpc", fields: [givenByNpcId], references: [id], onDelete: SetNull)
+  givenByFactionId String?
+  givenByFaction   Faction? @relation("QuestGiverFaction", fields: [givenByFactionId], references: [id], onDelete: SetNull)
+  reward           String? // what was promised, if anything (free text)
+
+  // Corruption gate (#83). min = only the marked may pass; max = the
+  // marked are turned away. Null on both (the default) means ungated.
+  // Enforced at a BOUNDARY only — never re-evaluated against state a
+  // character already holds — because marks are irreversible and a
+  // retroactive gate would be a one-way trap. See lib/game/corruptionGates.ts.
+  // Checked on ACQUISITION: an already-active quest is never revoked and
+  // completion is never blocked. Corruption can stop you taking a job; it
+  // must not strand you mid-job.
+  minCorruption Int?
+  maxCorruption Int?
+
   status      QuestStatus @default(ACTIVE)
   // Appended narrative beats, newest last — "Turn 4: found the smuggler's ledger"
   progressLog String?     @db.Text
@@ -412,7 +442,10 @@ model Quest {
   updatedAt  DateTime  @updatedAt
   resolvedAt DateTime?
 
+  @@unique([campaignId, objectiveKey])
   @@index([campaignId, status])
+  @@index([givenByNpcId])
+  @@index([givenByFactionId])
 }
 
 //
@@ -776,6 +809,21 @@ model NPC {
   // PLAYER CHARACTERS, not toward other NPCs.
   socialTies Json?
 
+  // Corruption gate (#83). min = only the marked may pass; max = the
+  // marked are turned away. Null on both (the default) means ungated.
+  // Enforced at a BOUNDARY only — never re-evaluated against state a
+  // character already holds — because marks are irreversible and a
+  // retroactive gate would be a one-way trap. See lib/game/corruptionGates.ts.
+  // Checked on LEVERAGE: a repulsed NPC's rapport doesn't modify the roll
+  // while the gate applies, and helps again the moment it stops. No
+  // lasting state, so nothing to trap.
+  minCorruption Int?
+  maxCorruption Int?
+
+  // Quests this NPC personally handed out (#75). The reason the FK exists:
+  // it's what lets a FAILED quest reach back to the person who gave it.
+  questsGiven Quest[] @relation("QuestGiverNpc")
+
   @@index([campaignId])
   @@index([factionId])
   @@index([locationId])
@@ -871,6 +919,10 @@ model Faction {
   // Urban Shadows economy: character standings with this faction.
   characterStandings FactionStanding[]
 
+  // Quests commissioned by this faction as an institution (#75) — distinct
+  // from a quest handed over by one of its members, which links to the NPC.
+  questsGiven Quest[] @relation("QuestGiverFaction")
+
   @@index([campaignId])
 }
 
@@ -904,6 +956,16 @@ model Location {
   ownerFactionId String?
   ownerFaction   Faction? @relation("FactionTerritories", fields: [ownerFactionId], references: [id], onDelete: SetNull)
   isContested    Boolean  @default(false)
+
+  // Corruption gate (#83). min = only the marked may pass; max = the
+  // marked are turned away. Null on both (the default) means ungated.
+  // Enforced at a BOUNDARY only — never re-evaluated against state a
+  // character already holds — because marks are irreversible and a
+  // retroactive gate would be a one-way trap. See lib/game/corruptionGates.ts.
+  // Checked on ENTRY: a character can be refused a door, never ejected
+  // through one they already walked through.
+  minCorruption Int?
+  maxCorruption Int?
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
@@ -1214,9 +1276,9 @@ model TimelineEvent {
 //
 
 model WorldMeta {
-  id                String   @id @default(cuid())
-  campaignId        String   @unique
-  currentTurnNumber Int      @default(1)
+  id                String  @id @default(cuid())
+  campaignId        String  @unique
+  currentTurnNumber Int     @default(1)
   currentInGameDate String?
   currentLocation   String?
 
@@ -1226,13 +1288,13 @@ model WorldMeta {
   // clock-advancement time: in a tense campaign, unattached threats close
   // faster. Both this and `phase` below spent a long time as dead columns
   // nothing wrote; they're real now (README #90).
-  tension           Int      @default(50)
+  tension   Int      @default(50)
   // Story-arc phase derived from tension and campaign length —
   // setup / rising / climax / aftermath. Steers narration pacing.
-  phase             String?
-  otherMeta         Json?
-  gmNotes           String?
-  updatedAt         DateTime @updatedAt
+  phase     String?
+  otherMeta Json?
+  gmNotes   String?
+  updatedAt DateTime @updatedAt
 
   // World-turn pacing: the faction/NPC simulation advances with IN-GAME
   // time, not per player action. hoursSinceWorldTurn accumulates the AI's
@@ -1508,7 +1570,7 @@ model PushSubscription {
   // Purely diagnostic — which browser this came from, for support.
   userAgent String?
 
-  createdAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
 
   user User @relation("UserPushSubscriptions", fields: [userId], references: [id], onDelete: Cascade)

@@ -33,6 +33,7 @@ import { resolveArmorValue, resolveConsumableHeal } from '../inventory'
 import { applyCapabilityChanges } from '../capabilities'
 import { applyDebtChanges, debtChangeFromConsequence, DebtChange } from '../debts'
 import { applyStandingChanges } from '../standing'
+import { checkCorruptionGate, hasCorruptionGate, describeRefusal } from '../corruptionGates'
 import { clampGoldDelta } from '../economy'
 import { appendBoundedProse, MAX_CHARACTER_DESCRIPTION_CHARS } from '../textAppend'
 import {
@@ -104,8 +105,14 @@ export async function applyCharacterChanges(
   charactersForResolution: Character[],
   getCorruptionTheme: () => Promise<CorruptionTheme | null>,
   sceneOrigin: boolean
-): Promise<void> {
+): Promise<string[]> {
   console.log(`🦸 Updating ${pcChanges.length} characters`)
+
+  // Refusals from corruption gates (#83) — returned rather than pushed into
+  // harmMessages, which doubles as the "write harm and conditions" trigger:
+  // being turned away from a door is not an injury and must not cause a
+  // harm write.
+  const gateRefusals: string[] = []
 
   for (const pcChange of pcChanges) {
     const pcResolution = resolveEntityByNameOrId(charactersForResolution, pcChange.character_name_or_id)
@@ -129,8 +136,20 @@ export async function applyCharacterChanges(
     // need the id anyway (see README Known Bugs P1 — Location stored as
     // free text, not an FK).
     if (pcChange.changes.location) {
-      updateData.currentLocation = pcChange.changes.location
-      updateData.locationId = await resolveOrCreateLocationId(tx, campaignId, pcChange.changes.location, sceneOrigin)
+      // Corruption gate on ENTRY (#83). Checked only for a MOVE, never
+      // against where the character already is: marks are irreversible, so
+      // re-evaluating a standing location would eject someone through a
+      // door they already walked through and could never re-enter.
+      const entry = await checkLocationEntryGate(
+        tx, campaignId, pcChange.changes.location, character.corruption ?? 0, getCorruptionTheme
+      )
+      if (entry.allowed) {
+        updateData.currentLocation = pcChange.changes.location
+        updateData.locationId = await resolveOrCreateLocationId(tx, campaignId, pcChange.changes.location, sceneOrigin)
+      } else {
+        gateRefusals.push(`${character.name} could not enter ${pcChange.changes.location} — ${entry.message}`)
+        console.log(`  🌑 ${character.name} turned away from ${pcChange.changes.location} — corruption gate`)
+      }
     }
 
     // Process harm and conditions
@@ -704,5 +723,47 @@ export async function applyCharacterChanges(
 
       console.log(`  🦸 Updated character: ${character.name}`)
     }
+  }
+
+  return gateRefusals
+}
+
+/**
+ * Corruption gate for a location a character is trying to MOVE INTO (#83).
+ *
+ * Boundary-only by construction: this is called from the location-change
+ * branch, so it can only ever refuse a move. Where a character already
+ * stands is never re-checked — with irreversible marks, that would eject
+ * someone through a door they could never re-enter.
+ *
+ * Fails OPEN on every uncertainty — no theme, no such location yet, a
+ * lookup error. A gate that accidentally refuses movement strands the
+ * party; one that accidentally permits it costs a moment of flavor.
+ */
+async function checkLocationEntryGate(
+  tx: Db,
+  campaignId: string,
+  locationName: string,
+  corruption: number,
+  getCorruptionTheme: () => Promise<CorruptionTheme | null>
+): Promise<{ allowed: boolean; message?: string }> {
+  try {
+    const theme = await getCorruptionTheme()
+    if (!theme) return { allowed: true }
+
+    const location = await tx.location.findUnique({
+      where: { campaignId_name: { campaignId, name: locationName } },
+      select: { minCorruption: true, maxCorruption: true },
+    })
+    // A location the fiction is inventing right now can't be gated — there
+    // is no row yet to carry a gate.
+    if (!location || !hasCorruptionGate(location)) return { allowed: true }
+
+    const gate = checkCorruptionGate(location, corruption, true)
+    if (gate.allowed) return { allowed: true }
+    return { allowed: false, message: describeRefusal(gate.refusal!, theme.name) }
+  } catch (error) {
+    console.error('Corruption entry gate check failed (allowing movement):', error)
+    return { allowed: true }
   }
 }

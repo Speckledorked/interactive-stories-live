@@ -41,6 +41,12 @@ export async function applyLocationChanges(
       if (locChange.gm_notes_append) {
         updateData.gmNotes = appendBounded(existing.gmNotes, locChange.gm_notes_append, GM_NOTES_BOUNDS)
       }
+      // Corruption gates (#83). Written whenever reported, including back
+      // to null — the fiction can consecrate a place as readily as taint
+      // it, and a gate with no way to be lifted is the trap this design
+      // exists to avoid.
+      if (locChange.min_corruption !== undefined) updateData.minCorruption = locChange.min_corruption
+      if (locChange.max_corruption !== undefined) updateData.maxCorruption = locChange.max_corruption
       // Fog of war: same reveal-on-mention rule as NPC/Faction — a live
       // scene touching this location means the party is there, so it's
       // discovered; an offscreen tick mentioning it must not out it.

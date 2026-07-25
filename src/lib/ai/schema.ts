@@ -267,7 +267,12 @@ export const NPCChangesSchema = z.object({
     // one. Deliberately simple — no conditions, death saves, or
     // stabilize/capture outcomes — matching how NPC.harm is a thinner
     // model than Character.harm by design (see schema.prisma).
-    harm_healing: z.number().min(0).max(6).optional()
+    harm_healing: z.number().min(0).max(6).optional(),
+    // Corruption gate (#83). min = only the marked may pass; max = the
+    // marked are turned away. Both omitted (the default) means ungated.
+    // Bounded 0-5 to match the corruption track.
+    min_corruption: z.number().int().min(0).max(5).optional(),
+    max_corruption: z.number().int().min(0).max(5).optional()
   })
 })
 
@@ -325,7 +330,12 @@ export const LocationChangesSchema = z.object({
   is_new: z.boolean().optional(),       // true when registering a new location
   description: z.string().max(MEDIUM_TEXT).optional(),   // what this place looks like / feels like
   location_type: z.string().max(SHORT_TEXT).optional(), // town, dungeon, wilderness, inn, building, etc.
-  gm_notes_append: z.string().max(LONG_TEXT).optional()
+  gm_notes_append: z.string().max(LONG_TEXT).optional(),
+  // Corruption gate (#83). min = only the marked may pass; max = the
+  // marked are turned away. Both omitted (the default) means ungated.
+  // Bounded 0-5 to match the corruption track.
+  min_corruption: z.number().int().min(0).max(5).optional(),
+  max_corruption: z.number().int().min(0).max(5).optional()
 })
 
 // Structured payout applied deterministically when a quest's status becomes
@@ -337,7 +347,19 @@ export const RewardGrantSchema = z.object({
   character_names: z.array(z.string()).optional(), // recipients; absent/empty = every living party member
   gold: z.number().optional(),
   items: z.array(InventoryItemSchema).optional(),
-  standing_changes: z.array(StandingChangeSchema).optional()
+  standing_changes: z.array(StandingChangeSchema).optional(),
+  // Who is footing the bill. When this names a real faction, the payout
+  // becomes a TRANSFER: the faction loses what it pays, and a faction that
+  // can't afford the promise defaults on part of it (see
+  // lib/game/factionPayout.ts). Omit for a personal or unaffiliated payer,
+  // which pays in full from nowhere exactly as before.
+  //
+  // Named explicitly rather than inferred from standing_changes or the
+  // quest's giver text: deducing a payer from adjacent fields is the
+  // guesswork this engine avoids, and getting it wrong bankrupts an
+  // institution that was never involved. The quest's resolved giver faction
+  // is used as a fallback, because that link IS a fact rather than a guess.
+  paid_by_faction: z.string().max(SHORT_TEXT).optional()
 })
 
 // Quest lifecycle schema (see lib/game/stateUpdater.ts quest handling)
@@ -351,6 +373,11 @@ export const QuestChangeSchema = z.object({
     reward: z.string().max(MEDIUM_TEXT).optional(),
     status: z.enum(['ACTIVE', 'COMPLETED', 'FAILED', 'ABANDONED']).optional(),
     progress_append: z.string().max(MEDIUM_TEXT).optional(),
+    // Corruption gate (#83). min = only the marked may pass; max = the
+    // marked are turned away. Both omitted (the default) means ungated.
+    // Bounded 0-5 to match the corruption track.
+    min_corruption: z.number().int().min(0).max(5).optional(),
+    max_corruption: z.number().int().min(0).max(5).optional(),
     reward_grant: RewardGrantSchema.optional()
   })
 })

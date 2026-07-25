@@ -25,6 +25,7 @@ import { BASIC_MOVES, calculateOutcome } from '@/lib/pbta-moves'
 import { MAX_CORRUPTION, CORRUPTION_SURGE_BONUS } from './corruption'
 import { proficiencyBand, ProficiencyBand } from './capabilities'
 import { effectiveStandingModifier } from './standing'
+import { checkCorruptionGate } from './corruptionGates'
 import {
   ZonePosition,
   Engagement,
@@ -640,7 +641,7 @@ export async function resolveActionMechanics(
   if (pendingActions.length === 0) return []
 
   try {
-    const [characterRows, factionRows, npcRows, locationRows, moveFlavorRows] = await Promise.all([
+    const [characterRows, factionRows, npcRows, locationRows, moveFlavorRows, campaignRow] = await Promise.all([
       prisma.character.findMany({
         where: { id: { in: Array.from(new Set(pendingActions.map(a => a.characterId))) } },
         include: {
@@ -660,7 +661,9 @@ export async function resolveActionMechanics(
       // can't knowingly work a relationship with someone the party hasn't met.
       prisma.nPC.findMany({
         where: { campaignId, isDiscovered: true },
-        select: { id: true, name: true },
+        // Corruption gate columns (#83): a repulsed NPC's rapport must not
+        // modify the roll — see the leverage gate below.
+        select: { id: true, name: true, minCorruption: true, maxCorruption: true },
       }),
       // Live weather per location (see lib/game/tick/weatherTick.ts) —
       // matched against each acting character's locationId (falling back
@@ -675,7 +678,16 @@ export async function resolveActionMechanics(
         where: { campaignId, baseMoveKey: { not: null } },
         select: { baseMoveKey: true, name: true, outcomes: true },
       }),
+      // Corruption gates (#83) only apply in a universe that HAS a
+      // corruption theme — a gate left on a row in a re-themed or imported
+      // campaign must not silently lock content, matching how the rest of
+      // the track disables itself when the theme is null.
+      prisma.campaign.findUnique({
+        where: { id: campaignId },
+        select: { corruptionTheme: true },
+      }),
     ])
+    const hasCorruptionTheme = Boolean(campaignRow?.corruptionTheme)
     const moveFlavorByKey = new Map(
       moveFlavorRows.map(m => [m.baseMoveKey as string, { name: m.name, outcomes: m.outcomes as MoveFlavorForRoll['outcomes'] }])
     )
@@ -768,11 +780,21 @@ export async function resolveActionMechanics(
         // No relationship row yet just means neutral (all zeros) — not "no
         // roll effect vs. an unknown NPC name", which is the null case below.
         if (npc) {
-          relationshipForRoll = {
-            npcName: npc.name,
-            trust: rel?.trust ?? 0,
-            tension: rel?.tension ?? 0,
-            respect: rel?.respect ?? 0,
+          // Corruption gate on LEVERAGE (#83): an NPC who is repulsed by
+          // (or who requires) what the character has become gives their
+          // rapport no weight. Deliberately the one gate with no lasting
+          // state — nothing is written, so it stops applying the moment the
+          // gate does, and it can never trap anyone.
+          const gate = checkCorruptionGate(npc, character.corruption ?? 0, hasCorruptionTheme)
+          if (gate.allowed) {
+            relationshipForRoll = {
+              npcName: npc.name,
+              trust: rel?.trust ?? 0,
+              tension: rel?.tension ?? 0,
+              respect: rel?.respect ?? 0,
+            }
+          } else {
+            console.log(`  🌑 ${npc.name} gives ${character.name} nothing — corruption gate (${gate.refusal})`)
           }
         }
       }

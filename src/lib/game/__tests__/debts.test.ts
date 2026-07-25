@@ -3,7 +3,7 @@
 // the diegetic read-side shaping.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { applyDebtChanges, summarizeDebts, formatDebtsForPrompt, DebtChange } from '../debts'
+import { applyDebtChanges, summarizeDebts, formatDebtsForPrompt, debtChangeFromConsequence, DebtChange } from '../debts'
 
 const makeDb = () => ({
   faction: { findFirst: vi.fn().mockResolvedValue(null) },
@@ -126,5 +126,77 @@ describe('read-side shaping', () => {
       'Jason owes Thieves Guild (They hid him from the watch)',
       'Mira owes Jason (He saved her brother)',
     ])
+  })
+})
+
+describe('debtChangeFromConsequence (#69)', () => {
+  it('ignores every consequence type that is not a debt', () => {
+    for (const type of ['promise', 'enemy', 'longTermThreat']) {
+      expect(debtChangeFromConsequence({ type, description: 'x', counterparty_name: 'Vashti' })).toBeNull()
+    }
+  })
+
+  it('turns a debt consequence into an incur against the named counterparty', () => {
+    expect(debtChangeFromConsequence({
+      type: 'debt',
+      description: 'She got them out of the district',
+      counterparty_name: 'Vashti',
+      counterparty_type: 'npc',
+      direction: 'owed_to_character',
+    })).toEqual({
+      counterparty_name: 'Vashti',
+      counterparty_type: 'npc',
+      direction: 'owed_to_character',
+      action: 'incur',
+      description: 'She got them out of the district',
+      reason: expect.any(String),
+    })
+  })
+
+  it('defaults to a debt the party owes, and to an NPC counterparty', () => {
+    // A bare "this became a debt" means the party owes someone. Guessing
+    // the other way would hand players leverage they never earned.
+    const debt = debtChangeFromConsequence({ type: 'debt', description: 'x', counterparty_name: 'Vashti' })!
+    expect(debt.direction).toBe('owed_by_character')
+    expect(debt.counterparty_type).toBe('npc')
+  })
+
+  it('never produces a debt owed to nobody', () => {
+    // Such a row could never be called in, which is the whole point of the
+    // Debt model. Dropping beats writing something inert.
+    expect(debtChangeFromConsequence({ type: 'debt', description: 'Owes someone' })).toBeNull()
+    expect(debtChangeFromConsequence({ type: 'debt', description: 'Owes someone', counterparty_name: '   ' })).toBeNull()
+  })
+
+  it('never produces a debt with no fiction behind it', () => {
+    expect(debtChangeFromConsequence({ type: 'debt', description: '', counterparty_name: 'Vashti' })).toBeNull()
+    expect(debtChangeFromConsequence({ type: 'debt', counterparty_name: 'Vashti' })).toBeNull()
+  })
+
+  it('trims the counterparty so the writer name-matches cleanly', () => {
+    // applyDebtChanges resolves counterparties by case-insensitive name;
+    // stray whitespace would silently miss a real NPC.
+    const debt = debtChangeFromConsequence({ type: 'debt', description: 'x', counterparty_name: '  Vashti  ' })!
+    expect(debt.counterparty_name).toBe('Vashti')
+  })
+
+  it('produces something applyDebtChanges actually accepts', async () => {
+    // The conversion is only useful if the writer takes it end to end.
+    const db = makeDb()
+    const debt = debtChangeFromConsequence({
+      type: 'debt', description: 'Smuggled them out', counterparty_name: 'Vashti', counterparty_type: 'npc',
+    })!
+    const log = await applyDebtChanges(db as any, 'camp1', 'char1', 'Jason', [debt], 4)
+    expect(db.debt.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          counterpartyName: 'Vashti',
+          direction: 'OWED_BY_CHARACTER',
+          description: 'Smuggled them out',
+          turnCreated: 4,
+        }),
+      })
+    )
+    expect(log).toEqual(['Jason now owes Vashti: Smuggled them out'])
   })
 })

@@ -89,8 +89,15 @@ export interface AIGMResponse {
         }>
         // Phase 14: Consequence changes
         consequences_add?: Array<{
-          type: 'promise' | 'enemy' | 'longTermThreat'
+          // 'debt' is an alias, not a consequence array: it's routed into
+          // the real Debt model (see debtChangeFromConsequence, #69), which
+          // is why the three fields below exist. Nothing is written to
+          // consequences.debts.
+          type: 'promise' | 'debt' | 'enemy' | 'longTermThreat'
           description: string
+          counterparty_name?: string
+          counterparty_type?: 'npc' | 'faction'
+          direction?: 'owed_by_character' | 'owed_to_character'
         }>
         consequences_remove?: string[] // Descriptions of consequences to remove
         // Physical appearance changes (scars, lost limbs, etc.)
@@ -805,7 +812,7 @@ You MUST respond with a JSON object matching this structure:
           "conditions_add": [{"name": "Bleeding", "category": "Physical", "description": "...", "mechanicalEffect": "..."}],
           "location": "New location",
           "relationship_changes": [{"entity_id": "npc_123", "entity_name": "Guard Captain", "trust_delta": 10, "reason": "Saved their life"}],
-          "consequences_add": [{"type": "promise", "description": "Swore to return for the child"}],
+          "consequences_add": [{"type": "promise", "description": "Swore to return for the child"}, {"type": "debt", "description": "Vashti's people got them out of the district", "counterparty_name": "Vashti", "counterparty_type": "npc", "direction": "owed_by_character"}],
           "appearance_changes": {"description": "Deep scar on cheek", "append": true},
           "equipment_changes": {"weapon": {"action": "remove", "value": "Broken sword"}},
           "inventory_changes": {"items_add": [...], "items_remove": [...], "items_modify": [...]},
@@ -924,7 +931,7 @@ USE DEBTS AS DRAMA:
 - CALL IN: NPCs and factions remember. When it serves the story, have a creditor show up wanting repayment — at the worst possible time is best. A called-in debt is pressure, not a transaction: refusing has social consequences (burned relationships, new enemies, reputation).
 - RESOLVE: when a debt is honored, refused, traded away, or forgiven, resolve it with how it ended.
 
-Report via debt_changes inside that character's pc_changes — this is the ONLY channel for a debt. There is no consequences_add "debt" type; only debt_changes carries direction, counterparty and status, and only it reaches the prompt later as leverage.
+Report via debt_changes inside that character's pc_changes. A consequences_add entry of type "debt" also works and lands in exactly the same place, but it MUST name a counterparty_name — a debt owed to nobody can never be called in, and one without a named creditor is dropped.
 - {"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the burning district", "reason": "Kessler's men saved them at real cost"}
 - {"counterparty_name": "Thieves Guild", "counterparty_type": "faction", "direction": "owed_by_character", "action": "resolve", "description": "Repaid by stealing the ledger for them", "reason": "The job is done"}
 

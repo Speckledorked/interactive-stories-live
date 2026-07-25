@@ -24,6 +24,48 @@ const DIRECTION_MAP: Record<DebtChange['direction'], DebtDirection> = {
   owed_to_character: 'OWED_TO_CHARACTER',
 }
 
+/**
+ * Translate a `consequences_add` entry of type 'debt' into a real
+ * DebtChange (#69). Pure; returns null when it can't become a debt.
+ *
+ * Why this exists: a narrator reporting a debt reaches for the consequence
+ * channel as often as for debt_changes — it's the obvious place to put
+ * "and now they owe someone". That used to write a freeform string into
+ * consequences.debts, a shadow of the real Debt model that carried no
+ * direction, no counterparty and no status, and never reached the prompt
+ * as leverage. Removing the type from the schema stopped the shadow but
+ * lost the fiction outright: the entry was rejected at the boundary and
+ * nothing was recorded anywhere. This keeps the convenient way in and
+ * lands it in the one real model.
+ *
+ * counterparty_name is the one thing a Debt needs that a consequence
+ * doesn't inherently carry, so an entry without it returns null — better
+ * a logged drop than a debt owed to nobody, which nothing could ever call
+ * in. Direction defaults to owed_by_character: a bare "this became a debt"
+ * means the party owes someone, and inverting that by accident would hand
+ * players leverage they never earned.
+ */
+export function debtChangeFromConsequence(entry: {
+  type: string
+  description?: string
+  counterparty_name?: string
+  counterparty_type?: 'npc' | 'faction'
+  direction?: 'owed_by_character' | 'owed_to_character'
+}): DebtChange | null {
+  if (entry.type !== 'debt') return null
+  const name = entry.counterparty_name?.trim()
+  const description = entry.description?.trim()
+  if (!name || !description) return null
+  return {
+    counterparty_name: name,
+    counterparty_type: entry.counterparty_type === 'faction' ? 'faction' : 'npc',
+    direction: entry.direction === 'owed_to_character' ? 'owed_to_character' : 'owed_by_character',
+    action: 'incur',
+    description,
+    reason: 'Reported as a consequence of this scene',
+  }
+}
+
 type Db = Prisma.TransactionClient
 
 /**

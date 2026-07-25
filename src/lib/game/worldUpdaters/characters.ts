@@ -31,7 +31,7 @@ import {
 } from '../harm'
 import { resolveArmorValue, resolveConsumableHeal } from '../inventory'
 import { applyCapabilityChanges } from '../capabilities'
-import { applyDebtChanges } from '../debts'
+import { applyDebtChanges, debtChangeFromConsequence, DebtChange } from '../debts'
 import { applyStandingChanges } from '../standing'
 import { clampGoldDelta } from '../economy'
 import { appendBoundedProse, MAX_CHARACTER_DESCRIPTION_CHARS } from '../textAppend'
@@ -389,6 +389,11 @@ export async function applyCharacterChanges(
       updateData.relationships = currentRelationships
     }
 
+    // Debts reported through the consequence channel (#69). Collected here
+    // and handed to applyDebtChanges below alongside debt_changes, so both
+    // routes end up writing the same Debt rows.
+    const consequenceDebts: DebtChange[] = []
+
     // Phase 14: Process consequence changes
     if (pcChange.changes.consequences_add || pcChange.changes.consequences_remove) {
       const currentConsequences: any = (character.consequences as any) || {
@@ -401,6 +406,22 @@ export async function applyCharacterChanges(
       // Add new consequences
       if (pcChange.changes.consequences_add) {
         for (const newConseq of pcChange.changes.consequences_add) {
+          // 'debt' is an alias for the real Debt model, not a consequence
+          // array — see debtChangeFromConsequence. Nothing is written to
+          // consequences.debts anymore; the shadow representation is what
+          // #69 was about.
+          if (newConseq.type === 'debt') {
+            const debt = debtChangeFromConsequence(newConseq)
+            if (debt) {
+              consequenceDebts.push(debt)
+            } else {
+              console.warn(
+                `  ⚠️ ${character.name}: consequences_add debt has no counterparty_name — ` +
+                `a debt owed to nobody can never be called in, so it was dropped: "${newConseq.description}"`
+              )
+            }
+            continue
+          }
           const typeKey = newConseq.type === 'longTermThreat' ? 'longTermThreats' : newConseq.type + 's'
           if (!currentConsequences[typeKey]) {
             currentConsequences[typeKey] = []
@@ -628,13 +649,14 @@ export async function applyCharacterChanges(
 
     // Debt economy: favors incurred or settled by this scene's fiction —
     // see lib/game/debts.ts for matching semantics.
-    if (pcChange.changes.debt_changes && pcChange.changes.debt_changes.length > 0) {
+    const allDebtChanges = [...(pcChange.changes.debt_changes || []), ...consequenceDebts]
+    if (allDebtChanges.length > 0) {
       const debtLog = await applyDebtChanges(
         tx,
         campaignId,
         character.id,
         character.name,
-        pcChange.changes.debt_changes,
+        allDebtChanges,
         currentTurnNumber
       )
       for (const line of debtLog) {

@@ -246,10 +246,17 @@ export async function POST(
     // scene — see start-scene/route.ts; any player can start one).
     // scene.participants is null for a genuinely open scene, where the
     // dynamic "add as they act" behavior below is correct and intended;
-    // only a scene created WITH a non-empty characterIds list is closed
-    // to anyone else.
-    let sceneParticipants = (scene.participants as any) || { characterIds: [], userIds: [] }
-    if (scene.participants && sceneParticipants.characterIds.length > 0 && !sceneParticipants.characterIds.includes(characterId)) {
+    // only a scene created WITH an explicit characterIds list (scoped:
+    // true — see createNewScene) is closed to anyone else. Gating on
+    // `characterIds.length > 0` alone used to reject this: an open
+    // scene's participants also ends up as a non-empty {characterIds,
+    // userIds} object the moment its first player acts, which made the
+    // scene look "closed" to every other character from then on — they'd
+    // get 403'd here, see no active scene of their own, and spin up a
+    // brand-new disconnected one, splitting the party into two
+    // independent stories neither could see the other's.
+    let sceneParticipants = (scene.participants as any) || { characterIds: [], userIds: [], scoped: false }
+    if (sceneParticipants.scoped && !sceneParticipants.characterIds.includes(characterId)) {
       return NextResponse.json<ErrorResponse>(
         {
           error: 'This character is not part of this scene',
@@ -276,7 +283,7 @@ export async function POST(
         const liveScene = attempt === 0 ? scene : await prisma.scene.findUnique({ where: { id: sceneId } })
         if (!liveScene) break
 
-        const liveParticipants = (liveScene.participants as any) || { characterIds: [], userIds: [] }
+        const liveParticipants = (liveScene.participants as any) || { characterIds: [], userIds: [], scoped: false }
         if (!liveParticipants.characterIds.includes(characterId)) {
           liveParticipants.characterIds.push(characterId)
         }
@@ -355,14 +362,17 @@ export async function POST(
     }
 
     // Who needs to act before this exchange can resolve. A defined-
-    // participant scene (Character-Focused/split-party) has its own
-    // explicit roster; an open scene doesn't, so it's every living
+    // participant scene (Character-Focused/split-party, scoped: true) has
+    // its own explicit roster; an open scene doesn't, so it's every living
     // character in the campaign instead — an open scene is meant to
     // include the whole party, so resolution shouldn't fire the instant
-    // the first person acts, only once everyone actually has.
-    const hasDefinedParticipants = scene.participants &&
-                                   (scene.participants as any).characterIds &&
-                                   (scene.participants as any).characterIds.length > 0
+    // the first person acts, only once everyone actually has. Gating on
+    // `characterIds.length > 0` alone used to flip this the moment an open
+    // scene's first player joined it: participantUserIds would then
+    // silently narrow to just whoever had joined so far instead of the
+    // full living roster, so a scene could resolve without ever waiting
+    // for a character who simply hadn't acted yet this scene.
+    const hasDefinedParticipants = sceneParticipants.scoped === true
 
     let participantUserIds: string[]
     if (hasDefinedParticipants) {

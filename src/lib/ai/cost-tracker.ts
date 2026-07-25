@@ -17,24 +17,37 @@ export interface AIUsageMetrics {
 }
 
 /**
- * AI Pricing, $ per 1K tokens. Update whenever the models in
- * src/lib/ai/models.ts change generation — this table needs to match
- * whatever is actually being called, or the numbers here are fiction.
- * Verified against https://developers.openai.com/api/docs/pricing on
- * 2026-07-08.
+ * AI Pricing. Update whenever the models in src/lib/ai/models.ts change
+ * generation — this table needs to match whatever is actually being
+ * called, or the numbers here are fiction. Verified against
+ * https://developers.openai.com/api/docs/pricing on 2026-07-08.
+ *
+ * Two different quoting conventions are mixed in here on purpose — each
+ * entry's price is per the unit its own pricing-page number was actually
+ * quoted in, not a uniform "per 1K" that got applied to everything:
+ *   - gpt-5.4 / gpt-5.4-mini / gpt-4.1 / gpt-4.1-mini: OpenAI quotes these
+ *     per MILLION tokens (e.g. gpt-4.1 is $2.00 in / $8.00 out per 1M —
+ *     divide by 1_000_000 to get $/token). Dividing the same numerators by
+ *     1_000 instead — as this table used to, uniformly — silently overbills
+ *     every call these models make by 1000x, since they're the ones
+ *     src/lib/ai/models.ts actually routes traffic to.
+ *   - The legacy entries below (gpt-4-turbo-preview, gpt-4, gpt-3.5-turbo,
+ *     text-embedding-ada-002) are genuinely quoted per 1K tokens on
+ *     OpenAI's historical pricing pages — divide by 1_000, correctly, as
+ *     before.
  */
 const AI_PRICING: Record<string, { inputTokenPrice: number; outputTokenPrice: number }> = {
-  // Current generation (see src/lib/ai/models.ts)
+  // Current generation (see src/lib/ai/models.ts) — priced per 1M tokens.
   'gpt-5.4': {
-    inputTokenPrice: 2.5 / 1000,
-    outputTokenPrice: 15.0 / 1000
+    inputTokenPrice: 2.5 / 1_000_000,
+    outputTokenPrice: 15.0 / 1_000_000
   },
   'gpt-5.4-mini': {
-    inputTokenPrice: 0.75 / 1000,
-    outputTokenPrice: 4.5 / 1000
+    inputTokenPrice: 0.75 / 1_000_000,
+    outputTokenPrice: 4.5 / 1_000_000
   },
   // Embeddings have no output tokens — outputTokenPrice stays 0 and callers
-  // always pass outputTokens: 0.
+  // always pass outputTokens: 0. Priced per 1K tokens.
   'text-embedding-ada-002': {
     inputTokenPrice: 0.0001 / 1000,
     outputTokenPrice: 0
@@ -42,14 +55,15 @@ const AI_PRICING: Record<string, { inputTokenPrice: number; outputTokenPrice: nu
 
   // Legacy — kept so historical requestHistory entries recorded under these
   // model names still resolve to a real price instead of falling through to
-  // the unknown-model fallback below.
+  // the unknown-model fallback below. gpt-4.1/gpt-4.1-mini priced per 1M
+  // tokens; gpt-4-turbo-preview/gpt-4/gpt-3.5-turbo priced per 1K tokens.
   'gpt-4.1': {
-    inputTokenPrice: 2.0 / 1000,
-    outputTokenPrice: 8.0 / 1000
+    inputTokenPrice: 2.0 / 1_000_000,
+    outputTokenPrice: 8.0 / 1_000_000
   },
   'gpt-4.1-mini': {
-    inputTokenPrice: 0.4 / 1000,
-    outputTokenPrice: 1.6 / 1000
+    inputTokenPrice: 0.4 / 1_000_000,
+    outputTokenPrice: 1.6 / 1_000_000
   },
   'gpt-4-turbo-preview': {
     inputTokenPrice: 0.01 / 1000,

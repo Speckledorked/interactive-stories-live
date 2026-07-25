@@ -196,7 +196,7 @@ describe('POST /api/campaigns/[id]/scene', () => {
   it('waits for the rest of the party instead of resolving when participants are defined and incomplete', async () => {
     db.scene.findUnique.mockResolvedValue({
       ...makeBaseScene(),
-      participants: { characterIds: ['char1', 'char2'], userIds: ['user1', 'user2'] },
+      participants: { characterIds: ['char1', 'char2'], userIds: ['user1', 'user2'], scoped: true },
     })
     // Only user1's action has landed so far this exchange.
     db.playerAction.findMany.mockResolvedValue([{ userId: 'user1' }])
@@ -215,7 +215,7 @@ describe('POST /api/campaigns/[id]/scene', () => {
       ...makeBaseScene(),
       // char1 (the caller's character) deliberately left out — the GM
       // scoped this scene to char2/char3 only.
-      participants: { characterIds: ['char2', 'char3'], userIds: ['user2', 'user3'] },
+      participants: { characterIds: ['char2', 'char3'], userIds: ['user2', 'user3'], scoped: true },
     })
 
     const response = await call()
@@ -228,7 +228,7 @@ describe('POST /api/campaigns/[id]/scene', () => {
   it('enqueues resolution once every defined participant has submitted', async () => {
     db.scene.findUnique.mockResolvedValue({
       ...makeBaseScene(),
-      participants: { characterIds: ['char1', 'char2'], userIds: ['user1', 'user2'] },
+      participants: { characterIds: ['char1', 'char2'], userIds: ['user1', 'user2'], scoped: true },
     })
     db.playerAction.findMany.mockResolvedValue([{ userId: 'user1' }, { userId: 'user2' }])
 
@@ -236,5 +236,35 @@ describe('POST /api/campaigns/[id]/scene', () => {
 
     expect(response.status).toBe(201)
     expect(enqueueSceneResolution).toHaveBeenCalledWith('camp1', 'scene1')
+  })
+
+  it("does not reject a second player from an open scene whose first joiner already made it a non-empty participants object", async () => {
+    // Regression: an open scene's participants starts null and gains a
+    // {characterIds, userIds} shape (scoped left false/absent) the moment
+    // its first player acts — that must not make the scene look "closed"
+    // to everyone else. Two living characters, only char1 has joined so
+    // far; char2 (a different user) submitting now must succeed, not 403.
+    ;(requireAuth as any).mockReturnValue({ userId: 'user2', email: 'user2@example.com' })
+    db.scene.findUnique.mockResolvedValue({
+      ...makeBaseScene(),
+      participants: { characterIds: ['char1'], userIds: ['user1'] },
+    })
+    db.character.findUnique.mockResolvedValue({ id: 'char2', userId: 'user2' })
+    db.character.findMany.mockResolvedValue([{ userId: 'user1' }, { userId: 'user2' }])
+    // Only char2's action (the one this request just created) is pending
+    // this exchange — char1/user1 hasn't acted yet this round, even
+    // though they're already in participants from an earlier exchange.
+    db.playerAction.findMany.mockResolvedValue([{ userId: 'user2' }])
+
+    const response = await call({ sceneId: 'scene1', characterId: 'char2', actionText: 'I follow.' })
+
+    expect(response.status).toBe(201)
+    expect(db.playerAction.create).toHaveBeenCalledTimes(1)
+    expect(enqueueSceneResolution).not.toHaveBeenCalled()
+    // Waits on the full living roster minus who's submitted this exchange
+    // — not just whoever happened to already be in participants.
+    expect(db.scene.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { waitingOnUsers: ['user1'] } })
+    )
   })
 })

@@ -16,9 +16,13 @@ ALTER TABLE "Quest" ADD COLUMN IF NOT EXISTS "objectiveKey" TEXT;
 ALTER TABLE "Quest" ADD COLUMN IF NOT EXISTS "givenByNpcId" TEXT;
 ALTER TABLE "Quest" ADD COLUMN IF NOT EXISTS "givenByFactionId" TEXT;
 
--- Partial-by-nature: Postgres treats NULLs as distinct, so every
--- un-keyed legacy quest coexists under this constraint without collision.
-CREATE UNIQUE INDEX IF NOT EXISTS "Quest_campaignId_objectiveKey_key"
+-- Indexed, deliberately NOT unique. `prisma db push` (this project's build
+-- command) treats adding a unique constraint as a potentially-destructive
+-- change and refuses without --accept-data-loss, which would be a standing
+-- permission to drop production columns. Uniqueness is enforced in
+-- application code instead — see claimObjectiveKey in
+-- lib/game/worldUpdaters/quests.ts, which only claims a free key.
+CREATE INDEX IF NOT EXISTS "Quest_campaignId_objectiveKey_idx"
   ON "Quest"("campaignId", "objectiveKey");
 CREATE INDEX IF NOT EXISTS "Quest_givenByNpcId_idx" ON "Quest"("givenByNpcId");
 CREATE INDEX IF NOT EXISTS "Quest_givenByFactionId_idx" ON "Quest"("givenByFactionId");

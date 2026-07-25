@@ -134,10 +134,12 @@ describe('applyQuestChanges — existing quest', () => {
   })
 
   it('leaves a quest unkeyed rather than colliding with a key another holds', async () => {
-    // objectiveKey is unique per campaign and these writes run inside the
-    // scene-resolution transaction: a collision would abort the whole batch
-    // and take unrelated quest progress with it. Losing a handle is cheap;
-    // losing the turn is not.
+    // This check is the ONLY thing keeping objectiveKey unique. The DB-level
+    // unique constraint was removed because `prisma db push` — this
+    // project's build command — refuses to add one without
+    // --accept-data-loss, and that flag would be a standing permission to
+    // drop production columns. So this test guards a real invariant, not a
+    // redundant belt on top of a database braces.
     tx.quest.findFirst
       .mockResolvedValueOnce({ ...existing, objectiveKey: null })
       .mockResolvedValueOnce({ id: 'other-quest', name: 'Clear the Warrens!' })

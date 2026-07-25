@@ -442,7 +442,19 @@ model Quest {
   updatedAt  DateTime  @updatedAt
   resolvedAt DateTime?
 
-  @@unique([campaignId, objectiveKey])
+  // Indexed, NOT unique. A unique constraint here is what broke deploys:
+  // this project's build command is `prisma db push`, and Prisma classifies
+  // ADDING a unique constraint as a potentially-destructive change, so it
+  // refuses without --accept-data-loss — even against an empty database.
+  // Passing that flag would be a standing permission for Prisma to drop
+  // production columns on any future schema change, which is far too much
+  // to trade for one constraint.
+  //
+  // Uniqueness is enforced in application code instead: claimObjectiveKey
+  // (worldUpdaters/quests.ts) only claims a key no other quest holds, and
+  // it was already written that way — a unique-violation inside the
+  // scene-resolution transaction would abort the whole batch.
+  @@index([campaignId, objectiveKey])
   @@index([campaignId, status])
   @@index([givenByNpcId])
   @@index([givenByFactionId])

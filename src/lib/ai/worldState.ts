@@ -16,6 +16,7 @@ import { describeTension, derivePhase } from '@/lib/game/tick/tension'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { resolveActionMechanics } from '@/lib/game/resolution'
 import { describeZone } from '@/lib/game/zones'
+import { inventoryValue, describeWealth } from '@/lib/game/itemValue'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
 import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
@@ -286,8 +287,14 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
       // raw proficiency numbers never reach a prompt (fog of war inward).
       origin_familiarity: c.originFamiliarity,
       capabilities: summarizeCapabilities(c.capabilities),
-      // Open favors, both directions — the AI's leverage currency.
+      // Open favors, both directions — the AI's leverage currency, and now
+      // a real roll modifier (see debtModifier in lib/game/debts.ts).
       debts: summarizeDebts(c.debts),
+      // Qualitative carried wealth (#44/#47). A band, never a number, the
+      // same discipline capabilities and corruption already follow — it
+      // tells the narrator whether these are people who can buy their way
+      // out of trouble without handing them a price list.
+      carried_wealth: describeWealth(inventoryValue(((c.inventory as any)?.items) || [])),
       // Social position with discovered active factions, qualitatively.
       standings: summarizeStandings(c.factionStandings)
     })),
@@ -550,8 +557,14 @@ export async function buildWorldSummaryForAI(
       // raw proficiency numbers never reach a prompt (fog of war inward).
       origin_familiarity: c.originFamiliarity,
       capabilities: summarizeCapabilities(c.capabilities),
-      // Open favors, both directions — the AI's leverage currency.
+      // Open favors, both directions — the AI's leverage currency, and now
+      // a real roll modifier (see debtModifier in lib/game/debts.ts).
       debts: summarizeDebts(c.debts),
+      // Qualitative carried wealth (#44/#47). A band, never a number, the
+      // same discipline capabilities and corruption already follow — it
+      // tells the narrator whether these are people who can buy their way
+      // out of trouble without handing them a price list.
+      carried_wealth: describeWealth(inventoryValue(((c.inventory as any)?.items) || [])),
       // Social position with discovered active factions, qualitatively.
       standings: summarizeStandings(c.factionStandings)
     })),

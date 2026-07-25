@@ -159,7 +159,7 @@ describe('computeMechanics', () => {
       { id: 'a1' },
       baseCharacter,
       seq(0.5, 0.5),
-      { name: 'Thieves Guild', isActive: true, influence: 70, standing: 3 }
+      { faction: { name: 'Thieves Guild', isActive: true, influence: 70, standing: 3 } }
     )
     expect(m!.standingMod).toBe(2) // ±2 cap even at +3 standing
     expect(m!.factionName).toBe('Thieves Guild')
@@ -171,7 +171,7 @@ describe('computeMechanics', () => {
       { id: 'a1' },
       baseCharacter,
       seq(0.5, 0.5),
-      { name: 'Thieves Guild', isActive: false, influence: 70, standing: 3 }
+      { faction: { name: 'Thieves Guild', isActive: false, influence: 70, standing: 3 } }
     )
     expect(collapsed!.standingMod).toBe(0)
     expect(collapsed!.total).toBe(8)
@@ -236,8 +236,7 @@ describe('computeMechanics — relationship weight', () => {
       { id: 'a1' },
       baseCharacter,
       seq(0.5, 0.5),
-      null,
-      { npcName: 'Lord Kessler', trust: 100, tension: 0, respect: 100 }
+      { relationship: { npcName: 'Lord Kessler', trust: 100, tension: 0, respect: 100 } }
     )
     expect(m!.relationshipMod).toBe(2)
     expect(m!.npcName).toBe('Lord Kessler')
@@ -380,9 +379,7 @@ describe('computeMechanics — weather weight', () => {
       { id: 'a1' },
       baseCharacter,
       seq(0.5, 0.5),
-      null,
-      null,
-      { condition: 'STORM', severity: 5 }
+      { weather: { condition: 'STORM', severity: 5 } }
     )
     expect(m!.weatherMod).toBe(-1)
     expect(m!.weatherCondition).toBe('STORM')
@@ -393,7 +390,7 @@ describe('computeMechanics — weather weight', () => {
   it('is unaffected by clear weather or no weather at all', () => {
     const clear = computeMechanics(
       { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
-      { id: 'a1' }, baseCharacter, seq(0.5, 0.5), null, null, { condition: 'CLEAR', severity: 3 }
+      { id: 'a1' }, baseCharacter, seq(0.5, 0.5), { weather: { condition: 'CLEAR', severity: 3 } }
     )
     expect(clear!.weatherMod).toBe(0)
     expect(clear!.weatherCondition).toBeNull()
@@ -415,10 +412,7 @@ describe('computeMechanics — per-campaign move flavor', () => {
       { id: 'a1' },
       baseCharacter,
       seq(0.5, 0.5),
-      null,
-      null,
-      null,
-      { name: 'Face the Storm', outcomes: { strongHit: 'You weather it cleanly.', weakHit: 'You weather it, but the storm exacts its due.', miss: 'The storm takes what it wants.' } }
+      { moveFlavor: { name: 'Face the Storm', outcomes: { strongHit: 'You weather it cleanly.', weakHit: 'You weather it, but the storm exacts its due.', miss: 'The storm takes what it wants.' } } }
     )
     expect(m!.total).toBe(9)
     expect(m!.outcome).toBe('weakHit')
@@ -432,10 +426,7 @@ describe('computeMechanics — per-campaign move flavor', () => {
       { id: 'a1' },
       baseCharacter,
       seq(0.5, 0.5),
-      null,
-      null,
-      null,
-      { name: 'Face the Storm', outcomes: {} }
+      { moveFlavor: { name: 'Face the Storm', outcomes: {} } }
     )
     expect(m!.moveName).toBe('Face the Storm')
     expect(m!.outcomeText).toBe('You do it, but there\'s a complication or cost.')
@@ -543,8 +534,7 @@ describe('computeMechanics range bands (#2, #43, #85)', () => {
       { id: 'a1' },
       { ...baseCharacter, ...character },
       seq(0.4, 0.4),
-      null, null, null, null, null,
-      sceneId ?? 'scene1'
+      { sceneId: sceneId ?? 'scene1' }
     )!
 
   it('adds nothing when the action does not reach for a target', () => {

@@ -109,7 +109,14 @@ export const InventoryItemSchema = z.object({
   itemType: z.enum(['weapon', 'armor', 'consumable', 'quest', 'currency', 'misc']).optional(),
   // Symmetric to armorValue, for weapons — see resolveDamageBonus.
   damageBonus: z.number().min(0).max(3).optional(),
-  effect: InventoryItemEffectSchema.optional()
+  effect: InventoryItemEffectSchema.optional(),
+  // What the item is WORTH, and how hard it is to come by (#44/#47). Both
+  // are read, not decorative: rarity is budgeted per arc so the economy
+  // can't be inflated a scene at a time, and value counts toward what a
+  // paying faction actually spends. Omit both for something with no worth
+  // to speak of. See lib/game/itemValue.ts.
+  value: z.number().min(0).max(1_000_000).optional(),
+  rarity: z.enum(['common', 'uncommon', 'rare', 'legendary']).optional()
 })
 
 // Knowledge-relative capability change schema. The AI signals WHAT the

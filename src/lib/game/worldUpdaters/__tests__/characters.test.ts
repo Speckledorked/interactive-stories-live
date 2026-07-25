@@ -242,7 +242,13 @@ describe('applyCharacterChanges — inventory', () => {
       { character_name_or_id: 'char1', changes: { inventory_changes: { items_add: [{ id: 'p1', name: 'Healing Potion', quantity: 2 }] } } } as PcChange,
     ], roster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
-    expect(data.inventory.items).toEqual([{ id: 'p1', name: 'Healing Potion', quantity: 3 }])
+    // grantedTurn is stamped on every grant so the next rarity-budget
+    // check can derive spend from the inventory itself (#44/#47) — a fresh
+    // grant restarts this stack's arc clock, or a stack topped up every
+    // scene would evade the budget forever.
+    expect(data.inventory.items).toEqual([
+      { id: 'p1', name: 'Healing Potion', quantity: 3, grantedTurn: 1 },
+    ])
   })
 
   it("enforces a consumed item's heal effect deterministically, independent of narration", async () => {

@@ -216,3 +216,95 @@ export function formatDebtsForPrompt(summary: DebtSummary, characterName: string
     ...summary.owedToCharacter.map(d => `${d.counterparty} owes ${characterName} (${d.description})`),
   ]
 }
+
+// ---------------------------------------------------------------------------
+// Roll-time weight (the Debt half of the economy question)
+// ---------------------------------------------------------------------------
+//
+// Debt was the one Urban Shadows currency with no mechanical weight.
+// Standing moves a roll, relationships move a roll, corruption moves a
+// roll — Debt reached the prompt as prose and stopped there, so "the
+// social currency of this world" was the only currency that bought
+// nothing. This is that weight.
+//
+// The direction is the whole point, and it cuts both ways:
+//
+//   they owe YOU   — leverage you can call in. A favor outstanding is
+//                    exactly the thing you spend when you need something.
+//   you owe THEM   — leverage they hold. "You already owe me" is a real
+//                    answer to a request, and being in someone's debt
+//                    genuinely weakens your position with them.
+//
+// Netted rather than summed separately, because owing someone who also
+// owes you is a wash — that's two people square with each other, not two
+// independent pressures.
+
+/** Outstanding debts with the ONE counterparty a roll named. */
+export interface DebtsForRoll {
+  counterpartyName: string
+  owedToCharacter: number
+  owedByCharacter: number
+}
+
+/**
+ * How much the debt ledger with a named counterparty shifts a roll.
+ *
+ * Capped at ±2 to sit alongside standing and relationships rather than
+ * dominate them, and deliberately NOT linear past the first favor: one
+ * outstanding debt is worth ±1, two or more ±2. A pile of small favors
+ * shouldn't out-weigh a deep faction standing, and without the flattening
+ * a narrator that likes recording debts would quietly inflate the scale.
+ *
+ * Pure.
+ */
+export function debtModifier(debts: DebtsForRoll | null | undefined): number {
+  if (!debts) return 0
+  const owedTo = Math.max(0, Math.trunc(Number(debts.owedToCharacter) || 0))
+  const owedBy = Math.max(0, Math.trunc(Number(debts.owedByCharacter) || 0))
+  const net = owedTo - owedBy
+  if (net === 0) return 0
+  const magnitude = Math.abs(net) >= 2 ? 2 : 1
+  return net > 0 ? magnitude : -magnitude
+}
+
+/** Short receipt phrasing — diegetic, never a count. */
+export function describeDebtLeverage(debts: DebtsForRoll, mod: number): string {
+  if (mod > 0) return `${debts.counterpartyName} owes you`
+  return `you owe ${debts.counterpartyName}`
+}
+
+interface DebtRowForWeight {
+  direction: DebtDirection
+  counterpartyName: string
+  counterpartyId: string | null
+}
+
+/**
+ * Collapse a character's outstanding debts down to the ledger with ONE
+ * named counterparty. Pure, so the orchestrator fetches every open debt
+ * for the acting characters once per exchange rather than querying per
+ * action.
+ *
+ * Matched on resolved id when both sides have one, else on name — the same
+ * id-then-name fallback weather and contested territory already use, and
+ * for the same reason: counterpartyId is only set when the name matched a
+ * known entity at the time the debt was incurred.
+ */
+export function debtsWithCounterparty(
+  rows: DebtRowForWeight[],
+  counterparty: { id: string; name: string }
+): DebtsForRoll | null {
+  const wanted = counterparty.name.trim().toLowerCase()
+  const matching = rows.filter(
+    r =>
+      (r.counterpartyId && r.counterpartyId === counterparty.id) ||
+      r.counterpartyName.trim().toLowerCase() === wanted
+  )
+  if (matching.length === 0) return null
+
+  return {
+    counterpartyName: counterparty.name,
+    owedToCharacter: matching.filter(r => r.direction === 'OWED_TO_CHARACTER').length,
+    owedByCharacter: matching.filter(r => r.direction === 'OWED_BY_CHARACTER').length,
+  }
+}

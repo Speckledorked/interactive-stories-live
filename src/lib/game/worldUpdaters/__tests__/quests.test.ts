@@ -55,10 +55,9 @@ describe('applyQuestChanges — new quest', () => {
 
     await applyQuestChanges(tx as any, 'camp1', 3, [change])
 
-    // Trailing arg is the quest's resolved giver faction, which funds the
-    // payout when the grant names no payer — null here, since this quest
-    // reported no giver.
-    expect(applyQuestRewardGrant).toHaveBeenCalledWith(tx, 'camp1', 'Clear the Warrens', { gold: 50 }, null)
+    // Trailing args: the quest's resolved giver faction (funds the payout
+    // when the grant names no payer) and the turn, for the rarity budget.
+    expect(applyQuestRewardGrant).toHaveBeenCalledWith(tx, 'camp1', 'Clear the Warrens', { gold: 50 }, null, 3)
   })
 
   it('skips a malformed change with no name', async () => {

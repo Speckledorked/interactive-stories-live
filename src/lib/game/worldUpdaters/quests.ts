@@ -169,7 +169,7 @@ export async function applyQuestChanges(
         const payerFactionId =
           (updateData.givenByFactionId as string | null | undefined) ?? existing.givenByFactionId
         const rewardLog = await applyQuestRewardGrant(
-          tx, campaignId, existing.name, changes.reward_grant, payerFactionId
+          tx, campaignId, existing.name, changes.reward_grant, payerFactionId, currentTurnNumber
         )
         for (const line of rewardLog) console.log(`  🎁 ${line}`)
       }
@@ -208,7 +208,7 @@ export async function applyQuestChanges(
       // turn it's introduced — same deterministic payout either way.
       if (changes.status === 'COMPLETED' && changes.reward_grant) {
         const rewardLog = await applyQuestRewardGrant(
-          tx, campaignId, questChange.name, changes.reward_grant, giverData.givenByFactionId
+          tx, campaignId, questChange.name, changes.reward_grant, giverData.givenByFactionId, currentTurnNumber
         )
         for (const line of rewardLog) console.log(`  🎁 ${line}`)
       }

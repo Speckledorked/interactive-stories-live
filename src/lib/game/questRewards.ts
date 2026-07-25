@@ -16,6 +16,7 @@ import { Prisma } from '@prisma/client'
 import { applyStandingChanges, StandingChange } from './standing'
 import { clampGoldDelta } from './economy'
 import { assessPayout, describeDefault } from './factionPayout'
+import { inventoryValue, applyGrantBudget } from './itemValue'
 
 type Db = Prisma.TransactionClient
 
@@ -28,6 +29,9 @@ export interface RewardGrantItem {
   itemType?: 'weapon' | 'armor' | 'consumable' | 'quest' | 'currency' | 'misc'
   damageBonus?: number
   effect?: { kind: 'heal' | 'custom'; amount?: number; description: string }
+  /** Worth and scarcity — both mechanically read, see lib/game/itemValue.ts. */
+  value?: number
+  rarity?: 'common' | 'uncommon' | 'rare' | 'legendary'
 }
 
 export interface RewardGrant {
@@ -95,7 +99,12 @@ export async function applyQuestRewardGrant(
   // grant doesn't name one. A resolved FK is a fact, not a guess, which is
   // why it's an acceptable fallback where inferring a payer from adjacent
   // fields would not be.
-  giverFactionId?: string | null
+  giverFactionId?: string | null,
+  // Current turn, for the per-arc rarity budget. Omitted means unbudgeted,
+  // which is the right degradation for a caller with no turn context —
+  // refusing rewards against a turn number we had to invent would be worse
+  // than not budgeting.
+  currentTurn?: number | null
 ): Promise<string[]> {
   const log: string[] = []
   const hasGold = (grant.gold ?? 0) !== 0
@@ -136,14 +145,28 @@ export async function applyQuestRewardGrant(
   // having, and a faction that can't afford its promise defaults on part
   // of it. A payout with no identifiable faction payer behaves exactly as
   // it always did — paid in full, from nowhere.
+  // Items cost the payer too. Before value existed, an items-only reward
+  // was FREE to the faction handing it over, so a bankrupt patron could
+  // settle every debt in artifacts forever — a real hole in the transfer
+  // model, and the reason `value` had to be more than a display field.
+  const itemsCost = inventoryValue(grant.items) * recipients.length
+
   let goldEach = promisedEach
-  if (hasGold && promisedEach > 0) {
+  if ((hasGold && promisedEach > 0) || itemsCost > 0) {
     const payer = await resolvePayingFaction(db, campaignId, grant.paid_by_faction, giverFactionId)
     if (payer) {
       // Assessed as a TOTAL across recipients: a five-person party each
       // paid 200 costs the faction a thousand, not two hundred.
-      const assessment = assessPayout(promisedEach * recipients.length, payer.resources)
-      goldEach = Math.floor(assessment.paid / recipients.length)
+      //
+      // Gold and goods are assessed together against one budget, because
+      // they come out of the same coffers. Only the GOLD half can be
+      // reduced by a shortfall, though: goods the fiction already handed
+      // over cannot be un-given, so a faction that overreaches pays for it
+      // in resources rather than by clawing an item back out of a
+      // character's pack.
+      const assessment = assessPayout(promisedEach * recipients.length + itemsCost, payer.resources)
+      const paidTowardGold = Math.max(0, assessment.paid - itemsCost)
+      goldEach = recipients.length > 0 ? Math.floor(paidTowardGold / recipients.length) : 0
 
       if (assessment.resourceCost > 0) {
         await db.faction.update({
@@ -168,9 +191,23 @@ export async function applyQuestRewardGrant(
     }
 
     if (hasItems) {
-      updateData.inventory = mergeGrantedItems(recipient.inventory as any, grant.items)
-      const itemNames = (grant.items || []).map(i => `${i.quantity}x ${i.name}`).join(', ')
-      log.push(`${recipient.name} received ${itemNames} from completing "${questName}"`)
+      // Per-arc rarity budget (#44/#47), applied per recipient because the
+      // budget is a property of a character's own haul, not of the party's.
+      let toGrant = grant.items || []
+      if (typeof currentTurn === 'number') {
+        const existing = ((recipient.inventory as any)?.items || []) as Array<{ rarity?: string | null; grantedTurn?: number | null }>
+        const budget = applyGrantBudget(existing, toGrant, currentTurn)
+        for (const skippedItem of budget.skipped) {
+          log.push(`${skippedItem.name} was promised but is beyond what ${recipient.name} has earned this arc`)
+        }
+        toGrant = budget.granted.map(item => ({ ...item, grantedTurn: currentTurn })) as typeof toGrant
+      }
+
+      if (toGrant.length > 0) {
+        updateData.inventory = mergeGrantedItems(recipient.inventory as any, toGrant)
+        const itemNames = toGrant.map(i => `${i.quantity}x ${i.name}`).join(', ')
+        log.push(`${recipient.name} received ${itemNames} from completing "${questName}"`)
+      }
     }
 
     if (Object.keys(updateData).length > 0) {

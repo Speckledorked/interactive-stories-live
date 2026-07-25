@@ -34,6 +34,7 @@ import { applyCapabilityChanges } from '../capabilities'
 import { applyDebtChanges, debtChangeFromConsequence, DebtChange } from '../debts'
 import { applyStandingChanges } from '../standing'
 import { checkCorruptionGate, hasCorruptionGate, describeRefusal } from '../corruptionGates'
+import { applyGrantBudget, rarityPoints } from '../itemValue'
 import { clampGoldDelta } from '../economy'
 import { appendBoundedProse, MAX_CHARACTER_DESCRIPTION_CHARS } from '../textAppend'
 import {
@@ -553,16 +554,32 @@ export async function applyCharacterChanges(
         currentInventory.items = []
       }
 
-      // Add items
+      // Add items, subject to the per-arc rarity budget (#44/#47). A
+      // narrator asked to reward players will reward them every scene, so
+      // scarcity has to be enforced deterministically — same guardrail
+      // shape as the perk/move caps (#65). Common items are effectively
+      // unbudgeted; a legendary costs the whole arc.
       if (invChange.items_add) {
-        for (const newItem of invChange.items_add) {
+        const budget = applyGrantBudget(currentInventory.items, invChange.items_add, currentTurnNumber)
+        for (const skippedItem of budget.skipped) {
+          console.warn(
+            `  📦 ${character.name}: "${skippedItem.name}" (${skippedItem.rarity || 'common'}) exceeds this arc's rarity budget — not granted`
+          )
+        }
+        for (const newItem of budget.granted) {
+          // Stamped so the NEXT budget check can derive spend from the
+          // inventory itself rather than from a counter that can drift.
+          const stamped = { ...newItem, grantedTurn: currentTurnNumber }
           // Check if item already exists, if so increase quantity
           const existingItem = currentInventory.items.find((item: any) => item.id === newItem.id)
           if (existingItem) {
             existingItem.quantity += newItem.quantity
+            // Re-stamp: a fresh grant restarts this stack's arc clock, or a
+            // stack topped up every scene would evade the budget forever.
+            existingItem.grantedTurn = currentTurnNumber
             console.log(`  📦 ${character.name} gained ${newItem.quantity}x ${newItem.name} (now ${existingItem.quantity})`)
           } else {
-            currentInventory.items.push(newItem)
+            currentInventory.items.push(stamped)
             console.log(`  📦 ${character.name} gained ${newItem.quantity}x ${newItem.name}`)
           }
         }

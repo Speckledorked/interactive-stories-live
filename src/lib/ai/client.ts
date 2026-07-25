@@ -250,6 +250,9 @@ export interface AIGMResponse {
             itemType?: 'weapon' | 'armor' | 'consumable' | 'quest' | 'currency' | 'misc'
             damageBonus?: number
             effect?: { kind: 'heal' | 'custom'; amount?: number; description: string }
+            // Worth and scarcity — both mechanically read, see itemValue.ts.
+            value?: number
+            rarity?: 'common' | 'uncommon' | 'rare' | 'legendary'
           }>
           standing_changes?: Array<{ faction_name: string; delta: number; reason: string }>
           // The faction footing the bill, if one is. Makes the payout a
@@ -938,6 +941,10 @@ USE DEBTS AS DRAMA:
 Report via debt_changes inside that character's pc_changes. A consequences_add entry of type "debt" also works and lands in exactly the same place, but it MUST name a counterparty_name — a debt owed to nobody can never be called in, and one without a named creditor is dropped.
 - {"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the burning district", "reason": "Kessler's men saved them at real cost"}
 - {"counterparty_name": "Thieves Guild", "counterparty_type": "faction", "direction": "owed_by_character", "action": "resolve", "description": "Repaid by stealing the ledger for them", "reason": "The job is done"}
+
+ITEM WORTH: give inventory items a "rarity" (common | uncommon | rare | legendary) and, where the fiction is specific about it, a "value". Both are mechanically read, not flavor. The engine enforces a per-arc rarity budget — roughly one legendary OR two rares OR four uncommons per character per ten turns — so a legendary artifact you hand out is genuinely the reward of an arc, and anything past the budget is silently NOT granted no matter how the prose describes it. Reserve the top two ranks accordingly. Item worth also counts toward what a paying faction spends, so goods are not a way around a broke patron's empty coffers.
+
+DEBTS MOVE THE DICE: an outstanding debt with whoever a character is dealing with now shifts their roll — a favor owed TO them helps, a favor they owe hurts. It is real leverage in both directions, so use it: a creditor who reminds them what they owe is genuinely stronger in that conversation.
 
 CORRUPTION GATES: a location, quest or NPC can require marks (min_corruption) or refuse the marked (max_corruption) — report these on location_changes / quest_changes / npc_changes when the fiction establishes such a boundary (a shrine that only opens to the touched, an order that turns away the tainted, a contact who won't be seen with them). The engine ENFORCES these: a gated location cannot be entered, a gated quest cannot be taken, and a gated NPC's goodwill stops helping their rolls. Gates only ever apply at the moment of crossing — nobody is ejected from where they already are, and no quest already underway is revoked — so set them freely. Report them back to null when the fiction lifts one.
 

@@ -26,6 +26,7 @@ import { MAX_CORRUPTION, CORRUPTION_SURGE_BONUS } from './corruption'
 import { proficiencyBand, ProficiencyBand } from './capabilities'
 import { effectiveStandingModifier } from './standing'
 import { checkCorruptionGate } from './corruptionGates'
+import { debtModifier, debtsWithCounterparty, describeDebtLeverage, DebtsForRoll } from './debts'
 import {
   ZonePosition,
   Engagement,
@@ -116,6 +117,10 @@ export interface ActionMechanics {
   signatureName: string | null
   // SIGNATURE_BONUS when a listed perk/ability's trigger matched, else 0.
   signatureMod: number
+  // Outstanding debts with whichever counterparty this roll named, and
+  // what that ledger was worth — see debtModifier in lib/game/debts.ts.
+  debtCounterparty: string | null
+  debtMod: number
   // Range band this character acted from, and how the action reached — see
   // lib/game/zones.ts. zoneMod is what the pairing was worth.
   zonePosition: ZonePosition
@@ -336,23 +341,42 @@ export interface MoveFlavorForRoll {
  * Roll one classified action. Pure given an injected RNG.
  * Returns null for no_roll classifications or unknown moves.
  */
+/**
+ * Everything a roll consults beyond the character and the classification —
+ * all of it optional, all of it degrading to "no effect" when absent.
+ *
+ * A named object rather than a tail of positional parameters: this list has
+ * grown to six as modifiers were added, and callers had reached
+ * `null, null, null, null, null` before the one argument they cared about.
+ * That is a defect waiting to happen — two adjacent nullable params of the
+ * same type would swap silently — and it already misled one call site.
+ */
+export interface RollContext {
+  faction?: FactionForRoll | null
+  relationship?: RelationshipForRoll | null
+  /** Outstanding debts with the counterparty this action named, if any. */
+  debts?: DebtsForRoll | null
+  weather?: WeatherForRoll | null
+  moveFlavor?: MoveFlavorForRoll | null
+  isContestedLocation?: boolean | null
+  /**
+   * The scene this roll belongs to. Required for a zone to count at all:
+   * resolveZoneForScene discards a stored position from a different scene,
+   * so omitting it means every character rolls from DEFAULT_ZONE, which
+   * modifies nothing. That's the correct degradation for a caller that
+   * doesn't track positions.
+   */
+  sceneId?: string | null
+}
+
 export function computeMechanics(
   classification: ActionClassification,
   action: { id: string },
   character: CharacterForRoll,
   rng: Rng,
-  faction?: FactionForRoll | null,
-  relationship?: RelationshipForRoll | null,
-  weather?: WeatherForRoll | null,
-  moveFlavor?: MoveFlavorForRoll | null,
-  isContestedLocation?: boolean | null,
-  // The scene this roll belongs to. Required for a zone to count at all:
-  // resolveZoneForScene discards a stored position from a different scene,
-  // so omitting it means every character rolls from DEFAULT_ZONE, which
-  // modifies nothing. That's the correct degradation for a caller that
-  // doesn't track positions.
-  sceneId?: string | null
+  context: RollContext = {}
 ): ActionMechanics | null {
+  const { faction, relationship, debts, weather, moveFlavor, isContestedLocation, sceneId } = context
   if (classification.move_name === 'no_roll') return null
   const move = BASIC_MOVES.find(m => m.name === classification.move_name)
   if (!move) return null
@@ -419,6 +443,11 @@ export function computeMechanics(
   // contestedPenalty above.
   const contestedMod = contestedPenalty(isContestedLocation)
 
+  // Debt leverage with whoever this action is aimed at: a favor they owe
+  // you helps, one you owe them hurts. See debtModifier.
+  const debtMod = debtModifier(debts)
+  const debtCounterparty = debts && debtMod !== 0 ? describeDebtLeverage(debts, debtMod) : null
+
   // Range band: where this character stands vs. how the action reaches —
   // see rangeModifier in zones.ts. An explicit reposition in the action
   // text wins over the carried position; a position from another scene
@@ -454,7 +483,7 @@ export function computeMechanics(
 
   const harmMod = harmPenalty(character.harm)
   const dice: [number, number] = [rollD6(rng), rollD6(rng)]
-  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + weatherMod + contestedMod + zoneMod + conditionMod + signatureMod + harmMod + corruptionSurgeBonus
+  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + debtMod + weatherMod + contestedMod + zoneMod + conditionMod + signatureMod + harmMod + corruptionSurgeBonus
   const outcome = calculateOutcome(total)
   // Flavor overrides display only, and only where it actually supplied text
   // for this band — a partially-flavored move (AI omitted one outcome)
@@ -478,6 +507,8 @@ export function computeMechanics(
     weatherMod,
     isContestedLocation: Boolean(isContestedLocation),
     contestedMod,
+    debtCounterparty,
+    debtMod,
     zonePosition,
     engagement,
     zoneMod,
@@ -641,7 +672,7 @@ export async function resolveActionMechanics(
   if (pendingActions.length === 0) return []
 
   try {
-    const [characterRows, factionRows, npcRows, locationRows, moveFlavorRows, campaignRow] = await Promise.all([
+    const [characterRows, factionRows, npcRows, locationRows, moveFlavorRows, campaignRow, debtRows] = await Promise.all([
       prisma.character.findMany({
         where: { id: { in: Array.from(new Set(pendingActions.map(a => a.characterId))) } },
         include: {
@@ -686,8 +717,24 @@ export async function resolveActionMechanics(
         where: { id: campaignId },
         select: { corruptionTheme: true },
       }),
+      // Every OUTSTANDING debt held by an acting character. Fetched once
+      // per exchange and matched in memory, rather than a query per action
+      // — same discipline the faction/NPC rosters above follow.
+      prisma.debt.findMany({
+        where: {
+          characterId: { in: Array.from(new Set(pendingActions.map(a => a.characterId))) },
+          status: 'OUTSTANDING',
+        },
+        select: { characterId: true, direction: true, counterpartyName: true, counterpartyId: true },
+      }),
     ])
     const hasCorruptionTheme = Boolean(campaignRow?.corruptionTheme)
+    const debtsByCharacter = new Map<string, typeof debtRows>()
+    for (const row of debtRows) {
+      const list = debtsByCharacter.get(row.characterId)
+      if (list) list.push(row)
+      else debtsByCharacter.set(row.characterId, [row])
+    }
     const moveFlavorByKey = new Map(
       moveFlavorRows.map(m => [m.baseMoveKey as string, { name: m.name, outcomes: m.outcomes as MoveFlavorForRoll['outcomes'] }])
     )
@@ -799,6 +846,25 @@ export async function resolveActionMechanics(
         }
       }
 
+      // Debt leverage (the Debt half of the economy). Whichever counterparty
+      // the action named — an NPC by preference, else the faction — is who
+      // the ledger is read against. An action that names neither has no
+      // debt in play, which is most actions.
+      let debtsForRoll: DebtsForRoll | null = null
+      const debtCounterpartyEntity =
+        (classification.npc_name
+          ? npcRows.find(n => n.name.toLowerCase() === classification.npc_name!.toLowerCase())
+          : null) ||
+        (classification.faction_name
+          ? factionRows.find(f => f.name.toLowerCase() === classification.faction_name!.toLowerCase())
+          : null)
+      if (debtCounterpartyEntity) {
+        debtsForRoll = debtsWithCounterparty(
+          debtsByCharacter.get(character.id) || [],
+          debtCounterpartyEntity
+        )
+      }
+
       // Prefer the stable locationId join — immune to the free-text drift
       // ("the Docks" vs "The Docks District") that made the name-string
       // match silently miss a real location. Fall back to the name match
@@ -819,7 +885,15 @@ export async function resolveActionMechanics(
       const move = BASIC_MOVES.find(m => m.name === classification.move_name)
       const moveFlavor = move ? moveFlavorByKey.get(move.key) ?? null : null
 
-      const rolled = computeMechanics(classification, action, character, rng, factionForRoll, relationshipForRoll, weatherForRoll, moveFlavor, isContestedLocation, sceneId)
+      const rolled = computeMechanics(classification, action, character, rng, {
+        faction: factionForRoll,
+        relationship: relationshipForRoll,
+        debts: debtsForRoll,
+        weather: weatherForRoll,
+        moveFlavor,
+        isContestedLocation,
+        sceneId,
+      })
       if (rolled) mechanics.push(rolled)
     }
 
@@ -835,10 +909,10 @@ export async function resolveActionMechanics(
             userId: action?.userId || '',
             rollType: 'move',
             dice: m.dice,
-            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.weatherMod + m.contestedMod + m.zoneMod + m.conditionMod + m.signatureMod + m.harmPenalty,
+            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.debtMod + m.weatherMod + m.contestedMod + m.zoneMod + m.conditionMod + m.signatureMod + m.harmPenalty,
             total: m.total,
             outcome: m.outcome,
-            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.weatherCondition ? `, ${m.weatherCondition.toLowerCase()}` : ''}${m.contestedMod ? ', contested ground' : ''}${m.zoneMod ? `, ${m.engagement} ${describeZone(m.zonePosition)}` : ''}${m.conditionMod ? `, ${m.conditionMod} condition penalty` : ''}${m.signatureName ? `, ${m.signatureName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
+            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.debtMod ? `, ${m.debtCounterparty}` : ''}${m.weatherCondition ? `, ${m.weatherCondition.toLowerCase()}` : ''}${m.contestedMod ? ', contested ground' : ''}${m.zoneMod ? `, ${m.engagement} ${describeZone(m.zonePosition)}` : ''}${m.conditionMod ? `, ${m.conditionMod} condition penalty` : ''}${m.signatureName ? `, ${m.signatureName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
           }
         }),
       })
@@ -931,6 +1005,7 @@ export function formatRollReceipt(m: ActionMechanics): string {
     ...(m.factionName ? [`${m.standingMod >= 0 ? '+' : ''}${m.standingMod} standing (${m.factionName})`] : []),
     ...(m.npcName ? [`${m.relationshipMod >= 0 ? '+' : ''}${m.relationshipMod} rapport (${m.npcName})`] : []),
     ...(m.weatherCondition ? [`${m.weatherMod} ${m.weatherCondition.toLowerCase()}`] : []),
+    ...(m.debtMod ? [`${m.debtMod >= 0 ? '+' : ''}${m.debtMod} ${m.debtCounterparty}`] : []),
     ...(m.contestedMod ? [`${m.contestedMod} contested ground`] : []),
     ...(m.zoneMod ? [`${m.zoneMod >= 0 ? '+' : ''}${m.zoneMod} ${m.engagement} range (${describeZone(m.zonePosition)})`] : []),
     ...(m.harmPenalty ? [`${m.harmPenalty} impaired`] : []),

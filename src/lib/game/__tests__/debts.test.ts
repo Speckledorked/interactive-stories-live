@@ -3,7 +3,7 @@
 // the diegetic read-side shaping.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { applyDebtChanges, summarizeDebts, formatDebtsForPrompt, debtChangeFromConsequence, DebtChange } from '../debts'
+import { applyDebtChanges, summarizeDebts, formatDebtsForPrompt, debtChangeFromConsequence, debtModifier, debtsWithCounterparty, DebtChange } from '../debts'
 
 const makeDb = () => ({
   faction: { findFirst: vi.fn().mockResolvedValue(null) },
@@ -198,5 +198,92 @@ describe('debtChangeFromConsequence (#69)', () => {
       })
     )
     expect(log).toEqual(['Jason now owes Vashti: Smuggled them out'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Roll-time weight (the Debt half of the economy question, #44/#47)
+// ---------------------------------------------------------------------------
+// Debt was the one Urban Shadows currency with no mechanical weight:
+// standing, relationships and corruption all move a roll, while "the
+// social currency of this world" reached the prompt as prose and bought
+// nothing.
+
+describe('debtModifier', () => {
+  it('helps when they owe you', () => {
+    expect(debtModifier({ counterpartyName: 'Kessler', owedToCharacter: 1, owedByCharacter: 0 })).toBe(1)
+  })
+
+  it('hurts when you owe them', () => {
+    // "You already owe me" is a real answer to a request.
+    expect(debtModifier({ counterpartyName: 'Kessler', owedToCharacter: 0, owedByCharacter: 1 })).toBe(-1)
+  })
+
+  it('nets debts in both directions to a wash', () => {
+    // Two people square with each other is not two independent pressures.
+    expect(debtModifier({ counterpartyName: 'Kessler', owedToCharacter: 2, owedByCharacter: 2 })).toBe(0)
+  })
+
+  it('flattens past the second favor', () => {
+    // A pile of small favors must not out-weigh a deep faction standing,
+    // and without the flattening a narrator who likes recording debts
+    // would quietly inflate the scale.
+    expect(debtModifier({ counterpartyName: 'K', owedToCharacter: 2, owedByCharacter: 0 })).toBe(2)
+    expect(debtModifier({ counterpartyName: 'K', owedToCharacter: 9, owedByCharacter: 0 })).toBe(2)
+    expect(debtModifier({ counterpartyName: 'K', owedToCharacter: 0, owedByCharacter: 9 })).toBe(-2)
+  })
+
+  it('stays within the same scale as standing and relationships', () => {
+    for (const owedTo of [0, 1, 5, 50]) {
+      for (const owedBy of [0, 1, 5, 50]) {
+        const mod = debtModifier({ counterpartyName: 'K', owedToCharacter: owedTo, owedByCharacter: owedBy })
+        expect(mod).toBeGreaterThanOrEqual(-2)
+        expect(mod).toBeLessThanOrEqual(2)
+      }
+    }
+  })
+
+  it('is zero with no ledger at all', () => {
+    expect(debtModifier(null)).toBe(0)
+    expect(debtModifier(undefined)).toBe(0)
+  })
+
+  it('treats malformed counts as none', () => {
+    expect(debtModifier({ counterpartyName: 'K', owedToCharacter: NaN, owedByCharacter: -3 } as any)).toBe(0)
+  })
+})
+
+describe('debtsWithCounterparty', () => {
+  const rows = [
+    { direction: 'OWED_TO_CHARACTER' as const, counterpartyName: 'Lord Kessler', counterpartyId: 'npc1' },
+    { direction: 'OWED_BY_CHARACTER' as const, counterpartyName: 'Thieves Guild', counterpartyId: 'f1' },
+    { direction: 'OWED_BY_CHARACTER' as const, counterpartyName: 'Lord Kessler', counterpartyId: null },
+  ]
+
+  it('collects both directions for one counterparty', () => {
+    expect(debtsWithCounterparty(rows, { id: 'npc1', name: 'Lord Kessler' })).toEqual({
+      counterpartyName: 'Lord Kessler',
+      owedToCharacter: 1,
+      owedByCharacter: 1,
+    })
+  })
+
+  it('matches on name when the debt was incurred before the entity resolved', () => {
+    // counterpartyId is only set when the name matched a known entity at
+    // the time — the same id-then-name fallback weather already uses.
+    expect(debtsWithCounterparty(
+      [{ direction: 'OWED_TO_CHARACTER', counterpartyName: 'lord kessler', counterpartyId: null }],
+      { id: 'npc1', name: 'Lord Kessler' }
+    )?.owedToCharacter).toBe(1)
+  })
+
+  it('returns nothing when there is no ledger with this counterparty', () => {
+    expect(debtsWithCounterparty(rows, { id: 'npc9', name: 'A Stranger' })).toBeNull()
+    expect(debtsWithCounterparty([], { id: 'npc1', name: 'Lord Kessler' })).toBeNull()
+  })
+
+  it('never bleeds one counterparty ledger into another', () => {
+    const guild = debtsWithCounterparty(rows, { id: 'f1', name: 'Thieves Guild' })
+    expect(guild).toEqual({ counterpartyName: 'Thieves Guild', owedToCharacter: 0, owedByCharacter: 1 })
   })
 })

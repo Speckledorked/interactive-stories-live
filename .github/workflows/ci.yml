@@ -1,4 +1,4 @@
-# CI: typecheck + tests on every push and PR.
+# CI: typecheck + tests, and a rehearsal of the deploy's database step.
 # Tests are fully mocked (no database needed) — see src/**/__tests__.
 name: CI
 
@@ -29,3 +29,75 @@ jobs:
 
       - name: Tests
         run: npx vitest run
+
+  # Rehearse the schema half of the deploy.
+  #
+  # This job exists because of a real outage: a `@@unique` added to Quest
+  # made `prisma db push` — the first command in vercel.json's buildCommand
+  # — exit 1, so two deploys in a row died before ever reaching `next
+  # build`. Nothing above caught it. Typecheck, tests and `next build` were
+  # all green the whole time, because the deploy is the only thing that
+  # touches a database.
+  #
+  # The check runs db push TWICE against the same throwaway Postgres:
+  # first the base revision's schema (standing in for what production
+  # already looks like), then this revision's. That ordering matters —
+  # pushing only the new schema onto an empty database would miss the whole
+  # class of failures that depend on there being something there already,
+  # like dropping a column that holds data.
+  schema-deploy:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # pgvector image: schema.prisma declares Unsupported("vector(1536)")
+        # for campaign memory, so plain postgres can't apply it.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: schemacheck
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/schemacheck
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need history to read the base revision's schema below.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Enable pgvector
+        run: psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+
+      # Best-effort: on a fresh repo or a squashed history there may be no
+      # usable base, in which case the current schema is pushed onto an
+      # empty database and only the second step really tests anything.
+      - name: Stand up the base revision's schema
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE:prisma/schema.prisma" 2>/dev/null; then
+            echo "No usable base schema — skipping, the current schema will apply to an empty database."
+            exit 0
+          fi
+          git show "$BASE:prisma/schema.prisma" > /tmp/base.prisma
+          npx prisma db push --schema=/tmp/base.prisma --skip-generate
+
+      # The real assertion. No --accept-data-loss, exactly as the deploy
+      # runs it: if Prisma would refuse there, it refuses here, on the PR,
+      # instead of at 2am against production.
+      - name: Apply this revision's schema, as the deploy would
+        run: npx prisma db push --skip-generate

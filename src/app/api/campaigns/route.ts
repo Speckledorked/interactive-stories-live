@@ -12,7 +12,7 @@ import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels, Ge
 import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
 import { generateMoveFlavor, GeneratedMoveFlavor } from '@/lib/ai/moveFlavor'
 import { BASIC_MOVES } from '@/lib/pbta-moves'
-import { slugifyCapabilityKey } from '@/lib/game/capabilities'
+import { slugifyCapabilityKey, resolvePrerequisiteLinks } from '@/lib/game/capabilities'
 import { kickLoreImportJob } from '@/lib/lore/loreQueue'
 import { clearPendingWorldSeed } from '@/lib/lore/reseedWorld'
 import { recordEvent } from '@/lib/analytics/events'
@@ -317,6 +317,41 @@ export async function POST(request: NextRequest) {
           skipDuplicates: true
         })
         console.log(`📖 Seeded ${generatedCapabilities.length} capability nodes`)
+
+        // Prerequisite tree (#82): generation names each deeper art's
+        // prerequisite, which can only be resolved to a parentId once every
+        // node exists. Links that don't resolve (wrong domain, not lower
+        // tier, name doesn't exist) are dropped by resolvePrerequisiteLinks
+        // and those nodes stay roots — a bad prerequisite costs the tree an
+        // edge, never the campaign its scaffold.
+        const prereqLinks = resolvePrerequisiteLinks(
+          generatedCapabilities.map(c => ({
+            key: slugifyCapabilityKey(c.name),
+            name: c.name,
+            domain: c.domain,
+            tier: c.tier,
+            requires: c.requires,
+          }))
+        )
+        if (prereqLinks.length > 0) {
+          const nodes = await tx.campaignCapability.findMany({
+            where: { campaignId: newCampaign.id },
+            select: { id: true, key: true },
+          })
+          const idByKey = new Map(nodes.map(n => [n.key, n.id]))
+          let linked = 0
+          for (const link of prereqLinks) {
+            const childId = idByKey.get(link.key)
+            const parentId = idByKey.get(link.parentKey)
+            if (!childId || !parentId) continue
+            await tx.campaignCapability.update({
+              where: { id: childId },
+              data: { parentId },
+            })
+            linked++
+          }
+          console.log(`🌳 Linked ${linked} capability prerequisites`)
+        }
 
         // Shadow branches: in a universe WITH a corruption theme, the
         // scaffold's secret nodes are its forbidden arts — unlockable only

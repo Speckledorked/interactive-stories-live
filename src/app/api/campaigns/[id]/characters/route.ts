@@ -153,7 +153,7 @@ export async function POST(
     try {
       const scaffold = await prisma.campaignCapability.findMany({
         where: { campaignId },
-        select: { id: true, tier: true, isSecret: true }
+        select: { id: true, tier: true, isSecret: true, parentId: true }
       })
       const seeds = decideSeedStates(originFamiliarity, scaffold)
       if (seeds.length > 0) {

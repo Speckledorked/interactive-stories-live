@@ -73,6 +73,7 @@ function toStubEntry(
     importance: 'normal',
     lastSeenTurn: null,
     changelog: [] as unknown[],
+    relatedEntries: [] as unknown[],
     createdBy: 'world',
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

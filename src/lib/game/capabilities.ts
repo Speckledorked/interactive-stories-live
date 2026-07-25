@@ -93,6 +93,8 @@ export interface SeedableCapability {
   id: string
   tier: number
   isSecret: boolean
+  /** Prerequisite node, when this campaign's scaffold has a tree (#82). */
+  parentId?: string | null
 }
 
 export interface SeedDecision {
@@ -109,6 +111,11 @@ export interface SeedDecision {
  *  NATIVE   — grew up here: the whole non-secret tree renders (as ???s).
  *  NEWCOMER — has heard of the top-level systems, nothing deeper.
  *  OUTSIDER — a truly blank sheet until the fiction shows them anything.
+ *
+ * "Top-level" for a NEWCOMER means a ROOT of the prerequisite tree (#82) —
+ * something with nothing standing in front of it — and additionally tier 1,
+ * so a scaffold that has tiers but no declared prerequisites (every node a
+ * root) still behaves exactly as it did before the tree existed.
  */
 export function decideSeedStates(
   familiarity: OriginFamiliarity,
@@ -120,11 +127,68 @@ export function decideSeedStates(
       return visible.map(c => ({ capabilityId: c.id, state: 'GLIMPSED' as CapabilityState }))
     case 'NEWCOMER':
       return visible
-        .filter(c => c.tier <= 1)
+        .filter(c => !c.parentId && c.tier <= 1)
         .map(c => ({ capabilityId: c.id, state: 'GLIMPSED' as CapabilityState }))
     case 'OUTSIDER':
       return []
   }
+}
+
+// ---------------------------------------------------------------------------
+// Prerequisite tree assembly (pure)
+// ---------------------------------------------------------------------------
+
+export interface LinkableCapability {
+  key: string
+  name: string
+  domain: string
+  tier: number
+  /** Prerequisite as declared by generation — a display name, not a key. */
+  requires?: string
+}
+
+/**
+ * Resolve generation's declared prerequisite NAMES into key→parentKey links
+ * (#82).
+ *
+ * Two rules, and they exist for one reason each:
+ *
+ *  - Same domain. A prerequisite reaching across domains would make one
+ *    branch of the scaffold silently un-unlockable until an unrelated one
+ *    was trained, which is not what "deeper art" means.
+ *
+ *  - Strictly lower tier. This is what makes cycles structurally
+ *    impossible: every edge decreases tier, so no path can return to where
+ *    it started. Cheaper and more honest than detecting cycles after the
+ *    fact, and it matches what the generator was asked for.
+ *
+ * Anything that fails to resolve is dropped, not repaired — a node with an
+ * unresolvable prerequisite becomes a root, which is always playable. A
+ * generator that names something that doesn't exist should cost the tree
+ * one edge, never the campaign its capability scaffold.
+ */
+export function resolvePrerequisiteLinks(
+  nodes: LinkableCapability[]
+): Array<{ key: string; parentKey: string }> {
+  const byDomain = new Map<string, LinkableCapability[]>()
+  for (const node of nodes) {
+    const domain = node.domain.toLowerCase()
+    const list = byDomain.get(domain)
+    if (list) list.push(node)
+    else byDomain.set(domain, [node])
+  }
+
+  const links: Array<{ key: string; parentKey: string }> = []
+  for (const node of nodes) {
+    const wanted = node.requires?.trim().toLowerCase()
+    if (!wanted) continue
+    const siblings = byDomain.get(node.domain.toLowerCase()) || []
+    const parent = siblings.find(
+      s => s.name.trim().toLowerCase() === wanted && s.tier < node.tier && s.key !== node.key
+    )
+    if (parent) links.push({ key: node.key, parentKey: parent.key })
+  }
+  return links
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +231,31 @@ export function shadowUnlockBlocked(
 ): boolean {
   if (!node.isShadow) return false
   return (Number(corruption) || 0) < Math.max(1, node.tier)
+}
+
+/**
+ * Prerequisite gate (pure): may this character UNLOCK this node, given what
+ * they've done with its parent? (#82)
+ *
+ * A deeper art requires the art it grows out of. The bar is UNLOCKED, not a
+ * proficiency threshold: you must genuinely be able to do the foundational
+ * thing, but you don't have to be good at it — and a numeric bar would
+ * interact badly with the per-arc growth cap, stalling a branch for two
+ * full arcs behind a number no player can see.
+ *
+ * `parentState` is the character's own row for the parent node, or null
+ * when they have none. A node with no parent is ungated, which is every
+ * node in a campaign generated before the tree existed.
+ *
+ * Glimpsing is never gated — as with shadow arts, anyone may learn that a
+ * deeper art EXISTS. Only doing it requires the groundwork.
+ */
+export function prerequisiteUnlockBlocked(
+  node: { parentId?: string | null },
+  parentState: { state: CapabilityState } | null | undefined
+): boolean {
+  if (!node.parentId) return false
+  return parentState?.state !== 'UNLOCKED'
 }
 
 /**
@@ -260,6 +349,43 @@ export async function applyCapabilityChanges(
 
     if (change.change === 'unlock') {
       if (existing?.state === 'UNLOCKED') continue
+
+      // Prerequisite gate (#82): a deeper art needs the art it grows out
+      // of. Checked before the shadow gate because it's the cheaper and
+      // more common refusal, and because a node can be both.
+      if (node.parentId) {
+        const parentState = await db.characterCapability.findUnique({
+          where: { characterId_capabilityId: { characterId, capabilityId: node.parentId } },
+          select: { state: true },
+        })
+        if (prerequisiteUnlockBlocked(node, parentState)) {
+          const parent = await db.campaignCapability.findUnique({
+            where: { id: node.parentId },
+            select: { name: true },
+          })
+          const parentName = parent?.name || 'its foundation'
+          // Same shape as the shadow refusal: remember that it exists,
+          // unlock nothing. The log line goes into the resolution summary,
+          // so the narrator learns the prerequisite for future turns rather
+          // than proposing the same blocked unlock every scene.
+          if (!existing) {
+            await db.characterCapability.create({
+              data: {
+                characterId,
+                capabilityId: node.id,
+                state: 'GLIMPSED',
+                hint: change.hint || `Beyond reach without ${parentName} first`,
+                source: change.reason,
+                arcStartTurn: currentTurn,
+              },
+            })
+          }
+          log.push(`${node.name} is out of reach — ${parentName} has to come first`)
+          console.warn(`  🔒 prerequisite gate: unlock of "${node.name}" blocked — "${parentName}" not unlocked`)
+          continue
+        }
+      }
+
       if (node.isShadow) {
         const ctx = await getShadowCtx()
         if (shadowUnlockBlocked(node, ctx.corruption)) {

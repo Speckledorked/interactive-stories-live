@@ -37,12 +37,29 @@ export async function syncWikiEntriesForChanges(
     const [entityType, entityId] = key.split(':') as ['NPC' | 'FACTION', string]
 
     if (entityType === 'NPC') {
-      const npc = await prisma.nPC.findUnique({ where: { id: entityId } })
+      const npc = await prisma.nPC.findUnique({
+        where: { id: entityId },
+        // Fog of war applies to the links too: an undiscovered faction or
+        // location must not be named on a page every member can read.
+        include: {
+          faction: { select: { name: true, isDiscovered: true } },
+          location: { select: { name: true, isDiscovered: true } },
+        },
+      })
       // Fog of war: an undiscovered NPC gets no wiki entry — the wiki is
       // readable by every campaign member, not just admins.
       if (!npc || !npc.isDiscovered) continue
       const socialLine = await describeSocialTies(npc.socialTies)
-      await syncNpcWikiEntry(campaignId, turnNumber, npc, socialLine)
+      await syncNpcWikiEntry(
+        campaignId,
+        turnNumber,
+        {
+          ...npc,
+          faction: npc.faction?.isDiscovered ? { name: npc.faction.name } : null,
+          location: npc.location?.isDiscovered ? { name: npc.location.name } : null,
+        },
+        socialLine
+      )
     } else {
       const faction = await prisma.faction.findUnique({
         where: { id: entityId },
@@ -83,9 +100,19 @@ async function describeSocialTies(rawTies: unknown): Promise<string | null> {
 async function syncNpcWikiEntry(
   campaignId: string,
   turnNumber: number,
-  npc: { name: string; description: string | null; goals: string | null; relationship: string | null; currentPlan: string | null; importance: number },
+  npc: {
+    name: string; description: string | null; goals: string | null
+    relationship: string | null; currentPlan: string | null; importance: number
+    faction?: { name: string } | null
+    location?: { name: string } | null
+  },
   socialLine: string | null
 ): Promise<void> {
+  // Cross-links so the wiki is navigable rather than a set of orphan pages.
+  const related = buildRelatedEntries([
+    npc.faction ? { id: npc.faction.name, type: 'FACTION', relationship: 'Affiliated with' } : null,
+    npc.location ? { id: npc.location.name, type: 'LOCATION', relationship: 'Found at' } : null,
+  ])
   const description = [
     npc.description || `${npc.name} is a character encountered during the adventure.`,
     `Current goal: ${npc.goals || 'Unknown'}`,
@@ -109,6 +136,7 @@ async function syncNpcWikiEntry(
         lastSeenTurn: turnNumber,
         updatedAt: new Date(),
         changelog: appendWikiChangelog(existing.changelog, turnNumber, 'Details updated') as any,
+        relatedEntries: related as any,
       },
     })
   } else {
@@ -116,6 +144,7 @@ async function syncNpcWikiEntry(
       data: {
         campaignId,
         entryType: 'NPC',
+        relatedEntries: related as any,
         name: npc.name,
         summary: npc.description || `A character in the story`,
         description,
@@ -158,6 +187,10 @@ async function syncFactionWikiEntry(
 
   const wikiImportance = faction.stability < 20 || faction.military > 80 ? 'major' : 'normal'
 
+  const related = buildRelatedEntries(
+    faction.territories.map(t => ({ id: t.name, type: 'LOCATION' as const, relationship: 'Controls' }))
+  )
+
   const existing = await prisma.wikiEntry.findFirst({
     where: { campaignId, entryType: 'FACTION', name: faction.name },
   })
@@ -171,6 +204,7 @@ async function syncFactionWikiEntry(
         lastSeenTurn: turnNumber,
         updatedAt: new Date(),
         changelog: appendWikiChangelog(existing.changelog, turnNumber, 'Details updated') as any,
+        relatedEntries: related as any,
       },
     })
   } else {
@@ -178,6 +212,7 @@ async function syncFactionWikiEntry(
       data: {
         campaignId,
         entryType: 'FACTION',
+        relatedEntries: related as any,
         name: faction.name,
         summary: faction.description || `A faction in the campaign`,
         description,
@@ -222,4 +257,37 @@ export function appendWikiChangelog(
   const last = prior[prior.length - 1]
   if (last && last.turn === turnNumber && last.change === change) return prior
   return [...prior, { turn: turnNumber, change }].slice(-MAX_WIKI_CHANGELOG_ENTRIES)
+}
+
+/**
+ * A wiki cross-reference. `id` is the *name* of the related entry rather
+ * than a row id: wiki entries are looked up by (campaignId, entryType,
+ * name) everywhere else in this file, and an entry may not exist yet when
+ * the link is written — a name resolves later, a dangling row id never
+ * does.
+ */
+export interface WikiRelatedEntry {
+  id: string
+  type: 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
+  relationship: string
+}
+
+/**
+ * Build the cross-reference list for a wiki entry, deduped and stable.
+ *
+ * WikiEntry.relatedEntries sat unwritten and unread for a long time
+ * (README #90) while the wiki page had no way to navigate between related
+ * things. Pure so the link-building rules are testable without a database.
+ */
+export function buildRelatedEntries(links: Array<WikiRelatedEntry | null | undefined>): WikiRelatedEntry[] {
+  const seen = new Set<string>()
+  const out: WikiRelatedEntry[] = []
+  for (const link of links) {
+    if (!link || !link.id?.trim()) continue
+    const key = `${link.type}:${link.id.trim().toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ ...link, id: link.id.trim() })
+  }
+  return out
 }

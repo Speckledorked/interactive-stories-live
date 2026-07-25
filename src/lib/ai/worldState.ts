@@ -12,6 +12,7 @@ import { retrieveRelevantLore } from './loreRetrieval' // Imported lore RAG (see
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
+import { describeTension, derivePhase } from '@/lib/game/tick/tension'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { resolveActionMechanics } from '@/lib/game/resolution'
 import { summarizeDebts } from '@/lib/game/debts'
@@ -243,6 +244,13 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
 
   const worldSummary = {
     turn_number: worldMeta.currentTurnNumber,
+    // Pacing guidance, derived deterministically from live state each
+    // world turn (see tick/tension.ts) — never a number the AI reports or
+    // reads. Qualitative for the same reason faction stats are: an exact
+    // "tension: 78" is trivial for the narrator to blurt out as something
+    // no character could know.
+    dramatic_tension: describeTension(worldMeta.tension),
+    story_phase: worldMeta.phase || derivePhase(worldMeta.tension, worldMeta.currentTurnNumber),
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
 
     // Include campaign summary in a special field (we'll handle this in the prompt)
@@ -503,6 +511,13 @@ export async function buildWorldSummaryForAI(
   // Format everything for the AI
   const worldSummary = {
     turn_number: worldMeta.currentTurnNumber,
+    // Pacing guidance, derived deterministically from live state each
+    // world turn (see tick/tension.ts) — never a number the AI reports or
+    // reads. Qualitative for the same reason faction stats are: an exact
+    // "tension: 78" is trivial for the narrator to blurt out as something
+    // no character could know.
+    dramatic_tension: describeTension(worldMeta.tension),
+    story_phase: worldMeta.phase || derivePhase(worldMeta.tension, worldMeta.currentTurnNumber),
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
 
     characters: promptCharacters.map(c => ({

@@ -20,6 +20,19 @@ type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST'
 // not a WikiEntry row. Handled as a special-cased tab below.
 type WikiTab = WikiEntryType | 'RUMORS'
 
+// Covers every WikiEntryType, not just the ones with tabs — cross-reference
+// links can point at LORE/CUSTOM entries that have no tab of their own.
+const ENTRY_TYPE_ICONS: Record<WikiEntryType, string> = {
+  NPC: '👤',
+  FACTION: '⚔️',
+  LOCATION: '🏛️',
+  CLOCK: '⏰',
+  ITEM: '🎒',
+  QUEST: '📜',
+  LORE: '📖',
+  CUSTOM: '🔖',
+}
+
 export default function WikiPage() {
   const router = useRouter()
   const params = useParams()
@@ -35,6 +48,10 @@ export default function WikiPage() {
   const [selectedType, setSelectedType] = useState<WikiTab>(initialType)
   const [searchQuery, setSearchQuery] = useState(initialSearch)
   const [selectedEntry, setSelectedEntry] = useState<any>(null)
+  // Set when a cross-reference link points at an entry on a different tab:
+  // the tab switch triggers a reload, and the entry can only be selected
+  // once that reload lands.
+  const [pendingEntryName, setPendingEntryName] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -80,7 +97,19 @@ export default function WikiPage() {
       if (!response.ok) throw new Error('Failed to load wiki entries')
 
       const data = await response.json()
-      setEntries(data.entries || [])
+      const loaded = data.entries || []
+      setEntries(loaded)
+      if (pendingEntryName) {
+        // A related-entry link asked for this specific page. It may not be
+        // here — fog of war can hide the target, or the link can name an
+        // entry that no longer exists — in which case the tab still
+        // switches and nothing is selected.
+        const target = loaded.find(
+          (e: any) => e.name.toLowerCase() === pendingEntryName.toLowerCase()
+        )
+        if (target) setSelectedEntry(target)
+        setPendingEntryName(null)
+      }
       setLastCampaignId(campaignId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load wiki')
@@ -108,6 +137,20 @@ export default function WikiPage() {
     { key: 'QUEST', label: 'Quests', icon: '📜' },
     { key: 'RUMORS', label: 'Rumors', icon: '🗣️' },
   ]
+
+  // Follow a cross-reference. Same-tab links resolve immediately from the
+  // already-loaded list; anything else switches tabs and defers selection
+  // to the reload (see pendingEntryName).
+  const followRelatedLink = (link: { id: string; type: WikiEntryType }) => {
+    if (link.type === selectedType) {
+      const target = entries.find(e => e.name.toLowerCase() === link.id.toLowerCase())
+      if (target) setSelectedEntry(target)
+      return
+    }
+    setPendingEntryName(link.id)
+    setSelectedEntry(null)
+    setSelectedType(link.type)
+  }
 
   const getImportanceColor = (importance: string) => {
     switch (importance) {
@@ -305,6 +348,25 @@ export default function WikiPage() {
                 </div>
               )}
 
+              {selectedEntry.relatedEntries && selectedEntry.relatedEntries.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="text-sm font-bold text-ember-300/60 mb-2">Connections</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedEntry.relatedEntries.map((link: any, i: number) => (
+                      <button
+                        key={i}
+                        onClick={() => followRelatedLink(link)}
+                        className="px-3 py-1.5 bg-black/30 border border-ember-900/30 hover:border-ember-700/60 hover:bg-black/50 rounded-lg text-xs text-left transition-colors"
+                      >
+                        <span className="mr-1">{ENTRY_TYPE_ICONS[link.type as WikiEntryType] || '🔗'}</span>
+                        <span className="text-ember-200 font-medium">{link.id}</span>
+                        <span className="text-ember-400/60"> — {link.relationship}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {selectedEntry.changelog && selectedEntry.changelog.length > 0 && (
                 <div className="mt-6 pt-6 border-t border-ember-900/30">
                   <h3 className="text-sm font-bold text-ember-300/60 mb-4 flex items-center gap-2">
@@ -317,7 +379,7 @@ export default function WikiPage() {
                     {selectedEntry.changelog.map((change: any, i: number) => (
                       <div key={i} className="text-sm p-3 bg-black/25 rounded-lg border border-ember-900/30">
                         <span className="text-ember-300 font-medium">Turn {change.turn}:</span>{' '}
-                        <span className="text-ember-200/80">{change.summary}</span>
+                        <span className="text-ember-200/80">{change.change}</span>
                       </div>
                     ))}
                   </div>

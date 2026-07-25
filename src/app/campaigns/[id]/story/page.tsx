@@ -17,6 +17,7 @@ import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
 import { CompactClock } from '@/components/clock/ClockProgress'
 import { CompactTimeline } from '@/components/scene/VisualTimeline'
 import AITransparencyPanel, { type WorldStateChange } from '@/components/scene/AITransparencyPanel'
+import { extractWorldStateChanges } from '@/lib/game/worldStateChanges'
 import CharacterSnapshotModal from '@/components/character/CharacterSnapshotModal'
 import { useCommandPalette } from '@/contexts/CommandPaletteContext'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -176,8 +177,11 @@ export default function StoryPage() {
       // Load world state changes for scenes
       const changesMap: Record<string, WorldStateChange[]> = {}
       for (const scene of sceneData.scenes || []) {
-        if (scene.consequences?.worldStateChanges) {
-          changesMap[scene.id] = scene.consequences.worldStateChanges
+        // Shape lives in one place (world-state-tracker) rather than being
+        // hand-read out of an untyped Json blob here.
+        const sceneChanges = extractWorldStateChanges(scene.consequences)
+        if (sceneChanges.length > 0) {
+          changesMap[scene.id] = sceneChanges
         }
       }
       setSceneWorldStateChanges(changesMap)

@@ -939,6 +939,8 @@ Report via debt_changes inside that character's pc_changes. A consequences_add e
 - {"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the burning district", "reason": "Kessler's men saved them at real cost"}
 - {"counterparty_name": "Thieves Guild", "counterparty_type": "faction", "direction": "owed_by_character", "action": "resolve", "description": "Repaid by stealing the ledger for them", "reason": "The job is done"}
 
+CORRUPTION GATES: a location, quest or NPC can require marks (min_corruption) or refuse the marked (max_corruption) — report these on location_changes / quest_changes / npc_changes when the fiction establishes such a boundary (a shrine that only opens to the touched, an order that turns away the tainted, a contact who won't be seen with them). The engine ENFORCES these: a gated location cannot be entered, a gated quest cannot be taken, and a gated NPC's goodwill stops helping their rolls. Gates only ever apply at the moment of crossing — nobody is ejected from where they already are, and no quest already underway is revoked — so set them freely. Report them back to null when the fiction lifts one.
+
 NEVER present debts as numbers or a ledger in scene_text — they live in the fiction: a meaningful look, a reminder over drinks, a knock on the door at midnight.
 </debts>
 

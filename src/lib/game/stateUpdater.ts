@@ -117,9 +117,16 @@ export async function applyWorldUpdates(
 
       // 4. Update player characters
       if (world_updates.pc_changes) {
-        await applyCharacterChanges(
+        const gateRefusals = await applyCharacterChanges(
           tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, getCorruptionTheme, sceneOrigin
         )
+        // Corruption gates (#83) refusing a move is a real world event, not
+        // a silent no-op — a character the narrator described walking into
+        // a shrine did not actually go in, and the log is where that
+        // divergence between prose and state is visible.
+        for (const refusal of gateRefusals) {
+          console.log(`  🌑 ${refusal}`)
+        }
       }
 
       // organic_advancement (stat_increases/new_perks/new_moves) is deliberately

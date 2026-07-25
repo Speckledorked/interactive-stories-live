@@ -15,6 +15,9 @@ const makeTx = () => ({
   // Quest-giver rosters (#75), loaded lazily and at most once per batch.
   nPC: { findMany: vi.fn(async (): Promise<Array<{ id: string; name: string }>> => []) },
   faction: { findMany: vi.fn(async (): Promise<Array<{ id: string; name: string }>> => []) },
+  // Corruption acquisition gate (#83) context.
+  campaign: { findUnique: vi.fn(async (): Promise<{ corruptionTheme: unknown } | null> => ({ corruptionTheme: { name: 'the Rot' } })) },
+  character: { findMany: vi.fn(async (): Promise<Array<{ corruption: number }>> => []) },
 })
 
 let tx: ReturnType<typeof makeTx>
@@ -195,5 +198,108 @@ describe('applyQuestChanges — quest giver resolution (#75)', () => {
       { name: 'Clear the Warrens', changes: { progress_append: 'Found the nest.' } } as QuestChange,
     ])
     expect(tx.nPC.findMany).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Corruption acquisition gate (#83)
+// ---------------------------------------------------------------------------
+// The safety property: gates apply at ACQUISITION only. Marks are
+// irreversible, so revoking an active quest — or blocking its completion —
+// would strand a party mid-job with no way back.
+
+describe('applyQuestChanges — corruption acquisition gate', () => {
+  const gated = (over: Record<string, unknown> = {}) => ({
+    id: 'q1', name: 'The Ledger Job', status: 'AVAILABLE', progressLog: null,
+    objectiveKey: 'the-ledger-job', minCorruption: null, maxCorruption: 2, ...over,
+  })
+
+  it('refuses a quest to a party too marked to take it', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated())
+    tx.character.findMany.mockResolvedValue([{ corruption: 0 }, { corruption: 4 }])
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    const data = tx.quest.update.mock.calls[0]?.[0]?.data
+    expect(data?.status).toBeUndefined()
+  })
+
+  it('judges the party by its most-marked member, which is what a giver sees', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated())
+    tx.character.findMany.mockResolvedValue([{ corruption: 0 }, { corruption: 1 }])
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('ACTIVE')
+  })
+
+  it('never revokes a quest already underway', async () => {
+    // The trap this rule exists to prevent: gaining a mark mid-job must
+    // not strand the party on a quest they can no longer touch.
+    tx.quest.findFirst.mockResolvedValue(gated({ status: 'ACTIVE' }))
+    tx.character.findMany.mockResolvedValue([{ corruption: 5 }])
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { progress_append: 'Found the ledger.' } } as QuestChange,
+    ])
+
+    expect(tx.character.findMany).not.toHaveBeenCalled()
+    expect(tx.quest.update).toHaveBeenCalled()
+  })
+
+  it('never blocks completion of a gated quest', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated({ status: 'ACTIVE' }))
+    tx.character.findMany.mockResolvedValue([{ corruption: 5 }])
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'COMPLETED' } } as QuestChange,
+    ])
+
+    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('COMPLETED')
+  })
+
+  it('never gates a campaign with no corruption theme', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated())
+    tx.campaign.findUnique.mockResolvedValue({ corruptionTheme: null })
+    tx.character.findMany.mockResolvedValue([{ corruption: 5 }])
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('ACTIVE')
+  })
+
+  it('never looks up gate context for an ungated quest', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated({ minCorruption: null, maxCorruption: null }))
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+    expect(tx.campaign.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('allows the quest when the gate lookup fails', async () => {
+    // Fails open: refusing a quest the fiction just handed over silently
+    // loses a thread.
+    tx.quest.findFirst.mockResolvedValue(gated())
+    tx.campaign.findUnique.mockRejectedValue(new Error('db down'))
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('ACTIVE')
+  })
+
+  it('persists gates the fiction reports, including lifting one', async () => {
+    tx.quest.findFirst.mockResolvedValue(gated())
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { min_corruption: 2, max_corruption: 5 } } as QuestChange,
+    ])
+    expect(tx.quest.update.mock.calls[0][0].data).toMatchObject({ minCorruption: 2, maxCorruption: 5 })
   })
 })

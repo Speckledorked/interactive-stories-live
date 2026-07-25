@@ -267,7 +267,12 @@ export const NPCChangesSchema = z.object({
     // one. Deliberately simple — no conditions, death saves, or
     // stabilize/capture outcomes — matching how NPC.harm is a thinner
     // model than Character.harm by design (see schema.prisma).
-    harm_healing: z.number().min(0).max(6).optional()
+    harm_healing: z.number().min(0).max(6).optional(),
+    // Corruption gate (#83). min = only the marked may pass; max = the
+    // marked are turned away. Both omitted (the default) means ungated.
+    // Bounded 0-5 to match the corruption track.
+    min_corruption: z.number().int().min(0).max(5).optional(),
+    max_corruption: z.number().int().min(0).max(5).optional()
   })
 })
 
@@ -325,7 +330,12 @@ export const LocationChangesSchema = z.object({
   is_new: z.boolean().optional(),       // true when registering a new location
   description: z.string().max(MEDIUM_TEXT).optional(),   // what this place looks like / feels like
   location_type: z.string().max(SHORT_TEXT).optional(), // town, dungeon, wilderness, inn, building, etc.
-  gm_notes_append: z.string().max(LONG_TEXT).optional()
+  gm_notes_append: z.string().max(LONG_TEXT).optional(),
+  // Corruption gate (#83). min = only the marked may pass; max = the
+  // marked are turned away. Both omitted (the default) means ungated.
+  // Bounded 0-5 to match the corruption track.
+  min_corruption: z.number().int().min(0).max(5).optional(),
+  max_corruption: z.number().int().min(0).max(5).optional()
 })
 
 // Structured payout applied deterministically when a quest's status becomes
@@ -363,6 +373,11 @@ export const QuestChangeSchema = z.object({
     reward: z.string().max(MEDIUM_TEXT).optional(),
     status: z.enum(['ACTIVE', 'COMPLETED', 'FAILED', 'ABANDONED']).optional(),
     progress_append: z.string().max(MEDIUM_TEXT).optional(),
+    // Corruption gate (#83). min = only the marked may pass; max = the
+    // marked are turned away. Both omitted (the default) means ungated.
+    // Bounded 0-5 to match the corruption track.
+    min_corruption: z.number().int().min(0).max(5).optional(),
+    max_corruption: z.number().int().min(0).max(5).optional(),
     reward_grant: RewardGrantSchema.optional()
   })
 })

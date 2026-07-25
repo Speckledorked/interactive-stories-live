@@ -9,6 +9,7 @@ import type { WorldUpdates } from '@/lib/ai/schema'
 import { applyQuestRewardGrant } from '../questRewards'
 import { appendBounded, QUEST_PROGRESS_BOUNDS } from '../textAppend'
 import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData } from '../quests'
+import { checkCorruptionGate, hasCorruptionGate } from '../corruptionGates'
 
 type Db = Prisma.TransactionClient
 export type QuestChange = NonNullable<WorldUpdates['quest_changes']>[number]
@@ -57,6 +58,48 @@ export async function applyQuestChanges(
     return key
   }
 
+  // Corruption gate on ACQUISITION (#83). Evaluated against the party's
+  // HIGHEST corruption, because that is what a quest-giver sees: one
+  // deeply-marked member is enough for an order to turn the party away, and
+  // enough for a forbidden patron to deal with them.
+  //
+  // Loaded lazily and once — most quest changes are progress updates on
+  // quests already taken, which are never re-gated.
+  let gateContext: { hasTheme: boolean; partyCorruption: number } | null = null
+  const getGateContext = async () => {
+    if (!gateContext) {
+      const [campaign, characters] = await Promise.all([
+        tx.campaign.findUnique({ where: { id: campaignId }, select: { corruptionTheme: true } }),
+        tx.character.findMany({ where: { campaignId, isAlive: true }, select: { corruption: true } }),
+      ])
+      gateContext = {
+        hasTheme: Boolean(campaign?.corruptionTheme),
+        partyCorruption: characters.reduce((max, c) => Math.max(max, c.corruption || 0), 0),
+      }
+    }
+    return gateContext
+  }
+
+  /**
+   * May the party TAKE this quest? Only ever consulted on a transition
+   * into ACTIVE — an already-active quest is never revoked and completion
+   * is never blocked, because marks are irreversible and stranding a party
+   * mid-job with no way back is exactly the trap a one-way track invites.
+   *
+   * Fails open on any error: refusing a quest the fiction just handed over
+   * silently loses a thread, while permitting one costs a beat of flavor.
+   */
+  const questAcquisitionAllowed = async (quest: { minCorruption?: number | null; maxCorruption?: number | null }) => {
+    if (!hasCorruptionGate(quest)) return true
+    try {
+      const ctx = await getGateContext()
+      return checkCorruptionGate(quest, ctx.partyCorruption, ctx.hasTheme).allowed
+    } catch (error) {
+      console.error('Corruption quest gate check failed (allowing):', error)
+      return true
+    }
+  }
+
   for (const questChange of questChanges) {
     if (!questChange?.name) continue
     const changes = questChange.changes || {}
@@ -96,13 +139,21 @@ export async function applyQuestChanges(
         if (key) updateData.objectiveKey = key
       }
       if (changes.reward) updateData.reward = changes.reward
+      if (changes.min_corruption !== undefined) updateData.minCorruption = changes.min_corruption
+      if (changes.max_corruption !== undefined) updateData.maxCorruption = changes.max_corruption
       if (progressLine) {
         updateData.progressLog = appendBounded(existing.progressLog, progressLine, QUEST_PROGRESS_BOUNDS)
       }
       const justCompleted = changes.status === 'COMPLETED' && existing.status !== 'COMPLETED'
       if (changes.status && changes.status !== existing.status) {
-        updateData.status = changes.status
-        if (changes.status !== 'ACTIVE') updateData.resolvedAt = new Date()
+        // Acquisition gate: only a transition INTO active is checked.
+        const becomingActive = changes.status === 'ACTIVE' && existing.status !== 'ACTIVE'
+        if (becomingActive && !(await questAcquisitionAllowed(existing))) {
+          console.log(`  🌑 "${existing.name}" refused to this party — corruption gate`)
+        } else {
+          updateData.status = changes.status
+          if (changes.status !== 'ACTIVE') updateData.resolvedAt = new Date()
+        }
       }
       if (Object.keys(updateData).length > 0) {
         await tx.quest.update({ where: { id: existing.id }, data: updateData })
@@ -145,6 +196,8 @@ export async function applyQuestChanges(
           givenBy: changes.given_by || null,
           ...giverData,
           reward: changes.reward || null,
+          minCorruption: changes.min_corruption ?? null,
+          maxCorruption: changes.max_corruption ?? null,
           status: changes.status || 'ACTIVE',
           progressLog: progressLine,
           ...(changes.status && changes.status !== 'ACTIVE' ? { resolvedAt: new Date() } : {})

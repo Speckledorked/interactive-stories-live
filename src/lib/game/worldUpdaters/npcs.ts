@@ -113,6 +113,14 @@ export async function applyNpcChanges(
         updateData.isDiscovered = true
       }
 
+      // Corruption gates (#83). An NPC who requires (or is repulsed by)
+      // what a character has become gives their rapport no roll weight —
+      // see the leverage gate in resolution.ts. Written whenever reported,
+      // including back to null: a gate the fiction can't lift is the trap
+      // this design exists to avoid.
+      if (npcChange.changes.min_corruption !== undefined) updateData.minCorruption = npcChange.changes.min_corruption
+      if (npcChange.changes.max_corruption !== undefined) updateData.maxCorruption = npcChange.changes.max_corruption
+
       if (Object.keys(updateData).length > 0) {
         await tx.nPC.update({
           where: { id: npc.id },
@@ -135,7 +143,9 @@ export async function applyNpcChanges(
           // Fog of war: an NPC introduced offscreen (e.g. a tournament
           // winner) exists but isn't "met" yet — undiscovered until a
           // live scene actually involves them.
-          isDiscovered: sceneOrigin
+          isDiscovered: sceneOrigin,
+          minCorruption: npcChange.changes.min_corruption ?? null,
+          maxCorruption: npcChange.changes.max_corruption ?? null
         }
       })
       npcsForResolution.push(newNPC)

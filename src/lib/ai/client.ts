@@ -252,6 +252,10 @@ export interface AIGMResponse {
             effect?: { kind: 'heal' | 'custom'; amount?: number; description: string }
           }>
           standing_changes?: Array<{ faction_name: string; delta: number; reason: string }>
+          // The faction footing the bill, if one is. Makes the payout a
+          // real transfer out of that faction's resources — see
+          // lib/game/factionPayout.ts.
+          paid_by_faction?: string
         }
       }
     }>
@@ -841,7 +845,7 @@ You MUST respond with a JSON object matching this structure:
     "quest_changes": [
       {"name": "The Missing Caravan", "is_new": true, "changes": {"description": "Merchants vanished on the north road", "objective": "Find the caravan and learn what took it", "given_by": "Guildmaster Oren", "reward": "200 gold and guild favor"}},
       {"name": "EXISTING_QUEST", "changes": {"progress_append": "Found wolf tracks that turn to bootprints at the river"}},
-      {"name": "ANOTHER_EXISTING_QUEST", "changes": {"status": "COMPLETED", "progress_append": "Delivered the ledger to the magistrate", "reward_grant": {"gold": 200, "standing_changes": [{"faction_name": "Merchants Guild", "delta": 1, "reason": "Delivered the ledger as promised"}]}}}
+      {"name": "ANOTHER_EXISTING_QUEST", "changes": {"status": "COMPLETED", "progress_append": "Delivered the ledger to the magistrate", "reward_grant": {"gold": 200, "paid_by_faction": "Merchants Guild", "standing_changes": [{"faction_name": "Merchants Guild", "delta": 1, "reason": "Delivered the ledger as promised"}]}}}
     ],
     "organic_advancement": [
       {"character_id": "CHARACTER_NAME", "new_perks": [{"name": "Riposte", "description": "You counter, you don't just block. +1 when you strike back at an opponent who's just missed you.", "tags": ["combat"]}], "new_moves": [{"name": "Read the Room", "trigger": "When you enter a tense negotiation", "description": "You always get one honest tell from the room before anyone speaks."}]}
@@ -1036,6 +1040,7 @@ TRACK QUESTS: Whenever the fiction hands the party a concrete job, goal, or prom
 - Every scene that meaningfully advances an active quest, add a progress_append beat for it (one sentence, concrete: what was learned/gained/lost)
 - When a quest resolves — success, failure, or the party walking away — set status to COMPLETED, FAILED, or ABANDONED, with a final progress_append saying how
 - When a quest is COMPLETED and a reward was promised, include reward_grant with the actual payout (gold, items, standing_changes) — this is what mechanically pays it out; the reward text alone is flavor and grants nothing by itself. Only include what was genuinely promised; omit reward_grant entirely if nothing concrete was owed
+- reward_grant.paid_by_faction: name the faction footing the bill when one is, exactly as listed in FACTIONS. The engine takes the gold OUT of that faction's resources, and a faction that can't afford what it promised pays what it can and defaults on the rest — so a struggling patron's coffers are real. Omit it for a private individual or an unaffiliated payer. Never name a faction that isn't actually paying just because the reward involves them
 - Vague ambitions ("get stronger", "explore the city") are NOT quests; only track things with a specific fictional endpoint
 
 TRACK PC LOCATION: Whenever a player character's physical location changes during this scene — walks into another room, leaves a building, travels to a new place, is moved/carried/dragged somewhere — set changes.location in that character's pc_changes entry to where they are NOW, matching the name you used in location_changes.

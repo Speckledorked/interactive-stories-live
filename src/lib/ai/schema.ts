@@ -337,7 +337,19 @@ export const RewardGrantSchema = z.object({
   character_names: z.array(z.string()).optional(), // recipients; absent/empty = every living party member
   gold: z.number().optional(),
   items: z.array(InventoryItemSchema).optional(),
-  standing_changes: z.array(StandingChangeSchema).optional()
+  standing_changes: z.array(StandingChangeSchema).optional(),
+  // Who is footing the bill. When this names a real faction, the payout
+  // becomes a TRANSFER: the faction loses what it pays, and a faction that
+  // can't afford the promise defaults on part of it (see
+  // lib/game/factionPayout.ts). Omit for a personal or unaffiliated payer,
+  // which pays in full from nowhere exactly as before.
+  //
+  // Named explicitly rather than inferred from standing_changes or the
+  // quest's giver text: deducing a payer from adjacent fields is the
+  // guesswork this engine avoids, and getting it wrong bankrupts an
+  // institution that was never involved. The quest's resolved giver faction
+  // is used as a fallback, because that link IS a fact rather than a guess.
+  paid_by_faction: z.string().max(SHORT_TEXT).optional()
 })
 
 // Quest lifecycle schema (see lib/game/stateUpdater.ts quest handling)

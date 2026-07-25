@@ -35,7 +35,9 @@ describe('applyQuestRewardGrant', () => {
       upsert: vi.fn().mockResolvedValue({}),
     },
     faction: {
-      findFirst: vi.fn().mockResolvedValue({ id: 'faction-1', name: 'Merchants Guild' }),
+      findFirst: vi.fn().mockResolvedValue({ id: 'faction-1', name: 'Merchants Guild', resources: 80 }),
+      findUnique: vi.fn().mockResolvedValue({ id: 'faction-1', name: 'Merchants Guild', resources: 80 }),
+      update: vi.fn().mockResolvedValue({}),
     },
   })
 
@@ -111,12 +113,18 @@ describe('applyQuestRewardGrant', () => {
   })
 
   it('never grants negative gold, even if the AI reports a negative reward', async () => {
+    // A reward is a payout, never a debit. Asserted as the invariant
+    // rather than as a specific write, because a zero payout now skips
+    // the write entirely instead of re-saving an unchanged value.
     const db = makeDb()
     db.character.findMany.mockResolvedValue([
       { id: 'c1', name: 'Jason', resources: { gold: 10 }, inventory: null },
     ])
     await applyQuestRewardGrant(db as any, 'camp1', 'The Missing Caravan', { gold: -50 })
-    expect(db.character.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { resources: { gold: 10 } } })
+    for (const call of db.character.update.mock.calls) {
+      const gold = (call[0] as any).data?.resources?.gold
+      if (gold !== undefined) expect(gold).toBeGreaterThanOrEqual(10)
+    }
   })
 
   it('skips silently when named recipients cannot be resolved', async () => {
@@ -128,5 +136,120 @@ describe('applyQuestRewardGrant', () => {
     })
     expect(log).toEqual([])
     expect(db.character.update).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Faction-funded payouts (the faction-wealth edge of #44/#47/#76/#77)
+// ---------------------------------------------------------------------------
+// A payout is a TRANSFER: what a faction pays, it stops having. Before
+// this, Faction.resources drove ambition thresholds, goal drift and war
+// outcomes but never reached a player, and gold appeared from nowhere.
+
+describe('applyQuestRewardGrant — faction-funded payouts', () => {
+  const makeDb = () => ({
+    character: {
+      findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'c1', name: 'Jason', resources: { gold: 0 }, inventory: null },
+      ]),
+      update: vi.fn().mockResolvedValue({}),
+    },
+    factionStanding: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
+    faction: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({}),
+    },
+  })
+
+  const goldPaid = (db: ReturnType<typeof makeDb>) =>
+    (db.character.update.mock.calls[0]?.[0] as any)?.data?.resources?.gold
+
+  it('debits the named paying faction', async () => {
+    const db = makeDb()
+    db.faction.findFirst.mockResolvedValue({ id: 'f1', name: 'Merchants Guild', resources: 80 })
+
+    await applyQuestRewardGrant(db as any, 'camp1', 'The Ledger Job', {
+      gold: 300, paid_by_faction: 'Merchants Guild',
+    })
+
+    expect(goldPaid(db)).toBe(300)
+    expect(db.faction.update).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { resources: 77 }, // 80 - 3 points at 100 gold/point
+    })
+  })
+
+  it('a broke faction pays what it can and the shortfall is reported', async () => {
+    const db = makeDb()
+    db.faction.findFirst.mockResolvedValue({ id: 'f1', name: 'Merchants Guild', resources: 2 })
+
+    const log = await applyQuestRewardGrant(db as any, 'camp1', 'The Ledger Job', {
+      gold: 1000, paid_by_faction: 'Merchants Guild',
+    })
+
+    expect(goldPaid(db)).toBe(200)
+    expect(log.some(l => l.includes('could only raise'))).toBe(true)
+  })
+
+  it('assesses the cost across the whole party, not per head', async () => {
+    // Five people each paid 200 costs the faction a thousand.
+    const db = makeDb()
+    db.character.findMany.mockResolvedValue(
+      ['a', 'b', 'c', 'd', 'e'].map(id => ({ id, name: id, resources: { gold: 0 }, inventory: null }))
+    )
+    db.faction.findFirst.mockResolvedValue({ id: 'f1', name: 'Merchants Guild', resources: 80 })
+
+    await applyQuestRewardGrant(db as any, 'camp1', 'The Ledger Job', {
+      gold: 200, paid_by_faction: 'Merchants Guild',
+    })
+
+    expect(db.faction.update).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { resources: 70 }, // 1000 gold = 10 points
+    })
+  })
+
+  it('falls back to the quest giver faction when no payer is named', async () => {
+    const db = makeDb()
+    db.faction.findUnique.mockResolvedValue({ id: 'giver', name: 'The Ashcrown Court', resources: 60 })
+
+    await applyQuestRewardGrant(db as any, 'camp1', 'The Ledger Job', { gold: 100 }, 'giver')
+
+    expect(db.faction.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'giver' } })
+    )
+    expect(db.faction.update).toHaveBeenCalled()
+  })
+
+  it('pays in full from nowhere when no faction is involved at all', async () => {
+    // A private patron. Unchanged from before this feature existed.
+    const db = makeDb()
+    await applyQuestRewardGrant(db as any, 'camp1', 'The Ledger Job', { gold: 250 })
+    expect(goldPaid(db)).toBe(250)
+    expect(db.faction.update).not.toHaveBeenCalled()
+  })
+
+  it('pays in full rather than withholding when the named faction does not resolve', async () => {
+    // Failing to charge someone is a far cheaper error than failing to pay
+    // the party what the fiction promised them.
+    const db = makeDb()
+    db.faction.findFirst.mockResolvedValue(null)
+    await applyQuestRewardGrant(db as any, 'camp1', 'The Ledger Job', {
+      gold: 250, paid_by_faction: 'A Guild That Does Not Exist',
+    })
+    expect(goldPaid(db)).toBe(250)
+    expect(db.faction.update).not.toHaveBeenCalled()
+  })
+
+  it('does not touch a payer for an items-only reward', async () => {
+    const db = makeDb()
+    db.faction.findFirst.mockResolvedValue({ id: 'f1', name: 'Merchants Guild', resources: 80 })
+    await applyQuestRewardGrant(db as any, 'camp1', 'The Ledger Job', {
+      items: [{ id: 'i1', name: 'Signet Ring', quantity: 1 }],
+      paid_by_faction: 'Merchants Guild',
+    })
+    expect(db.faction.update).not.toHaveBeenCalled()
   })
 })

@@ -12,8 +12,10 @@ import { retrieveRelevantLore } from './loreRetrieval' // Imported lore RAG (see
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
+import { describeTension, derivePhase } from '@/lib/game/tick/tension'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { resolveActionMechanics } from '@/lib/game/resolution'
+import { describeZone } from '@/lib/game/zones'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
 import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
@@ -243,6 +245,13 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
 
   const worldSummary = {
     turn_number: worldMeta.currentTurnNumber,
+    // Pacing guidance, derived deterministically from live state each
+    // world turn (see tick/tension.ts) — never a number the AI reports or
+    // reads. Qualitative for the same reason faction stats are: an exact
+    // "tension: 78" is trivial for the narrator to blurt out as something
+    // no character could know.
+    dramatic_tension: describeTension(worldMeta.tension),
+    story_phase: worldMeta.phase || derivePhase(worldMeta.tension, worldMeta.currentTurnNumber),
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
 
     // Include campaign summary in a special field (we'll handle this in the prompt)
@@ -503,6 +512,13 @@ export async function buildWorldSummaryForAI(
   // Format everything for the AI
   const worldSummary = {
     turn_number: worldMeta.currentTurnNumber,
+    // Pacing guidance, derived deterministically from live state each
+    // world turn (see tick/tension.ts) — never a number the AI reports or
+    // reads. Qualitative for the same reason faction stats are: an exact
+    // "tension: 78" is trivial for the narrator to blurt out as something
+    // no character could know.
+    dramatic_tension: describeTension(worldMeta.tension),
+    story_phase: worldMeta.phase || derivePhase(worldMeta.tension, worldMeta.currentTurnNumber),
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
 
     characters: promptCharacters.map(c => ({
@@ -742,6 +758,12 @@ export async function buildSceneResolutionRequest(
               move_name: mechanics.moveName,
               outcome: mechanics.outcome,
               outcome_text: mechanics.outcomeText,
+              // Where the engine decided this character was standing when
+              // they acted (#2/#43/#85). The dice already priced it; the
+              // narrator gets it so the prose doesn't contradict a position
+              // the roll charged for — a charge that earned +1 for closing
+              // shouldn't be narrated from across the room.
+              position: describeZone(mechanics.zonePosition),
               ...(mechanics.corruptionSurgeBonus > 0 ? { corruption_surge: true } : {})
             }
           }

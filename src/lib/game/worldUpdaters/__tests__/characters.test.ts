@@ -2,7 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { applyCharacterChanges, PcChange, findConsequenceToRemove } from '../characters'
 import type { Character } from '@prisma/client'
 
-vi.mock('../../debts', () => ({ applyDebtChanges: vi.fn(async () => ['debt log line']) }))
+// applyDebtChanges is mocked (it's a DB writer), but debtChangeFromConsequence
+// is pure and IS the behavior under test for #69 — mocking it away would
+// leave the routing untested.
+vi.mock('../../debts', async () => {
+  const actual = await vi.importActual<typeof import('../../debts')>('../../debts')
+  return { ...actual, applyDebtChanges: vi.fn(async () => ['debt log line']) }
+})
 vi.mock('../../standing', () => ({ applyStandingChanges: vi.fn(async () => ['standing log line']) }))
 vi.mock('../../capabilities', () => ({ applyCapabilityChanges: vi.fn(async () => ['capability log line']) }))
 vi.mock('../locations', () => ({ resolveOrCreateLocationId: vi.fn(async () => 'resolved-loc-id') }))
@@ -313,6 +319,86 @@ describe('applyCharacterChanges — delegation to debt/standing/capability write
       { character_name_or_id: 'char1', changes: { debt_changes: [{ counterparty_name: 'Lord Kessler', counterparty_type: 'npc', direction: 'owed_by_character', action: 'incur', description: 'A favor', reason: 'x' }] } } as PcChange,
     ], roster, noTheme, true)
     expect(applyDebtChanges).toHaveBeenCalledWith(tx, 'camp1', 'char1', 'Jason', expect.any(Array), 3)
+  })
+
+  it('routes a consequences_add debt into the real Debt model (#69)', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      {
+        character_name_or_id: 'char1',
+        changes: {
+          consequences_add: [
+            { type: 'debt', description: 'Vashti got them out of the district', counterparty_name: 'Vashti', counterparty_type: 'npc' },
+          ],
+        },
+      } as PcChange,
+    ], roster, noTheme, true)
+
+    const changes = vi.mocked(applyDebtChanges).mock.calls[0][4]
+    expect(changes).toEqual([
+      expect.objectContaining({
+        counterparty_name: 'Vashti',
+        counterparty_type: 'npc',
+        action: 'incur',
+        // A bare debt means the party owes someone; inverting it by
+        // accident would hand players leverage they never earned.
+        direction: 'owed_by_character',
+        description: 'Vashti got them out of the district',
+      }),
+    ])
+
+    // And nothing lands in the freeform string array — that shadow
+    // representation is exactly what #69 was about.
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.consequences?.debts ?? []).toEqual([])
+  })
+
+  it('merges consequence debts with debt_changes into one writer call', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      {
+        character_name_or_id: 'char1',
+        changes: {
+          debt_changes: [{ counterparty_name: 'Lord Kessler', counterparty_type: 'npc', direction: 'owed_by_character', action: 'incur', description: 'A favor', reason: 'x' }],
+          consequences_add: [{ type: 'debt', description: 'Owed the Guild', counterparty_name: 'Thieves Guild', counterparty_type: 'faction' }],
+        },
+      } as PcChange,
+    ], roster, noTheme, true)
+
+    expect(applyDebtChanges).toHaveBeenCalledTimes(1)
+    const changes = vi.mocked(applyDebtChanges).mock.calls[0][4]
+    expect(changes.map((c: any) => c.counterparty_name)).toEqual(['Lord Kessler', 'Thieves Guild'])
+  })
+
+  it('drops a consequence debt with no counterparty rather than inventing one', async () => {
+    // A debt owed to nobody can never be called in, so there is nothing
+    // useful to write. It must not fall through to the string array either.
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { consequences_add: [{ type: 'debt', description: 'Owes someone, somewhere' }] } } as PcChange,
+    ], roster, noTheme, true)
+
+    expect(applyDebtChanges).not.toHaveBeenCalled()
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(JSON.stringify(data.consequences)).not.toContain('Owes someone')
+  })
+
+  it('still writes non-debt consequences to their arrays', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      {
+        character_name_or_id: 'char1',
+        changes: {
+          consequences_add: [
+            { type: 'promise', description: 'Swore to return for the child' },
+            { type: 'debt', description: 'Owed Vashti', counterparty_name: 'Vashti' },
+          ],
+        },
+      } as PcChange,
+    ], roster, noTheme, true)
+
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.consequences.promises).toEqual(['Swore to return for the child'])
   })
 
   it('delegates standing_changes to applyStandingChanges', async () => {

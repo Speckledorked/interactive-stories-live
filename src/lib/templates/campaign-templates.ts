@@ -2,7 +2,7 @@
 // Phase 18: Campaign Presets & Content Packs
 // Pre-built system modules for quick campaign creation
 
-import { slugifyCapabilityKey } from '@/lib/game/capabilities'
+import { slugifyCapabilityKey, resolvePrerequisiteLinks } from '@/lib/game/capabilities'
 
 export interface CampaignTemplate {
   id: string
@@ -48,6 +48,12 @@ export interface TemplateCapability {
   description: string
   tier: number // 1 = entry knowledge, 3 = deep art
   isSecret: boolean
+  // Prerequisite tree (#82): exact `name` of the lower-tier capability in
+  // this same domain that must be UNLOCKED first. Omit for tier 1. Resolved
+  // by resolvePrerequisiteLinks, which silently drops anything that doesn't
+  // point at a lower-tier sibling — so a typo here costs one edge, not the
+  // scaffold.
+  requires?: string
 }
 
 export interface StartingDebtTemplate {
@@ -151,12 +157,12 @@ The town council is worried, and adventurers are needed to investigate the threa
 
   capabilityTemplates: [
     { domain: 'Swordplay', name: 'Bladework', description: 'Trained use of sword and shield in melee', tier: 1, isSecret: false },
-    { domain: 'Swordplay', name: 'Riposte', description: 'Turning a parried blow into a killing counter', tier: 2, isSecret: false },
+    { domain: 'Swordplay', name: 'Riposte', description: 'Turning a parried blow into a killing counter', tier: 2, isSecret: false, requires: 'Bladework' },
     { domain: 'Essence Magic', name: 'Cantrips', description: 'The minor spells every apprentice learns first', tier: 1, isSecret: false },
-    { domain: 'Essence Magic', name: 'Ritual Casting', description: 'Slow, powerful magic worked outside combat', tier: 2, isSecret: false },
-    { domain: 'Essence Magic', name: 'Blood Rites', description: 'Forbidden magic that trades the caster\'s vitality for power', tier: 3, isSecret: true },
+    { domain: 'Essence Magic', name: 'Ritual Casting', description: 'Slow, powerful magic worked outside combat', tier: 2, isSecret: false, requires: 'Cantrips' },
+    { domain: 'Essence Magic', name: 'Blood Rites', description: 'Forbidden magic that trades the caster\'s vitality for power', tier: 3, isSecret: true, requires: 'Ritual Casting' },
     { domain: 'Woodcraft', name: 'Tracking', description: 'Reading trail-sign and predicting a quarry\'s path', tier: 1, isSecret: false },
-    { domain: 'Woodcraft', name: 'Beast Speech', description: 'Communicating with the Whisperwood\'s creatures', tier: 2, isSecret: false }
+    { domain: 'Woodcraft', name: 'Beast Speech', description: 'Communicating with the Whisperwood\'s creatures', tier: 2, isSecret: false, requires: 'Tracking' }
   ],
 
   startingDebtTemplates: [
@@ -244,10 +250,10 @@ But as you prepare for the exercise, alarms blare throughout the school. Real vi
 
   capabilityTemplates: [
     { domain: 'Quirk Control', name: 'Basic Application', description: 'Using your quirk reliably, on command, without strain', tier: 1, isSecret: false },
-    { domain: 'Quirk Control', name: 'Refined Technique', description: 'Precise, efficient use that costs you far less than a beginner\'s', tier: 2, isSecret: false },
-    { domain: 'Quirk Control', name: 'Overdrive', description: 'Pushing your quirk past its safe limits — Plus Ultra, at a cost', tier: 3, isSecret: true },
+    { domain: 'Quirk Control', name: 'Refined Technique', description: 'Precise, efficient use that costs you far less than a beginner\'s', tier: 2, isSecret: false, requires: 'Basic Application' },
+    { domain: 'Quirk Control', name: 'Overdrive', description: 'Pushing your quirk past its safe limits — Plus Ultra, at a cost', tier: 3, isSecret: true, requires: 'Refined Technique' },
     { domain: 'Combat Technique', name: 'Hero Basics', description: 'U.A.\'s foundational combat and rescue curriculum', tier: 1, isSecret: false },
-    { domain: 'Combat Technique', name: 'Combo Work', description: 'Chaining your quirk with a weapon, gadget, or ally\'s power', tier: 2, isSecret: false },
+    { domain: 'Combat Technique', name: 'Combo Work', description: 'Chaining your quirk with a weapon, gadget, or ally\'s power', tier: 2, isSecret: false, requires: 'Hero Basics' },
     { domain: 'Support Engineering', name: 'Gear Maintenance', description: 'Keeping support-department gadgets running and tuned to your quirk', tier: 1, isSecret: false }
   ],
 
@@ -322,11 +328,11 @@ But you know better. Something supernatural is hunting in Millbrook, and it's yo
 
   capabilityTemplates: [
     { domain: 'Investigation', name: 'Fieldcraft', description: 'Reading a scene for evidence a normal investigator would miss', tier: 1, isSecret: false },
-    { domain: 'Investigation', name: 'Occult Research', description: 'Tracing a monster back to its lore, weaknesses, and origin', tier: 2, isSecret: false },
+    { domain: 'Investigation', name: 'Occult Research', description: 'Tracing a monster back to its lore, weaknesses, and origin', tier: 2, isSecret: false, requires: 'Fieldcraft' },
     { domain: 'Combat', name: 'Hunter\'s Reflexes', description: 'Fighting something that shouldn\'t exist without freezing up', tier: 1, isSecret: false },
-    { domain: 'Combat', name: 'Killing Blow', description: 'Knowing exactly where and how a given monster type actually dies', tier: 2, isSecret: false },
+    { domain: 'Combat', name: 'Killing Blow', description: 'Knowing exactly where and how a given monster type actually dies', tier: 2, isSecret: false, requires: 'Hunter\'s Reflexes' },
     { domain: 'The Sight', name: 'Glimpsing the Unnatural', description: 'Noticing wrongness other people\'s eyes slide past', tier: 1, isSecret: false },
-    { domain: 'The Sight', name: 'Communion', description: 'Speaking with what hunts in the dark — on its terms, not yours', tier: 3, isSecret: true }
+    { domain: 'The Sight', name: 'Communion', description: 'Speaking with what hunts in the dark — on its terms, not yours', tier: 3, isSecret: true, requires: 'Glimpsing the Unnatural' }
   ],
 
   startingDebtTemplates: [
@@ -575,6 +581,39 @@ export async function applyCampaignTemplate(
       skipDuplicates: true,
     })
     console.log(`📖 Seeded ${template.capabilityTemplates.length} template capability nodes (AI scaffold unavailable)`)
+
+    // Prerequisite tree (#82), same two-pass shape as the AI scaffold in
+    // campaigns/route.ts: parents can only be linked once every node has an
+    // id. A template's own prerequisites are hand-authored, so these all
+    // resolve — the resolver is still the only thing that decides, so a
+    // future edit that breaks one degrades to a root rather than to a node
+    // nobody can ever unlock.
+    const links = resolvePrerequisiteLinks(
+      template.capabilityTemplates.map(c => ({
+        key: slugifyCapabilityKey(c.name),
+        name: c.name,
+        domain: c.domain,
+        tier: c.tier,
+        requires: c.requires,
+      }))
+    )
+    if (links.length > 0) {
+      const nodes = await prisma.campaignCapability.findMany({
+        where: { campaignId },
+        select: { id: true, key: true },
+      })
+      const idByKey = new Map<string, string>(
+        nodes.map((n: { id: string; key: string }) => [n.key, n.id])
+      )
+      for (const link of links) {
+        const childId = idByKey.get(link.key)
+        const parentId = idByKey.get(link.parentKey)
+        if (childId && parentId) {
+          await prisma.campaignCapability.update({ where: { id: childId }, data: { parentId } })
+        }
+      }
+      console.log(`🌳 Linked ${links.length} template capability prerequisites`)
+    }
   }
 
   console.log(`✅ Applied template: ${template.name} (${factionsToCreate.length} factions, ${generatedFactions ? 'AI-generated' : 'template defaults'})`)

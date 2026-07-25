@@ -12,6 +12,8 @@ import {
   summarizeCapabilities,
   applyCapabilityChanges,
   shadowUnlockBlocked,
+  prerequisiteUnlockBlocked,
+  resolvePrerequisiteLinks,
   UNLOCK_STARTING_PROFICIENCY,
   ARC_LENGTH_TURNS,
   MAX_GROWTH_PER_ARC,
@@ -96,6 +98,25 @@ describe('decideSeedStates', () => {
     expect(seeds.map(s => s.capabilityId)).toEqual(['a'])
   })
 
+  it('NEWCOMER skips tier-1 nodes that hang off a prerequisite (#82)', () => {
+    // "Top-level" means a root of the tree, not merely a low tier — a
+    // cheap art gated behind another art isn't something you've heard of
+    // just by arriving.
+    const tree = [
+      { id: 'root', tier: 1, isSecret: false, parentId: null },
+      { id: 'child', tier: 1, isSecret: false, parentId: 'root' },
+    ]
+    expect(decideSeedStates('NEWCOMER', tree).map(s => s.capabilityId)).toEqual(['root'])
+  })
+
+  it('NATIVE sees the whole tree regardless of depth', () => {
+    const tree = [
+      { id: 'root', tier: 1, isSecret: false, parentId: null },
+      { id: 'deep', tier: 3, isSecret: false, parentId: 'root' },
+    ]
+    expect(decideSeedStates('NATIVE', tree).map(s => s.capabilityId).sort()).toEqual(['deep', 'root'])
+  })
+
   it('OUTSIDER starts with a blank sheet', () => {
     expect(decideSeedStates('OUTSIDER', scaffold)).toEqual([])
   })
@@ -148,6 +169,7 @@ describe('applyCapabilityChanges (writer)', () => {
   const makeDb = () => ({
     campaignCapability: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(async () => null),
       create: vi.fn(async ({ data }: any) => ({ id: 'new-node', ...data })),
     },
     characterCapability: {
@@ -281,6 +303,77 @@ describe('applyCapabilityChanges (writer)', () => {
     expect(log).toEqual(['Unlocked: Void Binding'])
   })
 
+  it('prerequisite gate: unlocking a child of an un-unlocked parent downgrades to a glimpse', async () => {
+    db.campaignCapability.findFirst.mockResolvedValue({
+      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false, parentId: 'cap-blade',
+    })
+    // The character's own row for Riposte, then the parent's row.
+    db.characterCapability.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ state: 'GLIMPSED' })
+    db.campaignCapability.findUnique.mockResolvedValue({ name: 'Bladework' } as any)
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'riposte', change: 'unlock', reason: 'improvised in a duel' },
+    ], 9)
+
+    expect(db.characterCapability.upsert).not.toHaveBeenCalled()
+    expect(db.characterCapability.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ state: 'GLIMPSED' }) })
+    )
+    // The log line names the prerequisite: it goes into the resolution
+    // summary, so the narrator learns the requirement instead of proposing
+    // the same blocked unlock every scene.
+    expect(log[0]).toContain('Bladework')
+  })
+
+  it('prerequisite gate: an unlocked parent lets the child through', async () => {
+    db.campaignCapability.findFirst.mockResolvedValue({
+      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false, parentId: 'cap-blade',
+    })
+    db.characterCapability.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ state: 'UNLOCKED' })
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'riposte', change: 'unlock', reason: 'earned it' },
+    ], 9)
+
+    expect(db.characterCapability.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ state: 'UNLOCKED' }) })
+    )
+    expect(log).toEqual(['Unlocked: Riposte'])
+  })
+
+  it('prerequisite gate: a root node never triggers a parent lookup', async () => {
+    db.campaignCapability.findFirst.mockResolvedValue({
+      id: 'cap6', name: 'Bladework', tier: 1, isShadow: false, parentId: null,
+    })
+    db.characterCapability.findUnique.mockResolvedValue(null)
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'bladework', change: 'unlock', reason: 'trained' },
+    ], 9)
+
+    expect(db.campaignCapability.findUnique).not.toHaveBeenCalled()
+    expect(log).toEqual(['Unlocked: Bladework'])
+  })
+
+  it('prerequisite gate: glimpsing a gated node is never blocked', async () => {
+    // Same rule as the shadow gate — anyone may learn a deeper art exists.
+    db.campaignCapability.findFirst.mockResolvedValue({
+      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false, parentId: 'cap-blade',
+    })
+    db.characterCapability.findUnique.mockResolvedValue(null)
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'riposte', change: 'glimpse', reason: 'saw it used' },
+    ], 9)
+
+    expect(db.campaignCapability.findUnique).not.toHaveBeenCalled()
+    expect(log).toEqual(['Glimpsed: Riposte'])
+  })
+
   it('shadow gate: glimpsing a shadow node is never gated', async () => {
     db.campaignCapability.findFirst.mockResolvedValue({
       id: 'cap4', name: 'Void Binding', tier: 3, isShadow: true,
@@ -316,5 +409,86 @@ describe('shadowUnlockBlocked', () => {
   it('treats malformed corruption values as zero', () => {
     expect(shadowUnlockBlocked({ isShadow: true, tier: 1 }, NaN)).toBe(true)
     expect(shadowUnlockBlocked({ isShadow: true, tier: 1 }, undefined as any)).toBe(true)
+  })
+})
+
+describe('prerequisiteUnlockBlocked (#82)', () => {
+  it('never gates a root', () => {
+    expect(prerequisiteUnlockBlocked({ parentId: null }, null)).toBe(false)
+    expect(prerequisiteUnlockBlocked({}, null)).toBe(false)
+  })
+
+  it('blocks when the character has never met the prerequisite', () => {
+    expect(prerequisiteUnlockBlocked({ parentId: 'p' }, null)).toBe(true)
+  })
+
+  it('blocks when the prerequisite is only glimpsed', () => {
+    // Knowing the foundation EXISTS is not the same as being able to do it.
+    expect(prerequisiteUnlockBlocked({ parentId: 'p' }, { state: 'GLIMPSED' })).toBe(true)
+  })
+
+  it('allows once the prerequisite is unlocked, at any proficiency', () => {
+    // Deliberately not a proficiency threshold: a numeric bar would stall a
+    // branch behind the per-arc growth cap for a number no player can see.
+    expect(prerequisiteUnlockBlocked({ parentId: 'p' }, { state: 'UNLOCKED' })).toBe(false)
+  })
+})
+
+describe('resolvePrerequisiteLinks (#82)', () => {
+  const node = (key: string, domain: string, tier: number, requires?: string) => ({
+    key, name: key, domain, tier, requires,
+  })
+
+  it('links a deeper art to the lower-tier art it names', () => {
+    expect(resolvePrerequisiteLinks([
+      node('bladework', 'Swordplay', 1),
+      node('riposte', 'Swordplay', 2, 'bladework'),
+    ])).toEqual([{ key: 'riposte', parentKey: 'bladework' }])
+  })
+
+  it('matches the prerequisite name case- and whitespace-insensitively', () => {
+    const links = resolvePrerequisiteLinks([
+      { key: 'cantrips', name: 'Cantrips', domain: 'Essence Magic', tier: 1 },
+      { key: 'ritual', name: 'Ritual Casting', domain: 'Essence Magic', tier: 2, requires: '  cantrips ' },
+    ])
+    expect(links).toEqual([{ key: 'ritual', parentKey: 'cantrips' }])
+  })
+
+  it('drops a prerequisite that reaches into another domain', () => {
+    // Cross-domain gating would make one branch silently un-unlockable
+    // until an unrelated one was trained.
+    expect(resolvePrerequisiteLinks([
+      node('bladework', 'Swordplay', 1),
+      node('ritual', 'Essence Magic', 2, 'bladework'),
+    ])).toEqual([])
+  })
+
+  it('drops a prerequisite that is not strictly lower tier', () => {
+    expect(resolvePrerequisiteLinks([
+      node('a', 'D', 2),
+      node('b', 'D', 2, 'a'),
+    ])).toEqual([])
+  })
+
+  it('makes cycles structurally impossible', () => {
+    // Every edge strictly decreases tier, so no chain can return to its
+    // start — no cycle detection pass needed.
+    const links = resolvePrerequisiteLinks([
+      node('a', 'D', 1, 'b'),
+      node('b', 'D', 2, 'a'),
+    ])
+    expect(links).toEqual([{ key: 'b', parentKey: 'a' }])
+  })
+
+  it('drops a prerequisite naming something that does not exist', () => {
+    expect(resolvePrerequisiteLinks([node('b', 'D', 2, 'ghost')])).toEqual([])
+  })
+
+  it('leaves a scaffold with no declared prerequisites entirely rooted', () => {
+    expect(resolvePrerequisiteLinks([
+      node('a', 'D', 1),
+      node('b', 'D', 2),
+      node('c', 'D', 3),
+    ])).toEqual([])
   })
 })

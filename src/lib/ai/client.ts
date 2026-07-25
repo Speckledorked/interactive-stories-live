@@ -89,8 +89,15 @@ export interface AIGMResponse {
         }>
         // Phase 14: Consequence changes
         consequences_add?: Array<{
-          type: 'promise' | 'enemy' | 'longTermThreat'
+          // 'debt' is an alias, not a consequence array: it's routed into
+          // the real Debt model (see debtChangeFromConsequence, #69), which
+          // is why the three fields below exist. Nothing is written to
+          // consequences.debts.
+          type: 'promise' | 'debt' | 'enemy' | 'longTermThreat'
           description: string
+          counterparty_name?: string
+          counterparty_type?: 'npc' | 'faction'
+          direction?: 'owed_by_character' | 'owed_to_character'
         }>
         consequences_remove?: string[] // Descriptions of consequences to remove
         // Physical appearance changes (scars, lost limbs, etc.)
@@ -440,6 +447,11 @@ export interface AIGMRequest {
       move_name: string
       outcome: 'strongHit' | 'weakHit' | 'miss'
       outcome_text: string
+      // Where the engine had this character standing when they acted, in
+      // the fiction's own words (see lib/game/zones.ts). The roll already
+      // charged for it; this keeps the prose consistent with what was
+      // charged for.
+      position?: string
       // True when this roll was powered by accepting an open corruption
       // bargain — narrate the borrowed power working, and the price.
       corruption_surge?: boolean
@@ -800,7 +812,7 @@ You MUST respond with a JSON object matching this structure:
           "conditions_add": [{"name": "Bleeding", "category": "Physical", "description": "...", "mechanicalEffect": "..."}],
           "location": "New location",
           "relationship_changes": [{"entity_id": "npc_123", "entity_name": "Guard Captain", "trust_delta": 10, "reason": "Saved their life"}],
-          "consequences_add": [{"type": "promise", "description": "Swore to return for the child"}],
+          "consequences_add": [{"type": "promise", "description": "Swore to return for the child"}, {"type": "debt", "description": "Vashti's people got them out of the district", "counterparty_name": "Vashti", "counterparty_type": "npc", "direction": "owed_by_character"}],
           "appearance_changes": {"description": "Deep scar on cheek", "append": true},
           "equipment_changes": {"weapon": {"action": "remove", "value": "Broken sword"}},
           "inventory_changes": {"items_add": [...], "items_remove": [...], "items_modify": [...]},
@@ -919,7 +931,7 @@ USE DEBTS AS DRAMA:
 - CALL IN: NPCs and factions remember. When it serves the story, have a creditor show up wanting repayment — at the worst possible time is best. A called-in debt is pressure, not a transaction: refusing has social consequences (burned relationships, new enemies, reputation).
 - RESOLVE: when a debt is honored, refused, traded away, or forgiven, resolve it with how it ended.
 
-Report via debt_changes inside that character's pc_changes — this is the ONLY channel for a debt. There is no consequences_add "debt" type; only debt_changes carries direction, counterparty and status, and only it reaches the prompt later as leverage.
+Report via debt_changes inside that character's pc_changes. A consequences_add entry of type "debt" also works and lands in exactly the same place, but it MUST name a counterparty_name — a debt owed to nobody can never be called in, and one without a named creditor is dropped.
 - {"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the burning district", "reason": "Kessler's men saved them at real cost"}
 - {"counterparty_name": "Thieves Guild", "counterparty_type": "faction", "direction": "owed_by_character", "action": "resolve", "description": "Repaid by stealing the ledger for them", "reason": "The job is done"}
 
@@ -1195,6 +1207,7 @@ ${player_actions.map(a => {
   const lines = [`${a.character_name}: "${a.action_text}"`]
   if (a.mechanics) {
     lines.push(`  → MECHANICAL OUTCOME (binding, already rolled): ${a.mechanics.move_name} — ${a.mechanics.outcome === 'strongHit' ? 'STRONG HIT' : a.mechanics.outcome === 'weakHit' ? 'WEAK HIT' : 'MISS'}. ${a.mechanics.outcome_text}`)
+    if (a.mechanics.position) lines.push(`  → POSITION (binding): they acted from ${a.mechanics.position}. Narrate them there`)
     if (a.mechanics.corruption_surge) {
       lines.push(`  → CORRUPTION SURGE: this character ACCEPTED the open bargain — the borrowed power visibly fueled this attempt. Narrate it working, and report corruption_change marks 1 for them (see <corruption>).`)
     }

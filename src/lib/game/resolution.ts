@@ -25,6 +25,17 @@ import { BASIC_MOVES, calculateOutcome } from '@/lib/pbta-moves'
 import { MAX_CORRUPTION, CORRUPTION_SURGE_BONUS } from './corruption'
 import { proficiencyBand, ProficiencyBand } from './capabilities'
 import { effectiveStandingModifier } from './standing'
+import {
+  ZonePosition,
+  Engagement,
+  rangeModifier,
+  resolveZoneForScene,
+  isEngagement,
+  isZonePosition,
+  describeZone,
+  parseZone,
+  DEFAULT_ZONE,
+} from './zones'
 import { AI_MODELS } from '@/lib/ai/models'
 import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
 
@@ -61,6 +72,20 @@ export interface ActionClassification {
   // never trusts this id blindly — it's re-checked against the acting
   // character's actual perks/moves before any bonus applies.
   matched_signature_id?: string | null
+  // How this action reaches its target: 'melee' (bodily, at arm's length),
+  // 'ranged' (a weapon/effect crossing distance), 'social' (aimed at a
+  // person's mind), or null for anything that isn't reaching for a target
+  // at all — which is most actions. Priced against the character's range
+  // band by rangeModifier (lib/game/zones.ts). Read from the fiction here
+  // for the same reason capability_key is: deciding melee-vs-ranged from a
+  // move's NAME would be keyword guesswork.
+  engagement?: 'melee' | 'ranged' | 'social' | null
+  // Set only when the action text itself repositions the character ("she
+  // charges the line", "he backs into the alley mouth"). Null — the normal
+  // case — means they stay in the band they were already in. Reporting a
+  // transition is a reading of the fiction; the modifier that transition
+  // earns is decided by the code.
+  moves_to_zone?: 'close' | 'near' | 'far' | 'distant' | null
 }
 
 export interface ActionMechanics {
@@ -90,6 +115,11 @@ export interface ActionMechanics {
   signatureName: string | null
   // SIGNATURE_BONUS when a listed perk/ability's trigger matched, else 0.
   signatureMod: number
+  // Range band this character acted from, and how the action reached — see
+  // lib/game/zones.ts. zoneMod is what the pairing was worth.
+  zonePosition: ZonePosition
+  engagement: Engagement
+  zoneMod: number
   // CORRUPTION_SURGE_BONUS when this roll invoked an open bargain, else 0.
   // A non-zero value is also the signal that a mark MUST land this scene
   // (see ensureSurgeCorruptionChanges in corruption.ts).
@@ -192,6 +222,11 @@ export interface CharacterForRoll {
   // This character's perks + earned Abilities, offered to the classifier
   // as possible situational matches — see SignatureForRoll.
   signatures?: SignatureForRoll[]
+  // Range band carried in from the last action, and the metadata that
+  // scopes it to a scene. Resolved by resolveZoneForScene, not read raw —
+  // a zone stored under a different scene is stale. See zones.ts.
+  currentZone?: unknown
+  zoneMetadata?: unknown
 }
 
 // The faction side of a roll, resolved by the orchestrator from the
@@ -309,7 +344,13 @@ export function computeMechanics(
   relationship?: RelationshipForRoll | null,
   weather?: WeatherForRoll | null,
   moveFlavor?: MoveFlavorForRoll | null,
-  isContestedLocation?: boolean | null
+  isContestedLocation?: boolean | null,
+  // The scene this roll belongs to. Required for a zone to count at all:
+  // resolveZoneForScene discards a stored position from a different scene,
+  // so omitting it means every character rolls from DEFAULT_ZONE, which
+  // modifies nothing. That's the correct degradation for a caller that
+  // doesn't track positions.
+  sceneId?: string | null
 ): ActionMechanics | null {
   if (classification.move_name === 'no_roll') return null
   const move = BASIC_MOVES.find(m => m.name === classification.move_name)
@@ -377,6 +418,21 @@ export function computeMechanics(
   // contestedPenalty above.
   const contestedMod = contestedPenalty(isContestedLocation)
 
+  // Range band: where this character stands vs. how the action reaches —
+  // see rangeModifier in zones.ts. An explicit reposition in the action
+  // text wins over the carried position; a position from another scene
+  // doesn't count.
+  const zonePosition = resolveZoneForScene({
+    storedZone: character.currentZone,
+    storedMetadata: character.zoneMetadata,
+    sceneId: sceneId || '',
+    movesTo: classification.moves_to_zone,
+  })
+  const engagement: Engagement = isEngagement(classification.engagement)
+    ? classification.engagement
+    : null
+  const zoneMod = rangeModifier(zonePosition, engagement)
+
   // Active conditions' flat roll penalty — see conditionPenalty above.
   const conditionMod = conditionPenalty(character.conditions)
 
@@ -397,7 +453,7 @@ export function computeMechanics(
 
   const harmMod = harmPenalty(character.harm)
   const dice: [number, number] = [rollD6(rng), rollD6(rng)]
-  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + weatherMod + contestedMod + conditionMod + signatureMod + harmMod + corruptionSurgeBonus
+  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + weatherMod + contestedMod + zoneMod + conditionMod + signatureMod + harmMod + corruptionSurgeBonus
   const outcome = calculateOutcome(total)
   // Flavor overrides display only, and only where it actually supplied text
   // for this band — a partially-flavored move (AI omitted one outcome)
@@ -421,6 +477,9 @@ export function computeMechanics(
     weatherMod,
     isContestedLocation: Boolean(isContestedLocation),
     contestedMod,
+    zonePosition,
+    engagement,
+    zoneMod,
     conditionMod,
     signatureName,
     signatureMod,
@@ -460,6 +519,8 @@ export function parseClassifications(raw: any, actionCount: number): ActionClass
       npc_name: typeof c.npc_name === 'string' && c.npc_name ? c.npc_name : null,
       accepts_bargain: c.accepts_bargain === true,
       matched_signature_id: typeof c.matched_signature_id === 'string' && c.matched_signature_id ? c.matched_signature_id : null,
+      engagement: isEngagement(c.engagement) ? c.engagement : null,
+      moves_to_zone: isZonePosition(c.moves_to_zone) ? c.moves_to_zone : null,
     }))
 }
 
@@ -485,7 +546,8 @@ async function classifyActions(
       const signatures = character?.signatures
         ?.map(s => `${s.id} (${s.name}: ${s.trigger})`)
         .join('; ')
-      return `${i}. ${character?.name || 'Unknown'}: "${a.actionText}"${knownCaps ? ` [known abilities: ${knownCaps}]` : ''}${signatures ? ` [perks/signature abilities: ${signatures}]` : ''}${character?.pendingBargainOffer ? ` [OPEN BARGAIN: ${character.pendingBargainOffer}]` : ''}`
+      const band = character ? parseZone(character.currentZone) : DEFAULT_ZONE
+      return `${i}. ${character?.name || 'Unknown'} [currently ${band}]: "${a.actionText}"${knownCaps ? ` [known abilities: ${knownCaps}]` : ''}${signatures ? ` [perks/signature abilities: ${signatures}]` : ''}${character?.pendingBargainOffer ? ` [OPEN BARGAIN: ${character.pendingBargainOffer}]` : ''}`
     })
     .join('\n')
 
@@ -507,8 +569,10 @@ Rules:
 - npc_name: if the action is aimed at persuading, appealing to, threatening, or otherwise leveraging ONE SPECIFIC NPC's personal opinion of the character (not their faction's) — name that NPC exactly as listed; else null. An action can name a faction OR an NPC OR neither, but naming both only makes sense if the character is explicitly working an individual within their own institution.
 - accepts_bargain: true ONLY if that action's line shows an [OPEN BARGAIN: ...] AND the action clearly reaches for / accepts / draws on that offered power. Refusing it, ignoring it, or doing something unrelated is false. Actions with no open bargain are always false.
 - matched_signature_id: if that action's line lists [perks/signature abilities] and this action clearly and specifically matches ONE of their trigger descriptions, return that exact id; else null. Be conservative — most actions match none, and an action can match at most one. Never invent an id not listed for that character.
+- engagement: how the action reaches its target. "melee" = bodily, at arm's length (a blade, a fist, a grapple). "ranged" = a weapon or effect crossing open distance (a bow, a thrown knife, a bolt of power). "social" = aimed at a person's mind (persuading, threatening, lying to, appealing to someone present). null = the action isn't reaching for a target at all (bracing a door, searching a room, holding your nerve, running). Most actions are null — do not stretch to fit one.
+- moves_to_zone: the range band the action itself MOVES the character to — "close" (in among them), "near" (a step away), "far" (across the space), "distant" (out of the confrontation). Set this ONLY when the action text explicitly changes their distance (charging in, backing off, taking cover across the room). Return null when the action doesn't move them, which is most of the time — each character's current band is shown in brackets on their line and carries over on its own.
 
-Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null, "npc_name": null, "accepts_bargain": false, "matched_signature_id": null}]}`
+Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null, "npc_name": null, "accepts_bargain": false, "matched_signature_id": null, "engagement": "melee", "moves_to_zone": null}]}`
 
   const startTime = Date.now()
   try {
@@ -637,6 +701,8 @@ export async function resolveActionMechanics(
         relationships: (c.relationships as any) || null,
         conditions: ((c.conditions as any)?.conditions || []) as Array<{ rollModifier?: number }>,
         signatures,
+        currentZone: c.currentZone,
+        zoneMetadata: c.zoneMetadata,
       }
     })
     const standingsByCharacter = new Map(
@@ -731,7 +797,7 @@ export async function resolveActionMechanics(
       const move = BASIC_MOVES.find(m => m.name === classification.move_name)
       const moveFlavor = move ? moveFlavorByKey.get(move.key) ?? null : null
 
-      const rolled = computeMechanics(classification, action, character, rng, factionForRoll, relationshipForRoll, weatherForRoll, moveFlavor, isContestedLocation)
+      const rolled = computeMechanics(classification, action, character, rng, factionForRoll, relationshipForRoll, weatherForRoll, moveFlavor, isContestedLocation, sceneId)
       if (rolled) mechanics.push(rolled)
     }
 
@@ -747,10 +813,10 @@ export async function resolveActionMechanics(
             userId: action?.userId || '',
             rollType: 'move',
             dice: m.dice,
-            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.weatherMod + m.contestedMod + m.conditionMod + m.signatureMod + m.harmPenalty,
+            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.weatherMod + m.contestedMod + m.zoneMod + m.conditionMod + m.signatureMod + m.harmPenalty,
             total: m.total,
             outcome: m.outcome,
-            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.weatherCondition ? `, ${m.weatherCondition.toLowerCase()}` : ''}${m.contestedMod ? ', contested ground' : ''}${m.conditionMod ? `, ${m.conditionMod} condition penalty` : ''}${m.signatureName ? `, ${m.signatureName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
+            description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.weatherCondition ? `, ${m.weatherCondition.toLowerCase()}` : ''}${m.contestedMod ? ', contested ground' : ''}${m.zoneMod ? `, ${m.engagement} ${describeZone(m.zonePosition)}` : ''}${m.conditionMod ? `, ${m.conditionMod} condition penalty` : ''}${m.signatureName ? `, ${m.signatureName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
           }
         }),
       })
@@ -778,6 +844,28 @@ export async function resolveActionMechanics(
           })
         )
       )
+      // Carry each character's range band forward. Without this write the
+      // position would be recomputed from nothing every action and the
+      // classifier's repositions would never persist — the exact failure
+      // that made the original zone system dead.
+      //
+      // Best-effort: positioning is a modifier, not the resolution. One
+      // character acting twice in an exchange settles on their last action's
+      // band, which is the same "latest wins" the fiction itself implies.
+      await Promise.all(
+        Array.from(new Map(mechanics.map(m => [m.characterId, m])).values()).map(m =>
+          prisma.character
+            .update({
+              where: { id: m.characterId },
+              data: {
+                currentZone: m.zonePosition,
+                zoneMetadata: { sceneId } as Prisma.InputJsonValue,
+              },
+            })
+            .catch(err => console.error(`Failed to persist zone for ${m.characterName}:`, err))
+        )
+      )
+
       console.log(`🎲 Rolled ${mechanics.length} move(s): ${mechanics.map(m => `${m.characterName} ${m.moveName}=${m.outcome}`).join('; ')}`)
     }
 
@@ -822,6 +910,7 @@ export function formatRollReceipt(m: ActionMechanics): string {
     ...(m.npcName ? [`${m.relationshipMod >= 0 ? '+' : ''}${m.relationshipMod} rapport (${m.npcName})`] : []),
     ...(m.weatherCondition ? [`${m.weatherMod} ${m.weatherCondition.toLowerCase()}`] : []),
     ...(m.contestedMod ? [`${m.contestedMod} contested ground`] : []),
+    ...(m.zoneMod ? [`${m.zoneMod >= 0 ? '+' : ''}${m.zoneMod} ${m.engagement} range (${describeZone(m.zonePosition)})`] : []),
     ...(m.harmPenalty ? [`${m.harmPenalty} impaired`] : []),
     ...(m.corruptionSurgeBonus ? [`+${m.corruptionSurgeBonus} corruption surge (bargain accepted)`] : []),
   ].join(', ')

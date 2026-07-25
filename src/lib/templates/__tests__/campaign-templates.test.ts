@@ -5,10 +5,12 @@ import {
   createNPCsForCampaign,
   createLocationsForCampaign,
   applyCampaignTemplate,
+  FANTASY_TEMPLATE,
   type GeneratedFactionOverride,
   type GeneratedNPCOverride,
   type GeneratedLocationOverride,
 } from '../campaign-templates'
+import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 
 function makeFaction(overrides: Partial<GeneratedFactionOverride> = {}): GeneratedFactionOverride {
   return {
@@ -31,7 +33,13 @@ function makeMockPrisma() {
     },
     move: { create: vi.fn().mockResolvedValue({}) },
     clock: { create: vi.fn().mockResolvedValue({}) },
-    campaignCapability: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    campaignCapability: {
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
+      // The prerequisite pass (#82) re-reads the nodes it just created to
+      // map keys to ids; the default returns them so links resolve.
+      findMany: vi.fn().mockResolvedValue([]),
+      update: vi.fn().mockResolvedValue({}),
+    },
     nPC: { create: vi.fn().mockResolvedValue({}) },
     location: { create: vi.fn().mockResolvedValue({}) },
   }
@@ -221,6 +229,33 @@ describe('applyCampaignTemplate', () => {
     const data = prisma.campaignCapability.createMany.mock.calls[0][0].data
     expect(data.length).toBeGreaterThan(0)
     expect(data.some((c: any) => c.name === 'Blood Rites' && c.isSecret === true)).toBe(true)
+  })
+
+  it('links the template scaffold into a real prerequisite tree (#82)', async () => {
+    const prisma = makeMockPrisma()
+    // Stand in for the rows createMany just wrote.
+    prisma.campaignCapability.findMany.mockResolvedValue(
+      FANTASY_TEMPLATE.capabilityTemplates!.map(c => ({
+        id: `id-${slugifyCapabilityKey(c.name)}`,
+        key: slugifyCapabilityKey(c.name),
+      }))
+    )
+
+    await applyCampaignTemplate('camp1', 'pbta-fantasy', prisma, undefined, false)
+
+    const updates = prisma.campaignCapability.update.mock.calls.map((c: any) => c[0])
+    const link = (child: string) =>
+      updates.find((u: any) => u.where.id === `id-${slugifyCapabilityKey(child)}`)?.data.parentId
+
+    expect(link('Riposte')).toBe('id-bladework')
+    expect(link('Ritual Casting')).toBe('id-cantrips')
+    // Depth 3: the forbidden art sits behind the ritual art, not behind the
+    // domain's entry-level one.
+    expect(link('Blood Rites')).toBe('id-ritual-casting')
+    // Every tier-1 node stays a root.
+    expect(link('Bladework')).toBeUndefined()
+    expect(link('Cantrips')).toBeUndefined()
+    expect(link('Tracking')).toBeUndefined()
   })
 
   it('skips the template capability scaffold when AI already generated one', async () => {

@@ -65,6 +65,33 @@ describe('generateWorldFromTemplate', () => {
     expect(result?.statLabels?.cool.label).toBe('Composure')
   })
 
+  it('carries a declared capability prerequisite through, rejecting self-reference (#82)', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({
+      world_seed: 'seed',
+      factions: [],
+      capability_domains: [
+        {
+          domain: 'Swordplay',
+          capabilities: [
+            { name: 'Bladework', description: 'x', tier: 1, is_secret: false },
+            { name: 'Riposte', description: 'y', tier: 2, is_secret: false, requires: '  Bladework ' },
+            // A node naming itself would be permanently un-unlockable —
+            // the one malformed prerequisite worth catching at parse time.
+            { name: 'Ouroboros', description: 'z', tier: 2, is_secret: false, requires: 'Ouroboros' },
+          ],
+        },
+      ],
+    }))
+
+    const result = await generateWorldFromTemplate('pbta-fantasy', 'Title', '')
+
+    const byName = Object.fromEntries((result?.capabilities || []).map(c => [c.name, c]))
+    expect(byName['Riposte'].requires).toBe('Bladework')
+    expect(byName['Bladework'].requires).toBeUndefined()
+    expect(byName['Ouroboros'].requires).toBeUndefined()
+  })
+
   it('omits statLabels entirely when the response has none', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
     vi.stubGlobal('fetch', mockCompletion({ world_seed: 'seed', factions: [] }))

@@ -3,6 +3,19 @@
 
 import { z } from 'zod'
 
+// Length ceilings for AI-reported free text (#81).
+//
+// These fields are applied verbatim to durable state and then read back
+// into the prompt, so an unbounded string is both a storage and a
+// per-call token cost — and unlike the numeric fields, none of them had
+// any ceiling at all. Set generously: normal output is nowhere near
+// these, so a rejection here means the response was genuinely
+// pathological, not merely wordy. clampPromptStrings (#67) bounds what
+// reaches the prompt; this bounds what reaches the DB in the first place.
+const SHORT_TEXT = 300   // names, single values, one-line labels
+const MEDIUM_TEXT = 1000 // a sentence or two of description
+const LONG_TEXT = 2000   // multi-sentence notes and plans
+
 /**
  * Phase 15.1: Strict Output Schema
  * Define comprehensive Zod schemas for all AI GM responses
@@ -21,18 +34,31 @@ export const RelationshipChangeSchema = z.object({
 
 // Consequence schemas.
 //
-// 'debt' is deliberately NOT a type here. A freeform consequences.debts
-// string array used to sit alongside the real, mechanically-live Debt
-// model — same concept, two unsynced representations, with only one of
-// them carrying direction/counterparty/status or reaching the prompt as
-// leverage. Debts now go exclusively through debt_changes (DebtChangeSchema
-// below), the same call already made for the duplicate reputation system
-// that shadowed FactionStanding: remove the shadow rather than sync it.
-// Pre-existing consequences.debts entries still render; nothing new is
-// written there.
+// 'debt' is accepted here but is NOT a consequence (#69). A freeform
+// consequences.debts string array used to sit alongside the real,
+// mechanically-live Debt model — same concept in two unsynced
+// representations, with only one carrying direction/counterparty/status or
+// reaching the prompt later as leverage.
+//
+// It was removed from this enum, and that removal had a cost: a narrator
+// that reaches for the consequence channel to report a debt — which they
+// do, it's the obvious place — had the entry rejected at the schema
+// boundary and the fiction was simply lost. So the type is back as an
+// ALIAS: applyPCChanges routes a 'debt' entry into applyDebtChanges and it
+// becomes a real Debt row. One model, two ways in; no shadow copy.
+//
+// counterparty_name is what a Debt actually needs and a consequence
+// doesn't carry. Without it there is no debt to write, so the entry is
+// logged and dropped rather than turned into a string nothing can act on.
+// direction defaults to owed_by_character — the overwhelmingly common
+// case, and the one a bare "they owe someone now" means.
 export const ConsequenceAddSchema = z.object({
-  type: z.enum(['promise', 'enemy', 'longTermThreat']),
-  description: z.string()
+  type: z.enum(['promise', 'debt', 'enemy', 'longTermThreat']),
+  description: z.string(),
+  // Only read when type is 'debt'.
+  counterparty_name: z.string().max(SHORT_TEXT).optional(),
+  counterparty_type: z.enum(['npc', 'faction']).optional(),
+  direction: z.enum(['owed_by_character', 'owed_to_character']).optional()
 })
 
 // Condition schema
@@ -49,19 +75,6 @@ export const ConditionSchema = z.object({
   // unset rather than force an inaccurate flat number.
   rollModifier: z.number().int().min(-2).max(2).optional()
 })
-
-// Length ceilings for AI-reported free text (#81).
-//
-// These fields are applied verbatim to durable state and then read back
-// into the prompt, so an unbounded string is both a storage and a
-// per-call token cost — and unlike the numeric fields, none of them had
-// any ceiling at all. Set generously: normal output is nowhere near
-// these, so a rejection here means the response was genuinely
-// pathological, not merely wordy. clampPromptStrings (#67) bounds what
-// reaches the prompt; this bounds what reaches the DB in the first place.
-const SHORT_TEXT = 300   // names, single values, one-line labels
-const MEDIUM_TEXT = 1000 // a sentence or two of description
-const LONG_TEXT = 2000   // multi-sentence notes and plans
 
 // Equipment change schema
 export const EquipmentChangeSchema = z.object({

@@ -2,6 +2,7 @@
 // Tracks world state changes made by the AI for transparency
 
 import { prisma } from '@/lib/prisma'
+import { extractWorldStateChanges } from './worldStateChanges'
 import type { WorldStateChange } from '@/components/scene/AITransparencyPanel'
 import { NotificationService } from '@/lib/notifications/notification-service'
 
@@ -268,6 +269,31 @@ export async function storeWorldStateChanges(
     }
   })
 }
+
+/**
+ * Retrieve the world-state changes recorded for a scene.
+ *
+ * This accessor previously existed with no callers — the one real consumer
+ * read `scene.consequences.worldStateChanges` directly, so the export only
+ * implied a read path nothing used.
+ *
+ * The actual problem it was reaching for is real: `consequences` is an
+ * untyped Json blob, and every caller reaching into it by hand breaks
+ * silently if the shape changes. But the consumer is a client component
+ * reading an already-fetched payload, so it can't call a Prisma accessor.
+ * The shape extraction is therefore split out into its own dependency-free
+ * module both sides share (worldStateChanges.ts — importing it from here
+ * would drag Prisma into the client bundle), with this as the server-side
+ * fetch-and-extract convenience.
+ */
+export async function getWorldStateChanges(sceneId: string): Promise<WorldStateChange[]> {
+  const scene = await prisma.scene.findUnique({
+    where: { id: sceneId },
+    select: { consequences: true }
+  })
+  return extractWorldStateChanges(scene?.consequences)
+}
+
 
 /**
  * Create notifications for character progression changes

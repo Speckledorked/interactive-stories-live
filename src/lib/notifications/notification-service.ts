@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { NotificationType, NotificationPriority, NotificationStatus } from '@prisma/client';
 import { sendEmail } from './email-service';
+import { sendPushToUser } from './push-service';
 
 interface CreateNotificationParams {
   type: NotificationType;
@@ -20,6 +21,8 @@ interface CreateNotificationParams {
 
 interface NotificationPreferences {
   emailEnabled: boolean;
+  pushEnabled: boolean;
+  soundEnabled: boolean;
   quietHours?: {
     enabled: boolean;
     start: string;
@@ -81,15 +84,13 @@ export class NotificationService {
       }
     });
 
-    // Send via the channels that actually reach a person: the in-app bell
-    // (realtime) and email. Browser-push and sound pipelines used to be
-    // dispatched here too, each wired at only one end — push published a
-    // Pusher event with no client listener anywhere, and sound published
-    // one to a SoundService whose audio files don't exist — so both
-    // burned a message per notification to deliver nothing. Removed
-    // rather than half-wired; see README (#10/#63/#64).
+    // All four delivery channels. Sound isn't dispatched from here: it's a
+    // client-side reaction to the realtime event below (the browser is the
+    // only place that can make a noise), so it rides along with the in-app
+    // notification rather than costing a second message.
     await Promise.all([
       this.sendEmailNotification(notification, preferences),
+      this.sendPushNotification(notification, preferences),
       this.sendRealtimeNotification(notification)
     ]);
 
@@ -128,11 +129,15 @@ export class NotificationService {
       
       return {
         emailEnabled: true,
+        pushEnabled: true,
+        soundEnabled: true,
       };
     }
 
     return {
       emailEnabled: settings.emailEnabled,
+      pushEnabled: settings.pushEnabled,
+      soundEnabled: settings.soundEnabled,
       quietHours: settings.quietHoursEnabled ? {
         enabled: true,
         start: settings.quietHoursStart || '22:00',
@@ -213,6 +218,34 @@ export class NotificationService {
         return settings.emailWorldEvents;
       default:
         return true;
+    }
+  }
+
+  /**
+   * Browser push. Real Web Push via VAPID (see push-service.ts) — a
+   * no-op when the deployment has no VAPID keys configured, which is a
+   * supported state rather than an error.
+   */
+  private static async sendPushNotification(notification: any, preferences: NotificationPreferences) {
+    if (!preferences.pushEnabled) return;
+
+    try {
+      const delivered = await sendPushToUser(notification.userId, {
+        title: notification.title,
+        message: notification.message,
+        actionUrl: notification.actionUrl,
+        notificationId: notification.id,
+      });
+
+      // Only claim it was sent if a push service actually accepted it.
+      if (delivered > 0) {
+        await prisma.notification.update({
+          where: { id: notification.id },
+          data: { pushSent: true }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to send push notification:', error);
     }
   }
 

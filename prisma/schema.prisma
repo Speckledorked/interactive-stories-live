@@ -187,6 +187,7 @@ model User {
   // Phase 9: Notifications
   notifications        Notification[]            @relation("UserNotifications")
   notificationSettings UserNotificationSettings? @relation("UserNotificationSettings")
+  pushSubscriptions    PushSubscription[]        @relation("UserPushSubscriptions")
 
   @@index([emailVerifyToken])
   @@index([resetToken])
@@ -1447,6 +1448,40 @@ model Notification {
   @@map("notifications")
 }
 
+//
+// WEB PUSH SUBSCRIPTIONS
+//
+// One row per browser/device a user has granted push permission on. The
+// endpoint is the push service's opaque URL; p256dh/auth are the client's
+// encryption keys, both required by the Web Push protocol to encrypt a
+// payload the push service itself can't read.
+//
+// A subscription can go stale on the push service's side (browser
+// uninstalled, permission revoked); a send that comes back 404/410 means
+// exactly that, and push-service.ts deletes the row rather than retrying
+// forever.
+model PushSubscription {
+  id     String @id @default(cuid())
+  userId String
+
+  // Unique because the push service issues one endpoint per subscription;
+  // re-subscribing the same browser must update rather than duplicate.
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  // Purely diagnostic — which browser this came from, for support.
+  userAgent String?
+
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
+
+  user User @relation("UserPushSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
 model UserNotificationSettings {
   id     String @id @default(cuid())
   userId String @unique
@@ -1460,11 +1495,27 @@ model UserNotificationSettings {
   emailCampaignInvites Boolean @default(true)
   emailWorldEvents     Boolean @default(false)
 
-  // Browser-push and sound preference columns lived here, backing two
-  // delivery pipelines that were each wired at only one end and could
-  // never reach anyone (README #10/#63/#64). Removed with the pipelines
-  // themselves rather than left as settings for features that don't
-  // exist. Email and in-app notifications are the real channels.
+  // Browser push preferences. These briefly went away along with a push
+  // pipeline that could never fire; they're back because the pipeline is
+  // now real — VAPID keys, a stored PushSubscription, and an actual
+  // web-push send (see lib/notifications/push-service.ts).
+  pushEnabled         Boolean @default(true)
+  pushTurnReminders   Boolean @default(true)
+  pushSceneChanges    Boolean @default(true)
+  pushMentions        Boolean @default(true)
+  pushWhispers        Boolean @default(true)
+  pushCampaignInvites Boolean @default(true)
+
+  // Sound preferences. Same story: the sound channel is wired end-to-end
+  // now (see lib/notifications/sound-service.ts), synthesized in the
+  // browser rather than depending on audio files that never existed.
+  soundEnabled         Boolean @default(true)
+  soundTurnReminders   Boolean @default(true)
+  soundSceneChanges    Boolean @default(true)
+  soundMentions        Boolean @default(true)
+  soundWhispers        Boolean @default(true)
+  soundCriticalMoments Boolean @default(true)
+  soundWorldEvents     Boolean @default(true)
 
   // Timing preferences
   quietHoursEnabled Boolean @default(false)

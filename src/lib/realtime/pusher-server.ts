@@ -82,18 +82,6 @@ export async function triggerSceneUpdate(campaignId: string, sceneData: any) {
   await pusher.trigger(`campaign-${campaignId}`, 'scene-update', sceneData);
 }
 
-// Trigger sound notification (stub function for notifications)
-export async function triggerSoundNotification(userId: string, campaignId: string, data: any) {
-  const pusher = getPusherServer();
-  if (!pusher) return; // Pusher not configured
-
-  await pusher.trigger(`user-${userId}`, 'sound-notification', {
-    campaignId,
-    ...data,
-    timestamp: new Date().toISOString()
-  });
-}
-
 // Trigger notification update (stub function for notifications)
 export async function triggerNotificationUpdate(userId: string, notification: any) {
   const pusher = getPusherServer();
@@ -101,17 +89,6 @@ export async function triggerNotificationUpdate(userId: string, notification: an
 
   await pusher.trigger(`user-${userId}`, 'notification-received', {
     ...notification,
-    timestamp: new Date().toISOString()
-  });
-}
-
-// Trigger push notification event (stub function for notifications)
-export async function triggerPushNotificationEvent(userId: string, data: any) {
-  const pusher = getPusherServer();
-  if (!pusher) return; // Pusher not configured
-
-  await pusher.trigger(`user-${userId}`, 'push-notification', {
-    ...data,
     timestamp: new Date().toISOString()
   });
 }

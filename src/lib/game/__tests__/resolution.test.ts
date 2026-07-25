@@ -470,6 +470,7 @@ describe('parseClassifications', () => {
     expect(parsed).toHaveLength(2)
     expect(parsed[0]).toEqual({
       action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: 'Swordplay', faction_name: null, npc_name: null, accepts_bargain: false, matched_signature_id: null,
+      engagement: null, moves_to_zone: null,
     })
     expect(parsed[1].move_name).toBe('no_roll')
     expect(parsed[1].capability_key).toBeNull()
@@ -529,6 +530,79 @@ describe('parseClassifications accepts_bargain passthrough', () => {
 // mechanical — territory changed hands with no consequence for anyone
 // standing on it, so the whole war/expansion layer was invisible to players
 // except as narration.
+
+describe('computeMechanics range bands (#2, #43, #85)', () => {
+  // Fixed dice (3+3) so any difference in the total is the zone modifier.
+  const roll = (
+    classification: Partial<Parameters<typeof computeMechanics>[0]>,
+    character: Partial<CharacterForRoll>,
+    sceneId?: string
+  ) =>
+    computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null, ...classification } as any,
+      { id: 'a1' },
+      { ...baseCharacter, ...character },
+      seq(0.4, 0.4),
+      null, null, null, null, null,
+      sceneId ?? 'scene1'
+    )!
+
+  it('adds nothing when the action does not reach for a target', () => {
+    // The common case. Position must not tax a character for standing
+    // somewhere while they brace a door.
+    const m = roll({}, { currentZone: 'distant', zoneMetadata: { sceneId: 'scene1' } })
+    expect(m.zoneMod).toBe(0)
+    expect(m.engagement).toBeNull()
+    expect(m.zonePosition).toBe('distant')
+  })
+
+  it('rewards a melee action taken from close and penalizes one from far', () => {
+    const close = roll({ engagement: 'melee' }, { currentZone: 'close', zoneMetadata: { sceneId: 'scene1' } })
+    const far = roll({ engagement: 'melee' }, { currentZone: 'far', zoneMetadata: { sceneId: 'scene1' } })
+    expect(close.zoneMod).toBe(1)
+    expect(far.zoneMod).toBe(-1)
+    // And it actually moves the number, not just the receipt.
+    expect(close.total - far.total).toBe(2)
+  })
+
+  it('penalizes a ranged action taken from on top of the target', () => {
+    const m = roll({ engagement: 'ranged' }, { currentZone: 'close', zoneMetadata: { sceneId: 'scene1' } })
+    expect(m.zoneMod).toBe(-1)
+  })
+
+  it('lets an explicit reposition in the action override the carried band', () => {
+    const m = roll(
+      { engagement: 'melee', moves_to_zone: 'close' },
+      { currentZone: 'distant', zoneMetadata: { sceneId: 'scene1' } }
+    )
+    expect(m.zonePosition).toBe('close')
+    expect(m.zoneMod).toBe(1)
+  })
+
+  it('ignores a position carried in from a previous scene', () => {
+    const m = roll({ engagement: 'melee' }, { currentZone: 'close', zoneMetadata: { sceneId: 'older-scene' } })
+    expect(m.zonePosition).toBe('near')
+    expect(m.zoneMod).toBe(0)
+  })
+
+  it('resolves to a neutral band when the caller passes no scene', () => {
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null, engagement: 'melee' } as any,
+      { id: 'a1' },
+      { ...baseCharacter, currentZone: 'close', zoneMetadata: { sceneId: 'scene1' } },
+      seq(0.4, 0.4)
+    )!
+    expect(m.zoneMod).toBe(0)
+  })
+
+  it('names the range band in the receipt only when it changed the roll', () => {
+    const scored = roll({ engagement: 'melee' }, { currentZone: 'close', zoneMetadata: { sceneId: 'scene1' } })
+    expect(formatRollReceipt(scored)).toContain('melee range')
+
+    const neutral = roll({ engagement: 'melee' }, { currentZone: 'near', zoneMetadata: { sceneId: 'scene1' } })
+    expect(formatRollReceipt(neutral)).not.toContain('range')
+  })
+})
 
 describe('contestedPenalty (#78)', () => {
   it('penalizes contested ground', () => {

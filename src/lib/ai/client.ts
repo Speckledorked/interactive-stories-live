@@ -440,6 +440,11 @@ export interface AIGMRequest {
       move_name: string
       outcome: 'strongHit' | 'weakHit' | 'miss'
       outcome_text: string
+      // Where the engine had this character standing when they acted, in
+      // the fiction's own words (see lib/game/zones.ts). The roll already
+      // charged for it; this keeps the prose consistent with what was
+      // charged for.
+      position?: string
       // True when this roll was powered by accepting an open corruption
       // bargain — narrate the borrowed power working, and the price.
       corruption_surge?: boolean
@@ -1195,6 +1200,7 @@ ${player_actions.map(a => {
   const lines = [`${a.character_name}: "${a.action_text}"`]
   if (a.mechanics) {
     lines.push(`  → MECHANICAL OUTCOME (binding, already rolled): ${a.mechanics.move_name} — ${a.mechanics.outcome === 'strongHit' ? 'STRONG HIT' : a.mechanics.outcome === 'weakHit' ? 'WEAK HIT' : 'MISS'}. ${a.mechanics.outcome_text}`)
+    if (a.mechanics.position) lines.push(`  → POSITION (binding): they acted from ${a.mechanics.position}. Narrate them there`)
     if (a.mechanics.corruption_surge) {
       lines.push(`  → CORRUPTION SURGE: this character ACCEPTED the open bargain — the borrowed power visibly fueled this attempt. Narrate it working, and report corruption_change marks 1 for them (see <corruption>).`)
     }

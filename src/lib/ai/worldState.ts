@@ -15,6 +15,7 @@ import { describeStat, describeThreatLevel, describeWarMomentum } from './qualit
 import { describeTension, derivePhase } from '@/lib/game/tick/tension'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { resolveActionMechanics } from '@/lib/game/resolution'
+import { describeZone } from '@/lib/game/zones'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
 import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
@@ -757,6 +758,12 @@ export async function buildSceneResolutionRequest(
               move_name: mechanics.moveName,
               outcome: mechanics.outcome,
               outcome_text: mechanics.outcomeText,
+              // Where the engine decided this character was standing when
+              // they acted (#2/#43/#85). The dice already priced it; the
+              // narrator gets it so the prose doesn't contradict a position
+              // the roll charged for — a charge that earned +1 for closing
+              // shouldn't be narrated from across the room.
+              position: describeZone(mechanics.zonePosition),
               ...(mechanics.corruptionSurgeBonus > 0 ? { corruption_surge: true } : {})
             }
           }

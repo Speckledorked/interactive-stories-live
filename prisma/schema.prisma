@@ -651,6 +651,23 @@ model Character {
   relationships Json? // { [entityId: string]: { trust: Int, tension: Int, respect: Int, fear: Int } }
   consequences  Json? // { promises?: string[], debts?: string[], enemies?: string[], longTermThreats?: string[] }
 
+  // Abstract range band within the current scene: how far this character
+  // stands from the center of the action ("close" | "near" | "far" |
+  // "distant"). Read by computeMechanics via rangeModifier — melee wants to
+  // be close, ranged wants a middle distance — so position is a real roll
+  // modifier on the DiceRoll receipt, not flavor. See lib/game/zones.ts.
+  //
+  // Distinct from, and never reconciled with, the literal x/y Map/Zone/
+  // Token grid: that one draws battle maps, this one prices rolls. Null
+  // means DEFAULT_ZONE.
+  currentZone  String?
+  // { sceneId?: string, note?: string } — sceneId is what scopes a position
+  // to its scene without a hook in scene creation: a zone stored under a
+  // different scene is stale by definition and resolves back to the default
+  // on read. note is the fiction's own words for where they are, carried
+  // into the narration prompt.
+  zoneMetadata Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

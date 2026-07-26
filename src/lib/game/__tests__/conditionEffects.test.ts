@@ -10,6 +10,9 @@
 
 import { describe, it, expect } from 'vitest'
 import {
+  accrueNaturalRecovery,
+  blocksNaturalRecovery,
+  HOURS_PER_HARM_RECOVERED,
   stabilizeCharacter,
   CRITICALLY_DYING_CONDITION_NAME,
   findConditionTemplate,
@@ -240,5 +243,92 @@ describe('stabilizeCharacter', () => {
     const conditions = [...dying(), { id: 'b', name: 'Bleeding', category: 'Physical', description: 'x' }] as any[]
     const { updatedConditions } = stabilizeCharacter(conditions, 4)
     expect(updatedConditions.some(c => c.name === 'Bleeding')).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Natural recovery — the design is "fiction and time", never a rest button
+// ---------------------------------------------------------------------------
+// In-game time previously did nothing at all: a character could carry a
+// wound across in-game weeks and arrive exactly as hurt, because the only
+// path down was the narrator explicitly reporting healing.
+
+const bleeding = [{ id: 'b', name: 'Bleeding', category: 'Physical', description: 'x', harmPerScene: 1 }] as any[]
+
+describe('accrueNaturalRecovery', () => {
+  it('heals a point once enough in-game time has passed', () => {
+    const r = accrueNaturalRecovery({ harm: 3, restHours: 0, hoursElapsed: HOURS_PER_HARM_RECOVERED })
+    expect(r.healed).toBe(1)
+    expect(r.newHarm).toBe(2)
+  })
+
+  it('CARRIES partial time instead of discarding it', () => {
+    // Exchanges advance a handful of hours at a time. Rounding each one
+    // down separately would mean nobody ever heals at all.
+    const first = accrueNaturalRecovery({ harm: 3, restHours: 0, hoursElapsed: 6 })
+    expect(first.healed).toBe(0)
+    expect(first.restHours).toBe(6)
+
+    const later = accrueNaturalRecovery({ harm: 3, restHours: 18, hoursElapsed: 6 })
+    expect(later.healed).toBe(1)
+  })
+
+  it('keeps the remainder after healing rather than resetting it', () => {
+    const r = accrueNaturalRecovery({ harm: 3, restHours: 0, hoursElapsed: HOURS_PER_HARM_RECOVERED + 5 })
+    expect(r.healed).toBe(1)
+    expect(r.restHours).toBe(5)
+  })
+
+  it('heals several points across a long stretch of time', () => {
+    const r = accrueNaturalRecovery({ harm: 4, restHours: 0, hoursElapsed: HOURS_PER_HARM_RECOVERED * 3 })
+    expect(r.healed).toBe(3)
+    expect(r.newHarm).toBe(1)
+  })
+
+  it('never heals past unhurt', () => {
+    const r = accrueNaturalRecovery({ harm: 1, restHours: 0, hoursElapsed: HOURS_PER_HARM_RECOVERED * 10 })
+    expect(r.newHarm).toBe(0)
+    expect(r.healed).toBe(1)
+  })
+
+  it('does nothing for a character who is Taken Out', () => {
+    // At harm 6 the way back is stabilization and a narrated recovery roll,
+    // not the calendar quietly undoing it — the mirror of the rule
+    // recurring harm follows in the other direction.
+    const r = accrueNaturalRecovery({ harm: 6, restHours: 0, hoursElapsed: HOURS_PER_HARM_RECOVERED * 5 })
+    expect(r.healed).toBe(0)
+    expect(r.newHarm).toBe(6)
+  })
+
+  it('does nothing for an uninjured character', () => {
+    expect(accrueNaturalRecovery({ harm: 0, restHours: 0, hoursElapsed: 999 }).healed).toBe(0)
+  })
+
+  it('does not heal a wound that is still open', () => {
+    // Bleeding costs harm every scene AND blocks mending. You do not
+    // slowly recover from something still bleeding.
+    const r = accrueNaturalRecovery({ harm: 3, restHours: 0, hoursElapsed: HOURS_PER_HARM_RECOVERED * 3, conditions: bleeding })
+    expect(r.healed).toBe(0)
+  })
+
+  it('survives malformed inputs rather than propagating them', () => {
+    const r = accrueNaturalRecovery({ harm: NaN as any, restHours: NaN as any, hoursElapsed: NaN as any })
+    expect(r.healed).toBe(0)
+    expect(Number.isFinite(r.restHours)).toBe(true)
+  })
+})
+
+describe('blocksNaturalRecovery', () => {
+  it('blocks on any condition dealing recurring harm, by effect not by name', () => {
+    // Matched on the enforced field so a condition the fiction invents
+    // blocks recovery too, without needing to be in the catalogue.
+    expect(blocksNaturalRecovery(bleeding)).toBe(true)
+    expect(blocksNaturalRecovery([{ name: 'Festering Curse', harmPerScene: 2 } as any])).toBe(true)
+  })
+
+  it('does not block on conditions that merely penalize rolls', () => {
+    expect(blocksNaturalRecovery([{ name: 'Stunned', rollModifier: -1 } as any])).toBe(false)
+    expect(blocksNaturalRecovery([])).toBe(false)
+    expect(blocksNaturalRecovery(null)).toBe(false)
   })
 })

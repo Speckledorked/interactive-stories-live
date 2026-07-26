@@ -935,10 +935,20 @@ export async function resolveActionMechanics(
 
     // Persist receipts — the auditable record behind "the game is fair".
     if (mechanics.length > 0) {
-      await prisma.diceRoll.createMany({
-        data: mechanics.map(m => {
+      // Created one at a time rather than with createMany, because
+      // createMany does not return ids and PlayerAction.rollMade is
+      // documented as "Link to DiceRoll.id if rolled" — a link that was
+      // never written, so the audit trail dead-ended: an action recorded
+      // that it required a roll, DiceRoll rows existed, and nothing
+      // connected the two. N here is the number of actions in one
+      // exchange (party-sized), and the block immediately below already
+      // issues one update per action, so this is the same order of work.
+      const rollIdByActionId = new Map<string, string>()
+      await Promise.all(
+        mechanics.map(async m => {
           const action = pendingActions.find(a => a.id === m.actionId)
-          return {
+          const created = await prisma.diceRoll.create({
+            data: {
             campaignId,
             sceneId,
             characterId: m.characterId,
@@ -949,9 +959,12 @@ export async function resolveActionMechanics(
             total: m.total,
             outcome: m.outcome,
             description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.debtMod ? `, ${m.debtCounterparty}` : ''}${m.weatherCondition ? `, ${m.weatherCondition.toLowerCase()}` : ''}${m.contestedMod ? ', contested ground' : ''}${m.zoneMod ? `, ${m.engagement} ${describeZone(m.zonePosition)}` : ''}${m.conditionMod ? `, ${m.conditionMod} condition penalty` : ''}${m.signatureName ? `, ${m.signatureName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
-          }
-        }),
-      })
+            },
+            select: { id: true },
+          })
+          rollIdByActionId.set(m.actionId, created.id)
+        })
+      )
 
       // Also stamp each action row with its roll — the organic advancement
       // system (applyOrganicCharacterGrowth) reads PlayerAction.rollResult
@@ -972,6 +985,9 @@ export async function resolveActionMechanics(
               },
               moveUsed: m.moveName,
               rollRequired: true,
+              // Completes the receipt trail: from the action, to the roll
+              // that decided it, to the modifiers behind that roll.
+              rollMade: rollIdByActionId.get(m.actionId) ?? null,
             },
           })
         )

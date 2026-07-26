@@ -9,7 +9,7 @@ export async function DELETE(
   { params }: { params: { id: string; userId: string } }
 ) {
   try {
-    const user = requireAuth(request);
+    const user = await requireAuth(request);
     const campaignId = params.id;
     const targetUserId = params.userId;
 
@@ -84,7 +84,7 @@ export async function PATCH(
   { params }: { params: { id: string; userId: string } }
 ) {
   try {
-    const user = requireAuth(request);
+    const user = await requireAuth(request);
     const campaignId = params.id;
     const targetUserId = params.userId;
     const body = await request.json();

@@ -12,7 +12,7 @@ export async function PATCH(
   { params }: { params: { id: string; reportId: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     const membership = await prisma.campaignMembership.findUnique({

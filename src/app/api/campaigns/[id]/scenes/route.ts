@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     // Verify user is a member of the campaign

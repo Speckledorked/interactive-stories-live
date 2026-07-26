@@ -10,7 +10,7 @@ import { ErrorResponse } from '@/types/api'
 
 export async function GET(request: NextRequest) {
   try {
-    const tokenUser = requireAuth(request)
+    const tokenUser = await requireAuth(request)
 
     const user = await prisma.user.findUnique({
       where: { id: tokenUser.userId },
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const tokenUser = requireAuth(request)
+    const tokenUser = await requireAuth(request)
     const body = await request.json()
 
     // Only allow updating name for now
@@ -99,7 +99,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const tokenUser = requireAuth(request)
+    const tokenUser = await requireAuth(request)
     const body = await request.json()
 
     // Require confirmation

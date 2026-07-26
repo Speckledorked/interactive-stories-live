@@ -10,7 +10,7 @@ import bcrypt from 'bcryptjs'
 
 export async function POST(request: NextRequest) {
   try {
-    const tokenUser = requireAuth(request)
+    const tokenUser = await requireAuth(request)
     const body = await request.json()
 
     const { currentPassword, newPassword } = body

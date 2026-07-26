@@ -20,7 +20,7 @@ import { recordEvent } from '@/lib/analytics/events'
 // GET /api/campaigns - List user's campaigns
 export async function GET(request: NextRequest) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
 
     // Find all campaign memberships for the user
     const memberships = await prisma.campaignMembership.findMany({
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
 // POST /api/campaigns - Create new campaign
 export async function POST(request: NextRequest) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const body = await request.json()
     const { title, description, universe, aiSystemPrompt, initialWorldSeed, templateId, loreImport } = body
 

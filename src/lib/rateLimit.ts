@@ -34,6 +34,11 @@ export const AI_ACTION_LIMIT = { bucket: 'ai-action', limit: 10, windowSeconds: 
 // ai-action's budget with actual gameplay.
 export const LORE_IMPORT_LIMIT = { bucket: 'lore-import', limit: 5, windowSeconds: 60 } as const
 
+// Session revocation (#98). Its own small bucket: it writes to the user row
+// on every call and legitimate use is a handful of times ever, so there is
+// no reason for it to share gameplay's budget in either direction.
+export const SESSION_REVOKE_LIMIT = { bucket: 'session-revoke', limit: 5, windowSeconds: 300 } as const
+
 const PRUNE_RETENTION_MS = 60 * 60 * 1000 // keep at most an hour of windows
 
 export async function checkRateLimit(

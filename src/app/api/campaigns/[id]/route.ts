@@ -16,7 +16,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     // Check if user is a member of this campaign
@@ -155,7 +155,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     // Check if user is an admin of this campaign
@@ -227,7 +227,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     // Check if user is an admin of this campaign

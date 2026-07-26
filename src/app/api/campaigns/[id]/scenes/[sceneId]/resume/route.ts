@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: { id: string; sceneId: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
 
     const campaignId = params.id
     const sceneId = params.sceneId

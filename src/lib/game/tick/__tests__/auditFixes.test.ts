@@ -6,6 +6,8 @@ vi.mock('@/lib/prisma', () => ({
     nPC: { updateMany: vi.fn(), findMany: vi.fn() },
     location: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     warParticipant: { findMany: vi.fn() },
+    // #79: tickFactions reads goal-change history for commitment.
+    worldEvent: { findMany: vi.fn(async () => []) },
   },
 }))
 

@@ -3,6 +3,8 @@
 
 'use client'
 
+import { getHarmStatus, HarmLevel } from '@/lib/game/harm'
+
 interface HarmTrackerProps {
   current: number // Current harm (0-6)
   max?: number // Max harm (default 6)
@@ -33,10 +35,28 @@ export default function HarmTracker({
     return 'bg-wine-500 border-wine-400'
   }
 
-  const getStatusText = (): { text: string; color: string } => {
-    if (current >= 6) return { text: 'Taken Out', color: 'text-wine-400' }
-    if (current >= 4) return { text: 'Impaired', color: 'text-ember-400' }
-    return { text: 'Healthy', color: 'text-success-400' }
+  // Thresholds, labels and penalty text all come from the engine now.
+  //
+  // This component held THREE separate copies of the harm bands: the
+  // status label (>= 6 / >= 4, with its own wording, "Healthy"), the
+  // warning banner's visibility (>= 4), and the warning's text (a
+  // hand-written "-1 to all rolls"). getHarmStatus in lib/game/harm.ts is
+  // the definition the dice and the narration actually use, and it had no
+  // callers at all — so the numbers a player reads here were only
+  // coincidentally the numbers being applied to their rolls. Move a band
+  // in the engine and this component would have gone on reporting the old
+  // one, confidently.
+  const STATUS_COLORS: Record<string, string> = {
+    'Taken Out': 'text-wine-400',
+    Impaired: 'text-ember-400',
+    Fine: 'text-success-400',
+  }
+
+  const clampedHarm = Math.max(0, Math.min(6, Math.trunc(current) || 0)) as HarmLevel
+  const harmStatus = getHarmStatus(clampedHarm)
+  const status = {
+    text: harmStatus.status,
+    color: STATUS_COLORS[harmStatus.status] ?? 'text-ember-300',
   }
 
   const sizeClasses = {
@@ -44,8 +64,6 @@ export default function HarmTracker({
     md: 'h-3 gap-1',
     lg: 'h-4 gap-1.5'
   }
-
-  const status = getStatusText()
 
   return (
     <div className="space-y-2">
@@ -74,13 +92,9 @@ export default function HarmTracker({
         ))}
       </div>
 
-      {current >= 4 && (
+      {harmStatus.status !== 'Fine' && (
         <div className="text-xs text-ember-400 bg-ember-900/15 border border-ember-700/30 rounded px-2 py-1">
-          {current >= 6 ? (
-            '⚠️ Character is unconscious, captured, or dying'
-          ) : (
-            '⚠️ -1 to all rolls while impaired'
-          )}
+          ⚠️ {harmStatus.description}
         </div>
       )}
     </div>

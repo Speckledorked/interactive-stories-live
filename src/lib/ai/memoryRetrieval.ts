@@ -8,6 +8,7 @@
 import { prisma } from '@/lib/prisma';
 import { generateEmbedding, embeddingToPostgresVector } from './embeddingService';
 import { recordAICost, estimateTokenCount } from './cost-tracker';
+import { MEMORY_SEARCH_COLUMNS } from './campaignMemoryColumns';
 import type { Scene, PlayerAction, Character, NPC, Faction } from '@prisma/client';
 
 export interface RetrievalContext {
@@ -129,19 +130,10 @@ export async function retrieveRelevantHistory(
     // Uses cosine distance operator <=> (1 - cosine similarity)
     // Handle empty entity arrays by providing empty arrays to PostgreSQL
     // PostgreSQL's && operator returns false when one array is empty, which is what we want
-    // Column names below are quoted camelCase because that's what Prisma
-    // actually created the table with (no @map on CampaignMemory's fields,
-    // only @@map on the table itself) — unquoted snake_case would silently
-    // target nonexistent columns.
-    const memories = await prisma.$queryRaw<any[]>`
+    // See campaignMemoryColumns.ts for why the shared column list is quoted.
+    const memories = await prisma.$queryRaw<RetrievedMemory[]>`
       SELECT
-        id,
-        "turnNumber" as "turnNumber",
-        title,
-        summary,
-        "memoryType" as "memoryType",
-        importance,
-        "emotionalTone" as "emotionalTone",
+        ${MEMORY_SEARCH_COLUMNS},
         (1 - (embedding <=> ${embeddingString}::vector)) as similarity
       FROM campaign_memories
       WHERE
@@ -255,15 +247,9 @@ export async function retrieveNpcHistory(
   limit: number = 5
 ): Promise<RetrievedMemory[]> {
   try {
-    const memories = await prisma.$queryRaw<any[]>`
+    const memories = await prisma.$queryRaw<RetrievedMemory[]>`
       SELECT
-        id,
-        "turnNumber" as "turnNumber",
-        title,
-        summary,
-        "memoryType" as "memoryType",
-        importance,
-        "emotionalTone" as "emotionalTone",
+        ${MEMORY_SEARCH_COLUMNS},
         1.0 as similarity
       FROM campaign_memories
       WHERE
@@ -347,15 +333,9 @@ export async function retrieveCrossEntityHistory(
   limit: number = 5
 ): Promise<RetrievedMemory[]> {
   try {
-    const memories = await prisma.$queryRaw<any[]>`
+    const memories = await prisma.$queryRaw<RetrievedMemory[]>`
       SELECT
-        id,
-        "turnNumber" as "turnNumber",
-        title,
-        summary,
-        "memoryType" as "memoryType",
-        importance,
-        "emotionalTone" as "emotionalTone",
+        ${MEMORY_SEARCH_COLUMNS},
         1.0 as similarity
       FROM campaign_memories
       WHERE

@@ -34,6 +34,7 @@ import { applyCapabilityChanges } from '../capabilities'
 import { applyDebtChanges, debtChangeFromConsequence, DebtChange } from '../debts'
 import { applyStandingChanges } from '../standing'
 import { checkCorruptionGate, hasCorruptionGate, describeRefusal } from '../corruptionGates'
+import { applyConditionTemplate } from '../harm'
 import { applyGrantBudget, rarityPoints } from '../itemValue'
 import { clampGoldDelta } from '../economy'
 import { appendBoundedProse, MAX_CHARACTER_DESCRIPTION_CHARS } from '../textAppend'
@@ -195,7 +196,14 @@ export async function applyCharacterChanges(
 
     // Add conditions
     if (pcChange.changes.conditions_add && pcChange.changes.conditions_add.length > 0) {
-      for (const conditionData of pcChange.changes.conditions_add) {
+      for (const rawCondition of pcChange.changes.conditions_add) {
+        // Fill the enforced fields in from the stock catalogue where the
+        // report left them out (COMMON_CONDITIONS). Without this the
+        // catalogue had no production consumer at all: a narrator writing
+        // "Bleeding" got whatever fields it happened to report, which was
+        // usually none, so the entry specifying 1 harm per scene was only
+        // ever true of a table nobody read. Reported values still win.
+        const conditionData = applyConditionTemplate(rawCondition)
         const newCondition: Condition = {
           id: conditionData.id || `condition_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           name: conditionData.name,

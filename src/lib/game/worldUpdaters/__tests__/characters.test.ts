@@ -584,3 +584,69 @@ describe('applyCharacterChanges — corruption entry gate', () => {
     expect(data?.conditions).toBeUndefined()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Stock conditions reach the sheet with their effects intact
+// ---------------------------------------------------------------------------
+// COMMON_CONDITIONS had no production consumer, so a narrator writing
+// "Bleeding" produced a condition with whatever fields it happened to
+// report — usually none — while the catalogue entry specifying 1 harm per
+// scene was true only of a table nobody read.
+
+describe('applyCharacterChanges — stock condition effects', () => {
+  it('fills a bare "Bleeding" in from the catalogue so it actually bleeds', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      {
+        character_name_or_id: 'char1',
+        changes: { conditions_add: [{ name: 'Bleeding', category: 'Physical', description: 'Bleeding badly.' }] },
+      } as PcChange,
+    ], roster, noTheme, true)
+
+    const data = tx.character.update.mock.calls[0][0].data
+    const bleeding = data.conditions.conditions.find((c: any) => c.name === 'Bleeding')
+    expect(bleeding.harmPerScene).toBe(1)
+  })
+
+  it('fills stat effects in for a stock condition that has them', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      {
+        character_name_or_id: 'char1',
+        changes: { conditions_add: [{ name: 'Enraged', category: 'Emotional', description: 'Furious.' }] },
+      } as PcChange,
+    ], roster, noTheme, true)
+
+    const data = tx.character.update.mock.calls[0][0].data
+    const enraged = data.conditions.conditions.find((c: any) => c.name === 'Enraged')
+    expect(enraged.statModifiers).toEqual({ hard: 1, hot: -2 })
+  })
+
+  it('lets an explicitly reported value beat the catalogue', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      {
+        character_name_or_id: 'char1',
+        changes: { conditions_add: [{ name: 'Bleeding', category: 'Physical', description: 'Arterial.', harmPerScene: 3 }] },
+      } as PcChange,
+    ], roster, noTheme, true)
+
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.conditions.conditions.find((c: any) => c.name === 'Bleeding').harmPerScene).toBe(3)
+  })
+
+  it('leaves an invented condition exactly as reported', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      {
+        character_name_or_id: 'char1',
+        changes: { conditions_add: [{ name: 'Moonstruck', category: 'Special', description: 'Touched by the moon.', rollModifier: -1 }] },
+      } as PcChange,
+    ], roster, noTheme, true)
+
+    const data = tx.character.update.mock.calls[0][0].data
+    const invented = data.conditions.conditions.find((c: any) => c.name === 'Moonstruck')
+    expect(invented.rollModifier).toBe(-1)
+    expect(invented.harmPerScene).toBeUndefined()
+  })
+})

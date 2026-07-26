@@ -10,6 +10,9 @@
 
 import { describe, it, expect } from 'vitest'
 import {
+  findConditionTemplate,
+  applyConditionTemplate,
+  createConditionFromTemplate,
   recurringHarmForScene,
   applyRecurringHarm,
   conditionStatModifier,
@@ -145,5 +148,68 @@ describe('COMMON_CONDITIONS no longer promise rules nothing executes', () => {
       expect(c.harmPerScene, `${key}`).toBeUndefined()
       expect(c.statModifiers, `${key}`).toBeUndefined()
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The catalogue reaching production
+// ---------------------------------------------------------------------------
+// COMMON_CONDITIONS had NO production consumer: nothing instantiated it,
+// and applyHarm built its one auto-condition inline. So the entries
+// specifying Bleeding's harm and Enraged's stat split were only ever true
+// of a table nobody read — a narrator writing "Bleeding" got whatever
+// fields it happened to report, which was usually none.
+
+describe('findConditionTemplate', () => {
+  it('matches on the display name the fiction actually writes', () => {
+    expect(findConditionTemplate('Bleeding')?.harmPerScene).toBe(1)
+    expect(findConditionTemplate('bleeding')?.harmPerScene).toBe(1)
+    expect(findConditionTemplate('  BLEEDING  ')?.harmPerScene).toBe(1)
+  })
+
+  it('returns nothing for a condition the fiction invented', () => {
+    expect(findConditionTemplate('Hexed by the Moon')).toBeNull()
+    expect(findConditionTemplate('')).toBeNull()
+    expect(findConditionTemplate(null)).toBeNull()
+  })
+})
+
+describe('applyConditionTemplate', () => {
+  it('supplies the enforced fields a bare report left out', () => {
+    // THE fix: "Bleeding" with nothing else now actually bleeds.
+    const filled = applyConditionTemplate({ name: 'Bleeding' })
+    expect(filled.harmPerScene).toBe(1)
+    expect(filled.mechanicalEffect).toBeTruthy()
+  })
+
+  it('fills stat effects for a stock condition too', () => {
+    expect(applyConditionTemplate({ name: 'Enraged' }).statModifiers).toEqual({ hard: 1, hot: -2 })
+  })
+
+  it('lets an explicit report win over the catalogue', () => {
+    // A narrator deliberately writing a nastier Bleeding keeps it.
+    expect(applyConditionTemplate({ name: 'Bleeding', harmPerScene: 3 }).harmPerScene).toBe(3)
+    expect(applyConditionTemplate({ name: 'Stunned', rollModifier: -2 }).rollModifier).toBe(-2)
+  })
+
+  it('does not resurrect a field the catalogue also leaves unset', () => {
+    expect(applyConditionTemplate({ name: 'Cursed' }).harmPerScene).toBeUndefined()
+    expect(applyConditionTemplate({ name: 'Cursed' }).statModifiers).toBeUndefined()
+  })
+
+  it('passes an invented condition through untouched', () => {
+    const invented = { name: 'Hexed by the Moon', rollModifier: -1 }
+    expect(applyConditionTemplate(invented)).toEqual(invented)
+  })
+})
+
+describe('createConditionFromTemplate', () => {
+  it('builds Taken Out with the text canAct keys off', () => {
+    // applyHarm used to construct this inline, so two definitions of what
+    // Taken Out means could drift apart.
+    const c = createConditionFromTemplate('taken_out', 4)
+    expect(c.name).toBe('Taken Out')
+    expect(c.mechanicalEffect?.toLowerCase()).toContain('cannot take actions')
+    expect(c.appliedAt).toBe(4)
   })
 })

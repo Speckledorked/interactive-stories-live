@@ -522,6 +522,46 @@ describe('parseClassifications accepts_bargain passthrough', () => {
 // standing on it, so the whole war/expansion layer was invisible to players
 // except as narration.
 
+describe('computeMechanics condition stat effects (#88)', () => {
+  const roll = (statKey: string, conditions: any[]) =>
+    computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: statKey, capability_key: null, faction_name: null } as any,
+      { id: 'a1' },
+      { ...baseCharacter, stats: { cool: 0, hard: 0, hot: 0, sharp: 0, weird: 0 }, conditions },
+      seq(0.4, 0.4)
+    )!
+
+  const enraged = { statModifiers: { hard: 1, hot: -2 } }
+
+  it('helps the roll it says it helps, and lands in the total', () => {
+    const m = roll('hard', [enraged])
+    expect(m.conditionStatMod).toBe(1)
+    expect(m.total).toBe(m.dice[0] + m.dice[1] + 1)
+  })
+
+  it('hurts the roll it says it hurts', () => {
+    const m = roll('hot', [enraged])
+    expect(m.conditionStatMod).toBe(-2)
+  })
+
+  it('leaves untouched stats alone', () => {
+    expect(roll('sharp', [enraged]).conditionStatMod).toBe(0)
+  })
+
+  it('composes with the flat condition penalty rather than replacing it', () => {
+    // A condition may carry both; they are different mechanics.
+    const m = roll('hard', [{ rollModifier: -1, ...enraged }])
+    expect(m.conditionMod).toBe(-1)
+    expect(m.conditionStatMod).toBe(1)
+    expect(m.total).toBe(m.dice[0] + m.dice[1] + 0)
+  })
+
+  it('names the stat in the receipt when it mattered', () => {
+    expect(formatRollReceipt(roll('hard', [enraged]))).toContain('condition (hard)')
+    expect(formatRollReceipt(roll('sharp', [enraged]))).not.toContain('condition (')
+  })
+})
+
 describe('computeMechanics range bands (#2, #43, #85)', () => {
   // Fixed dice (3+3) so any difference in the total is the zone modifier.
   const roll = (

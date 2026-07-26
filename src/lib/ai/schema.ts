@@ -73,7 +73,24 @@ export const ConditionSchema = z.object({
   // whose real effect is genuinely undirected — a bidirectional or
   // situational condition (e.g. "+1 combat/-2 social") should leave this
   // unset rather than force an inaccurate flat number.
-  rollModifier: z.number().int().min(-2).max(2).optional()
+  rollModifier: z.number().int().min(-2).max(2).optional(),
+  // Harm this condition deals at the start of every scene (#88). Set it
+  // for anything that describes ongoing damage — the engine applies it, so
+  // "1 harm per turn" stops being a sentence nothing executes. Capped at 3
+  // per condition; the engine also refuses to carry anyone past Impaired
+  // this way, so a condition can never kill between scenes.
+  harmPerScene: z.number().int().min(0).max(3).optional(),
+  // Per-stat modifiers, for a condition whose effect helps at some things
+  // and hurts at others ("+1 to combat, -2 to social"). rollModifier can
+  // only say one undirected number, so use this instead of forcing a
+  // number that would be wrong half the time.
+  statModifiers: z.object({
+    cool: z.number().int().min(-2).max(2).optional(),
+    hard: z.number().int().min(-2).max(2).optional(),
+    hot: z.number().int().min(-2).max(2).optional(),
+    sharp: z.number().int().min(-2).max(2).optional(),
+    weird: z.number().int().min(-2).max(2).optional()
+  }).optional()
 })
 
 // Equipment change schema

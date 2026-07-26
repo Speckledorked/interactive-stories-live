@@ -74,6 +74,10 @@ export interface AIGMResponse {
           category: 'Physical' | 'Emotional' | 'Special'
           description: string
           mechanicalEffect?: string
+          // Enforced counterparts to the free text above (#88) — see
+          // lib/game/harm.ts.
+          harmPerScene?: number
+          statModifiers?: { cool?: number; hard?: number; hot?: number; sharp?: number; weird?: number }
         }>
         conditions_remove?: string[] // IDs or names of conditions to remove
         location?: string
@@ -941,6 +945,8 @@ USE DEBTS AS DRAMA:
 Report via debt_changes inside that character's pc_changes. A consequences_add entry of type "debt" also works and lands in exactly the same place, but it MUST name a counterparty_name — a debt owed to nobody can never be called in, and one without a named creditor is dropped.
 - {"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the burning district", "reason": "Kessler's men saved them at real cost"}
 - {"counterparty_name": "Thieves Guild", "counterparty_type": "faction", "direction": "owed_by_character", "action": "resolve", "description": "Repaid by stealing the ledger for them", "reason": "The job is done"}
+
+CONDITIONS MUST BE ENFORCEABLE: when you add a condition, the mechanicalEffect text is for the player to READ — it does nothing on its own. Put the actual mechanic in the structured fields alongside it: rollModifier for a flat penalty to everything, statModifiers for something that helps at one kind of action and hurts another (cool=nerve, hard=force/violence, hot=charm/social, sharp=perception/wits, weird=the strange), harmPerScene for ongoing damage. A condition whose text promises a number with no matching field is a rule the engine will never apply — either give it the field or write the text so it doesn't promise one.
 
 ITEM WORTH: give inventory items a "rarity" (common | uncommon | rare | legendary) and, where the fiction is specific about it, a "value". Both are mechanically read, not flavor. The engine enforces a per-arc rarity budget — roughly one legendary OR two rares OR four uncommons per character per ten turns — so a legendary artifact you hand out is genuinely the reward of an arc, and anything past the budget is silently NOT granted no matter how the prose describes it. Reserve the top two ranks accordingly. Item worth also counts toward what a paying faction spends, so goods are not a way around a broke patron's empty coffers.
 

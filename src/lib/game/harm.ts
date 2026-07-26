@@ -41,6 +41,30 @@ export interface Condition {
   // directly on a custom condition it authors (schema.ts clamps it to
   // -2..2), not just the fixed templates.
   rollModifier?: number
+  // Harm this condition inflicts at the start of each scene (#88).
+  //
+  // mechanicalEffect could always SAY "1 harm per turn" — Bleeding did,
+  // from the day it was written — but nothing anywhere applied it, so the
+  // sheet stated a rule the engine never executed. This is the number that
+  // actually gets applied, the same split rollModifier already makes
+  // between the readable text and the enforced value.
+  //
+  // Deliberately capped below the Taken Out threshold when applied (see
+  // RECURRING_HARM_CEILING): a condition ticking away between scenes must
+  // not kill someone while nobody is looking. Taken Out is resolved by a
+  // server-side recovery roll during scene resolution, where it can be
+  // narrated; bleeding out in a gap between scenes has no such moment.
+  harmPerScene?: number
+  // Per-stat roll modifiers, for conditions whose real effect is stat-
+  // shaped rather than flat (#88). Enraged's "+1 to combat rolls, -2 to
+  // social rolls" is exactly this, and had NO enforcement at all because
+  // rollModifier can only express one undirected number.
+  //
+  // Keyed by PbtA stat: cool (nerve), hard (force/violence), hot
+  // (charm/social), sharp (perception/wits), weird (the strange). Composes
+  // additively with rollModifier — a condition may set either, both, or
+  // neither.
+  statModifiers?: Partial<Record<'cool' | 'hard' | 'hot' | 'sharp' | 'weird', number>>
   appliedAt?: number // Turn number when applied
 }
 
@@ -266,8 +290,9 @@ export const COMMON_CONDITIONS: Record<string, Omit<Condition, 'id' | 'appliedAt
   bleeding: {
     name: 'Bleeding',
     category: 'Physical',
-    description: 'Losing blood rapidly. Takes 1 harm at the start of each turn unless treated.',
-    mechanicalEffect: '1 harm per turn'
+    description: 'Losing blood rapidly. Takes 1 harm at the start of each scene unless treated.',
+    mechanicalEffect: '1 harm at the start of each scene',
+    harmPerScene: 1
   },
   stunned: {
     name: 'Stunned',
@@ -307,7 +332,12 @@ export const COMMON_CONDITIONS: Record<string, Omit<Condition, 'id' | 'appliedAt
     name: 'Enraged',
     category: 'Emotional',
     description: 'Consumed by anger.',
-    mechanicalEffect: '+1 to combat rolls, -2 to social rolls'
+    // The one condition whose flavor is precisely stat-shaped, which is
+    // why it gets statModifiers rather than the flattened rollModifier the
+    // situational ones settle for: "combat" is hard, "social" is hot, and
+    // both are exactly what the classifier already picks per action.
+    mechanicalEffect: '+1 to combat rolls, -2 to social rolls',
+    statModifiers: { hard: 1, hot: -2 }
   },
   despair: {
     name: 'Despair',
@@ -340,9 +370,84 @@ export const COMMON_CONDITIONS: Record<string, Omit<Condition, 'id' | 'appliedAt
   unstable: {
     name: 'Unstable',
     category: 'Special',
-    description: 'Reality warps around you.',
-    mechanicalEffect: 'Roll 1d6 at start of turn: 1-2 = random effect'
+    // Text was "Roll 1d6 at start of turn: 1-2 = random effect" — a die
+    // this engine never rolled, against an effect table that never
+    // existed. Defining one would be inventing game design rather than
+    // implementing text already on the sheet, which is what the other two
+    // #88 fixes do, so this says what the condition genuinely is: a
+    // narrative instability the GM plays, with no number behind it. The
+    // condition itself is untouched and still applies.
+    description: 'Reality warps around you, unpredictably and without warning.',
+    mechanicalEffect: 'The GM may twist any scene you are in — no fixed rule'
   }
+}
+
+/**
+ * Harm a character's conditions inflict at the start of a scene (#88).
+ *
+ * Pure. Summed across every active condition, then clamped by the caller
+ * against RECURRING_HARM_CEILING.
+ */
+export function recurringHarmForScene(conditions: Condition[] | null | undefined): number {
+  if (!Array.isArray(conditions)) return 0
+  return conditions.reduce((sum, c) => {
+    const amount = Number(c?.harmPerScene)
+    if (!Number.isFinite(amount) || amount <= 0) return sum
+    return sum + Math.trunc(amount)
+  }, 0)
+}
+
+/**
+ * The highest harm recurring conditions may drive a character to on their
+ * own: Impaired, never Taken Out.
+ *
+ * A condition ticking between scenes must not kill someone while nobody is
+ * looking. Taken Out is resolved by a server-side recovery roll during
+ * scene resolution — a real moment, narrated, with the death-save path
+ * behind it — and bleeding out in the gap before a scene starts has no
+ * such moment. So Bleeding can carry a character to the edge and hold them
+ * there; finishing them is the fiction's job, not a background tick's.
+ */
+export const RECURRING_HARM_CEILING = 5
+
+/**
+ * Apply a scene's recurring harm to a starting harm value. Pure.
+ * Returns the new harm and how much was actually dealt (which is less than
+ * requested once the ceiling bites, and zero for anyone already past it).
+ */
+export function applyRecurringHarm(
+  currentHarm: number,
+  recurring: number
+): { newHarm: number; dealt: number } {
+  const start = Math.max(0, Math.min(6, Math.trunc(Number(currentHarm) || 0)))
+  if (recurring <= 0 || start >= RECURRING_HARM_CEILING) return { newHarm: start, dealt: 0 }
+  const newHarm = Math.min(RECURRING_HARM_CEILING, start + recurring)
+  return { newHarm, dealt: newHarm - start }
+}
+
+/**
+ * Per-stat modifier from active conditions, for the stat this roll uses
+ * (#88). Pure; summed, then bounded on the same scale conditionPenalty
+ * uses so a stack of conditions can't invert a roll outright.
+ *
+ * Unlike conditionPenalty this can be POSITIVE — Enraged genuinely helps
+ * you hit someone. That's the point of the field: a condition with real
+ * upside and real downside was previously enforced as neither.
+ */
+export const CONDITION_STAT_MOD_BOUND = 2
+
+export function conditionStatModifier(
+  conditions: Condition[] | null | undefined,
+  statKey: string
+): number {
+  if (!Array.isArray(conditions)) return 0
+  const total = conditions.reduce((sum, c) => {
+    const mods = c?.statModifiers
+    if (!mods || typeof mods !== 'object') return sum
+    const value = Number((mods as Record<string, unknown>)[statKey])
+    return Number.isFinite(value) ? sum + value : sum
+  }, 0)
+  return Math.max(-CONDITION_STAT_MOD_BOUND, Math.min(CONDITION_STAT_MOD_BOUND, total))
 }
 
 /**

@@ -13,15 +13,25 @@ interface WorldStateSnapshot {
 }
 
 /**
- * Capture the current world state before AI resolution
+ * The same 4-table read used both to snapshot state before AI resolution
+ * and to read it back after, for diffing.
  */
-export async function captureWorldStateSnapshot(campaignId: string): Promise<WorldStateSnapshot> {
+async function fetchCampaignEntities(campaignId: string) {
   const [npcs, factions, clocks, characters] = await Promise.all([
     prisma.nPC.findMany({ where: { campaignId } }),
     prisma.faction.findMany({ where: { campaignId } }),
     prisma.clock.findMany({ where: { campaignId } }),
     prisma.character.findMany({ where: { campaignId } })
   ])
+
+  return { npcs, factions, clocks, characters }
+}
+
+/**
+ * Capture the current world state before AI resolution
+ */
+export async function captureWorldStateSnapshot(campaignId: string): Promise<WorldStateSnapshot> {
+  const { npcs, factions, clocks, characters } = await fetchCampaignEntities(campaignId)
 
   return {
     npcs: Object.fromEntries(npcs.map(n => [n.id, n])),
@@ -42,12 +52,7 @@ export async function detectWorldStateChanges(
   const changes: WorldStateChange[] = []
 
   // Get current state
-  const [npcs, factions, clocks, characters] = await Promise.all([
-    prisma.nPC.findMany({ where: { campaignId } }),
-    prisma.faction.findMany({ where: { campaignId } }),
-    prisma.clock.findMany({ where: { campaignId } }),
-    prisma.character.findMany({ where: { campaignId } })
-  ])
+  const { npcs, factions, clocks, characters } = await fetchCampaignEntities(campaignId)
 
   // Detect NPC changes
   for (const npc of npcs) {

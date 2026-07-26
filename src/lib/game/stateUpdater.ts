@@ -10,11 +10,9 @@
 // Bugs P1 (stateUpdater decomposition, #4/#41) for why this file used to
 // be ~1,400 lines with no direct test coverage.
 
-import { openaiFetch } from '@/lib/ai/openaiCompat'
+import { Clock } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { AIGMResponse } from '@/lib/ai/client'
-import { AI_MODELS } from '@/lib/ai/models'
-import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
 import { parseCorruptionTheme, CorruptionTheme } from './corruption'
 
 import { applyTimelineEventChanges } from './worldUpdaters/timelineEvents'
@@ -26,6 +24,11 @@ import { applyLocationChanges } from './worldUpdaters/locations'
 import { applyQuestChanges } from './worldUpdaters/quests'
 import { applyBargainOffers } from './worldUpdaters/bargainOffers'
 import { storeGmNotesForTurn } from './worldUpdaters/worldMetaNotes'
+
+// Re-exported so existing importers (sceneResolver.ts) don't need to
+// change — the implementation lives in stubEnrichment.ts now, see there
+// for why the two were merged.
+export { enrichStubNPCs, enrichStubFactions } from './stubEnrichment'
 
 /**
  * Apply all world updates from an AI GM response to the database
@@ -188,7 +191,7 @@ export async function applyWorldUpdates(
 export async function checkAndResolveCompletedClocks(
   campaignId: string,
   currentTurnNumber: number
-): Promise<any[]> {
+): Promise<Clock[]> {
   console.log('🔍 Checking for completed clocks...')
 
   const completedClocks = await prisma.clock.findMany({
@@ -274,177 +277,3 @@ export function summarizeWorldUpdates(aiResponse: AIGMResponse): string {
     : 'No world changes'
 }
 
-/**
- * Enrich stub factions auto-created mid-campaign with no description.
- * Mirror of enrichStubNPCs — same pattern, same non-critical fire-and-forget usage.
- */
-export async function enrichStubFactions(
-  campaignId: string,
-  sceneText: string
-): Promise<void> {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return
-
-  const cutoff = new Date(Date.now() - 2 * 60 * 1000)
-  const stubs = await prisma.faction.findMany({
-    where: {
-      campaignId,
-      description: '',
-      createdAt: { gte: cutoff }
-    },
-    select: { id: true, name: true }
-  })
-
-  if (stubs.length === 0) return
-
-  console.log(`🪄 Enriching ${stubs.length} stub faction(s): ${stubs.map(f => f.name).join(', ')}`)
-
-  const nameList = stubs.map(f => `- ${f.name}`).join('\n')
-  const prompt = `You are a TTRPG game master. The following scene just resolved:\n\n${sceneText}\n\nThese factions or groups were introduced for the first time:\n${nameList}\n\nFor each faction, write a SHORT 1-2 sentence description (what they are, their role or agenda) based on context from the scene. Invent something consistent with the fiction if they aren't explicitly described.\n\nRespond with valid JSON:\n{"factions": [{"name": "...", "description": "...", "goals": "..."}]}`
-
-  const startTime = Date.now()
-  try {
-    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: AI_MODELS.EFFICIENT,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 400,
-        response_format: { type: 'json_object' }
-      })
-    })
-
-    if (!response.ok) {
-      console.warn('⚠️ Faction enrichment API call failed:', response.status)
-      return
-    }
-
-    const data = await response.json()
-    const rawContent = data.choices[0].message.content
-    const parsed = JSON.parse(rawContent) as {
-      factions: Array<{ name: string; description: string; goals?: string }>
-    }
-
-    const usage = data.usage || {}
-    await recordAICost({
-      campaignId,
-      model: AI_MODELS.EFFICIENT,
-      requestType: 'faction_enrichment',
-      inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
-      outputTokens: usage.completion_tokens || estimateTokenCount(rawContent),
-      responseTimeMs: Date.now() - startTime,
-      success: true
-    }).catch(console.error)
-
-    for (const enriched of parsed.factions) {
-      const stub = stubs.find(f => f.name.toLowerCase() === enriched.name.toLowerCase())
-      if (stub && enriched.description) {
-        await prisma.faction.update({
-          where: { id: stub.id },
-          data: {
-            description: enriched.description,
-            ...(enriched.goals ? { goals: enriched.goals } : {})
-          }
-        })
-        console.log(`  ✅ Enriched faction: ${stub.name}`)
-      }
-    }
-  } catch (err) {
-    console.warn('⚠️ Faction enrichment failed (non-critical):', err)
-  }
-}
-
-/**
- * Enrich stub NPCs that were auto-created mid-scene with no description.
- *
- * After `applyWorldUpdates` commits, any NPC introduced by the AI without
- * a description exists as a bare name in the DB.  This function makes a
- * single lightweight AI call to flesh them out based on the resolved scene
- * text, then persists the result.
- *
- * Silently skips if OpenAI is unconfigured or returns an error — it is
- * intentionally non-critical.
- */
-export async function enrichStubNPCs(
-  campaignId: string,
-  sceneText: string
-): Promise<void> {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return
-
-  // Find NPCs created in the last 2 minutes with no description
-  const cutoff = new Date(Date.now() - 2 * 60 * 1000)
-  const stubs = await prisma.nPC.findMany({
-    where: {
-      campaignId,
-      description: null,
-      createdAt: { gte: cutoff }
-    },
-    select: { id: true, name: true }
-  })
-
-  if (stubs.length === 0) return
-
-  console.log(`🪄 Enriching ${stubs.length} stub NPC(s): ${stubs.map(n => n.name).join(', ')}`)
-
-  const nameList = stubs.map(n => `- ${n.name}`).join('\n')
-  const prompt = `You are a TTRPG game master. The following scene just resolved:\n\n${sceneText}\n\nThese NPCs were introduced for the first time:\n${nameList}\n\nFor each NPC, write a SHORT 1-2 sentence description (appearance, role, or personality) based on how they appear in the scene. If the scene doesn't mention them explicitly, invent something consistent with the fiction.\n\nRespond with valid JSON:\n{"npcs": [{"name": "...", "description": "..."}]}`
-
-  const startTime = Date.now()
-  try {
-    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: AI_MODELS.EFFICIENT,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 400,
-        response_format: { type: 'json_object' }
-      })
-    })
-
-    if (!response.ok) {
-      console.warn('⚠️ NPC enrichment API call failed:', response.status)
-      return
-    }
-
-    const data = await response.json()
-    const rawContent = data.choices[0].message.content
-    const parsed = JSON.parse(rawContent) as {
-      npcs: Array<{ name: string; description: string }>
-    }
-
-    const usage = data.usage || {}
-    await recordAICost({
-      campaignId,
-      model: AI_MODELS.EFFICIENT,
-      requestType: 'npc_enrichment',
-      inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
-      outputTokens: usage.completion_tokens || estimateTokenCount(rawContent),
-      responseTimeMs: Date.now() - startTime,
-      success: true
-    }).catch(console.error)
-
-    for (const enriched of parsed.npcs) {
-      const stub = stubs.find(s => s.name.toLowerCase() === enriched.name.toLowerCase())
-      if (stub && enriched.description) {
-        await prisma.nPC.update({
-          where: { id: stub.id },
-          data: { description: enriched.description }
-        })
-        console.log(`  ✅ Enriched NPC: ${stub.name}`)
-      }
-    }
-  } catch (err) {
-    console.warn('⚠️ NPC enrichment failed (non-critical):', err)
-  }
-}

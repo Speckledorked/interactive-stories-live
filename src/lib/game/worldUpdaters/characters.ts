@@ -15,6 +15,7 @@ import { Prisma, Character } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { resolveEntityByNameOrId } from '../entityResolution'
 import { resolveOrCreateLocationId } from './locations'
+import { clamp } from '../tick/types'
 import {
   applyHarm,
   healHarm,
@@ -49,6 +50,24 @@ import {
 
 type Db = Prisma.TransactionClient
 export type PcChange = NonNullable<WorldUpdates['pc_changes']>[number]
+type EquipmentSlotChange = NonNullable<NonNullable<PcChange['changes']['equipment_changes']>['weapon']>
+
+/** The add/replace/remove shape shared by the weapon/armor/misc equipment slots. */
+function applyEquipmentSlotChange(
+  currentEquipment: Record<string, string>,
+  slot: 'weapon' | 'armor' | 'misc',
+  change: EquipmentSlotChange,
+  characterName: string,
+  emoji: string
+): void {
+  if (change.action === 'add' || change.action === 'replace') {
+    currentEquipment[slot] = change.value
+    console.log(`  ${emoji} ${characterName} equipped ${slot}: ${change.value}`)
+  } else if (change.action === 'remove') {
+    console.log(`  ${emoji} ${characterName} lost ${slot}: ${currentEquipment[slot] || change.value}`)
+    currentEquipment[slot] = ''
+  }
+}
 
 /**
  * Locate the single consequence entry a `consequences_remove` string means.
@@ -442,13 +461,11 @@ export async function applyCharacterChanges(
         }
 
         // Apply deltas and clamp between -100 and 100
-        const clamp = (value: number) => Math.max(-100, Math.min(100, value))
-
         currentRelationships[entityId] = {
-          trust: relChange.trust_delta !== undefined ? clamp(currentRel.trust + relChange.trust_delta) : currentRel.trust,
-          tension: relChange.tension_delta !== undefined ? clamp(currentRel.tension + relChange.tension_delta) : currentRel.tension,
-          respect: relChange.respect_delta !== undefined ? clamp(currentRel.respect + relChange.respect_delta) : currentRel.respect,
-          fear: relChange.fear_delta !== undefined ? clamp(currentRel.fear + relChange.fear_delta) : currentRel.fear
+          trust: relChange.trust_delta !== undefined ? clamp(currentRel.trust + relChange.trust_delta, -100, 100) : currentRel.trust,
+          tension: relChange.tension_delta !== undefined ? clamp(currentRel.tension + relChange.tension_delta, -100, 100) : currentRel.tension,
+          respect: relChange.respect_delta !== undefined ? clamp(currentRel.respect + relChange.respect_delta, -100, 100) : currentRel.respect,
+          fear: relChange.fear_delta !== undefined ? clamp(currentRel.fear + relChange.fear_delta, -100, 100) : currentRel.fear
         }
 
         console.log(`  🤝 ${character.name} → ${relChange.entity_name}: ${relChange.reason}`)
@@ -559,35 +576,9 @@ export async function applyCharacterChanges(
       const currentEquipment: any = (character.equipment as any) || {}
       const equipChange = pcChange.changes.equipment_changes
 
-      if (equipChange.weapon) {
-        if (equipChange.weapon.action === 'add' || equipChange.weapon.action === 'replace') {
-          currentEquipment.weapon = equipChange.weapon.value
-          console.log(`  ⚔️ ${character.name} equipped weapon: ${equipChange.weapon.value}`)
-        } else if (equipChange.weapon.action === 'remove') {
-          console.log(`  ⚔️ ${character.name} lost weapon: ${currentEquipment.weapon || equipChange.weapon.value}`)
-          currentEquipment.weapon = ''
-        }
-      }
-
-      if (equipChange.armor) {
-        if (equipChange.armor.action === 'add' || equipChange.armor.action === 'replace') {
-          currentEquipment.armor = equipChange.armor.value
-          console.log(`  🛡️ ${character.name} equipped armor: ${equipChange.armor.value}`)
-        } else if (equipChange.armor.action === 'remove') {
-          console.log(`  🛡️ ${character.name} lost armor: ${currentEquipment.armor || equipChange.armor.value}`)
-          currentEquipment.armor = ''
-        }
-      }
-
-      if (equipChange.misc) {
-        if (equipChange.misc.action === 'add' || equipChange.misc.action === 'replace') {
-          currentEquipment.misc = equipChange.misc.value
-          console.log(`  🎒 ${character.name} equipped misc: ${equipChange.misc.value}`)
-        } else if (equipChange.misc.action === 'remove') {
-          console.log(`  🎒 ${character.name} lost misc: ${currentEquipment.misc || equipChange.misc.value}`)
-          currentEquipment.misc = ''
-        }
-      }
+      if (equipChange.weapon) applyEquipmentSlotChange(currentEquipment, 'weapon', equipChange.weapon, character.name, '⚔️')
+      if (equipChange.armor) applyEquipmentSlotChange(currentEquipment, 'armor', equipChange.armor, character.name, '🛡️')
+      if (equipChange.misc) applyEquipmentSlotChange(currentEquipment, 'misc', equipChange.misc, character.name, '🎒')
 
       updateData.equipment = currentEquipment
     }

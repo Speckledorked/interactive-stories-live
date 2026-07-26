@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    // #79: tickFactions reads goal-change history for commitment.
+    worldEvent: { findMany: vi.fn(async () => []) },
     location: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     faction: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
     nPC: { updateMany: vi.fn(), findMany: vi.fn() },

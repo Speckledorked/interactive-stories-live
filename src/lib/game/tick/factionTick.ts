@@ -80,19 +80,55 @@ export function decideFactionTick(faction: {
 // becomes reachable once the faction actually has a rival on record (see
 // relationshipTick.ts) — otherwise there's nothing for it to mean.
 /** Pure decision function — no DB access, safe to unit test directly. */
+/**
+ * How long a faction sticks with a goal before circumstances are allowed to
+ * talk it out of one (#79).
+ *
+ * Without this the tick had no memory of what a faction was *just doing*,
+ * and the arithmetic produced a permanent oscillation. A faction with a
+ * rival and a strong army sitting near the LOW/MEDIUM resource cutoff runs:
+ * DESTABILIZE_RIVAL drains 2 resources a turn until it dips under 34,
+ * ENRICH earns 4 and lifts it back over, which immediately re-qualifies
+ * DESTABILIZE_RIVAL — a three-turn cycle that repeats forever. The faction
+ * abandons its scheme every third turn to go make money, resumes it, and
+ * never accumulates enough to actually do anything.
+ *
+ * Three turns is deliberately short. This is meant to stop a faction
+ * flip-flopping across a band boundary, not to make it stubborn — a real
+ * shift in circumstances should still redirect it, just not a one-point
+ * drift back and forth over the same line.
+ */
+export const GOAL_COMMITMENT_TURNS = 3
+
 export function decideFactionGoalReassessment(faction: {
   resources: number
   stability: number
   military: number
   goal: FactionGoal
   hasRival: boolean
+  /**
+   * Turns the faction has already held its current goal, read back from the
+   * `faction.goal` world events the tick has always written (see
+   * worldEventLog.ts). History as a decision input, with no new column:
+   * the record of what it decided last time is what stops it thrashing.
+   */
+  turnsOnCurrentGoal?: number
 }): FactionGoal {
   const stabilityBand = band(faction.stability)
   const resourcesBand = band(faction.resources)
   const militaryBand = band(faction.military)
 
   // Internal cohesion is failing — shore it up before anything ambitious.
+  // Checked BEFORE commitment on purpose: a faction coming apart does not
+  // stay the course out of consistency, and a crisis is exactly the kind
+  // of real change that should always be able to redirect it.
   if (stabilityBand === 'LOW') return 'DEFEND'
+
+  // Otherwise, hold the current course until it has been given a fair run.
+  const held = Number(faction.turnsOnCurrentGoal)
+  if (Number.isFinite(held) && held >= 0 && held < GOAL_COMMITMENT_TURNS) {
+    return faction.goal
+  }
   // Too poor to attempt anything ambitious — rebuild the treasury first.
   if (resourcesBand === 'LOW') return 'ENRICH'
   // Strong enough to act, and there's a known rival to act against —
@@ -172,6 +208,36 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     orderBy: { createdAt: 'asc' },
     take: ctx.factionCap,
   })
+
+  // #79: how long each faction has held its current goal, read back from
+  // the `faction.goal` events the tick has always written. No new column —
+  // the world's own record of what it decided last time is what stops it
+  // deciding the opposite next turn.
+  //
+  // A faction with no goal-change event on record has held its goal since
+  // the campaign began, which is well past the commitment window, so an
+  // absent entry correctly means "free to reconsider".
+  //
+  // Fail-soft: goal commitment is a refinement, not a correctness
+  // requirement, and the faction tick ran without it for the whole life of
+  // the project. Losing the read should cost the anti-thrash behaviour for
+  // one turn, not the entire faction simulation.
+  const turnsOnGoalByFaction = new Map<string, number>()
+  try {
+    const goalChangeEvents = await prisma.worldEvent.findMany({
+      where: { campaignId: ctx.campaignId, type: 'faction.goal' },
+      select: { targetId: true, turnNumber: true },
+      orderBy: { turnNumber: 'desc' },
+    })
+    for (const event of goalChangeEvents ?? []) {
+      // Ordered newest-first, so the first entry per faction is its latest
+      // goal change and the rest are history.
+      if (turnsOnGoalByFaction.has(event.targetId)) continue
+      turnsOnGoalByFaction.set(event.targetId, ctx.turnNumber - event.turnNumber)
+    }
+  } catch (error) {
+    console.error('Could not read goal history; goals reassess without commitment this turn:', error)
+  }
 
   // Uncapped set of every currently-active faction, used to ignore
   // relationship entries pointing at collapsed factions. relationshipTick
@@ -305,7 +371,12 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     const factionHasRival = hasActiveRival(relationships, activeFactionIds)
     const nextGoal = faction.leaderCharacterId
       ? faction.goal
-      : decideFactionGoalReassessment({ ...next, goal: faction.goal, hasRival: factionHasRival })
+      : decideFactionGoalReassessment({
+          ...next,
+          goal: faction.goal,
+          hasRival: factionHasRival,
+          turnsOnCurrentGoal: turnsOnGoalByFaction.get(faction.id),
+        })
 
     if (!ctx.dryRun) {
       await prisma.faction.update({

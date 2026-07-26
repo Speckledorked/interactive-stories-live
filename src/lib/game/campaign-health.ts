@@ -2,6 +2,7 @@
 // Phase 15.4: Campaign Failure Recovery and Health Monitoring
 
 import { prisma } from '@/lib/prisma'
+import { assessCampaignHealth } from '@/lib/ai/contextManager'
 
 /**
  * Campaign Health Score
@@ -79,12 +80,46 @@ export class CampaignHealthMonitor {
       recommendations.push('Consider temporary pause or manual GM intervention')
     }
 
-    const isHealthy = score >= 70 && issues.length === 0
+    // Scale and context-window pressure, folded in from what were two
+    // separate dead systems.
+    //
+    // `assessCampaignHealth` (lib/ai/contextManager.ts) and
+    // `suggestStoppingPoints` below were both written and never called,
+    // while this — the one health surface anyone actually sees — had no
+    // notion of campaign size at all. So a campaign with 120 scenes and 60
+    // NPCs, straining the context window every turn, could report a clean
+    // bill of health. Three overlapping ideas, none of them reaching a GM.
+    //
+    // Merged rather than re-implemented, and deduped, since the two dead
+    // systems overlapped on the "50+ scenes" advice.
+    try {
+      const scale = await assessCampaignHealth(prisma, this.campaignId)
+      // Only a CRITICAL scale problem counts as an issue. Size warnings
+      // are advice, and letting every large campaign accumulate issues
+      // would push healthy long-running games over the intervention
+      // threshold for the crime of being long-running.
+      if (scale.health === 'critical') {
+        issues.push(...scale.warnings)
+      } else {
+        recommendations.push(...scale.warnings)
+      }
+      recommendations.push(...scale.recommendations)
+      recommendations.push(...(await this.suggestStoppingPoints()))
+    } catch (error) {
+      // Scale advice is a bonus on top of the real metrics; failing to
+      // gather it must not cost the health check itself.
+      console.error('Error assessing campaign scale:', error)
+    }
+
+    const dedupedRecommendations = Array.from(new Set(recommendations))
+    const dedupedIssues = Array.from(new Set(issues))
+
+    const isHealthy = score >= 70 && dedupedIssues.length === 0
 
     return {
       score,
-      issues,
-      recommendations,
+      issues: dedupedIssues,
+      recommendations: dedupedRecommendations,
       isHealthy,
       metrics: {
         aiConsistency,
@@ -115,8 +150,27 @@ export class CampaignHealthMonitor {
       if (requestHistory.length < 3) return 75 // Not enough data, assume good
 
       const recentRequests = requestHistory.slice(-10)
-      const successfulValidations = recentRequests.filter((r: any) => r.success).length
-      const validationRate = (successfulValidations / recentRequests.length) * 100
+
+      // Credit per request, not a success/failure count.
+      //
+      // `success` alone said 100 for a campaign whose model had stopped
+      // producing usable output: a response that fell through to a partial
+      // extraction or an emergency template still returns successfully, so
+      // the metric was blind to the exact failure it exists to measure.
+      // validationLevel is recorded alongside it now (see cost-tracker).
+      //
+      // Older entries predate the field and carry no level. They keep
+      // full credit rather than being penalised for a field that did not
+      // exist when they were written — a scoring change must not
+      // retroactively invent a decline that never happened.
+      const credit = recentRequests.reduce((total: number, r: any) => {
+        if (!r?.success) return total
+        if (r.validationLevel === 'emergency') return total + 0.25
+        if (r.validationLevel === 'partial') return total + 0.6
+        return total + 1
+      }, 0)
+
+      const validationRate = (credit / recentRequests.length) * 100
 
       return Math.round(validationRate)
     } catch (error) {
@@ -353,12 +407,24 @@ export class CampaignHealthMonitor {
   }
 }
 
-/**
- * Check if campaign needs intervention
- */
-export async function checkCampaignNeedsIntervention(campaignId: string): Promise<boolean> {
-  const monitor = new CampaignHealthMonitor(campaignId)
-  const health = await monitor.calculateHealth()
-
-  return health.score < 50 || health.issues.length >= 3
-}
+// `checkCampaignNeedsIntervention(campaignId)` used to live here: an async
+// wrapper that loaded the campaign and recomputed the entire health score
+// just to return a boolean. A caller was looked for rather than assumed
+// absent, and there is none possible — every place that wants this answer
+// already HAS the health, either freshly computed (the scene resolver, one
+// line after calculateHealth) or read back from WorldMeta (the health
+// endpoint, which deliberately does not recompute so the read side cannot
+// trigger AI usage). A fetch-and-recompute convenience had nobody to be
+// convenient for.
+//
+// The rule it carried was worth keeping and now lives in
+// campaignHealthBands.ts — dependency-free, because the admin panel needs
+// it too and this module imports Prisma. See that file for why the
+// definition had to leave this one.
+export {
+  needsIntervention,
+  healthBand,
+  HEALTH_INTERVENTION_SCORE,
+  HEALTH_INTERVENTION_ISSUE_COUNT,
+  HEALTH_GOOD_SCORE,
+} from './campaignHealthBands'

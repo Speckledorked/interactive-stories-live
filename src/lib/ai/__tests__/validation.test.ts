@@ -3,7 +3,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { z } from 'zod'
-import { validateAIResponse, validateAIResponseWithRepair, buildRepairPrompt, validateWorldTurnResponse } from '../validation'
+import { validateAIResponse, validateAIResponseWithRepair, buildRepairPrompt, validateWorldTurnResponse, extractValidWorldUpdates } from '../validation'
 
 describe('AI Response Validation (Phase 15)', () => {
   describe('Full Schema Validation', () => {
@@ -401,5 +401,100 @@ describe('validateWorldTurnResponse (#66)', () => {
     if (result.level !== 'full') throw new Error('expected full')
     expect(result.data.offscreen_events).toEqual([])
     expect(result.data.gm_notes).toBe('')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Salvaging mechanical updates below Level 1
+// ---------------------------------------------------------------------------
+// Below full validation the ladder used to zero world_updates outright:
+// one bad field anywhere and every mechanical consequence of the scene
+// vanished — harm dealt, clocks advanced, relationships moved — with a
+// console warning as the only evidence. extractValidWorldUpdates was
+// written for exactly that and never called.
+//
+// The version that sat there validated NOTHING (it kept any non-empty
+// array as-is), so wiring it in unchanged would have handed unvalidated
+// objects to the state appliers and bypassed every bound the schemas
+// exist to enforce. The property these cover is that salvage runs through
+// the real schemas: anything kept passed the same validation it would
+// have passed at Level 1.
+
+describe('extractValidWorldUpdates — salvage without bypassing validation', () => {
+  const goodPc = { character_name_or_id: 'char1', changes: { harm_damage: 2 } }
+  const goodClock = { clock_name_or_id: 'doom', delta: 1 }
+
+  it('keeps a section that is entirely valid', () => {
+    expect(extractValidWorldUpdates({ pc_changes: [goodPc] })).toEqual({ pc_changes: [goodPc] })
+  })
+
+  it('does not let one bad section cost an unrelated good one', () => {
+    const salvaged = extractValidWorldUpdates({
+      pc_changes: [goodPc],
+      clock_changes: 'not an array at all',
+    })
+    expect(salvaged.pc_changes).toEqual([goodPc])
+    expect(salvaged.clock_changes).toBeUndefined()
+  })
+
+  it('keeps the good entries in a partially bad list', () => {
+    // One malformed NPC out of several should cost that entry, not the
+    // rest of the scene's consequences.
+    const salvaged = extractValidWorldUpdates({
+      clock_changes: [goodClock, { nonsense: true }, { clock_name_or_id: 'other', delta: -1 }],
+    })
+    expect(salvaged.clock_changes).toHaveLength(2)
+  })
+
+  it('drops an entry that violates a schema BOUND, not just shape', () => {
+    // The load-bearing case. harm_damage is capped at 6; a salvage that
+    // merely checked "is this an array of objects" would let 9999 through
+    // to applyHarm. Nothing kept here may be anything Level 1 would have
+    // rejected.
+    const salvaged = extractValidWorldUpdates({
+      pc_changes: [goodPc, { character_name_or_id: 'char2', changes: { harm_damage: 9999 } }],
+    })
+    expect(salvaged.pc_changes).toEqual([goodPc])
+  })
+
+  it('returns nothing for input that is not an updates object', () => {
+    for (const junk of [null, undefined, 'text', 42, []]) {
+      expect(extractValidWorldUpdates(junk), String(junk)).toEqual({})
+    }
+  })
+
+  it('ignores keys that are not real update sections', () => {
+    expect(extractValidWorldUpdates({ made_up_section: [{ x: 1 }] })).toEqual({})
+  })
+})
+
+describe('the degradation ladder now carries salvaged updates', () => {
+  it('keeps valid mechanical updates when the response fails full validation', () => {
+    // scene_text is present and long enough for Level 2, but time_passage
+    // is malformed, so Level 1 fails. Previously the harm dealt in this
+    // scene would simply not have happened.
+    const result = validateAIResponse({
+      scene_text: 'The blade goes in under the ribs and the room turns very quiet indeed, all at once.',
+      time_passage: 'yesterday afternoon sometime',
+      world_updates: {
+        pc_changes: [{ character_name_or_id: 'char1', changes: { harm_damage: 2 } }],
+      },
+    })
+
+    expect(result.success).toBe(true)
+    if (!result.success) return
+    expect(result.level).toBe('partial')
+    expect((result.data.world_updates as any).pc_changes).toHaveLength(1)
+  })
+
+  it('still carries nothing mechanical into the emergency template', () => {
+    // No usable scene text at all: there is no response to salvage from,
+    // and inventing consequences to go with a template would be worse
+    // than having none.
+    const result = validateAIResponse({ garbage: true })
+    expect(result.success).toBe(true)
+    if (!result.success) return
+    expect(result.level).toBe('emergency')
+    expect(result.data.world_updates).toEqual({})
   })
 })

@@ -7,8 +7,10 @@ import {
   MinimalAIResponseSchema,
   WorldTurnResponseSchema,
   WorldTurnNarrativeOnlySchema,
+  WorldUpdatesSchema,
   type AIGMResponseValidated,
   type WorldTurnResponseValidated,
+  type WorldUpdates,
 } from './schema'
 import type { AIGMResponse } from './client'
 import { prisma } from '@/lib/prisma'
@@ -16,10 +18,15 @@ import { prisma } from '@/lib/prisma'
 /**
  * Validation Result Types
  */
+// `world_updates` on the degraded levels was typed `{}` — which in
+// TypeScript means "any non-null value", not "empty object", so it
+// documented nothing and would have hidden a salvaged payload behind a
+// type that says it carries none. Partial<WorldUpdates> is what these
+// levels actually produce now.
 export type ValidationResult =
   | { success: true; data: AIGMResponseValidated; level: 'full' }
-  | { success: true; data: { scene_text: string; world_updates: {} }; level: 'partial' }
-  | { success: true; data: { scene_text: string; world_updates: {} }; level: 'emergency'; template: string }
+  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates> }; level: 'partial' }
+  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates> }; level: 'emergency'; template: string }
   | { success: false; error: string; rawData?: any }
 
 /**
@@ -138,7 +145,12 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
       success: true,
       data: {
         scene_text: minimalValidated.scene_text,
-        world_updates: {} // Empty updates - no mechanical changes
+        // Salvage whatever passes its own schema instead of zeroing the
+        // lot. Everything kept has passed exactly the validation it would
+        // have passed at Level 1, so no applier sees unvalidated input —
+        // but a scene no longer loses every mechanical consequence over
+        // one bad field somewhere else in the response.
+        world_updates: extractValidWorldUpdates((rawResponse as any)?.world_updates)
       },
       level: 'partial'
     }
@@ -156,7 +168,7 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
       success: true,
       data: {
         scene_text: extractedText,
-        world_updates: {}
+        world_updates: extractValidWorldUpdates((rawResponse as any)?.world_updates)
       },
       level: 'partial'
     }
@@ -257,43 +269,76 @@ function selectEmergencyTemplate(sceneContext?: string): string {
 }
 
 /**
- * Validate partial world updates
- * Used when we have scene_text but want to salvage any valid updates
+ * Salvage whatever survives full validation, section by section and
+ * element by element.
+ *
+ * Below Level 1 the ladder used to zero `world_updates` outright: one bad
+ * field anywhere in the response and every mechanical consequence of the
+ * scene vanished — harm dealt, clocks advanced, relationships moved — with
+ * a console warning as the only evidence. That is what this exists to
+ * stop, and it had no callers, so it never stopped it.
+ *
+ * The version that sat here did not validate anything. It kept a section
+ * if it was a non-empty array, whatever was in it. Wiring THAT in would
+ * have handed unvalidated objects straight to the state appliers and
+ * bypassed every bound the schemas exist to enforce — unbounded harm
+ * numbers, unbounded appended prose (#46/#81), ungated corruption. So the
+ * salvage is done through the real schemas instead:
+ *
+ *  - Each section is validated on its own. A malformed `npc_changes` can
+ *    no longer cost you `pc_changes`.
+ *  - If a section fails as a whole, its ELEMENTS are validated one at a
+ *    time and the good ones kept. One malformed NPC entry out of five
+ *    should cost that entry, not the other four.
+ *  - Anything kept has passed exactly the same schema it would have passed
+ *    at Level 1. Nothing reaches an applier unvalidated, which is the
+ *    property that makes salvaging safe to do at all.
  */
-export function extractValidWorldUpdates(rawUpdates: any): any {
-  if (!rawUpdates || typeof rawUpdates !== 'object') {
+export function extractValidWorldUpdates(rawUpdates: unknown): Partial<WorldUpdates> {
+  if (!rawUpdates || typeof rawUpdates !== 'object' || Array.isArray(rawUpdates)) {
     return {}
   }
 
-  const validated: any = {}
+  const raw = rawUpdates as Record<string, unknown>
+  const salvaged: Record<string, unknown> = {}
 
-  // Try to validate each section independently
-  const sections = [
-    'new_timeline_events',
-    'clock_changes',
-    'npc_changes',
-    'pc_changes',
-    'faction_changes',
-    'organic_advancement',
-    'notes_for_gm'
-  ]
+  for (const section of Object.keys(WorldUpdatesSchema.shape)) {
+    const value = raw[section]
+    if (value === undefined || value === null) continue
 
-  for (const section of sections) {
-    if (rawUpdates[section]) {
-      try {
-        // Attempt basic validation - just check it's an array or string
-        if (Array.isArray(rawUpdates[section]) && rawUpdates[section].length > 0) {
-          validated[section] = rawUpdates[section]
-        } else if (typeof rawUpdates[section] === 'string') {
-          validated[section] = rawUpdates[section]
-        }
-      } catch (error) {
-        console.warn(`⚠️ Could not validate ${section}:`, error)
-      }
+    // Pick the one field so each section is judged against its own real
+    // schema, using only Zod's public API rather than reaching into the
+    // internals of an optional-wrapped array type.
+    const sectionSchema = WorldUpdatesSchema.pick({ [section]: true } as never)
+
+    const whole = sectionSchema.safeParse({ [section]: value })
+    if (whole.success) {
+      const parsed = (whole.data as Record<string, unknown>)[section]
+      if (parsed !== undefined) salvaged[section] = parsed
+      continue
+    }
+
+    // Section-level failure. If it's a list, keep the entries that stand
+    // on their own.
+    if (!Array.isArray(value)) {
+      console.warn(`⚠️ Dropping unsalvageable ${section} from a partially-valid response`)
+      continue
+    }
+
+    const keptEntries = value.filter(
+      entry => sectionSchema.safeParse({ [section]: [entry] }).success
+    )
+    if (keptEntries.length > 0) {
+      salvaged[section] = keptEntries
+      console.warn(
+        `⚠️ Salvaged ${keptEntries.length}/${value.length} ${section} entries from a partially-valid response`
+      )
+    } else {
+      console.warn(`⚠️ Dropping all ${value.length} ${section} entries — none passed validation`)
     }
   }
 
-  return validated
+  return salvaged as Partial<WorldUpdates>
 }
 
 /**

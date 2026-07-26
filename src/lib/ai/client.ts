@@ -4,7 +4,7 @@ import { openaiFetch } from '@/lib/ai/openaiCompat'
 // This handles all communication with the AI model
 // Phase 15: Enhanced with strict validation, error handling, and cost tracking
 
-import { validateAIResponseWithRepair } from './validation'
+import { validateAIResponseWithRepair, addValidationMetadata } from './validation'
 import { validateWorldTurnResponse } from './validation'
 import { circuitBreakerManager } from './circuit-breaker'
 import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
@@ -651,7 +651,15 @@ export async function callAIGM(
       throw new Error('AI response validation failed')
     }
 
-    const validatedResponse = validationResult.data as AIGMResponse
+    // Stamp how intact this response was onto the response itself, so the
+    // degradation level travels with it instead of living only in a
+    // console line. It is what the AI-consistency health metric reads
+    // below, and it is available to anything downstream that wants to be
+    // honest with the player about a scene resolved from partial output.
+    const validatedResponse = addValidationMetadata(
+      validationResult.data as AIGMResponse,
+      validationResult.level
+    )
 
     // Log validation level
     if (validationResult.level === 'partial') {
@@ -675,6 +683,11 @@ export async function callAIGM(
         outputTokens: usage.completion_tokens || estimateTokenCount(content),
         responseTimeMs: Date.now() - startTime,
         success: true,
+        // A response that fell through to a template is not a successful
+        // resolution in any sense a GM would recognise, and recording it
+        // as one is why AI consistency could read 100 on a campaign whose
+        // model had stopped producing usable output.
+        validationLevel: validationResult.level,
         cacheHit: false,
         sceneId,
         requestType: 'scene_resolution'

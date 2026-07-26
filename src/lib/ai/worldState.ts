@@ -1474,48 +1474,19 @@ Respond with JSON only: { "recap": "..." }`
   return recap
 }
 
-/**
- * Helper: Get world state including GM-only information
- * Used for admin views and debugging
- */
-export async function buildFullWorldState(campaignId: string) {
-  const [
-    campaign,
-    worldMeta,
-    characters,
-    npcs,
-    factions,
-    allClocks, // Including hidden ones
-    allEvents  // Including GM-only events
-  ] = await Promise.all([
-    prisma.campaign.findUnique({
-      where: { id: campaignId }
-    }),
-    prisma.worldMeta.findUnique({ where: { campaignId } }),
-    prisma.character.findMany({ 
-      where: { campaignId },
-      include: { user: { select: { email: true } } }
-    }),
-    prisma.nPC.findMany({ where: { campaignId } }),
-    prisma.faction.findMany({ where: { campaignId } }),
-    prisma.clock.findMany({ where: { campaignId } }),
-    prisma.timelineEvent.findMany({
-      where: { campaignId },
-      orderBy: { turnNumber: 'desc' },
-      take: 20
-    })
-  ])
-
-  return {
-    campaign,
-    worldMeta,
-    characters,
-    npcs,
-    factions,
-    clocks: allClocks,
-    timeline: allEvents
-  }
-}
+// NOTE: there is deliberately no buildFullWorldState(campaignId).
+//
+// It was documented as "used for admin views and debugging" and had no
+// callers. A caller was looked for; wiring one in would have been a
+// security regression rather than a fix. It took a campaignId and nothing
+// else — no membership check, no role check — and returned every hidden
+// clock and GM-only timeline event unconditionally.
+//
+// The real admin view is GET /api/campaigns/[id], which loads the same set
+// and gates each relation on membership.role: an undiscovered NPC or a
+// hidden clock never reaches a non-admin's response at all. That is the
+// fog-of-war-at-the-query-layer rule this codebase enforces everywhere,
+// and this function was a way around it waiting for someone to call it.
 
 /**
  * Enhance system prompt with campaign memory instructions

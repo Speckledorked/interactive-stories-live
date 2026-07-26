@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
+import { needsIntervention, healthBand } from '@/lib/game/campaignHealthBands'
 
 export async function GET(
   request: NextRequest,
@@ -56,6 +57,10 @@ export async function GET(
         currentTurnNumber: worldMeta?.currentTurnNumber ?? null,
         issues: [],
         recommendations: [],
+        // Never assessed is not a crisis. Reported explicitly so the client
+        // has no reason to infer a verdict from a missing score.
+        needsIntervention: false,
+        band: 'fair',
       })
     }
 
@@ -66,13 +71,23 @@ export async function GET(
       : []
     const latest = history.length > 0 ? history[history.length - 1] : null
 
+    const issues = Array.isArray(latest?.issues) ? latest.issues : []
+    // The verdict is computed server-side from the SAME rule the scene
+    // resolver uses, rather than left for the client to re-derive from a
+    // score. A panel inventing its own thresholds is how the admin page
+    // came to show an amber badge on a campaign the engine considered to
+    // be in trouble.
+    const summary = { score: worldMeta.currentHealthScore, issues }
+
     return NextResponse.json({
       assessed: true,
       score: worldMeta.currentHealthScore,
       lastCheckedAt: worldMeta.lastHealthCheck,
       currentTurnNumber: worldMeta.currentTurnNumber,
-      issues: Array.isArray(latest?.issues) ? latest.issues : [],
+      issues,
       recommendations: Array.isArray(latest?.recommendations) ? latest.recommendations : [],
+      needsIntervention: needsIntervention(summary),
+      band: healthBand(summary),
     })
   } catch (error) {
     console.error('Get campaign health error:', error)

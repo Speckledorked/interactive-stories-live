@@ -2,6 +2,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { HealthBand } from '@/lib/game/campaignHealthBands'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { authenticatedFetch, setLastCampaignId } from '@/lib/clientAuth'
 import WorldStateDashboard from '@/components/admin/WorldStateDashboard'
@@ -116,6 +117,15 @@ interface Member {
   }
 }
 
+// Colour comes from the engine's band, never from thresholds re-invented
+// here. campaignHealthBands.ts is dependency-free precisely so a client
+// component can share the rule without pulling Prisma into the bundle.
+const HEALTH_BAND_COLORS: Record<HealthBand, string> = {
+  good: 'text-emerald-400',
+  fair: 'text-amber-400',
+  'needs-intervention': 'text-red-400',
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const params = useParams()
@@ -157,6 +167,12 @@ export default function AdminPage() {
     lastCheckedAt: string | null
     issues: string[]
     recommendations: string[]
+    // Computed server-side from the engine's own thresholds. This panel
+    // used to colour the score with numbers it invented locally (>= 70,
+    // >= 40), which could show amber on a campaign the engine considered
+    // to need intervention.
+    needsIntervention?: boolean
+    band?: HealthBand
   } | null>(null)
   const [worldEventsTurn, setWorldEventsTurn] = useState<number | null>(null)
   const [worldEventsLoading, setWorldEventsLoading] = useState(false)
@@ -1035,15 +1051,7 @@ export default function AdminPage() {
                     <div className="flex items-baseline justify-between gap-3 mb-2">
                       <h4 className="text-sm font-semibold text-myth-ink">Campaign health</h4>
                       {health.assessed && health.score !== null ? (
-                        <span
-                          className={`text-sm font-mono ${
-                            health.score >= 70
-                              ? 'text-emerald-400'
-                              : health.score >= 40
-                                ? 'text-amber-400'
-                                : 'text-red-400'
-                          }`}
-                        >
+                        <span className={`text-sm font-mono ${HEALTH_BAND_COLORS[health.band ?? 'fair']}`}>
                           {health.score}/100
                         </span>
                       ) : (
@@ -1056,6 +1064,11 @@ export default function AdminPage() {
                       </p>
                     ) : (
                       <>
+                        {health.needsIntervention && (
+                          <p className="text-xs text-red-400 mb-2">
+                            This campaign needs your attention.
+                          </p>
+                        )}
                         {health.issues.length === 0 ? (
                           <p className="text-xs text-myth-ink-faint">No issues flagged at the last check.</p>
                         ) : (

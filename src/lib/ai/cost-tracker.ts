@@ -118,6 +118,16 @@ export class AICostTracker {
     sceneId?: string
     /** Which call this was — "scene_resolution", "map_generation", "consequence_extraction", etc. Powers the per-type cost breakdown. */
     requestType?: string
+    /**
+     * How intact the response was (see lib/ai/validation.ts). `success`
+     * alone is not enough: a response that fell all the way through to an
+     * emergency template still returns successfully, so a campaign whose
+     * model was producing unusable output scored a perfect 100 on "AI
+     * consistency" — the metric was blind to the exact failure it exists
+     * to measure. Optional so non-scene calls (maps, embeddings) that have
+     * no degradation ladder simply don't report one.
+     */
+    validationLevel?: 'full' | 'partial' | 'emergency'
   }): Promise<void> {
     const pricing = this.getPricing()
     const cost = (params.inputTokens * pricing.inputTokenPrice) +
@@ -181,6 +191,7 @@ export class AICostTracker {
             cost,
             responseTimeMs: params.responseTimeMs,
             success: params.success,
+            validationLevel: params.validationLevel,
             cacheHit: params.cacheHit || false
           }
         ],

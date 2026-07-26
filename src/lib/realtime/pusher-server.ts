@@ -93,13 +93,13 @@ export async function triggerUserTyping(campaignId: string, userId: string, user
   });
 }
 
-// Trigger scene updates (for context in chat)
-export async function triggerSceneUpdate(campaignId: string, sceneData: any) {
-  const pusher = getPusherServer();
-  if (!pusher) return; // Pusher not configured
-
-  await pusher.trigger(`campaign-${campaignId}`, 'scene-update', sceneData);
-}
+// NOTE: there is deliberately no triggerSceneUpdate / 'scene-update' event.
+// It had no publisher and no subscriber — an orphan of an older naming
+// convention. Everything scene-related settled on `scene:verb`
+// (scene:resolving, scene:resolved, scene:ended, scene:paused,
+// scene:resumed), all of which are published from the code that actually
+// performs the action. A second, differently-named channel for the same
+// thing is how two half-wired notification paths appear.
 
 // Trigger notification update (stub function for notifications)
 export async function triggerNotificationUpdate(userId: string, notification: any) {

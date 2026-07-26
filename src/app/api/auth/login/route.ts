@@ -48,7 +48,10 @@ export async function POST(request: NextRequest) {
     // Create JWT token
     const token = createToken({
       userId: user.id,
-      email: user.email
+      email: user.email,
+      // Stamp the version this session is minted at (#98). Bumping
+      // User.tokenVersion invalidates every token carrying an older one.
+      tokenVersion: user.tokenVersion,
     })
 
     // Return token and user info

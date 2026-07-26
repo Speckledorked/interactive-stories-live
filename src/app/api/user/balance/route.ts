@@ -28,7 +28,7 @@ interface BalanceResponse {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
 
     // Get user's current balance
     const balance = await getUserBalance(user.userId)

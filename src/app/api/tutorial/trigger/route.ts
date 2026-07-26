@@ -8,7 +8,7 @@ import { TutorialService } from '@/lib/tutorial/tutorial-service'
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const { trigger, metadata } = await request.json()
 
     if (!trigger) {

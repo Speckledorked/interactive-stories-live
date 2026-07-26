@@ -20,7 +20,7 @@ interface AddFundsResponse {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const body: AddFundsRequest = await request.json()
 
     // Validate amount

@@ -39,7 +39,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     const rateLimit = await checkRateLimit(user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds)

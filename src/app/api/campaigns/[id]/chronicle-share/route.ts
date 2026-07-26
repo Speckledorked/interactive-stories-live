@@ -22,7 +22,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     if (!(await requireAdmin(user.userId, campaignId))) {
@@ -55,7 +55,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     if (!(await requireAdmin(user.userId, campaignId))) {
@@ -84,7 +84,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     if (!(await requireAdmin(user.userId, campaignId))) {

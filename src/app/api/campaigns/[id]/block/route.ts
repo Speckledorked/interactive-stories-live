@@ -14,7 +14,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     const membership = await prisma.campaignMembership.findUnique({
@@ -60,7 +60,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     const { searchParams } = new URL(request.url)
@@ -87,7 +87,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = requireAuth(request)
+    const user = await requireAuth(request)
     const campaignId = params.id
 
     const membership = await prisma.campaignMembership.findUnique({

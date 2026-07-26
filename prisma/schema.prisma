@@ -168,6 +168,18 @@ model User {
   resetToken        String?
   resetTokenExpires DateTime?
 
+  // Session revocation (#98). Tokens are stateless JWTs with a long life,
+  // so before this there was NO way to invalidate one: a leaked token
+  // stayed valid until it expired, and changing a password did nothing to
+  // sessions already open. Every token carries the version it was minted
+  // at; bumping this invalidates all of them at once.
+  //
+  // Defaulted rather than required so the migration is purely additive —
+  // existing rows get 0, and tokens minted before this existed carry no
+  // version and are accepted (see isTokenRevoked). Logging out the entire
+  // userbase to ship a security improvement would be its own outage.
+  tokenVersion Int @default(0)
+
   // Phase 9: Online status
   lastSeenAt DateTime?
   isOnline   Boolean   @default(false)

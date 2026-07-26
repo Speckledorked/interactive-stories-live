@@ -29,6 +29,15 @@ export function getJwtSecret(): string {
 export interface TokenPayload {
   userId: string
   email: string
+  /**
+   * The User.tokenVersion this token was minted at (#98).
+   *
+   * Optional because tokens issued before session revocation existed do not
+   * carry one, and those must keep working — shipping a security
+   * improvement by logging out the entire userbase is its own outage. See
+   * isTokenRevoked for how an absent version is treated.
+   */
+  tokenVersion?: number
 }
 
 /**
@@ -43,9 +52,11 @@ export function createToken(payload: TokenPayload): string {
 }
 
 /**
- * Verify and decode a JWT token
- * @param token - The JWT token to verify
- * @returns Decoded payload or null if invalid
+ * Verify and decode a JWT token.
+ *
+ * Signature and expiry only — deliberately synchronous and DB-free, so it
+ * stays usable anywhere. Revocation is a separate, asynchronous question:
+ * see isTokenRevoked, which the request-level helpers below apply.
  */
 export function verifyToken(token: string): TokenPayload | null {
   try {
@@ -53,6 +64,62 @@ export function verifyToken(token: string): TokenPayload | null {
   } catch (error) {
     return null
   }
+}
+
+/**
+ * Has this token been revoked since it was issued? (#98)
+ *
+ * A JWT is stateless, which is why it needed no database — and also why a
+ * leaked one was valid for its full 30 days with no way to cut it off. This
+ * is the one database read that buys revocation back, keyed on the user's
+ * primary key.
+ *
+ * **Fails open on a read failure, and on a token with no version.** That is
+ * a deliberate trade, not an oversight:
+ *
+ *  - A token minted before this existed has no version. Rejecting those
+ *    would log out every current session on deploy.
+ *  - A database blip must not sign the whole userbase out. The request was
+ *    going to fail anyway if the DB is down — every route needs it — so
+ *    failing closed here buys no real safety and costs a much worse
+ *    outage mode.
+ *
+ * What it does guarantee is the case that matters: once a version has been
+ * bumped, every token minted before it is refused on its next request.
+ */
+export async function isTokenRevoked(payload: TokenPayload | null): Promise<boolean> {
+  if (!payload?.userId) return false
+  // Tokens predating session revocation carry no version.
+  if (typeof payload.tokenVersion !== 'number') return false
+
+  try {
+    const { prisma } = await import('@/lib/prisma')
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { tokenVersion: true },
+    })
+    // An unreadable or absent user is not positive evidence of revocation.
+    if (!user || typeof user.tokenVersion !== 'number') return false
+    return user.tokenVersion !== payload.tokenVersion
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Invalidate every token this user currently holds.
+ *
+ * The endpoint behind "log out everywhere", and what a password reset
+ * should call — a reset that leaves stolen sessions alive is not a reset.
+ */
+export async function revokeAllSessions(userId: string): Promise<number> {
+  const { prisma } = await import('@/lib/prisma')
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { tokenVersion: { increment: 1 } },
+    select: { tokenVersion: true },
+  })
+  return user.tokenVersion
 }
 
 /**
@@ -75,10 +142,10 @@ export function getUserFromRequest(request: NextRequest): TokenPayload | null {
  * Middleware helper to require authentication
  * Throws an error if user is not authenticated
  */
-export function requireAuth(request: NextRequest): TokenPayload {
+export async function requireAuth(request: NextRequest): Promise<TokenPayload> {
   const user = getUserFromRequest(request)
 
-  if (!user) {
+  if (!user || (await isTokenRevoked(user))) {
     throw new Error('Unauthorized')
   }
 
@@ -93,7 +160,8 @@ export function requireAuth(request: NextRequest): TokenPayload {
 export async function getUser(request?: NextRequest): Promise<TokenPayload | null> {
   // If an explicit NextRequest is passed (API routes), use it
   if (request) {
-    return getUserFromRequest(request)
+    const user = getUserFromRequest(request)
+    return (await isTokenRevoked(user)) ? null : user
   }
 
   // Fallback: read from Next.js request headers in server components/actions
@@ -105,7 +173,8 @@ export async function getUser(request?: NextRequest): Promise<TokenPayload | nul
     }
 
     const token = authHeader.substring(7)
-    return verifyToken(token)
+    const user = verifyToken(token)
+    return (await isTokenRevoked(user)) ? null : user
   } catch {
     return null
   }
@@ -116,5 +185,6 @@ export async function getUser(request?: NextRequest): Promise<TokenPayload | nul
  * Used by API routes that need auth but want to handle unauthorized state themselves
  */
 export async function verifyAuth(request: NextRequest): Promise<TokenPayload | null> {
-  return getUserFromRequest(request)
+  const user = getUserFromRequest(request)
+  return (await isTokenRevoked(user)) ? null : user
 }

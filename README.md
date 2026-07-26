@@ -234,6 +234,17 @@ A realtime pipeline built end to end and connected at *neither* end: `triggerNot
 - **The `-999` sentinel is not rendered.** `getHarmStatus` uses it to mean "cannot act" rather than as a modifier, so the component shows the prose description instead — printing it raw would be nonsense on a character sheet.
 - **This repo's first component test**, and it needed `@vitejs/plugin-react` in the Vitest config to exist at all: without it Vitest hands raw JSX to the parser and a `.test.tsx` file fails to load, which is why `@testing-library/react` was installed with nothing using it. The load-bearing case asserts the component agrees with `getHarmStatus` at every point on the track, so moving a band in the engine fails a test instead of silently desyncing the UI.
 
+**`Character.conditions` has one parse boundary now — and it was silently eating recovery time:**
+
+`HarmState`, `createDefaultHarmState` and `validateHarmState` described the contents of that column and had no callers, so nothing ever forced the description to meet the data. It didn't: the interface carried `currentHarm` (which lives in its own `Character.harm` column and has never been in the blob) and typed `permanentInjuries` as `string[]` where every writer puts objects. `validateHarmState` would have returned false for **every real row in the database** — harmless only because nothing called it.
+
+Meanwhile the blob was parsed ad hoc at six sites, once per field, each independently responsible for remembering the column is nullable and which fields live in it. That cost something real:
+
+- **Fixed: any harm event wiped a character's accrued recovery time.** The three write sites in the pc_changes applier rebuilt the blob from exactly `{conditions, permanentInjuries, deathSaves}` — so `restHours`, added later for natural recovery, was reset to zero whenever someone took a scratch. Days of mending, gone, with no symptom beyond "healing feels broken." Writes now go out as a complete `HarmState`.
+- **`parseHarmState` is the single read boundary**, and it degrades field by field rather than all-or-nothing: a corrupt `deathSaves` costs the death saves, not a character's whole condition list. It also rejects null/undefined *before* coercion, since `Number(null)` is `0` and finite.
+- **Parse repairs, validate reports.** Production reads through `parseHarmState`, so it has to be forgiving; `validateHarmState` stays strict and answers whether a repair *was* needed. A test asserts the two agree — anything parse returns, validate accepts.
+- **Unknown keys are still dropped, deliberately.** The way a new field stays safe is by being in `HarmState`, not by the blob accumulating whatever anyone happened to write.
+
 **The manual world-turn trigger is removed, on purpose:**
 
 `manualWorldTurn` and `getWorldTurnSummary` were exported with no callers anywhere — a host-facing "advance the world now" surface built and never connected. Removed rather than wired up, which is the opposite of the usual call here and the reasoning is worth keeping:

@@ -69,13 +69,27 @@ export interface Condition {
 }
 
 /**
- * Full harm state for a character
+ * The persisted contents of `Character.conditions`.
+ *
+ * This interface used to describe a shape nothing anywhere stored: it
+ * carried `currentHarm`, which lives in its own `Character.harm` column
+ * and has never been in this blob, and typed `permanentInjuries` as
+ * `string[]` where every writer puts `PermanentInjury` objects. Both of
+ * its helpers were unreferenced, so nothing ever forced the description to
+ * meet the data — and `validateHarmState` would in fact have rejected
+ * every real row in the database.
+ *
+ * Harm itself is deliberately NOT here. It is a column so it can be
+ * queried (`harm: { gt: 0, lt: 6 }` selects who is mending), and
+ * duplicating it into the blob would create two sources of truth for the
+ * one number the whole system turns on.
  */
 export interface HarmState {
-  currentHarm: HarmLevel
   conditions: Condition[]
-  deathSaves?: number // For death spiral mechanics
-  permanentInjuries?: string[]
+  deathSaves: number // For death spiral mechanics
+  permanentInjuries: PermanentInjury[]
+  /** Carried in-game hours toward the next point of natural recovery. */
+  restHours: number
 }
 
 /**
@@ -259,11 +273,46 @@ export function canAct(harm: HarmLevel, conditions: Condition[]): boolean {
  */
 export function createDefaultHarmState(): HarmState {
   return {
-    currentHarm: 0,
     conditions: [],
     deathSaves: 0,
-    permanentInjuries: []
+    permanentInjuries: [],
+    restHours: 0
   }
+}
+
+/**
+ * Read `Character.conditions` into a whole HarmState.
+ *
+ * The single parse boundary for that blob. It was being reimplemented at
+ * every read site as `(character.conditions as any)?.conditions || []`,
+ * once per field, in six files — each one independently responsible for
+ * remembering that the column is nullable, that it might hold a scalar or
+ * an array, and which fields live in it. `restHours` is the proof that
+ * costs something: it was added for natural recovery and only two of those
+ * sites know it exists.
+ *
+ * Degrades field by field rather than all-or-nothing. A blob with good
+ * conditions and a corrupt deathSaves should cost the death saves, not a
+ * character's whole condition list — the same degradation ladder the AI
+ * schemas use.
+ */
+export function parseHarmState(value: unknown): HarmState {
+  const state = createDefaultHarmState()
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return state
+
+  const raw = value as Record<string, unknown>
+  if (Array.isArray(raw.conditions)) state.conditions = raw.conditions as Condition[]
+  if (Array.isArray(raw.permanentInjuries)) {
+    state.permanentInjuries = raw.permanentInjuries as PermanentInjury[]
+  }
+
+  const deathSaves = Number(raw.deathSaves)
+  if (Number.isFinite(deathSaves) && deathSaves >= 0) state.deathSaves = deathSaves
+
+  const restHours = Number(raw.restHours)
+  if (Number.isFinite(restHours) && restHours >= 0) state.restHours = restHours
+
+  return state
 }
 
 /**
@@ -577,19 +626,27 @@ export function makeDeathSave(
 }
 
 /**
- * Validate harm state
+ * Is this blob already a well-formed HarmState?
+ *
+ * Strict where parseHarmState is forgiving, and that split is the point:
+ * parse is what production reads through, so it repairs; this reports
+ * whether a repair was needed. Used to log blobs that came back malformed
+ * rather than fixing them in silence forever.
+ *
+ * It previously required a `currentHarm` between 0 and 6, a field this
+ * blob has never held — so it returned false for every row ever written.
+ * Nothing called it, so nothing noticed.
  */
-export function validateHarmState(state: any): state is HarmState {
-  if (!state || typeof state !== 'object') {
+export function validateHarmState(state: unknown): state is HarmState {
+  if (!state || typeof state !== 'object' || Array.isArray(state)) return false
+
+  const raw = state as Record<string, unknown>
+  if (!Array.isArray(raw.conditions)) return false
+  if (!Array.isArray(raw.permanentInjuries)) return false
+  if (typeof raw.deathSaves !== 'number' || !Number.isFinite(raw.deathSaves) || raw.deathSaves < 0) {
     return false
   }
-
-  const harm = state.currentHarm
-  if (typeof harm !== 'number' || harm < 0 || harm > 6) {
-    return false
-  }
-
-  if (!Array.isArray(state.conditions)) {
+  if (typeof raw.restHours !== 'number' || !Number.isFinite(raw.restHours) || raw.restHours < 0) {
     return false
   }
 

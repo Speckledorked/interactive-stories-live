@@ -26,6 +26,7 @@ import {
   applyRest,
   performHeroicSacrifice,
   isDying,
+  parseHarmState,
   Condition,
   HarmLevel,
   PermanentInjury
@@ -158,9 +159,20 @@ export async function applyCharacterChanges(
     // Process harm and conditions
     const previousHarm = (character.harm as number) || 0
     let currentHarm = previousHarm
-    let currentConditions: Condition[] = (character.conditions as any)?.conditions || []
-    let permanentInjuries: PermanentInjury[] = (character.conditions as any)?.permanentInjuries || []
-    let deathSaves: number = (character.conditions as any)?.deathSaves || 0
+    // Read the whole blob once, and keep it. The three write sites below
+    // used to rebuild `conditions` from exactly these three named fields,
+    // which silently DROPPED anything else living in there — restHours,
+    // added for natural recovery, was being reset to zero by every harm
+    // event, so a character who took a scratch lost days of mending.
+    // Spreading the parsed state writes a COMPLETE HarmState every time,
+    // so a field this function has no opinion about survives it. (Unknown
+    // keys are still dropped — parseHarmState is typed on purpose. The way
+    // a new field stays safe is by being in HarmState, not by the blob
+    // accumulating whatever anyone happened to write.)
+    const harmState = parseHarmState(character.conditions)
+    let currentConditions: Condition[] = harmState.conditions
+    let permanentInjuries: PermanentInjury[] = harmState.permanentInjuries
+    let deathSaves: number = harmState.deathSaves
     let newIsAlive: boolean | undefined
     let harmMessages: string[] = []
 
@@ -405,6 +417,7 @@ export async function applyCharacterChanges(
     if (harmMessages.length > 0) {
       updateData.harm = currentHarm
       updateData.conditions = {
+        ...harmState,
         conditions: currentConditions,
         permanentInjuries,
         deathSaves
@@ -641,7 +654,7 @@ export async function applyCharacterChanges(
               currentHarm = healResult.newHarm
               harmMessages.push(`${character.name} uses ${removedItem.name}: ${healResult.message}`)
               updateData.harm = currentHarm
-              updateData.conditions = { conditions: currentConditions, permanentInjuries, deathSaves }
+              updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves }
             }
           }
         }
@@ -662,7 +675,7 @@ export async function applyCharacterChanges(
                 currentHarm = healResult.newHarm
                 harmMessages.push(`${character.name} uses ${Math.abs(modify.quantity_delta)}x ${item.name}: ${healResult.message}`)
                 updateData.harm = currentHarm
-                updateData.conditions = { conditions: currentConditions, permanentInjuries, deathSaves }
+                updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves }
               }
             }
 

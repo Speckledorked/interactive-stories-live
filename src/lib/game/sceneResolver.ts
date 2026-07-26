@@ -10,7 +10,7 @@ import { SceneStatus } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
 import { ExchangeManager } from './exchange-manager' // Phase 16
 import PusherServer from '@/lib/realtime/pusher-server' // For real-time updates
-import { recurringHarmForScene, applyRecurringHarm, accrueNaturalRecovery, type Condition } from './harm'
+import { recurringHarmForScene, applyRecurringHarm, accrueNaturalRecovery, parseHarmState } from './harm'
 import {
   computeOrganicGrowth,
   applyOrganicGrowth,
@@ -683,7 +683,7 @@ async function applyRecurringConditionHarm(
   })
 
   for (const character of characters) {
-    const conditions = ((character.conditions as any)?.conditions || []) as Condition[]
+    const conditions = parseHarmState(character.conditions).conditions
     const recurring = recurringHarmForScene(conditions)
     if (recurring <= 0) continue
 
@@ -1422,21 +1422,20 @@ async function applyNaturalRecovery(campaignId: string, hoursElapsed: number): P
   })
 
   for (const character of characters) {
-    const state = (character.conditions as any) || {}
-    const conditions = (state.conditions || []) as Condition[]
+    const state = parseHarmState(character.conditions)
 
     const result = accrueNaturalRecovery({
       harm: character.harm,
-      restHours: state.restHours || 0,
+      restHours: state.restHours,
       hoursElapsed,
-      conditions,
+      conditions: state.conditions,
     })
 
     // Always persist the carried hours, even when nothing healed yet —
     // dropping the remainder is how "a few hours at a time" would add up
     // to never.
     const data: Record<string, unknown> = {
-      conditions: { ...state, conditions, restHours: result.restHours },
+      conditions: { ...state, restHours: result.restHours },
     }
     if (result.healed > 0) {
       data.harm = result.newHarm

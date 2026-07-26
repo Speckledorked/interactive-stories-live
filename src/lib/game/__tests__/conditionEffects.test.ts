@@ -12,6 +12,9 @@ import { describe, it, expect } from 'vitest'
 import {
   accrueNaturalRecovery,
   applyRest,
+  parseHarmState,
+  createDefaultHarmState,
+  validateHarmState,
   blocksNaturalRecovery,
   HOURS_PER_HARM_RECOVERED,
   stabilizeCharacter,
@@ -387,5 +390,85 @@ describe('applyRest — the fiction half of recovery', () => {
     const bestRest = 4 - applyRest(4, 'excellent').newHarm
     expect(bestRest).toBeLessThan(3)  // expert + supplies heals 3
     expect(bestRest).toBeGreaterThan(0)
+  })
+})
+
+describe('parseHarmState — the one place Character.conditions is read', () => {
+  // This blob was parsed ad hoc at six sites, once per field, each one
+  // independently responsible for remembering the column is nullable and
+  // which fields live in it. restHours is what that cost: added for
+  // natural recovery, and only two of the six knew it existed.
+
+  it('reads every field of a well-formed blob', () => {
+    expect(parseHarmState({
+      conditions: [{ name: 'Bleeding' }],
+      permanentInjuries: [{ name: 'Bad Leg' }],
+      deathSaves: 2,
+      restHours: 13,
+    })).toEqual({
+      conditions: [{ name: 'Bleeding' }],
+      permanentInjuries: [{ name: 'Bad Leg' }],
+      deathSaves: 2,
+      restHours: 13,
+    })
+  })
+
+  it('gives a complete default state for a character who has never been hurt', () => {
+    // The nullable column, which is most rows.
+    expect(parseHarmState(null)).toEqual(createDefaultHarmState())
+    expect(parseHarmState(undefined)).toEqual(createDefaultHarmState())
+  })
+
+  it('survives the shapes a JSON column can actually hold', () => {
+    for (const junk of ['nope', 42, [], true]) {
+      expect(parseHarmState(junk), String(junk)).toEqual(createDefaultHarmState())
+    }
+  })
+
+  it('degrades field by field rather than all-or-nothing', () => {
+    // A corrupt deathSaves should cost the death saves, not a character's
+    // entire condition list.
+    const state = parseHarmState({
+      conditions: [{ name: 'Stunned' }],
+      deathSaves: 'two',
+      restHours: -5,
+      permanentInjuries: 'none',
+    })
+    expect(state.conditions).toEqual([{ name: 'Stunned' }])
+    expect(state.deathSaves).toBe(0)
+    expect(state.restHours).toBe(0)
+    expect(state.permanentInjuries).toEqual([])
+  })
+
+  it('does not read a zero out of a missing field', () => {
+    // Number(null) is 0 and finite — the coercion trap that has to be
+    // rejected before it happens, not after.
+    expect(parseHarmState({ deathSaves: null, restHours: null }))
+      .toEqual(createDefaultHarmState())
+  })
+})
+
+describe('validateHarmState', () => {
+  it('accepts a state this codebase actually persists', () => {
+    // It used to require a currentHarm between 0 and 6 — a field this blob
+    // has never held, since harm is its own column. It returned false for
+    // every row ever written, and nothing called it, so nothing noticed.
+    expect(validateHarmState(createDefaultHarmState())).toBe(true)
+    expect(validateHarmState(parseHarmState({ conditions: [], deathSaves: 1, restHours: 4, permanentInjuries: [] }))).toBe(true)
+  })
+
+  it('rejects the malformed blobs parseHarmState repairs', () => {
+    // The split is deliberate: parse repairs because production reads
+    // through it; validate reports whether a repair was needed.
+    expect(validateHarmState(null)).toBe(false)
+    expect(validateHarmState({ conditions: [] })).toBe(false)
+    expect(validateHarmState({ conditions: 'x', deathSaves: 0, restHours: 0, permanentInjuries: [] })).toBe(false)
+    expect(validateHarmState({ conditions: [], deathSaves: -1, restHours: 0, permanentInjuries: [] })).toBe(false)
+  })
+
+  it('agrees with parseHarmState: anything parsed is valid', () => {
+    for (const junk of [null, 'x', 42, [], { conditions: 'no' }, { deathSaves: NaN }]) {
+      expect(validateHarmState(parseHarmState(junk)), String(junk)).toBe(true)
+    }
   })
 })

@@ -161,6 +161,40 @@ describe('applyCharacterChanges — harm and conditions', () => {
     expect(tx.character.update.mock.calls[0][0].data.harm).toBe(2)
   })
 
+  it('does not wipe accrued recovery time when writing harm', async () => {
+    // A real data-loss bug. The three write sites rebuilt the conditions
+    // blob from exactly {conditions, permanentInjuries, deathSaves}, so
+    // restHours — added later for natural recovery — was reset to zero by
+    // any harm event. A character who took a scratch lost days of mending,
+    // silently, and the only symptom would be "healing feels broken".
+    const roster = [character({
+      harm: 2,
+      conditions: { conditions: [], permanentInjuries: [], deathSaves: 0, restHours: 18 },
+    })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
+    ], roster, noTheme, true)
+
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.conditions.restHours).toBe(18)
+  })
+
+  it('writes a complete harm state, so no field is left undefined', async () => {
+    // The structural half of the same fix: every write goes out as a whole
+    // HarmState. A field that exists in the type but not in the write is
+    // exactly how restHours got lost, so all four are asserted present
+    // rather than only the one that broke.
+    const roster = [character({ harm: 1 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
+    ], roster, noTheme, true)
+
+    const blob = tx.character.update.mock.calls[0][0].data.conditions
+    expect(Object.keys(blob).sort()).toEqual(
+      ['conditions', 'deathSaves', 'permanentInjuries', 'restHours']
+    )
+  })
+
   it('adds a structured condition', async () => {
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 1, [

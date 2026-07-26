@@ -51,6 +51,12 @@ export async function triggerNewMessage(message: RealtimeMessage) {
 }
 
 // Trigger note updates to campaign channel
+//
+// The visibility check is the security boundary, not a filter: this goes to
+// the whole campaign channel, so a PRIVATE note must never be published
+// here. A note leaving SHARED is announced by passing its OLD visibility
+// with action 'deleted' — otherwise nothing would be broadcast and every
+// other player's panel would keep showing a note they can no longer read.
 export async function triggerNoteUpdate(noteUpdate: RealtimeNoteUpdate) {
   const pusher = getPusherServer();
   if (!pusher) return; // Pusher not configured
@@ -59,6 +65,19 @@ export async function triggerNoteUpdate(noteUpdate: RealtimeNoteUpdate) {
   if (noteUpdate.visibility === 'SHARED' || noteUpdate.visibility === 'GM') {
     await pusher.trigger(`campaign-${noteUpdate.campaignId}`, 'note-update', noteUpdate);
   }
+}
+
+/**
+ * Fire-and-forget wrapper for note broadcasts.
+ *
+ * A note write must not fail because realtime is down or unconfigured —
+ * same contract notifyNoteShared already follows on these routes. The
+ * caller gets its 200 either way; the worst case is a player refreshing.
+ */
+export function broadcastNoteUpdate(noteUpdate: RealtimeNoteUpdate): void {
+  triggerNoteUpdate(noteUpdate).catch(err =>
+    console.error('Failed to broadcast note update:', err)
+  );
 }
 
 // Trigger user typing indicator

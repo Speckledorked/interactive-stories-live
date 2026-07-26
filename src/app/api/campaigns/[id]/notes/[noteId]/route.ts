@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
 import { notifyNoteShared } from '@/lib/notifications/noteShared';
+import { broadcastNoteUpdate } from '@/lib/realtime/pusher-server';
 
 // GET /api/campaigns/[id]/notes/[noteId] - Get specific note
 export async function GET(
@@ -196,6 +197,30 @@ export async function PUT(
       notifyNoteShared(params.id, user.userId, authorLabel, updatedNote.title);
     }
 
+    // A note going private is a RETRACTION, and it has to be announced or
+    // every other player's panel keeps rendering something they no longer
+    // have access to. Broadcast it under its old visibility — that's what
+    // gets it past triggerNoteUpdate's guard — with the content stripped,
+    // since the point is to take it back rather than send it one last time.
+    const wentPrivate =
+      existingNote.visibility !== 'PRIVATE' && updatedNote.visibility === 'PRIVATE';
+
+    broadcastNoteUpdate({
+      id: updatedNote.id,
+      title: wentPrivate ? '' : updatedNote.title,
+      content: wentPrivate ? '' : updatedNote.content,
+      visibility: (wentPrivate ? existingNote.visibility : updatedNote.visibility) as
+        'PRIVATE' | 'GM' | 'SHARED',
+      authorId: updatedNote.authorId,
+      campaignId: params.id,
+      action: wentPrivate ? 'deleted' : 'updated',
+      author: {
+        id: updatedNote.author.id,
+        email: updatedNote.author.email,
+        name: updatedNote.author.name ?? undefined,
+      },
+    });
+
     return NextResponse.json(updatedNote);
 
   } catch (error) {
@@ -230,6 +255,20 @@ export async function DELETE(
 
     await prisma.playerNote.delete({
       where: { id: params.noteId },
+    });
+
+    // Same retraction as SHARED -> PRIVATE above: title and content are
+    // omitted because the event exists to remove the note from other
+    // panels, not to deliver it once more on the way out.
+    broadcastNoteUpdate({
+      id: existingNote.id,
+      title: '',
+      content: '',
+      visibility: existingNote.visibility as 'PRIVATE' | 'GM' | 'SHARED',
+      authorId: existingNote.authorId,
+      campaignId: params.id,
+      action: 'deleted',
+      author: { id: existingNote.authorId, email: '' },
     });
 
     return NextResponse.json({ message: 'Note deleted successfully' });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { MapService } from '@/lib/maps/map-service'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 // GET /api/campaigns/[id]/maps/active - Get the currently active map
 export async function GET(
@@ -22,12 +23,7 @@ export async function GET(
     const campaignId = params.id
 
     // Verify user is a member of the campaign
-    const membership = await prisma.campaignMembership.findFirst({
-      where: {
-        campaignId,
-        userId: user.userId
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })

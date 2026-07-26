@@ -15,7 +15,7 @@ import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    campaignMembership: { findFirst: vi.fn() },
+    campaignMembership: { findFirst: vi.fn(), findUnique: vi.fn() },
     playerNote: {
       create: vi.fn(),
       findFirst: vi.fn(),
@@ -63,6 +63,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   ;(verifyAuth as any).mockResolvedValue({ userId: 'user1', email: author.email })
   db.campaignMembership.findFirst.mockResolvedValue({ id: 'mem1' })
+  db.campaignMembership.findUnique.mockResolvedValue({ id: 'mem1' })
 })
 
 describe('POST /notes — broadcast on create', () => {
@@ -172,6 +173,7 @@ describe('DELETE /notes/[id] — broadcast on delete', () => {
 describe('authorization still gates the broadcast', () => {
   it('publishes nothing for a non-member', async () => {
     db.campaignMembership.findFirst.mockResolvedValue(null)
+    db.campaignMembership.findUnique.mockResolvedValue(null)
 
     await POST(req('POST', { title: 'x', content: 'y', visibility: 'SHARED' }), { params: { id: 'camp1' } })
 

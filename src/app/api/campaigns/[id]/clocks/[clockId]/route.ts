@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { pusherServer } from '@/lib/pusher'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function PATCH(
   request: NextRequest,
@@ -18,14 +19,7 @@ export async function PATCH(
     const body = await request.json()
 
     // Check if user is admin
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(
@@ -90,14 +84,7 @@ export async function POST(
     const { action } = await request.json() // action: 'tick' or 'untick'
 
     // Check if user is admin
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(

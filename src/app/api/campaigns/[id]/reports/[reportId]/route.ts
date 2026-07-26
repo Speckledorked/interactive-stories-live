@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
 import { SafetyService } from '@/lib/safety/safety-service'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function PATCH(
   request: NextRequest,
@@ -15,9 +16,7 @@ export async function PATCH(
     const user = await requireAuth(request)
     const campaignId = params.id
 
-    const membership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: user.userId, campaignId } },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
     if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json({ error: 'Only admins can act on reports' }, { status: 403 })
     }

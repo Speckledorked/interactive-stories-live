@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function GET(
   request: NextRequest,
@@ -28,9 +29,7 @@ export async function GET(
 
     const campaignId = params.id
 
-    const membership = await prisma.campaignMembership.findFirst({
-      where: { campaignId, userId: user.userId }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })

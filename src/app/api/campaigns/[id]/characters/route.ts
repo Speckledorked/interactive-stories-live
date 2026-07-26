@@ -9,6 +9,7 @@ import { recordEvent } from '@/lib/analytics/events'
 import { getTemplate } from '@/lib/templates/campaign-templates'
 import { OriginFamiliarity } from '@prisma/client'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 interface CreateCharacterBody {
   name: string
@@ -96,14 +97,7 @@ export async function POST(
       }
     }
 
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json(
@@ -352,14 +346,7 @@ export async function GET(
 
     const campaignId = params.id
 
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json(

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { getAppUrl } from '@/lib/appUrl'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function POST(
   request: NextRequest,
@@ -18,14 +19,7 @@ export async function POST(
     const body = await request.json()
 
     // Check if user is admin
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(
@@ -79,14 +73,7 @@ export async function GET(
     const campaignId = params.id
 
     // Check if user is admin
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(

@@ -4,9 +4,9 @@
 // defaults forever, invisible to the GM who might believe they'd configured it.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { SafetyService } from '@/lib/safety/safety-service'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function GET(
   request: NextRequest,
@@ -19,9 +19,7 @@ export async function GET(
     }
 
     const campaignId = params.id
-    const membership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: user.userId, campaignId } },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
@@ -46,9 +44,7 @@ export async function PATCH(
     }
 
     const campaignId = params.id
-    const membership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: user.userId, campaignId } },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Only campaign admins can change safety settings' }, { status: 403 })

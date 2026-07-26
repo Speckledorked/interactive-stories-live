@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
 import { notifyNoteShared } from '@/lib/notifications/noteShared';
 import { broadcastNoteUpdate } from '@/lib/realtime/pusher-server';
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 // GET /api/campaigns/[id]/notes/[noteId] - Get specific note
 export async function GET(
@@ -18,12 +19,7 @@ export async function GET(
     }
 
     // Verify user is member of campaign
-    const membership = await prisma.campaignMembership.findFirst({
-      where: {
-        userId: user.userId,
-        campaignId: params.id,
-      },
-    });
+    const membership = await getCampaignMembership(user.userId, params.id);
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 });

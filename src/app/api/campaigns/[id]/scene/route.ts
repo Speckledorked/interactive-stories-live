@@ -12,6 +12,7 @@ import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/li
 import { moderatePlayerText } from '@/lib/ai/moderation'
 import { recordEvent } from '@/lib/analytics/events'
 import { canAct, parseHarmState, HarmLevel } from '@/lib/game/harm'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 // POST can trigger a full scene resolution (AI GM call + world tick) inline
 // before responding. 60s is the Vercel Hobby-tier ceiling — safe on every
@@ -30,14 +31,7 @@ export async function GET(
     const campaignId = params.id
 
     // Check membership
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
-        }
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json<ErrorResponse>(

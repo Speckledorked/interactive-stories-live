@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CampaignExporter } from '@/lib/export/campaign-exporter';
 import { verifyAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 /**
  * GET /api/campaigns/[id]/export
@@ -20,14 +21,7 @@ export async function GET(
     const { id: campaignId } = params;
 
     // Verify user has access to this campaign
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    });
+    const membership = await getCampaignMembership(user.userId, campaignId);
 
     if (!membership) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

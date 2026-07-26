@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { buildAwayRecap } from '@/lib/game/awayRecap'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function GET(
   request: NextRequest,
@@ -21,9 +22,7 @@ export async function GET(
 
     const campaignId = params.id
 
-    const membership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: user.userId, campaignId } },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })

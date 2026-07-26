@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
 import { triggerNewMessage } from '@/lib/realtime/pusher-server';
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 // GET /api/campaigns/[id]/messages - Get messages for campaign
 export async function GET(
@@ -23,12 +24,7 @@ export async function GET(
     const offset = parseInt(searchParams.get('offset') || '0');
 
     // Verify user is member of campaign
-    const membership = await prisma.campaignMembership.findFirst({
-      where: {
-        userId: user.userId,
-        campaignId: params.id,
-      },
-    });
+    const membership = await getCampaignMembership(user.userId, params.id);
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 });
@@ -108,12 +104,7 @@ export async function POST(
     }
 
     // Verify user is member of campaign
-    const membership = await prisma.campaignMembership.findFirst({
-      where: {
-        userId: user.userId,
-        campaignId: params.id,
-      },
-    });
+    const membership = await getCampaignMembership(user.userId, params.id);
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 });
@@ -121,12 +112,7 @@ export async function POST(
 
     // If whisper, validate target user is in campaign
     if (type === 'WHISPER' && targetUserId) {
-      const targetMembership = await prisma.campaignMembership.findFirst({
-        where: {
-          userId: targetUserId,
-          campaignId: params.id,
-        },
-      });
+      const targetMembership = await getCampaignMembership(targetUserId, params.id);
 
       if (!targetMembership) {
         return NextResponse.json({ error: 'Target user is not in this campaign' }, { status: 400 });

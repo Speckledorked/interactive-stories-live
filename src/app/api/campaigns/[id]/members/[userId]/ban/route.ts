@@ -5,9 +5,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
 import { SafetyService } from '@/lib/safety/safety-service'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function POST(
   request: NextRequest,
@@ -22,16 +22,12 @@ export async function POST(
       return NextResponse.json({ error: 'You cannot ban yourself' }, { status: 400 })
     }
 
-    const adminMembership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: user.userId, campaignId } },
-    })
+    const adminMembership = await getCampaignMembership(user.userId, campaignId)
     if (!adminMembership || adminMembership.role !== UserRole.ADMIN) {
       return NextResponse.json({ error: 'Only admins can ban members' }, { status: 403 })
     }
 
-    const targetMembership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: targetUserId, campaignId } },
-    })
+    const targetMembership = await getCampaignMembership(targetUserId, campaignId)
     if (!targetMembership) {
       return NextResponse.json({ error: 'User is not a member of this campaign' }, { status: 404 })
     }
@@ -74,9 +70,7 @@ export async function DELETE(
     const user = await requireAuth(request)
     const campaignId = params.id
 
-    const adminMembership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: user.userId, campaignId } },
-    })
+    const adminMembership = await getCampaignMembership(user.userId, campaignId)
     if (!adminMembership || adminMembership.role !== UserRole.ADMIN) {
       return NextResponse.json({ error: 'Only admins can unban members' }, { status: 403 })
     }

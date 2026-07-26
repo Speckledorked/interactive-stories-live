@@ -14,6 +14,7 @@ import { generateNewSceneIntro } from '@/lib/ai/worldState'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import PusherServer from '@/lib/realtime/pusher-server'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function POST(
   request: NextRequest,
@@ -31,14 +32,7 @@ export async function POST(
       return rateLimitExceededResponse(rateLimit)
     }
 
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
-        }
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json<ErrorResponse>(

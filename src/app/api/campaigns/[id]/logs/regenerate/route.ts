@@ -29,6 +29,7 @@ import { prisma } from '@/lib/prisma'
 import { summarizeSceneForLog } from '@/lib/ai/worldState'
 import { planLogConsolidation } from '@/lib/game/storyLogConsolidation'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export const maxDuration = 60
 
@@ -47,14 +48,7 @@ export async function POST(
       return rateLimitExceededResponse(rateLimit)
     }
 
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
-        }
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json<ErrorResponse>(

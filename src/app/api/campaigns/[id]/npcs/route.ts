@@ -5,6 +5,7 @@ import { visibleTo, isCampaignAdmin } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 // GET /api/campaigns/:id/npcs - List all NPCs for a campaign
 export async function GET(
@@ -20,14 +21,7 @@ export async function GET(
     const campaignId = params.id
 
     // Check if user is a member
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json(
@@ -70,14 +64,7 @@ export async function POST(
     const body = await request.json()
 
     // Check if user is admin
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import PusherServer from '@/lib/realtime/pusher-server'
 import { SceneStatus, Prisma } from '@prisma/client'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function POST(
   request: NextRequest,
@@ -18,14 +19,7 @@ export async function POST(
     const sceneId = params.sceneId
 
     // Check if user is an admin
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
-        }
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(

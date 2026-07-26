@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { LORE_IMPORT_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { kickLoreImportJob, recoverStaleLoreJobs } from '@/lib/lore/loreQueue'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 const MAX_PASTE_CHARS = 200_000
 
@@ -15,9 +16,7 @@ async function requireAdmin(request: NextRequest, campaignId: string) {
   const user = await getUser(request)
   if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) } as const
 
-  const membership = await prisma.campaignMembership.findUnique({
-    where: { userId_campaignId: { userId: user.userId, campaignId } },
-  })
+  const membership = await getCampaignMembership(user.userId, campaignId)
   if (!membership || membership.role !== 'ADMIN') {
     return { error: NextResponse.json({ error: 'Only campaign admins can manage lore' }, { status: 403 }) } as const
   }

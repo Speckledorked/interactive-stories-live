@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function GET(
   request: NextRequest,
@@ -22,9 +23,7 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const turnParam = searchParams.get('turn')
 
-    const membership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: user.userId, campaignId } },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json(

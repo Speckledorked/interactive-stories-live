@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function DELETE(
   request: NextRequest,
@@ -18,9 +19,7 @@ export async function DELETE(
     }
 
     const campaignId = params.id
-    const membership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: user.userId, campaignId } },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Only campaign admins can delete lore sources' }, { status: 403 })
     }

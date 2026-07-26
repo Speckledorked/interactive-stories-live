@@ -7,9 +7,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { UserRole, ReportStatus, ReportSeverity } from '@prisma/client'
 import { SafetyService } from '@/lib/safety/safety-service'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 const VALID_CONTENT_TYPES = ['message', 'note', 'character', 'scene', 'user_behavior', 'other']
 
@@ -21,9 +21,7 @@ export async function POST(
     const user = await requireAuth(request)
     const campaignId = params.id
 
-    const membership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: user.userId, campaignId } },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
     }
@@ -68,9 +66,7 @@ export async function GET(
     const user = await requireAuth(request)
     const campaignId = params.id
 
-    const membership = await prisma.campaignMembership.findUnique({
-      where: { userId_campaignId: { userId: user.userId, campaignId } },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
     if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json({ error: 'Only admins can view reports' }, { status: 403 })
     }

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { SafetyService } from '@/lib/safety/safety-service'
 import { NotificationService } from '@/lib/notifications/notification-service'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function POST(
   request: NextRequest,
@@ -57,14 +58,7 @@ export async function POST(
     }
 
     // Check if already a member
-    const existingMembership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId: invite.campaignId,
-        },
-      },
-    })
+    const existingMembership = await getCampaignMembership(user.userId, invite.campaignId)
 
     if (existingMembership) {
       return NextResponse.json(

@@ -6,6 +6,7 @@ import { validateStats } from '@/lib/game/advancement'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 // Fields the owning player can edit directly — cosmetic/narrative only.
 // Everything mechanical (stats, harm, equipment, inventory, resources,
@@ -38,14 +39,7 @@ export async function GET(
     const { id: campaignId, characterId } = params
 
     // Check membership
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json(
@@ -108,14 +102,7 @@ export async function PATCH(
     const body = await request.json()
 
     // Check membership
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json(
@@ -249,14 +236,7 @@ export async function DELETE(
     const { id: campaignId, characterId } = params
 
     // Check membership
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json(

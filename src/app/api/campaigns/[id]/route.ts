@@ -10,6 +10,7 @@ import { ErrorResponse } from '@/types/api'
 import { UserRole } from '@prisma/client'
 import { redactGmNotes, redactGmNotesList } from '@/lib/game/visibility'
 import { isWorldSeeding } from '@/lib/lore/seedingGate'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function GET(
   request: NextRequest,
@@ -20,14 +21,7 @@ export async function GET(
     const campaignId = params.id
 
     // Check if user is a member of this campaign
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
-        }
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json<ErrorResponse>(
@@ -159,14 +153,7 @@ export async function PATCH(
     const campaignId = params.id
 
     // Check if user is an admin of this campaign
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
-        }
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json<ErrorResponse>(
@@ -231,14 +218,7 @@ export async function DELETE(
     const campaignId = params.id
 
     // Check if user is an admin of this campaign
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
-        }
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json<ErrorResponse>(

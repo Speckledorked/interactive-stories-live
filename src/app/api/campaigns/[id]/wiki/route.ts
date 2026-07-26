@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { visibleTo } from '@/lib/api/visibility'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 // Fog of war: WikiEntry rows are matched to their source entity by name, not
 // a real FK, so there's no isDiscovered column to filter on directly here.
@@ -153,12 +154,7 @@ export async function GET(
     const entryType = searchParams.get('type')
 
     // Verify user is a member of the campaign
-    const membership = await prisma.campaignMembership.findFirst({
-      where: {
-        campaignId,
-        userId: user.userId
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })

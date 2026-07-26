@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma'
 import { SceneStatus } from '@prisma/client'
 import PusherServer from '@/lib/realtime/pusher-server'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 // 60s = Vercel Hobby-tier ceiling, safe on every plan. See scene/route.ts for
 // the full rationale — this route awaits the same resolveScene() call.
@@ -42,14 +43,7 @@ export async function POST(
     // Note the billing consequence, deliberately accepted: the member who
     // ends the scene pays its metered AI bill (see the preflight/charge
     // below), so any player can be the payer, not only the admin.
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
-        }
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json<ErrorResponse>(

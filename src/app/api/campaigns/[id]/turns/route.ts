@@ -1,10 +1,10 @@
 // src/app/api/campaigns/[id]/turns/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
 import { TurnTracker } from '@/lib/notifications/turn-tracker';
 import { pusherServer } from '@/lib/pusher';
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 // GET /api/campaigns/[id]/turns - Get current turn info
 export async function GET(
@@ -25,12 +25,7 @@ export async function GET(
     }
 
     // Verify user is member of campaign
-    const membership = await prisma.campaignMembership.findFirst({
-      where: {
-        userId: user.userId,
-        campaignId: params.id,
-      },
-    });
+    const membership = await getCampaignMembership(user.userId, params.id);
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 });
@@ -69,12 +64,7 @@ export async function POST(
     }
 
     // Verify user is member of campaign
-    const membership = await prisma.campaignMembership.findFirst({
-      where: {
-        userId: user.userId,
-        campaignId: params.id,
-      },
-    });
+    const membership = await getCampaignMembership(user.userId, params.id);
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 });
@@ -164,12 +154,7 @@ export async function DELETE(
     // Any member can end turn tracking, matching who can enable it —
     // turn order is an advisory table-level convention, not a GM power
     // (there is no human GM in this product; every human is a player).
-    const membership = await prisma.campaignMembership.findFirst({
-      where: {
-        userId: user.userId,
-        campaignId: params.id,
-      },
-    });
+    const membership = await getCampaignMembership(user.userId, params.id);
 
     if (!membership) {
       return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 });

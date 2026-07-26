@@ -9,11 +9,10 @@ import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
 import crypto from 'crypto'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 async function requireAdmin(userId: string, campaignId: string) {
-  const membership = await prisma.campaignMembership.findUnique({
-    where: { userId_campaignId: { userId, campaignId } },
-  })
+  const membership = await getCampaignMembership(userId, campaignId)
   return membership?.role === UserRole.ADMIN
 }
 

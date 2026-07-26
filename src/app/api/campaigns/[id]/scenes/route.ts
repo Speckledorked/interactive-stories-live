@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 // GET /api/campaigns/[id]/scenes - Get all scenes for a campaign
 export async function GET(
@@ -12,12 +13,7 @@ export async function GET(
     const campaignId = params.id
 
     // Verify user is a member of the campaign
-    const membership = await prisma.campaignMembership.findFirst({
-      where: {
-        campaignId,
-        userId: user.userId
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json(

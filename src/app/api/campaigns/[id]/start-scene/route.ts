@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import { recordEvent } from '@/lib/analytics/events'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export async function POST(
   request: NextRequest,
@@ -37,14 +38,7 @@ export async function POST(
     // every human is a player, and story pacing (starting the next scene)
     // belongs to the whole table. The admin role is reserved for genuine
     // hosting duties (safety settings, bans, lore import, rescue tools).
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId
-        }
-      }
-    })
+    const membership = await getCampaignMembership(user.userId, campaignId)
 
     if (!membership) {
       return NextResponse.json<ErrorResponse>(

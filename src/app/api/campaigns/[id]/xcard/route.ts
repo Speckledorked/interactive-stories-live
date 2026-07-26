@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SafetyService } from '@/lib/safety/safety-service';
 import { verifyAuth } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
 import { XCardTrigger } from '@prisma/client';
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 /**
  * POST /api/campaigns/[id]/xcard
@@ -21,14 +21,7 @@ export async function POST(
     const { id: campaignId } = params;
 
     // Verify user has access
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    });
+    const membership = await getCampaignMembership(user.userId, campaignId);
 
     if (!membership) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -74,14 +67,7 @@ export async function GET(
     const { id: campaignId } = params;
 
     // Verify user is GM
-    const membership = await prisma.campaignMembership.findUnique({
-      where: {
-        userId_campaignId: {
-          userId: user.userId,
-          campaignId,
-        },
-      },
-    });
+    const membership = await getCampaignMembership(user.userId, campaignId);
 
     if (!membership || membership.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Forbidden - GM only' }, { status: 403 });

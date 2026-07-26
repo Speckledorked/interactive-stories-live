@@ -43,6 +43,7 @@ import { ensureSurgeCorruptionChanges } from './corruption'
 import { aggregateInventoryItems, describeAggregatedItem } from './itemRegistry'
 import { reportError } from '@/lib/monitoring'
 import { checkAndCreateMilestone } from './campaignMilestone'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 /**
  * Resolve a scene using the AI GM
@@ -755,14 +756,7 @@ export async function canUserResolveScene(
   userId: string,
   campaignId: string
 ): Promise<boolean> {
-  const membership = await prisma.campaignMembership.findUnique({
-    where: {
-      userId_campaignId: {
-        userId,
-        campaignId
-      }
-    }
-  })
+  const membership = await getCampaignMembership(userId, campaignId)
 
   return membership?.role === 'ADMIN'
 }

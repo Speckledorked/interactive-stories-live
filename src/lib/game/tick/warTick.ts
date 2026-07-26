@@ -51,17 +51,112 @@ const MAX_JOINERS_PER_SIDE_PER_TICK = 1 // a war spreads gradually, not all at o
 export interface WarDeclarationDecision {
   shouldDeclare: boolean
   contestedLocationId?: string
+  /**
+   * Set when the pair is still war-weary. Reported rather than swallowed so
+   * the tick log can say WHY two rivals with contested ground and standing
+   * armies did not fight — otherwise the absence looks like a bug.
+   */
+  exhaustionRemaining?: number
 }
 
 /** Pure decision function — no DB access, safe to unit test directly. */
+/** A war that has already been fought and settled, as the DB records it. */
+export interface ResolvedWar {
+  attackerFactionId: string
+  defenderFactionId: string
+  resolvedTurn: number | null
+  /** 'attacker' | 'defender' | 'stalemate' — who prevailed. */
+  outcome: string | null
+}
+
+/**
+ * How long a faction stays war-weary after a war it won or drew.
+ *
+ * Set against WAR_MAX_DURATION (10) rather than picked from nowhere: a
+ * shorter window than a war typically runs would let a pair spend most of
+ * their existence fighting, which is the symptom this fixes.
+ */
+export const WAR_EXHAUSTION_TURNS = 6
+
+/**
+ * How long the side that LOST waits. Longer, because that is the whole
+ * point of this being history rather than a flat cooldown — the OUTCOME of
+ * a past war changes a future decision, not merely the fact that one
+ * happened. A faction that was beaten does not come straight back.
+ */
+export const WAR_DEFEAT_EXHAUSTION_TURNS = 12
+
+/**
+ * Turns of war-weariness left between two factions, 0 if they are free to
+ * fight again.
+ *
+ * Pure. `prospectiveAttackerId` matters because the window depends on who
+ * lost: the loser of the last war waits roughly twice as long as the winner.
+ */
+export function warExhaustionRemaining(
+  priorWars: ResolvedWar[],
+  prospectiveAttackerId: string,
+  defenderId: string,
+  currentTurn: number
+): number {
+  if (!Array.isArray(priorWars) || priorWars.length === 0) return 0
+
+  const between = priorWars.filter(
+    (w) =>
+      typeof w?.resolvedTurn === 'number' &&
+      ((w.attackerFactionId === prospectiveAttackerId && w.defenderFactionId === defenderId) ||
+        (w.attackerFactionId === defenderId && w.defenderFactionId === prospectiveAttackerId))
+  )
+  if (between.length === 0) return 0
+
+  const latest = between.reduce((a, b) => ((b.resolvedTurn ?? 0) > (a.resolvedTurn ?? 0) ? b : a))
+  const endedTurn = latest.resolvedTurn ?? 0
+
+  // Did the faction now contemplating an attack lose that war? A stalemate
+  // has no loser, so both sides get the shorter window.
+  const attackerLost =
+    (latest.attackerFactionId === prospectiveAttackerId && latest.outcome === 'defender') ||
+    (latest.defenderFactionId === prospectiveAttackerId && latest.outcome === 'attacker')
+
+  const window = attackerLost ? WAR_DEFEAT_EXHAUSTION_TURNS : WAR_EXHAUSTION_TURNS
+  const elapsed = currentTurn - endedTurn
+  // A negative elapsed means the recorded turn is ahead of the current one
+  // — corrupt data rather than a real future war. Treat it as fully spent
+  // rather than blocking the pair indefinitely.
+  if (!Number.isFinite(elapsed) || elapsed < 0) return 0
+
+  return Math.max(0, window - elapsed)
+}
+
+/**
+ * Whether these two go to war.
+ *
+ * `history` is what makes this #79 rather than a coin flip on current
+ * military: the War table has always recorded `resolvedTurn` and `outcome`
+ * and **nothing ever read them**. Without it, the tick after a war resolved
+ * the same pair could declare another over the same location, forever —
+ * a world with no memory of its own biggest events.
+ *
+ * Optional so a caller with no history in hand behaves exactly as before,
+ * which is also what makes the parameter safe to add.
+ */
 export function decideWarDeclaration(
   attacker: { id: string; military: number },
   defender: { id: string; military: number },
-  contestedLocations: Array<{ id: string; ownerFactionId: string | null; isContested: boolean }>
+  contestedLocations: Array<{ id: string; ownerFactionId: string | null; isContested: boolean }>,
+  history?: { priorWars?: ResolvedWar[]; currentTurn?: number }
 ): WarDeclarationDecision {
   if (attacker.military < WAR_MILITARY_THRESHOLD || defender.military < WAR_MILITARY_THRESHOLD) {
     return { shouldDeclare: false }
   }
+
+  const exhaustion = warExhaustionRemaining(
+    history?.priorWars ?? [],
+    attacker.id,
+    defender.id,
+    history?.currentTurn ?? 0
+  )
+  if (exhaustion > 0) return { shouldDeclare: false, exhaustionRemaining: exhaustion }
 
   const prize = contestedLocations
     .filter((l) => l.ownerFactionId === defender.id && l.isContested)
@@ -380,6 +475,14 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
     select: { id: true, name: true, ownerFactionId: true, isContested: true },
   })
 
+  // #79: the world remembers its own wars. Loaded once for the whole pass
+  // rather than per pair — this is the read that was missing, not a new
+  // write; resolvedTurn and outcome have been recorded since wars existed.
+  const priorWars = await prisma.war.findMany({
+    where: { campaignId: ctx.campaignId, status: 'RESOLVED' },
+    select: { attackerFactionId: true, defenderFactionId: true, resolvedTurn: true, outcome: true },
+  })
+
   for (const defender of factions) {
     if (factionIdsAtWar.has(defender.id)) continue
 
@@ -389,8 +492,18 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
     const attacker = factions.find((f) => f.id === rivalId)
     if (!attacker) continue
 
-    const decision = decideWarDeclaration(attacker, defender, locations)
-    if (!decision.shouldDeclare) continue
+    const decision = decideWarDeclaration(attacker, defender, locations, {
+      priorWars,
+      currentTurn: ctx.turnNumber,
+    })
+    if (!decision.shouldDeclare) {
+      if (decision.exhaustionRemaining) {
+        console.log(
+          `  🕊️ ${attacker.name} vs ${defender.name}: still war-weary for ${decision.exhaustionRemaining} more turn(s)`
+        )
+      }
+      continue
+    }
 
     const prizeLocation = locations.find((l) => l.id === decision.contestedLocationId)
 

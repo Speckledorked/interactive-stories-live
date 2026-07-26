@@ -132,3 +132,65 @@ describe('checkAIConsistency — degraded responses are not successes', () => {
     expect(h.metrics.aiConsistency).toBe(50)
   })
 })
+
+describe('checkAIConsistency — outcome adherence (#93)', () => {
+  const history = (extra: Record<string, unknown>) =>
+    Array.from({ length: 10 }, () => ({ success: true, validationLevel: 'full', ...extra }))
+
+  it('scores a narrator that ignores the dice below one that honors them', async () => {
+    // Well-formedness and obedience are different things. A response can
+    // validate perfectly and still narrate a triumph on every MISS.
+    const { prisma } = await import('@/lib/prisma')
+
+    ;(prisma.worldMeta.findUnique as any).mockResolvedValue({
+      aiMetrics: { requestHistory: history({ outcomeChecked: 2, outcomeMismatches: 2 }) },
+    })
+    const ignoring = await health()
+
+    ;(prisma.worldMeta.findUnique as any).mockResolvedValue({
+      aiMetrics: { requestHistory: history({ outcomeChecked: 2, outcomeMismatches: 0 }) },
+    })
+    const honoring = await health()
+
+    expect(ignoring.metrics.aiConsistency).toBeLessThan(honoring.metrics.aiConsistency)
+    expect(honoring.metrics.aiConsistency).toBe(100)
+  })
+
+  it('dents rather than erases a response that was otherwise fine', async () => {
+    // A bad exchange should cost something without wiping out a response
+    // that validated cleanly and got most of its actions right.
+    const { prisma } = await import('@/lib/prisma')
+    ;(prisma.worldMeta.findUnique as any).mockResolvedValue({
+      aiMetrics: { requestHistory: history({ outcomeChecked: 4, outcomeMismatches: 4 }) },
+    })
+    const h = await health()
+    expect(h.metrics.aiConsistency).toBeGreaterThanOrEqual(50)
+    expect(h.metrics.aiConsistency).toBeLessThan(100)
+  })
+
+  it('leaves history written before the check existed untouched', async () => {
+    // Same rule as validationLevel: a scoring change must not invent a
+    // decline that never happened.
+    const { prisma } = await import('@/lib/prisma')
+    ;(prisma.worldMeta.findUnique as any).mockResolvedValue({
+      aiMetrics: { requestHistory: history({}) },
+    })
+    expect((await health()).metrics.aiConsistency).toBe(100)
+  })
+
+  it('ignores a malformed or zero check count rather than dividing by it', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    ;(prisma.worldMeta.findUnique as any).mockResolvedValue({
+      aiMetrics: { requestHistory: history({ outcomeChecked: 0, outcomeMismatches: 3 }) },
+    })
+    const zero = await health()
+
+    ;(prisma.worldMeta.findUnique as any).mockResolvedValue({
+      aiMetrics: { requestHistory: history({ outcomeChecked: 'two', outcomeMismatches: NaN }) },
+    })
+    const junk = await health()
+
+    expect(zero.metrics.aiConsistency).toBe(100)
+    expect(junk.metrics.aiConsistency).toBe(100)
+  })
+})

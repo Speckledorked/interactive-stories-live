@@ -128,6 +128,15 @@ export class AICostTracker {
      * no degradation ladder simply don't report one.
      */
     validationLevel?: 'full' | 'partial' | 'emergency'
+    /**
+     * Outcome adherence (#93): how many pre-rolled actions the narration
+     * contradicted, out of how many it reported on. Recorded for the same
+     * reason as validationLevel — a response can be perfectly well-formed
+     * and still ignore every roll in it, and campaign health should be able
+     * to see that. Omitted by calls with no rolled actions to check.
+     */
+    outcomeMismatches?: number
+    outcomeChecked?: number
   }): Promise<void> {
     const pricing = this.getPricing()
     const cost = (params.inputTokens * pricing.inputTokenPrice) +
@@ -192,6 +201,8 @@ export class AICostTracker {
             responseTimeMs: params.responseTimeMs,
             success: params.success,
             validationLevel: params.validationLevel,
+            outcomeMismatches: params.outcomeMismatches,
+            outcomeChecked: params.outcomeChecked,
             cacheHit: params.cacheHit || false
           }
         ],

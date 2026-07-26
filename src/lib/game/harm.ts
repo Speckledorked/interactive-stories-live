@@ -494,13 +494,14 @@ export function findConditionTemplate(
  * Pure. Returns the condition unchanged when the name matches nothing,
  * which is every condition the fiction invents.
  */
-export function applyConditionTemplate<T extends {
-  name: string
-  rollModifier?: number
-  harmPerScene?: number
-  statModifiers?: Condition['statModifiers']
-  mechanicalEffect?: string
-}>(reported: T): T {
+type EnforcedConditionFields = Pick<
+  Condition,
+  'rollModifier' | 'harmPerScene' | 'statModifiers' | 'mechanicalEffect'
+>
+
+export function applyConditionTemplate<T extends { name: string } & Partial<EnforcedConditionFields>>(
+  reported: T
+): T & EnforcedConditionFields {
   const template = findConditionTemplate(reported.name)
   if (!template) return reported
   return {

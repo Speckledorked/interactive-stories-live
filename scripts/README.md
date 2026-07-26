@@ -29,7 +29,7 @@ Database initialization script that automatically enables the pgvector extension
 
 ### `backfill-location-ids.sql`
 
-**Run once, by hand, after deploying.** This project's production build command (`vercel.json`) runs `prisma db push`, not `prisma migrate deploy` — `db push` applies schema changes straight from `schema.prisma` but never executes anything in `prisma/migrations/`. Most schema changes need nothing further, but this one shipped with a one-time data backfill (linking existing `Character`/`NPC` rows to their matching `Location` row by name) that only exists as migration SQL, so it needs to be run manually against the real database once:
+**Run once, by hand, after deploying.** At the time this shipped, the production build command (`vercel.json`) ran `prisma db push`, not `prisma migrate deploy` — `db push` applies schema changes straight from `schema.prisma` but never executes anything in `prisma/migrations/`. Most schema changes needed nothing further, but this one shipped with a one-time data backfill (linking existing `Character`/`NPC` rows to their matching `Location` row by name) that only existed as migration SQL, so it had to be run manually against the real database once (see `docs/MIGRATIONS.md` for the deploy command's current state):
 
 ```bash
 psql "$DATABASE_URL" -f scripts/backfill-location-ids.sql

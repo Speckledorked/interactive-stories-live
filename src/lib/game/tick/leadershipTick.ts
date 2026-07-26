@@ -19,6 +19,89 @@
 import { prisma } from '@/lib/prisma'
 import { TickContext, TickHandlerResult, WorldChange } from './types'
 
+/** One living, affiliated NPC considered for promotion. */
+export interface SuccessionCandidate {
+  id: string
+  name: string
+  importance: number
+  factionRole: 'LEADER' | 'MEMBER' | null
+}
+
+export interface SuccessionDecision {
+  successorId: string
+  successorName: string
+  /** The role they actually held, for an honest history entry. */
+  previousRole: string
+  reason: string
+}
+
+/**
+ * Who, if anyone, steps up to lead this faction.
+ *
+ * Extracted as a pure function (#97) because this was the only tick module
+ * with no testable form: the whole rule lived inline in the DB handler
+ * below, so succession — named in the README's faction-simulation row —
+ * was the one simulation rule with no test at all. Every other handler in
+ * this directory has a `decide*` counterpart; this is that.
+ *
+ * Sorting happens HERE rather than being inherited from the query's
+ * `orderBy`, so the decision is a function of its arguments and nothing
+ * else. That also fixes a real determinism gap: `orderBy: { importance:
+ * 'desc' }` leaves ties to whatever order Postgres returns rows in, so two
+ * equally important lieutenants could promote differently on identical
+ * data. This engine avoids that everywhere else (see `stableHash` in
+ * types.ts) and it should not have been the exception.
+ *
+ * Returns null when the invariant already holds, which is most factions on
+ * most ticks — this handler reads as "keep this true", not "react to a
+ * death".
+ */
+export function decideSuccession(faction: {
+  name: string
+  leaderCharacterId: string | null
+  /** Living affiliated members only. */
+  members: SuccessionCandidate[]
+}): SuccessionDecision | null {
+  // A player character leading is not a gap to fill. No NPC is promoted
+  // over a player, however important they are.
+  if (faction.leaderCharacterId) return null
+
+  const members = Array.isArray(faction.members) ? faction.members : []
+  if (members.length === 0) return null
+
+  // Idempotent: a faction that already has a living leader is untouched.
+  if (members.some(m => m.factionRole === 'LEADER')) return null
+
+  const successor = [...members].sort(compareCandidates)[0]
+
+  return {
+    successorId: successor.id,
+    successorName: successor.name,
+    // The real role, not a hardcoded 'MEMBER'. factionRole is nullable, so
+    // an unranked member would otherwise be recorded in campaign history as
+    // having lost a role they never held.
+    previousRole: successor.factionRole ?? 'none',
+    reason: `${successor.name} steps up to lead ${faction.name}`,
+  }
+}
+
+/**
+ * Most important first, then by name, then by id.
+ *
+ * The name tiebreak is deliberate rather than jumping straight to id: it
+ * makes the outcome explicable to a host reading the history ("the
+ * next-ranked member, alphabetically") instead of turning on an opaque
+ * cuid. Id is the final backstop so the order is total.
+ */
+function compareCandidates(a: SuccessionCandidate, b: SuccessionCandidate): number {
+  const importanceA = Number.isFinite(Number(a.importance)) ? Number(a.importance) : 0
+  const importanceB = Number.isFinite(Number(b.importance)) ? Number(b.importance) : 0
+  if (importanceA !== importanceB) return importanceB - importanceA
+  const byName = (a.name ?? '').localeCompare(b.name ?? '')
+  if (byName !== 0) return byName
+  return (a.id ?? '').localeCompare(b.id ?? '')
+}
+
 export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandlerResult> {
   const factions = await prisma.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
@@ -27,6 +110,8 @@ export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandl
     include: {
       members: {
         where: { isAlive: true },
+        // Kept for query stability; decideSuccession sorts independently, so
+        // the outcome no longer depends on the order rows come back in.
         orderBy: { importance: 'desc' },
       },
     },
@@ -35,30 +120,25 @@ export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandl
   const changes: WorldChange[] = []
 
   for (const faction of factions) {
-    if (faction.leaderCharacterId) continue
-    if (faction.members.length === 0) continue
+    const decision = decideSuccession(faction)
+    if (!decision) continue
 
-    const hasLivingLeader = faction.members.some((m) => m.factionRole === 'LEADER')
-    if (hasLivingLeader) continue
-
-    // Members are already sorted by importance descending.
-    const successor = faction.members[0]
     if (!ctx.dryRun) {
       await prisma.nPC.update({
-        where: { id: successor.id },
+        where: { id: decision.successorId },
         data: { factionRole: 'LEADER' },
       })
     }
 
     changes.push({
       entityType: 'NPC',
-      entityId: successor.id,
-      entityName: successor.name,
+      entityId: decision.successorId,
+      entityName: decision.successorName,
       campaignId: ctx.campaignId,
       field: 'factionRole',
-      previousValue: 'MEMBER',
+      previousValue: decision.previousRole,
       newValue: 'LEADER',
-      reason: `${successor.name} steps up to lead ${faction.name}`,
+      reason: decision.reason,
       significant: true,
       importance: 'MAJOR',
     })

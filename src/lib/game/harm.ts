@@ -881,6 +881,102 @@ export function applyRest(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Natural recovery — harm healing as in-game time passes
+// ---------------------------------------------------------------------------
+//
+// The design decision this implements: recovery happens through the fiction
+// and through TIME, never through a "rest" button. In-fiction events reduce
+// harm (harm_healing, medical_attention), and beyond that a body mends on
+// its own the way a real one does — slowly, and only when it is left alone
+// to do it.
+//
+// Before this, in-game time did nothing at all. A character could carry a
+// broken rib across three in-game weeks and arrive exactly as broken,
+// because the only path down was the narrator explicitly reporting healing.
+
+/**
+ * In-game hours of undisturbed time per point of harm recovered.
+ *
+ * A full day per point. Deliberately slow: harm is a 0-6 track where 4 is
+ * "Impaired", so this puts a serious injury several days from healed and
+ * keeps wounds meaningful across an arc rather than evaporating between
+ * scenes. Fiction remains the fast path — a healer or a potion still works
+ * in a moment, which is the point of having both.
+ */
+export const HOURS_PER_HARM_RECOVERED = 24
+
+/**
+ * Conditions that stop a body mending on its own.
+ *
+ * Bleeding is the obvious one and composes exactly as it should with the
+ * harm it already deals each scene (#88): you do not slowly recover from a
+ * wound that is still open. Matched on the enforced field rather than on
+ * the name, so any condition that deals recurring harm blocks recovery
+ * automatically — including ones the fiction invents.
+ */
+export function blocksNaturalRecovery(conditions: Condition[] | null | undefined): boolean {
+  if (!Array.isArray(conditions)) return false
+  return conditions.some(c => {
+    const amount = Number(c?.harmPerScene)
+    return Number.isFinite(amount) && amount > 0
+  })
+}
+
+export interface NaturalRecoveryResult {
+  newHarm: HarmLevel
+  /** Carried-over in-game hours that did not add up to a full point yet. */
+  restHours: number
+  healed: number
+  message: string | null
+}
+
+/**
+ * Accrue in-game time toward healing, and spend it when it adds up.
+ *
+ * Partial time is CARRIED, not discarded: exchanges advance a handful of
+ * hours at a time, so rounding each one down separately would mean nobody
+ * ever heals. The remainder lives alongside the rest of the harm state.
+ *
+ * Never touches a character who is Taken Out. At harm 6 the way back is
+ * stabilization and a recovery roll — a narrated moment — not the calendar
+ * quietly undoing it, which is the same rule recurring harm follows in the
+ * other direction.
+ *
+ * Pure.
+ */
+export function accrueNaturalRecovery(params: {
+  harm: number
+  restHours: number
+  hoursElapsed: number
+  conditions?: Condition[] | null
+}): NaturalRecoveryResult {
+  const harm = Math.max(0, Math.min(6, Math.trunc(Number(params.harm) || 0))) as HarmLevel
+  const carried = Math.max(0, Number(params.restHours) || 0)
+  const elapsed = Math.max(0, Number(params.hoursElapsed) || 0)
+
+  const unchanged = (restHours: number): NaturalRecoveryResult =>
+    ({ newHarm: harm, restHours, healed: 0, message: null })
+
+  // Nothing to heal, or healing is not the mechanism that applies.
+  if (harm === 0) return unchanged(0)
+  if (harm >= 6) return unchanged(0)
+  if (blocksNaturalRecovery(params.conditions)) return unchanged(0)
+
+  const total = carried + elapsed
+  const points = Math.floor(total / HOURS_PER_HARM_RECOVERED)
+  if (points <= 0) return unchanged(total)
+
+  const healed = Math.min(points, harm)
+  const result = healHarm(harm, healed)
+  return {
+    newHarm: result.newHarm,
+    restHours: total - healed * HOURS_PER_HARM_RECOVERED,
+    healed,
+    message: `Time and rest have done their work — ${result.message.toLowerCase()}`,
+  }
+}
+
 /**
  * Check if a character is dying
  */

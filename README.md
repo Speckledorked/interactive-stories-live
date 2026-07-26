@@ -197,6 +197,18 @@ ledger.
 
 **Contested territory is now a real mechanic (`#78`)** — `Location.isContested` was written by the tick (a rival has moved against a place but hasn't taken it yet) and read by nothing mechanical, so territory changing hands had no consequence for anyone standing on it and the whole war/expansion layer was invisible to players except as narration. Added `contestedPenalty`, resolved off the same id-then-name location join weather already uses, and threaded through the roll total, the persisted `DiceRoll.modifier`, and the transparency-panel receipt ("contested ground"). Flat and universal at -1, matching harm/weather rather than introducing a new scale or making per-move judgments about which actions contested ground "should" affect — that judgment from a move name is the keyword guesswork this codebase avoids. Unknown contested state is neutral, never a penalty: a character whose location hasn't resolved isn't silently punished for it.
 
+**Recovery is fiction and time — and the time half didn't exist:**
+
+A product decision, now implemented: harm comes down through in-fiction events and through the passage of in-game time. There is deliberately **no rest action** — no button a player presses to heal.
+
+The fiction half already worked (`harm_healing`, `medical_attention`). The **time half did nothing at all**: a character could carry a broken rib across three in-game weeks and arrive exactly as broken, because the only path down was the narrator explicitly reporting healing. `accrueNaturalRecovery` runs on the same hours that advance the calendar after each scene.
+
+- **A full in-game day per point of harm.** Deliberately slow on a 0-6 track where 4 is Impaired — a serious injury sits several days from healed, so wounds stay meaningful across an arc instead of evaporating between scenes. Fiction remains the fast path, which is the point of having both.
+- **Partial hours are carried, not discarded.** Exchanges advance a handful of hours at a time; rounding each one down separately would mean nobody ever heals. The remainder lives in the existing harm-state blob, so no migration.
+- **Never touches a character who is Taken Out.** At harm 6 the way back is stabilization and a narrated recovery roll — not the calendar quietly undoing it. Exactly the rule recurring harm follows in the other direction.
+- **An open wound doesn't mend.** Anything dealing recurring harm blocks natural recovery, matched on the enforced field rather than by name, so a condition the fiction invents blocks it too. Bleeding now costs harm every scene *and* stops you healing, which is how it should have read all along.
+- **Campaign-wide, not scene-scoped** — time passes for the character who sat this scene out too, and scoping it to participants would mean a wound heals faster the more you play.
+
 **The manual world-turn trigger is removed, on purpose:**
 
 `manualWorldTurn` and `getWorldTurnSummary` were exported with no callers anywhere — a host-facing "advance the world now" surface built and never connected. Removed rather than wired up, which is the opposite of the usual call here and the reasoning is worth keeping:

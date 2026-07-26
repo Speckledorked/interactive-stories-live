@@ -10,7 +10,7 @@ import { SceneStatus } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
 import { ExchangeManager } from './exchange-manager' // Phase 16
 import PusherServer from '@/lib/realtime/pusher-server' // For real-time updates
-import { recurringHarmForScene, applyRecurringHarm, type Condition } from './harm'
+import { recurringHarmForScene, applyRecurringHarm, accrueNaturalRecovery, type Condition } from './harm'
 import {
   computeOrganicGrowth,
   applyOrganicGrowth,
@@ -472,6 +472,21 @@ async function performResolution(
     })
 
     console.log(`✅ Turn incremented: ${currentTurn} → ${currentTurn + 1}`)
+
+    // Natural recovery: bodies mend as in-game time passes, the same hours
+    // that just moved the calendar. Fiction stays the fast path
+    // (harm_healing, medical_attention); this is the slow one, and before
+    // it existed a character could carry a wound across in-game weeks and
+    // arrive exactly as hurt.
+    //
+    // Best-effort — a failure here must not cost the resolved scene.
+    if (hoursThisExchange > 0) {
+      try {
+        await applyNaturalRecovery(campaignId, hoursThisExchange)
+      } catch (error) {
+        console.error('⚠️  Natural recovery failed (non-critical):', error)
+      }
+    }
     if (timePassage.days || timePassage.hours) {
       console.log(`⏰ Time passed: ${timePassage.days || 0} days, ${timePassage.hours || 0} hours`)
       console.log(`📅 New date: ${newInGameDate}`)
@@ -1387,5 +1402,46 @@ async function updateWikiEntries(
         }
       })
     }
+  }
+}
+
+
+/**
+ * Heal living characters as in-game time passes.
+ *
+ * Scoped to the whole campaign rather than a scene's participants: time
+ * passes for everyone, including the character who sat this scene out, and
+ * scoping it to participants would mean a wound heals faster the more you
+ * play. Partial hours are carried in the harm state so the accrual
+ * survives across exchanges — see accrueNaturalRecovery.
+ */
+async function applyNaturalRecovery(campaignId: string, hoursElapsed: number): Promise<void> {
+  const characters = await prisma.character.findMany({
+    where: { campaignId, isAlive: true, harm: { gt: 0, lt: 6 } },
+    select: { id: true, name: true, harm: true, conditions: true },
+  })
+
+  for (const character of characters) {
+    const state = (character.conditions as any) || {}
+    const conditions = (state.conditions || []) as Condition[]
+
+    const result = accrueNaturalRecovery({
+      harm: character.harm,
+      restHours: state.restHours || 0,
+      hoursElapsed,
+      conditions,
+    })
+
+    // Always persist the carried hours, even when nothing healed yet —
+    // dropping the remainder is how "a few hours at a time" would add up
+    // to never.
+    const data: Record<string, unknown> = {
+      conditions: { ...state, conditions, restHours: result.restHours },
+    }
+    if (result.healed > 0) {
+      data.harm = result.newHarm
+      console.log(`🌙 ${character.name}: ${result.message}`)
+    }
+    await prisma.character.update({ where: { id: character.id }, data })
   }
 }

@@ -26,6 +26,7 @@ import { MAX_CORRUPTION, CORRUPTION_SURGE_BONUS } from './corruption'
 import { proficiencyBand, ProficiencyBand } from './capabilities'
 import { effectiveStandingModifier } from './standing'
 import { checkCorruptionGate } from './corruptionGates'
+import { conditionStatModifier } from './harm'
 import { debtModifier, debtsWithCounterparty, describeDebtLeverage, DebtsForRoll } from './debts'
 import {
   ZonePosition,
@@ -112,6 +113,9 @@ export interface ActionMechanics {
   harmPenalty: number
   // Sum of active conditions' rollModifier (see conditionPenalty below).
   conditionMod: number
+  // Stat-shaped condition effects for THIS roll's stat (#88). Unlike
+  // conditionMod this may be positive.
+  conditionStatMod: number
   // Name of the perk/signature-ability the classifier matched to this
   // action, if any — for display alongside signatureMod.
   signatureName: string | null
@@ -224,7 +228,11 @@ export interface CharacterForRoll {
   relationships?: Record<string, { trust: number; tension: number; respect: number; fear: number }> | null
   // Conditions currently marked on this character's sheet (see harm.ts) —
   // read for conditionPenalty above.
-  conditions?: Array<{ rollModifier?: number }> | null
+  conditions?: Array<{
+    rollModifier?: number
+    // Per-stat modifiers (#88) — see conditionStatModifier in harm.ts.
+    statModifiers?: Partial<Record<string, number>>
+  }> | null
   // This character's perks + earned Abilities, offered to the classifier
   // as possible situational matches — see SignatureForRoll.
   signatures?: SignatureForRoll[]
@@ -466,6 +474,12 @@ export function computeMechanics(
   // Active conditions' flat roll penalty — see conditionPenalty above.
   const conditionMod = conditionPenalty(character.conditions)
 
+  // Stat-shaped condition effects (#88). Separate from conditionMod
+  // because this one can be POSITIVE — Enraged genuinely helps you hit
+  // someone and genuinely hurts you talking to them, and a single
+  // undirected number could express neither.
+  const conditionStatMod = conditionStatModifier(character.conditions as any, statKey)
+
   // Perk/Ability situational bonus: never trust the classifier's pick
   // blindly — re-check it against the character's actual signatures
   // first, same discipline capability_key gets above. An id the
@@ -483,7 +497,7 @@ export function computeMechanics(
 
   const harmMod = harmPenalty(character.harm)
   const dice: [number, number] = [rollD6(rng), rollD6(rng)]
-  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + debtMod + weatherMod + contestedMod + zoneMod + conditionMod + signatureMod + harmMod + corruptionSurgeBonus
+  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + debtMod + weatherMod + contestedMod + zoneMod + conditionMod + conditionStatMod + signatureMod + harmMod + corruptionSurgeBonus
   const outcome = calculateOutcome(total)
   // Flavor overrides display only, and only where it actually supplied text
   // for this band — a partially-flavored move (AI omitted one outcome)
@@ -513,6 +527,7 @@ export function computeMechanics(
     engagement,
     zoneMod,
     conditionMod,
+    conditionStatMod,
     signatureName,
     signatureMod,
     harmPenalty: harmMod,
@@ -909,7 +924,7 @@ export async function resolveActionMechanics(
             userId: action?.userId || '',
             rollType: 'move',
             dice: m.dice,
-            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.debtMod + m.weatherMod + m.contestedMod + m.zoneMod + m.conditionMod + m.signatureMod + m.harmPenalty,
+            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.debtMod + m.weatherMod + m.contestedMod + m.zoneMod + m.conditionMod + m.conditionStatMod + m.signatureMod + m.harmPenalty,
             total: m.total,
             outcome: m.outcome,
             description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.debtMod ? `, ${m.debtCounterparty}` : ''}${m.weatherCondition ? `, ${m.weatherCondition.toLowerCase()}` : ''}${m.contestedMod ? ', contested ground' : ''}${m.zoneMod ? `, ${m.engagement} ${describeZone(m.zonePosition)}` : ''}${m.conditionMod ? `, ${m.conditionMod} condition penalty` : ''}${m.signatureName ? `, ${m.signatureName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
@@ -1006,6 +1021,7 @@ export function formatRollReceipt(m: ActionMechanics): string {
     ...(m.npcName ? [`${m.relationshipMod >= 0 ? '+' : ''}${m.relationshipMod} rapport (${m.npcName})`] : []),
     ...(m.weatherCondition ? [`${m.weatherMod} ${m.weatherCondition.toLowerCase()}`] : []),
     ...(m.debtMod ? [`${m.debtMod >= 0 ? '+' : ''}${m.debtMod} ${m.debtCounterparty}`] : []),
+    ...(m.conditionStatMod ? [`${m.conditionStatMod >= 0 ? '+' : ''}${m.conditionStatMod} condition (${m.statKey})`] : []),
     ...(m.contestedMod ? [`${m.contestedMod} contested ground`] : []),
     ...(m.zoneMod ? [`${m.zoneMod >= 0 ? '+' : ''}${m.zoneMod} ${m.engagement} range (${describeZone(m.zonePosition)})`] : []),
     ...(m.harmPenalty ? [`${m.harmPenalty} impaired`] : []),

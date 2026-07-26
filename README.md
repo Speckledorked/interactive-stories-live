@@ -161,11 +161,14 @@ list nobody can action.
 - *Scope:* UX, product positioning — worth knowing before describing the admin panel as a "design tool" anywhere external.
 - *Suggested fix:* No fix needed if the intent is genuinely "host settings," not "simulation design" — but the copy/positioning should match reality.
 
-**Condition `mechanicalEffect` text is mostly unenforced flavor (#88)**
-- *Why it matters:* `canAct()` is the only code that reads `mechanicalEffect` at all, and it only checks for two hardcoded substrings. A condition like "Chronic Pain: Start each scene with 1 harm unless rested" has no corresponding enforcement anywhere — the rule reads as real but nothing executes it.
-- *Evidence:* `lib/game/harm.ts:221-234` (`canAct`), `harm.ts:467` (the Chronic Pain example specifically).
-- *Scope:* narrative-mechanical alignment.
-- *Suggested fix:* Either give a small number of conditions real start-of-scene hooks, or rewrite their flavor text to stop implying enforcement that doesn't exist.
+**Condition `mechanicalEffect` text is mostly unenforced flavor (#88)** — **FIXED.** `mechanicalEffect` is free text and `canAct()` was the only thing reading it, via two hardcoded substrings, so Bleeding said *"1 harm per turn"* from the day it was written and nothing ever applied it. Both halves of the suggested fix were taken, each where it belongs:
+
+- **`harmPerScene`** — a structured, enforced counterpart, applied to a scene's participants at scene creation. Bleeding now bleeds. Capped by `RECURRING_HARM_CEILING` so recurring harm can carry someone to Impaired and hold them there but **never to Taken Out**: Taken Out is resolved by a server-side recovery roll during scene resolution — a narrated moment with the death-save path behind it — and there is no such moment in the gap before a scene starts. A condition ticking away must not kill someone while nobody is looking.
+- **`statModifiers`** — per-stat effects, for conditions whose text is stat-shaped rather than flat. Enraged's *"+1 to combat rolls, -2 to social rolls"* had **no** enforcement at all, because `rollModifier` can only express one undirected number; it now maps onto `hard`/`hot`, which is exactly what the classifier already picks per action. Unlike `conditionPenalty` this can be positive — a condition with real upside and real downside was previously enforced as neither.
+- **Honest text where no mechanic is definable.** Unstable promised *"Roll 1d6 at start of turn: 1-2 = random effect"* — a die this engine never rolled against a table that never existed. Defining one would be inventing game design rather than implementing text already on the sheet, so its description now says what it actually is: a narrative instability the GM plays. The condition itself is untouched and still applies. Cursed and Marked were already honestly narrative.
+- **Found while fixing it:** the `conditions_add` writer was dropping `rollModifier` entirely, so *every* AI-authored condition reached the dice as pure flavor no matter what number it reported — despite that field's own schema comment promising "the AI can also set this directly on a custom condition it authors". Exactly the same defect as `#88` itself, one field over: read at one end, never written at the other. All three enforced fields are now persisted.
+
+A test scans every entry in `COMMON_CONDITIONS` and fails if its text quotes a modifier or a damage figure with no field behind it, so the class of defect can't come back. Mutation-checked in both directions rather than assumed.
 
 **NPC social ties reach only two narrow consumers (#89)**
 - *Why it matters:* `socialTies` (ally/rival stance between major NPCs, derived from faction politics) is read in exactly three places: the tick that writes it, one wiki flavor sentence, and joint-scheme clock spawning. It never reaches a dice roll or any other player-facing mechanic — real but much narrower than the schema comments imply.

@@ -202,6 +202,17 @@ export async function applyCharacterChanges(
           category: conditionData.category,
           description: conditionData.description,
           mechanicalEffect: conditionData.mechanicalEffect,
+          // The ENFORCED fields, all three of which were being dropped here.
+          //
+          // rollModifier's own schema comment promises "the AI can also set
+          // this directly on a custom condition it authors, not just the
+          // fixed templates" — but this writer never copied it, so every
+          // AI-authored condition reached the dice as flavor no matter what
+          // number it reported. Same class of defect as #88 itself: a field
+          // that is read at one end and never written at the other.
+          rollModifier: conditionData.rollModifier,
+          harmPerScene: conditionData.harmPerScene,
+          statModifiers: conditionData.statModifiers,
           appliedAt: currentTurnNumber
         }
         const condResult = markCondition(currentConditions, newCondition)

@@ -10,6 +10,7 @@ import { SceneStatus } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
 import { ExchangeManager } from './exchange-manager' // Phase 16
 import PusherServer from '@/lib/realtime/pusher-server' // For real-time updates
+import { recurringHarmForScene, applyRecurringHarm, type Condition } from './harm'
 import {
   computeOrganicGrowth,
   applyOrganicGrowth,
@@ -623,7 +624,60 @@ export async function createNewScene(campaignId: string, characterIds?: string[]
 
   console.log(`✅ Scene ${nextSceneNumber} created`)
 
+  // Recurring condition harm (#88). Bleeding said "1 harm at the start of
+  // each scene" from the day it was written and nothing ever applied it —
+  // the sheet stated a rule the engine didn't execute. This is where it
+  // executes.
+  //
+  // Best-effort: a failure here must not cost anyone the scene that was
+  // just successfully created.
+  try {
+    await applyRecurringConditionHarm(campaignId, characterIds || [], nextSceneNumber)
+  } catch (error) {
+    console.error('⚠️  Recurring condition harm failed (non-critical):', error)
+  }
+
   return newScene
+}
+
+/**
+ * Apply every participant's recurring condition harm at the start of a
+ * scene (#88).
+ *
+ * Scoped to the scene's own participants when it has an explicit list, so
+ * a split party doesn't bleed characters who aren't in this scene.
+ *
+ * Capped at RECURRING_HARM_CEILING: this can carry someone to Impaired and
+ * hold them there, never to Taken Out. Taken Out is resolved by a
+ * server-side recovery roll during scene resolution — a narrated moment
+ * with the death-save path behind it — and there is no such moment in the
+ * gap before a scene starts.
+ */
+async function applyRecurringConditionHarm(
+  campaignId: string,
+  characterIds: string[],
+  sceneNumber: number
+): Promise<void> {
+  const characters = await prisma.character.findMany({
+    where: {
+      campaignId,
+      isAlive: true,
+      ...(characterIds.length > 0 ? { id: { in: characterIds } } : {}),
+    },
+    select: { id: true, name: true, harm: true, conditions: true },
+  })
+
+  for (const character of characters) {
+    const conditions = ((character.conditions as any)?.conditions || []) as Condition[]
+    const recurring = recurringHarmForScene(conditions)
+    if (recurring <= 0) continue
+
+    const { newHarm, dealt } = applyRecurringHarm(character.harm, recurring)
+    if (dealt <= 0) continue
+
+    await prisma.character.update({ where: { id: character.id }, data: { harm: newHarm } })
+    console.log(`🩸 ${character.name} takes ${dealt} harm from ongoing conditions (scene ${sceneNumber}) — now ${newHarm}`)
+  }
 }
 
 /**

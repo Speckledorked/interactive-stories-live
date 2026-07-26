@@ -5,6 +5,7 @@ import { openaiFetch } from '@/lib/ai/openaiCompat'
 // Phase 15: Enhanced with strict validation, error handling, and cost tracking
 
 import { validateAIResponseWithRepair, addValidationMetadata } from './validation'
+import { checkOutcomeAdherence, type OutcomeBand } from '@/lib/game/outcomeAdherence'
 import { validateWorldTurnResponse } from './validation'
 import { circuitBreakerManager } from './circuit-breaker'
 import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
@@ -670,6 +671,25 @@ export async function callAIGM(
       console.log('✅ Full AI response validation passed')
     }
 
+    // Outcome adherence (#93): did the prose obey the dice? The engine
+    // rolled these bands and told the narrator they were binding; this is
+    // the first thing that checks whether that held. Deliberately only
+    // observed — never rewrites the scene, never fails the turn — because
+    // the gap being closed is that nothing MEASURED it, and a constraint
+    // nobody measures is a request.
+    const adherence = checkOutcomeAdherence(
+      (request.player_actions ?? [])
+        .filter(a => a.mechanics?.outcome)
+        .map(a => ({ characterName: a.character_name, outcome: a.mechanics!.outcome as OutcomeBand })),
+      (validatedResponse as { outcome_echo?: unknown }).outcome_echo
+    )
+    if (adherence.mismatched > 0) {
+      console.warn(`⚖️ Narration contradicted the roll on ${adherence.mismatched} action(s):`)
+      for (const problem of adherence.problems) console.warn(`  - ${problem}`)
+    } else if (adherence.unreported > 0) {
+      console.log(`⚖️ ${adherence.unreported} rolled action(s) not reported back by the narrator`)
+    }
+
     // Phase 15.3: Record success in circuit breaker
     if (campaignId) {
       circuitBreakerManager.getBreaker(campaignId).recordSuccess()
@@ -688,6 +708,12 @@ export async function callAIGM(
         // as one is why AI consistency could read 100 on a campaign whose
         // model had stopped producing usable output.
         validationLevel: validationResult.level,
+        // #93: recorded alongside the validation level so campaign health
+        // can see a narrator that stops honoring outcomes — the same
+        // reasoning as validationLevel itself, one layer up. A response can
+        // be perfectly well-formed and still ignore every roll in it.
+        outcomeMismatches: adherence.mismatched,
+        outcomeChecked: adherence.matched + adherence.mismatched,
         cacheHit: false,
         sceneId,
         requestType: 'scene_resolution'
@@ -1000,6 +1026,8 @@ Some player actions arrive with a MECHANICAL OUTCOME line — the game engine al
 - MISS: it goes wrong. Make a hard GM move against them: harm, a threat materializes, a cost is paid, an opportunity is lost, the situation worsens. A miss is never "nothing happens".
 Actions without a MECHANICAL OUTCOME line are yours to adjudicate freely (dialogue, planning, low-stakes activity).
 NEVER mention dice, rolls, moves, hits, or misses in scene_text — express outcomes purely through the fiction. The engine's outcome decides HOW WELL it went; you decide what that looks like.
+
+AFTER writing scene_text, report back what you actually narrated: set outcome_echo to one entry per character who had a MECHANICAL OUTCOME line, with the band your prose actually depicts for them. Report what you WROTE, not what you were told — if your narration ended up depicting a clean success where the outcome said MISS, say strongHit here. This is a self-check the engine reads to measure how well outcomes are being honored; copying the given band without looking at your own prose defeats the entire purpose and makes the measurement worthless. It never changes the scene, and there is no penalty for an honest mismatch.
 </mechanical_outcomes>
 
 <capabilities>

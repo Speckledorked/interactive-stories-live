@@ -165,9 +165,24 @@ export class CampaignHealthMonitor {
       // retroactively invent a decline that never happened.
       const credit = recentRequests.reduce((total: number, r: any) => {
         if (!r?.success) return total
-        if (r.validationLevel === 'emergency') return total + 0.25
-        if (r.validationLevel === 'partial') return total + 0.6
-        return total + 1
+        let earned = 1
+        if (r.validationLevel === 'emergency') earned = 0.25
+        else if (r.validationLevel === 'partial') earned = 0.6
+
+        // Outcome adherence (#93). A response can be perfectly well-formed
+        // and still narrate a triumph on a MISS — well-formedness and
+        // obedience are different things, and "AI consistency" should mean
+        // both. Scaled by the share of checked actions that were honored,
+        // and floored so a bad exchange dents the score without erasing a
+        // response that was otherwise fine.
+        const checked = Number(r.outcomeChecked)
+        const mismatched = Number(r.outcomeMismatches)
+        if (Number.isFinite(checked) && checked > 0 && Number.isFinite(mismatched)) {
+          const honored = Math.max(0, checked - Math.max(0, mismatched)) / checked
+          earned *= Math.max(0.5, honored)
+        }
+
+        return total + earned
       }, 0)
 
       const validationRate = (credit / recentRequests.length) * 100

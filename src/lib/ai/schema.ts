@@ -459,6 +459,19 @@ export const AIGMResponseSchema = z.object({
   // missing recap; generateCampaignLog falls back to the old truncation
   // only when this is absent (e.g. a repaired/degraded response).
   scene_summary: z.string().min(10).optional(),
+  // Outcome adherence (#93). The narrator reports which band it actually
+  // narrated for each character whose action was pre-rolled, and the engine
+  // compares that to what it rolled. Asking is the only honest way to check
+  // this — classifying prose as "reads like a miss" needs a second model
+  // call and would be wrong often enough to get the check ignored.
+  //
+  // Optional, and a mismatch never blocks or rewrites anything: this is a
+  // measurement, because a constraint nobody measures is a request. See
+  // lib/game/outcomeAdherence.ts.
+  outcome_echo: z.array(z.object({
+    character_name_or_id: z.string().max(SHORT_TEXT),
+    outcome: z.enum(['strongHit', 'weakHit', 'miss'])
+  })).optional(),
   time_passage: TimePassageSchema.optional(),
   world_updates: WorldUpdatesSchema
 })

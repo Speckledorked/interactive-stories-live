@@ -902,6 +902,9 @@ export function isDying(harm: HarmLevel, conditions: Condition[]): boolean {
  * Stabilize a dying character
  * Emergency first aid to prevent death
  */
+/** The condition stabilizing removes. Named so the two sides can't drift. */
+export const CRITICALLY_DYING_CONDITION_NAME = 'Critically Dying'
+
 export function stabilizeCharacter(
   conditions: Condition[],
   turnNumber: number
@@ -918,7 +921,12 @@ export function stabilizeCharacter(
     appliedAt: turnNumber
   }
 
-  const result = markCondition(conditions, stabilizedCondition)
+  // Stabilizing means you are no longer DYING — clearing that condition is
+  // part of what the word means, and leaving it to each caller is how the
+  // one caller that existed ended up doing it by hand while this function
+  // quietly did not.
+  const noLongerDying = conditions.filter(c => c.name !== CRITICALLY_DYING_CONDITION_NAME)
+  const result = markCondition(noLongerDying, stabilizedCondition)
 
   return {
     updatedConditions: result.updatedConditions,

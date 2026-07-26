@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { extractWorldStateChanges } from '@/lib/game/worldStateChanges';
 
 export interface ExportOptions {
   includeCharacters?: boolean;
@@ -165,7 +166,7 @@ export class CampaignExporter {
   }
 
   private static async exportScenes(campaignId: string) {
-    return await prisma.scene.findMany({
+    const scenes = await prisma.scene.findMany({
       where: { campaignId },
       include: {
         playerActions: {
@@ -178,6 +179,18 @@ export class CampaignExporter {
       },
       orderBy: { sceneNumber: 'asc' },
     });
+
+    // Surface what actually CHANGED in each scene as a named field rather
+    // than leaving it buried in the untyped `consequences` blob. An export
+    // is something a person reads; "here is what this scene changed about
+    // the world" is the most useful thing in that record and it was the
+    // least reachable. Extracted through the shared reader (#61) so the
+    // export and the story page agree on the shape instead of each
+    // reaching into the Json by hand.
+    return scenes.map(scene => ({
+      ...scene,
+      worldStateChanges: extractWorldStateChanges(scene.consequences),
+    }));
   }
 
   private static async exportTimeline(campaignId: string) {

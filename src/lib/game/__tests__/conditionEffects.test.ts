@@ -10,6 +10,8 @@
 
 import { describe, it, expect } from 'vitest'
 import {
+  stabilizeCharacter,
+  CRITICALLY_DYING_CONDITION_NAME,
   findConditionTemplate,
   applyConditionTemplate,
   createConditionFromTemplate,
@@ -211,5 +213,32 @@ describe('createConditionFromTemplate', () => {
     expect(c.name).toBe('Taken Out')
     expect(c.mechanicalEffect?.toLowerCase()).toContain('cannot take actions')
     expect(c.appliedAt).toBe(4)
+  })
+})
+
+describe('stabilizeCharacter', () => {
+  const dying = (): any[] => ([
+    { id: 'd1', name: CRITICALLY_DYING_CONDITION_NAME, category: 'Physical', description: 'x', mechanicalEffect: 'Cannot act' },
+  ])
+
+  it('clears the dying condition — that is what stabilizing MEANS', () => {
+    // This function existed with no callers while the one code path that
+    // needed it cleared the condition by hand. Leaving it to the caller is
+    // exactly how the two drifted.
+    const { updatedConditions } = stabilizeCharacter(dying(), 4)
+    expect(updatedConditions.some(c => c.name === CRITICALLY_DYING_CONDITION_NAME)).toBe(false)
+  })
+
+  it('adds Stabilized with the text canAct reads', () => {
+    const { updatedConditions } = stabilizeCharacter(dying(), 4)
+    const stabilized = updatedConditions.find(c => c.name === 'Stabilized')!
+    expect(stabilized.mechanicalEffect).toContain('Cannot act')
+    expect(stabilized.appliedAt).toBe(4)
+  })
+
+  it('leaves unrelated conditions alone', () => {
+    const conditions = [...dying(), { id: 'b', name: 'Bleeding', category: 'Physical', description: 'x' }] as any[]
+    const { updatedConditions } = stabilizeCharacter(conditions, 4)
+    expect(updatedConditions.some(c => c.name === 'Bleeding')).toBe(true)
   })
 })

@@ -227,6 +227,13 @@ A realtime pipeline built end to end and connected at *neither* end: `triggerNot
 - **The client refetches rather than rendering the pushed body.** The GET route is what applies visibility rules; trusting a broadcast payload would put a second, weaker copy of those rules in the browser. The event is only ever a signal that *something* changed.
 - **Fire-and-forget.** A note must save whether or not the socket layer is healthy, and an unconfigured Pusher degrades to the old behavior (the panel works, it just isn't live) rather than erroring.
 
+**The harm tracker now reads the harm bands from the engine (`getHarmStatus`):**
+
+`getHarmStatus` is where the 0-6 track's bands, labels and roll penalty are defined — and it had no callers. `HarmTracker.tsx` held three separate copies of the same rule instead: the status label (`>= 6` / `>= 4`, in its own wording — "Healthy" where the engine says "Fine"), the warning banner's visibility (`>= 4`), and the banner's text (a hand-written "-1 to all rolls"). The numbers a player read were only *coincidentally* the numbers being applied to their rolls; move a band in the engine and the sheet would have gone on confidently reporting the old one. All three now come from `getHarmStatus`.
+
+- **The `-999` sentinel is not rendered.** `getHarmStatus` uses it to mean "cannot act" rather than as a modifier, so the component shows the prose description instead — printing it raw would be nonsense on a character sheet.
+- **This repo's first component test**, and it needed `@vitejs/plugin-react` in the Vitest config to exist at all: without it Vitest hands raw JSX to the parser and a `.test.tsx` file fails to load, which is why `@testing-library/react` was installed with nothing using it. The load-bearing case asserts the component agrees with `getHarmStatus` at every point on the track, so moving a band in the engine fails a test instead of silently desyncing the UI.
+
 **The manual world-turn trigger is removed, on purpose:**
 
 `manualWorldTurn` and `getWorldTurnSummary` were exported with no callers anywhere — a host-facing "advance the world now" surface built and never connected. Removed rather than wired up, which is the opposite of the usual call here and the reasoning is worth keeping:

@@ -1,4 +1,4 @@
-import { openaiFetch } from '@/lib/ai/openaiCompat'
+import { callChatCompletion } from '@/lib/ai/chatCompletion'
 import { reportError } from '@/lib/monitoring'
 // src/lib/ai/worldState.ts
 // Convert database records into a clean format for the AI GM
@@ -1271,37 +1271,27 @@ ${openingGuidance}
 Write ONLY the scene introduction. No JSON, no meta-commentary, no character sheets.`
 
   try {
-    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: AI_MODELS.FLAGSHIP, // Flagship model for scene intros - first impression shapes the whole session
-        messages: [
-          { role: 'system', content: 'You are an evocative, atmospheric storyteller and game master. You show, don\'t tell. You create tension through imagery and implication, not explanation.' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.9, // Higher creativity for more varied, atmospheric openings
-        max_tokens: 600 // Shorter, punchier scenes (2-3 paragraphs)
-      })
+    const result = await callChatCompletion({
+      apiKey,
+      model: AI_MODELS.FLAGSHIP, // Flagship model for scene intros - first impression shapes the whole session
+      systemPrompt: 'You are an evocative, atmospheric storyteller and game master. You show, don\'t tell. You create tension through imagery and implication, not explanation.',
+      userPrompt: prompt,
+      temperature: 0.9, // Higher creativity for more varied, atmospheric openings
+      maxTokens: 600, // Shorter, punchier scenes (2-3 paragraphs)
     })
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`)
+    if (!result.ok) {
+      throw new Error(`OpenAI API error: ${result.status}`)
     }
 
-    const data = await response.json()
-    const sceneIntro = data.choices[0].message.content.trim()
+    const sceneIntro = result.content.trim()
 
-    const usage = data.usage || {}
     await recordAICost({
       campaignId,
       model: AI_MODELS.FLAGSHIP,
       requestType: 'scene_intro',
-      inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
-      outputTokens: usage.completion_tokens || estimateTokenCount(sceneIntro),
+      inputTokens: result.usage.prompt_tokens || estimateTokenCount(prompt),
+      outputTokens: result.usage.completion_tokens || estimateTokenCount(sceneIntro),
       responseTimeMs: Date.now() - startTime,
       success: true
     }).catch(console.error)
@@ -1356,38 +1346,28 @@ Respond with JSON only, in this exact shape:
 
 The summary must be complete sentences that stand alone without the original text. highlights should be 0-5 short phrases (not full sentences) naming the most notable beats - omit it entirely (empty array) if nothing stands out.`
 
-  const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: AI_MODELS.EFFICIENT,
-      messages: [
-        { role: 'system', content: 'You summarize RPG scene text into concise, player-facing recap entries. You always respond with valid JSON.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.5,
-      max_tokens: 300,
-      response_format: { type: 'json_object' }
-    })
+  const result = await callChatCompletion({
+    apiKey,
+    model: AI_MODELS.EFFICIENT,
+    systemPrompt: 'You summarize RPG scene text into concise, player-facing recap entries. You always respond with valid JSON.',
+    userPrompt: prompt,
+    temperature: 0.5,
+    maxTokens: 300,
+    jsonMode: true,
   })
 
-  if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.status}`)
+  if (!result.ok) {
+    throw new Error(`OpenAI API error: ${result.status}`)
   }
 
-  const data = await response.json()
-  const content = data.choices[0].message.content
+  const content = result.content
 
-  const usage = data.usage || {}
   await recordAICost({
     campaignId,
     model: AI_MODELS.EFFICIENT,
     requestType: 'story_log_summary',
-    inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
-    outputTokens: usage.completion_tokens || estimateTokenCount(content),
+    inputTokens: result.usage.prompt_tokens || estimateTokenCount(prompt),
+    outputTokens: result.usage.completion_tokens || estimateTokenCount(content),
     responseTimeMs: Date.now() - startTime,
     success: true
   }).catch(console.error)
@@ -1429,38 +1409,28 @@ Write a short retrospective (3-5 sentences) of this stretch of the campaign for 
 
 Respond with JSON only: { "recap": "..." }`
 
-  const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: AI_MODELS.EFFICIENT,
-      messages: [
-        { role: 'system', content: 'You write short, evocative campaign retrospectives for a tabletop RPG Story Log. You always respond with valid JSON.' },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.6,
-      max_tokens: 300,
-      response_format: { type: 'json_object' }
-    })
+  const result = await callChatCompletion({
+    apiKey,
+    model: AI_MODELS.EFFICIENT,
+    systemPrompt: 'You write short, evocative campaign retrospectives for a tabletop RPG Story Log. You always respond with valid JSON.',
+    userPrompt: prompt,
+    temperature: 0.6,
+    maxTokens: 300,
+    jsonMode: true,
   })
 
-  if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.status}`)
+  if (!result.ok) {
+    throw new Error(`OpenAI API error: ${result.status}`)
   }
 
-  const data = await response.json()
-  const content = data.choices[0].message.content
+  const content = result.content
 
-  const usage = data.usage || {}
   await recordAICost({
     campaignId,
     model: AI_MODELS.EFFICIENT,
     requestType: 'campaign_milestone_recap',
-    inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
-    outputTokens: usage.completion_tokens || estimateTokenCount(content),
+    inputTokens: result.usage.prompt_tokens || estimateTokenCount(prompt),
+    outputTokens: result.usage.completion_tokens || estimateTokenCount(content),
     responseTimeMs: Date.now() - startTime,
     success: true
   }).catch(console.error)

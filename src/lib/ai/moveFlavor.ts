@@ -15,7 +15,7 @@
 // text keyed by baseMoveKey, the same relationship statLabels has to the
 // fixed stat keys.
 
-import { openaiFetch } from '@/lib/ai/openaiCompat'
+import { callChatCompletion } from './chatCompletion'
 import { AI_MODELS } from './models'
 import { BASIC_MOVES } from '@/lib/pbta-moves'
 import type { GeneratedStatLabels } from './worldGenerator'
@@ -90,34 +90,22 @@ Rules:
 - name: 2-5 words, evocative, never the literal original move name`
 
   try {
-    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: AI_MODELS.EFFICIENT,
-        messages: [
-          {
-            role: 'system',
-            content: 'You reword tabletop RPG move flavor text to fit a campaign\'s voice without altering its mechanics. JSON only.',
-          },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.9,
-        max_tokens: loreDigest ? 2200 : 1800,
-        response_format: { type: 'json_object' },
-      }),
+    const result = await callChatCompletion({
+      apiKey,
+      model: AI_MODELS.EFFICIENT,
+      systemPrompt: 'You reword tabletop RPG move flavor text to fit a campaign\'s voice without altering its mechanics. JSON only.',
+      userPrompt: prompt,
+      temperature: 0.9,
+      maxTokens: loreDigest ? 2200 : 1800,
+      jsonMode: true,
     })
 
-    if (!response.ok) {
-      console.error('Move flavor generation API error:', response.status)
+    if (!result.ok) {
+      console.error('Move flavor generation API error:', result.status)
       return null
     }
 
-    const data = await response.json()
-    const raw = JSON.parse(data.choices[0].message.content)
+    const raw = JSON.parse(result.content)
     if (!Array.isArray(raw.moves)) return null
 
     const flavors: GeneratedMoveFlavor[] = []

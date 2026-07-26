@@ -4,6 +4,7 @@ import { openaiFetch } from '@/lib/ai/openaiCompat'
 // This handles all communication with the AI model
 // Phase 15: Enhanced with strict validation, error handling, and cost tracking
 
+import { callChatCompletion } from './chatCompletion'
 import { validateAIResponseWithRepair, addValidationMetadata } from './validation'
 import { checkOutcomeAdherence, type OutcomeBand } from '@/lib/game/outcomeAdherence'
 import { validateWorldTurnResponse } from './validation'
@@ -1476,39 +1477,29 @@ Respond with JSON:
 }`
 
   try {
-    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: AI_MODELS.EFFICIENT, // Cost optimization: efficient model for background world turns
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.75, // Balanced creativity
-        max_tokens: 1000, // Brief offscreen events (cost optimization)
-        response_format: { type: 'json_object' }
-      })
+    const result = await callChatCompletion({
+      apiKey,
+      model: AI_MODELS.EFFICIENT, // Cost optimization: efficient model for background world turns
+      systemPrompt,
+      userPrompt,
+      temperature: 0.75, // Balanced creativity
+      maxTokens: 1000, // Brief offscreen events (cost optimization)
+      jsonMode: true,
     })
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`)
+    if (!result.ok) {
+      throw new Error(`OpenAI API error: ${result.status}`)
     }
 
-    const data = await response.json()
-    const content = data.choices[0].message.content
+    const content = result.content
 
     if (campaignId) {
-      const usage = data.usage || {}
       await recordAICost({
         campaignId,
         model: AI_MODELS.EFFICIENT,
         requestType: 'offscreen_events',
-        inputTokens: usage.prompt_tokens || estimateTokenCount(systemPrompt + userPrompt),
-        outputTokens: usage.completion_tokens || estimateTokenCount(content),
+        inputTokens: result.usage.prompt_tokens || estimateTokenCount(systemPrompt + userPrompt),
+        outputTokens: result.usage.completion_tokens || estimateTokenCount(content),
         responseTimeMs: Date.now() - startTime,
         success: true
       }).catch(console.error)

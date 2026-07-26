@@ -1,4 +1,3 @@
-import { openaiFetch } from '@/lib/ai/openaiCompat'
 /**
  * AI World Generator
  *
@@ -9,6 +8,7 @@ import { openaiFetch } from '@/lib/ai/openaiCompat'
  */
 
 import { AI_MODELS } from './models'
+import { callChatCompletion } from './chatCompletion'
 
 interface GeneratedFaction {
   name: string
@@ -212,43 +212,31 @@ Rules:
 - Make it feel like it belongs specifically to "${campaignTitle}"`
 
   try {
-    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: AI_MODELS.EFFICIENT,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a creative tabletop RPG world builder. You produce specific, evocative campaign worlds in JSON. Every world you create is unique.'
-          },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.95,
-        // Canon-grounded generation allows up to 6 factions — give the
-        // response real headroom so the JSON doesn't truncate mid-array.
-        // A truncated response fails JSON.parse entirely and zeroes out
-        // factions/capabilities/fronts together, not just whichever field
-        // was mid-write — seen in practice against a content-rich real
-        // wiki digest even at 1900. Fronts add a bounded amount on top
-        // regardless of lore. NPCs/locations are deliberately NOT part of
-        // this call (see worldExtras.ts) — kept separate specifically so
-        // this response stays as small as the rules below allow.
-        max_tokens: loreDigest ? 3200 : 1300,
-        response_format: { type: 'json_object' }
-      })
+    const result = await callChatCompletion({
+      apiKey,
+      model: AI_MODELS.EFFICIENT,
+      systemPrompt: 'You are a creative tabletop RPG world builder. You produce specific, evocative campaign worlds in JSON. Every world you create is unique.',
+      userPrompt: prompt,
+      temperature: 0.95,
+      // Canon-grounded generation allows up to 6 factions — give the
+      // response real headroom so the JSON doesn't truncate mid-array.
+      // A truncated response fails JSON.parse entirely and zeroes out
+      // factions/capabilities/fronts together, not just whichever field
+      // was mid-write — seen in practice against a content-rich real
+      // wiki digest even at 1900. Fronts add a bounded amount on top
+      // regardless of lore. NPCs/locations are deliberately NOT part of
+      // this call (see worldExtras.ts) — kept separate specifically so
+      // this response stays as small as the rules below allow.
+      maxTokens: loreDigest ? 3200 : 1300,
+      jsonMode: true,
     })
 
-    if (!response.ok) {
-      console.error('World generation API error:', response.status)
+    if (!result.ok) {
+      console.error('World generation API error:', result.status)
       return null
     }
 
-    const data = await response.json()
-    const raw = JSON.parse(data.choices[0].message.content)
+    const raw = JSON.parse(result.content)
 
     // Validate and normalise
     if (!raw.world_seed || !Array.isArray(raw.factions)) {

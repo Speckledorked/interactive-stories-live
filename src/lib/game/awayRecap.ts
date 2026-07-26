@@ -2,7 +2,7 @@
 // "While you were away" — surfaces offscreen world-turn fallout a player
 // missed since they last opened the campaign lobby. Pure selection/
 // formatting here; the DB query and lastViewedAt read/write live in the
-// away-recap API route (mirrors buildAskGmPrompt vs answerGmQuestion).
+// away-recap API route (mirrors buildAskGmPrompt vs generateGmAnswer).
 
 // Below this, a recap reads as noise rather than a meaningful absence —
 // nobody wants "while you were away (for 40 seconds)..." on a page refresh.

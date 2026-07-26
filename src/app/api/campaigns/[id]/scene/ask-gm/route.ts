@@ -10,7 +10,7 @@ import { requireAuth } from '@/lib/auth'
 import { pusherServer } from '@/lib/pusher'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { moderatePlayerText } from '@/lib/ai/moderation'
-import { answerGmQuestion, MAX_QUESTION_CHARS } from '@/lib/ai/askGm'
+import { generateGmAnswer, MAX_QUESTION_CHARS } from '@/lib/ai/askGm'
 
 export const maxDuration = 30
 
@@ -70,7 +70,7 @@ export async function POST(
 
     const sceneText = [scene.sceneIntroText, scene.sceneResolutionText].filter(Boolean).join('\n\n')
 
-    const answer = await answerGmQuestion(campaignId, {
+    const answer = await generateGmAnswer(campaignId, {
       campaignTitle: campaign.title,
       universe: campaign.universe || 'Original',
       characterId: character.id,

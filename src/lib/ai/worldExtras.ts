@@ -10,7 +10,7 @@
 // corruption track (which is also the CORRECT output for a universe whose
 // fiction has no devil's-bargain concept — absence is a feature here).
 
-import { openaiFetch } from '@/lib/ai/openaiCompat'
+import { callChatCompletion } from './chatCompletion'
 import { AI_MODELS } from './models'
 import { validateStats } from '@/lib/game/advancement'
 import { MAX_CORRUPTION, CorruptionTheme } from '@/lib/game/corruption'
@@ -154,38 +154,26 @@ Rules for locations:
 - Keep description SHORT (one sentence) — this is a wiki stub, not a gazetteer entry`
 
   try {
-    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: AI_MODELS.EFFICIENT,
-        messages: [
-          {
-            role: 'system',
-            content: 'You design tabletop RPG onboarding content in JSON. You follow structural rules exactly.'
-          },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.9,
-        // Archetypes are the heaviest item (gear/tie/backstory prompts x4)
-        // — npcs/locations add a bounded amount on top. Canon-grounded
-        // generation gets more headroom since named individuals/places
-        // pulled from real lore run longer than invented ones.
-        max_tokens: loreDigest ? 2600 : 2000,
-        response_format: { type: 'json_object' }
-      })
+    const result = await callChatCompletion({
+      apiKey,
+      model: AI_MODELS.EFFICIENT,
+      systemPrompt: 'You design tabletop RPG onboarding content in JSON. You follow structural rules exactly.',
+      userPrompt: prompt,
+      temperature: 0.9,
+      // Archetypes are the heaviest item (gear/tie/backstory prompts x4)
+      // — npcs/locations add a bounded amount on top. Canon-grounded
+      // generation gets more headroom since named individuals/places
+      // pulled from real lore run longer than invented ones.
+      maxTokens: loreDigest ? 2600 : 2000,
+      jsonMode: true,
     })
 
-    if (!response.ok) {
-      console.error('World extras generation API error:', response.status)
+    if (!result.ok) {
+      console.error('World extras generation API error:', result.status)
       return null
     }
 
-    const data = await response.json()
-    const raw = JSON.parse(data.choices[0].message.content)
+    const raw = JSON.parse(result.content)
 
     const validCapabilityKeys = new Set(capabilities.filter(c => !c.isSecret).map(c => slugifyCapabilityKey(c.name)))
     const factionNames = new Set(factions.map(f => f.name.toLowerCase()))

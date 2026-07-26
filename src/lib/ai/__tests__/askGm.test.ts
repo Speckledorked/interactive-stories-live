@@ -1,6 +1,6 @@
 // src/lib/ai/__tests__/askGm.test.ts
 // Ask-the-GM: pure prompt building. buildAskGmPrompt is the only piece of
-// answerGmQuestion that doesn't touch the DB/network, so it's what gets a
+// generateGmAnswer that doesn't touch the DB/network, so it's what gets a
 // direct unit test — the orchestration around it is exercised end-to-end
 // via the API route instead (see the "no PlayerAction" architectural
 // constraint documented on the GmClarification model).

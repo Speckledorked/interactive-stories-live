@@ -11,7 +11,7 @@
 // generateNewSceneIntro's pattern (a plain free-text completion) rather
 // than callAIGM's (a JSON-schema world_updates response).
 
-import { openaiFetch } from './openaiCompat'
+import { callChatCompletion } from './chatCompletion'
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { buildWorldSummaryForAI } from './worldState'
@@ -72,7 +72,7 @@ export interface AskGmOptions {
  * failure (no API key, network error, malformed response) — the caller
  * treats that as "try again," never as a fabricated answer.
  */
-export async function answerGmQuestion(campaignId: string, opts: AskGmOptions): Promise<string | null> {
+export async function generateGmAnswer(campaignId: string, opts: AskGmOptions): Promise<string | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return null
 
@@ -90,39 +90,29 @@ export async function answerGmQuestion(campaignId: string, opts: AskGmOptions): 
 
   const startTime = Date.now()
   try {
-    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: AI_MODELS.EFFICIENT,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        temperature: 0.6,
-        max_tokens: MAX_ANSWER_TOKENS,
-      }),
+    const result = await callChatCompletion({
+      apiKey,
+      model: AI_MODELS.EFFICIENT,
+      systemPrompt: system,
+      userPrompt: user,
+      temperature: 0.6,
+      maxTokens: MAX_ANSWER_TOKENS,
     })
 
-    if (!response.ok) {
-      console.error('Ask-GM API error:', response.status)
+    if (!result.ok) {
+      console.error('Ask-GM API error:', result.status)
       return null
     }
 
-    const data = await response.json()
-    const answer = String(data.choices?.[0]?.message?.content || '').trim()
+    const answer = String(result.content || '').trim()
     if (!answer) return null
 
-    const usage = data.usage || {}
     await recordAICost({
       campaignId,
       model: AI_MODELS.EFFICIENT,
       requestType: 'gm_clarification',
-      inputTokens: usage.prompt_tokens || estimateTokenCount(system + user),
-      outputTokens: usage.completion_tokens || estimateTokenCount(answer),
+      inputTokens: result.usage.prompt_tokens || estimateTokenCount(system + user),
+      outputTokens: result.usage.completion_tokens || estimateTokenCount(answer),
       responseTimeMs: Date.now() - startTime,
       success: true,
     }).catch(console.error)

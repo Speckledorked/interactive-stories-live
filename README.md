@@ -182,6 +182,21 @@ Re-examined rather than re-asserted, and the decision holds with evidence behind
 - *Scope:* UX, product positioning — worth knowing before describing the admin panel as a "design tool" anywhere external.
 - *Suggested fix:* No fix needed if the intent is genuinely "host settings," not "simulation design" — but the copy/positioning should match reality.
 
+**Naming inconsistency in `lib/game/`: kebab-case survivors among camelCase (#99)** — found during a world-simulation refactor pass (`worldTick.ts`/`worldTurn.ts`/`tick/*`, which came back clean of dead code and unused imports — this is what was left over): four files — `world-state-tracker.ts`, `complex-exchange-resolver.ts`, `exchange-manager.ts`, `campaign-health.ts` — use kebab-case while every other file in `lib/game/` (the entire simulation subsystem included, ~25 files) uses camelCase. Purely cosmetic; each file works correctly under either convention, but a new file in this directory has no single pattern to copy.
+- *Evidence:* `find src/lib/game -maxdepth 1 -name "*-*.ts"` returns exactly these four.
+- *Scope:* maintainability only — no behavior involved.
+- *Suggested fix:* rename to camelCase (`worldStateTracker.ts`, etc.) the next time one of these four is touched for its own reasons, updating its importers in the same commit — not worth a standalone rename-only PR against systems outside the simulation refactor's scope.
+
+**`warTick.ts`'s `tickWars` split short of separate files (#100)** — the world-simulation refactor broke `tickWars` (previously one ~300-line function covering three jobs) into three named functions — `resolveWarProgress`, `growWarCoalitions`, `declareNewWars` — in the same file, rather than three separate modules. Deliberate: this is the most heavily mutation-tested file in the simulation (see the War & coalition system row above), and a full-file split touches every import in `warCoalitions.test.ts`/`tick.test.ts` for a stylistic win with no behavior change. Left as an open option for whoever revisits this file next rather than decided unilaterally.
+- *Evidence:* `src/lib/game/tick/warTick.ts`.
+- *Scope:* maintainability only.
+- *Suggested fix:* split into `tick/war/progress.ts`, `tick/war/coalitions.ts`, `tick/war/declaration.ts` if the file grows further; not urgent at its current size.
+
+**Loose `any` typing through the clock/ambition/offscreen-event pipeline (#101)** — `advancedClocks: any[]`, `completedAmbitionClocks: any[]`, and one `(c: any) =>` filter carry through `worldTurn.ts`, `tick/clockTick.ts`, `tick/ambitionResolution.ts`, and `worldTurnOffscreenEvents.ts` (plus one `worldMeta.otherMeta as any` for the untyped GM-notes JSON blob). Pre-existing looseness, preserved as-is by the world-simulation refactor rather than widened into a type-strengthening pass — moving code and changing its types in the same diff would have made "no behavior change" harder to verify honestly.
+- *Evidence:* `src/lib/game/worldTurn.ts`, `worldTurnOffscreenEvents.ts`, `tick/ambitionResolution.ts`, `tick/clockTick.ts`.
+- *Scope:* type-safety only — every current call site already passes the right shape, so nothing is silently wrong today.
+- *Suggested fix:* define a shared interface (fields already implied by usage: `id`, `oldTicks`, `newTicks`, `category`, `sourceFactionId`, etc.) and thread it through the four files instead of `any[]`.
+
 ## Roadmap
 
 ### 🎯 Next — Product & Market

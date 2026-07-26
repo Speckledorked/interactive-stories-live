@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { visibleTo } from '@/lib/api/visibility'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import { UserRole } from '@prisma/client'
@@ -47,32 +48,20 @@ export async function GET(
             }
           }
         },
-        // Fog of war: same admin-aware discovery gating as locations below —
-        // an undiscovered NPC/faction must not reach a non-admin's network
-        // response at all, not just have its gmNotes stripped.
-        npcs: {
-          where: membership.role === 'ADMIN'
-            ? {}
-            : { isDiscovered: true }
-        },
-        factions: {
-          where: membership.role === 'ADMIN'
-            ? {}
-            : { isDiscovered: true }
-        },
+        // Fog of war (#94): the gate comes from lib/api/visibility.ts rather
+        // than being re-decided here. An undiscovered NPC/faction must not
+        // reach a non-admin's network response at all, not just have its
+        // gmNotes stripped — and an admin sees everything so they can
+        // manage it. Note clocks gate on the OPPOSITE polarity (isHidden),
+        // which is exactly the detail visibleTo exists to stop each caller
+        // having to remember.
+        npcs: { where: visibleTo('npc', membership.role) },
+        factions: { where: visibleTo('faction', membership.role) },
         locations: {
-          // Admin sees all locations (including undiscovered ones, so they
-          // can manage them); others see only what the party has found.
-          where: membership.role === 'ADMIN'
-            ? {}
-            : { isDiscovered: true },
+          where: visibleTo('location', membership.role),
           orderBy: { name: 'asc' }
         },
-        clocks: {
-          where: membership.role === 'ADMIN'
-            ? {} // Admin sees all clocks
-            : { isHidden: false } // Others see only public clocks
-        },
+        clocks: { where: visibleTo('clock', membership.role) },
         // Timeline events relation is named "timeline" in the schema
         timeline: {
           // Admin sees all events; others see only public ones

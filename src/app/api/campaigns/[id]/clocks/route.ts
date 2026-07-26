@@ -1,6 +1,7 @@
 // src/app/api/campaigns/[id]/clocks/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { visibleTo } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
 
@@ -38,7 +39,7 @@ export async function GET(
     const clocks = await prisma.clock.findMany({
       where: {
         campaignId,
-        ...(membership.role === 'ADMIN' ? {} : { isHidden: false }),
+        ...visibleTo('clock', membership.role),
       },
       orderBy: { createdAt: 'desc' },
     })

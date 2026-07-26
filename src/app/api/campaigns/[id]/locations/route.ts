@@ -1,6 +1,7 @@
 // src/app/api/campaigns/[id]/locations/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { visibleTo, isCampaignAdmin } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
 
@@ -34,12 +35,12 @@ export async function GET(
       )
     }
 
-    const isAdmin = membership.role === 'ADMIN'
+    const isAdmin = isCampaignAdmin(membership.role)
 
     // Get all locations for the campaign — admins see undiscovered ones too
     // (so they can manage them), others see only what the party has found.
     const locations = await prisma.location.findMany({
-      where: isAdmin ? { campaignId } : { campaignId, isDiscovered: true },
+      where: { campaignId, ...visibleTo('location', membership.role) },
       orderBy: { name: 'asc' },
     })
 

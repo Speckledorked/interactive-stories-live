@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   accrueNaturalRecovery,
+  applyRest,
   blocksNaturalRecovery,
   HOURS_PER_HARM_RECOVERED,
   stabilizeCharacter,
@@ -330,5 +331,61 @@ describe('blocksNaturalRecovery', () => {
     expect(blocksNaturalRecovery([{ name: 'Stunned', rollModifier: -1 } as any])).toBe(false)
     expect(blocksNaturalRecovery([])).toBe(false)
     expect(blocksNaturalRecovery(null)).toBe(false)
+  })
+})
+
+describe('applyRest — the fiction half of recovery', () => {
+  // Rest is narrated, never chosen: the AI reports the shelter the story
+  // gave a character, and the engine decides what it was worth. These
+  // cover the properties that keep that from becoming a loophole.
+
+  it('grades recovery by the shelter the fiction gave them', () => {
+    expect(applyRest(4, 'excellent').newHarm).toBe(2)
+    expect(applyRest(4, 'adequate').newHarm).toBe(3)
+    expect(applyRest(4, 'poor').newHarm).toBe(4)
+  })
+
+  it('says so plainly when the shelter was too rough to help', () => {
+    const r = applyRest(3, 'poor')
+    expect(r.newHarm).toBe(3)
+    expect(r.message).toMatch(/insufficient/i)
+  })
+
+  it('will not mend a wound that is still open', () => {
+    // The load-bearing one. accrueNaturalRecovery already refuses to heal
+    // through bleeding; without this, "they slept at the inn" would be a
+    // way around the rule the calendar path enforces.
+    const r = applyRest(4, 'excellent', bleeding)
+    expect(r.newHarm).toBe(4)
+    expect(r.message).toMatch(/open/i)
+  })
+
+  it('blocks on recurring harm by effect, not by condition name', () => {
+    expect(applyRest(4, 'excellent', [{ name: 'Festering Curse', harmPerScene: 1 } as any]).newHarm).toBe(4)
+  })
+
+  it('is unblocked by conditions that only penalize rolls', () => {
+    expect(applyRest(4, 'excellent', [{ name: 'Stunned', rollModifier: -1 } as any]).newHarm).toBe(2)
+  })
+
+  it('cannot pull anyone back from Taken Out', () => {
+    // At harm 6 the way back is stabilization and a recovery roll — a
+    // narrated moment. Sleeping it off is not one.
+    const r = applyRest(6, 'excellent')
+    expect(r.newHarm).toBe(6)
+    expect(r.message).toMatch(/stabiliz/i)
+  })
+
+  it('never heals past unhurt', () => {
+    expect(applyRest(1, 'excellent').newHarm).toBe(0)
+    expect(applyRest(0, 'excellent').newHarm).toBe(0)
+  })
+
+  it('is slower than a healer and faster than the calendar', () => {
+    // The reason it exists as a third speed rather than an alias of one
+    // of the other two.
+    const bestRest = 4 - applyRest(4, 'excellent').newHarm
+    expect(bestRest).toBeLessThan(3)  // expert + supplies heals 3
+    expect(bestRest).toBeGreaterThan(0)
   })
 })

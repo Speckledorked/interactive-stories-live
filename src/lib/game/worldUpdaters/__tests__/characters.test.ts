@@ -124,6 +124,43 @@ describe('applyCharacterChanges — harm and conditions', () => {
     expect(data.isAlive).toBeUndefined()
   })
 
+  it('mends harm from a narrated stretch of rest, graded by shelter', async () => {
+    // Rest reaches the sheet through the fiction channel, not a button.
+    const roster = [character({ harm: 4 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { rest_quality: 'excellent' } } as PcChange,
+    ], roster, noTheme, true)
+    expect(tx.character.update.mock.calls[0][0].data.harm).toBe(2)
+  })
+
+  it('will not let a narrated night of rest mend an open wound', async () => {
+    // The loophole this closes: the calendar path already refuses to heal
+    // through Bleeding, so rest must refuse too or it becomes the way
+    // around that rule.
+    const roster = [character({
+      harm: 4,
+      conditions: { conditions: [{ id: 'b1', name: 'Bleeding', category: 'Physical', description: 'open wound', harmPerScene: 1 }] },
+    })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { rest_quality: 'excellent' } } as PcChange,
+    ], roster, noTheme, true)
+    expect(tx.character.update.mock.calls[0][0].data.harm).toBe(4)
+  })
+
+  it('stacks treatment and rest when the fiction gave both', async () => {
+    const roster = [character({ harm: 5 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      {
+        character_name_or_id: 'char1',
+        changes: {
+          medical_attention: { skill: 'trained', has_supplies: true },  // -2
+          rest_quality: 'adequate',                                     // -1
+        },
+      } as PcChange,
+    ], roster, noTheme, true)
+    expect(tx.character.update.mock.calls[0][0].data.harm).toBe(2)
+  })
+
   it('adds a structured condition', async () => {
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 1, [

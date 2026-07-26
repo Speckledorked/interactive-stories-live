@@ -159,6 +159,8 @@ export interface AIGMResponse {
           skill: 'basic' | 'trained' | 'expert'
           has_supplies: boolean
         }
+        // A stretch of real rest the fiction gave them, graded by shelter
+        rest_quality?: 'poor' | 'adequate' | 'excellent'
         // Only while the character is in the critical dying state
         death_save_result?: 'success' | 'failure'
         // Player-driven choice to die for something that matters
@@ -877,6 +879,17 @@ harm_healing number. Set skill to match who's treating them and
 has_supplies to whether they have the means (bandages, potions, etc.) on
 hand. It has no effect on a character who is unconscious/dying at 6 harm
 — they need to be stabilized first (see below).
+
+REST: When the fiction actually gives a character a real stretch of rest —
+a night at an inn, a long watch-free sleep, days laid up recovering — set
+rest_quality instead of guessing a harm_healing number. Grade it by the
+SHELTER they had, not by how long: 'excellent' for a bed, warmth and
+safety; 'adequate' for somewhere dry and reasonably quiet; 'poor' for
+sleeping rough, in shifts, or under threat. Do NOT set it for a few
+minutes catching their breath mid-scene, or for time that merely passed —
+ordinary passing time already heals on its own. A character who is
+bleeding or otherwise still taking harm each scene will not mend from
+rest; treat the wound first.
 
 DYING STATE (only relevant once a character's conditions show them
 critically dying — check the world state you were given, don't invent

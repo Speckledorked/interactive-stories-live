@@ -23,6 +23,7 @@ import {
   performRecoveryRoll,
   makeDeathSave,
   applyMedicalAttention,
+  applyRest,
   performHeroicSacrifice,
   isDying,
   Condition,
@@ -310,6 +311,23 @@ export async function applyCharacterChanges(
         )
         deathSaves = 0
       }
+    }
+
+    // A stretch of real rest in the fiction. Deliberately AFTER treatment,
+    // so a night that included both is worth both — the same ordering
+    // harm_healing already has, and the order a story tells it in.
+    //
+    // Conditions are passed so bleeding blocks it: the slow calendar path
+    // (accrueNaturalRecovery) already refuses to mend an open wound, and a
+    // narrated night's sleep must not become the way around that rule.
+    if (pcChange.changes.rest_quality) {
+      const rested = applyRest(
+        currentHarm as HarmLevel,
+        pcChange.changes.rest_quality,
+        currentConditions
+      )
+      currentHarm = rested.newHarm
+      harmMessages.push(rested.message)
     }
 
     // Already critically dying: apply whatever the AI narrated this turn.

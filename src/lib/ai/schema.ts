@@ -222,6 +222,12 @@ export const PCChangesSchema = z.object({
       skill: z.enum(['basic', 'trained', 'expert']),
       has_supplies: z.boolean()
     }).optional(),
+    // A stretch of genuine rest the fiction gave them, graded by the
+    // shelter they had. Same reasoning as medical_attention: the engine
+    // decides what a night's sleep is worth rather than the AI guessing a
+    // harm_healing number. Not a player-facing button — there is no rest
+    // action, only rest that happens in the story.
+    rest_quality: z.enum(['poor', 'adequate', 'excellent']).optional(),
     // Only meaningful while a character is in the critical "dying" state
     // (Taken Out with no stabilizing treatment yet). Narrate whether they
     // cling to life or slip further this turn.

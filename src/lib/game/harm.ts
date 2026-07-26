@@ -834,12 +834,28 @@ export function applyMedicalAttention(
 }
 
 /**
- * Rest and recover
- * Characters heal slowly over time with rest
+ * A deliberate stretch of rest, sourced from the fiction.
+ *
+ * This is the same channel as medical_attention and for the same reason:
+ * when the narration says the party held up in a warm room for the night,
+ * the engine decides what that is worth rather than letting the AI pick a
+ * harm_healing number. `restQuality` describes the SHELTER the fiction
+ * gave them — a bed and a fire, a dry cave, or a wet ditch in shifts — not
+ * a difficulty the player selected. There is no rest button, by design.
+ *
+ * It sits between the two recovery speeds: faster than the calendar
+ * (accrueNaturalRecovery, a full in-game day per point), slower than a
+ * healer's hands (applyMedicalAttention, up to 3 at expert with supplies).
+ *
+ * Recurring-harm conditions block it, exactly as they block natural
+ * recovery. Otherwise "they rest" would be a way to mend a wound that is
+ * still actively bleeding, and the fiction path would quietly undo the
+ * rule the time path enforces.
  */
 export function applyRest(
   currentHarm: HarmLevel,
-  restQuality: 'poor' | 'adequate' | 'excellent'
+  restQuality: 'poor' | 'adequate' | 'excellent',
+  conditions?: Condition[] | null
 ): {
   newHarm: HarmLevel
   message: string
@@ -849,6 +865,13 @@ export function applyRest(
     return {
       newHarm: 6,
       message: 'Cannot rest while Taken Out - stabilization required'
+    }
+  }
+
+  if (blocksNaturalRecovery(conditions)) {
+    return {
+      newHarm: currentHarm,
+      message: 'Rest cannot mend a wound that is still open'
     }
   }
 

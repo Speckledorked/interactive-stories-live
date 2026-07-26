@@ -209,6 +209,15 @@ The fiction half already worked (`harm_healing`, `medical_attention`). The **tim
 - **An open wound doesn't mend.** Anything dealing recurring harm blocks natural recovery, matched on the enforced field rather than by name, so a condition the fiction invents blocks it too. Bleeding now costs harm every scene *and* stops you healing, which is how it should have read all along.
 - **Campaign-wide, not scene-scoped** — time passes for the character who sat this scene out too, and scoping it to participants would mean a wound heals faster the more you play.
 
+**Rest is now the third recovery speed, and it comes from the fiction (`rest_quality`):**
+
+`applyRest` was the last recovery function with no caller — written with `poor`/`adequate`/`excellent` bands that read like a player-choice API, in a design that has no player choice in it. Rather than delete it, it's wired the way `medical_attention` already is: **the narrator reports the shelter, the engine decides what it was worth.** Setting `rest_quality` on a `pc_changes` entry is how "they held up at the inn for the night" reaches the sheet — there's still no rest button.
+
+- **Graded by shelter, not by duration.** A bed and a fire heals 2, somewhere dry and quiet heals 1, sleeping rough in shifts heals nothing. Duration is already the calendar's job; grading rest by it too would double-count the same hours.
+- **A third speed on purpose.** Slower than a healer's hands (up to 3 at expert with supplies), faster than the calendar (a full day per point). If it matched either it would be an alias rather than a mechanic.
+- **Same reason `medical_attention` exists:** the engine picks the number so the AI can't. Left to `harm_healing`, "they slept well" is a free-text integer between 0 and 6.
+- **Bleeding blocks it, exactly as it blocks the calendar.** Without that guard, a narrated night's sleep would be the way around the rule the time path enforces — so the conditions are passed in and the same `blocksNaturalRecovery` check runs. Rest still can't touch a character at harm 6, either; that road out is stabilization and a recovery roll.
+
 **The manual world-turn trigger is removed, on purpose:**
 
 `manualWorldTurn` and `getWorldTurnSummary` were exported with no callers anywhere — a host-facing "advance the world now" surface built and never connected. Removed rather than wired up, which is the opposite of the usual call here and the reasoning is worth keeping:

@@ -20,6 +20,9 @@
 //     with no faction driving them close faster. Without that, this would
 //     be another well-named number nothing reads.
 
+import { prisma } from '@/lib/prisma'
+import { clamp } from './types'
+
 /** Everything tension is computed from. Snapshot, not live objects. */
 export interface TensionInputs {
   /** Active clocks, as fill ratios 0..1 (currentTicks / maxTicks). */
@@ -36,10 +39,6 @@ export const TENSION_MIN = 0
 export const TENSION_MAX = 100
 /** Where a campaign with nothing going on sits. */
 export const TENSION_BASELINE = 25
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
-}
 
 /**
  * Compute tension from current world state. Pure and deterministic — the
@@ -126,4 +125,51 @@ export function describeTension(tension: number): string {
   if (tension >= 40) return 'building'
   if (tension >= 25) return 'simmering'
   return 'calm'
+}
+
+/**
+ * Recompute dramatic tension from live state and persist it, along with
+ * the story phase derived from it. Returns the new tension so the caller
+ * can use it in the same pass.
+ *
+ * Recomputed from scratch rather than accumulated: an accumulator drifts
+ * and can't be reasoned about after a hundred turns, whereas this is a
+ * pure function of the world as it stands right now (see computeTension
+ * above). Best-effort — a failure leaves the previous value and never
+ * blocks the world turn.
+ */
+export async function refreshCampaignTension(
+  campaignId: string,
+  turnNumber: number,
+  activeClocks: Array<{ currentTicks: number; maxTicks: number }>
+): Promise<number> {
+  try {
+    const [wars, characters, factions] = await Promise.all([
+      prisma.war.count({ where: { campaignId, status: 'ESCALATING' } }),
+      prisma.character.findMany({ where: { campaignId, isAlive: true }, select: { harm: true } }),
+      prisma.faction.findMany({
+        where: { campaignId, isActive: true, isDiscovered: true },
+        select: { threatLevel: true },
+      }),
+    ])
+
+    const tension = computeTension({
+      clockFillRatios: activeClocks
+        .filter(c => c.maxTicks > 0)
+        .map(c => c.currentTicks / c.maxTicks),
+      activeWarCount: wars,
+      partyHarm: characters.map(c => c.harm),
+      factionThreatLevels: factions.map(f => f.threatLevel),
+    })
+
+    await prisma.worldMeta.update({
+      where: { campaignId },
+      data: { tension, phase: derivePhase(tension, turnNumber) },
+    })
+
+    return tension
+  } catch (error) {
+    console.error('  ⚠️ Tension refresh failed (non-critical):', error)
+    return TENSION_BASELINE
+  }
 }

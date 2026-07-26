@@ -10,6 +10,7 @@
 // scope for this pass) so LOCATION_WEATHER changes are ignored.
 
 import { prisma } from '@/lib/prisma'
+import type { Prisma, WikiEntryType } from '@prisma/client'
 import { WorldChange, parseFactionRelationships } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
 import { describeStat } from '@/lib/ai/qualitativeStats'
@@ -123,39 +124,16 @@ async function syncNpcWikiEntry(
 
   const wikiImportance = npc.importance >= MAJOR_IMPORTANCE_THRESHOLD ? 'major' : 'normal'
 
-  const existing = await prisma.wikiEntry.findFirst({
-    where: { campaignId, entryType: 'NPC', name: npc.name },
+  await upsertWikiEntry({
+    campaignId,
+    turnNumber,
+    entryType: 'NPC',
+    name: npc.name,
+    summary: npc.description || `A character in the story`,
+    description,
+    importance: wikiImportance,
+    related,
   })
-
-  if (existing) {
-    await prisma.wikiEntry.update({
-      where: { id: existing.id },
-      data: {
-        description,
-        importance: wikiImportance,
-        lastSeenTurn: turnNumber,
-        updatedAt: new Date(),
-        changelog: appendWikiChangelog(existing.changelog, turnNumber, 'Details updated') as any,
-        relatedEntries: related as any,
-      },
-    })
-  } else {
-    await prisma.wikiEntry.create({
-      data: {
-        campaignId,
-        entryType: 'NPC',
-        relatedEntries: related as any,
-        name: npc.name,
-        summary: npc.description || `A character in the story`,
-        description,
-        tags: [],
-        aliases: [],
-        importance: wikiImportance,
-        lastSeenTurn: turnNumber,
-        createdBy: 'ai',
-      },
-    })
-  }
 }
 
 async function syncFactionWikiEntry(
@@ -191,35 +169,63 @@ async function syncFactionWikiEntry(
     faction.territories.map(t => ({ id: t.name, type: 'LOCATION' as const, relationship: 'Controls' }))
   )
 
+  await upsertWikiEntry({
+    campaignId,
+    turnNumber,
+    entryType: 'FACTION',
+    name: faction.name,
+    summary: faction.description || `A faction in the campaign`,
+    description,
+    importance: wikiImportance,
+    related,
+  })
+}
+
+/**
+ * Shared find-or-create for a wiki entry, keyed by (campaignId, entryType,
+ * name) as everywhere else in this file. Extracted because syncNpcWikiEntry
+ * and syncFactionWikiEntry differed only in which fields feed the same
+ * update-or-create shape, not in the shape itself.
+ */
+async function upsertWikiEntry(input: {
+  campaignId: string
+  turnNumber: number
+  entryType: WikiEntryType
+  name: string
+  summary: string
+  description: string
+  importance: 'major' | 'normal'
+  related: WikiRelatedEntry[]
+}): Promise<void> {
   const existing = await prisma.wikiEntry.findFirst({
-    where: { campaignId, entryType: 'FACTION', name: faction.name },
+    where: { campaignId: input.campaignId, entryType: input.entryType, name: input.name },
   })
 
   if (existing) {
     await prisma.wikiEntry.update({
       where: { id: existing.id },
       data: {
-        description,
-        importance: wikiImportance,
-        lastSeenTurn: turnNumber,
+        description: input.description,
+        importance: input.importance,
+        lastSeenTurn: input.turnNumber,
         updatedAt: new Date(),
-        changelog: appendWikiChangelog(existing.changelog, turnNumber, 'Details updated') as any,
-        relatedEntries: related as any,
+        changelog: appendWikiChangelog(existing.changelog, input.turnNumber, 'Details updated') as Prisma.InputJsonValue,
+        relatedEntries: input.related as unknown as Prisma.InputJsonValue,
       },
     })
   } else {
     await prisma.wikiEntry.create({
       data: {
-        campaignId,
-        entryType: 'FACTION',
-        relatedEntries: related as any,
-        name: faction.name,
-        summary: faction.description || `A faction in the campaign`,
-        description,
+        campaignId: input.campaignId,
+        entryType: input.entryType,
+        relatedEntries: input.related as unknown as Prisma.InputJsonValue,
+        name: input.name,
+        summary: input.summary,
+        description: input.description,
         tags: [],
         aliases: [],
-        importance: wikiImportance,
-        lastSeenTurn: turnNumber,
+        importance: input.importance,
+        lastSeenTurn: input.turnNumber,
         createdBy: 'ai',
       },
     })

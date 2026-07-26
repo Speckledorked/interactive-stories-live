@@ -36,6 +36,7 @@
 // tick either, for the same reason.
 
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { HIGH_BAND_MIN } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, parseFactionRelationships, stableHash } from './types'
 
@@ -237,9 +238,11 @@ export function decideWarJoiner(candidates: WarJoinCandidate[]): WarJoinCandidat
   return eligible.sort((a, b) => b.military - a.military || a.id.localeCompare(b.id))[0]
 }
 
-export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
-  const changes: WorldChange[] = []
+type ActiveWar = Prisma.WarGetPayload<{
+  include: { attacker: true; defender: true; participants: { include: { faction: true } } }
+}>
 
+export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
   const activeWars = await prisma.war.findMany({
     where: { campaignId: ctx.campaignId, status: 'ESCALATING' },
     include: {
@@ -254,6 +257,27 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
     for (const p of war.participants) factionIdsAtWar.add(p.factionId)
   }
 
+  // Three distinct jobs, run in this order: settle the wars already
+  // underway, let the survivors' allies pile on, then see whether any new
+  // war ignites — each phase's output (who's resolved, who's now at war)
+  // feeds the next.
+  const progress = await resolveWarProgress(ctx, activeWars)
+  const coalitionChanges = await growWarCoalitions(ctx, activeWars, factionIdsAtWar, progress.resolvedWarIds)
+  const declarationChanges = await declareNewWars(ctx, factionIdsAtWar)
+
+  return { changes: [...progress.changes, ...coalitionChanges, ...declarationChanges] }
+}
+
+/**
+ * Settle every currently-ESCALATING war: apply momentum/attrition, and
+ * resolve any that reach a decisive swing or their max duration. Returns
+ * which wars resolved this tick so growWarCoalitions can skip them.
+ */
+async function resolveWarProgress(
+  ctx: TickContext,
+  activeWars: ActiveWar[]
+): Promise<{ changes: WorldChange[]; resolvedWarIds: Set<string> }> {
+  const changes: WorldChange[] = []
   const resolvedWarIds = new Set<string>()
 
   for (const war of activeWars) {
@@ -399,11 +423,25 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
     })
   }
 
-  // Coalitions: let each side of an ongoing (not just-resolved) war pull in
-  // one already-idle ally, if one is strong enough. A faction is eligible
-  // only if it's allied with a CURRENT side member, active, meets the same
-  // military bar declaration itself requires, and isn't already committed
-  // to any war (this one or another) — factionIdsAtWar tracks that globally.
+  return { changes, resolvedWarIds }
+}
+
+/**
+ * Let each side of an ongoing (not just-resolved) war pull in one
+ * already-idle ally, if one is strong enough. A faction is eligible only if
+ * it's allied with a CURRENT side member, active, meets the same military
+ * bar declaration itself requires, and isn't already committed to any war
+ * (this one or another) — factionIdsAtWar tracks that globally, and is
+ * mutated here as joiners are added so declareNewWars sees them too.
+ */
+async function growWarCoalitions(
+  ctx: TickContext,
+  activeWars: ActiveWar[],
+  factionIdsAtWar: Set<string>,
+  resolvedWarIds: Set<string>
+): Promise<WorldChange[]> {
+  const changes: WorldChange[] = []
+
   for (const war of activeWars) {
     if (resolvedWarIds.has(war.id)) continue
 
@@ -462,8 +500,19 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
     }
   }
 
-  // Declare new wars among rival pairs not already fighting each other,
-  // where one side's territory is already contested by the other.
+  return changes
+}
+
+/**
+ * Declare new wars among rival pairs not already fighting each other, where
+ * one side's territory is already contested by the other. `factionIdsAtWar`
+ * is mutated as new wars ignite, reflecting everyone tickWars has already
+ * committed to a war this tick (pre-existing participants plus this tick's
+ * coalition joiners).
+ */
+async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): Promise<WorldChange[]> {
+  const changes: WorldChange[] = []
+
   const factions = await prisma.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
     orderBy: { createdAt: 'asc' },
@@ -543,5 +592,5 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
     })
   }
 
-  return { changes }
+  return changes
 }

@@ -37,7 +37,9 @@
 // dependency, just ties-then-consequences).
 
 import { prisma } from '@/lib/prisma'
-import { TickContext, TickHandlerResult, WorldChange, FactionRelationshipEntry, parseFactionRelationships, stableHash } from './types'
+import type { Prisma } from '@prisma/client'
+import { TickContext, TickHandlerResult, WorldChange, parseFactionRelationships, stableHash } from './types'
+import { tickPairwiseTies } from './relationshipEngine'
 import { MAJOR_IMPORTANCE_THRESHOLD, isActingPhase } from './npcTick'
 
 export type NpcSocialTieType = 'ALLY' | 'RIVAL' | 'NEUTRAL'
@@ -110,36 +112,19 @@ export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerRe
     return factionRelById.get(aFactionId)?.[bFactionId]?.type ?? 'NEUTRAL'
   }
 
-  const changes: WorldChange[] = []
   const aliveNpcIds = new Set(npcs.map((n) => n.id))
-  const working = new Map<string, Record<string, FactionRelationshipEntry>>()
-  const dirty = new Set<string>()
-  for (const n of npcs) {
-    working.set(n.id, { ...parseFactionRelationships(n.socialTies) })
-  }
 
-  // Expire ties whose other NPC died, dropped below major importance, or
-  // was otherwise removed from this tick's roster — without this a tie
-  // to a dead NPC stays on record forever, since nothing else ever visits it.
-  for (const n of npcs) {
-    const ties = working.get(n.id)!
-    for (const [otherId, tie] of Object.entries(ties)) {
-      if (aliveNpcIds.has(otherId)) continue
-      delete ties[otherId]
-      dirty.add(n.id)
-      changes.push({
-        entityType: 'NPC', entityId: n.id, entityName: n.name, campaignId: ctx.campaignId,
-        field: 'socialTie', previousValue: tie.type, newValue: 'NEUTRAL',
-        reason: `${n.name}'s ${tie.type === 'RIVAL' ? 'rivalry' : 'alliance'} lapses — the other party is no longer part of this world's active cast`,
-        significant: false, importance: 'NORMAL',
-      })
-    }
-  }
-
-  for (let i = 0; i < npcs.length; i++) {
-    for (let j = i + 1; j < npcs.length; j++) {
-      const a = npcs[i]
-      const b = npcs[j]
+  const { changes, working, dirty } = tickPairwiseTies({
+    campaignId: ctx.campaignId,
+    entityType: 'NPC',
+    entities: npcs,
+    turnNumber: ctx.turnNumber,
+    getRawTies: (n) => n.socialTies,
+    // Expire ties whose other NPC died, dropped below major importance, or
+    // was otherwise removed from this tick's roster — without this a tie
+    // to a dead NPC stays on record forever, since nothing else ever visits it.
+    isValidOtherId: (otherId) => aliveNpcIds.has(otherId),
+    decide: (a, b) => {
       const factionRel = a.factionId && b.factionId ? factionRelationshipBetween(a.factionId, b.factionId) : 'NEUTRAL'
       let freshType: NpcSocialTieType = decideNpcSocialTie(a, b, factionRel)
 
@@ -156,54 +141,32 @@ export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerRe
           viaTerritory = true
         }
       }
-
-      const aTies = working.get(a.id)!
-      const bTies = working.get(b.id)!
-      const existing = aTies[b.id]
-
-      if (freshType === 'NEUTRAL') {
-        if (!existing) continue
-        delete aTies[b.id]
-        delete bTies[a.id]
-        dirty.add(a.id)
-        dirty.add(b.id)
-        changes.push({
-          entityType: 'NPC', entityId: a.id, entityName: a.name, campaignId: ctx.campaignId,
-          field: 'socialTie', previousValue: existing.type, newValue: 'NEUTRAL',
-          reason: `${a.name} and ${b.name} are no longer ${existing.type === 'RIVAL' ? 'rivals' : 'allies'}`,
-          significant: false, importance: 'NORMAL',
-        })
-        continue
-      }
-
-      if (existing?.type === freshType) continue
-
-      aTies[b.id] = { type: freshType, since: ctx.turnNumber }
-      bTies[a.id] = { type: freshType, since: ctx.turnNumber }
-      dirty.add(a.id)
-      dirty.add(b.id)
-
-      const reason = viaTerritory
+      return { type: freshType, meta: viaTerritory }
+    },
+    buildExpireChange: (n, _otherId, previous) => ({
+      reason: `${n.name}'s ${previous.type === 'RIVAL' ? 'rivalry' : 'alliance'} lapses — the other party is no longer part of this world's active cast`,
+      significant: false,
+    }),
+    buildNeutralChange: (a, b, previous) => ({
+      reason: `${a.name} and ${b.name} are no longer ${previous.type === 'RIVAL' ? 'rivals' : 'allies'}`,
+      significant: false,
+    }),
+    buildNewChange: (a, b, freshType, viaTerritory) => ({
+      reason: viaTerritory
         ? (freshType === 'RIVAL'
             ? `${a.name} and ${b.name}, neither answering to any faction, become rivals over the same turf`
             : `${a.name} and ${b.name}, neither answering to any faction, find community sharing the same turf`)
         : a.factionId === b.factionId
           ? `${a.name} and ${b.name} stand together, serving the same cause`
-          : `${a.name} and ${b.name} become ${freshType === 'RIVAL' ? 'rivals' : 'allies'} through their factions' own ${freshType === 'RIVAL' ? 'rivalry' : 'alliance'}`
-
-      changes.push({
-        entityType: 'NPC', entityId: a.id, entityName: a.name, campaignId: ctx.campaignId,
-        field: 'socialTie', previousValue: existing?.type || 'NEUTRAL', newValue: freshType,
-        reason,
-        significant: freshType === 'RIVAL', // a new individual rivalry is worth a beat; a new same-faction/turf alliance is routine background texture
-        importance: 'NORMAL',
-      })
-    }
-  }
+          : `${a.name} and ${b.name} become ${freshType === 'RIVAL' ? 'rivals' : 'allies'} through their factions' own ${freshType === 'RIVAL' ? 'rivalry' : 'alliance'}`,
+      // A new individual rivalry is worth a beat; a new same-faction/turf alliance is routine background texture.
+      significant: freshType === 'RIVAL',
+    }),
+  })
 
   if (!ctx.dryRun) {
     for (const npcId of dirty) {
-      await prisma.nPC.update({ where: { id: npcId }, data: { socialTies: working.get(npcId) as any } })
+      await prisma.nPC.update({ where: { id: npcId }, data: { socialTies: working.get(npcId) as unknown as Prisma.InputJsonValue } })
     }
   }
 

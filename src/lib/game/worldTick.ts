@@ -5,8 +5,9 @@
 // pure and deterministic: it decides WHAT changed and WHY, then returns a
 // structured list of changes. It never calls the AI. Narration of these
 // changes into prose is entirely the job of the existing AI GM code
-// (generateOffscreenEvents in worldTurn.ts, and the prompt builder in
-// src/lib/ai/worldState.ts) — the AI narrates, the tick simulates. Keeping
+// (generateOffscreenEvents in worldTurnOffscreenEvents.ts, and the prompt
+// builder in src/lib/ai/worldState.ts) — the AI narrates, the tick
+// simulates. Keeping
 // that boundary strict is the entire point of this system.
 //
 // Phase 2+ features (rumors, economy, ecology, ...) plug in by adding

@@ -763,58 +763,27 @@ async function generateOffscreenEvents(
   }
 }
 
-/**
- * Get world turn summary for display
- * Shows what happened during background processing
- */
-export async function getWorldTurnSummary(campaignId: string) {
-  const worldMeta = await prisma.worldMeta.findUnique({
-    where: { campaignId }
-  })
+// Deliberately NO manual world-turn trigger, and no admin summary reader
+// for one.
+//
+// Both existed here, exported, with no callers anywhere — a host-facing
+// "advance the world now" surface that was built and never connected to
+// anything. Removed on purpose rather than wired up, because wiring it was
+// the wrong call:
+//
+//   - The world already moves on its own, twice over: runWorldTurnIfDue
+//     when a scene ends, and the daily cron sweep for idle campaigns. Both
+//     respect the pacing gate in tick/pacing.ts, which exists precisely
+//     because world turns used to fire on every player action.
+//   - manualWorldTurn called runWorldTurn DIRECTLY, bypassing that gate.
+//     It was a button that overrode a deliberate design decision, spent a
+//     metered AI call per press, and had no cooldown.
+//   - A world that moves without you is the product. A button that moves
+//     it for you undercuts that.
+//
+// The admin tick PREVIEW (api/campaigns/[id]/world-tick/preview) is
+// intentionally read-only and should stay that way. It is not a half-built
+// feature missing its apply step — the preview is the whole feature. If
+// this ever gets revisited, it needs a cooldown and an explicit cost
+// warning before it deserves to exist at all.
 
-  if (!worldMeta) {
-    return null
-  }
-
-  const otherMeta = worldMeta.otherMeta as any || {}
-  const worldTurnNotes = otherMeta.world_turn_notes || []
-
-  // Get recent offscreen events
-  const offscreenEvents = await prisma.timelineEvent.findMany({
-    where: {
-      campaignId,
-      isOffscreen: true
-    },
-    orderBy: { turnNumber: 'desc' },
-    take: 5
-  })
-
-  return {
-    currentTurn: worldMeta.currentTurnNumber,
-    currentDate: worldMeta.currentInGameDate,
-    recentNotes: worldTurnNotes.slice(-3), // Last 3 turns
-    recentOffscreenEvents: offscreenEvents
-  }
-}
-
-/**
- * Manually trigger a world turn
- * Useful for testing or when admin wants to advance the world
- */
-export async function manualWorldTurn(campaignId: string, userId: string) {
-  // Verify user is admin
-  const membership = await prisma.campaignMembership.findUnique({
-    where: {
-      userId_campaignId: {
-        userId,
-        campaignId
-      }
-    }
-  })
-
-  if (membership?.role !== 'ADMIN') {
-    throw new Error('Only admins can trigger world turns')
-  }
-
-  return runWorldTurn(campaignId)
-}

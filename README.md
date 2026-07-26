@@ -156,7 +156,7 @@ list nobody can action.
 - *Scope:* maintainability, drift risk.
 
 **Admin panel is CRUD, not simulation-design tooling (#87)**
-- *Why it matters:* every admin tab but one is a thin PATCH wrapper — the "Simulation Goal"/"Archetype" controls are bare `<select>` elements over enum values with no preview of tick effect, and the "Map" tab is an unrelated client-computed SVG relationship graph that never touches the real `Map`/`Zone`/`Token` tables used during play (a naming collision, not a data link). The one genuinely deep feature — the tick dry-run preview — is real but read-only.
+- *Why it matters:* every admin tab but one is a thin PATCH wrapper — the "Simulation Goal"/"Archetype" controls are bare `<select>` elements over enum values with no preview of tick effect, and the "Map" tab is an unrelated client-computed SVG relationship graph that never touches the real `Map`/`Zone`/`Token` tables used during play (a naming collision, not a data link). The one genuinely deep feature — the tick dry-run preview — is real and deliberately read-only (see above; the apply side was removed on purpose, not left unbuilt).
 - *Evidence:* full read of `src/app/campaigns/[id]/admin/page.tsx` (2,511 lines), `world-tick/preview/route.ts`.
 - *Scope:* UX, product positioning — worth knowing before describing the admin panel as a "design tool" anywhere external.
 - *Suggested fix:* No fix needed if the intent is genuinely "host settings," not "simulation design" — but the copy/positioning should match reality.
@@ -196,6 +196,14 @@ ledger.
 - **`WorldMeta.tension`/`phase`** — read only by the export dump, so every campaign sat at the same default forever; the names promised a pacing model and there wasn't one. `lib/game/tick/tension.ts` is that model. Tension is **derived, never reported**: computed each world turn from state the simulation already owns (clocks near firing, live wars, party harm, standing threats), the same way faction drift and weather are — a gauge the narrator could set would just be the narrator's opinion of itself. It has a mechanical consumer, not just a prompt line: at breaking point, GM-authored clocks with no faction driving them close faster. Deliberately 0-or-1, and deliberately only for *unattached* clocks — a faction-driven clock is already paced by that faction's strength, and double-counting it would build the runaway loop (tense → faster clocks → tenser) that a bigger number invites.
 
 **Contested territory is now a real mechanic (`#78`)** — `Location.isContested` was written by the tick (a rival has moved against a place but hasn't taken it yet) and read by nothing mechanical, so territory changing hands had no consequence for anyone standing on it and the whole war/expansion layer was invisible to players except as narration. Added `contestedPenalty`, resolved off the same id-then-name location join weather already uses, and threaded through the roll total, the persisted `DiceRoll.modifier`, and the transparency-panel receipt ("contested ground"). Flat and universal at -1, matching harm/weather rather than introducing a new scale or making per-move judgments about which actions contested ground "should" affect — that judgment from a move name is the keyword guesswork this codebase avoids. Unknown contested state is neutral, never a penalty: a character whose location hasn't resolved isn't silently punished for it.
+
+**The manual world-turn trigger is removed, on purpose:**
+
+`manualWorldTurn` and `getWorldTurnSummary` were exported with no callers anywhere — a host-facing "advance the world now" surface built and never connected. Removed rather than wired up, which is the opposite of the usual call here and the reasoning is worth keeping:
+
+The world already moves on its own, twice over — `runWorldTurnIfDue` when a scene ends, and the daily cron sweep for idle campaigns. Both respect the pacing gate in `tick/pacing.ts`, which exists precisely because world turns used to fire on every player action. `manualWorldTurn` called `runWorldTurn` **directly, bypassing that gate**: a button that overrode a deliberate design decision, spent a metered AI call per press, and had no cooldown. And a world that moves without you is the product — a button that moves it for you undercuts the pitch.
+
+**The admin tick preview (`/api/campaigns/[id]/world-tick/preview`) is intentionally read-only and should stay that way.** It is not a half-built feature missing its apply step; the preview *is* the feature. That's recorded here and in `worldTurn.ts` so the gap isn't "discovered" and re-filled later. If it's ever revisited, it needs a cooldown and an explicit cost warning before it deserves to exist.
 
 **Dead-export sweep — and a correction to what I claimed for `#88`:**
 

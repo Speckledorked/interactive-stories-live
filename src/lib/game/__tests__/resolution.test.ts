@@ -522,6 +522,44 @@ describe('parseClassifications accepts_bargain passthrough', () => {
 // standing on it, so the whole war/expansion layer was invisible to players
 // except as narration.
 
+describe('computeMechanics reflected rapport (#89)', () => {
+  const roll = (reflected: number | undefined) =>
+    computeMechanics(
+      { action_index: 0, move_name: 'Seduce or Manipulate', stat_key: 'hot', capability_key: null, faction_name: null, npc_name: 'Lord Kessler' } as any,
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5),
+      { relationship: { npcName: 'Lord Kessler', trust: 0, tension: 0, respect: 0, reflected } }
+    )!
+
+  it('lands in the total on top of direct rapport', () => {
+    const m = roll(1)
+    expect(m.reflectedMod).toBe(1)
+    expect(m.relationshipMod).toBe(0)
+    expect(m.total).toBe(m.dice[0] + m.dice[1] + 1)
+  })
+
+  it('can count against the character', () => {
+    expect(roll(-1).reflectedMod).toBe(-1)
+  })
+
+  it('is absent for an NPC with no ties on record', () => {
+    expect(roll(undefined).reflectedMod).toBe(0)
+  })
+
+  it('never exceeds the echo cap, whatever the caller passes', () => {
+    // Bounded at the roll too, not only at the source: direct rapport is
+    // capped at ±2 and a reputation must not outweigh the person present.
+    expect(roll(9).reflectedMod).toBe(1)
+    expect(roll(-9).reflectedMod).toBe(-1)
+  })
+
+  it('names it diegetically in the receipt, and only when it mattered', () => {
+    expect(formatRollReceipt(roll(1))).toContain('word travels in your favor')
+    expect(formatRollReceipt(roll(0))).not.toContain('word travels')
+  })
+})
+
 describe('computeMechanics condition stat effects (#88)', () => {
   const roll = (statKey: string, conditions: any[]) =>
     computeMechanics(

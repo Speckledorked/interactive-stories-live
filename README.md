@@ -170,11 +170,13 @@ list nobody can action.
 
 A test scans every entry in `COMMON_CONDITIONS` and fails if its text quotes a modifier or a damage figure with no field behind it, so the class of defect can't come back. Mutation-checked in both directions rather than assumed.
 
-**NPC social ties reach only two narrow consumers (#89)**
-- *Why it matters:* `socialTies` (ally/rival stance between major NPCs, derived from faction politics) is read in exactly three places: the tick that writes it, one wiki flavor sentence, and joint-scheme clock spawning. It never reaches a dice roll or any other player-facing mechanic — real but much narrower than the schema comments imply.
-- *Evidence:* grep of `socialTies` usage across `src/`.
-- *Scope:* narrative-mechanical alignment.
-- *Suggested fix:* No urgent fix — worth knowing the actual reach before describing NPC society as broadly mechanical.
+**NPC social ties reach only two narrow consumers (#89)** — **FIXED.** `socialTies` (ally/rival stance between major NPCs, derived from faction politics) was read in exactly three places: the tick that writes it, one wiki flavor sentence, and joint-scheme clock spawning. It never reached a dice roll or anything a player could feel.
+
+It does now, via the obvious consumer: **rapport propagates through the graph.** If you did right by someone, their allies have heard about it — and so have their rivals. Standing with the world stops being a set of unconnected one-to-one meters and becomes a position in a society that talks to itself.
+
+Two properties keep it honest. It's an **echo, never the thing itself** — capped at ±1 against direct rapport's ±2, so the person actually in front of you always matters more than who they drink with; a reputation that outweighed the relationship would make direct rapport pointless. And it **cuts both ways**: being well in with someone's rival counts against you, which is what makes it a social position rather than a bonus track. Reflection needs a real feeling to reflect (the same 50-point step `relationshipModifier` treats as one full point) — an ally hearing you're mildly well-regarded changes nothing.
+
+Reads only state that already exists (the character's own relationships, the tick's own ties), writes nothing, adds no AI channel, and an NPC with no ties on record contributes exactly zero — so a campaign whose society tick has never run behaves precisely as before.
 
 ## Roadmap
 

@@ -27,6 +27,7 @@ import { proficiencyBand, ProficiencyBand } from './capabilities'
 import { effectiveStandingModifier } from './standing'
 import { checkCorruptionGate } from './corruptionGates'
 import { conditionStatModifier } from './harm'
+import { reflectedRapportModifier, describeReflectedRapport } from './socialTies'
 import { debtModifier, debtsWithCounterparty, describeDebtLeverage, DebtsForRoll } from './debts'
 import {
   ZonePosition,
@@ -121,6 +122,10 @@ export interface ActionMechanics {
   signatureName: string | null
   // SIGNATURE_BONUS when a listed perk/ability's trigger matched, else 0.
   signatureMod: number
+  // What this NPC's allies and rivals think of the character, echoing onto
+  // their own regard (#89). Capped at ±1 against relationshipMod's ±2 —
+  // an echo, never the thing itself.
+  reflectedMod: number
   // Outstanding debts with whichever counterparty this roll named, and
   // what that ledger was worth — see debtModifier in lib/game/debts.ts.
   debtCounterparty: string | null
@@ -265,6 +270,11 @@ export interface RelationshipForRoll {
   trust: number
   tension: number
   respect: number
+  // How this NPC's own allies and rivals color their view of the character
+  // (#89) — resolved by the orchestrator from NPC.socialTies against the
+  // character's existing rapport with those third parties. See
+  // lib/game/socialTies.ts. Absent means no ties on record.
+  reflected?: number
 }
 
 /**
@@ -427,9 +437,12 @@ export function computeMechanics(
   // Personal relationship weight, capped ±2 — see relationshipModifier above.
   let npcName: string | null = null
   let relationshipMod = 0
+  let reflectedMod = 0
   if (relationship) {
     npcName = relationship.npcName
     relationshipMod = relationshipModifier(relationship)
+    // Reputation reaching this NPC through their own allies and rivals.
+    reflectedMod = Math.max(-1, Math.min(1, Math.trunc(Number(relationship.reflected) || 0)))
   }
 
   // Corruption surge: the classifier says this action invokes the
@@ -497,7 +510,7 @@ export function computeMechanics(
 
   const harmMod = harmPenalty(character.harm)
   const dice: [number, number] = [rollD6(rng), rollD6(rng)]
-  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + debtMod + weatherMod + contestedMod + zoneMod + conditionMod + conditionStatMod + signatureMod + harmMod + corruptionSurgeBonus
+  const total = dice[0] + dice[1] + statMod + capabilityMod + standingMod + relationshipMod + reflectedMod + debtMod + weatherMod + contestedMod + zoneMod + conditionMod + conditionStatMod + signatureMod + harmMod + corruptionSurgeBonus
   const outcome = calculateOutcome(total)
   // Flavor overrides display only, and only where it actually supplied text
   // for this band — a partially-flavored move (AI omitted one outcome)
@@ -521,6 +534,7 @@ export function computeMechanics(
     weatherMod,
     isContestedLocation: Boolean(isContestedLocation),
     contestedMod,
+    reflectedMod,
     debtCounterparty,
     debtMod,
     zonePosition,
@@ -709,7 +723,9 @@ export async function resolveActionMechanics(
         where: { campaignId, isDiscovered: true },
         // Corruption gate columns (#83): a repulsed NPC's rapport must not
         // modify the roll — see the leverage gate below.
-        select: { id: true, name: true, minCorruption: true, maxCorruption: true },
+        // socialTies (#89): who this NPC counts as an ally or rival, so the
+        // character's rapport with those third parties can echo onto them.
+        select: { id: true, name: true, minCorruption: true, maxCorruption: true, socialTies: true },
       }),
       // Live weather per location (see lib/game/tick/weatherTick.ts) —
       // matched against each acting character's locationId (falling back
@@ -854,6 +870,11 @@ export async function resolveActionMechanics(
               trust: rel?.trust ?? 0,
               tension: rel?.tension ?? 0,
               respect: rel?.respect ?? 0,
+              // Reputation reaching this NPC through their own society
+              // (#89). Reads the character's EXISTING rapport with the
+              // third parties, so nothing is written and an NPC with no
+              // ties contributes nothing.
+              reflected: reflectedRapportModifier(npc.socialTies, character.relationships),
             }
           } else {
             console.log(`  🌑 ${npc.name} gives ${character.name} nothing — corruption gate (${gate.refusal})`)
@@ -924,7 +945,7 @@ export async function resolveActionMechanics(
             userId: action?.userId || '',
             rollType: 'move',
             dice: m.dice,
-            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.debtMod + m.weatherMod + m.contestedMod + m.zoneMod + m.conditionMod + m.conditionStatMod + m.signatureMod + m.harmPenalty,
+            modifier: m.statMod + m.capabilityMod + m.standingMod + m.relationshipMod + m.reflectedMod + m.debtMod + m.weatherMod + m.contestedMod + m.zoneMod + m.conditionMod + m.conditionStatMod + m.signatureMod + m.harmPenalty,
             total: m.total,
             outcome: m.outcome,
             description: `${m.moveName} (+${m.statKey}${m.capabilityName ? `, ${m.capabilityName}` : ''}${m.factionName ? `, standing w/ ${m.factionName}` : ''}${m.npcName ? `, rapport w/ ${m.npcName}` : ''}${m.debtMod ? `, ${m.debtCounterparty}` : ''}${m.weatherCondition ? `, ${m.weatherCondition.toLowerCase()}` : ''}${m.contestedMod ? ', contested ground' : ''}${m.zoneMod ? `, ${m.engagement} ${describeZone(m.zonePosition)}` : ''}${m.conditionMod ? `, ${m.conditionMod} condition penalty` : ''}${m.signatureName ? `, ${m.signatureName}` : ''}${m.harmPenalty ? ', impaired' : ''})`,
@@ -1020,6 +1041,7 @@ export function formatRollReceipt(m: ActionMechanics): string {
     ...(m.factionName ? [`${m.standingMod >= 0 ? '+' : ''}${m.standingMod} standing (${m.factionName})`] : []),
     ...(m.npcName ? [`${m.relationshipMod >= 0 ? '+' : ''}${m.relationshipMod} rapport (${m.npcName})`] : []),
     ...(m.weatherCondition ? [`${m.weatherMod} ${m.weatherCondition.toLowerCase()}`] : []),
+    ...(m.reflectedMod ? [`${m.reflectedMod >= 0 ? '+' : ''}${m.reflectedMod} ${describeReflectedRapport(m.reflectedMod)}`] : []),
     ...(m.debtMod ? [`${m.debtMod >= 0 ? '+' : ''}${m.debtMod} ${m.debtCounterparty}`] : []),
     ...(m.conditionStatMod ? [`${m.conditionStatMod >= 0 ? '+' : ''}${m.conditionStatMod} condition (${m.statKey})`] : []),
     ...(m.contestedMod ? [`${m.contestedMod} contested ground`] : []),

@@ -218,6 +218,15 @@ The fiction half already worked (`harm_healing`, `medical_attention`). The **tim
 - **Same reason `medical_attention` exists:** the engine picks the number so the AI can't. Left to `harm_healing`, "they slept well" is a free-text integer between 0 and 6.
 - **Bleeding blocks it, exactly as it blocks the calendar.** Without that guard, a narrated night's sleep would be the way around the rule the time path enforces — so the conditions are passed in and the same `blocksNaturalRecovery` check runs. Rest still can't touch a character at harm 6, either; that road out is stabilization and a recovery roll.
 
+**Shared notes are live (`triggerNoteUpdate`):**
+
+A realtime pipeline built end to end and connected at *neither* end: `triggerNoteUpdate` had no caller, `'note-update'` had no subscriber, and `RealtimeNoteUpdate` described an event nobody sent. Sharing a note with the table was invisible to everyone else until they happened to reload — in a feature whose entire point is that other people see it. Both halves are now wired: the note write routes publish, and `NotesPanel` subscribes.
+
+- **The visibility check is a security boundary, not a filter.** `campaign-${id}` reaches every member, so a PRIVATE note landing there is a leak. The routes report visibility honestly and let `triggerNoteUpdate` drop it, rather than deciding per call site — one place to be right instead of three.
+- **Un-sharing is a retraction, and it has to be announced.** A note going SHARED → PRIVATE (or being deleted) is broadcast under its *old* visibility with `action: 'deleted'` — publish the new one and the guard eats it, leaving the note on every other player's screen indefinitely. Title and content are stripped: the event exists to take the note back, not to deliver it one last time to the people losing access.
+- **The client refetches rather than rendering the pushed body.** The GET route is what applies visibility rules; trusting a broadcast payload would put a second, weaker copy of those rules in the browser. The event is only ever a signal that *something* changed.
+- **Fire-and-forget.** A note must save whether or not the socket layer is healthy, and an unconfigured Pusher degrades to the old behavior (the panel works, it just isn't live) rather than erroring.
+
 **The manual world-turn trigger is removed, on purpose:**
 
 `manualWorldTurn` and `getWorldTurnSummary` were exported with no callers anywhere — a host-facing "advance the world now" surface built and never connected. Removed rather than wired up, which is the opposite of the usual call here and the reasoning is worth keeping:

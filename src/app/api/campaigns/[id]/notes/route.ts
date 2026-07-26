@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
 import { notifyNoteShared } from '@/lib/notifications/noteShared';
+import { broadcastNoteUpdate } from '@/lib/realtime/pusher-server';
 
 // GET /api/campaigns/[id]/notes - Get notes for campaign
 export async function GET(
@@ -216,6 +217,23 @@ export async function POST(
       const authorLabel = note.author.name || note.author.email;
       notifyNoteShared(params.id, user.userId, authorLabel, note.title);
     }
+
+    // Live-update everyone else's panel. triggerNoteUpdate drops anything
+    // still PRIVATE, so this is safe to call unconditionally.
+    broadcastNoteUpdate({
+      id: note.id,
+      title: note.title,
+      content: note.content,
+      visibility: note.visibility as 'PRIVATE' | 'GM' | 'SHARED',
+      authorId: note.authorId,
+      campaignId: params.id,
+      action: 'created',
+      author: {
+        id: note.author.id,
+        email: note.author.email,
+        name: note.author.name ?? undefined,
+      },
+    });
 
     return NextResponse.json(note);
 

@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { PlayerNote } from '@prisma/client';
 import { getToken } from '@/lib/clientAuth';
+import { subscribeToCampaignMessages, RealtimeNoteUpdate } from '@/lib/realtime/pusher-client';
 
 interface NotesPanelProps {
   campaignId: string;
@@ -48,9 +49,41 @@ export default function NotesPanel({
     entityId: '',
   });
 
+  // Bumped by realtime note events. Kept as state in the fetch dependency
+  // list rather than calling fetchNotes from the socket handler, so the
+  // handler never closes over a stale filter.
+  const [refreshKey, setRefreshKey] = useState(0);
+
   useEffect(() => {
     fetchNotes();
-  }, [campaignId, filter]);
+  }, [campaignId, filter, refreshKey]);
+
+  // Shared notes are a multiplayer surface, so another player sharing one
+  // should appear without a reload. The server publishes on note writes;
+  // triggerNoteUpdate drops anything PRIVATE before it reaches the channel.
+  //
+  // Deliberately a REFETCH rather than splicing the pushed payload into
+  // state: the GET route is what applies visibility rules, and trusting a
+  // broadcast body would put a second, weaker copy of those rules in the
+  // client. The event is only ever a signal that something changed.
+  useEffect(() => {
+    const channel = subscribeToCampaignMessages(campaignId);
+    if (!channel) return; // Pusher not configured — the panel still works, just not live.
+
+    const onNoteUpdate = (update: RealtimeNoteUpdate) => {
+      // Our own writes already refetched in handleSubmit/deleteNote.
+      if (update.authorId === currentUserId) return;
+      setRefreshKey(k => k + 1);
+    };
+
+    channel.bind('note-update', onNoteUpdate);
+    return () => {
+      // Unbind only. The channel itself is left subscribed because
+      // ChatPanel shares `campaign-${id}` — unsubscribing here would
+      // silently kill live chat for the whole campaign.
+      channel.unbind('note-update', onNoteUpdate);
+    };
+  }, [campaignId, currentUserId]);
 
   const fetchNotes = async () => {
     try {

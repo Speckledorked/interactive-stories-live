@@ -117,8 +117,11 @@ durable state) · `lib/ai/client.ts` (the `AIGMResponse` contract everything
 else must agree with) · `lib/game/worldTick.ts` + `lib/game/tick/factionTick.ts`
 + `lib/game/tick/warTick.ts` (the deterministic simulation core) ·
 `lib/game/worldTurn.ts` (ties tick output into ambitions/territory/memory) ·
-`lib/ai/worldState.ts` (the prompt builder — real fog-of-war and
-qualitative-stat enforcement, not just formatting) · `lib/ai/validation.ts`
+`lib/ai/worldSummary.ts` + `lib/ai/worldSummaryMappers.ts` (real fog-of-war
+and qualitative-stat enforcement, not just formatting — `worldState.ts` is
+now a thin re-export barrel over this and three sibling modules, split out
+during a prompt-generation refactor) · `lib/ai/scenePrompt.ts` (the actual
+system/user prompt text sent to the model) · `lib/ai/validation.ts`
 (the correctness gate all mechanical depth passes through) ·
 `lib/game/sceneResolver.ts` (the top-level orchestrator) ·
 `lib/game/consequences.ts` (player choice → persistent world state).
@@ -196,6 +199,21 @@ Re-examined rather than re-asserted, and the decision holds with evidence behind
 - *Evidence:* `src/lib/game/worldTurn.ts`, `worldTurnOffscreenEvents.ts`, `tick/ambitionResolution.ts`, `tick/clockTick.ts`.
 - *Scope:* type-safety only — every current call site already passes the right shape, so nothing is silently wrong today.
 - *Suggested fix:* define a shared interface (fields already implied by usage: `id`, `oldTicks`, `newTicks`, `category`, `sourceFactionId`, etc.) and thread it through the four files instead of `any[]`.
+
+**`callAIGM`'s two fetch calls not routed through the new shared completion helper (#102)** — a later prompt-generation refactor deduped the "build request → `openaiFetch` → pull message content" shape repeated across 7 call sites into `lib/ai/chatCompletion.ts`, and switched all 7 over to it. `client.ts`'s `callAIGM` (the main scene-resolution call, plus its one-shot repair round-trip) deliberately stayed on raw `openaiFetch` calls: both are threaded through circuit-breaker recording, a repair-specific `AICostTracker` instantiation, and response validation closely enough that folding them into the shared helper risked changing that surrounding behavior, not just the fetch shape — a worse trade than leaving one documented exception.
+- *Evidence:* `src/lib/ai/client.ts` (two `openaiFetch(` call sites inside `callAIGM`), `src/lib/ai/chatCompletion.ts`'s header comment, which names this exception explicitly.
+- *Scope:* maintainability only — the duplication left behind is two call sites, not the original seven.
+- *Suggested fix:* only worth revisiting if `callAIGM` itself is next refactored anyway; extracting the repair round-trip as its own step first would make folding both into `callChatCompletion` a smaller, safer follow-up.
+
+**`buildSceneResolutionRequest` stayed one ~340-line function (#103)** — splitting `worldState.ts` moved this function verbatim into `sceneResolutionRequest.ts` rather than decomposing it further. It still interleaves world-summary selection, action-mechanics resolution, complex-exchange/narrative-flow guidance, campaign-memory and lore retrieval (including the named-entity and cross-entity recall passes), and corruption-theme assembly in one function body. Left alone deliberately: every one of those steps is already a thin call into a genuinely separate, out-of-scope system (`memoryRetrieval.ts`, `loreRetrieval.ts`, `lib/game/complex-exchange-resolver.ts`, `lib/game/corruption.ts`) — the function's job is real sequencing and shared local state (`entities`, `relevantMemories`) between those calls, not duplicated logic, so splitting it further is a design call about this file specifically rather than a mechanical extraction.
+- *Evidence:* `src/lib/ai/sceneResolutionRequest.ts` (417 lines).
+- *Scope:* maintainability only.
+- *Suggested fix:* if revisited, split along its existing numbered-comment steps (memory retrieval, lore retrieval, named/cross-entity recall, corruption assembly) into named helper functions the same way `scenePrompt.ts`'s sections were extracted — each step already reads as a self-contained unit with a clear boundary.
+
+**`contextManager.ts`'s naming zoo, and `assessCampaignHealth`'s misplacement, revisited in the prompt-generation subsystem itself (#104)** — noted previously as a `lib/game/` finding (see the naming-inconsistency entry above); the same file is also squarely in scope for prompt generation (it shapes what reaches the AI's context window) and wasn't touched here either. `cap`/`clamp`/`classify`/`assess`/`generate` is a five-verb spread against the `build*`/`generate*`/`describe*`/`summarize*` convention the rest of `lib/ai/` settled into (and `answerGmQuestion` → `generateGmAnswer` was renamed to fit it this pass). `assessCampaignHealth` specifically has zero prompt or AI-call involvement — pure DB counts and thresholds — and is called only by the adjacent `lib/game/campaign-health.ts`, not by anything in `lib/ai/`.
+- *Evidence:* `src/lib/ai/contextManager.ts` (474 lines; `capForPrompt`, `clampPromptStrings`, `classifySceneImportance`, `assessCampaignHealth`, `generateCampaignSummary` all in one file).
+- *Scope:* maintainability/naming only.
+- *Suggested fix:* `assessCampaignHealth` belongs in `lib/game/campaign-health.ts` beside its only caller, not in the AI context-management file; moving it means touching that adjacent file's imports in the same commit, which is why it wasn't done as part of either refactor pass so far.
 
 ## Roadmap
 

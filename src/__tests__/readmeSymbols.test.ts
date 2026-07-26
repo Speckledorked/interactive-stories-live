@@ -86,6 +86,10 @@ const DELIBERATELY_ABSENT: Record<string, string> = {
 
   // The rest of the never-wired inventory-capacity family.
   hasInventorySpace: 'never wired; inventory capacity is undefined here',
+
+  // Renamed to generateGmAnswer to match the generate* convention every
+  // other "make an AI call, return a generated artifact" function uses.
+  answerGmQuestion: 'renamed to generateGmAnswer for naming consistency',
 }
 
 const SEARCH_ROOTS = ['src', 'prisma']

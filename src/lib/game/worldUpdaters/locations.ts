@@ -26,8 +26,19 @@ export async function applyLocationChanges(
   console.log(`📍 Syncing ${locationChanges.length} location(s)`)
 
   for (const locChange of locationChanges) {
-    const existing = await tx.location.findUnique({
-      where: { campaignId_name: { campaignId, name: locChange.name } }
+    // Case-INSENSITIVE, matching resolveOrCreateLocationId below.
+    //
+    // This used to be findUnique on the campaignId_name compound key,
+    // which Postgres matches case-sensitively — so the two writers for
+    // this one table disagreed about what counts as the same place. A
+    // location_changes entry saying "the Docks" after "The Docks" already
+    // existed minted a SECOND row, and every later lookup went through
+    // the case-insensitive path and picked whichever findFirst returned.
+    // Weather, isContested, faction territory and the corruption gates all
+    // hang off Location, so a split row silently strands the party on one
+    // copy while the state they care about lives on the other.
+    const existing = await tx.location.findFirst({
+      where: { campaignId, name: { equals: locChange.name, mode: 'insensitive' } }
     })
 
     if (existing) {
@@ -60,7 +71,13 @@ export async function applyLocationChanges(
         })
         console.log(`  📍 Updated location: ${locChange.name}`)
       }
-    } else {
+    } else if (locChange.is_new || locChange.description) {
+      // Same guard NPCs and factions use: a bare name with nothing behind
+      // it is a passing mention or a misspelling, not a request to mint a
+      // row. is_new was declared and prompted for but never read until
+      // now, so an unresolvable location name always created something.
+      // The main path for real new places is unaffected — characters
+      // moving somewhere go through resolveOrCreateLocationId below.
       await tx.location.create({
         data: {
           campaignId,
@@ -68,10 +85,18 @@ export async function applyLocationChanges(
           description: locChange.description || null,
           locationType: locChange.location_type || null,
           gmNotes: locChange.gm_notes_append || null,
+          // Corruption gates (#83) — these were dropped on the create path
+          // while the update path above wrote them, so a location born
+          // already gated came out ungated. Same read-at-one-end,
+          // never-written-at-the-other defect as #88's rollModifier.
+          minCorruption: locChange.min_corruption ?? null,
+          maxCorruption: locChange.max_corruption ?? null,
           isDiscovered: sceneOrigin
         }
       })
       console.log(`  📍 Created location: ${locChange.name}`)
+    } else {
+      console.warn(`  ❓ location_changes: "${locChange.name}" is unknown and carries no description or is_new — skipped rather than minting a row from a passing mention`)
     }
   }
 }

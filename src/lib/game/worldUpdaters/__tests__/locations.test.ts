@@ -3,7 +3,9 @@ import { applyLocationChanges, resolveOrCreateLocationId, LocationChange } from 
 
 const makeTx = () => ({
   location: {
-    findUnique: vi.fn(),
+    // Both writers for this table now resolve identity the same way —
+    // case-insensitively, via findFirst. findUnique on the compound key
+    // was case-SENSITIVE, which is what let one place become two rows.
     findFirst: vi.fn(),
     update: vi.fn(async (_args: any) => ({})),
     create: vi.fn(async ({ data }: any) => ({ id: 'new-loc', ...data })),
@@ -17,7 +19,7 @@ beforeEach(() => {
 
 describe('applyLocationChanges', () => {
   it('creates a brand-new location as discovered when the scene is live', async () => {
-    tx.location.findUnique.mockResolvedValue(null)
+    tx.location.findFirst.mockResolvedValue(null)
     await applyLocationChanges(tx as any, 'camp1', [
       { name: 'The Drowned Market', description: 'A flooded bazaar.' } as LocationChange,
     ], true)
@@ -33,15 +35,17 @@ describe('applyLocationChanges', () => {
   })
 
   it('creates an offscreen-introduced location as undiscovered', async () => {
-    tx.location.findUnique.mockResolvedValue(null)
-    await applyLocationChanges(tx as any, 'camp1', [{ name: 'Hidden Vault' } as LocationChange], false)
+    tx.location.findFirst.mockResolvedValue(null)
+    // Carries a description so it clears the is_new guard — this test is
+    // about the fog-of-war rule, not about bare-name mentions.
+    await applyLocationChanges(tx as any, 'camp1', [{ name: 'Hidden Vault', description: 'Sealed for an age.' } as LocationChange], false)
     expect(tx.location.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ isDiscovered: false }),
     })
   })
 
   it('fills in description only if the existing row has none — never overwrites', async () => {
-    tx.location.findUnique.mockResolvedValue({ id: 'loc1', description: 'Already described.', locationType: null, gmNotes: null, isDiscovered: true })
+    tx.location.findFirst.mockResolvedValue({ id: 'loc1', description: 'Already described.', locationType: null, gmNotes: null, isDiscovered: true })
     await applyLocationChanges(tx as any, 'camp1', [
       { name: 'The Docks', description: 'A new description the AI made up.' } as LocationChange,
     ], true)
@@ -49,13 +53,13 @@ describe('applyLocationChanges', () => {
   })
 
   it('reveals an existing undiscovered location when touched by a live scene', async () => {
-    tx.location.findUnique.mockResolvedValue({ id: 'loc1', description: 'x', locationType: 'town', gmNotes: null, isDiscovered: false })
+    tx.location.findFirst.mockResolvedValue({ id: 'loc1', description: 'x', locationType: 'town', gmNotes: null, isDiscovered: false })
     await applyLocationChanges(tx as any, 'camp1', [{ name: 'The Docks' } as LocationChange], true)
     expect(tx.location.update).toHaveBeenCalledWith({ where: { id: 'loc1' }, data: { isDiscovered: true } })
   })
 
   it('does not reveal a location from an offscreen background update', async () => {
-    tx.location.findUnique.mockResolvedValue({ id: 'loc1', description: 'x', locationType: 'town', gmNotes: null, isDiscovered: false })
+    tx.location.findFirst.mockResolvedValue({ id: 'loc1', description: 'x', locationType: 'town', gmNotes: null, isDiscovered: false })
     await applyLocationChanges(tx as any, 'camp1', [{ name: 'The Docks' } as LocationChange], false)
     expect(tx.location.update).not.toHaveBeenCalled()
   })
@@ -110,5 +114,89 @@ describe('resolveOrCreateLocationId', () => {
     tx.location.findFirst.mockRejectedValue(new Error('connection reset'))
     const id = await resolveOrCreateLocationId(tx as any, 'camp1', 'The Rookery', true)
     expect(id).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// One place, one row
+// ---------------------------------------------------------------------------
+// applyLocationChanges used findUnique on the campaignId_name compound key,
+// which Postgres matches case-sensitively, while resolveOrCreateLocationId
+// matched case-insensitively. The two writers for the same table disagreed
+// about what counts as the same place, so a re-spelling minted a duplicate
+// and later lookups picked whichever row came back first. Weather,
+// isContested, faction territory and the corruption gates all hang off
+// Location, so a split row strands the party on one copy while the state
+// they care about lives on the other.
+
+describe('applyLocationChanges — location identity', () => {
+  it('matches an existing location regardless of case, instead of duplicating it', async () => {
+    tx.location.findFirst.mockResolvedValue({
+      id: 'loc1', description: 'x', locationType: 'town', gmNotes: null, isDiscovered: true,
+    })
+
+    await applyLocationChanges(tx as any, 'camp1', [
+      { name: 'the docks', gm_notes_append: 'Smugglers active.' } as LocationChange,
+    ], true)
+
+    expect(tx.location.create).not.toHaveBeenCalled()
+    expect(tx.location.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'loc1' } })
+    )
+  })
+
+  it('looks up case-insensitively, the same way character movement does', async () => {
+    tx.location.findFirst.mockResolvedValue(null)
+    await applyLocationChanges(tx as any, 'camp1', [
+      { name: 'The Docks', description: 'x' } as LocationChange,
+    ], true)
+
+    expect(tx.location.findFirst).toHaveBeenCalledWith({
+      where: { campaignId: 'camp1', name: { equals: 'The Docks', mode: 'insensitive' } },
+    })
+  })
+})
+
+describe('applyLocationChanges — is_new guards row creation', () => {
+  it('mints a row for a genuinely new place', async () => {
+    tx.location.findFirst.mockResolvedValue(null)
+    await applyLocationChanges(tx as any, 'camp1', [
+      { name: 'The Sunken Vault', is_new: true } as LocationChange,
+    ], true)
+    expect(tx.location.create).toHaveBeenCalled()
+  })
+
+  it('mints a row for an unknown place that carries a description', async () => {
+    tx.location.findFirst.mockResolvedValue(null)
+    await applyLocationChanges(tx as any, 'camp1', [
+      { name: 'The Sunken Vault', description: 'Flooded and forgotten.' } as LocationChange,
+    ], true)
+    expect(tx.location.create).toHaveBeenCalled()
+  })
+
+  it('skips a bare unknown name rather than minting a row from a passing mention', async () => {
+    // is_new was declared in the schema and prompted for, but never read —
+    // so any unresolvable name created something. Same guard NPCs and
+    // factions already use.
+    tx.location.findFirst.mockResolvedValue(null)
+    await applyLocationChanges(tx as any, 'camp1', [
+      { name: 'somewhere north' } as LocationChange,
+    ], true)
+    expect(tx.location.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('applyLocationChanges — corruption gates on the create path (#83)', () => {
+  it('carries reported gates onto a newly created location', async () => {
+    // The update path wrote these and the create path dropped them, so a
+    // location born already gated came out ungated.
+    tx.location.findFirst.mockResolvedValue(null)
+    await applyLocationChanges(tx as any, 'camp1', [
+      { name: 'The High Temple', description: 'x', max_corruption: 1 } as LocationChange,
+    ], true)
+
+    expect(tx.location.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ maxCorruption: 1, minCorruption: null }),
+    })
   })
 })

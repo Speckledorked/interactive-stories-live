@@ -133,13 +133,10 @@ export function applyHarm(
 
   if (newHarmValue === 6) {
     message += ' and is Taken Out!'
-    autoConditions.push({
-      id: `taken_out_${Date.now()}`,
-      name: 'Taken Out',
-      category: 'Physical',
-      description: 'Unconscious, captured, or dying. Cannot act until stabilized.',
-      mechanicalEffect: 'Cannot take actions'
-    })
+    // From the catalogue rather than hand-built here, so there is exactly
+    // one definition of what Taken Out means. canAct() keys off
+    // "cannot take actions" in this text, so the two must not drift.
+    autoConditions.push(createConditionFromTemplate('taken_out'))
   }
 
   return {
@@ -354,6 +351,17 @@ export const COMMON_CONDITIONS: Record<string, Omit<Condition, 'id' | 'appliedAt
     rollModifier: -1
   },
 
+  // Applied automatically by applyHarm when harm reaches 6. canAct() reads
+  // this exact mechanicalEffect text, so it lives in the catalogue with
+  // everything else rather than being constructed inline where the two
+  // could drift apart.
+  taken_out: {
+    name: 'Taken Out',
+    category: 'Physical',
+    description: 'Unconscious, captured, or dying. Cannot act until stabilized.',
+    mechanicalEffect: 'Cannot take actions'
+  },
+
   // Special Conditions
   cursed: {
     name: 'Cursed',
@@ -448,6 +456,64 @@ export function conditionStatModifier(
     return Number.isFinite(value) ? sum + value : sum
   }, 0)
   return Math.max(-CONDITION_STAT_MOD_BOUND, Math.min(CONDITION_STAT_MOD_BOUND, total))
+}
+
+/**
+ * Look up a stock condition by the NAME the fiction used.
+ *
+ * COMMON_CONDITIONS existed as a catalogue with no production consumer at
+ * all: nothing ever instantiated it, and applyHarm builds its one auto
+ * condition ("Taken Out") inline. So the catalogue's carefully-specified
+ * effects — Bleeding's harm per scene, Enraged's stat split — were only
+ * ever true of a table nobody read. A narrator writing "Bleeding" got
+ * whatever fields it happened to report, and usually reported none.
+ *
+ * This is what makes the catalogue authoritative for names it knows.
+ * Matching is on the display name rather than the key, because the name is
+ * what the AI actually writes.
+ */
+export function findConditionTemplate(
+  name: string | null | undefined
+): Omit<Condition, 'id' | 'appliedAt'> | null {
+  const wanted = (name || '').trim().toLowerCase()
+  if (!wanted) return null
+  for (const template of Object.values(COMMON_CONDITIONS)) {
+    if (template.name.toLowerCase() === wanted) return template
+  }
+  return null
+}
+
+/**
+ * Fill in a reported condition's ENFORCED fields from the stock catalogue,
+ * where the report left them out.
+ *
+ * Reported values always win — a narrator that deliberately writes a
+ * nastier Bleeding keeps it. The catalogue only supplies what wasn't said,
+ * which is the common case and the whole reason those entries exist.
+ *
+ * Pure. Returns the condition unchanged when the name matches nothing,
+ * which is every condition the fiction invents.
+ */
+type EnforcedConditionFields = Pick<
+  Condition,
+  'rollModifier' | 'harmPerScene' | 'statModifiers' | 'mechanicalEffect'
+>
+
+export function applyConditionTemplate<T extends { name: string } & Partial<EnforcedConditionFields>>(
+  reported: T
+): T & EnforcedConditionFields {
+  const template = findConditionTemplate(reported.name)
+  if (!template) return reported
+  return {
+    ...reported,
+    rollModifier: reported.rollModifier ?? template.rollModifier,
+    harmPerScene: reported.harmPerScene ?? template.harmPerScene,
+    statModifiers: reported.statModifiers ?? template.statModifiers,
+    // Text too: a bare "Bleeding" should read on the sheet the way the
+    // catalogue describes it rather than as whatever half-sentence the
+    // narrator supplied, or nothing at all.
+    mechanicalEffect: reported.mechanicalEffect || template.mechanicalEffect,
+  }
 }
 
 /**
@@ -836,6 +902,9 @@ export function isDying(harm: HarmLevel, conditions: Condition[]): boolean {
  * Stabilize a dying character
  * Emergency first aid to prevent death
  */
+/** The condition stabilizing removes. Named so the two sides can't drift. */
+export const CRITICALLY_DYING_CONDITION_NAME = 'Critically Dying'
+
 export function stabilizeCharacter(
   conditions: Condition[],
   turnNumber: number
@@ -852,7 +921,12 @@ export function stabilizeCharacter(
     appliedAt: turnNumber
   }
 
-  const result = markCondition(conditions, stabilizedCondition)
+  // Stabilizing means you are no longer DYING — clearing that condition is
+  // part of what the word means, and leaving it to each caller is how the
+  // one caller that existed ended up doing it by hand while this function
+  // quietly did not.
+  const noLongerDying = conditions.filter(c => c.name !== CRITICALLY_DYING_CONDITION_NAME)
+  const result = markCondition(noLongerDying, stabilizedCondition)
 
   return {
     updatedConditions: result.updatedConditions,

@@ -4,7 +4,11 @@ import { applyQuestChanges, QuestChange } from '../quests'
 vi.mock('../../questRewards', () => ({
   applyQuestRewardGrant: vi.fn(async () => ['Jason received 50 gold from completing "Clear the Warrens"']),
 }))
+vi.mock('../../questFailure', () => ({
+  applyQuestFailureCost: vi.fn(async () => ['Jason lost standing with the quest-giver']),
+}))
 import { applyQuestRewardGrant } from '../../questRewards'
+import { applyQuestFailureCost } from '../../questFailure'
 
 const makeTx = () => ({
   quest: {
@@ -24,6 +28,7 @@ let tx: ReturnType<typeof makeTx>
 beforeEach(() => {
   tx = makeTx()
   vi.mocked(applyQuestRewardGrant).mockClear()
+  vi.mocked(applyQuestFailureCost).mockClear()
 })
 
 describe('applyQuestChanges — new quest', () => {
@@ -302,5 +307,93 @@ describe('applyQuestChanges — corruption acquisition gate', () => {
       { name: 'The Ledger Job', changes: { min_corruption: 2, max_corruption: 5 } } as QuestChange,
     ])
     expect(tx.quest.update.mock.calls[0][0].data).toMatchObject({ minCorruption: 2, maxCorruption: 5 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Failure consequences — the other side of the reward ledger.
+// ---------------------------------------------------------------------------
+// FAILED/ABANDONED were inert after #45/#75 gave quests the structure to
+// have consequences. These pin the wiring: it fires on a real transition,
+// exactly once, and passes the giver the same way the payout does.
+
+describe('applyQuestChanges — failure consequences', () => {
+  const active = (over: Record<string, unknown> = {}) => ({
+    id: 'q1',
+    name: 'The Ledger Job',
+    status: 'ACTIVE',
+    progressLog: null,
+    givenByNpcId: null,
+    givenByFactionId: 'f1',
+    minCorruption: null,
+    maxCorruption: null,
+    ...over,
+  })
+
+  it('charges the party when a quest is abandoned', async () => {
+    tx.quest.findFirst.mockResolvedValue(active())
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'The Ledger Job', changes: { status: 'ABANDONED' } } as QuestChange,
+    ])
+
+    expect(applyQuestFailureCost).toHaveBeenCalledTimes(1)
+    const [, campaignId, quest, status] = vi.mocked(applyQuestFailureCost).mock.calls[0]
+    expect(campaignId).toBe('camp1')
+    expect(status).toBe('ABANDONED')
+    expect(quest).toMatchObject({ name: 'The Ledger Job', givenByFactionId: 'f1' })
+  })
+
+  it('charges the party when a quest is failed', async () => {
+    tx.quest.findFirst.mockResolvedValue(active())
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'The Ledger Job', changes: { status: 'FAILED' } } as QuestChange,
+    ])
+
+    expect(vi.mocked(applyQuestFailureCost).mock.calls[0][3]).toBe('FAILED')
+  })
+
+  it('does not charge twice for a quest already in that state', async () => {
+    // The once-only guard, matching the payout's. A repeated report of an
+    // already-failed quest must not re-charge one broken promise.
+    tx.quest.findFirst.mockResolvedValue(active({ status: 'FAILED' }))
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'The Ledger Job', changes: { status: 'FAILED' } } as QuestChange,
+    ])
+
+    expect(applyQuestFailureCost).not.toHaveBeenCalled()
+  })
+
+  it('does charge when a failed quest is later abandoned outright', async () => {
+    // A different outcome is a different event, not a repeat.
+    tx.quest.findFirst.mockResolvedValue(active({ status: 'FAILED' }))
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'The Ledger Job', changes: { status: 'ABANDONED' } } as QuestChange,
+    ])
+
+    expect(applyQuestFailureCost).toHaveBeenCalledTimes(1)
+  })
+
+  it('charges nothing when a quest merely progresses', async () => {
+    tx.quest.findFirst.mockResolvedValue(active())
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'The Ledger Job', changes: { progress_append: 'Found the ledger.' } } as QuestChange,
+    ])
+
+    expect(applyQuestFailureCost).not.toHaveBeenCalled()
+  })
+
+  it('charges nothing when a quest completes', async () => {
+    tx.quest.findFirst.mockResolvedValue(active())
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'The Ledger Job', changes: { status: 'COMPLETED' } } as QuestChange,
+    ])
+
+    expect(applyQuestFailureCost).not.toHaveBeenCalled()
   })
 })

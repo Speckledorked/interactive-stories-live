@@ -10,6 +10,7 @@ import { applyQuestRewardGrant } from '../questRewards'
 import { appendBounded, QUEST_PROGRESS_BOUNDS } from '../textAppend'
 import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData } from '../quests'
 import { checkCorruptionGate, hasCorruptionGate } from '../corruptionGates'
+import { applyQuestFailureCost, type QuestFailureStatus } from '../questFailure'
 
 type Db = Prisma.TransactionClient
 export type QuestChange = NonNullable<WorldUpdates['quest_changes']>[number]
@@ -145,6 +146,12 @@ export async function applyQuestChanges(
         updateData.progressLog = appendBounded(existing.progressLog, progressLine, QUEST_PROGRESS_BOUNDS)
       }
       const justCompleted = changes.status === 'COMPLETED' && existing.status !== 'COMPLETED'
+      // Same once-only shape as justCompleted, and for the same reason: a
+      // repeated report of an already-failed quest must not charge the
+      // party twice for one broken promise.
+      const justFailed =
+        (changes.status === 'FAILED' || changes.status === 'ABANDONED') &&
+        existing.status !== changes.status
       if (changes.status && changes.status !== existing.status) {
         // Acquisition gate: only a transition INTO active is checked.
         const becomingActive = changes.status === 'ACTIVE' && existing.status !== 'ACTIVE'
@@ -172,6 +179,25 @@ export async function applyQuestChanges(
           tx, campaignId, existing.name, changes.reward_grant, payerFactionId, currentTurnNumber
         )
         for (const line of rewardLog) console.log(`  🎁 ${line}`)
+      }
+
+      // The other side of the same ledger (see lib/game/questFailure.ts):
+      // walking away costs trust and standing, losing honestly costs only
+      // respect. Reads the giver from updateData first, matching the
+      // payout above, so a giver linked earlier in this same batch counts.
+      if (justFailed && updateData.status) {
+        const failureLog = await applyQuestFailureCost(
+          tx as never,
+          campaignId,
+          {
+            name: existing.name,
+            givenByNpcId: (updateData.givenByNpcId as string | null | undefined) ?? existing.givenByNpcId,
+            givenByFactionId:
+              (updateData.givenByFactionId as string | null | undefined) ?? existing.givenByFactionId,
+          },
+          changes.status as QuestFailureStatus
+        )
+        for (const line of failureLog) console.log(`  💔 ${line}`)
       }
     } else {
       let giverData: { givenByNpcId: string | null; givenByFactionId: string | null } = {

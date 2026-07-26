@@ -693,6 +693,20 @@ model Character {
   resources Json? // { gold?: number, reputation?: { [factionId: string]: number }, contacts?: string[] }
 
   // Phase 14: Relationships and consequences (HIDDEN from players)
+  //
+  // #91 is DECIDED: these stay hidden. The numbers drive a real roll
+  // modifier (relationshipModifier in lib/game/resolution.ts), and that is
+  // exactly why showing them would be wrong — a visible meter turns a
+  // relationship into a resource to farm, and players optimise a number
+  // they can see. What a character has earned reaches them through the
+  // fiction and through the receipt's diegetic phrasing ("they trust you",
+  // "word travels in your favor"), never as trust: 62.
+  //
+  // Deliberately NOT the same call as capability proficiency, which is
+  // hidden as a raw number but surfaced as a qualitative band: a
+  // proficiency band describes the character's own competence, which they
+  // would plausibly know, while rapport is someone else's private opinion
+  // of them.
   relationships Json? // { [entityId: string]: { trust: Int, tension: Int, respect: Int, fear: Int } }
   consequences  Json? // { promises?: string[], debts?: string[], enemies?: string[], longTermThreats?: string[] }
 

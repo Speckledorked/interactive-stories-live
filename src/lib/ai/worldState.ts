@@ -11,71 +11,22 @@ import { retrieveRelevantHistory, retrieveNpcHistory, retrieveCrossEntityHistory
 import { retrieveRelevantLore } from './loreRetrieval' // Imported lore RAG (see lib/lore/)
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
-import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
 import { describeTension, derivePhase } from '@/lib/game/tick/tension'
-import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { resolveActionMechanics } from '@/lib/game/resolution'
 import { describeZone } from '@/lib/game/zones'
-import { inventoryValue, describeWealth } from '@/lib/game/itemValue'
-import { summarizeDebts } from '@/lib/game/debts'
-import { summarizeStandings } from '@/lib/game/standing'
 import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
-import { parseFactionRelationships } from '@/lib/game/tick/types'
-
-// Depth-hardening #37 (see README): hard per-category caps on the live
-// world-state payload, applied via capForPrompt below — a backstop against
-// unbounded prompt/token growth in a maximally active long campaign. Under
-// each cap, nothing changes; only an excess triggers priority-ordered
-// trimming. Numbers are generous relative to what a typical scene actually
-// needs narrated in detail.
-const MAX_NPCS_IN_PROMPT = 15
-const MAX_FACTIONS_IN_PROMPT = 10
-const MAX_LOCATIONS_IN_PROMPT = 12
-const MAX_CLOCKS_IN_PROMPT = 10
-const MAX_QUESTS_IN_PROMPT = 8
-
-/**
- * Phase 9 NPC society: resolve NPC.socialTies into AI-facing lines, naming
- * only OTHER discovered NPCs — fog of war applies to social ties exactly
- * like every other NPC-facing field the prompt builders below already gate.
- */
-function describeNpcSocialTies(rawTies: unknown, discoveredNpcNameById: Map<string, string>): string[] {
-  const ties = parseFactionRelationships(rawTies)
-  const lines: string[] = []
-  for (const [otherId, tie] of Object.entries(ties)) {
-    const name = discoveredNpcNameById.get(otherId)
-    if (!name) continue
-    lines.push(`${tie.type === 'ALLY' ? 'ally' : 'rival'}: ${name}`)
-  }
-  return lines
-}
-
-/**
- * PbtA-style GM-facing flavor for a significant NPC (threat archetype,
- * what drives them, custom moves they can trigger) — set by admins/AI at
- * creation but previously never read by anything, so an NPC built as a
- * "grotesque" with real impulses/moves narrated exactly like a blank one.
- * Only returns keys that are actually set, so the vast majority of minor
- * NPCs (which never populate these) don't bloat every prompt with empty
- * arrays/nulls.
- */
-function npcFlavorFields(n: { threat: string | null; impulses: string[]; moves: string[] }) {
-  const fields: { threat?: string; impulses?: string[]; moves?: string[] } = {}
-  if (n.threat) fields.threat = n.threat
-  if (n.impulses.length > 0) fields.impulses = n.impulses
-  if (n.moves.length > 0) fields.moves = n.moves
-  return fields
-}
-
-/**
- * Last appended beat of a quest's progress log — the prompt only needs
- * "where this quest currently stands", not its whole history.
- */
-function lastProgressBeat(progressLog: string | null): string | null {
-  if (!progressLog) return null
-  const lines = progressLog.split('\n').map(l => l.trim()).filter(Boolean)
-  return lines.length > 0 ? lines[lines.length - 1] : null
-}
+import {
+  MAX_NPCS_IN_PROMPT,
+  MAX_FACTIONS_IN_PROMPT,
+  MAX_QUESTS_IN_PROMPT,
+  mapCharactersForPrompt,
+  mapNpcsForPrompt,
+  mapFactionsForPrompt,
+  mapLocationsForPrompt,
+  mapClocksForPrompt,
+  mapQuestsForPrompt,
+  mapWarsForPrompt,
+} from './worldSummaryMappers'
 
 /**
  * Scene-participant scoping (split-party support): a scene the GM created
@@ -258,146 +209,36 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
     // Include campaign summary in a special field (we'll handle this in the prompt)
     _campaignSummary: campaignSummaryText,
 
-    characters: promptCharacters.map(c => ({
-      id: c.id,
-      name: c.name,
-      description: c.description,
-      // Permanent/lasting changes the fiction has already written onto this
-      // character (scars, mutations, trauma, growth) — previously written
-      // by pc_changes.appearance_changes/personality_changes but never fed
-      // back into any prompt, so the narrator that wrote a scar was never
-      // told about it again. Read here exactly like description/backstory.
-      appearance: c.appearance,
-      personality: c.personality,
-      stats: c.stats,
-      backstory: c.backstory,
-      goals: c.goals,
-      location: c.currentLocation,
-      harm: c.harm,
-      conditions: c.conditions,
-      moves: c.moves,
-      statUsage: c.statUsage,
-      perks: c.perks,
-      inventory: c.inventory,
-      equipment: c.equipment,
-      resources: c.resources,
-      relationships: c.relationships,
-      consequences: c.consequences,
-      // Knowledge-relative sheet: qualitative bands + known-domains only —
-      // raw proficiency numbers never reach a prompt (fog of war inward).
-      origin_familiarity: c.originFamiliarity,
-      capabilities: summarizeCapabilities(c.capabilities),
-      // Open favors, both directions — the AI's leverage currency, and now
-      // a real roll modifier (see debtModifier in lib/game/debts.ts).
-      debts: summarizeDebts(c.debts),
-      // Qualitative carried wealth (#44/#47). A band, never a number, the
-      // same discipline capabilities and corruption already follow — it
-      // tells the narrator whether these are people who can buy their way
-      // out of trouble without handing them a price list.
-      carried_wealth: describeWealth(inventoryValue(((c.inventory as any)?.items) || [])),
-      // Social position with discovered active factions, qualitatively.
-      standings: summarizeStandings(c.factionStandings)
-    })),
+    characters: mapCharactersForPrompt(promptCharacters),
 
     // Only relevant, discovered NPCs — fog of war: relevance alone isn't
     // enough, the party has to have actually encountered them.
-    npcs: discoveredNpcs.map(n => ({
-      id: n.id,
-      name: n.name,
-      description: n.description,
-      goals: n.goals,
-      relationship: n.relationship,
-      importance: n.importance,
-      // Cross-reference against the factions array below by id for the
-      // faction's name/goal — kept as a bare id here rather than joined, to
-      // avoid duplicating faction data into every affiliated NPC.
-      factionId: n.factionId,
-      factionRole: n.factionRole,
-      // Phase 9 NPC society: this NPC's own web of allies/rivals.
-      social_ties: describeNpcSocialTies(n.socialTies, discoveredNpcNameById),
-      // PbtA GM-facing flavor (threat archetype, drives, custom moves) —
-      // only present for NPCs where it's actually set (see npcFlavorFields).
-      ...npcFlavorFields(n)
-    })),
+    npcs: mapNpcsForPrompt(discoveredNpcs, discoveredNpcNameById),
 
     // Only relevant, discovered factions. Numeric stats are deliberately
     // qualitative here, not exact — the deterministic tick needs the real
     // numbers and reads them straight from Prisma; this prompt is narration
     // only, and an exact "resources: 73" is trivial for the AI to blurt out
     // as something no player could know in-fiction.
-    factions: discoveredFactions.map(f => ({
-      id: f.id,
-      name: f.name,
-      goals: f.goals,
-      currentPlan: f.currentPlan,
-      threat_level: describeThreatLevel(f.threatLevel),
-      resources: describeStat(f.resources),
-      influence: describeStat(f.influence),
-      // World Sim Phase 6: set only when a player character leads this
-      // faction — see the PLAYER-LED FACTIONS prompt instruction.
-      leader_character_id: f.leaderCharacterId
-    })),
+    factions: mapFactionsForPrompt(discoveredFactions),
 
     // capForPrompt: contested locations are the ones actually worth
     // narrating in a crowded world — kept preferentially if there's an
     // excess.
-    locations: capForPrompt(locations, MAX_LOCATIONS_IN_PROMPT, l => (l.isContested ? 1 : 0)).map(l => ({
-      name: l.name,
-      description: l.description || '',
-      type: l.locationType || 'unknown',
-      // World Sim Phase 1: persistent weather, ticked independently of the
-      // player. Reference this in narration instead of inventing weather.
-      weather: l.weather,
-      weather_severity: l.weatherSeverity,
-      // World Sim Phase 4: cross-reference owner_faction_id against the
-      // factions array for the controlling faction's name — narrate control
-      // and contested status from this, don't invent your own map.
-      // Fog of war: null if the owner isn't discovered — territory doesn't
-      // reveal a faction's existence just because it's mapped.
-      owner_faction_id: l.ownerFactionId && discoveredFactionIds.has(l.ownerFactionId) ? l.ownerFactionId : null,
-      is_contested: l.isContested
-    })),
+    locations: mapLocationsForPrompt(locations, discoveredFactionIds),
 
     // capForPrompt: clocks closest to firing are the most narratively
     // urgent — kept preferentially if there's an excess.
-    clocks: capForPrompt(clocks, MAX_CLOCKS_IN_PROMPT, cl => cl.maxTicks > 0 ? cl.currentTicks / cl.maxTicks : 0).map(cl => ({
-      id: cl.id,
-      name: cl.name,
-      current_ticks: cl.currentTicks,
-      max_ticks: cl.maxTicks,
-      description: cl.description || '',
-      consequence: cl.consequence || ''
-    })),
+    clocks: mapClocksForPrompt(clocks),
 
-    quests: activeQuests.map(q => ({
-      name: q.name,
-      description: q.description,
-      objective: q.objective,
-      given_by: q.givenBy,
-      recent_progress: lastProgressBeat(q.progressLog)
-    })),
+    quests: mapQuestsForPrompt(activeQuests),
 
     // World Sim Phase 5: sustained conflicts — only ones where both sides
     // are discovered; the party can't hear about a war between two
     // factions they've never encountered. Coalitions: ally counts only
     // include discovered factions, same fog-of-war rule as everything else
     // here — a hidden faction joining a known war doesn't get outed by it.
-    wars: activeWars
-      .filter(w => discoveredFactionIds.has(w.attackerFactionId) && discoveredFactionIds.has(w.defenderFactionId))
-      .map(w => {
-        const discoveredParticipants = w.participants.filter(p => p.faction.isDiscovered)
-        const attackerAllies = discoveredParticipants.filter(p => p.side === 'ATTACKER' && p.factionId !== w.attackerFactionId).length
-        const defenderAllies = discoveredParticipants.filter(p => p.side === 'DEFENDER' && p.factionId !== w.defenderFactionId).length
-        return {
-          name: w.name,
-          attacker: allFactions.find(f => f.id === w.attackerFactionId)?.name || 'Unknown',
-          defender: allFactions.find(f => f.id === w.defenderFactionId)?.name || 'Unknown',
-          attacker_allies: attackerAllies,
-          defender_allies: defenderAllies,
-          momentum: describeWarMomentum(w.momentum),
-          turns_elapsed: worldMeta.currentTurnNumber - w.startedTurn
-        }
-      }),
+    wars: mapWarsForPrompt(activeWars, allFactions, discoveredFactionIds, worldMeta.currentTurnNumber),
 
     // Use compressed timeline from context manager
     recent_timeline_events: compressedTimeline
@@ -528,107 +369,20 @@ export async function buildWorldSummaryForAI(
     story_phase: worldMeta.phase || derivePhase(worldMeta.tension, worldMeta.currentTurnNumber),
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
 
-    characters: promptCharacters.map(c => ({
-      id: c.id,
-      name: c.name,
-      description: c.description,
-      // Permanent/lasting changes the fiction has already written onto this
-      // character (scars, mutations, trauma, growth) — previously written
-      // by pc_changes.appearance_changes/personality_changes but never fed
-      // back into any prompt, so the narrator that wrote a scar was never
-      // told about it again. Read here exactly like description/backstory.
-      appearance: c.appearance,
-      personality: c.personality,
-      stats: c.stats,
-      backstory: c.backstory,
-      goals: c.goals,
-      location: c.currentLocation,
-      harm: c.harm,
-      conditions: c.conditions,
-      moves: c.moves,
-      statUsage: c.statUsage,
-      perks: c.perks,
-      inventory: c.inventory,
-      equipment: c.equipment,
-      resources: c.resources,
-      relationships: c.relationships,
-      consequences: c.consequences,
-      // Knowledge-relative sheet: qualitative bands + known-domains only —
-      // raw proficiency numbers never reach a prompt (fog of war inward).
-      origin_familiarity: c.originFamiliarity,
-      capabilities: summarizeCapabilities(c.capabilities),
-      // Open favors, both directions — the AI's leverage currency, and now
-      // a real roll modifier (see debtModifier in lib/game/debts.ts).
-      debts: summarizeDebts(c.debts),
-      // Qualitative carried wealth (#44/#47). A band, never a number, the
-      // same discipline capabilities and corruption already follow — it
-      // tells the narrator whether these are people who can buy their way
-      // out of trouble without handing them a price list.
-      carried_wealth: describeWealth(inventoryValue(((c.inventory as any)?.items) || [])),
-      // Social position with discovered active factions, qualitatively.
-      standings: summarizeStandings(c.factionStandings)
-    })),
+    characters: mapCharactersForPrompt(promptCharacters),
 
-    npcs: discoveredNpcs.map(n => ({
-      id: n.id,
-      name: n.name,
-      description: n.description,
-      goals: n.goals,
-      relationship: n.relationship,
-      importance: n.importance,
-      factionId: n.factionId,
-      factionRole: n.factionRole,
-      // Phase 9 NPC society: this NPC's own web of allies/rivals.
-      social_ties: describeNpcSocialTies(n.socialTies, discoveredNpcNameById),
-      // PbtA GM-facing flavor (threat archetype, drives, custom moves) —
-      // only present for NPCs where it's actually set (see npcFlavorFields).
-      ...npcFlavorFields(n)
-    })),
+    npcs: mapNpcsForPrompt(discoveredNpcs, discoveredNpcNameById),
 
     // Numeric stats are deliberately qualitative here, not exact — see
     // qualitativeStats.ts. The deterministic tick reads real numbers
     // straight from Prisma and never goes through this prompt.
-    factions: discoveredFactions.map(f => ({
-      id: f.id,
-      name: f.name,
-      goals: f.goals,
-      currentPlan: f.currentPlan,
-      threat_level: describeThreatLevel(f.threatLevel),
-      resources: describeStat(f.resources),
-      influence: describeStat(f.influence),
-      leader_character_id: f.leaderCharacterId
-    })),
+    factions: mapFactionsForPrompt(discoveredFactions),
 
-    clocks: capForPrompt(clocks, MAX_CLOCKS_IN_PROMPT, cl => cl.maxTicks > 0 ? cl.currentTicks / cl.maxTicks : 0).map(cl => ({
-      id: cl.id,
-      name: cl.name,
-      current_ticks: cl.currentTicks,
-      max_ticks: cl.maxTicks,
-      description: cl.description || '',
-      consequence: cl.consequence || ''
-    })),
+    clocks: mapClocksForPrompt(clocks),
 
-    quests: capForPrompt(activeQuests, MAX_QUESTS_IN_PROMPT, q => q.createdAt.getTime()).map(q => ({
-      name: q.name,
-      description: q.description,
-      objective: q.objective,
-      given_by: q.givenBy,
-      recent_progress: lastProgressBeat(q.progressLog)
-    })),
+    quests: mapQuestsForPrompt(capForPrompt(activeQuests, MAX_QUESTS_IN_PROMPT, q => q.createdAt.getTime())),
 
-    locations: capForPrompt(locations, MAX_LOCATIONS_IN_PROMPT, l => (l.isContested ? 1 : 0)).map(l => ({
-      name: l.name,
-      description: l.description || '',
-      type: l.locationType || 'unknown',
-      // World Sim Phase 1: persistent weather, ticked independently of the
-      // player. Reference this in narration instead of inventing weather.
-      weather: l.weather,
-      weather_severity: l.weatherSeverity,
-      // Fog of war: null if the owner isn't discovered — territory doesn't
-      // reveal a faction's existence just because it's mapped.
-      owner_faction_id: l.ownerFactionId && discoveredFactionIds.has(l.ownerFactionId) ? l.ownerFactionId : null,
-      is_contested: l.isContested
-    })),
+    locations: mapLocationsForPrompt(locations, discoveredFactionIds),
 
     recent_timeline_events: recentEvents.map(e => ({
       title: e.title,
@@ -640,22 +394,7 @@ export async function buildWorldSummaryForAI(
     // "how's the war going" from momentum/turns_elapsed, don't improvise.
     // Fog of war: only wars where both sides are discovered; ally counts
     // only include discovered factions.
-    wars: activeWars
-      .filter(w => discoveredFactionIds.has(w.attackerFactionId) && discoveredFactionIds.has(w.defenderFactionId))
-      .map(w => {
-        const discoveredParticipants = w.participants.filter(p => p.faction.isDiscovered)
-        const attackerAllies = discoveredParticipants.filter(p => p.side === 'ATTACKER' && p.factionId !== w.attackerFactionId).length
-        const defenderAllies = discoveredParticipants.filter(p => p.side === 'DEFENDER' && p.factionId !== w.defenderFactionId).length
-        return {
-          name: w.name,
-          attacker: factions.find(f => f.id === w.attackerFactionId)?.name || 'Unknown',
-          defender: factions.find(f => f.id === w.defenderFactionId)?.name || 'Unknown',
-          attacker_allies: attackerAllies,
-          defender_allies: defenderAllies,
-          momentum: describeWarMomentum(w.momentum),
-          turns_elapsed: (worldMeta?.currentTurnNumber ?? w.startedTurn) - w.startedTurn
-        }
-      })
+    wars: mapWarsForPrompt(activeWars, factions, discoveredFactionIds, worldMeta.currentTurnNumber),
   } as any
 
   // Return both world summary and entities for reuse in memory retrieval.

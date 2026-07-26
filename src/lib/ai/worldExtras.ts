@@ -17,7 +17,10 @@ import { MAX_CORRUPTION, CorruptionTheme } from '@/lib/game/corruption'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 import type { GeneratedCapability, GeneratedStatLabels, GeneratedNPC, GeneratedLocation } from './worldGenerator'
 
-export interface GeneratedArchetypeTie {
+// Not exported: only referenced structurally (via GeneratedArchetype.startingTie)
+// by the one external importer, GeneratedWorldExtras — nothing imports this
+// type by name.
+interface GeneratedArchetypeTie {
   kind: 'debt_owed_by_character' | 'debt_owed_to_character' | 'faction_standing'
   counterparty_type: 'npc' | 'faction'
   counterparty_name: string

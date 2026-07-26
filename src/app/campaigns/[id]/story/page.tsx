@@ -398,6 +398,34 @@ export default function StoryPage() {
       loadData()
     })
 
+    // Safety pause (X-Card). The safety service has always published these
+    // and nothing has ever listened, so hitting the X-Card stopped the
+    // scene on the server while every other player's screen carried on as
+    // though nothing had happened — they kept writing into a scene that
+    // could no longer accept anything, and found out only when submission
+    // failed. Of everything on this channel, this is the event that most
+    // needs to land immediately.
+    channel.bind('scene:paused', (data: any) => {
+      console.log('Scene paused for a safety check-in:', data)
+      setResolvingMessage('')
+      setError('')
+      loadData()
+    })
+
+    channel.bind('scene:resumed', (data: any) => {
+      console.log('Scene resumed:', data)
+      setError('')
+      loadData()
+    })
+
+    // Scene ended by the GM — also published and never listened for, so
+    // the table sat on a finished scene until someone reloaded.
+    channel.bind('scene:ended', (data: any) => {
+      console.log('Scene ended:', data)
+      setResolvingMessage('')
+      loadData()
+    })
+
     // Cleanup on unmount
     return () => {
       if (pusherClient) {

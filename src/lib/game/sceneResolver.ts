@@ -8,6 +8,7 @@ import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
 import { applyWorldUpdates, summarizeWorldUpdates, enrichStubNPCs, enrichStubFactions } from './stateUpdater'
 import { SceneStatus } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
+import { needsIntervention } from './campaignHealthBands'
 import { ExchangeManager } from './exchange-manager' // Phase 16
 import PusherServer from '@/lib/realtime/pusher-server' // For real-time updates
 import { recurringHarmForScene, applyRecurringHarm, accrueNaturalRecovery, parseHarmState } from './harm'
@@ -543,11 +544,18 @@ async function performResolution(
       const health = await healthMonitor.calculateHealth()
       await healthMonitor.recordHealthCheck(health)
 
-      if (!health.isHealthy) {
-        console.warn('⚠️ Campaign health issues detected:')
+      // Three bands, not two. "Not healthy" is a high bar (>= 70 and zero
+      // issues), so it fires for a campaign with one minor rough edge —
+      // which made the warning easy to ignore and hid the campaigns that
+      // are genuinely in trouble. needsIntervention is the low bar, and
+      // it's the same rule the health endpoint and the admin panel read.
+      if (needsIntervention(health)) {
+        console.warn(`🚨 Campaign needs intervention (${health.score}/100):`)
         health.issues.forEach(issue => console.warn(`  - ${issue}`))
         console.warn('💡 Recommendations:')
         health.recommendations.forEach(rec => console.warn(`  - ${rec}`))
+      } else if (!health.isHealthy) {
+        console.log(`🩺 Campaign health: ${health.score}/100 — ${health.issues.length} issue(s)`)
       } else {
         console.log(`✅ Campaign health: ${health.score}/100`)
       }

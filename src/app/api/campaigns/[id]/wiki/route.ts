@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { visibleTo } from '@/lib/api/visibility'
 
 // Fog of war: WikiEntry rows are matched to their source entity by name, not
 // a real FK, so there's no isDiscovered column to filter on directly here.
@@ -23,10 +24,14 @@ async function filterDiscoveredEntries<T extends { entryType: string; name: stri
   entries: T[]
 ): Promise<T[]> {
   const [discoveredNpcs, discoveredFactions, discoveredLocations, visibleClocks] = await Promise.all([
-    prisma.nPC.findMany({ where: { campaignId, isDiscovered: true }, select: { name: true } }),
-    prisma.faction.findMany({ where: { campaignId, isDiscovered: true }, select: { name: true } }),
-    prisma.location.findMany({ where: { campaignId, isDiscovered: true }, select: { name: true } }),
-    prisma.clock.findMany({ where: { campaignId, isHidden: false }, select: { name: true } }),
+    // Deliberately player-scoped even for an admin: this index decides
+    // which names inside wiki PROSE become links, and a link to something
+    // undiscovered would reveal it exists. Passing a non-admin role here is
+    // the point, not an oversight.
+    prisma.nPC.findMany({ where: { campaignId, ...visibleTo('npc', null) }, select: { name: true } }),
+    prisma.faction.findMany({ where: { campaignId, ...visibleTo('faction', null) }, select: { name: true } }),
+    prisma.location.findMany({ where: { campaignId, ...visibleTo('location', null) }, select: { name: true } }),
+    prisma.clock.findMany({ where: { campaignId, ...visibleTo('clock', null) }, select: { name: true } }),
   ])
 
   const npcNames = new Set(discoveredNpcs.map((n) => n.name))
@@ -94,21 +99,23 @@ async function visibleEntityStubs(
   existingEntries: Array<{ entryType: string; name: string }>
 ) {
   const wanted = (type: string) => !requestedType || requestedType === type
-  const discovery = isAdmin ? {} : { isDiscovered: true }
+  // #94: one gate, four models, and the clock's inverted polarity handled
+  // by the helper rather than by a second ternary here.
+  const role = isAdmin ? 'ADMIN' : 'PLAYER'
 
   const [npcs, factions, locations, clocks] = await Promise.all([
     wanted('NPC')
-      ? prisma.nPC.findMany({ where: { campaignId, ...discovery }, select: ENTITY_STUB_FIELDS })
+      ? prisma.nPC.findMany({ where: { campaignId, ...visibleTo('npc', role) }, select: ENTITY_STUB_FIELDS })
       : [],
     wanted('FACTION')
-      ? prisma.faction.findMany({ where: { campaignId, ...discovery }, select: ENTITY_STUB_FIELDS })
+      ? prisma.faction.findMany({ where: { campaignId, ...visibleTo('faction', role) }, select: ENTITY_STUB_FIELDS })
       : [],
     wanted('LOCATION')
-      ? prisma.location.findMany({ where: { campaignId, ...discovery }, select: ENTITY_STUB_FIELDS })
+      ? prisma.location.findMany({ where: { campaignId, ...visibleTo('location', role) }, select: ENTITY_STUB_FIELDS })
       : [],
     wanted('CLOCK')
       ? prisma.clock.findMany({
-          where: { campaignId, ...(isAdmin ? {} : { isHidden: false }) },
+          where: { campaignId, ...visibleTo('clock', role) },
           select: ENTITY_STUB_FIELDS,
         })
       : [],

@@ -147,7 +147,8 @@ export async function POST(
     // Validate entity references if provided
     if (characterId) {
       const character = await prisma.character.findFirst({
-        where: { id: characterId, campaignId: params.id }
+        where: { id: characterId, campaignId: params.id },
+        select: { id: true }
       });
       if (!character) {
         return NextResponse.json({ error: 'Character not found' }, { status: 400 });
@@ -156,7 +157,8 @@ export async function POST(
 
     if (npcId) {
       const npc = await prisma.nPC.findFirst({
-        where: { id: npcId, campaignId: params.id }
+        where: { id: npcId, campaignId: params.id },
+        select: { id: true }
       });
       if (!npc) {
         return NextResponse.json({ error: 'NPC not found' }, { status: 400 });
@@ -165,7 +167,8 @@ export async function POST(
 
     if (factionId) {
       const faction = await prisma.faction.findFirst({
-        where: { id: factionId, campaignId: params.id }
+        where: { id: factionId, campaignId: params.id },
+        select: { id: true }
       });
       if (!faction) {
         return NextResponse.json({ error: 'Faction not found' }, { status: 400 });
@@ -174,7 +177,8 @@ export async function POST(
 
     if (sceneId) {
       const scene = await prisma.scene.findFirst({
-        where: { id: sceneId, campaignId: params.id }
+        where: { id: sceneId, campaignId: params.id },
+        select: { id: true }
       });
       if (!scene) {
         return NextResponse.json({ error: 'Scene not found' }, { status: 400 });

@@ -1,6 +1,7 @@
 // src/app/api/campaigns/[id]/factions/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { visibleTo, isCampaignAdmin } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
 
@@ -34,12 +35,12 @@ export async function GET(
       )
     }
 
-    const isAdmin = membership.role === 'ADMIN'
+    const isAdmin = isCampaignAdmin(membership.role)
 
     // Fog of war: admins see undiscovered factions too (they manage them);
     // everyone else sees only what the party has actually found.
     const factions = await prisma.faction.findMany({
-      where: isAdmin ? { campaignId } : { campaignId, isDiscovered: true },
+      where: { campaignId, ...visibleTo('faction', membership.role) },
       orderBy: { createdAt: 'desc' },
     })
 

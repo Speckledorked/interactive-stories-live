@@ -1,6 +1,7 @@
 // src/app/api/campaigns/[id]/npcs/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { visibleTo, isCampaignAdmin } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
@@ -35,12 +36,12 @@ export async function GET(
       )
     }
 
-    const isAdmin = membership.role === 'ADMIN'
+    const isAdmin = isCampaignAdmin(membership.role)
 
     // Fog of war: admins see undiscovered NPCs too (they manage them);
     // everyone else sees only what the party has actually found.
     const npcs = await prisma.nPC.findMany({
-      where: isAdmin ? { campaignId } : { campaignId, isDiscovered: true },
+      where: { campaignId, ...visibleTo('npc', membership.role) },
       orderBy: { createdAt: 'desc' },
     })
 

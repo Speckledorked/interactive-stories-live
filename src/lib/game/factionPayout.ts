@@ -20,6 +20,8 @@
 // The design in one line: a payout is a TRANSFER. What a faction pays,
 // it stops having.
 
+import { clamp } from '@/lib/game/tick/types'
+
 /** Faction.resources is a 0-100 band, not a treasury denominated in gold. */
 export const RESOURCES_MIN = 0
 export const RESOURCES_MAX = 100
@@ -63,10 +65,6 @@ export interface PayoutAssessment {
   resourceCost: number
   /** True when the faction could not pay in full. */
   defaulted: boolean
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
 }
 
 /**

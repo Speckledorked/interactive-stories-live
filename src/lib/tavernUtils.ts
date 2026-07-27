@@ -3,14 +3,15 @@
 import {
   Sword, TreeDeciduous, Compass, Scroll, Castle, Flame, Skull, Feather, Moon, Mountain, Shield, Swords,
 } from 'lucide-react'
+import { stableHash } from '@/lib/game/tick/types'
 
 // Deterministic banner icon per entity id — stable across reloads without
-// needing a real per-campaign theme field.
+// needing a real per-campaign theme field. Reuses the same hash the
+// simulation ticks use for deterministic pseudo-variety (was a private,
+// byte-identical copy of it before this refactor).
 const BANNER_ICONS = [Sword, TreeDeciduous, Compass, Scroll, Castle, Flame, Skull, Feather, Moon, Mountain, Shield, Swords]
 export function bannerIconFor(id: string) {
-  let hash = 0
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0
-  return BANNER_ICONS[Math.abs(hash) % BANNER_ICONS.length]
+  return BANNER_ICONS[stableHash(id) % BANNER_ICONS.length]
 }
 
 export function formatRelativeTime(iso: string): string {

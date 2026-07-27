@@ -9,6 +9,7 @@ import { callChatCompletion } from '@/lib/ai/chatCompletion'
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { buildWorldSummaryForAI } from './worldSummary'
+import { truncateWithEllipsis } from '@/lib/format'
 
 /**
  * Generate intro text for a brand new scene
@@ -129,7 +130,7 @@ export async function generateNewSceneIntro(campaignId: string, characterIds?: s
 
       // Only include the most story-relevant details
       if (c.backstory && c.backstory.length > 20) {
-        parts.push(`Background hint: ${c.backstory.substring(0, 80)}${c.backstory.length > 80 ? '...' : ''}`)
+        parts.push(`Background hint: ${truncateWithEllipsis(c.backstory, 80)}`)
       }
 
       // Lasting appearance/personality changes the fiction already wrote
@@ -137,11 +138,11 @@ export async function generateNewSceneIntro(campaignId: string, characterIds?: s
       // should be able to reach for — surfaced here the same truncated way
       // backstory is above, not the full text.
       if (c.appearance && c.appearance.length > 20) {
-        parts.push(`Appearance: ${c.appearance.substring(0, 80)}${c.appearance.length > 80 ? '...' : ''}`)
+        parts.push(`Appearance: ${truncateWithEllipsis(c.appearance, 80)}`)
       }
 
       if (c.personality && c.personality.length > 20) {
-        parts.push(`Personality: ${c.personality.substring(0, 80)}${c.personality.length > 80 ? '...' : ''}`)
+        parts.push(`Personality: ${truncateWithEllipsis(c.personality, 80)}`)
       }
 
       if (c.goals) {

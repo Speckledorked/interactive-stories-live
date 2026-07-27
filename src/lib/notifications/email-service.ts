@@ -2,6 +2,7 @@
 
 import nodemailer from 'nodemailer';
 import { getAppUrl } from '@/lib/appUrl';
+import { pluralize } from '@/lib/format';
 
 interface EmailParams {
   to: string;
@@ -287,7 +288,7 @@ export class EmailService {
             <div style="background: #eff6ff; border-radius: 6px; padding: 15px;">
               <h3 style="color: #1e40af; margin: 0 0 5px 0; font-size: 16px;">🔔 Notifications</h3>
               <p style="color: #374151; margin: 0; font-size: 14px;">
-                ${digestData.unreadNotifications} unread notification${digestData.unreadNotifications !== 1 ? 's' : ''}
+                ${digestData.unreadNotifications} unread ${pluralize(digestData.unreadNotifications, 'notification')}
               </p>
             </div>
             

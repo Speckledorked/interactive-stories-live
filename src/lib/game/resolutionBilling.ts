@@ -13,6 +13,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { checkBalance, deductFunds, formatCurrency } from '@/lib/payment/service'
+import { pluralize } from '@/lib/format'
 
 // Real AI cost is a few cents at most per scene (see cost-tracker.ts's
 // pricing table) — this multiplier is what actually funds hosting, dev
@@ -162,7 +163,7 @@ export async function chargeForSceneResolution(
     await deductFunds(
       uid,
       costPerPlayer,
-      `Scene #${scene.sceneNumber} resolution (${payerIds.length} player${payerIds.length !== 1 ? 's' : ''}, metered AI cost $${(rawCostCents / 100).toFixed(4)})`,
+      `Scene #${scene.sceneNumber} resolution (${payerIds.length} ${pluralize(payerIds.length, 'player')}, metered AI cost $${(rawCostCents / 100).toFixed(4)})`,
       { sceneId, campaignId, rawCostCents }
     )
   }

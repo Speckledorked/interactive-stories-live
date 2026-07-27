@@ -5,7 +5,7 @@ import { visibleTo, isCampaignAdmin } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
 // GET /api/campaigns/:id/npcs - List all NPCs for a campaign
 export async function GET(
@@ -64,14 +64,8 @@ export async function POST(
     const body = await request.json()
 
     // Check if user is admin
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Only campaign admins can create NPCs' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can create NPCs')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Validate required fields
     if (!body.name) {

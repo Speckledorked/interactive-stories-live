@@ -11,6 +11,7 @@ import { UserRole } from '@prisma/client'
 import { redactGmNotes, redactGmNotesList } from '@/lib/game/visibility'
 import { isWorldSeeding } from '@/lib/lore/seedingGate'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function GET(
   request: NextRequest,
@@ -59,7 +60,7 @@ export async function GET(
         // Timeline events relation is named "timeline" in the schema
         timeline: {
           // Admin sees all events; others see only public ones
-          where: membership.role === 'ADMIN'
+          where: membership.role === UserRole.ADMIN
             ? {}
             : { visibility: 'PUBLIC' },
           orderBy: { sessionDate: 'desc' },
@@ -109,7 +110,7 @@ export async function GET(
       pendingWorldSeed = await isWorldSeeding(campaignId)
     }
 
-    const isAdmin = membership.role === 'ADMIN'
+    const isAdmin = membership.role === UserRole.ADMIN
     const redactedCampaign = {
       ...campaign,
       pendingWorldSeed,
@@ -129,17 +130,7 @@ export async function GET(
       userRole: membership.role
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Get campaign error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Get campaign error', 'Internal server error')
   }
 }
 
@@ -194,17 +185,7 @@ export async function PATCH(
 
     return NextResponse.json({ campaign: updatedCampaign })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Update campaign error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Update campaign error', 'Internal server error')
   }
 }
 
@@ -241,16 +222,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Delete campaign error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Delete campaign error', 'Internal server error')
   }
 }

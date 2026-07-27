@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
 import crypto from 'crypto'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 async function requireAdmin(userId: string, campaignId: string) {
   const membership = await getCampaignMembership(userId, campaignId)
@@ -41,11 +42,7 @@ export async function GET(
       token: campaign.chronicleShareEnabled ? campaign.chronicleShareToken : null,
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Get chronicle share error:', error)
-    return NextResponse.json({ error: 'Failed to load chronicle share state' }, { status: 500 })
+    return handleRouteError(error, 'Get chronicle share error', 'Failed to load chronicle share state')
   }
 }
 
@@ -70,11 +67,7 @@ export async function POST(
 
     return NextResponse.json({ enabled: true, token: campaign.chronicleShareToken })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Enable chronicle share error:', error)
-    return NextResponse.json({ error: 'Failed to enable chronicle share' }, { status: 500 })
+    return handleRouteError(error, 'Enable chronicle share error', 'Failed to enable chronicle share')
   }
 }
 
@@ -97,10 +90,6 @@ export async function DELETE(
 
     return NextResponse.json({ enabled: false, token: null })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Disable chronicle share error:', error)
-    return NextResponse.json({ error: 'Failed to disable chronicle share' }, { status: 500 })
+    return handleRouteError(error, 'Disable chronicle share error', 'Failed to disable chronicle share')
   }
 }

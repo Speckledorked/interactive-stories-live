@@ -8,6 +8,7 @@ import { stripe } from '@/lib/stripe'
 import { ErrorResponse } from '@/types/api'
 import { MINIMUM_ADD_AMOUNT, formatCurrency } from '@/lib/payment/service'
 import { getAppUrl } from '@/lib/appUrl'
+import { handleRouteErrorWithDetails } from '@/lib/api/errors'
 
 interface AddFundsRequest {
   amountInCents: number
@@ -83,21 +84,6 @@ export async function POST(request: NextRequest) {
       sessionId: session.id,
     })
   } catch (error) {
-    console.error('Error creating checkout session:', error)
-
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    return NextResponse.json<ErrorResponse>(
-      {
-        error: 'Failed to create checkout session',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    return handleRouteErrorWithDetails(error, 'Error creating checkout session', 'Failed to create checkout session')
   }
 }

@@ -11,7 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
 export const maxDuration = 60
 
@@ -26,10 +26,8 @@ export async function POST(
     }
 
     const campaignId = params.id
-    const membership = await getCampaignMembership(user.userId, campaignId)
-    if (!membership || membership.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Only campaign admins can generate world extras' }, { status: 403 })
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can generate world extras')
+    if ('response' in adminCheck) return adminCheck.response
 
     const rateLimit = await checkRateLimit(
       user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds

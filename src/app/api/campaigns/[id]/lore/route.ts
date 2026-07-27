@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
 import { LORE_IMPORT_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { kickLoreImportJob, recoverStaleLoreJobs } from '@/lib/lore/loreQueue'
@@ -17,7 +18,7 @@ async function requireAdmin(request: NextRequest, campaignId: string) {
   if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) } as const
 
   const membership = await getCampaignMembership(user.userId, campaignId)
-  if (!membership || membership.role !== 'ADMIN') {
+  if (!membership || membership.role !== UserRole.ADMIN) {
     return { error: NextResponse.json({ error: 'Only campaign admins can manage lore' }, { status: 403 }) } as const
   }
   return { user } as const

@@ -4,9 +4,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { UserRole } from '@prisma/client'
 import { SafetyService } from '@/lib/safety/safety-service'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function PATCH(
   request: NextRequest,
@@ -16,10 +16,8 @@ export async function PATCH(
     const user = await requireAuth(request)
     const campaignId = params.id
 
-    const membership = await getCampaignMembership(user.userId, campaignId)
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Only admins can act on reports' }, { status: 403 })
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only admins can act on reports')
+    if ('response' in adminCheck) return adminCheck.response
 
     const existing = await prisma.contentReport.findUnique({ where: { id: params.reportId } })
     if (!existing || existing.campaignId !== campaignId) {
@@ -53,10 +51,6 @@ export async function PATCH(
 
     return NextResponse.json({ error: 'action must be "resolve" or "dismiss"' }, { status: 400 })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Update report error:', error)
-    return NextResponse.json({ error: 'Failed to update report' }, { status: 500 })
+    return handleRouteError(error, 'Update report error', 'Failed to update report')
   }
 }

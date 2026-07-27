@@ -4,8 +4,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { UserRole } from '@prisma/client'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function GET(
   request: NextRequest,
@@ -15,10 +15,8 @@ export async function GET(
     const user = await requireAuth(request)
     const campaignId = params.id
 
-    const membership = await getCampaignMembership(user.userId, campaignId)
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Only admins can view bans' }, { status: 403 })
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only admins can view bans')
+    if ('response' in adminCheck) return adminCheck.response
 
     const bans = await prisma.campaignBan.findMany({
       where: { campaignId },
@@ -38,10 +36,6 @@ export async function GET(
       bans: bans.map(b => ({ ...b, user: userById.get(b.userId) || null })),
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('List bans error:', error)
-    return NextResponse.json({ error: 'Failed to load bans' }, { status: 500 })
+    return handleRouteError(error, 'List bans error', 'Failed to load bans')
   }
 }

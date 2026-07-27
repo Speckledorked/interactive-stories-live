@@ -7,7 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { UserRole } from '@prisma/client'
 import { SafetyService } from '@/lib/safety/safety-service'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function POST(
   request: NextRequest,
@@ -22,10 +23,8 @@ export async function POST(
       return NextResponse.json({ error: 'You cannot ban yourself' }, { status: 400 })
     }
 
-    const adminMembership = await getCampaignMembership(user.userId, campaignId)
-    if (!adminMembership || adminMembership.role !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Only admins can ban members' }, { status: 403 })
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only admins can ban members')
+    if ('response' in adminCheck) return adminCheck.response
 
     const targetMembership = await getCampaignMembership(targetUserId, campaignId)
     if (!targetMembership) {
@@ -54,11 +53,7 @@ export async function POST(
 
     return NextResponse.json({ ban })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Ban member error:', error)
-    return NextResponse.json({ error: 'Failed to ban member' }, { status: 500 })
+    return handleRouteError(error, 'Ban member error', 'Failed to ban member')
   }
 }
 
@@ -70,18 +65,12 @@ export async function DELETE(
     const user = await requireAuth(request)
     const campaignId = params.id
 
-    const adminMembership = await getCampaignMembership(user.userId, campaignId)
-    if (!adminMembership || adminMembership.role !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Only admins can unban members' }, { status: 403 })
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only admins can unban members')
+    if ('response' in adminCheck) return adminCheck.response
 
     await SafetyService.unbanUserFromCampaign(campaignId, params.userId)
     return NextResponse.json({ success: true })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Unban member error:', error)
-    return NextResponse.json({ error: 'Failed to unban member' }, { status: 500 })
+    return handleRouteError(error, 'Unban member error', 'Failed to unban member')
   }
 }

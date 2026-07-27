@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth } from '@/lib/auth';
+import { UserRole } from '@prisma/client';
 import { TurnTracker } from '@/lib/notifications/turn-tracker';
 import { pusherServer } from '@/lib/pusher';
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
@@ -93,7 +94,7 @@ export async function POST(
         // Skipping someone ELSE'S turn stays host-only — it's the one
         // turn-order control that overrides another player rather than
         // driving your own participation, i.e. moderation, not GM-ing.
-        if (membership.role !== 'ADMIN') {
+        if (membership.role !== UserRole.ADMIN) {
           return NextResponse.json({ error: 'Only the campaign host can skip another player\'s turn' }, { status: 403 });
         }
         result = await TurnTracker.skipTurn(params.id, sceneId, 'Skipped by the host');

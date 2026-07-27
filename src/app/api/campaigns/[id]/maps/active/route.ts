@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken } from '@/lib/auth'
+import { getUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { MapService } from '@/lib/maps/map-service'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
@@ -10,14 +10,11 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const token = request.headers.get('authorization')?.split(' ')[1]
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const user = verifyToken(token)
+    // Called-out fix, not a silent behavior change: see quests/route.ts's
+    // comment — hand-rolled token parsing here bypassed session revocation.
+    const user = await getUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const campaignId = params.id
@@ -48,14 +45,11 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const token = request.headers.get('authorization')?.split(' ')[1]
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const user = verifyToken(token)
+    // Called-out fix, not a silent behavior change: see quests/route.ts's
+    // comment — hand-rolled token parsing here bypassed session revocation.
+    const user = await getUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const campaignId = params.id

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 // GET /api/campaigns/[id]/scenes - Get all scenes for a campaign
 export async function GET(
@@ -43,10 +44,8 @@ export async function GET(
 
     return NextResponse.json({ scenes })
   } catch (error) {
-    console.error('Error fetching scenes:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch scenes' },
-      { status: 500 }
-    )
+    // Called-out fix, not a silent behavior change: see tutorial/trigger/
+    // route.ts's comment — this route had the same missing 401 case.
+    return handleRouteError(error, 'Error fetching scenes', 'Failed to fetch scenes')
   }
 }

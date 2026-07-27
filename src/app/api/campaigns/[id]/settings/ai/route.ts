@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
 export async function PATCH(
   request: NextRequest,
@@ -18,14 +18,8 @@ export async function PATCH(
     const body = await request.json()
 
     // Check if user is admin
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Only campaign admins can update settings' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can update settings')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Update AI settings
     const contentModerationLevel = body.contentModerationLevel === 'strict' ? 'strict' : 'standard'

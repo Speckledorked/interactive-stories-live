@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { getAppUrl } from '@/lib/appUrl'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
 export async function POST(
   request: NextRequest,
@@ -19,14 +19,8 @@ export async function POST(
     const body = await request.json()
 
     // Check if user is admin
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Only campaign admins can create invites' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can create invites')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Create invite with defaults
     const expiresAt = body.expiresAt 
@@ -73,14 +67,8 @@ export async function GET(
     const campaignId = params.id
 
     // Check if user is admin
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Only campaign admins can view invites' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can view invites')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Get all invites
     const invites = await prisma.campaignInvite.findMany({

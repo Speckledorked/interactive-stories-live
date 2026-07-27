@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,17 +32,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ user })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Get user error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Get user error', 'Internal server error')
   }
 }
 
@@ -83,17 +74,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ user })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Update user error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Update user error', 'Internal server error')
   }
 }
 
@@ -117,16 +98,6 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: 'Account deleted successfully' })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Delete user error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Delete user error', 'Internal server error')
   }
 }

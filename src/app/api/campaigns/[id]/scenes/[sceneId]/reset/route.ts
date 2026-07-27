@@ -6,7 +6,8 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import PusherServer from '@/lib/realtime/pusher-server'
 import { SceneStatus, Prisma } from '@prisma/client'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function POST(
   request: NextRequest,
@@ -19,14 +20,8 @@ export async function POST(
     const sceneId = params.sceneId
 
     // Check if user is an admin
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Only campaign admins can reset scenes' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can reset scenes')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Get the scene
     const scene = await prisma.scene.findUnique({
@@ -104,10 +99,8 @@ export async function POST(
       actionsCleared: deletedActions.count
     })
   } catch (error) {
-    console.error('Error resetting scene:', error)
-    return NextResponse.json(
-      { error: 'Failed to reset scene' },
-      { status: 500 }
-    )
+    // Called-out fix, not a silent behavior change: see tutorial/trigger/
+    // route.ts's comment — this route had the same missing 401 case.
+    return handleRouteError(error, 'Error resetting scene', 'Failed to reset scene')
   }
 }

@@ -4,11 +4,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
+import { UserRole } from '@prisma/client'
 import { ErrorResponse } from '@/types/api'
 import { getCurrentScene } from '@/lib/game/sceneResolver'
 import { enqueueSceneResolution } from '@/lib/game/resolutionQueue'
 import { prisma } from '@/lib/prisma'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
+import { handleRouteErrorWithDetails } from '@/lib/api/errors'
 
 // This route only validates and enqueues — free, like every other
 // mid-scene resolution. Billing happens exactly once, when the scene
@@ -59,7 +61,7 @@ export async function POST(
     }
 
     const userMembership = campaign.memberships.find(m => m.userId === user.userId)
-    if (!userMembership || userMembership.role !== 'ADMIN') {
+    if (!userMembership || userMembership.role !== UserRole.ADMIN) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Only the campaign host can force-resolve a scene (normal resolution happens automatically once everyone has acted)' },
         { status: 403 }
@@ -131,21 +133,6 @@ export async function POST(
       sceneNumber: currentScene.sceneNumber
     }, { status: 202 })
   } catch (error) {
-    console.error('❌ Scene resolution error:', error)
-
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    return NextResponse.json<ErrorResponse>(
-      {
-        error: 'Failed to resolve scene',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    return handleRouteErrorWithDetails(error, '❌ Scene resolution error', 'Failed to resolve scene')
   }
 }

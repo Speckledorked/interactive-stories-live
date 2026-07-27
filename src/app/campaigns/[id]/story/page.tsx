@@ -43,10 +43,25 @@ import { SubNavTabs } from '@/components/ui/SubNavTabs'
 // every OTHER character from then on — they'd see "No Active Scene" and
 // start a brand-new one instead of joining the existing one, splitting
 // the party into two disconnected stories.
-function canParticipateInScene(scene: any, characterId: string): boolean {
+//
+// `allActiveScenes` closes a real gap: a split-party/Character-Focused
+// scene can be created for a character before that character has ever
+// acted in a still-open scene (the open scene's participants stay null
+// until someone submits, so the start-scene overlap check sees nothing to
+// conflict with). Once that happens, the character is scoped into the new
+// scene AND still shown as eligible for the open one — this mirrors
+// scene/route.ts's actual submission-time "already in another active
+// scene" rejection so the UI doesn't offer an action box that would just
+// 400 on submit.
+function canParticipateInScene(scene: any, characterId: string, allActiveScenes: any[] = []): boolean {
   const participants = scene.participants as any
   if (!participants?.scoped) {
-    return true
+    const committedElsewhere = allActiveScenes.some(other =>
+      other.id !== scene.id &&
+      (other.participants as any)?.scoped &&
+      ((other.participants as any).characterIds || []).includes(characterId)
+    )
+    return !committedElsewhere
   }
   return (participants.characterIds || []).includes(characterId)
 }
@@ -109,7 +124,7 @@ export default function StoryPage() {
   // party): a player would see chat/turn-order/map for whichever scene
   // happened to be created first, not the one their own character is in.
   const availableScenes = useMemo(
-    () => activeScenes.filter(scene => selectedCharacterId && canParticipateInScene(scene, selectedCharacterId)),
+    () => activeScenes.filter(scene => selectedCharacterId && canParticipateInScene(scene, selectedCharacterId, activeScenes)),
     [activeScenes, selectedCharacterId]
   )
   const currentScene = availableScenes[0] ?? null

@@ -13,7 +13,9 @@ interface NPC {
   name: string
   role: string
   status: 'alive' | 'dead' | 'unknown'
-  relationship?: 'friendly' | 'neutral' | 'hostile'
+  // Free text in the DB (an AI-narrated note like "wary ally, owes a
+  // debt"), not a fixed enum — never assume it matches RELATIONSHIP_LABEL.
+  relationship?: string
   lastSeen?: string
 }
 
@@ -52,10 +54,17 @@ const RELATIONSHIP_LABEL: Record<'friendly' | 'allied' | 'neutral' | 'hostile', 
   hostile: { label: 'Hostile', className: 'bg-myth-danger/10 text-myth-danger' },
 }
 
-function RelationshipBadge({ relationship }: { relationship?: 'friendly' | 'neutral' | 'hostile' | 'allied' }) {
+function RelationshipBadge({ relationship }: { relationship?: string }) {
   if (!relationship) return null
-  const config = RELATIONSHIP_LABEL[relationship]
-  return <span className={`shrink-0 rounded px-2 py-0.5 text-xs ${config.className}`}>{config.label}</span>
+  // NPC.relationship is free AI-narrated text ("wary ally, owes a debt"),
+  // not guaranteed to be one of the four known keywords — fall back to a
+  // neutral badge showing the raw text instead of crashing on lookup miss.
+  const config = RELATIONSHIP_LABEL[relationship as keyof typeof RELATIONSHIP_LABEL]
+  return (
+    <span className={`shrink-0 rounded px-2 py-0.5 text-xs ${config?.className || 'bg-myth-ink/5 text-myth-ink-muted'}`}>
+      {config?.label || relationship}
+    </span>
+  )
 }
 
 function Panel({ icon: Icon, title, count, children }: { icon: React.ComponentType<{ className?: string }>; title: string; count: number; children: React.ReactNode }) {

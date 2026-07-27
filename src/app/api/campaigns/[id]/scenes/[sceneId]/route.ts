@@ -1,12 +1,12 @@
 // src/app/api/campaigns/[id]/scenes/[sceneId]/route.ts
 // Admin-only permanent deletion of a scene — for cleaning up a mistake
-// (wrong split grouping, an accidental duplicate) before it's gone anywhere.
-// Restricted to a scene nobody has acted on and that hasn't resolved yet,
-// same safety condition regenerate-intro/route.ts uses: once a resolution
-// has happened, its consequences (stat changes, world-turn effects,
-// CampaignLog/TimelineEvent entries) are already baked into the rest of the
-// campaign and deleting the Scene row wouldn't undo any of that — it would
-// just leave those other records pointing at a scene that no longer exists.
+// (wrong split grouping, an accidental duplicate, a scene that's gone
+// somewhere nobody wants) at any point in its life, not just before
+// anyone's acted. Deleting a scene that's already resolved doesn't undo
+// its consequences elsewhere (stat changes, world-turn effects,
+// CampaignLog/TimelineEvent entries stay — they just end up pointing at a
+// scene that no longer exists), which is why this is admin-gated and the
+// frontend confirm dialog says so explicitly.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -28,20 +28,10 @@ export async function DELETE(
     const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can delete scenes')
     if ('response' in adminCheck) return adminCheck.response
 
-    const scene = await prisma.scene.findUnique({
-      where: { id: sceneId },
-      include: { playerActions: { select: { id: true } } }
-    })
+    const scene = await prisma.scene.findUnique({ where: { id: sceneId } })
 
     if (!scene || scene.campaignId !== campaignId) {
       return NextResponse.json<ErrorResponse>({ error: 'Scene not found' }, { status: 404 })
-    }
-
-    if (scene.playerActions.length > 0 || scene.sceneResolutionText) {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'This scene already has actions or a resolution — only an untouched scene can be deleted.' },
-        { status: 400 }
-      )
     }
 
     await prisma.scene.delete({ where: { id: sceneId } })

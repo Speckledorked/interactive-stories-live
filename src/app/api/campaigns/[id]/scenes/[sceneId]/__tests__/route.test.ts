@@ -1,5 +1,5 @@
 // src/app/api/campaigns/[id]/scenes/[sceneId]/__tests__/route.test.ts
-// Admin-only permanent deletion of an untouched scene.
+// Admin-only permanent scene deletion, at any point in the scene's life.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
@@ -45,7 +45,7 @@ describe('DELETE scene', () => {
 
   it('404s when the scene does not belong to the campaign', async () => {
     db.campaignMembership.findUnique.mockResolvedValue({ role: 'ADMIN' })
-    db.scene.findUnique.mockResolvedValue({ id: 'scene1', campaignId: 'other-campaign', playerActions: [] })
+    db.scene.findUnique.mockResolvedValue({ id: 'scene1', campaignId: 'other-campaign' })
     const response = await call()
     expect(response.status).toBe(404)
   })
@@ -57,33 +57,11 @@ describe('DELETE scene', () => {
     expect(response.status).toBe(404)
   })
 
-  it('400s when the scene already has player actions', async () => {
-    db.campaignMembership.findUnique.mockResolvedValue({ role: 'ADMIN' })
-    db.scene.findUnique.mockResolvedValue({
-      id: 'scene1', campaignId: 'camp1', sceneNumber: 1,
-      sceneResolutionText: null, playerActions: [{ id: 'action1' }],
-    })
-    const response = await call()
-    expect(response.status).toBe(400)
-    expect(db.scene.delete).not.toHaveBeenCalled()
-  })
-
-  it('400s when the scene has already resolved', async () => {
-    db.campaignMembership.findUnique.mockResolvedValue({ role: 'ADMIN' })
-    db.scene.findUnique.mockResolvedValue({
-      id: 'scene1', campaignId: 'camp1', sceneNumber: 1,
-      sceneResolutionText: 'It happened.', playerActions: [],
-    })
-    const response = await call()
-    expect(response.status).toBe(400)
-    expect(db.scene.delete).not.toHaveBeenCalled()
-  })
-
   it('deletes an untouched scene for an admin', async () => {
     db.campaignMembership.findUnique.mockResolvedValue({ role: 'ADMIN' })
     db.scene.findUnique.mockResolvedValue({
       id: 'scene1', campaignId: 'camp1', sceneNumber: 3,
-      sceneResolutionText: null, playerActions: [],
+      sceneResolutionText: null,
     })
     db.scene.delete.mockResolvedValue({ id: 'scene1' })
 
@@ -93,5 +71,19 @@ describe('DELETE scene', () => {
     expect(db.scene.delete).toHaveBeenCalledWith({ where: { id: 'scene1' } })
     const body = await response.json()
     expect(body).toEqual({ success: true, sceneId: 'scene1' })
+  })
+
+  it('deletes a scene that already has actions and a resolution', async () => {
+    db.campaignMembership.findUnique.mockResolvedValue({ role: 'ADMIN' })
+    db.scene.findUnique.mockResolvedValue({
+      id: 'scene1', campaignId: 'camp1', sceneNumber: 1,
+      sceneResolutionText: 'It happened.',
+    })
+    db.scene.delete.mockResolvedValue({ id: 'scene1' })
+
+    const response = await call()
+
+    expect(response.status).toBe(200)
+    expect(db.scene.delete).toHaveBeenCalledWith({ where: { id: 'scene1' } })
   })
 })

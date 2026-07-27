@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Menu, X, ChevronDown } from 'lucide-react'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 export type AdminTabKey =
   | 'overview'
@@ -156,14 +157,7 @@ export function AdminNav({ activeKey, onSelect }: { activeKey: AdminTabKey; onSe
     setExpandedGroups((prev) => new Set(prev).add(activeGroup.key))
   }, [activeGroup.key])
 
-  useEffect(() => {
-    if (!drawerOpen) return
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDrawerOpen(false)
-    }
-    window.addEventListener('keydown', handleEscape)
-    return () => window.removeEventListener('keydown', handleEscape)
-  }, [drawerOpen])
+  useEscapeKey(() => setDrawerOpen(false), drawerOpen)
 
   const toggleGroup = (groupKey: string) => {
     setExpandedGroups((prev) => {

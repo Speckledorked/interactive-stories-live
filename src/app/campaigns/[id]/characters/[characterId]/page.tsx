@@ -11,6 +11,7 @@ import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { TavernCard, TavernSpinner } from '@/components/tavern/ui'
+import { SubNavTabs } from '@/components/ui/SubNavTabs'
 
 export default function CharacterPage() {
   const router = useRouter()
@@ -169,24 +170,14 @@ export default function CharacterPage() {
         isAdmin={campaign?.userRole === 'ADMIN'}
         subrow={
           <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-ember-900/20 pt-2 pb-0">
-            <Link
-              href={`/campaigns/${campaignId}`}
-              className="flex items-center gap-1.5 px-2.5 py-2 border-b-2 border-transparent text-ember-300/40 hover:text-ember-300/70 transition-colors"
-            >
-              <Home className="w-3.5 h-3.5" />
-              Overview
-            </Link>
-            <Link
-              href={`/campaigns/${campaignId}/story`}
-              className="flex items-center gap-1.5 px-2.5 py-2 border-b-2 border-transparent text-ember-300/40 hover:text-ember-300/70 transition-colors"
-            >
-              <Scroll className="w-3.5 h-3.5" />
-              Story
-            </Link>
-            <span className="flex items-center gap-1.5 px-2.5 py-2 border-b-2 border-ember-400 text-ember-200">
-              <User className="w-3.5 h-3.5" />
-              Character
-            </span>
+            <SubNavTabs
+              tabs={[
+                { key: 'overview', label: 'Overview', icon: Home, href: `/campaigns/${campaignId}` },
+                { key: 'story', label: 'Story', icon: Scroll, href: `/campaigns/${campaignId}/story` },
+                { key: 'character', label: 'Character', icon: User },
+              ]}
+              activeKey="character"
+            />
           </nav>
         }
       />

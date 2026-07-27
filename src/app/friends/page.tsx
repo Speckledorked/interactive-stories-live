@@ -15,6 +15,7 @@ import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { TavernButton, TavernErrorBanner, TavernEmptyState, TavernSpinner } from '@/components/tavern/ui'
+import { SubNavTabs } from '@/components/ui/SubNavTabs'
 
 interface Friend {
   id: string
@@ -220,23 +221,7 @@ export default function FriendsPage() {
         campaignId={lastCampaignId || undefined}
         subrow={
           <nav className="max-w-2xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-ember-900/20 pt-2 pb-0">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-1.5 px-2.5 py-2 border-b-2 transition-colors ${
-                  activeTab === tab.key ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
-                }`}
-              >
-                <tab.icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-                {!!tab.badge && (
-                  <span className="text-[10px] bg-wine-600 text-ember-100 rounded-full px-1.5 py-0.5 leading-none">
-                    {tab.badge}
-                  </span>
-                )}
-              </button>
-            ))}
+            <SubNavTabs tabs={tabs} activeKey={activeTab} onSelect={(key) => setActiveTab(key as TabKey)} />
           </nav>
         }
       />

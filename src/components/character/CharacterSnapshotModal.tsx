@@ -4,6 +4,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 import HarmTracker from './HarmTracker'
 import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
@@ -53,6 +54,15 @@ export default function CharacterSnapshotModal({
     }
   }, [isOpen, characterId])
 
+  // Close on escape key. Called unconditionally (before the `if (!isOpen)
+  // return null` below) rather than being skipped via an early return, so
+  // this component calls the same hooks in the same order every render —
+  // this component is mounted whenever a character is selected and stays
+  // mounted as `isOpen` toggles (see story/page.tsx), so a hook declared
+  // after that early return would be called a different number of times
+  // between renders of the same instance.
+  useEscapeKey(onClose, isOpen)
+
   const loadCharacter = async () => {
     setLoading(true)
     try {
@@ -76,15 +86,6 @@ export default function CharacterSnapshotModal({
       onClose()
     }
   }
-
-  // Close on escape key
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handleEscape)
-    return () => window.removeEventListener('keydown', handleEscape)
-  }, [onClose])
 
   // Parse stats
   const stats = character?.stats as Record<string, number> || {}

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { authenticatedFetch, getUser } from '@/lib/clientAuth'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 interface ShortcutGroup {
   title: string
@@ -18,18 +19,7 @@ interface KeyboardShortcutsModalProps {
 
 export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsModalProps) {
   // Close on Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose()
-      }
-    }
-
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown)
-      return () => window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isOpen, onClose])
+  useEscapeKey(onClose, isOpen)
 
   // Trigger tutorial completion when modal opens
   useEffect(() => {

@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronRight, BookOpen } from 'lucide-react'
+import { ChevronRight, BookOpen, MessageCircle } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import { displayFont } from '@/lib/tavernTheme'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { TavernCard, TavernEmptyState, TavernSpinner } from '@/components/tavern/ui'
+import { CalendarMonthGrid } from '@/components/tavern/CalendarMonthGrid'
 
 interface CampaignLogEntry {
   id: string
@@ -21,7 +22,24 @@ interface CampaignLogEntry {
   entryType: string
   inGameDate: string | null
   duration: string | null
+  // Null for every entry written before the in-fiction calendar existed —
+  // never backfilled retroactively (see calendarBackfill.ts). Entries like
+  // this surface in the "Before your calendar began" section rather than
+  // being silently mis-assigned to a day.
+  inGameDayNumber: number | null
   createdAt: string
+}
+
+interface Rumor {
+  id: string
+  turnNumber: number | null
+  title: string
+  summary: string | null
+}
+
+interface DayDetail {
+  logs: CampaignLogEntry[]
+  rumors: Rumor[]
 }
 
 interface Campaign {
@@ -42,6 +60,12 @@ export default function StoryLogPage() {
   const [error, setError] = useState('')
   const [regenerating, setRegenerating] = useState(false)
   const [regenerateResult, setRegenerateResult] = useState('')
+
+  const [selectedDayNumber, setSelectedDayNumber] = useState<number | null>(null)
+  const [selectedDayLabel, setSelectedDayLabel] = useState('')
+  const [dayDetail, setDayDetail] = useState<DayDetail | null>(null)
+  const [dayDetailLoading, setDayDetailLoading] = useState(false)
+  const [showPreCalendar, setShowPreCalendar] = useState(false)
 
   const isAdmin = campaign?.userRole === 'ADMIN'
 
@@ -104,6 +128,23 @@ export default function StoryLogPage() {
       setRegenerating(false)
     }
   }
+
+  const handleSelectDay = async (dayNumber: number, label: string) => {
+    setSelectedDayNumber(dayNumber)
+    setSelectedDayLabel(label)
+    setDayDetailLoading(true)
+    setDayDetail(null)
+    try {
+      const res = await authenticatedFetch(`/api/campaigns/${campaignId}/logs/day?dayNumber=${dayNumber}`)
+      if (res.ok) {
+        setDayDetail(await res.json())
+      }
+    } finally {
+      setDayDetailLoading(false)
+    }
+  }
+
+  const preCalendarLogs = logs.filter((log) => log.inGameDayNumber == null)
 
   if (loading) {
     return (
@@ -176,73 +217,136 @@ export default function StoryLogPage() {
         </TavernCard>
 
         {/* Log Entries */}
-        <div className="space-y-4">
-          {logs.length === 0 ? (
-            <TavernEmptyState
-              icon={BookOpen}
-              title="No story entries yet"
-              description="The story log will be automatically updated as scenes are resolved"
+        {logs.length === 0 ? (
+          <TavernEmptyState
+            icon={BookOpen}
+            title="No story entries yet"
+            description="The story log will be automatically updated as scenes are resolved"
+          />
+        ) : (
+          <div className="space-y-6">
+            <CalendarMonthGrid
+              campaignId={campaignId}
+              onSelectDay={handleSelectDay}
+              selectedDayNumber={selectedDayNumber}
             />
-          ) : (
-            logs.map((log) => (
-              <Link key={log.id} href={`/campaigns/${campaignId}/story`} className="block">
-                <TavernCard className="p-5 group hover:border-ember-700/50 transition-colors cursor-pointer">
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-xs font-medium text-ember-300 bg-ember-900/30 border border-ember-800/40 rounded px-2 py-1">
-                        Turn {log.turnNumber}
-                      </span>
-                      {log.entryType !== 'scene' && (
-                        <span className="text-xs px-2 py-1 rounded bg-black/30 border border-ember-900/30 text-ember-400/60">
-                          {log.entryType}
-                        </span>
-                      )}
-                      <h3 className={`${displayFont.className} text-lg text-ember-100`}>{log.title}</h3>
-                    </div>
-                    <div className="text-xs text-ember-400/40 whitespace-nowrap">
-                      {new Date(log.createdAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </div>
+
+            {selectedDayNumber !== null && (
+              <TavernCard className="p-5">
+                <h3 className={`${displayFont.className} text-lg text-ember-100 mb-4`}>{selectedDayLabel}</h3>
+                {dayDetailLoading ? (
+                  <TavernSpinner className="h-8 w-8" />
+                ) : !dayDetail || (dayDetail.logs.length === 0 && dayDetail.rumors.length === 0) ? (
+                  <p className="text-sm text-ember-400/50">Nothing recorded for this day yet.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {dayDetail.logs.map((log) => (
+                      <LogEntryCard key={log.id} log={log} campaignId={campaignId} />
+                    ))}
+                    {dayDetail.rumors.length > 0 && (
+                      <div className={dayDetail.logs.length > 0 ? 'pt-4 border-t border-ember-900/30' : ''}>
+                        <h4 className="text-xs font-medium text-ember-400/60 mb-2 flex items-center gap-1.5">
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          Word on the Street
+                        </h4>
+                        <div className="space-y-2">
+                          {dayDetail.rumors.map((rumor) => (
+                            <TavernCard key={rumor.id} className="p-3">
+                              <p className="text-sm font-medium text-ember-100 mb-1">{rumor.title}</p>
+                              <p className="text-xs text-ember-300/70">{rumor.summary}</p>
+                            </TavernCard>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
+                )}
+              </TavernCard>
+            )}
 
-                  {log.inGameDate && (
-                    <p className="text-xs text-ember-400/50 mb-3">
-                      {log.inGameDate}
-                      {log.duration && ` • Duration: ${log.duration}`}
-                    </p>
-                  )}
-
-                  <p className="text-ember-200/70 leading-relaxed mb-4 whitespace-pre-wrap text-sm">{log.summary}</p>
-
-                  {log.highlights && log.highlights.length > 0 && (
-                    <div className="pt-4 border-t border-ember-900/30">
-                      <h4 className="text-xs font-medium text-ember-400/60 mb-2">Key Moments</h4>
-                      <ul className="space-y-1">
-                        {log.highlights.map((highlight, i) => (
-                          <li key={i} className="text-sm text-ember-300/60 flex items-start gap-2">
-                            <span className="text-ember-500 mt-1">•</span>
-                            <span>{highlight}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <div className="mt-4 flex items-center gap-1 text-sm text-ember-300 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span>View in Story</span>
-                    <ChevronRight className="w-4 h-4" />
+            {preCalendarLogs.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setShowPreCalendar((v) => !v)}
+                  className="text-xs text-ember-400/60 hover:text-ember-300 transition-colors mb-3"
+                >
+                  {showPreCalendar ? '▾' : '▸'} Before your calendar began ({preCalendarLogs.length})
+                </button>
+                {showPreCalendar && (
+                  <div className="space-y-4">
+                    {preCalendarLogs.map((log) => (
+                      <LogEntryCard key={log.id} log={log} campaignId={campaignId} />
+                    ))}
                   </div>
-                </TavernCard>
-              </Link>
-            ))
-          )}
-        </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       <TavernNav campaignId={campaignId} />
     </TavernPage>
+  )
+}
+
+// Extracted from the original flat-list rendering so the exact same card
+// (Turn badge, entryType tag, inGameDate/duration line, summary,
+// highlights, "View in Story" link) renders identically whether it's
+// reached via the calendar's day-detail panel or the pre-calendar bucket.
+function LogEntryCard({ log, campaignId }: { log: CampaignLogEntry; campaignId: string }) {
+  return (
+    <Link href={`/campaigns/${campaignId}/story`} className="block">
+      <TavernCard className="p-5 group hover:border-ember-700/50 transition-colors cursor-pointer">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs font-medium text-ember-300 bg-ember-900/30 border border-ember-800/40 rounded px-2 py-1">
+              Turn {log.turnNumber}
+            </span>
+            {log.entryType !== 'scene' && (
+              <span className="text-xs px-2 py-1 rounded bg-black/30 border border-ember-900/30 text-ember-400/60">
+                {log.entryType}
+              </span>
+            )}
+            <h3 className={`${displayFont.className} text-lg text-ember-100`}>{log.title}</h3>
+          </div>
+          <div className="text-xs text-ember-400/40 whitespace-nowrap">
+            {new Date(log.createdAt).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })}
+          </div>
+        </div>
+
+        {log.inGameDate && (
+          <p className="text-xs text-ember-400/50 mb-3">
+            {log.inGameDate}
+            {log.duration && ` • Duration: ${log.duration}`}
+          </p>
+        )}
+
+        <p className="text-ember-200/70 leading-relaxed mb-4 whitespace-pre-wrap text-sm">{log.summary}</p>
+
+        {log.highlights && log.highlights.length > 0 && (
+          <div className="pt-4 border-t border-ember-900/30">
+            <h4 className="text-xs font-medium text-ember-400/60 mb-2">Key Moments</h4>
+            <ul className="space-y-1">
+              {log.highlights.map((highlight, i) => (
+                <li key={i} className="text-sm text-ember-300/60 flex items-start gap-2">
+                  <span className="text-ember-500 mt-1">•</span>
+                  <span>{highlight}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-1 text-sm text-ember-300 opacity-0 group-hover:opacity-100 transition-opacity">
+          <span>View in Story</span>
+          <ChevronRight className="w-4 h-4" />
+        </div>
+      </TavernCard>
+    </Link>
   )
 }

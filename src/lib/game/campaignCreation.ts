@@ -20,6 +20,8 @@ import {
 import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels, GeneratedFront, GeneratedNPC, GeneratedLocation } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
 import { generateMoveFlavor, GeneratedMoveFlavor } from '@/lib/ai/moveFlavor'
+import { generateCalendar } from '@/lib/ai/calendarGenerator'
+import { DEFAULT_CALENDAR, formatInGameDate, type GeneratedCalendar } from '@/lib/game/calendar'
 import { BASIC_MOVES } from '@/lib/pbta-moves'
 import { slugifyCapabilityKey, resolvePrerequisiteLinks } from '@/lib/game/capabilities'
 import { kickLoreImportJob } from '@/lib/lore/loreQueue'
@@ -93,12 +95,13 @@ export async function createCampaign(input: CreateCampaignInput) {
   // introduces them).
   let worldExtras: GeneratedWorldExtras | null = null
   let generatedMoveFlavor: GeneratedMoveFlavor[] | null = null
+  let generatedCalendar: GeneratedCalendar | null = null
   try {
     // Independent calls, run together: move flavor doesn't need factions/
-    // capabilities as input (only stat labels), so there's no ordering
-    // dependency between the two — see lib/ai/moveFlavor.ts's doc comment
-    // for why this is a separate call rather than folded into either.
-    const [extrasResult, moveFlavorResult] = await Promise.all([
+    // capabilities as input (only stat labels), and the calendar needs
+    // neither — see lib/ai/moveFlavor.ts's doc comment for why these are
+    // separate calls rather than folded into worldExtras.
+    const [extrasResult, moveFlavorResult, calendarResult] = await Promise.all([
       generateWorldExtras(
         title,
         description || '',
@@ -108,9 +111,11 @@ export async function createCampaign(input: CreateCampaignInput) {
         generatedStatLabels
       ),
       generateMoveFlavor(title, description || '', resolvedUniverse, generatedStatLabels),
+      generateCalendar(title, description || '', resolvedUniverse),
     ])
     worldExtras = extrasResult
     generatedMoveFlavor = moveFlavorResult
+    generatedCalendar = calendarResult
     if (worldExtras) {
       generatedNpcs = worldExtras.npcs
       generatedLocations = worldExtras.locations
@@ -118,6 +123,13 @@ export async function createCampaign(input: CreateCampaignInput) {
   } catch (extrasError) {
     console.error('World extras generation failed (non-critical):', extrasError)
   }
+
+  // Unlike worldExtras/moveFlavor, a calendar is never optional — every
+  // campaign needs *some* calendar for formatInGameDate's math to work.
+  // DEFAULT_CALENDAR is the same generic, unthemed fallback used when a
+  // pre-existing campaign's lazy backfill also fails to generate one (see
+  // lib/game/calendarBackfill.ts).
+  const resolvedCalendar = generatedCalendar || DEFAULT_CALENDAR
 
   // Create campaign, world meta, membership, and template data in one transaction
   const campaign = await prisma.$transaction(async (tx) => {
@@ -132,6 +144,9 @@ export async function createCampaign(input: CreateCampaignInput) {
         // Null is meaningful: this universe has no power-at-a-cost
         // concept, so the corruption track stays disabled.
         corruptionTheme: (worldExtras?.corruptionTheme as object | undefined) || undefined,
+        // Never null for a campaign created after this shipped — see
+        // resolvedCalendar above.
+        calendarConfig: resolvedCalendar as object,
         // Canon lore was provided: lock play until the import finishes
         // and the auto-reseed replaces this provisional world (see
         // lib/lore/seedingGate.ts).
@@ -167,7 +182,7 @@ export async function createCampaign(input: CreateCampaignInput) {
       data: {
         campaignId: newCampaign.id,
         currentTurnNumber: 1,
-        currentInGameDate: 'Day 1',
+        currentInGameDate: formatInGameDate(0, resolvedCalendar).display,
         otherMeta: {}
       }
     })

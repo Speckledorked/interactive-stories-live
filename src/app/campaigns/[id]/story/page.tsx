@@ -83,6 +83,7 @@ export default function StoryPage() {
   const [startingScene, setStartingScene] = useState(false)
   const [endingScene, setEndingScene] = useState(false)
   const [regeneratingSceneId, setRegeneratingSceneId] = useState<string | null>(null)
+  const [deletingSceneId, setDeletingSceneId] = useState<string | null>(null)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   // Turn order — an opt-in, advisory queue layered on top of the scene's
   // real (simultaneous) action collection; see TurnTracker's doc comment.
@@ -363,6 +364,12 @@ export default function StoryPage() {
     // Listen for a regenerated scene intro
     channel.bind('scene:regenerated', (data: any) => {
       console.log('Scene intro regenerated:', data)
+      loadData()
+    })
+
+    // Listen for a deleted scene
+    channel.bind('scene:deleted', (data: any) => {
+      console.log('Scene deleted:', data)
       loadData()
     })
 
@@ -819,6 +826,35 @@ export default function StoryPage() {
     }
   }
 
+  const handleDeleteScene = async (sceneId: string) => {
+    if (!confirm('Permanently delete this scene? This cannot be undone. Only available before anyone has acted.')) {
+      return
+    }
+
+    setError('')
+    setSuccess('')
+    setDeletingSceneId(sceneId)
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/scenes/${sceneId}`,
+        { method: 'DELETE' }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to delete scene')
+      }
+
+      setSuccess('Scene deleted.')
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete scene')
+    } finally {
+      setDeletingSceneId(null)
+    }
+  }
+
   const handleResumeScene = async (sceneId: string) => {
     setError('')
     setSuccess('')
@@ -1006,6 +1042,17 @@ export default function StoryPage() {
                             title="Regenerate this scene's opening — only available before anyone has acted"
                           >
                             {regeneratingSceneId === scene.id ? 'Regenerating…' : '🔄 Regenerate'}
+                          </button>
+                        )}
+                        {scene.status === 'AWAITING_ACTIONS' && !scene.sceneResolutionText &&
+                          (!scene.playerActions || scene.playerActions.length === 0) && isAdmin && (
+                          <button
+                            onClick={() => handleDeleteScene(scene.id)}
+                            disabled={deletingSceneId === scene.id}
+                            className="text-xs px-2 py-1 bg-black/30 hover:bg-wine-600 border border-ember-900/40 text-ember-300 hover:text-ember-100 rounded transition-colors disabled:opacity-50"
+                            title="Permanently delete this scene — only available before anyone has acted"
+                          >
+                            {deletingSceneId === scene.id ? 'Deleting…' : '🗑️ Delete'}
                           </button>
                         )}
                         {scene.status === 'RESOLVING' && isAdmin && (

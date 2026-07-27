@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { TutorialService } from '@/lib/tutorial/tutorial-service'
+import { handleRouteError } from '@/lib/api/errors'
 
 /**
  * POST /api/tutorial/trigger
@@ -23,10 +24,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Tutorial trigger error:', error)
-    return NextResponse.json(
-      { error: 'Failed to process tutorial trigger' },
-      { status: 500 }
-    )
+    // Called-out fix, not a silent behavior change: this route previously
+    // had no Unauthorized special-case, so an unauthenticated request fell
+    // through to a bare 500 instead of 401 like every other requireAuth
+    // route. Bringing it in line with the shared helper.
+    return handleRouteError(error, 'Tutorial trigger error', 'Failed to process tutorial trigger')
   }
 }

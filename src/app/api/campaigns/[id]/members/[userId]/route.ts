@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UserRole } from '@prisma/client';
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors';
 
 // DELETE /api/campaigns/[id]/members/[userId] - Remove member from campaign
 export async function DELETE(
@@ -57,11 +58,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    console.error('Error removing member:', error);
-    return NextResponse.json({ error: 'Failed to remove member' }, { status: 500 });
+    return handleRouteError(error, 'Error removing member', 'Failed to remove member');
   }
 }
 
@@ -135,10 +132,6 @@ export async function PATCH(
 
     return NextResponse.json({ membership: updatedMembership });
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    console.error('Error updating member role:', error);
-    return NextResponse.json({ error: 'Failed to update member role' }, { status: 500 });
+    return handleRouteError(error, 'Error updating member role', 'Failed to update member role');
   }
 }

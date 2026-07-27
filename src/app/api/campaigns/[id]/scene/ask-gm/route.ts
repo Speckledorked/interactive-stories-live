@@ -11,6 +11,7 @@ import { pusherServer } from '@/lib/pusher'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { moderatePlayerText } from '@/lib/ai/moderation'
 import { generateGmAnswer, MAX_QUESTION_CHARS } from '@/lib/ai/askGm'
+import { handleRouteError } from '@/lib/api/errors'
 
 export const maxDuration = 30
 
@@ -113,10 +114,6 @@ export async function POST(
 
     return NextResponse.json({ clarification })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Ask-GM error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return handleRouteError(error, 'Ask-GM error', 'Internal server error')
   }
 }

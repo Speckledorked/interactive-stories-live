@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors';
 
 // GET /api/campaigns/[id]/members - List all members
 export async function GET(
@@ -61,10 +62,6 @@ export async function GET(
 
     return NextResponse.json({ members });
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    console.error('Error fetching members:', error);
-    return NextResponse.json({ error: 'Failed to fetch members' }, { status: 500 });
+    return handleRouteError(error, 'Error fetching members', 'Failed to fetch members');
   }
 }

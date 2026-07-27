@@ -1,6 +1,7 @@
 // src/app/api/campaigns/[id]/clocks/[clockId]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
 import { pusherServer } from '@/lib/pusher'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
@@ -21,7 +22,7 @@ export async function PATCH(
     // Check if user is admin
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'Only campaign admins can update clocks' },
         { status: 403 }
@@ -86,7 +87,7 @@ export async function POST(
     // Check if user is admin
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'Only campaign admins can modify clocks' },
         { status: 403 }

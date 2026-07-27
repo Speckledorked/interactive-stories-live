@@ -5,12 +5,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
-import { createNewScene, getCurrentScene } from '@/lib/game/sceneResolver'
+import { createNewScene } from '@/lib/game/sceneResolver'
 import { prisma } from '@/lib/prisma'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import { recordEvent } from '@/lib/analytics/events'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteErrorWithDetails } from '@/lib/api/errors'
 
 export async function POST(
   request: NextRequest,
@@ -125,21 +126,6 @@ export async function POST(
       }
     }, { status: 201 })
   } catch (error) {
-    console.error('❌ Scene creation error:', error)
-    
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    return NextResponse.json<ErrorResponse>(
-      { 
-        error: 'Failed to create scene',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    return handleRouteErrorWithDetails(error, '❌ Scene creation error', 'Failed to create scene')
   }
 }

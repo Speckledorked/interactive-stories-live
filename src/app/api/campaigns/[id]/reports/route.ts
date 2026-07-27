@@ -10,6 +10,7 @@ import { requireAuth } from '@/lib/auth'
 import { UserRole, ReportStatus, ReportSeverity } from '@prisma/client'
 import { SafetyService } from '@/lib/safety/safety-service'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 const VALID_CONTENT_TYPES = ['message', 'note', 'character', 'scene', 'user_behavior', 'other']
 
@@ -49,11 +50,7 @@ export async function POST(
 
     return NextResponse.json({ report })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Create report error:', error)
-    return NextResponse.json({ error: 'Failed to submit report' }, { status: 500 })
+    return handleRouteError(error, 'Create report error', 'Failed to submit report')
   }
 }
 
@@ -80,10 +77,6 @@ export async function GET(
     const reports = await SafetyService.getReports(campaignId, status)
     return NextResponse.json({ reports })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('List reports error:', error)
-    return NextResponse.json({ error: 'Failed to load reports' }, { status: 500 })
+    return handleRouteError(error, 'List reports error', 'Failed to load reports')
   }
 }

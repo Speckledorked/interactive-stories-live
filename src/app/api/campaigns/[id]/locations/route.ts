@@ -1,6 +1,7 @@
 // src/app/api/campaigns/[id]/locations/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { UserRole } from '@prisma/client'
 import { visibleTo, isCampaignAdmin } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
@@ -65,7 +66,7 @@ export async function POST(
     // Check if user is admin
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'Only campaign admins can create locations' },
         { status: 403 }

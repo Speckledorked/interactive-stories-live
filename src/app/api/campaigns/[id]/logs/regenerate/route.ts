@@ -24,12 +24,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
+import { UserRole } from '@prisma/client'
 import { ErrorResponse } from '@/types/api'
 import { prisma } from '@/lib/prisma'
 import { summarizeSceneForLog } from '@/lib/ai/worldState'
 import { planLogConsolidation } from '@/lib/game/storyLogConsolidation'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteErrorWithDetails } from '@/lib/api/errors'
 
 export const maxDuration = 60
 
@@ -50,7 +52,7 @@ export async function POST(
 
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Only campaign admins can regenerate Story Log entries' },
         { status: 403 }
@@ -126,18 +128,6 @@ export async function POST(
       consolidated
     })
   } catch (error) {
-    console.error('❌ Story Log regeneration error:', error)
-
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    return NextResponse.json<ErrorResponse>(
-      {
-        error: 'Failed to regenerate Story Log entries',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    return handleRouteErrorWithDetails(error, '❌ Story Log regeneration error', 'Failed to regenerate Story Log entries')
   }
 }

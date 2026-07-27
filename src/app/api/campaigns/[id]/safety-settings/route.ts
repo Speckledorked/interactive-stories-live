@@ -4,6 +4,7 @@
 // defaults forever, invisible to the GM who might believe they'd configured it.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
 import { SafetyService } from '@/lib/safety/safety-service'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
@@ -46,7 +47,7 @@ export async function PATCH(
     const campaignId = params.id
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json({ error: 'Only campaign admins can change safety settings' }, { status: 403 })
     }
 

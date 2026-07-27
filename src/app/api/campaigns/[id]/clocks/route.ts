@@ -1,6 +1,7 @@
 // src/app/api/campaigns/[id]/clocks/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { UserRole } from '@prisma/client'
 import { visibleTo } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
@@ -38,7 +39,7 @@ export async function GET(
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ clocks: redactGmNotesList(clocks, membership.role === 'ADMIN') })
+    return NextResponse.json({ clocks: redactGmNotesList(clocks, membership.role === UserRole.ADMIN) })
   } catch (error) {
     console.error('Get clocks error:', error)
     return NextResponse.json(
@@ -65,7 +66,7 @@ export async function POST(
     // Check if user is admin
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'Only campaign admins can create clocks' },
         { status: 403 }

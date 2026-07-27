@@ -13,6 +13,7 @@ import { moderatePlayerText } from '@/lib/ai/moderation'
 import { recordEvent } from '@/lib/analytics/events'
 import { canAct, parseHarmState, HarmLevel } from '@/lib/game/harm'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 // POST can trigger a full scene resolution (AI GM call + world tick) inline
 // before responding. 60s is the Vercel Hobby-tier ceiling — safe on every
@@ -109,17 +110,7 @@ export async function GET(
 
     return NextResponse.json({ scene: currentScene, scenes: activeScenes })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Get scene error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Get scene error', 'Internal server error')
   }
 }
 
@@ -433,16 +424,6 @@ export async function POST(
 
     return NextResponse.json({ action }, { status: 201 })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Submit action error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Submit action error', 'Internal server error')
   }
 }

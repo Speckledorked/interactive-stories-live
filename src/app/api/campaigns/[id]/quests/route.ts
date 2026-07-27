@@ -8,7 +8,7 @@
 // fields a real quest-log view can group and format.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken } from '@/lib/auth'
+import { getUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
@@ -17,14 +17,16 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const token = request.headers.get('authorization')?.split(' ')[1]
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const user = verifyToken(token)
+    // Called-out fix, not a silent behavior change: previously hand-rolled
+    // token parsing here bypassed session revocation (isTokenRevoked) —
+    // a token invalidated via "log out everywhere" still worked on this
+    // route. getUser() applies the same revocation check every other
+    // route already gets. It also collapses "no token" and "bad token"
+    // into one 'Unauthorized' message instead of two, matching the
+    // convention everywhere else in the API.
+    const user = await getUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const campaignId = params.id

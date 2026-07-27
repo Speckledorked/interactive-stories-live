@@ -4,8 +4,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { UserRole } from '@prisma/client'
 import { SafetyService } from '@/lib/safety/safety-service'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function POST(
   request: NextRequest,
@@ -19,7 +21,7 @@ export async function POST(
 
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'Only campaign admins can resume a paused scene' },
         { status: 403 }
@@ -49,10 +51,8 @@ export async function POST(
       isPaused: resumed.isPaused
     })
   } catch (error) {
-    console.error('Error resuming scene:', error)
-    return NextResponse.json(
-      { error: 'Failed to resume scene' },
-      { status: 500 }
-    )
+    // Called-out fix, not a silent behavior change: see tutorial/trigger/
+    // route.ts's comment — this route had the same missing 401 case.
+    return handleRouteError(error, 'Error resuming scene', 'Failed to resume scene')
   }
 }

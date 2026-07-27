@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import bcrypt from 'bcryptjs'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function POST(request: NextRequest) {
   try {
@@ -78,16 +79,6 @@ export async function POST(request: NextRequest) {
       message: 'Password updated successfully'
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Change password error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Change password error', 'Internal server error')
   }
 }

@@ -1,6 +1,7 @@
 // src/app/api/campaigns/[id]/invites/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
 import { getAppUrl } from '@/lib/appUrl'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
@@ -21,7 +22,7 @@ export async function POST(
     // Check if user is admin
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'Only campaign admins can create invites' },
         { status: 403 }
@@ -75,7 +76,7 @@ export async function GET(
     // Check if user is admin
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'Only campaign admins can view invites' },
         { status: 403 }

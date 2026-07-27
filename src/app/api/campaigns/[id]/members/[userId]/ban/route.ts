@@ -8,6 +8,7 @@ import { requireAuth } from '@/lib/auth'
 import { UserRole } from '@prisma/client'
 import { SafetyService } from '@/lib/safety/safety-service'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function POST(
   request: NextRequest,
@@ -54,11 +55,7 @@ export async function POST(
 
     return NextResponse.json({ ban })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Ban member error:', error)
-    return NextResponse.json({ error: 'Failed to ban member' }, { status: 500 })
+    return handleRouteError(error, 'Ban member error', 'Failed to ban member')
   }
 }
 
@@ -78,10 +75,6 @@ export async function DELETE(
     await SafetyService.unbanUserFromCampaign(campaignId, params.userId)
     return NextResponse.json({ success: true })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Unban member error:', error)
-    return NextResponse.json({ error: 'Failed to unban member' }, { status: 500 })
+    return handleRouteError(error, 'Unban member error', 'Failed to unban member')
   }
 }

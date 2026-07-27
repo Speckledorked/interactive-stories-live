@@ -9,6 +9,7 @@ import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { SafetyService } from '@/lib/safety/safety-service'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function POST(
   request: NextRequest,
@@ -71,11 +72,7 @@ export async function DELETE(
     await SafetyService.unblockUser(user.userId, blockedUserId, campaignId)
     return NextResponse.json({ success: true })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Unblock user error:', error)
-    return NextResponse.json({ error: 'Failed to unblock user' }, { status: 500 })
+    return handleRouteError(error, 'Unblock user error', 'Failed to unblock user')
   }
 }
 
@@ -101,10 +98,6 @@ export async function GET(
 
     return NextResponse.json({ blockedUserIds: blocks.map(b => b.blockedUserId) })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('List blocks error:', error)
-    return NextResponse.json({ error: 'Failed to load blocks' }, { status: 500 })
+    return handleRouteError(error, 'List blocks error', 'Failed to load blocks')
   }
 }

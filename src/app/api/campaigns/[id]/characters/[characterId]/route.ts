@@ -1,6 +1,7 @@
 // src/app/api/campaigns/[id]/characters/[characterId]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
 import { validateStats } from '@/lib/game/advancement'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
@@ -123,7 +124,7 @@ export async function PATCH(
       )
     }
 
-    const isAdmin = membership.role === 'ADMIN'
+    const isAdmin = membership.role === UserRole.ADMIN
 
     if (character.userId !== user.userId && !isAdmin) {
       return NextResponse.json(
@@ -257,7 +258,7 @@ export async function DELETE(
       )
     }
 
-    if (character.userId !== user.userId && membership.role !== 'ADMIN') {
+    if (character.userId !== user.userId && membership.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'You can only delete your own characters' },
         { status: 403 }

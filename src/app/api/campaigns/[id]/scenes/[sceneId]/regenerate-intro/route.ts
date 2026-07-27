@@ -15,6 +15,7 @@ import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/li
 import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import PusherServer from '@/lib/realtime/pusher-server'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteErrorWithDetails } from '@/lib/api/errors'
 
 export async function POST(
   request: NextRequest,
@@ -105,18 +106,6 @@ export async function POST(
       }
     })
   } catch (error) {
-    console.error('❌ Scene regeneration error:', error)
-
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    return NextResponse.json<ErrorResponse>(
-      {
-        error: 'Failed to regenerate scene',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    return handleRouteErrorWithDetails(error, '❌ Scene regeneration error', 'Failed to regenerate scene')
   }
 }

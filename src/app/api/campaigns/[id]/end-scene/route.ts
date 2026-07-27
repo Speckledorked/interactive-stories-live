@@ -10,6 +10,7 @@ import { SceneStatus } from '@prisma/client'
 import PusherServer from '@/lib/realtime/pusher-server'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteErrorWithDetails } from '@/lib/api/errors'
 
 // 60s = Vercel Hobby-tier ceiling, safe on every plan. See scene/route.ts for
 // the full rationale — this route awaits the same resolveScene() call.
@@ -149,21 +150,6 @@ export async function POST(
       message: 'Scene ended successfully'
     })
   } catch (error) {
-    console.error('❌ End scene error:', error)
-
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    return NextResponse.json<ErrorResponse>(
-      {
-        error: 'Failed to end scene',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    return handleRouteErrorWithDetails(error, '❌ End scene error', 'Failed to end scene')
   }
 }

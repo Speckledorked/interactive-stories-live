@@ -2,6 +2,7 @@
 // World Sim Phase 8 — per-campaign tick caps (see src/lib/game/tick/caps.ts).
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
 import { DEFAULT_FACTION_CAP, DEFAULT_NPC_CAP } from '@/lib/game/tick/caps'
 import { DEFAULT_WORLD_TURN_HOURS } from '@/lib/game/tick/pacing'
@@ -66,7 +67,7 @@ export async function PATCH(
 
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'Only campaign admins can update simulation settings' },
         { status: 403 }

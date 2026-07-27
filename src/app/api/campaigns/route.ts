@@ -6,7 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { CreateCampaignRequest, ErrorResponse } from '@/types/api'
+import { ErrorResponse } from '@/types/api'
+import { handleRouteError } from '@/lib/api/errors'
 import { getTemplate, applyCampaignTemplate, createFactionsForCampaign, createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels, GeneratedFront, GeneratedNPC, GeneratedLocation } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
@@ -52,17 +53,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ campaigns })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Get campaigns error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Get campaigns error', 'Internal server error')
   }
 }
 
@@ -449,16 +440,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ campaign }, { status: 201 })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-    console.error('Create campaign error:', error)
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, 'Create campaign error', 'Internal server error')
   }
 }

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import { getUserBalance, getTransactionHistory, formatCurrency } from '@/lib/payment/service'
+import { handleRouteErrorWithDetails } from '@/lib/api/errors'
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic'
@@ -55,21 +56,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('Error fetching balance:', error)
-
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    return NextResponse.json<ErrorResponse>(
-      {
-        error: 'Failed to fetch balance',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    return handleRouteErrorWithDetails(error, 'Error fetching balance', 'Failed to fetch balance')
   }
 }

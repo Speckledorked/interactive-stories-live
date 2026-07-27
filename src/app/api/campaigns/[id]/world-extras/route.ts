@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
@@ -27,7 +28,7 @@ export async function POST(
 
     const campaignId = params.id
     const membership = await getCampaignMembership(user.userId, campaignId)
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json({ error: 'Only campaign admins can generate world extras' }, { status: 403 })
     }
 

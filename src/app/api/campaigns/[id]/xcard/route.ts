@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SafetyService } from '@/lib/safety/safety-service';
 import { verifyAuth } from '@/lib/auth';
-import { XCardTrigger } from '@prisma/client';
+import { XCardTrigger, UserRole } from '@prisma/client';
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 /**
@@ -69,7 +69,7 @@ export async function GET(
     // Verify user is GM
     const membership = await getCampaignMembership(user.userId, campaignId);
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json({ error: 'Forbidden - GM only' }, { status: 403 });
     }
 

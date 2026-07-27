@@ -8,6 +8,7 @@
 // state.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
 import { runWorldTick } from '@/lib/game/worldTick'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
@@ -26,7 +27,7 @@ export async function POST(
 
     const membership = await getCampaignMembership(user.userId, campaignId)
 
-    if (!membership || membership.role !== 'ADMIN') {
+    if (!membership || membership.role !== UserRole.ADMIN) {
       return NextResponse.json(
         { error: 'Only campaign admins can preview the world tick' },
         { status: 403 }

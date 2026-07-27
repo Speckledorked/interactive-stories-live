@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
 import { SafetyService } from '@/lib/safety/safety-service'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { handleRouteError } from '@/lib/api/errors'
 
 export async function PATCH(
   request: NextRequest,
@@ -53,10 +54,6 @@ export async function PATCH(
 
     return NextResponse.json({ error: 'action must be "resolve" or "dismiss"' }, { status: 400 })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('Update report error:', error)
-    return NextResponse.json({ error: 'Failed to update report' }, { status: 500 })
+    return handleRouteError(error, 'Update report error', 'Failed to update report')
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken } from '@/lib/auth'
+import { getUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { UserRole } from '@prisma/client'
 import { visibleTo } from '@/lib/api/visibility'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
@@ -139,14 +140,11 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const token = request.headers.get('authorization')?.split(' ')[1]
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const user = verifyToken(token)
+    // Called-out fix, not a silent behavior change: see quests/route.ts's
+    // comment — hand-rolled token parsing here bypassed session revocation.
+    const user = await getUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const campaignId = params.id
@@ -179,7 +177,7 @@ export async function GET(
     // depth on top of the write-side gating (sceneResolver.ts, wikiSync.ts)
     // for the case where an entity was discovered, got a wiki entry, and
     // was then manually re-hidden via the admin panel. Admins see everything.
-    const isAdmin = membership.role === 'ADMIN'
+    const isAdmin = membership.role === UserRole.ADMIN
     const visibleEntries = isAdmin ? entries : await filterDiscoveredEntries(campaignId, entries)
 
     // Entities the fiction knows about but the wiki hasn't written up yet
@@ -199,14 +197,11 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const token = request.headers.get('authorization')?.split(' ')[1]
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const user = verifyToken(token)
+    // Called-out fix, not a silent behavior change: see quests/route.ts's
+    // comment — hand-rolled token parsing here bypassed session revocation.
+    const user = await getUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const campaignId = params.id

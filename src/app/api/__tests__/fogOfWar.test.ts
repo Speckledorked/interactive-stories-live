@@ -28,8 +28,14 @@ const API_ROOT = 'src/app/api'
  * that true rather than merely claimed.
  */
 const EXEMPT: Record<string, string> = {
-  'campaigns/[id]/characters/route.ts':
-    'character creation resolves a starting-tie counterparty by name to write FactionStanding/Debt rows; selects id only, never returned. Gating on discovery would break backstory ties to factions the party has not met — which is the point of a backstory tie.',
+  // campaigns/[id]/characters/route.ts's old entry here is gone on purpose,
+  // not an oversight: the API-routes refactor moved character creation's
+  // faction/NPC name-to-id resolution (still id-only-select, still never
+  // returned) into src/lib/game/characterCreation.ts. The route file no
+  // longer reads a fog-gated model at all, so it correctly drops out of
+  // gatedRoutes below — but that also means this file's scan (API_ROOT is
+  // src/app/api only) no longer covers that logic. It was re-verified by
+  // hand at the time of the move; a future change to it isn't caught here.
   'campaigns/[id]/notes/route.ts':
     'validates that a note\'s referenced entity exists before linking it; selects id only, answers with 400 or nothing.',
   'campaigns/[id]/notes/[noteId]/route.ts':

@@ -13,7 +13,8 @@ export async function applyTimelineEventChanges(
   tx: Db,
   campaignId: string,
   currentTurnNumber: number,
-  events: TimelineEventChange[]
+  events: TimelineEventChange[],
+  inGameDayNumber?: number
 ): Promise<void> {
   console.log(`📜 Creating ${events.length} timeline events`)
 
@@ -26,7 +27,8 @@ export async function applyTimelineEventChanges(
         summaryPublic: event.summary_public,
         summaryGM: event.summary_gm,
         isOffscreen: event.is_offscreen,
-        visibility: event.visibility.toUpperCase() as EventVisibility
+        visibility: event.visibility.toUpperCase() as EventVisibility,
+        inGameDayNumber
       }
     })
   }

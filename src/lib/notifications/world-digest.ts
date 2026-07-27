@@ -106,7 +106,8 @@ export function titleForDigestChange(change: WorldChange): string {
 export async function sendWorldDigest(
   campaignId: string,
   changes: WorldChange[],
-  currentTurn: number
+  currentTurn: number,
+  inGameDayNumber?: number
 ): Promise<number> {
   try {
     if (changes.length === 0) return 0
@@ -147,6 +148,7 @@ export async function sendWorldDigest(
         isOffscreen: true,
         visibility: 'PUBLIC' as EventVisibility,
         eventType: 'WORLD_EVENT' as EventType,
+        inGameDayNumber,
       })),
     }).catch((err: unknown) => {
       console.error('World digest journal write failed (non-critical):', err)

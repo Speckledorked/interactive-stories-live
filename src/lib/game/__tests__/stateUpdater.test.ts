@@ -97,7 +97,7 @@ describe('applyWorldUpdates — delegation', () => {
       response({ new_timeline_events: [{ title: 'X' }], pc_changes: [{ character_name_or_id: 'Vera', changes: {} }] }),
       42
     )
-    expect(applyTimelineEventChanges).toHaveBeenCalledWith(tx, 'camp1', 42, [{ title: 'X' }])
+    expect(applyTimelineEventChanges).toHaveBeenCalledWith(tx, 'camp1', 42, [{ title: 'X' }], undefined)
     expect(applyCharacterChanges).toHaveBeenCalledWith(
       tx, 'camp1', 42, expect.anything(), expect.anything(), expect.any(Function), true
     )

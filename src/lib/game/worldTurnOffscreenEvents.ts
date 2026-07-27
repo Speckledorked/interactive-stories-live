@@ -19,7 +19,8 @@ export async function generateOffscreenEvents(
   advancedClocks: any[],
   completedClocks: any[],
   completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = [],
-  pendingAmbitions: PendingAmbition[] = []
+  pendingAmbitions: PendingAmbition[] = [],
+  inGameDayNumber?: number
 ) {
   try {
     const campaign = await prisma.campaign.findUnique({
@@ -105,7 +106,8 @@ export async function generateOffscreenEvents(
           summaryPublic: event.summary_public,
           summaryGM: event.summary_gm,
           isOffscreen: true,
-          visibility: 'MIXED' as EventVisibility // Players see public, GM sees full
+          visibility: 'MIXED' as EventVisibility, // Players see public, GM sees full
+          inGameDayNumber
         }
       })
       createdEvents.push({ id: created.id, title: event.title, summary_gm: event.summary_gm })
@@ -139,7 +141,8 @@ export async function generateOffscreenEvents(
         currentTurn,
         // Fog of war: an offscreen event happening in the background is not
         // the party witnessing anything — it must not reveal entities.
-        false
+        false,
+        inGameDayNumber
       )
       involvedNpcIds = applied.involvedNpcIds
       involvedFactionIds = applied.involvedFactionIds

@@ -29,7 +29,7 @@ export function isMilestoneTurn(sceneLogCount: number): boolean {
  * and notification, or null if the campaign has no active faction yet to
  * threaten anyone with.
  */
-async function triggerMilestoneCrisis(campaignId: string, turnNumber: number): Promise<string | null> {
+async function triggerMilestoneCrisis(campaignId: string, turnNumber: number, inGameDayNumber?: number): Promise<string | null> {
   const factions = await prisma.faction.findMany({
     where: { campaignId, isActive: true },
     select: { id: true, name: true, threatLevel: true, military: true, resources: true }
@@ -94,7 +94,8 @@ async function triggerMilestoneCrisis(campaignId: string, turnNumber: number): P
       summaryPublic: blurb,
       summaryGM: blurb,
       isOffscreen: true,
-      visibility: 'PUBLIC'
+      visibility: 'PUBLIC',
+      inGameDayNumber
     }
   }).catch((err: unknown) => console.error('Crisis timeline event failed (non-critical):', err))
 
@@ -134,7 +135,8 @@ async function triggerMilestoneCrisis(campaignId: string, turnNumber: number): P
 export async function checkAndCreateMilestone(
   campaignId: string,
   sceneLogCount: number,
-  latestTurnNumber: number
+  latestTurnNumber: number,
+  inGameDayNumber?: number
 ): Promise<void> {
   if (!isMilestoneTurn(sceneLogCount)) return
 
@@ -154,7 +156,7 @@ export async function checkAndCreateMilestone(
     // A milestone isn't just a look back - the world moves too. Best-effort
     // and independent of the recap above: a crisis failure never blocks the
     // real milestone entry from being written.
-    const crisisBlurb = await triggerMilestoneCrisis(campaignId, latestTurnNumber).catch((err: unknown) => {
+    const crisisBlurb = await triggerMilestoneCrisis(campaignId, latestTurnNumber, inGameDayNumber).catch((err: unknown) => {
       console.error('Milestone crisis trigger failed (non-critical):', err)
       return null
     })
@@ -169,7 +171,10 @@ export async function checkAndCreateMilestone(
         title: `Milestone: ${sceneLogCount} Scenes`,
         summary: fullSummary,
         highlights: mergedHighlights,
-        entryType: 'milestone'
+        entryType: 'milestone',
+        // No duration — a milestone recap isn't a discrete span of time,
+        // unlike a scene's own log entry.
+        inGameDayNumber
       }
     })
 

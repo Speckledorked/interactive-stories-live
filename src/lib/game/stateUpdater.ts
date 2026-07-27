@@ -55,7 +55,12 @@ export async function applyWorldUpdates(
   // events (see worldTurn.ts) pass false: the simulation moving a faction
   // the party has never met must not silently teach the AI to talk about
   // it as if they had.
-  sceneOrigin: boolean = true
+  sceneOrigin: boolean = true,
+  // The in-game day these AI-named timeline events happened on — see
+  // calendar.ts. Optional only because a caller that predates the
+  // calendar migration has nothing sensible to pass; such rows just keep
+  // inGameDayNumber null.
+  inGameDayNumber?: number
 ): Promise<AppliedWorldUpdates> {
   console.log('💾 Applying world updates to database...')
 
@@ -83,7 +88,7 @@ export async function applyWorldUpdates(
 
       // 1. Create timeline events
       if (world_updates.new_timeline_events) {
-        await applyTimelineEventChanges(tx, campaignId, currentTurnNumber, world_updates.new_timeline_events)
+        await applyTimelineEventChanges(tx, campaignId, currentTurnNumber, world_updates.new_timeline_events, inGameDayNumber)
       }
 
       // Fetched once per batch and resolved against in-memory (exact -> a
@@ -190,7 +195,8 @@ export async function applyWorldUpdates(
  */
 export async function checkAndResolveCompletedClocks(
   campaignId: string,
-  currentTurnNumber: number
+  currentTurnNumber: number,
+  inGameDayNumber?: number
 ): Promise<Clock[]> {
   console.log('🔍 Checking for completed clocks...')
 
@@ -224,7 +230,8 @@ export async function checkAndResolveCompletedClocks(
           summaryPublic: clock.consequence,
           summaryGM: `Clock "${clock.name}" reached ${clock.maxTicks} ticks. ${clock.gmNotes}`,
           isOffscreen: true,
-          visibility: clock.isHidden ? 'GM_ONLY' : 'PUBLIC'
+          visibility: clock.isHidden ? 'GM_ONLY' : 'PUBLIC',
+          inGameDayNumber
         }
       })
 

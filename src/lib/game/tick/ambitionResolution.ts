@@ -16,7 +16,8 @@ import { logSignificantChanges } from './historyLog'
 export async function resolveCompletedAmbitions(
   campaignId: string,
   currentTurn: number,
-  completedAmbitionClocks: any[]
+  completedAmbitionClocks: any[],
+  inGameDayNumber?: number
 ) {
   const changes: WorldChange[] = []
 
@@ -160,6 +161,7 @@ export async function resolveCompletedAmbitions(
         summaryGM: `${outcome.consequenceText} (Δresources ${outcome.resourceDelta >= 0 ? '+' : ''}${outcome.resourceDelta}, Δstability ${outcome.stabilityDelta >= 0 ? '+' : ''}${outcome.stabilityDelta}, Δmilitary ${outcome.militaryDelta >= 0 ? '+' : ''}${outcome.militaryDelta})`,
         isOffscreen: true,
         visibility: clock.isHidden ? 'GM_ONLY' : 'PUBLIC',
+        inGameDayNumber,
       },
     })
 

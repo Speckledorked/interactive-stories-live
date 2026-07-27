@@ -3,8 +3,10 @@
 // This is the heart of the AI GM system
 
 import { prisma } from '@/lib/prisma'
-import { truncateWithEllipsis } from '@/lib/format'
+import { truncateWithEllipsis, pluralize } from '@/lib/format'
 import { callAIGM } from '@/lib/ai/client'
+import { formatInGameDate, type GeneratedCalendar } from './calendar'
+import { resolveLegacyCalendar } from './calendarBackfill'
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
 import { applyWorldUpdates, summarizeWorldUpdates, enrichStubNPCs, enrichStubFactions } from './stateUpdater'
 import { SceneStatus } from '@prisma/client'
@@ -210,7 +212,8 @@ async function performResolution(
 
     // 3. Get world meta for turn number
     const worldMeta = await prisma.worldMeta.findUnique({
-      where: { campaignId }
+      where: { campaignId },
+      include: { campaign: { select: { id: true, title: true, description: true, universe: true, calendarConfig: true } } }
     })
 
     if (!worldMeta) {
@@ -218,6 +221,28 @@ async function performResolution(
     }
 
     const currentTurn = (worldMeta as any).currentTurnNumber
+
+    // Every campaign created before the in-fiction calendar existed has a
+    // null calendarConfig — lazily backfilled here (the sole WorldMeta/turn
+    // writer) rather than via a separate migration script. baseTotalHours
+    // may be higher than worldMeta.totalElapsedGameHours if the backfill
+    // recovered hours from a legacy "Day N" date string — see
+    // calendarBackfill.ts.
+    let calendar: GeneratedCalendar
+    let baseTotalElapsedGameHours = worldMeta.totalElapsedGameHours
+    if (worldMeta.campaign.calendarConfig) {
+      calendar = worldMeta.campaign.calendarConfig as unknown as GeneratedCalendar
+    } else {
+      const backfilled = await resolveLegacyCalendar(worldMeta.campaign, worldMeta)
+      calendar = backfilled.calendar
+      baseTotalElapsedGameHours = backfilled.totalElapsedGameHours
+    }
+
+    // The day this exchange's events happened ON, not the day the DB row
+    // for them happens to be inserted — computed from state as of the
+    // START of this exchange, before any of this call's own time passage
+    // is banked below.
+    const inGameDayNumber = Math.floor(baseTotalElapsedGameHours / 24)
 
     // 4. Build AI request from world state
     console.log('📊 Building AI request...')
@@ -249,7 +274,7 @@ async function performResolution(
 
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')
-    const { involvedNpcIds, involvedFactionIds } = await applyWorldUpdates(campaignId, aiResponse, currentTurn)
+    const { involvedNpcIds, involvedFactionIds } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber)
 
     // 6.1. Enrich any stub NPCs/factions auto-created mid-scene (non-blocking, best-effort)
     enrichStubNPCs(campaignId, aiResponse.scene_text).catch(err =>
@@ -453,9 +478,16 @@ async function performResolution(
     // can never desync, and a single scene can't jump either one an
     // absurd amount.
     const hoursThisExchange = elapsedInGameHours(timePassage)
-    const newInGameDate = hoursThisExchange > 0
-      ? calculateNewDate(worldMeta.currentInGameDate || 'Day 1', hoursThisExchange)
-      : (worldMeta.currentInGameDate || 'Day 1')
+    // The durable number is the source of truth — newInGameDate is always
+    // recomputed fresh from it, never mutated/reparsed the way the old
+    // calculateNewDate did (see calendar.ts's header comment).
+    const newTotalElapsedGameHours = baseTotalElapsedGameHours + hoursThisExchange
+    const newInGameDate = formatInGameDate(newTotalElapsedGameHours, calendar).display
+    const exchangeDuration = hoursThisExchange > 0
+      ? (hoursThisExchange >= 24 && hoursThisExchange % 24 === 0
+          ? `${hoursThisExchange / 24} ${pluralize(hoursThisExchange / 24, 'day')}`
+          : `${hoursThisExchange} ${pluralize(hoursThisExchange, 'hour')}`)
+      : null
 
     // Bank this exchange's in-game time toward the next world turn — the
     // faction/NPC simulation advances with fiction time, not per action
@@ -466,6 +498,7 @@ async function performResolution(
       data: {
         currentTurnNumber: currentTurn + 1,
         currentInGameDate: newInGameDate,
+        totalElapsedGameHours: newTotalElapsedGameHours,
         hoursSinceWorldTurn: { increment: hoursThisExchange },
         // Tracks what play itself has banked since the last heartbeat sweep,
         // so the sweep can top up to real elapsed time instead of stacking
@@ -504,7 +537,10 @@ async function performResolution(
         currentTurn + 1,
         aiResponse.scene_text,
         aiResponse.scene_summary,
-        aiResponse.world_updates?.new_timeline_events
+        aiResponse.world_updates?.new_timeline_events,
+        newInGameDate,
+        exchangeDuration,
+        inGameDayNumber
       )
       console.log('✅ Campaign log entry created')
     } catch (logError) {
@@ -1008,7 +1044,10 @@ async function generateCampaignLog(
   turnNumber: number,
   sceneText: string,
   sceneSummary?: string,
-  timelineEvents?: Array<{ title: string; visibility: string }>
+  timelineEvents?: Array<{ title: string; visibility: string }>,
+  inGameDate?: string,
+  duration?: string | null,
+  inGameDayNumber?: number
 ): Promise<void> {
   const newSegment = sceneSummary?.trim() || fallbackSummaryFromSceneText(sceneText)
 
@@ -1032,7 +1071,13 @@ async function generateCampaignLog(
       data: {
         turnNumber,
         summary: appendSummarySegment(existing.summary, newSegment),
-        highlights: mergedHighlights
+        highlights: mergedHighlights,
+        // Refreshed the same way turnNumber already was above — this
+        // entry represents the scene's log as of its most recent update,
+        // not just its first exchange.
+        inGameDate,
+        duration,
+        inGameDayNumber
       }
     })
     return
@@ -1053,7 +1098,10 @@ async function generateCampaignLog(
       title,
       summary: newSegment,
       highlights: newHighlights.slice(0, MAX_HIGHLIGHTS_PER_SCENE),
-      entryType: 'scene'
+      entryType: 'scene',
+      inGameDate,
+      duration,
+      inGameDayNumber
     }
   })
 
@@ -1063,7 +1111,7 @@ async function generateCampaignLog(
   const sceneLogCount = await prisma.campaignLog.count({
     where: { campaignId, entryType: 'scene' }
   })
-  await checkAndCreateMilestone(campaignId, sceneLogCount, turnNumber)
+  await checkAndCreateMilestone(campaignId, sceneLogCount, turnNumber, inGameDayNumber)
 }
 
 /**
@@ -1091,48 +1139,6 @@ export function fallbackSummaryFromSceneText(sceneText: string): string {
   const summary = sentences.slice(0, 3).map(s => s.trim()).join(' ')
   if (summary) return summary
   return truncateWithEllipsis(sceneText, 300)
-}
-
-/**
- * Calculate new in-game date from an already-clamped total hour count (see
- * elapsedInGameHours in tick/pacing.ts — this never receives raw AI input).
- * Handles simple date formats like "Day X" or more complex dates.
- */
-function calculateNewDate(currentDate: string, hoursToAdd: number): string {
-  // Handle "Day X" format
-  const dayMatch = currentDate.match(/Day (\d+)/)
-  if (dayMatch) {
-    const currentDay = parseInt(dayMatch[1])
-    const totalDays = currentDay + Math.floor(hoursToAdd / 24)
-    const remainingHours = hoursToAdd % 24
-
-    if (remainingHours > 0) {
-      return `Day ${totalDays}, ${remainingHours}:00`
-    }
-    return `Day ${totalDays}`
-  }
-
-  // Handle "Day X, HH:MM" format
-  const dayTimeMatch = currentDate.match(/Day (\d+), (\d+):(\d+)/)
-  if (dayTimeMatch) {
-    const currentDay = parseInt(dayTimeMatch[1])
-    const currentMinute = parseInt(dayTimeMatch[3])
-
-    const totalHours = parseInt(dayTimeMatch[2]) + hoursToAdd
-    const newDay = currentDay + Math.floor(totalHours / 24)
-    const newHour = totalHours % 24
-
-    return `Day ${newDay}, ${newHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`
-  }
-
-  // Fallback: just append time passage description
-  if (hoursToAdd >= 24 && hoursToAdd % 24 === 0) {
-    return `${currentDate} + ${hoursToAdd / 24} days`
-  } else if (hoursToAdd > 0) {
-    return `${currentDate} + ${hoursToAdd} hours`
-  }
-
-  return currentDate
 }
 
 /**

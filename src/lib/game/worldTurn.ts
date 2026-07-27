@@ -74,6 +74,11 @@ export async function runWorldTurn(campaignId: string) {
   }
 
   const currentTurn = worldMeta.currentTurnNumber
+  // Which in-game day this world turn's events happened on — see
+  // lib/game/calendar.ts. Every writer below stamps its TimelineEvent/
+  // CampaignLog rows with this same value so a background tick's events
+  // land on the same day regardless of which handler produced them.
+  const inGameDayNumber = Math.floor(worldMeta.totalElapsedGameHours / 24)
 
   try {
     // 0. World Sim Phase 1: deterministic tick — NPCs, factions, weather.
@@ -89,7 +94,7 @@ export async function runWorldTurn(campaignId: string) {
 
     // 2. Check for completed clocks
     console.log('🔍 Checking completed clocks...')
-    const completedClocks = await checkAndResolveCompletedClocks(campaignId, currentTurn)
+    const completedClocks = await checkAndResolveCompletedClocks(campaignId, currentTurn, inGameDayNumber)
 
     // 2a. Resolve any ambitions among the clocks that just completed — win
     // or lose, deterministically, so a faction's tournament/campaign/heist
@@ -98,7 +103,7 @@ export async function runWorldTurn(campaignId: string) {
     // world summary the AI sees already reflects the real outcome.
     const completedAmbitionClocks = completedClocks.filter((c: any) => c.sourceFactionId)
     if (completedAmbitionClocks.length > 0) {
-      await resolveCompletedAmbitions(campaignId, currentTurn, completedAmbitionClocks)
+      await resolveCompletedAmbitions(campaignId, currentTurn, completedAmbitionClocks, inGameDayNumber)
     }
 
     // 2b. Major NPCs whose goal just completed this tick — these need AI
@@ -111,7 +116,7 @@ export async function runWorldTurn(campaignId: string) {
     // 3. Generate offscreen events with AI (if there's interesting clock or NPC activity)
     if (advancedClocks.length > 0 || completedClocks.length > 0 || completedGoalNpcs.length > 0 || worldTick.pendingAmbitions.length > 0) {
       console.log('🤖 Generating offscreen events...')
-      await generateOffscreenEvents(campaignId, currentTurn, advancedClocks, completedClocks, completedGoalNpcs, worldTick.pendingAmbitions)
+      await generateOffscreenEvents(campaignId, currentTurn, advancedClocks, completedClocks, completedGoalNpcs, worldTick.pendingAmbitions, inGameDayNumber)
     } else {
       console.log('  No significant clock or NPC activity - skipping offscreen events')
     }
@@ -132,7 +137,7 @@ export async function runWorldTurn(campaignId: string) {
     // becomes a "word on the street" notification for every member — the
     // living world reaching players instead of running silently. Best
     // effort; never blocks the turn.
-    await sendWorldDigest(campaignId, worldTick.changes, currentTurn)
+    await sendWorldDigest(campaignId, worldTick.changes, currentTurn, inGameDayNumber)
 
     // 5. Periodically roll up old, low-importance memories so the RAG table
     // doesn't grow unbounded over a long campaign — every 10 turns is often

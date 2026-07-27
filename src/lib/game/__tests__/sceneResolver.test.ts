@@ -160,6 +160,11 @@ describe('Scene Resolver', () => {
       id: 'meta-1',
       campaignId: mockCampaignId,
       currentTurnNumber: 5,
+      totalElapsedGameHours: 0,
+      // Non-null so tests exercise ordinary scene resolution, not the
+      // legacy-calendar-backfill path (calendarBackfill.test.ts covers
+      // that separately).
+      campaign: { id: mockCampaignId, title: 'Test Campaign', description: '', universe: 'Fantasy', calendarConfig: { epochLabel: '', daysPerWeek: 7, weekdayNames: ['A','B','C','D','E','F','G'], months: [{ name: 'Month 1', days: 30 }], startingYear: 1, startingMonthIndex: 0, startingDay: 1 } },
     };
 
     const mockAIResponse = {
@@ -218,9 +223,10 @@ describe('Scene Resolver', () => {
         },
       });
 
-      // Verify turn was incremented (currentInGameDate is always included
-      // too — it defaults to 'Day 1' when the AI response has no time_passage
-      // data and worldMeta.currentInGameDate isn't set on the fixture).
+      // Verify turn was incremented (currentInGameDate is always recomputed
+      // fresh from totalElapsedGameHours + the fixture's calendar via
+      // formatInGameDate — see calendar.ts — rather than string-mutated the
+      // way the old calculateNewDate did).
       // hoursSinceWorldTurn banks this exchange's in-game time toward the
       // next world turn — 0 here since the fixture has no time_passage.
       // hoursBankedSinceLastHeartbeat tracks the same amount, so the cron
@@ -230,7 +236,8 @@ describe('Scene Resolver', () => {
         where: { id: mockWorldMeta.id },
         data: {
           currentTurnNumber: 6,
-          currentInGameDate: 'Day 1',
+          currentInGameDate: '1 Month 1, Year 1',
+          totalElapsedGameHours: 0,
           hoursSinceWorldTurn: { increment: 0 },
           hoursBankedSinceLastHeartbeat: { increment: 0 },
         },

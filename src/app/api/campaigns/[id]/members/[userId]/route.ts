@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UserRole } from '@prisma/client';
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { handleRouteError } from '@/lib/api/errors';
 
 // DELETE /api/campaigns/[id]/members/[userId] - Remove member from campaign
@@ -16,11 +16,8 @@ export async function DELETE(
     const targetUserId = params.userId;
 
     // Check if current user is an admin
-    const adminMembership = await getCampaignMembership(user.userId, campaignId);
-
-    if (!adminMembership || adminMembership.role !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Only admins can remove members' }, { status: 403 });
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only admins can remove members');
+    if ('response' in adminCheck) return adminCheck.response;
 
     // Check if target user is a member
     const targetMembership = await getCampaignMembership(targetUserId, campaignId);
@@ -80,11 +77,8 @@ export async function PATCH(
     }
 
     // Check if current user is an admin
-    const adminMembership = await getCampaignMembership(user.userId, campaignId);
-
-    if (!adminMembership || adminMembership.role !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Only admins can change member roles' }, { status: 403 });
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only admins can change member roles');
+    if ('response' in adminCheck) return adminCheck.response;
 
     // Check if target user is a member
     const targetMembership = await getCampaignMembership(targetUserId, campaignId);

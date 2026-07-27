@@ -4,8 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { UserRole } from '@prisma/client'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { handleRouteError } from '@/lib/api/errors'
 
 export async function GET(
@@ -16,10 +15,8 @@ export async function GET(
     const user = await requireAuth(request)
     const campaignId = params.id
 
-    const membership = await getCampaignMembership(user.userId, campaignId)
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Only admins can view bans' }, { status: 403 })
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only admins can view bans')
+    if ('response' in adminCheck) return adminCheck.response
 
     const bans = await prisma.campaignBan.findMany({
       where: { campaignId },

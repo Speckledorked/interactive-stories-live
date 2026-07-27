@@ -1,9 +1,8 @@
 // src/app/api/campaigns/[id]/locations/[locationId]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
 export async function PATCH(
   request: NextRequest,
@@ -19,14 +18,8 @@ export async function PATCH(
     const body = await request.json()
 
     // Check if user is admin
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json(
-        { error: 'Only campaign admins can update locations' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can update locations')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Update location
     const location = await prisma.location.update({
@@ -67,14 +60,8 @@ export async function DELETE(
     const { id: campaignId, locationId } = params
 
     // Check if user is admin
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json(
-        { error: 'Only campaign admins can delete locations' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can delete locations')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Delete location
     await prisma.location.delete({

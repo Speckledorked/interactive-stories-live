@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SafetyService } from '@/lib/safety/safety-service';
 import { verifyAuth } from '@/lib/auth';
-import { XCardTrigger, UserRole } from '@prisma/client';
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { XCardTrigger } from '@prisma/client';
+import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
 /**
  * POST /api/campaigns/[id]/xcard
@@ -67,11 +67,8 @@ export async function GET(
     const { id: campaignId } = params;
 
     // Verify user is GM
-    const membership = await getCampaignMembership(user.userId, campaignId);
-
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Forbidden - GM only' }, { status: 403 });
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Forbidden - GM only');
+    if ('response' in adminCheck) return adminCheck.response;
 
     const history = await SafetyService.getXCardHistory(campaignId, true);
     return NextResponse.json(history);

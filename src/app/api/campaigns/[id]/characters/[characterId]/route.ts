@@ -8,6 +8,7 @@ import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { ensureContactNpcStubs } from '@/lib/wiki/contactNpcStubs'
 
 // Fields the owning player can edit directly — cosmetic/narrative only.
 // Everything mechanical (stats, harm, equipment, inventory, resources,
@@ -175,43 +176,7 @@ export async function PATCH(
       const newContacts = body.resources.contacts.filter(
         (contact: string) => !oldContacts.includes(contact)
       )
-
-      for (const contactName of newContacts) {
-        try {
-          // Check if NPC already exists with this name or alias
-          const existingNPC = await prisma.wikiEntry.findFirst({
-            where: {
-              campaignId,
-              entryType: 'NPC',
-              OR: [
-                { name: contactName },
-                { aliases: { has: contactName } }
-              ]
-            }
-          })
-
-          if (!existingNPC) {
-            // Create stub NPC entry
-            await prisma.wikiEntry.create({
-              data: {
-                campaignId,
-                entryType: 'NPC',
-                name: contactName,
-                summary: `Contact of ${character.name}`,
-                description: `${contactName} is a known contact of ${character.name}. More details will be revealed through gameplay.`,
-                tags: ['contact', 'unmet'],
-                aliases: [],
-                importance: 'normal',
-                createdBy: 'system'
-              }
-            })
-            console.log(`✨ Auto-created NPC: ${contactName} (contact of ${character.name})`)
-          }
-        } catch (npcError) {
-          // Log error but don't fail character update
-          console.error(`Failed to auto-create NPC for contact ${contactName}:`, npcError)
-        }
-      }
+      await ensureContactNpcStubs(campaignId, character.name, newContacts)
     }
 
     return NextResponse.json({ character: updatedCharacter })

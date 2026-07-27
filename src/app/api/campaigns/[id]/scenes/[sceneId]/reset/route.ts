@@ -5,8 +5,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import PusherServer from '@/lib/realtime/pusher-server'
-import { SceneStatus, Prisma, UserRole } from '@prisma/client'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { SceneStatus, Prisma } from '@prisma/client'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { handleRouteError } from '@/lib/api/errors'
 
 export async function POST(
@@ -20,14 +20,8 @@ export async function POST(
     const sceneId = params.sceneId
 
     // Check if user is an admin
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json(
-        { error: 'Only campaign admins can reset scenes' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can reset scenes')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Get the scene
     const scene = await prisma.scene.findUnique({

@@ -6,9 +6,8 @@
 // an undiscovered NPC's plan) the same way gmNotes can.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
 export async function GET(
   request: NextRequest,
@@ -24,14 +23,8 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const turnParam = searchParams.get('turn')
 
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json(
-        { error: 'Only campaign admins can view the tick log' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can view the tick log')
+    if ('response' in adminCheck) return adminCheck.response
 
     const where: any = { campaignId }
     if (turnParam !== null) {

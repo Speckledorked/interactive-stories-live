@@ -24,13 +24,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { UserRole } from '@prisma/client'
 import { ErrorResponse } from '@/types/api'
 import { prisma } from '@/lib/prisma'
 import { summarizeSceneForLog } from '@/lib/ai/worldState'
 import { planLogConsolidation } from '@/lib/game/storyLogConsolidation'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { handleRouteErrorWithDetails } from '@/lib/api/errors'
 
 export const maxDuration = 60
@@ -50,14 +49,8 @@ export async function POST(
       return rateLimitExceededResponse(rateLimit)
     }
 
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Only campaign admins can regenerate Story Log entries' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can regenerate Story Log entries')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Consolidate first: cheap (no AI calls), so process every duplicate
     // in one request regardless of the resummarization cap below.

@@ -73,7 +73,8 @@ const gatedRoutes = files.filter(f => {
 })
 
 const usesHelper = (src: string) => src.includes("from '@/lib/api/visibility'")
-const isAdminOnly = (src: string) => /role\s*!==\s*(?:'ADMIN'|UserRole\.ADMIN)/.test(src)
+const isAdminOnly = (src: string) =>
+  /role\s*!==\s*(?:'ADMIN'|UserRole\.ADMIN)/.test(src) || /requireCampaignAdmin\(/.test(src)
 
 describe('fog of war is enforced structurally, not by memory', () => {
   it('finds the routes that read fog-gated models at all', () => {

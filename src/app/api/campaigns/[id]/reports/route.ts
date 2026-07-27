@@ -7,9 +7,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
-import { UserRole, ReportStatus, ReportSeverity } from '@prisma/client'
+import { ReportStatus, ReportSeverity } from '@prisma/client'
 import { SafetyService } from '@/lib/safety/safety-service'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { handleRouteError } from '@/lib/api/errors'
 
 const VALID_CONTENT_TYPES = ['message', 'note', 'character', 'scene', 'user_behavior', 'other']
@@ -63,10 +63,8 @@ export async function GET(
     const user = await requireAuth(request)
     const campaignId = params.id
 
-    const membership = await getCampaignMembership(user.userId, campaignId)
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Only admins can view reports' }, { status: 403 })
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only admins can view reports')
+    if ('response' in adminCheck) return adminCheck.response
 
     const { searchParams } = new URL(request.url)
     const statusParam = searchParams.get('status')

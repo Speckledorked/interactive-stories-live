@@ -1,10 +1,9 @@
 // src/app/api/campaigns/[id]/npcs/[npcId]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
 export async function PATCH(
   request: NextRequest,
@@ -20,14 +19,8 @@ export async function PATCH(
     const body = await request.json()
 
     // Check if user is admin
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json(
-        { error: 'Only campaign admins can update NPCs' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can update NPCs')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Resolve/create the matching Location row and link it via locationId
     // alongside the free-text field (see README Known Bugs P1 — Location
@@ -85,14 +78,8 @@ export async function DELETE(
     const { id: campaignId, npcId } = params
 
     // Check if user is admin
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json(
-        { error: 'Only campaign admins can delete NPCs' },
-        { status: 403 }
-      )
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can delete NPCs')
+    if ('response' in adminCheck) return adminCheck.response
 
     // Delete NPC
     await prisma.nPC.delete({

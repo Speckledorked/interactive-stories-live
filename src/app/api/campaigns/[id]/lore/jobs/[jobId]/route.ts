@@ -5,9 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { UserRole } from '@prisma/client'
 import { getUser } from '@/lib/auth'
-import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
 export async function GET(
   request: NextRequest,
@@ -20,10 +19,8 @@ export async function GET(
     }
 
     const campaignId = params.id
-    const membership = await getCampaignMembership(user.userId, campaignId)
-    if (!membership || membership.role !== UserRole.ADMIN) {
-      return NextResponse.json({ error: 'Only campaign admins can view lore imports' }, { status: 403 })
-    }
+    const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can view lore imports')
+    if ('response' in adminCheck) return adminCheck.response
 
     const job = await prisma.loreImportJob.findFirst({
       where: { id: params.jobId, campaignId },

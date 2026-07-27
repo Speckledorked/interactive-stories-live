@@ -66,6 +66,21 @@ function canParticipateInScene(scene: any, characterId: string, allActiveScenes:
   return (participants.characterIds || []).includes(characterId)
 }
 
+// Tab label for a concurrent scene — the characters actually in it reads
+// better than a bare scene number when the party's split across several
+// scenes at once. Falls back to the scene number for an open scene with
+// no recorded participants yet (nobody's acted in it).
+function sceneTabLabel(scene: any, characters: any[]): string {
+  const characterIds = (scene.participants as any)?.characterIds as string[] | undefined
+  if (characterIds && characterIds.length > 0) {
+    const names = characterIds
+      .map(id => characters.find((c: any) => c.id === id)?.name)
+      .filter(Boolean)
+    if (names.length > 0) return names.join(', ')
+  }
+  return `Scene ${scene.sceneNumber}`
+}
+
 export default function StoryPage() {
   const router = useRouter()
   const params = useParams()
@@ -99,6 +114,12 @@ export default function StoryPage() {
   const [endingScene, setEndingScene] = useState(false)
   const [regeneratingSceneId, setRegeneratingSceneId] = useState<string | null>(null)
   const [deletingSceneId, setDeletingSceneId] = useState<string | null>(null)
+  // Which of several genuinely concurrent scenes (a split party) the
+  // viewer is currently looking at. Falls back to the first available
+  // scene below rather than needing to be kept in sync on every
+  // load/resolve/end — a stale id from a scene that just resolved or
+  // ended simply stops matching and the fallback takes over.
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   // Turn order — an opt-in, advisory queue layered on top of the scene's
   // real (simultaneous) action collection; see TurnTracker's doc comment.
@@ -127,7 +148,10 @@ export default function StoryPage() {
     () => activeScenes.filter(scene => selectedCharacterId && canParticipateInScene(scene, selectedCharacterId, activeScenes)),
     [activeScenes, selectedCharacterId]
   )
-  const currentScene = availableScenes[0] ?? null
+  // The scene the viewer is actively looking at — the tab they picked,
+  // when they've genuinely got more than one concurrent scene available,
+  // otherwise just the one they've got.
+  const currentScene = availableScenes.find(s => s.id === activeSceneId) ?? availableScenes[0] ?? null
 
   // Split-party detection: living characters not already tied up in an
   // active scene, grouped by currentLocation. A character with no
@@ -1005,9 +1029,31 @@ export default function StoryPage() {
             </div>
           )}
 
+          {/* Scene switcher — genuinely concurrent scenes (a split party)
+              get tabs instead of being stacked one after another in the
+              same scroll; picking one scopes the action box, chat, map,
+              and turn tracker below to just that scene. */}
+          {availableScenes.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {availableScenes.map(scene => (
+                <button
+                  key={scene.id}
+                  onClick={() => setActiveSceneId(scene.id)}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                    currentScene?.id === scene.id
+                      ? 'bg-wine-700 border-wine-500 text-ember-100'
+                      : 'bg-black/30 border-ember-900/40 text-ember-300/70 hover:text-ember-200'
+                  }`}
+                >
+                  {sceneTabLabel(scene, campaign?.characters || [])}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Active Scenes */}
           {availableScenes.length > 0 ? (
-            availableScenes.map(scene => {
+            (availableScenes.length > 1 && currentScene ? [currentScene] : availableScenes).map(scene => {
               const userHasSubmitted = hasUserSubmitted(scene)
               const waitingOn = (scene.waitingOnUsers as any) || []
               const isWaitingOnUser = waitingOn.includes(user?.id)

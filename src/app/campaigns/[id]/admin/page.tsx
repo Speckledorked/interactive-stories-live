@@ -939,7 +939,7 @@ export default function AdminPage() {
                   name: npc.name,
                   role: npc.description || '',
                   status: npc.isAlive ? 'alive' : 'dead',
-                  relationship: npc.relationship as 'friendly' | 'neutral' | 'hostile' | undefined,
+                  relationship: npc.relationship || undefined,
                   lastSeen: npc.currentLocation
                 }))}
                 factions={factions.map(faction => ({

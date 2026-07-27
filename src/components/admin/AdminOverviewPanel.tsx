@@ -26,7 +26,7 @@ export function AdminOverviewPanel({
   onSaveCampaignInfo: () => void
   saving: boolean
   checklistItems: SetupChecklistItem[]
-  npcs: Array<{ id: string; name: string; role: string; status: 'alive' | 'dead'; relationship?: 'friendly' | 'neutral' | 'hostile'; lastSeen: string }>
+  npcs: Array<{ id: string; name: string; role: string; status: 'alive' | 'dead'; relationship?: string; lastSeen: string }>
   factions: Array<{ id: string; name: string; influence: number; relationship: 'hostile' | 'neutral' | 'allied'; description: string }>
   clocks: Array<{ id: string; name: string; current: number; max: number }>
   worldNotes: string[]

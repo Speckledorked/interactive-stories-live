@@ -827,7 +827,7 @@ export default function StoryPage() {
   }
 
   const handleDeleteScene = async (sceneId: string) => {
-    if (!confirm('Permanently delete this scene? This cannot be undone. Only available before anyone has acted.')) {
+    if (!confirm('Permanently delete this scene? This cannot be undone. Anything that already happened in it (stat changes, world effects, log entries) stays in the campaign — only the scene itself goes away.')) {
       return
     }
 
@@ -1044,13 +1044,12 @@ export default function StoryPage() {
                             {regeneratingSceneId === scene.id ? 'Regenerating…' : '🔄 Regenerate'}
                           </button>
                         )}
-                        {scene.status === 'AWAITING_ACTIONS' && !scene.sceneResolutionText &&
-                          (!scene.playerActions || scene.playerActions.length === 0) && isAdmin && (
+                        {isAdmin && (
                           <button
                             onClick={() => handleDeleteScene(scene.id)}
                             disabled={deletingSceneId === scene.id}
                             className="text-xs px-2 py-1 bg-black/30 hover:bg-wine-600 border border-ember-900/40 text-ember-300 hover:text-ember-100 rounded transition-colors disabled:opacity-50"
-                            title="Permanently delete this scene — only available before anyone has acted"
+                            title="Permanently delete this scene"
                           >
                             {deletingSceneId === scene.id ? 'Deleting…' : '🗑️ Delete'}
                           </button>

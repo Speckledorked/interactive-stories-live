@@ -5,14 +5,13 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
-import { Search, BookOpen } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernEmptyState, TavernSpinner } from '@/components/tavern/ui'
+import { SubNavTabs } from '@/components/ui/SubNavTabs'
 
 type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
 // RUMORS isn't a WikiEntryType — it's a separate feed (offscreen
@@ -169,18 +168,12 @@ export default function WikiPage() {
         campaignId={campaignId}
         subrow={
           <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setSelectedType(tab.key)}
-                className={`flex items-center gap-1.5 px-2.5 py-2 border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
-                  selectedType === tab.key ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
-                }`}
-              >
-                <span>{tab.icon}</span>
-                <span>{tab.label}</span>
-              </button>
-            ))}
+            <SubNavTabs
+              tabs={tabs}
+              activeKey={selectedType}
+              onSelect={(key) => setSelectedType(key as WikiTab)}
+              itemClassName="whitespace-nowrap flex-shrink-0"
+            />
           </nav>
         }
       />

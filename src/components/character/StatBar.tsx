@@ -4,6 +4,7 @@
 'use client'
 
 import { useEffect, useId, useRef, useState } from 'react'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 interface StatBarProps {
   name: string
@@ -20,6 +21,8 @@ function StatInfo({ description }: { description: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const popoverId = useId()
 
+  useEscapeKey(() => setOpen(false), open)
+
   useEffect(() => {
     if (!open) return
 
@@ -29,17 +32,11 @@ function StatInfo({ description }: { description: string }) {
       }
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
-    }
-
     document.addEventListener('mousedown', handlePointerDown)
     document.addEventListener('touchstart', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('mousedown', handlePointerDown)
       document.removeEventListener('touchstart', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
     }
   }, [open])
 

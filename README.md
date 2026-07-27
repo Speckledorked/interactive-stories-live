@@ -270,6 +270,14 @@ Re-examined rather than re-asserted, and the decision holds with evidence behind
 - *Scope:* cost observability only — bounded exposure (lore import is a one-time-per-source action, not per-scene), but a real gap in the same metered-cost tracking the README's Payments section claims.
 - *Suggested fix:* thread both through `embedWithCostTracking` with their own request-type labels (e.g. `lore_retrieval_embedding`, `lore_chunk_embedding`), the same mechanical change `#105` describes for the world-generation callers.
 
+**15 hand-rolled modals not retrofitted onto the `Dialog` primitive (#117)** — a UI component layer pass deduped two genuinely identical patterns (a shared `useEscapeKey` hook across 6 escape-to-close effects; a shared `SubNavTabs` component across the 6 sub-nav tab bars in `friends`/`settings`/`wiki`/`story`/`characters`/`characters/[characterId]`), but left the ~15 modals across the app (`CharacterSnapshotModal`, `KeyboardShortcutsModal`, `SimpleXCard`, `ReportContentModal`, and others) as independent components rather than rebuilding them on a shared `Dialog`. Considered and rejected for the same reason `#110` rejected a shared `npcs.ts`/`factions.ts` abstraction: each modal's actual backdrop/close/focus behavior differs enough (some trap focus, some don't; close triggers vary; a couple layer additional confirm-before-close logic) that forcing a shared primitive underneath all of them is a behavior-risking rewrite, not a refactor, for a component layer pass mandated to change zero visible or interactive behavior.
+- *Evidence:* `src/components/character/CharacterSnapshotModal.tsx`, `src/components/KeyboardShortcutsModal.tsx`, `src/components/safety/SimpleXCard.tsx`, `src/components/safety/ReportContentModal.tsx`, and ~11 further modal components identified by grep for backdrop-overlay markup.
+- *Scope:* noted for completeness — no action intended unless a future pass is explicitly scoped to a shared `Dialog` primitive with its own behavior-verification plan.
+
+**`CommandPalette`'s Escape handling not migrated to `useEscapeKey` (#118)** — `CommandPalette.tsx` handles Escape inside one combined `keydown` listener that also owns Cmd+K toggle and arrow-key list navigation. Every other Escape-to-close site in the app was a standalone effect and migrated cleanly to the new `useEscapeKey` hook; this one wasn't, because splitting Escape out of that combined handler risks subtly changing when Escape fires relative to the other key handling in the same listener — exactly the kind of behavior change this pass's mandate excluded.
+- *Evidence:* `src/components/CommandPalette.tsx`.
+- *Scope:* maintainability only — one remaining non-hook Escape handler, left as-is rather than unified for unification's sake.
+
 ## Roadmap
 
 ### 🎯 Next — Product & Market

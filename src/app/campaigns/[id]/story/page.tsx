@@ -8,14 +8,9 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
-import ChatPanel from '@/components/chat/ChatPanel'
-import TurnTracker from '@/components/turns/TurnTracker'
-import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
 import type { MapData } from '@/lib/maps/map-service'
 import AILoadingState from '@/components/scene/AILoadingState'
 import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
-import { CompactClock } from '@/components/clock/ClockProgress'
-import { CompactTimeline } from '@/components/scene/VisualTimeline'
 import AITransparencyPanel, { type WorldStateChange } from '@/components/scene/AITransparencyPanel'
 import { extractWorldStateChanges } from '@/lib/game/worldStateChanges'
 import CharacterSnapshotModal from '@/components/character/CharacterSnapshotModal'
@@ -24,10 +19,17 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import KeyboardShortcutsModal from '@/components/KeyboardShortcutsModal'
 import SimpleXCard from '@/components/safety/SimpleXCard'
 import ReportContentModal from '@/components/safety/ReportContentModal'
-import { Home, Scroll, StickyNote, Map as MapIcon, MessageSquare, Settings as SettingsIcon, Keyboard, Eye } from 'lucide-react'
+import { CharacterSelectorPanel } from '@/components/scene/CharacterSelectorPanel'
+import { TurnOrderPanel } from '@/components/scene/TurnOrderPanel'
+import { MapViewerPanel } from '@/components/scene/MapViewerPanel'
+import { SceneChatPanel } from '@/components/scene/SceneChatPanel'
+import { ActiveClocksPanel } from '@/components/scene/ActiveClocksPanel'
+import { RecentTimelinePanel } from '@/components/scene/RecentTimelinePanel'
+import { Home, Scroll, StickyNote, Map as MapIcon, MessageSquare, Settings as SettingsIcon, Keyboard } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
+import { SubNavTabs } from '@/components/ui/SubNavTabs'
 
 // Whether `characterId` may act in `scene` — participants is null for a
 // genuinely open scene (anyone can act; membership grows dynamically as
@@ -890,24 +892,7 @@ export default function StoryPage() {
         subrow={
           <div className="max-w-7xl mx-auto px-4 flex items-center justify-between gap-3 border-t border-ember-900/20 pt-2 pb-0">
             <nav className="flex items-center gap-1 overflow-x-auto text-sm">
-              {storyTabs.map((tab) => {
-                const isActive = tab.key === 'story'
-                const content = (
-                  <span
-                    className={`flex items-center gap-1.5 px-2.5 py-2 border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
-                      isActive ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
-                    }`}
-                  >
-                    <tab.icon className="w-3.5 h-3.5" />
-                    <span>{tab.label}</span>
-                  </span>
-                )
-                return tab.href ? (
-                  <Link key={tab.key} href={tab.href}>{content}</Link>
-                ) : (
-                  <span key={tab.key}>{content}</span>
-                )
-              })}
+              <SubNavTabs tabs={storyTabs} activeKey="story" itemClassName="whitespace-nowrap flex-shrink-0" />
             </nav>
             <div className="flex items-center gap-1 flex-shrink-0 pb-1.5">
               <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
@@ -1527,163 +1512,43 @@ export default function StoryPage() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Character Selector */}
-          {userCharacters.length > 0 && (
-            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-              <h3 className="text-sm font-bold text-ember-300/60 mb-3">SELECT CHARACTER</h3>
-              <select
-                value={selectedCharacterId}
-                onChange={(e) => setSelectedCharacterId(e.target.value)}
-                className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full"
-              >
-                <option value="">Choose a character...</option>
-                {userCharacters.map(char => (
-                  <option key={char.id} value={char.id}>
-                    {char.name}
-                  </option>
-                ))}
-              </select>
-              {selectedCharacter && (
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <h4 className="font-bold text-ember-100 text-lg">{selectedCharacter.name}</h4>
-                      <p className="text-sm text-ember-300/60">{selectedCharacter.concept}</p>
-                    </div>
-                    <button
-                      onClick={() => setShowCharacterSnapshot(true)}
-                      className="px-2 py-1 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded text-xs font-medium transition-colors"
-                      title="Quick Reference"
-                    >
-                      👁️ View
-                    </button>
-                  </div>
-                  {selectedCharacter.currentLocation && (
-                    <p className="text-xs text-ember-400/50">
-                      📍 {selectedCharacter.currentLocation}
-                    </p>
-                  )}
-                  {Array.isArray(selectedCharacter.conditions) &&
-                    selectedCharacter.conditions.length > 0 && (
-                      <div className="mt-3">
-                        <p className="text-xs text-ember-400/50 mb-1">Conditions:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {selectedCharacter.conditions.map((cond: string, i: number) => (
-                            <span
-                              key={i}
-                              className="px-2 py-1 bg-wine-800/30 text-wine-400 rounded text-xs"
-                            >
-                              {cond}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                </div>
-              )}
-            </div>
-          )}
+          <CharacterSelectorPanel
+            userCharacters={userCharacters}
+            selectedCharacterId={selectedCharacterId}
+            onSelectCharacter={setSelectedCharacterId}
+            selectedCharacter={selectedCharacter}
+            onShowSnapshot={() => setShowCharacterSnapshot(true)}
+          />
 
-          {/* Turn Order — opt-in advisory queue any player can enable or
-              end (a table-level convention, not a GM power — there is no
-              human GM). See TurnTracker's doc comment for why it never
-              gates action submission. */}
-          {currentScene && sceneTurnInfo && (
-            <div className="space-y-2">
-              <TurnTracker
-                campaignId={campaignId}
-                sceneId={currentScene.id}
-                currentUserId={user?.id || ''}
-                isHost={isAdmin}
-              />
-              <button
-                onClick={handleEndTurnOrder}
-                disabled={endingTurnOrder}
-                className="w-full text-xs text-ember-400/50 hover:text-ember-200 transition-colors disabled:opacity-50"
-              >
-                {endingTurnOrder ? 'Ending…' : 'End turn order'}
-              </button>
-            </div>
-          )}
-          {currentScene && !sceneTurnInfo && (
-            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-              <h3 className="text-sm font-bold text-ember-300/60 uppercase tracking-wide mb-2">Turn Order</h3>
-              <p className="text-xs text-ember-400/50 mb-3">
-                Play is freeform by default — anyone can act anytime. Turn this on if you'd rather the party go in order for this scene; it's just a visible queue and timer, submitting an action is never blocked by it.
-              </p>
-              <button
-                onClick={handleEnableTurnOrder}
-                disabled={enablingTurnOrder}
-                className="btn-secondary py-2 px-4 text-sm w-full"
-              >
-                {enablingTurnOrder ? 'Enabling…' : 'Enable turn order'}
-              </button>
-            </div>
-          )}
+          <TurnOrderPanel
+            currentScene={currentScene}
+            sceneTurnInfo={sceneTurnInfo}
+            campaignId={campaignId}
+            currentUserId={user?.id || ''}
+            isHost={isAdmin}
+            onEndTurnOrder={handleEndTurnOrder}
+            endingTurnOrder={endingTurnOrder}
+            onEnableTurnOrder={handleEnableTurnOrder}
+            enablingTurnOrder={enablingTurnOrder}
+          />
 
-          {/* Map Viewer */}
-          {activeMap && (
-            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-ember-300/60">MAP</h3>
-                <button
-                  onClick={() => setShowMap(!showMap)}
-                  className="text-xs text-ember-400/50 hover:text-ember-100 transition-colors"
-                >
-                  {showMap ? 'Hide' : 'Show'}
-                </button>
-              </div>
-              {showMap && (
-                <div className="rounded-lg overflow-hidden border border-ember-900/30">
-                  <PlayerMapViewer
-                    map={activeMap}
-                    characterName={selectedCharacter?.name || ''}
-                  />
-                </div>
-              )}
-            </div>
-          )}
+          <MapViewerPanel
+            activeMap={activeMap}
+            showMap={showMap}
+            onToggleShowMap={() => setShowMap(!showMap)}
+            characterName={selectedCharacter?.name || ''}
+          />
 
-          {/* In-Character Chat for Current Scene */}
-          {currentScene && user && (
-            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-0">
-              <ChatPanel
-                campaignId={campaignId}
-                currentUserId={user.id}
-                currentUserName={user.name || user.email}
-                userCharacters={userCharacters}
-                sceneId={currentScene.id}
-                icOnly={true}
-              />
-            </div>
-          )}
+          <SceneChatPanel
+            currentScene={currentScene}
+            user={user}
+            campaignId={campaignId}
+            userCharacters={userCharacters}
+          />
 
-          {/* Active Clocks */}
-          {campaign?.campaign?.clocks && campaign.campaign.clocks.length > 0 && (
-            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-              <h3 className="text-sm font-bold text-ember-300/60 mb-3">ACTIVE CLOCKS</h3>
-              <div className="space-y-2">
-                {campaign.campaign.clocks
-                  .filter((clock: any) => !clock.isHidden)
-                  .map((clock: any) => (
-                    <CompactClock
-                      key={clock.id}
-                      name={clock.name}
-                      current={clock.currentTicks}
-                      max={clock.maxTicks}
-                    />
-                  ))}
-              </div>
-            </div>
-          )}
+          <ActiveClocksPanel clocks={campaign?.campaign?.clocks} />
 
-          {/* Recent Timeline */}
-          {campaign?.campaign?.timeline &&
-            campaign.campaign.timeline.length > 0 && (
-              <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-0">
-                <CompactTimeline events={campaign.campaign.timeline.slice(0, 5)} />
-              </div>
-            )}
+          <RecentTimelinePanel timeline={campaign?.campaign?.timeline} />
         </div>
       </div>
       </main>

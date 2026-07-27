@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useId, useRef, useState } from 'react'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
 
 export interface FieldHelpProps {
   /** What the control does. */
@@ -19,6 +20,8 @@ export function FieldHelp({ what, whoItAffects, whenToUse, className = '' }: Fie
   const containerRef = useRef<HTMLDivElement>(null)
   const popoverId = useId()
 
+  useEscapeKey(() => setOpen(false), open)
+
   useEffect(() => {
     if (!open) return
 
@@ -28,17 +31,9 @@ export function FieldHelp({ what, whoItAffects, whenToUse, className = '' }: Fie
       }
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setOpen(false)
-      }
-    }
-
     document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
     }
   }, [open])
 

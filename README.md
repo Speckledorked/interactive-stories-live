@@ -243,6 +243,28 @@ Re-examined rather than re-asserted, and the decision holds with evidence behind
 - *Evidence:* `src/lib/game/worldUpdaters/npcs.ts`, `src/lib/game/worldUpdaters/factions.ts`.
 - *Scope:* maintainability only — no behavior involved either way.
 
+**`prisma.ts` logs every query, in every environment (#111)** — `new PrismaClient({ log: ['query', 'error', 'warn'] })` isn't gated on `NODE_ENV`, so every SQL statement this app runs gets logged in production the same as in dev. Not changed: this is an observable behavior (log volume), not a correctness bug, and there's no evidence either way about whether that verbosity is deliberate for this stage of the project.
+- *Evidence:* `src/lib/prisma.ts`.
+- *Scope:* observability/log volume only — no data-access behavior involved.
+- *Suggested fix:* if unintentional, gate the `query` entry on `process.env.NODE_ENV !== 'production'`, matching the file's own existing environment check for the `globalForPrisma` singleton pattern one line below.
+
+**The campaign-membership dedup pattern repeats for `Campaign` (23 sites) and `Character` (21 sites) lookups by id (#112)** — found during the same audit that produced `getCampaignMembership()` (`#4`-era database-layer work): fetch-by-id-then-check is the same shape, just for different models, at similar scale. Not migrated this pass — the plan was scoped to the single largest, most identical duplication (the membership lookup, 92 sites of one exact query), and a second `Campaign`/`Character` sweep of this size deserved its own explicit go-ahead rather than being folded in silently.
+- *Evidence:* grep counts from the database-layer audit (`campaign.findUnique`/`findFirst`, `character.findUnique`/`findFirst`, excluding the membership/capability/invite/log/ban/settings/memory variants of the `campaign*` accessor).
+- *Scope:* maintainability — same shape as `#4`'s membership fix, same low risk, just not yet done.
+- *Suggested fix:* same pattern as `getCampaignMembership()` — a thin id-lookup passthrough per model in `src/lib/db/`, migrated the same mechanical way (verified for `select`/`include` variance and response-shape leaks first).
+
+**The 3 role-filtered `campaignMembership` lookups stayed inline, not folded into `getCampaignMembership()` (#113)** — `wiki/route.ts`, `logs/route.ts`, and `maps/active/route.ts` each filter `role: 'ADMIN'` directly in the `where` clause rather than fetching the membership and checking `.role` after. Left alone deliberately: that's a different query shape (it collapses "not a member" and "member but not admin" into the same `null`), and normalizing it into the shared helper would mean either changing what `null` means for 3 routes or adding a role parameter the other 89 call sites don't need.
+- *Evidence:* `src/app/api/campaigns/[id]/wiki/route.ts`, `logs/route.ts`, `maps/active/route.ts`.
+- *Scope:* maintainability only — 3 call sites, no behavior change available without deciding whether to normalize the shape first.
+
+**Vector-insert boilerplate duplicated across 2 tables, not centralized (#114)** — `memoryCreation.ts` (`campaign_memories`) and `loreImportService.ts` (`lore_entries`) both do "generate embedding → `embeddingToPostgresVector` → raw `INSERT ... ::vector`," the same shape, different table and column list. Considered and rejected for the same reason `#110` rejected a shared `npcs.ts`/`factions.ts` abstraction: each INSERT's actual column list is different enough (`campaign_memories` has 8 more columns than `lore_entries`, including the 3 involved-entity arrays) that a generic "vector insert" helper would need more parameters to stay correct than the two current inline queries have lines.
+- *Evidence:* `src/lib/ai/memoryCreation.ts` (`createCampaignMemory`), `src/lib/lore/loreImportService.ts` (`storeLoreChunks`).
+- *Scope:* maintainability only.
+
+**`sceneResolver.ts` and other heavy Prisma callers left untouched on purpose (#115)** — `sceneResolver.ts` (52 direct Prisma calls), `ai-downtime-service.ts`, `safety-service.ts`, `warTick.ts`/`factionTick.ts`, and `exchange-manager.ts` all call Prisma extensively, but each one's calls are genuinely different, context-specific queries as part of domain orchestration rather than copies of each other or of anything covered by this pass's fixes. Out of scope on purpose: rewriting these would be refactoring game logic under cover of a "database layer" mandate, not deduplicating data access.
+- *Evidence:* call counts from the database-layer audit (`grep -c` of `prisma.<model>.<verb>` per file).
+- *Scope:* noted for completeness — no action intended unless one of these files is the actual target of a future pass.
+
 ## Roadmap
 
 ### 🎯 Next — Product & Market

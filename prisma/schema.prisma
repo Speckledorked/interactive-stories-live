@@ -266,6 +266,19 @@ model Campaign {
   // Shape: { name, description, stages: string[5], bargainGuidance }
   corruptionTheme Json?
 
+  // In-fiction calendar structure (month names/lengths, weekday names,
+  // starting year) — generated once at creation (see
+  // lib/ai/calendarGenerator.ts), immutable afterward, same
+  // generated-once-then-frozen pattern as statLabels/corruptionTheme
+  // above. Null only for campaigns created before this existed; the next
+  // scene resolution for one of those lazily backfills a real generated
+  // calendar (see lib/game/calendarBackfill.ts) rather than leaving it
+  // permanently null. Never read directly for display — always through
+  // formatInGameDate (lib/game/calendar.ts), falling back to
+  // DEFAULT_CALENDAR while null.
+  // Shape: GeneratedCalendar (lib/game/calendar.ts)
+  calendarConfig Json?
+
   // True while a creation-time lore import + auto-reseed is in flight —
   // the campaign is unplayable (no characters, no scenes) until the world
   // has finished becoming its canon self, so a mid-import character can't
@@ -1303,10 +1316,17 @@ model TimelineEvent {
   gmNotes       String?
   createdAt     DateTime        @default(now())
 
+  // Absolute in-game day number since campaign epoch at time of writing —
+  // this model had no date concept at all before this field. Null for
+  // every row written before it existed; never backfilled retroactively.
+  // See CampaignLog.inGameDayNumber's comment for the same reasoning.
+  inGameDayNumber Int?
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
   @@index([turnNumber])
+  @@index([campaignId, inGameDayNumber])
 }
 
 //
@@ -1340,6 +1360,16 @@ model WorldMeta {
   // worldTurnHours (null = default, see lib/game/tick/pacing.ts).
   hoursSinceWorldTurn Float @default(0)
   worldTurnHours      Int?
+
+  // Durable, monotonically-increasing total in-game hours since campaign
+  // epoch (hour 0 = campaign creation) — unlike hoursSinceWorldTurn above,
+  // this NEVER resets (that field is a pacing accumulator that zeroes out
+  // every time a world turn fires). This is the single numeric source of
+  // truth lib/game/calendar.ts's formatInGameDate reads to compute the
+  // in-fiction date — currentInGameDate above is just a cached display
+  // string recomputed from this number on every write, never
+  // string-mutated in place the way the old calculateNewDate did.
+  totalElapsedGameHours Float @default(0)
 
   // Real-time heartbeat (see lib/game/cronHeartbeat.ts): a pure idle
   // backstop, not an add-on to active play. The daily cron sweep tops
@@ -2135,13 +2165,25 @@ model CampaignLog {
   highlights String[] // Key events or important moments
   entryType  String   @default("scene") // scene, downtime, world_event, milestone
 
-  // Timeline tracking
-  inGameDate String? // Optional in-game date/time
+  // Timeline tracking. Both fields existed long before they had a writer:
+  // generateCampaignLog (sceneResolver.ts) never set either one, so every
+  // AI-generated entry had them null regardless of what the UI rendered.
+  // Now actually populated at write time, from formatInGameDate/
+  // hoursThisExchange — see lib/game/calendar.ts.
+  inGameDate String? // Formatted in-game date/time, frozen at write time
   duration   String? // How much in-game time passed (e.g., "2 hours", "3 days")
+
+  // Absolute in-game day number since campaign epoch at time of writing —
+  // groupable/filterable, unlike the free-text inGameDate string above.
+  // Null for every entry written before this field existed; never
+  // backfilled retroactively (see lib/game/calendarBackfill.ts's header
+  // comment for why an exact historical reconstruction isn't attempted).
+  inGameDayNumber Int?
 
   createdAt DateTime @default(now())
 
   @@index([campaignId, turnNumber])
+  @@index([campaignId, inGameDayNumber])
   @@index([sceneId])
   @@map("campaign_logs")
 }

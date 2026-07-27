@@ -6,8 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { generateEmbedding, embeddingToPostgresVector } from './embeddingService';
-import { recordAICost, estimateTokenCount } from './cost-tracker';
+import { embedWithCostTracking } from './embeddingService';
 import type { Scene } from '@prisma/client';
 
 type MemoryType = 'SCENE' | 'NPC_INTERACTION' | 'FACTION_EVENT' | 'LOCATION_EVENT' | 'CHARACTER_MOMENT' | 'CLOCK_COMPLETION' | 'WORLD_EVENT';
@@ -38,19 +37,7 @@ export interface MemoryData {
 export async function createCampaignMemory(data: MemoryData): Promise<void> {
   try {
     // Generate embedding for the summary
-    const embeddingStartTime = Date.now();
-    const embedding = await generateEmbedding(data.summary);
-    const embeddingString = embeddingToPostgresVector(embedding);
-
-    await recordAICost({
-      campaignId: data.campaignId,
-      model: 'text-embedding-ada-002',
-      requestType: 'memory_embedding',
-      inputTokens: estimateTokenCount(data.summary),
-      outputTokens: 0,
-      responseTimeMs: Date.now() - embeddingStartTime,
-      success: true
-    }).catch(console.error);
+    const embeddingString = await embedWithCostTracking(data.campaignId, data.summary, 'memory_embedding');
 
     // Insert using raw SQL to handle vector type. Column names are quoted
     // and camelCase because that's what Prisma actually created the table

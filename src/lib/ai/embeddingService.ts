@@ -6,6 +6,7 @@
  */
 
 import OpenAI from 'openai';
+import { recordAICost, estimateTokenCount } from './cost-tracker';
 
 // Lazily constructed so importing this module (even transitively, e.g. via
 // createCampaignMemory) doesn't crash in environments without
@@ -54,6 +55,43 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  */
 export function embeddingToPostgresVector(embedding: number[]): string {
   return `[${embedding.join(',')}]`;
+}
+
+/**
+ * Generate an embedding for `text` and record its AI cost in one call —
+ * the "start timer, embed, convert to pgvector format, recordAICost with
+ * outputTokens: 0" sequence that used to be duplicated identically (bar
+ * the requestType label) between memoryRetrieval.ts's
+ * retrieveRelevantHistory and memoryCreation.ts's createCampaignMemory.
+ * Fire-and-forget on the cost write, same as both original call sites —
+ * a cost-tracking failure must never block scene resolution or memory
+ * creation.
+ *
+ * @param campaignId - Campaign the cost is billed to
+ * @param text - Text to embed
+ * @param requestType - Cost-tracker request-type label (e.g. "memory_embedding")
+ * @returns The embedding in PostgreSQL vector string format
+ */
+export async function embedWithCostTracking(
+  campaignId: string,
+  text: string,
+  requestType: string
+): Promise<string> {
+  const startTime = Date.now();
+  const embedding = await generateEmbedding(text);
+  const embeddingString = embeddingToPostgresVector(embedding);
+
+  await recordAICost({
+    campaignId,
+    model: EMBEDDING_MODEL,
+    requestType,
+    inputTokens: estimateTokenCount(text),
+    outputTokens: 0,
+    responseTimeMs: Date.now() - startTime,
+    success: true
+  }).catch(console.error);
+
+  return embeddingString;
 }
 
 // generateEmbeddingsBatch, cosineSimilarity, estimateTokens, and

@@ -8,7 +8,8 @@
 import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
-import { retrieveRelevantHistory, retrieveNpcHistory, retrieveCrossEntityHistory, generateEntityPairs, buildSearchQuery } from './memoryRetrieval' // Campaign Memory RAG
+import { retrieveRelevantHistory, retrieveNpcHistory, buildSearchQuery } from './memoryRetrieval' // Campaign Memory RAG
+import { retrieveCrossEntityHistory, generateEntityPairs } from './crossEntityRecall'
 import { retrieveRelevantLore } from './loreRetrieval' // Imported lore RAG (see lib/lore/)
 import { resolveActionMechanics } from '@/lib/game/resolution'
 import { describeZone } from '@/lib/game/zones'
@@ -235,6 +236,21 @@ export async function buildSceneResolutionRequest(
 
   // RAG Memory Retrieval: Get relevant campaign history
   // OPTIMIZATION: Reuse entities already fetched in world summary to avoid duplicate queries
+  //
+  // The search query text is built once here and reused by both memory and
+  // lore retrieval below (previously each built its own copy from the same
+  // context — buildSearchQuery is pure, so that was recomputation, not a
+  // behavior difference). Same scene-context query text either way, so a
+  // query naming an NPC or location matches lore about it the same way it
+  // matches history.
+  const searchQuery = buildSearchQuery({
+    currentScene: scene,
+    playerActions: scene.playerActions,
+    characters: entities.characters,
+    npcs: entities.npcs,
+    factions: entities.factions,
+  })
+
   let relevantMemories: any[] = []
   try {
     console.log('🧠 Retrieving relevant campaign memories...')
@@ -257,7 +273,8 @@ export async function buildSceneResolutionRequest(
         recencyBias: 0.3, // 30% weight to recent events, 70% to semantic similarity
         minSimilarity: 0.7, // Only include memories with 70%+ relevance
         importanceBoost: true, // Boost CRITICAL and MAJOR memories
-      }
+      },
+      searchQuery
     )
 
     console.log(`✅ Retrieved ${relevantMemories.length} relevant memories`)
@@ -268,19 +285,10 @@ export async function buildSceneResolutionRequest(
   }
 
   // Imported Lore Retrieval: search any pasted/URL/wiki lore the GM has
-  // imported (see lib/lore/) for what's relevant to this scene. Same
-  // scene-context query text memory retrieval uses, so a query naming an
-  // NPC or location matches lore about it the same way it matches history.
+  // imported (see lib/lore/) for what's relevant to this scene.
   let relevantLore: any[] = []
   try {
-    const query = buildSearchQuery({
-      currentScene: scene,
-      playerActions: scene.playerActions,
-      characters: entities.characters,
-      npcs: entities.npcs,
-      factions: entities.factions,
-    })
-    relevantLore = await retrieveRelevantLore(campaignId, query, { maxEntries: 5, minSimilarity: 0.75 })
+    relevantLore = await retrieveRelevantLore(campaignId, searchQuery, { maxEntries: 5, minSimilarity: 0.75 })
     if (relevantLore.length > 0) {
       console.log(`📚 Retrieved ${relevantLore.length} relevant lore entries`)
     }

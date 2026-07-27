@@ -265,6 +265,11 @@ Re-examined rather than re-asserted, and the decision holds with evidence behind
 - *Evidence:* call counts from the database-layer audit (`grep -c` of `prisma.<model>.<verb>` per file).
 - *Scope:* noted for completeness — no action intended unless one of these files is the actual target of a future pass.
 
+**Embedding cost-tracking is inconsistent across the memory/RAG subsystem (#116)** — `memoryRetrieval.ts`'s query embedding and `memoryCreation.ts`'s summary embedding both go through the new shared `embedWithCostTracking` (`lib/ai/embeddingService.ts`) and record cost; `loreRetrieval.ts`'s query embedding and `loreImportService.ts`'s per-chunk embedding (potentially dozens of calls for a whole wiki import) still call `generateEmbedding` directly and record nothing. Same shape as the already-documented `#105` (three world-generation callers with the same gap). Not fixed here: adding cost tracking to a call site that never had it is new behavior, not a refactor of existing behavior, which this pass's mandate was explicitly not to introduce.
+- *Evidence:* `src/lib/ai/loreRetrieval.ts` (`retrieveRelevantLore`), `src/lib/lore/loreImportService.ts` (`storeLoreChunks`) — neither imports `recordAICost`.
+- *Scope:* cost observability only — bounded exposure (lore import is a one-time-per-source action, not per-scene), but a real gap in the same metered-cost tracking the README's Payments section claims.
+- *Suggested fix:* thread both through `embedWithCostTracking` with their own request-type labels (e.g. `lore_retrieval_embedding`, `lore_chunk_embedding`), the same mechanical change `#105` describes for the world-generation callers.
+
 ## Roadmap
 
 ### 🎯 Next — Product & Market

@@ -6,8 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { generateEmbedding, embeddingToPostgresVector } from './embeddingService';
-import { recordAICost, estimateTokenCount } from './cost-tracker';
+import { embedWithCostTracking } from './embeddingService';
 import { MEMORY_SEARCH_COLUMNS } from './campaignMemoryColumns';
 import type { Scene, PlayerAction, Character, NPC, Faction } from '@prisma/client';
 
@@ -79,7 +78,8 @@ export function filterAndRankMemories(
  * Retrieve relevant campaign memories using semantic search
  *
  * This is the main function for RAG-based memory retrieval. It:
- * 1. Builds a query from current scene context
+ * 1. Builds a query from current scene context (or reuses one the caller
+ *    already built — see precomputedQuery)
  * 2. Generates an embedding for that query
  * 3. Searches the database using pgvector cosine similarity
  * 4. Filters by entity involvement (NPCs, factions, characters)
@@ -88,18 +88,25 @@ export function filterAndRankMemories(
  * @param campaignId - The campaign to search
  * @param context - Current scene context (scene, actions, entities)
  * @param options - Search options
+ * @param precomputedQuery - Optional: reuse a query string the caller
+ *   already built from this same context via buildSearchQuery, instead of
+ *   building an identical one again. sceneResolutionRequest.ts needs the
+ *   same query text for lore retrieval too, and buildSearchQuery is pure —
+ *   recomputing it from unchanged inputs was wasted work, not a behavior
+ *   difference, so this is purely an optimization knob.
  * @returns Array of relevant memories, sorted by relevance
  */
 export async function retrieveRelevantHistory(
   campaignId: string,
   context: RetrievalContext,
-  options: RetrievalOptions = {}
+  options: RetrievalOptions = {},
+  precomputedQuery?: string
 ): Promise<RetrievedMemory[]> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
   try {
-    // Build search query from current context
-    const query = buildSearchQuery(context);
+    // Build search query from current context, unless the caller already built one
+    const query = precomputedQuery ?? buildSearchQuery(context);
 
     if (!query.trim()) {
       console.log('Empty search query, skipping memory retrieval');
@@ -107,19 +114,7 @@ export async function retrieveRelevantHistory(
     }
 
     // Generate embedding for current context
-    const embeddingStartTime = Date.now();
-    const queryEmbedding = await generateEmbedding(query);
-    const embeddingString = embeddingToPostgresVector(queryEmbedding);
-
-    await recordAICost({
-      campaignId,
-      model: 'text-embedding-ada-002',
-      requestType: 'memory_retrieval_embedding',
-      inputTokens: estimateTokenCount(query),
-      outputTokens: 0,
-      responseTimeMs: Date.now() - embeddingStartTime,
-      success: true
-    }).catch(console.error);
+    const embeddingString = await embedWithCostTracking(campaignId, query, 'memory_retrieval_embedding');
 
     // Get entity IDs for filtering
     const npcIds = context.npcs.map(n => n.id);
@@ -177,9 +172,11 @@ export async function retrieveRelevantHistory(
  * Build a search query from current scene context
  *
  * Combines scene intro, stakes, player actions, NPC goals, and faction plans
- * into a coherent query for semantic search. Exported so lib/ai/loreRetrieval.ts
- * can search imported lore against the same "what's this scene about" text
- * instead of re-deriving its own.
+ * into a coherent query for semantic search. Exported so
+ * sceneResolutionRequest.ts can build the query once and pass it to both
+ * retrieveRelevantHistory (via precomputedQuery) and loreRetrieval.ts's
+ * retrieveRelevantLore, rather than each deriving its own from the same
+ * context.
  */
 export function buildSearchQuery(context: RetrievalContext): string {
   const parts: string[] = [];
@@ -266,100 +263,10 @@ export async function retrieveNpcHistory(
   }
 }
 
-/**
- * Hard ceiling on how many cross-entity recall pairs one scene can generate.
- *
- * The entity list this pairs up comes from substring-matching PLAYER-WRITTEN
- * action text against known entity names (see worldState.ts), and pairing is
- * combinatorial — n mentions produce n(n-1)/2 pairs, each firing its own DB
- * query in a Promise.all. So a player could name-drop a dozen known NPCs in
- * one action and turn a single scene resolution into ~66 parallel vector
- * queries, purely by typing. That's a player-controlled amplification factor
- * on someone else's infrastructure, which is exactly the kind of thing that
- * should have a number attached to it rather than an assumption that nobody
- * will.
- *
- * capForPrompt (#37) doesn't help here: it bounds the world-state entity
- * lists, not this recall path.
- */
-export const MAX_ENTITY_PAIRS = 12
-
-/**
- * Pure helper: unique unordered pairs from a list of mentioned entity IDs,
- * for feeding retrieveCrossEntityHistory once per pair. No DB access — kept
- * separate so this combinatorics logic is testable on its own.
- *
- * Capped at MAX_ENTITY_PAIRS. The cap keeps pairs among the EARLIEST-listed
- * entities rather than taking an arbitrary slice of the full pair list:
- * callers pass entities in relevance order (the scene's own NPCs/factions
- * before incidental name-drops), so this degrades toward the mentions that
- * actually matter instead of whichever pairs the nested loop reached first.
- */
-export function generateEntityPairs(
-  entityIds: string[],
-  maxPairs: number = MAX_ENTITY_PAIRS
-): Array<[string, string]> {
-  const unique = Array.from(new Set(entityIds))
-  const pairs: Array<[string, string]> = []
-  // Widen the considered prefix one entity at a time, so we exhaust all
-  // pairs among the most relevant few before reaching further down the list.
-  for (let j = 1; j < unique.length && pairs.length < maxPairs; j++) {
-    for (let i = 0; i < j && pairs.length < maxPairs; i++) {
-      pairs.push([unique[i], unique[j]])
-    }
-  }
-  return pairs
-}
-
-/**
- * Retrieve memories that involve BOTH of two entities — "what happened
- * between X and Y" — as opposed to retrieveNpcHistory, which returns
- * everything involving just one entity (a union, not an intersection).
- * Either ID can be an NPC, faction, or character; a memory
- * matches only if both IDs appear somewhere across its three
- * involved-entity arrays, regardless of which array either one is in — so
- * this also answers "history between this NPC and this faction" or
- * "between these two player characters", not just NPC-NPC pairs.
- *
- * @param campaignId - Campaign ID
- * @param entityIdA - First entity's ID (NPC, faction, or character)
- * @param entityIdB - Second entity's ID (NPC, faction, or character)
- * @param limit - Maximum number of memories to retrieve
- */
-export async function retrieveCrossEntityHistory(
-  campaignId: string,
-  entityIdA: string,
-  entityIdB: string,
-  limit: number = 5
-): Promise<RetrievedMemory[]> {
-  try {
-    const memories = await prisma.$queryRaw<RetrievedMemory[]>`
-      SELECT
-        ${MEMORY_SEARCH_COLUMNS},
-        1.0 as similarity
-      FROM campaign_memories
-      WHERE
-        "campaignId" = ${campaignId}
-        AND (
-          ${entityIdA} = ANY("involvedNpcIds")
-          OR ${entityIdA} = ANY("involvedFactionIds")
-          OR ${entityIdA} = ANY("involvedCharacterIds")
-        )
-        AND (
-          ${entityIdB} = ANY("involvedNpcIds")
-          OR ${entityIdB} = ANY("involvedFactionIds")
-          OR ${entityIdB} = ANY("involvedCharacterIds")
-        )
-      ORDER BY "turnNumber" DESC
-      LIMIT ${limit}
-    `;
-
-    return memories;
-  } catch (error) {
-    console.error('Error retrieving cross-entity history:', error);
-    return [];
-  }
-}
+// Cross-entity pair recall (MAX_ENTITY_PAIRS, generateEntityPairs,
+// retrieveCrossEntityHistory) moved to crossEntityRecall.ts — its own
+// combinatorics problem layered on a DB read, not another flavor of the
+// semantic/single-entity search this file does. See that file's header.
 
 // retrieveFactionHistory, retrieveLocationHistory, and getCampaignMemoryStats
 // used to live here as speculative built-ahead-of-a-consumer exports; they

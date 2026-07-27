@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { filterAndRankMemories, generateEntityPairs, MAX_ENTITY_PAIRS } from '../memoryRetrieval'
+import { filterAndRankMemories } from '../memoryRetrieval'
+import { generateEntityPairs, MAX_ENTITY_PAIRS } from '../crossEntityRecall'
 import type { RetrievedMemory } from '../memoryRetrieval'
 
 function makeMemory(overrides: Partial<RetrievedMemory> = {}): RetrievedMemory {

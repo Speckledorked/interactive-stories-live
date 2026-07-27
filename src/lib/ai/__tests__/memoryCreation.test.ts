@@ -7,17 +7,11 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 vi.mock('../embeddingService', () => ({
-  generateEmbedding: vi.fn().mockResolvedValue(new Array(1536).fill(0.01)),
-  embeddingToPostgresVector: vi.fn((embedding: number[]) => `[${embedding.join(',')}]`),
-}))
-
-vi.mock('../cost-tracker', () => ({
-  recordAICost: vi.fn().mockResolvedValue(undefined),
-  estimateTokenCount: vi.fn().mockReturnValue(10),
+  embedWithCostTracking: vi.fn().mockResolvedValue('[0.01,0.01]'),
 }))
 
 import { prisma } from '@/lib/prisma'
-import { generateEmbedding } from '../embeddingService'
+import { embedWithCostTracking } from '../embeddingService'
 import { createCampaignMemory, determineImportance, extractTags, type MemoryData } from '../memoryCreation'
 import type { Scene } from '@prisma/client'
 
@@ -48,7 +42,7 @@ describe('createCampaignMemory (baseline)', () => {
   it('embeds the summary text, not the full context', async () => {
     const data = makeMemoryData({ summary: 'short summary', fullContext: 'much longer full context text' })
     await createCampaignMemory(data)
-    expect(generateEmbedding).toHaveBeenCalledWith('short summary')
+    expect(embedWithCostTracking).toHaveBeenCalledWith('campaign-1', 'short summary', 'memory_embedding')
   })
 
   it('writes exactly one row via raw SQL', async () => {
@@ -57,7 +51,7 @@ describe('createCampaignMemory (baseline)', () => {
   })
 
   it('does not throw when embedding generation fails', async () => {
-    vi.mocked(generateEmbedding).mockRejectedValueOnce(new Error('embedding service down'))
+    vi.mocked(embedWithCostTracking).mockRejectedValueOnce(new Error('embedding service down'))
     await expect(createCampaignMemory(makeMemoryData())).resolves.toBeUndefined()
     expect(prisma.$executeRaw).not.toHaveBeenCalled()
   })

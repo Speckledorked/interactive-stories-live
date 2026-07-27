@@ -7,7 +7,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { prisma } from '@/lib/prisma'
-import { generateEntityPairs, retrieveCrossEntityHistory } from '../memoryRetrieval'
+import { generateEntityPairs, retrieveCrossEntityHistory } from '../crossEntityRecall'
 
 describe('generateEntityPairs (pure)', () => {
   it('returns no pairs for fewer than two IDs', () => {

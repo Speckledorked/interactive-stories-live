@@ -8,6 +8,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
+import { pluralize } from '@/lib/format'
 import type { MapData } from '@/lib/maps/map-service'
 import AILoadingState from '@/components/scene/AILoadingState'
 import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
@@ -1496,10 +1497,10 @@ export default function StoryPage() {
                         >
                           {startingScene
                             ? 'Generating...'
-                            : `Create Scene with ${selectedSceneCharacters.length || 0} Character${selectedSceneCharacters.length !== 1 ? 's' : ''}`}
+                            : `Create Scene with ${selectedSceneCharacters.length || 0} ${pluralize(selectedSceneCharacters.length, 'Character')}`}
                         </button>
                         <p className="text-xs text-ember-400/50">
-                          AI will create a scene focused on the selected character{selectedSceneCharacters.length !== 1 ? 's' : ''}
+                          AI will create a scene focused on the selected {pluralize(selectedSceneCharacters.length, 'character')}
                         </p>
                       </div>
                     </div>

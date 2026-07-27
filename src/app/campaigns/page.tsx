@@ -14,6 +14,7 @@ import { Plus, ChevronRight, Users, BookOpen, Compass, Scroll } from 'lucide-rea
 import { authenticatedFetch, isAuthenticated, getLastCampaignId } from '@/lib/clientAuth'
 import { displayFont } from '@/lib/tavernTheme'
 import { bannerIconFor, formatRelativeTime } from '@/lib/tavernUtils'
+import { pluralize } from '@/lib/format'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
@@ -151,11 +152,11 @@ export default function CampaignsPage() {
                     <div className="flex items-center gap-4 mt-3 text-xs text-ember-400/60">
                       <span className="flex items-center gap-1.5">
                         <Users className="w-3.5 h-3.5" />
-                        {campaign._count.characters} Player{campaign._count.characters !== 1 ? 's' : ''}
+                        {campaign._count.characters} {pluralize(campaign._count.characters, 'Player')}
                       </span>
                       <span className="flex items-center gap-1.5">
                         <BookOpen className="w-3.5 h-3.5" />
-                        {campaign._count.scenes} Session{campaign._count.scenes !== 1 ? 's' : ''}
+                        {campaign._count.scenes} {pluralize(campaign._count.scenes, 'Session')}
                       </span>
                       <span>{formatRelativeTime(campaign.updatedAt)}</span>
                     </div>

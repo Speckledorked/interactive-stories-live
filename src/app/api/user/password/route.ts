@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
-import bcrypt from 'bcryptjs'
+import { hashPassword, verifyPassword } from '@/lib/password'
 import { handleRouteError } from '@/lib/api/errors'
 
 export async function POST(request: NextRequest) {
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify current password
-    const isValid = await bcrypt.compare(currentPassword, user.password)
+    const isValid = await verifyPassword(currentPassword, user.password)
     if (!isValid) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Current password is incorrect' },
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10)
+    const hashedPassword = await hashPassword(newPassword)
 
     // Update password
     await prisma.user.update({

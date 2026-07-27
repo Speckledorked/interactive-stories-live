@@ -3,6 +3,7 @@
 // This is the heart of the AI GM system
 
 import { prisma } from '@/lib/prisma'
+import { truncateWithEllipsis } from '@/lib/format'
 import { callAIGM } from '@/lib/ai/client'
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
 import { applyWorldUpdates, summarizeWorldUpdates, enrichStubNPCs, enrichStubFactions } from './stateUpdater'
@@ -1089,7 +1090,7 @@ export function fallbackSummaryFromSceneText(sceneText: string): string {
   // raw ones to avoid double spaces between sentences.
   const summary = sentences.slice(0, 3).map(s => s.trim()).join(' ')
   if (summary) return summary
-  return sceneText.slice(0, 300) + (sceneText.length > 300 ? '...' : '')
+  return truncateWithEllipsis(sceneText, 300)
 }
 
 /**

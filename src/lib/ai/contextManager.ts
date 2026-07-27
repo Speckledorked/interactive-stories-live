@@ -9,6 +9,7 @@
  */
 
 import { PrismaClient, Scene, MemoryImportance } from '@prisma/client';
+import { truncateWithEllipsis } from '@/lib/format';
 
 export interface CompressedEvent {
   sceneNumber: number;
@@ -209,7 +210,7 @@ function summarizeSceneText(text: string): string {
   if (text.length <= 200) return text;
 
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  if (sentences.length === 0) return text.substring(0, 200) + '...';
+  if (sentences.length === 0) return truncateWithEllipsis(text, 200);
 
   // Try to fit 1-2 sentences within 200 chars
   let summary = sentences[0].trim();
@@ -217,7 +218,7 @@ function summarizeSceneText(text: string): string {
     summary += '. ' + sentences[1].trim();
   }
 
-  return summary.length > 200 ? summary.substring(0, 197) + '...' : summary;
+  return truncateWithEllipsis(summary, 200, 197);
 }
 
 /**

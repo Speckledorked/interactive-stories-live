@@ -970,6 +970,11 @@ export default function StoryPage() {
                         <h2 className="text-xl font-bold text-ember-100">
                           Scene {scene.sceneNumber}
                         </h2>
+                        {campaign?.worldMeta?.currentInGameDate && (
+                          <span className="text-xs text-ember-400/50">
+                            {campaign.worldMeta.currentInGameDate}
+                          </span>
+                        )}
                         {/* Scene mood indicators */}
                         <div className="flex gap-2">
                           {detectSceneMood(currentStageText).map((mood, idx) => (

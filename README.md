@@ -339,6 +339,16 @@ Re-examined rather than re-asserted, and the decision holds with evidence behind
 - *Evidence:* each site read in full context; none has an `if (x.length > N)` guard before appending `'...'`.
 - *Scope:* shared-utilities pass — real, but a behavior change, not a refactor; no action taken.
 
+**`stableHash`/`clamp` left in `lib/game/tick/types.ts`, not relocated to a shared-utils location (#134)** — both are genuinely generic (no tick-specific logic) and genuinely shared already: `stableHash` has 8 importers, `clamp` has 8, spread across `leadershipTick.ts`, `clockTick.ts`, `warTick.ts`, `npcSocietyTick.ts`, `ambitionTick.ts`, `weatherTick.ts`, `npcTick.ts`, `downtimeEventOutcome.ts`, `worldUpdaters/characters.ts`, `consequences.ts`, `factionTick.ts`, `ambitionResolution.ts`, and `tension.ts`. A domain-named file living at a "tick types" path is the wrong home for them on paper. Not moved: every one of those importers sits inside the world-simulation tick pipeline — this pass's most sensitive, most test-covered code — and relocating a used-everywhere function for organizational tidiness alone is real blast radius (16 import paths to update) for zero behavior change and zero functional gain. New consumers (`bannerIconFor` in this pass) were pointed at the existing path instead. Flagged for a future pass if a real shared-utils module structure is adopted app-wide.
+- *Evidence:* `grep -rl "from '@/lib/game/tick/types'"` for both symbols across `src/lib/game/`.
+- *Scope:* shared-utilities pass — judgment call, not a defect; no action taken.
+
+**No `cn()`/classnames-merge helper introduced, despite ~59 files that could use one (#135)** — nearly every component in `src/components` and `src/app` builds conditional Tailwind class strings with inline ternaries and template literals (`` `${base} ${active ? 'x' : 'y'}` ``) rather than a small merge helper (the common `clsx`/`tailwind-merge` pattern). A real, widespread duplication in shape, but this pass's mandate is explicit — "do not introduce new utilities unless directly required to support the refactor" — and nothing here required one; it would be a genuinely new utility, not a consolidation of existing ones. Not added. Flagged as a candidate for a future pass, and one that would need a product decision (which library, or a hand-rolled version) rather than a mechanical extraction.
+- *Scope:* shared-utilities pass — real gap, deliberately out of mandate; no action taken.
+
+**`getInitials`/`getColorFromName` left as private helpers inside `CharacterAvatar.tsx`, not relocated (#136)** — both are genuinely single-use (no duplicate of either exists anywhere else in `src/`, confirmed by grep for `getColorFromName` and for `getInitials`'s distinctive `split(/\s+/)` pattern), so there's no duplication to eliminate by moving them. Left in place rather than relocated to `src/lib/format.ts` alongside this pass's other additions: moving single-use, component-local helpers into a shared module with no second caller isn't consolidating scattered helpers, it's relocation for its own sake, and this pass's mandate is to eliminate duplication and consolidate what's actually scattered — not to centralize everything utility-shaped regardless of use count.
+- *Scope:* shared-utilities pass — judgment call, not a defect; no action taken.
+
 ## Roadmap
 
 ### 🎯 Next — Product & Market

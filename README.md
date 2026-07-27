@@ -51,6 +51,12 @@ sitting unnoticed.
   what a player can roll next session. This is the most differentiated
   thing in the codebase — consequences are remembered mechanically, not
   just narratively.
+- **World-visibility digest** — a background world turn's MAJOR, discovered
+  drama (a war declared, a faction falling, new leadership) reaches every
+  member as a notification, and is also written permanently into the
+  campaign's Rumors feed (`/wiki?type=RUMORS`) — so what the world did while
+  nobody was watching is a lasting, revisitable record, not just a
+  transient alert.
 - **Fog of war** — hidden factions/NPCs/locations, GM-only notes, and exact
   simulation numbers never reach player-facing text or prompts, enforced at
   the query layer through a single shared gate rather than by convention at
@@ -247,6 +253,7 @@ speculation, not stale carryover.
 | `consequences.ts`'s `findNpcByName`/`findFactionByName` use exact-then-`contains` matching, which can cross-match an entity whose name is a substring of another's (e.g. "Bob" matching "Bobby's Assistant") — the exact failure mode the safer fuzzy matcher elsewhere in the codebase was built to prevent. | Consequence engine | Minor | Open |
 | The identical "not a member of this campaign" check returns 403 at ~37 call sites but 404 at 2 (`members/[userId]/route.ts`, `.../ban/route.ts`), with different wording. | API routes | Minor | Open |
 | Four `substring`/`slice` truncation call sites append `'...'` unconditionally, regardless of whether the text actually exceeds the length limit, producing a spurious ellipsis on short strings. | UI / shared utilities | Minor | Open |
+| `formatDigestLine`'s leadership-change case checked `field === 'leader' \| 'leadership'`, but the real leadership-succession tick writes `field: 'factionRole'` — every real leadership-change notification silently fell through to the generic "there's talk of upheaval" line instead of the intended, more specific one. Found live via a production database check. Fixed: `factionRole` now maps to the same specific line. | Notifications / world tick | Minor | Fixed |
 
 ## Priority List
 

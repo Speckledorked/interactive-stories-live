@@ -132,7 +132,7 @@ export async function runWorldTurn(campaignId: string) {
     // becomes a "word on the street" notification for every member — the
     // living world reaching players instead of running silently. Best
     // effort; never blocks the turn.
-    await sendWorldDigest(campaignId, worldTick.changes)
+    await sendWorldDigest(campaignId, worldTick.changes, currentTurn)
 
     // 5. Periodically roll up old, low-importance memories so the RAG table
     // doesn't grow unbounded over a long campaign — every 10 turns is often

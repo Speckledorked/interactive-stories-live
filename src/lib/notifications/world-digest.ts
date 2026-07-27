@@ -5,6 +5,15 @@
 // actually discovered become one "word on the street" notification per
 // campaign member — the retention hook for a world that moves offscreen.
 //
+// The notification alone used to be the only record — its actionUrl
+// pointed at the Story Log, which never actually contained the digest's
+// text. Each digest-worthy change is now also written as a permanent,
+// player-readable TimelineEvent (isOffscreen, PUBLIC), the same feed
+// worldTurnOffscreenEvents.ts's AI-generated events already write into
+// and the Rumors tab (/campaigns/[id]/wiki?type=RUMORS) already reads —
+// so "word on the street" survives past the transient notification that
+// announced it, instead of being a second, disconnected logging path.
+//
 // Fog of war note: tick `reason` strings are GM-grade (they can name
 // undiscovered factions — see the admin debug viewer), so the digest
 // never uses them. Each line is built from a per-field template plus the
@@ -13,6 +22,7 @@
 import { prisma } from '@/lib/prisma'
 import { NotificationService } from './notification-service'
 import type { WorldChange } from '@/lib/game/tick/types'
+import type { EventType, EventVisibility } from '@prisma/client'
 
 // At most this many rumor lines per turn — a digest, not a firehose.
 export const MAX_DIGEST_LINES = 3
@@ -52,9 +62,39 @@ export function formatDigestLine(change: WorldChange): string {
       return `A new power calling itself ${name} is making its presence felt.`
     case 'leader':
     case 'leadership':
+    case 'factionRole':
       return `Word is that ${name} answers to new leadership.`
     default:
       return `There's talk of upheaval around ${name}.`
+  }
+}
+
+/**
+ * Pure: a short category title for the journal entry (the Rumors tab
+ * renders title and summary as separate fields — see wiki/page.tsx's
+ * RUMORS view). Mirrors formatDigestLine's cases exactly; kept as a
+ * separate function rather than returning a tuple so formatDigestLine's
+ * existing signature and callers stay untouched.
+ */
+export function titleForDigestChange(change: WorldChange): string {
+  switch (change.field) {
+    case 'warDeclared':
+      return 'War Declared'
+    case 'warJoined':
+      return 'New Ally in the War'
+    case 'warResolved':
+    case 'warEnded':
+      return 'War Ended'
+    case 'collapsed':
+      return 'A Power Has Fallen'
+    case 'founded':
+      return 'A New Power Rises'
+    case 'leader':
+    case 'leadership':
+    case 'factionRole':
+      return 'New Leadership'
+    default:
+      return 'Word on the Street'
   }
 }
 
@@ -65,7 +105,8 @@ export function formatDigestLine(change: WorldChange): string {
  */
 export async function sendWorldDigest(
   campaignId: string,
-  changes: WorldChange[]
+  changes: WorldChange[],
+  currentTurn: number
 ): Promise<number> {
   try {
     if (changes.length === 0) return 0
@@ -94,6 +135,23 @@ export async function sendWorldDigest(
     const lines = selected.map(formatDigestLine)
     const message = lines.join('\n')
 
+    // Journal: independent try/catch — a journal-write failure must not
+    // cost players the notification itself, the same reasoning behind
+    // catching each member's notification individually below.
+    await prisma.timelineEvent.createMany({
+      data: selected.map(change => ({
+        campaignId,
+        turnNumber: currentTurn,
+        title: titleForDigestChange(change),
+        summaryPublic: formatDigestLine(change),
+        isOffscreen: true,
+        visibility: 'PUBLIC' as EventVisibility,
+        eventType: 'WORLD_EVENT' as EventType,
+      })),
+    }).catch((err: unknown) => {
+      console.error('World digest journal write failed (non-critical):', err)
+    })
+
     await Promise.all(
       members.map(m =>
         NotificationService.createNotification({
@@ -102,7 +160,7 @@ export async function sendWorldDigest(
           message,
           userId: m.userId,
           campaignId,
-          actionUrl: `/campaigns/${campaignId}/story-log`,
+          actionUrl: `/campaigns/${campaignId}/wiki?type=RUMORS`,
           metadata: { digest: true, lineCount: lines.length },
         }).catch((err: unknown) => {
           console.error('World digest notification failed (non-critical):', err)

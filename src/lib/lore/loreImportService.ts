@@ -13,7 +13,7 @@ import type { LoreImportJob } from '@prisma/client'
 import { generateEmbedding, embeddingToPostgresVector } from '@/lib/ai/embeddingService'
 import { chunkText, type TextChunk } from './textChunker'
 import { extractFromHtml } from './htmlExtractor'
-import { detectApiBase, listAllPages, fetchExtracts } from './mediaWikiClient'
+import { detectApiBase, listAllPages, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from './mediaWikiClient'
 
 // A wiki crawl runs inside a single worker invocation (see the internal
 // route's maxDuration) — capped well short of "the whole internet" so one
@@ -62,11 +62,7 @@ async function importUrl(job: LoreImportJob): Promise<void> {
 
   await prisma.loreImportJob.update({ where: { id: job.id }, data: { pagesFound: 1 } })
 
-  const res = await fetch(url, { headers: { 'User-Agent': 'MythOS-LoreImport/1.0' } })
-  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`)
-  const html = await res.text()
-
-  const page = extractFromHtml(html, job.sourceTitle || url)
+  const page = await fetchSinglePage(url, job.sourceTitle)
   if (!page.text.trim()) throw new Error('No readable text found at that URL')
 
   const chunks = chunkText(page.text, job.sourceTitle || page.title)
@@ -76,6 +72,36 @@ async function importUrl(job: LoreImportJob): Promise<void> {
     where: { id: job.id },
     data: { pagesDone: 1, entriesCreated: { increment: stored } },
   })
+}
+
+/**
+ * Fetch one page's readable text for the single-URL import path,
+ * preferring the source wiki's own MediaWiki API when the URL points at
+ * one. Confirmed live against Fandom: a direct fetch of a wiki page's HTML
+ * (e.g. ".../wiki/Category:Characters") gets a flat 403 from Fandom's
+ * Cloudflare bot protection regardless of User-Agent — including a full
+ * browser User-Agent string — while that same wiki's api.php stays open.
+ * A single-page URL pointed at any MediaWiki wiki (Fandom above all —
+ * it's the most common host for exactly the fan-lore pages this feature
+ * targets) now goes through the API instead of hitting that wall.
+ */
+async function fetchSinglePage(url: string, sourceTitle?: string | null): Promise<{ title: string; text: string }> {
+  const apiBase = await detectApiBase(url)
+  const pageTitle = apiBase ? pageTitleFromUrl(url) : null
+
+  if (apiBase && pageTitle) {
+    const text = await fetchPageViaParse(apiBase, pageTitle)
+    if (text && text.trim()) {
+      return { title: sourceTitle || pageTitle, text }
+    }
+  }
+
+  // Not a MediaWiki site, or the API-based fetch came back empty — fall
+  // back to fetching the page's own HTML directly, exactly as before.
+  const res = await fetch(url, { headers: { 'User-Agent': 'MythOS-LoreImport/1.0' } })
+  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`)
+  const html = await res.text()
+  return extractFromHtml(html, sourceTitle || url)
 }
 
 async function importWiki(job: LoreImportJob): Promise<void> {

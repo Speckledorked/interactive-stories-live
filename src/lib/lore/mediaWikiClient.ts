@@ -7,6 +7,8 @@
 // MediaWiki, detectApiBase() returns null and the caller falls back to
 // treating the URL as a single page instead.
 
+import { extractFromHtml } from './htmlExtractor'
+
 export interface WikiPageSummary {
   pageId: number
   title: string
@@ -89,6 +91,17 @@ export async function listAllPages(apiBase: string, maxPages = 500): Promise<Wik
  * Fetch the plain-text extract (rendered article text, no wikitext markup)
  * for one or more page titles in a single request. MediaWiki caps
  * multi-title extract requests, so callers should batch in groups of ~20.
+ *
+ * `prop=extracts` needs the TextExtracts extension, which is NOT a given —
+ * confirmed empirically against Fandom (harrypotter.fandom.com,
+ * leagueoflegends.fandom.com, and others all reject it as an unrecognized
+ * parameter, while Wikipedia supports it fine). Since Fandom is the single
+ * most likely wiki host a MythOS user actually points this at, any title
+ * this call comes back empty for is retried individually through
+ * fetchPageViaParse below — action=parse is a core API action every
+ * MediaWiki install has, unlike TextExtracts. Without this fallback, a
+ * whole-wiki import against a TextExtracts-less wiki silently succeeds
+ * with pagesDone === pagesFound and zero entries created.
  */
 export async function fetchExtracts(apiBase: string, titles: string[]): Promise<Map<string, string>> {
   const result = new Map<string, string>()
@@ -102,20 +115,75 @@ export async function fetchExtracts(apiBase: string, titles: string[]): Promise<
     format: 'json',
   })
 
-  const res = await fetch(`${apiBase}?${params.toString()}`, {
-    headers: { 'User-Agent': 'MythOS-LoreImport/1.0' },
-  })
-  if (!res.ok) return result
-
-  const data = await res.json()
-  const pages = data?.query?.pages
-  if (!pages || typeof pages !== 'object') return result
-
-  for (const page of Object.values(pages) as any[]) {
-    if (page?.title && typeof page.extract === 'string' && page.extract.trim()) {
-      result.set(page.title, page.extract)
+  try {
+    const res = await fetch(`${apiBase}?${params.toString()}`, {
+      headers: { 'User-Agent': 'MythOS-LoreImport/1.0' },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      const pages = data?.query?.pages
+      if (pages && typeof pages === 'object') {
+        for (const page of Object.values(pages) as any[]) {
+          if (page?.title && typeof page.extract === 'string' && page.extract.trim()) {
+            result.set(page.title, page.extract)
+          }
+        }
+      }
     }
+  } catch {
+    // Falls through to the per-title fallback below for every title.
+  }
+
+  const missing = titles.filter(title => !result.has(title))
+  if (missing.length > 0) {
+    const fallbacks = await Promise.all(missing.map(title => fetchPageViaParse(apiBase, title)))
+    fallbacks.forEach((text, i) => {
+      if (text && text.trim()) result.set(missing[i], text)
+    })
   }
 
   return result
+}
+
+/**
+ * Extract a MediaWiki page title from a canonical article URL (the
+ * ".../wiki/Page_Title" shape every MediaWiki site uses, Fandom included).
+ * Returns null for a URL that isn't an article link (e.g. just the wiki's
+ * root, or a query-string-based URL some older installs use).
+ */
+export function pageTitleFromUrl(url: string): string | null {
+  try {
+    const { pathname } = new URL(url)
+    const match = pathname.match(/\/wiki\/(.+)$/)
+    if (!match) return null
+    const decoded = decodeURIComponent(match[1]).replace(/_/g, ' ')
+    return decoded.trim() || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Render one page via action=parse and pull its plain text out of the
+ * rendered HTML with the same cheerio-based extractor the single-URL
+ * importer uses for arbitrary web pages. The universal fallback for a wiki
+ * without TextExtracts (see fetchExtracts above) — every MediaWiki install
+ * supports action=parse, since it's what the wiki's own page-view feature
+ * is built on.
+ */
+export async function fetchPageViaParse(apiBase: string, title: string): Promise<string | null> {
+  const params = new URLSearchParams({ action: 'parse', page: title, prop: 'text', format: 'json' })
+  try {
+    const res = await fetch(`${apiBase}?${params.toString()}`, {
+      headers: { 'User-Agent': 'MythOS-LoreImport/1.0' },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const html = data?.parse?.text?.['*']
+    if (typeof html !== 'string' || !html.trim()) return null
+    const { text } = extractFromHtml(html, title)
+    return text
+  } catch {
+    return null
+  }
 }

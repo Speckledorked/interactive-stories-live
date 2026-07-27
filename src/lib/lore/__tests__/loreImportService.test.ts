@@ -17,11 +17,13 @@ vi.mock('../mediaWikiClient', () => ({
   detectApiBase: vi.fn(),
   listAllPages: vi.fn(),
   fetchExtracts: vi.fn(),
+  fetchPageViaParse: vi.fn(),
+  pageTitleFromUrl: vi.fn(),
 }))
 
 import { prisma } from '@/lib/prisma'
 import { generateEmbedding } from '@/lib/ai/embeddingService'
-import { detectApiBase, listAllPages, fetchExtracts } from '../mediaWikiClient'
+import { detectApiBase, listAllPages, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from '../mediaWikiClient'
 import { runLoreImport } from '../loreImportService'
 
 function makeJob(overrides: Partial<any> = {}) {
@@ -100,6 +102,56 @@ describe('runLoreImport', () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
       const job = makeJob({ sourceType: 'URL', sourceUrl: 'https://example.com/missing' })
       await expect(runLoreImport(job as any)).rejects.toThrow('Failed to fetch')
+    })
+
+    it('prefers the MediaWiki API when the URL points at a wiki page, never touching raw fetch', async () => {
+      // Confirmed live: Fandom's Cloudflare protection 403s a direct page
+      // fetch regardless of User-Agent, while api.php stays open — this is
+      // the fix for that.
+      const fetchSpy = vi.fn()
+      vi.stubGlobal('fetch', fetchSpy)
+      vi.mocked(detectApiBase).mockResolvedValue('https://example.fandom.com/api.php')
+      vi.mocked(pageTitleFromUrl).mockReturnValue('Category:Characters')
+      vi.mocked(fetchPageViaParse).mockResolvedValue('Full page text from the wiki API.')
+
+      const job = makeJob({ sourceType: 'URL', sourceUrl: 'https://example.fandom.com/wiki/Category:Characters' })
+      await runLoreImport(job as any)
+
+      expect(fetchPageViaParse).toHaveBeenCalledWith('https://example.fandom.com/api.php', 'Category:Characters')
+      expect(fetchSpy).not.toHaveBeenCalled()
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
+    })
+
+    it('falls back to raw fetch when the API path resolves but returns no content', async () => {
+      const fetchSpy = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => '<html><body><h1>Fallback</h1><p>Fetched directly.</p></body></html>',
+      })
+      vi.stubGlobal('fetch', fetchSpy)
+      vi.mocked(detectApiBase).mockResolvedValue('https://example.fandom.com/api.php')
+      vi.mocked(pageTitleFromUrl).mockReturnValue('Some Page')
+      vi.mocked(fetchPageViaParse).mockResolvedValue(null)
+
+      const job = makeJob({ sourceType: 'URL', sourceUrl: 'https://example.fandom.com/wiki/Some_Page' })
+      await runLoreImport(job as any)
+
+      expect(fetchSpy).toHaveBeenCalledWith('https://example.fandom.com/wiki/Some_Page', expect.any(Object))
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
+    })
+
+    it('falls back to raw fetch when the URL is not a MediaWiki site at all', async () => {
+      const fetchSpy = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => '<html><body><h1>A Blog Post</h1><p>Not a wiki.</p></body></html>',
+      })
+      vi.stubGlobal('fetch', fetchSpy)
+      vi.mocked(detectApiBase).mockResolvedValue(null)
+
+      const job = makeJob({ sourceType: 'URL', sourceUrl: 'https://example.com/blog-post' })
+      await runLoreImport(job as any)
+
+      expect(fetchPageViaParse).not.toHaveBeenCalled()
+      expect(fetchSpy).toHaveBeenCalledWith('https://example.com/blog-post', expect.any(Object))
     })
   })
 

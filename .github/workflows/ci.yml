@@ -1,5 +1,9 @@
 # CI: typecheck + tests, and a rehearsal of the deploy's database step.
 # Tests are fully mocked (no database needed) — see src/**/__tests__.
+# One exception: warTick.faultInjection.test.ts uses a real Postgres
+# connection, but only when RUN_DB_TESTS=1 is set — unset here, so it
+# no-ops in this job exactly like every other test file. Run it locally
+# against the dev DB when touching game/integrity/ or warTick.ts.
 name: CI
 
 on:

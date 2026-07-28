@@ -142,6 +142,13 @@ enum WorldEventTargetType {
   NPC
   FACTION
   LOCATION_WEATHER
+  // Added for the Integrity Engine (game/integrity/) — repairs to these
+  // entity types are logged as WorldEvents the same way tick changes are.
+  CLOCK
+  QUEST
+  WAR
+  CHARACTER
+  DEBT
 }
 
 //

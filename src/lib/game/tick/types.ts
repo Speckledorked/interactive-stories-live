@@ -8,7 +8,7 @@
 // back a list of WorldChange entries so the engine can log the significant
 // ones to campaign history.
 
-export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER'
+export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT'
 
 export interface WorldChange {
   entityType: TickEntityType

@@ -23,6 +23,7 @@ import { tickWars } from './tick/warTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
 import { tickNpcs } from './tick/npcTick'
 import { tickNpcSocialTies, tickNpcJointSchemes } from './tick/npcSocietyTick'
+import { tickIntegrity } from './tick/integrityTick'
 import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
@@ -58,7 +59,11 @@ import { resolveTickCaps } from './tick/caps'
 // don't feed back into it). tickNpcJointSchemes runs immediately after
 // that, in the same pass, so a scheme can use the ties this turn just
 // established rather than waiting a full extra tick (see npcSocietyTick.ts).
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickFactionAmbitions, tickNpcs, tickNpcSocialTies, tickNpcJointSchemes]
+// tickIntegrity runs LAST, deliberately: it validates the state every
+// other handler above just produced (see game/integrity/ — the structural
+// tier of the Integrity Engine), so it needs to see this turn's writes, not
+// last turn's. See its own file for what it does and doesn't repair.
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickFactionAmbitions, tickNpcs, tickNpcSocialTies, tickNpcJointSchemes, tickIntegrity]
 
 /**
  * Run one deterministic world tick for a campaign.

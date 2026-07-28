@@ -156,7 +156,15 @@ export async function clearPendingWorldSeed(campaignId: string): Promise<void> {
   })
 }
 
-export async function reseedWorldFromLore(campaignId: string): Promise<ReseedResult> {
+export interface ReseedOptions {
+  // Admin opt-in: overwrite stat labels from canon even in live mode,
+  // where everything else stays fill-only/additive. See the schema
+  // comment on ReseedJob.forceStatLabels for why this one field is safe
+  // to treat differently.
+  forceStatLabels?: boolean
+}
+
+export async function reseedWorldFromLore(campaignId: string, options: ReseedOptions = {}): Promise<ReseedResult> {
   const campaign = await prisma.campaign.findUnique({ where: { id: campaignId } })
   if (!campaign) return { ok: false, reason: 'not_found' }
 
@@ -281,9 +289,12 @@ export async function reseedWorldFromLore(campaignId: string): Promise<ReseedRes
   // actual play introduced anyone — this closes that gap on every reseed,
   // not just at creation.
   // --- Stat labels -----------------------------------------------------------
-  // Fresh: canon replaces the provisional labels. Live: fill-only.
+  // Fresh: canon replaces the provisional labels. Live: fill-only, unless
+  // the admin explicitly asked to overwrite (options.forceStatLabels) —
+  // see ReseedOptions above for why this one field gets an escape hatch
+  // the rest of live mode doesn't.
   let statLabelsSet = false
-  if (generated.statLabels && (fresh || !campaign.statLabels)) {
+  if (generated.statLabels && (fresh || !campaign.statLabels || options.forceStatLabels)) {
     await prisma.campaign.update({
       where: { id: campaignId },
       data: { statLabels: generated.statLabels as object },

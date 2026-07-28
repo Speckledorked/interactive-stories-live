@@ -69,6 +69,9 @@ export async function POST(
     const auth = await requireAdmin(request, campaignId)
     if (auth.error) return auth.error
 
+    const body = await request.json().catch(() => ({}))
+    const forceStatLabels = body?.forceStatLabels === true
+
     const rateLimit = await checkRateLimit(
       auth.user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds
     )
@@ -86,7 +89,7 @@ export async function POST(
       )
     }
 
-    const job = await prisma.reseedJob.create({ data: { campaignId } })
+    const job = await prisma.reseedJob.create({ data: { campaignId, forceStatLabels } })
     await kickReseedJob(job.id)
 
     return NextResponse.json({ job }, { status: 202 })

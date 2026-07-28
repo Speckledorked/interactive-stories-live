@@ -99,7 +99,7 @@ describe('applyWorldUpdates — delegation', () => {
     )
     expect(applyTimelineEventChanges).toHaveBeenCalledWith(tx, 'camp1', 42, [{ title: 'X' }], undefined)
     expect(applyCharacterChanges).toHaveBeenCalledWith(
-      tx, 'camp1', 42, expect.anything(), expect.anything(), expect.any(Function), true
+      tx, 'camp1', 42, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), true
     )
   })
 })
@@ -166,7 +166,7 @@ describe('applyWorldUpdates — sceneOrigin (fog of war) threading', () => {
     expect(applyFactionChanges).toHaveBeenCalledWith(tx, 'camp1', expect.anything(), expect.anything(), false)
     expect(applyLocationChanges).toHaveBeenCalledWith(tx, 'camp1', expect.anything(), false)
     expect(applyCharacterChanges).toHaveBeenCalledWith(
-      tx, 'camp1', 1, expect.anything(), expect.anything(), expect.any(Function), false
+      tx, 'camp1', 1, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), false
     )
   })
 
@@ -205,8 +205,8 @@ describe('applyWorldUpdates — corruption theme memoization', () => {
 
   it('looks the theme up at most once even when two appliers both request it', async () => {
     ;(applyCharacterChanges as any).mockImplementation(async (...args: any[]) => {
-      await args[5]() // getCorruptionTheme
-      await args[5]()
+      await args[6]() // getCorruptionTheme
+      await args[6]()
       return []
     })
     ;(applyBargainOffers as any).mockImplementation(async (...args: any[]) => {
@@ -229,9 +229,9 @@ describe('applyWorldUpdates — corruption theme memoization', () => {
   it('caches a null theme too, rather than re-querying every time', async () => {
     tx.campaign.findUnique = vi.fn(async () => ({ corruptionTheme: null })) as any
     ;(applyCharacterChanges as any).mockImplementation(async (...args: any[]) => {
-      await args[5]()
-      await args[5]()
-      await args[5]()
+      await args[6]()
+      await args[6]()
+      await args[6]()
       return []
     })
 

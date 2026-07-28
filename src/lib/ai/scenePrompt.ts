@@ -133,7 +133,7 @@ You MUST respond with a JSON object matching this structure:
           "harm_healing": 0,
           "conditions_add": [{"name": "Bleeding", "category": "Physical", "description": "...", "mechanicalEffect": "..."}],
           "location": "New location",
-          "relationship_changes": [{"entity_id": "npc_123", "entity_name": "Guard Captain", "trust_delta": 10, "reason": "Saved their life"}],
+          "relationship_changes": [{"entity_id": "the NPC's real id from the NPCS list, or repeat their exact name if you don't have it", "entity_name": "Guard Captain", "trust_delta": 10, "reason": "Saved their life"}],
           "consequences_add": [{"type": "promise", "description": "Swore to return for the child"}, {"type": "debt", "description": "Vashti's people got them out of the district", "counterparty_name": "Vashti", "counterparty_type": "npc", "direction": "owed_by_character"}],
           "appearance_changes": {"description": "Deep scar on cheek", "append": true},
           "equipment_changes": {"weapon": {"action": "remove", "value": "Broken sword"}},

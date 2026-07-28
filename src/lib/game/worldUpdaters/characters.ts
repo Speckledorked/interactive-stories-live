@@ -126,6 +126,7 @@ export async function applyCharacterChanges(
   currentTurnNumber: number,
   pcChanges: PcChange[],
   charactersForResolution: Character[],
+  npcsForResolution: Array<{ id: string; name: string }>,
   getCorruptionTheme: () => Promise<CorruptionTheme | null>,
   sceneOrigin: boolean
 ): Promise<string[]> {
@@ -450,9 +451,29 @@ export async function applyCharacterChanges(
     // Phase 14: Process relationship changes
     if (pcChange.changes.relationship_changes && pcChange.changes.relationship_changes.length > 0) {
       const currentRelationships: any = (character.relationships as any) || {}
+      let anyRelationshipApplied = false
 
       for (const relChange of pcChange.changes.relationship_changes) {
-        const entityId = relChange.entity_id
+        // Resolve to a real NPC row before writing. This map is keyed by NPC
+        // id and every reader looks it up that way (resolution.ts's roll
+        // lookup, socialTies.ts, questFailure.ts) — so writing the AI's raw
+        // entity_id created a key nothing would ever read, silently costing
+        // the change entirely. This was the only applier that skipped
+        // resolveEntityByNameOrId, and the prompt's own example shows a
+        // placeholder-shaped id ("npc_123"), so the miss was routine rather
+        // than exceptional. entity_id first (correct when the AI echoes a
+        // real id), then entity_name, which is what it reliably gets right.
+        const relResolution = resolveEntityByNameOrId(npcsForResolution, relChange.entity_id)
+        const resolved = relResolution.kind === 'found'
+          ? relResolution
+          : resolveEntityByNameOrId(npcsForResolution, relChange.entity_name)
+
+        if (resolved.kind !== 'found') {
+          console.warn(`  ⚠️ Relationship change for unresolvable NPC "${relChange.entity_name}" (id "${relChange.entity_id}") — skipping rather than writing a key no roll would read`)
+          continue
+        }
+
+        const entityId = resolved.entity.id
         const currentRel = currentRelationships[entityId] || {
           trust: 0,
           tension: 0,
@@ -468,10 +489,16 @@ export async function applyCharacterChanges(
           fear: relChange.fear_delta !== undefined ? clamp(currentRel.fear + relChange.fear_delta, -100, 100) : currentRel.fear
         }
 
+        anyRelationshipApplied = true
         console.log(`  🤝 ${character.name} → ${relChange.entity_name}: ${relChange.reason}`)
       }
 
-      updateData.relationships = currentRelationships
+      // Only write when something actually resolved — a batch where every
+      // change named an unknown NPC shouldn't rewrite the column with an
+      // unchanged value.
+      if (anyRelationshipApplied) {
+        updateData.relationships = currentRelationships
+      }
     }
 
     // Debts reported through the consequence channel (#69). Collected here

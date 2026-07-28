@@ -100,7 +100,9 @@ export async function applyWorldUpdates(
       const clocksForResolution = world_updates.clock_changes?.length
         ? await tx.clock.findMany({ where: { campaignId } })
         : []
-      const npcsForResolution = world_updates.npc_changes?.length
+      // pc_changes needs this roster too: relationship_changes name an NPC,
+      // and resolving them requires the same roster npc_changes uses.
+      const npcsForResolution = (world_updates.npc_changes?.length || world_updates.pc_changes?.length)
         ? await tx.nPC.findMany({ where: { campaignId } })
         : []
       const charactersForResolution = (world_updates.npc_changes?.length || world_updates.pc_changes?.length)
@@ -126,7 +128,7 @@ export async function applyWorldUpdates(
       // 4. Update player characters
       if (world_updates.pc_changes) {
         const gateRefusals = await applyCharacterChanges(
-          tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, getCorruptionTheme, sceneOrigin
+          tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, npcsForResolution, getCorruptionTheme, sceneOrigin
         )
         // Corruption gates (#83) refusing a move is a real world event, not
         // a silent no-op — a character the narrator described walking into

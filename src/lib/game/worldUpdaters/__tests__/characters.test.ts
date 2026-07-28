@@ -27,6 +27,13 @@ const makeTx = () => ({
 let tx: ReturnType<typeof makeTx>
 const noTheme = vi.fn().mockResolvedValue(null)
 
+// relationship_changes resolve against the real NPC roster before being
+// written, so the map stays keyed by ids that readers actually look up.
+const npcRoster = [
+  { id: 'npc1', name: 'Lord Kessler' },
+  { id: 'npc2', name: 'Vashti' },
+]
+
 beforeEach(() => {
   tx = makeTx()
   vi.mocked(applyDebtChanges).mockClear()
@@ -54,7 +61,7 @@ describe('applyCharacterChanges — resolution', () => {
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { location: 'The Docks' } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     expect(tx.character.update).toHaveBeenCalledWith({
       where: { id: 'char1' },
@@ -65,7 +72,7 @@ describe('applyCharacterChanges — resolution', () => {
   it('does nothing (and does not throw) for an unresolvable character', async () => {
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'Nobody', changes: { location: 'Nowhere' } } as PcChange,
-    ], [], noTheme, true)
+    ], [], npcRoster, noTheme, true)
     expect(tx.character.update).not.toHaveBeenCalled()
   })
 })
@@ -75,7 +82,7 @@ describe('applyCharacterChanges — location FK sync', () => {
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 4, [
       { character_name_or_id: 'char1', changes: { location: 'The Rookery' } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     expect(resolveOrCreateLocationId).toHaveBeenCalledWith(tx, 'camp1', 'The Rookery', true)
   })
 
@@ -83,7 +90,7 @@ describe('applyCharacterChanges — location FK sync', () => {
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 4, [
       { character_name_or_id: 'char1', changes: { location: 'The Rookery' } } as PcChange,
-    ], roster, noTheme, false)
+    ], roster, npcRoster, noTheme, false)
     expect(resolveOrCreateLocationId).toHaveBeenCalledWith(tx, 'camp1', 'The Rookery', false)
   })
 
@@ -91,7 +98,7 @@ describe('applyCharacterChanges — location FK sync', () => {
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 4, [
       { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     expect(resolveOrCreateLocationId).not.toHaveBeenCalled()
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.locationId).toBeUndefined()
@@ -106,7 +113,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
     })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { harm_damage: 3 } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     expect(tx.character.update).toHaveBeenCalledWith({
       where: { id: 'char1' },
@@ -118,7 +125,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
     const roster = [character({ harm: 4 })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { harm_healing: 2 } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.harm).toBe(2)
     expect(data.isAlive).toBeUndefined()
@@ -129,7 +136,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
     const roster = [character({ harm: 4 })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { rest_quality: 'excellent' } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     expect(tx.character.update.mock.calls[0][0].data.harm).toBe(2)
   })
 
@@ -143,7 +150,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
     })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { rest_quality: 'excellent' } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     expect(tx.character.update.mock.calls[0][0].data.harm).toBe(4)
   })
 
@@ -157,7 +164,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
           rest_quality: 'adequate',                                     // -1
         },
       } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     expect(tx.character.update.mock.calls[0][0].data.harm).toBe(2)
   })
 
@@ -173,7 +180,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
     })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.conditions.restHours).toBe(18)
@@ -187,7 +194,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
     const roster = [character({ harm: 1 })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     const blob = tx.character.update.mock.calls[0][0].data.conditions
     expect(Object.keys(blob).sort()).toEqual(
@@ -202,7 +209,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
         character_name_or_id: 'char1',
         changes: { conditions_add: [{ name: 'Shaken', category: 'Emotional', description: 'Rattled by the ambush.', mechanicalEffect: '-1 to cool' }] },
       } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.conditions.conditions).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'Shaken' })])
@@ -215,7 +222,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
     })]
     await applyCharacterChanges(tx as any, 'camp1', 2, [
       { character_name_or_id: 'char1', changes: { conditions_remove: ['shaken'] } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.conditions.conditions).toEqual([])
   })
@@ -226,7 +233,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
     const roster = [character({ harm: 3 })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { harm_damage: 3 } } as PcChange, // 3 -> 6, crosses the Taken Out threshold
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     // performRecoveryRoll's >=10 branch reduces harm back down to 4.
     expect(data.harm).toBe(4)
@@ -239,7 +246,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
     })]
     await applyCharacterChanges(tx as any, 'camp1', 2, [
       { character_name_or_id: 'char1', changes: { death_save_result: 'success' } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.conditions.conditions.some((c: any) => c.name === 'Critically Dying')).toBe(false)
   })
@@ -248,7 +255,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { heroic_sacrifice: { circumstances: 'Held the bridge alone', effect: 'The others escaped' } } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.isAlive).toBe(false)
   })
@@ -259,7 +266,7 @@ describe('applyCharacterChanges — corruption', () => {
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { corruption_change: { marks: 1, reason: 'Used the forbidden rite' } } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     expect(tx.character.update).not.toHaveBeenCalled()
   })
 
@@ -268,7 +275,7 @@ describe('applyCharacterChanges — corruption', () => {
     const roster = [character({ corruption: 1 })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { corruption_change: { marks: 1, reason: 'Used the forbidden rite' } } } as PcChange,
-    ], roster, theme, true)
+    ], roster, npcRoster, theme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.corruption).toBe(2)
   })
@@ -279,7 +286,7 @@ describe('applyCharacterChanges — appearance, personality, equipment', () => {
     const roster = [character({ appearance: 'A long scar across one cheek.' })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { appearance_changes: { description: 'Now walks with a limp.', append: true } } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.appearance).toBe('A long scar across one cheek. Now walks with a limp.')
   })
@@ -288,7 +295,7 @@ describe('applyCharacterChanges — appearance, personality, equipment', () => {
     const roster = [character({ personality: 'Cheerful and trusting.' })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { personality_changes: { description: 'Withdrawn and suspicious of everyone.', append: false } } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.personality).toBe('Withdrawn and suspicious of everyone.')
   })
@@ -300,7 +307,7 @@ describe('applyCharacterChanges — appearance, personality, equipment', () => {
         character_name_or_id: 'char1',
         changes: { equipment_changes: { weapon: { action: 'add', value: 'rapier' }, armor: { action: 'remove', value: 'leather jerkin' } } },
       } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.equipment).toEqual({ weapon: 'rapier', armor: '' })
   })
@@ -311,7 +318,7 @@ describe('applyCharacterChanges — inventory', () => {
     const roster = [character({ inventory: { items: [{ id: 'p1', name: 'Healing Potion', quantity: 1 }] } })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { inventory_changes: { items_add: [{ id: 'p1', name: 'Healing Potion', quantity: 2 }] } } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     // grantedTurn is stamped on every grant so the next rarity-budget
     // check can derive spend from the inventory itself (#44/#47) — a fresh
@@ -329,7 +336,7 @@ describe('applyCharacterChanges — inventory', () => {
     })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { inventory_changes: { items_remove: ['p1'] } } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.harm).toBe(2)
     expect(data.inventory.items).toEqual([])
@@ -342,7 +349,7 @@ describe('applyCharacterChanges — inventory', () => {
     })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { inventory_changes: { items_modify: [{ id: 'p1', quantity_delta: -2 }] } } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.harm).toBe(3) // 5 - (1 heal x 2 units consumed)
     expect(data.inventory.items[0].quantity).toBe(1)
@@ -355,7 +362,7 @@ describe('applyCharacterChanges — inventory', () => {
     })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { inventory_changes: { items_remove: ['c1'] } } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.harm).toBeUndefined()
   })
@@ -367,7 +374,7 @@ describe('applyCharacterChanges — resources and relationships', () => {
     const roster = [character({ resources: { gold: 5, contacts: [], reputation: {} } })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { resource_changes: { gold_delta: -20 } } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.resources.gold).toBe(0)
   })
@@ -376,7 +383,7 @@ describe('applyCharacterChanges — resources and relationships', () => {
     const roster = [character({ resources: { gold: 0, contacts: ['Old Marta'], reputation: {} } })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { resource_changes: { contacts_add: ['Old Marta'] } } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.resources.contacts).toEqual(['Old Marta'])
   })
@@ -385,9 +392,44 @@ describe('applyCharacterChanges — resources and relationships', () => {
     const roster = [character({ relationships: { npc1: { trust: 95, tension: 0, respect: 0, fear: 0 } } })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { relationship_changes: [{ entity_id: 'npc1', entity_name: 'Lord Kessler', trust_delta: 20, reason: 'A grand gesture' }] } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.relationships.npc1.trust).toBe(100)
+  })
+
+  // The map is keyed by NPC id and every reader looks it up that way
+  // (resolution.ts's roll lookup, socialTies.ts, questFailure.ts), so an
+  // unresolved key is a change that silently never applies to anything.
+  it('keys a relationship change by the resolved NPC id when the AI sends a name as the id', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { relationship_changes: [{ entity_id: 'Lord Kessler', entity_name: 'Lord Kessler', trust_delta: 10, reason: 'Saved their life' }] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.relationships.npc1.trust).toBe(10)
+    expect(data.relationships['Lord Kessler']).toBeUndefined()
+  })
+
+  it('falls back to entity_name when entity_id is a placeholder the AI invented', async () => {
+    // The prompt's own example used to show "npc_123", so this is the
+    // routine case rather than the exceptional one.
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { relationship_changes: [{ entity_id: 'npc_123', entity_name: 'Vashti', trust_delta: -5, reason: 'Broke a promise' }] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.relationships.npc2.trust).toBe(-5)
+    expect(data.relationships.npc_123).toBeUndefined()
+  })
+
+  it('skips a relationship change naming an NPC that does not exist, rather than writing an orphan key', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { relationship_changes: [{ entity_id: 'ghost', entity_name: 'Someone Who Never Existed', trust_delta: 10, reason: 'x' }] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    // Nothing resolved, so there is nothing to write at all — not even an
+    // unchanged relationships column.
+    expect(tx.character.update).not.toHaveBeenCalled()
   })
 })
 
@@ -396,7 +438,7 @@ describe('applyCharacterChanges — delegation to debt/standing/capability write
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { debt_changes: [{ counterparty_name: 'Lord Kessler', counterparty_type: 'npc', direction: 'owed_by_character', action: 'incur', description: 'A favor', reason: 'x' }] } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     expect(applyDebtChanges).toHaveBeenCalledWith(tx, 'camp1', 'char1', 'Jason', expect.any(Array), 3)
   })
 
@@ -411,7 +453,7 @@ describe('applyCharacterChanges — delegation to debt/standing/capability write
           ],
         },
       } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     const changes = vi.mocked(applyDebtChanges).mock.calls[0][4]
     expect(changes).toEqual([
@@ -442,7 +484,7 @@ describe('applyCharacterChanges — delegation to debt/standing/capability write
           consequences_add: [{ type: 'debt', description: 'Owed the Guild', counterparty_name: 'Thieves Guild', counterparty_type: 'faction' }],
         },
       } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     expect(applyDebtChanges).toHaveBeenCalledTimes(1)
     const changes = vi.mocked(applyDebtChanges).mock.calls[0][4]
@@ -455,7 +497,7 @@ describe('applyCharacterChanges — delegation to debt/standing/capability write
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { consequences_add: [{ type: 'debt', description: 'Owes someone, somewhere' }] } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     expect(applyDebtChanges).not.toHaveBeenCalled()
     const data = tx.character.update.mock.calls[0][0].data
@@ -474,7 +516,7 @@ describe('applyCharacterChanges — delegation to debt/standing/capability write
           ],
         },
       } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.consequences.promises).toEqual(['Swore to return for the child'])
@@ -484,7 +526,7 @@ describe('applyCharacterChanges — delegation to debt/standing/capability write
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { standing_changes: [{ faction_name: 'The Ashen Circle', delta: 1, reason: 'x' }] } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     expect(applyStandingChanges).toHaveBeenCalledWith(tx, 'camp1', 'char1', 'Jason', expect.any(Array))
   })
 
@@ -492,7 +534,7 @@ describe('applyCharacterChanges — delegation to debt/standing/capability write
     const roster = [character()]
     await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { capability_changes: [{ capability_key: 'lockpicking', change: 'glimpse', reason: 'Watched a master pick a lock' }] } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
     expect(applyCapabilityChanges).toHaveBeenCalledWith(tx, 'camp1', 'char1', expect.any(Array), 3, 'scene')
   })
 })
@@ -560,7 +602,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
 
     const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'The High Temple' } } as PcChange,
-    ], roster, theme, true)
+    ], roster, npcRoster, theme, true)
 
     expect(refusals).toHaveLength(1)
     expect(refusals[0]).toContain('The High Temple')
@@ -575,7 +617,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
 
     const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'The Drowned Shrine' } } as PcChange,
-    ], roster, theme, true)
+    ], roster, npcRoster, theme, true)
 
     expect(refusals).toHaveLength(1)
   })
@@ -586,7 +628,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
 
     const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'The Drowned Shrine' } } as PcChange,
-    ], roster, theme, true)
+    ], roster, npcRoster, theme, true)
 
     expect(refusals).toEqual([])
     expect(tx.character.update.mock.calls[0][0].data.currentLocation).toBe('The Drowned Shrine')
@@ -598,7 +640,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
 
     const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'The High Temple' } } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     expect(refusals).toEqual([])
     expect(tx.character.update.mock.calls[0][0].data.currentLocation).toBe('The High Temple')
@@ -610,7 +652,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
     const roster = [character({ corruption: 5 })]
     await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
-    ], roster, theme, true)
+    ], roster, npcRoster, theme, true)
     expect(tx.location.findUnique).not.toHaveBeenCalled()
   })
 
@@ -622,7 +664,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
 
     const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'Anywhere' } } as PcChange,
-    ], roster, theme, true)
+    ], roster, npcRoster, theme, true)
 
     expect(refusals).toEqual([])
     expect(tx.character.update.mock.calls[0][0].data.currentLocation).toBe('Anywhere')
@@ -635,7 +677,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
 
     const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'A Nameless Hollow' } } as PcChange,
-    ], roster, theme, true)
+    ], roster, npcRoster, theme, true)
 
     expect(refusals).toEqual([])
   })
@@ -648,7 +690,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
 
     await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'The High Temple' } } as PcChange,
-    ], roster, theme, true)
+    ], roster, npcRoster, theme, true)
 
     const data = tx.character.update.mock.calls[0]?.[0]?.data
     expect(data?.harm).toBeUndefined()
@@ -672,7 +714,7 @@ describe('applyCharacterChanges — stock condition effects', () => {
         character_name_or_id: 'char1',
         changes: { conditions_add: [{ name: 'Bleeding', category: 'Physical', description: 'Bleeding badly.' }] },
       } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     const data = tx.character.update.mock.calls[0][0].data
     const bleeding = data.conditions.conditions.find((c: any) => c.name === 'Bleeding')
@@ -686,7 +728,7 @@ describe('applyCharacterChanges — stock condition effects', () => {
         character_name_or_id: 'char1',
         changes: { conditions_add: [{ name: 'Enraged', category: 'Emotional', description: 'Furious.' }] },
       } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     const data = tx.character.update.mock.calls[0][0].data
     const enraged = data.conditions.conditions.find((c: any) => c.name === 'Enraged')
@@ -700,7 +742,7 @@ describe('applyCharacterChanges — stock condition effects', () => {
         character_name_or_id: 'char1',
         changes: { conditions_add: [{ name: 'Bleeding', category: 'Physical', description: 'Arterial.', harmPerScene: 3 }] },
       } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.conditions.conditions.find((c: any) => c.name === 'Bleeding').harmPerScene).toBe(3)
@@ -713,7 +755,7 @@ describe('applyCharacterChanges — stock condition effects', () => {
         character_name_or_id: 'char1',
         changes: { conditions_add: [{ name: 'Moonstruck', category: 'Special', description: 'Touched by the moon.', rollModifier: -1 }] },
       } as PcChange,
-    ], roster, noTheme, true)
+    ], roster, npcRoster, noTheme, true)
 
     const data = tx.character.update.mock.calls[0][0].data
     const invented = data.conditions.conditions.find((c: any) => c.name === 'Moonstruck')

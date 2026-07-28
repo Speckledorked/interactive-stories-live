@@ -4,7 +4,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     war: { findMany: vi.fn(), update: vi.fn(), create: vi.fn() },
     faction: { update: vi.fn(), findMany: vi.fn() },
-    location: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+    location: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
     warParticipant: { create: vi.fn(), createMany: vi.fn() },
   },
 }))
@@ -173,6 +173,41 @@ describe('tickWars coalitions', () => {
     expect(prisma.faction.update).not.toHaveBeenCalled()
   })
 
+  // Regression: this path used a bare location.update, which throws P2025 on
+  // a missing row. The tick is not transactional, so that took down the whole
+  // world turn partway through — after the accumulator had already been reset
+  // by worldTurn's atomic claim, so the banked hours were gone and the
+  // half-applied state was never retried.
+  it('resolves a collapsed-side war without throwing when the contested location is gone', async () => {
+    const attackerA = makeFaction('att-a', { military: 90, isActive: false })
+    const defender = makeFaction('def-a', { military: 50 })
+
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([{
+      id: 'war-1',
+      campaignId: 'campaign-1',
+      name: 'Test War',
+      attackerFactionId: 'att-a',
+      defenderFactionId: 'def-a',
+      contestedLocationId: 'deleted-loc',
+      momentum: 0,
+      startedTurn: 1,
+      attacker: attackerA,
+      defender,
+      participants: [
+        makeParticipant('war-1', 'att-a', 'ATTACKER', attackerA),
+        makeParticipant('war-1', 'def-a', 'DEFENDER', defender),
+      ],
+    }] as any)
+    // updateMany matches zero rows rather than throwing, which is the point.
+    vi.mocked(prisma.location.updateMany).mockResolvedValueOnce({ count: 0 } as any)
+
+    await expect(tickWars(baseCtx({ turnNumber: 2 }))).resolves.toBeDefined()
+
+    expect(prisma.war.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'RESOLVED' }) })
+    )
+  })
+
   it('does NOT end the war when a coalition partner collapses but the primary side still has a living member', async () => {
     const attackerA = makeFaction('att-a', { military: 60, isActive: true })
     const attackerB = makeFaction('att-b', { military: 60, isActive: false }) // this partner collapsed
@@ -247,6 +282,39 @@ describe('tickWars coalitions', () => {
     const locationUpdateCall = vi.mocked(prisma.location.update).mock.calls.find((c) => (c[0] as any).where.id === 'loc-1')
     expect(locationUpdateCall).toBeTruthy()
     expect((locationUpdateCall![0] as any).data.ownerFactionId).toBe('att-a')
+  })
+
+  // Companion regression to the one above: the findUnique here was only ever
+  // read for the location's NAME, so a war whose prize had been deleted still
+  // fell through to an update that throws P2025 and killed the turn.
+  it('resolves a decisive win without throwing when the contested location is gone', async () => {
+    const attackerA = makeFaction('att-a', { military: 95 })
+    const defender = makeFaction('def-a', { military: 5 })
+
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([{
+      id: 'war-1',
+      campaignId: 'campaign-1',
+      name: 'Test War',
+      attackerFactionId: 'att-a',
+      defenderFactionId: 'def-a',
+      contestedLocationId: 'deleted-loc',
+      momentum: 50,
+      startedTurn: 1,
+      attacker: attackerA,
+      defender,
+      participants: [
+        makeParticipant('war-1', 'att-a', 'ATTACKER', attackerA),
+        makeParticipant('war-1', 'def-a', 'DEFENDER', defender),
+      ],
+    }] as any)
+    vi.mocked(prisma.location.findUnique).mockResolvedValueOnce(null as any)
+
+    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+
+    expect(result.changes.some((c) => c.field === 'warResolved')).toBe(true)
+    expect(
+      vi.mocked(prisma.location.update).mock.calls.some((c) => (c[0] as any).where.id === 'deleted-loc')
+    ).toBe(false)
   })
 
   it('pulls in an eligible ally as a new WarParticipant', async () => {

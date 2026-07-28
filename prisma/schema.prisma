@@ -1023,6 +1023,8 @@ model Location {
   // Reverse side of Character.locationId / NPC.locationId.
   characters Character[]
   npcs       NPC[]
+  // Reverse side of War.contestedLocationId.
+  contestedInWars War[] @relation("WarContestedLocation")
 
   @@unique([campaignId, name])
   @@index([campaignId])
@@ -1066,7 +1068,13 @@ model War {
   name                String
   attackerFactionId   String
   defenderFactionId   String
-  contestedLocationId String? // the specific prize this war is over, if any
+  // The specific prize this war is over, if any. A real FK with SetNull
+  // (matching Location.ownerFactionId / Clock.sourceFactionId): this was a
+  // bare id with no relation, and warTick.ts's resolution path does an
+  // unguarded location.update on it — a deleted Location made that throw
+  // P2025 mid-tick, which (the tick not being transactional) left the world
+  // turn half-applied with its banked hours already spent.
+  contestedLocationId String?
 
   // -100 (total defender advantage) .. +100 (total attacker advantage).
   momentum Int       @default(0)
@@ -1080,9 +1088,10 @@ model War {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  campaign     Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  attacker     Faction          @relation("WarsAsAttacker", fields: [attackerFactionId], references: [id], onDelete: Cascade)
-  defender     Faction          @relation("WarsAsDefender", fields: [defenderFactionId], references: [id], onDelete: Cascade)
+  campaign         Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  attacker         Faction   @relation("WarsAsAttacker", fields: [attackerFactionId], references: [id], onDelete: Cascade)
+  defender         Faction   @relation("WarsAsDefender", fields: [defenderFactionId], references: [id], onDelete: Cascade)
+  contestedLocation Location? @relation("WarContestedLocation", fields: [contestedLocationId], references: [id], onDelete: SetNull)
   // Every faction actually fighting in this war, both sides — including the
   // original attacker/defender (given their own rows at declaration time),
   // so all war-math can read participants uniformly instead of special-
@@ -1092,6 +1101,7 @@ model War {
   @@index([campaignId])
   @@index([attackerFactionId])
   @@index([defenderFactionId])
+  @@index([contestedLocationId])
 }
 
 model WarParticipant {

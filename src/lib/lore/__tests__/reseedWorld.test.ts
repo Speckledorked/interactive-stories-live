@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { planFactionMerge, planFrontMerge, reseedWorldFromLore } from '../reseedWorld'
+import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
 import { generateMoveFlavor } from '@/lib/ai/moveFlavor'
 import { createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
@@ -183,6 +184,71 @@ describe('reseedWorldFromLore — archetype regeneration', () => {
       expect.any(Promise),
       expect.any(Promise),
     ])
+  })
+})
+
+describe('reseedWorldFromLore — stat labels', () => {
+  const canonLabels = { cool: { name: 'Recovery', description: 'x' } }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'Test', description: '', universe: 'Original',
+      initialWorldSeed: '', statLabels: { cool: { name: 'Steady', description: 'y' } }, corruptionTheme: null,
+    })
+    db.faction.findMany.mockResolvedValue([])
+    db.faction.updateMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.findMany.mockResolvedValue([])
+    db.campaignCapability.deleteMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.createMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.updateMany.mockResolvedValue({ count: 0 })
+    db.clock.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([])
+    db.location.findMany.mockResolvedValue([])
+    db.move.findMany.mockResolvedValue([])
+    db.move.deleteMany.mockResolvedValue({ count: 0 })
+    db.move.createMany.mockResolvedValue({ count: 0 })
+    db.campaignArchetype.count.mockResolvedValue(4)
+    db.campaignArchetype.deleteMany.mockResolvedValue({ count: 0 })
+    db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
+    db.$transaction.mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops))
+    vi.mocked(generateWorldFromTemplate).mockResolvedValue({
+      factions: [], capabilities: [], statLabels: canonLabels, fronts: [],
+    } as any)
+  })
+
+  it('live mode leaves existing stat labels alone by default', async () => {
+    db.character.count.mockResolvedValue(2)
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.summary.statLabelsSet).toBe(false)
+    expect(db.campaign.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ statLabels: expect.anything() }) })
+    )
+  })
+
+  it('live mode overwrites stat labels when the admin passes forceStatLabels', async () => {
+    db.character.count.mockResolvedValue(2)
+
+    const result = await reseedWorldFromLore('camp1', { forceStatLabels: true })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.summary.statLabelsSet).toBe(true)
+    expect(db.campaign.update).toHaveBeenCalledWith({
+      where: { id: 'camp1' },
+      data: { statLabels: canonLabels },
+    })
+  })
+
+  it('fresh mode always replaces stat labels, forceStatLabels or not', async () => {
+    db.character.count.mockResolvedValue(0)
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.summary.statLabelsSet).toBe(true)
   })
 })
 

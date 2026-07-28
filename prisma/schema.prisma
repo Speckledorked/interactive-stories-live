@@ -2417,6 +2417,17 @@ model ReseedJob {
   // is released once this job reaches a terminal state.
   releasesPlayLock Boolean @default(false)
 
+  // Admin opt-in only: normally a "live" campaign (characters already
+  // exist) treats stat labels as fill-only, same as everything else in
+  // live mode — never overwriting what's already in play. Stat labels are
+  // pure display flavor over the five fixed stat keys (see
+  // lib/pbta-moves.ts), never the underlying numbers a character's sheet
+  // stores, so overwriting them retroactively is safe in a way overwriting
+  // factions/archetypes would not be. This lets an admin who imported lore
+  // (or generated a character) before getting canon-accurate labels fix
+  // that without a full fresh-mode reseed touching anything else.
+  forceStatLabels Boolean @default(false)
+
   // The completed run's summary (ReseedSummary), so the admin UI can
   // render exactly what changed without re-deriving it.
   summary Json?

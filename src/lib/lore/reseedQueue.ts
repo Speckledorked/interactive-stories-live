@@ -92,7 +92,7 @@ export async function processReseedJob(jobId: string): Promise<ProcessResult> {
   if (!job) return { status: 'skipped' }
 
   try {
-    const result = await reseedWorldFromLore(job.campaignId)
+    const result = await reseedWorldFromLore(job.campaignId, { forceStatLabels: job.forceStatLabels })
 
     if (!result.ok) {
       // "no_lore"/"not_found" are genuinely done — no amount of retrying

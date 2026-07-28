@@ -50,13 +50,13 @@ describe('processReseedJob', () => {
   it('runs the reseed and completes on success, storing the summary', async () => {
     db.reseedJob.updateMany.mockResolvedValue({ count: 1 })
     db.reseedJob.findUnique.mockResolvedValue({
-      id: 'job1', campaignId: 'camp1', attempts: 1, releasesPlayLock: false,
+      id: 'job1', campaignId: 'camp1', attempts: 1, releasesPlayLock: false, forceStatLabels: false,
     })
     ;(reseedWorldFromLore as any).mockResolvedValue({ ok: true, summary: { fresh: true } } as any)
 
     const result = await processReseedJob('job1')
 
-    expect(reseedWorldFromLore).toHaveBeenCalledWith('camp1')
+    expect(reseedWorldFromLore).toHaveBeenCalledWith('camp1', { forceStatLabels: false })
     expect(db.reseedJob.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED', summary: { fresh: true } }) })
     )

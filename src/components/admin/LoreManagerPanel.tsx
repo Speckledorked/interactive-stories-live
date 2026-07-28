@@ -217,6 +217,13 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
 
   const [reseedStarting, setReseedStarting] = useState(false)
   const [reseedStartError, setReseedStartError] = useState<string | null>(null)
+  // Everything else in live mode (characters already exist) is additive-only
+  // by design — this is the one field an admin can explicitly choose to
+  // overwrite, since it's just display flavor over the fixed stat keys and
+  // never touches a character's actual stat values. Off by default so a
+  // routine "add more lore" reseed never silently changes labels a table
+  // has already gotten used to.
+  const [forceStatLabels, setForceStatLabels] = useState(false)
 
   const reseedInFlight = reseedStarting || reseedJob?.status === 'PENDING' || reseedJob?.status === 'RUNNING'
 
@@ -225,12 +232,17 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
       'Regenerate the world\'s structure from imported lore?\n\n' +
       'While the campaign has no characters yet, the generated world is REPLACED ' +
       'by the canon one (non-canon factions are retired). Once characters exist, ' +
-      'canon factions and systems are only ADDED — nothing in play is touched.'
+      'canon factions and systems are only ADDED — nothing in play is touched.' +
+      (forceStatLabels ? '\n\nStat labels will be OVERWRITTEN from canon, replacing whatever is set now.' : '')
     )) return
     setReseedStarting(true)
     setReseedStartError(null)
     try {
-      const res = await authenticatedFetch(`/api/campaigns/${campaignId}/reseed-from-lore`, { method: 'POST' })
+      const res = await authenticatedFetch(`/api/campaigns/${campaignId}/reseed-from-lore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forceStatLabels }),
+      })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to start reseed')
       setReseedJob(data.job)
@@ -337,6 +349,19 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
           exist the generated world is replaced by the canon one; once characters exist, canon factions and
           systems are only added alongside what&apos;s already in play.
         </p>
+        <label className="mb-3 flex items-start gap-2 text-xs text-myth-ink-muted">
+          <input
+            type="checkbox"
+            checked={forceStatLabels}
+            onChange={(e) => setForceStatLabels(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            Also overwrite stat labels from canon, even if characters already exist. Stat labels are just display
+            names over the fixed underlying stats — safe to change any time, existing characters&apos; numbers
+            aren&apos;t affected.
+          </span>
+        </label>
         <button
           type="button"
           onClick={handleReseed}

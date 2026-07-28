@@ -1,0 +1,37 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+const runIntegrityPass = vi.hoisted(() => vi.fn())
+vi.mock('../../integrity/runIntegrityPass', () => ({ runIntegrityPass }))
+vi.mock('@/lib/prisma', () => ({ prisma: {} }))
+
+import { tickIntegrity } from '../integrityTick'
+import type { TickContext } from '../types'
+
+function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
+  return { campaignId: 'camp1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, ...overrides }
+}
+
+beforeEach(() => vi.clearAllMocks())
+
+describe('tickIntegrity', () => {
+  it('returns the changes from runIntegrityPass, threading campaignId/turnNumber/dryRun through', async () => {
+    runIntegrityPass.mockResolvedValue({
+      changes: [{ entityType: 'CHARACTER', field: 'relationships' }],
+      report: { violationsFound: 1, repairsApplied: 1, unrepaired: [] },
+    })
+
+    const result = await tickIntegrity(baseCtx({ campaignId: 'camp1', turnNumber: 9, dryRun: true }))
+
+    expect(runIntegrityPass).toHaveBeenCalledWith(expect.anything(), 'camp1', 9, { dryRun: true })
+    expect(result.changes).toHaveLength(1)
+  })
+
+  it('returns an empty changes array on a clean pass', async () => {
+    runIntegrityPass.mockResolvedValue({
+      changes: [],
+      report: { violationsFound: 0, repairsApplied: 0, unrepaired: [] },
+    })
+    const result = await tickIntegrity(baseCtx())
+    expect(result.changes).toEqual([])
+  })
+})

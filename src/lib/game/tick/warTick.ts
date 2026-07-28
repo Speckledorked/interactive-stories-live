@@ -299,7 +299,12 @@ async function resolveWarProgress(
           data: { status: 'RESOLVED', outcome: 'stalemate', resolvedTurn: ctx.turnNumber },
         })
         if (war.contestedLocationId) {
-          await prisma.location.update({ where: { id: war.contestedLocationId }, data: { isContested: false } })
+          // updateMany, not update: this is a "lift the siege if that place
+          // still exists" write, and update throws P2025 on a missing row.
+          // The FK added alongside this makes a dangling id impossible at
+          // rest, but the war row was read earlier in the tick, so a delete
+          // landing in between would still take the whole turn down.
+          await prisma.location.updateMany({ where: { id: war.contestedLocationId }, data: { isContested: false } })
         }
       }
       changes.push({
@@ -370,7 +375,11 @@ async function resolveWarProgress(
       const contestedLocation = await prisma.location.findUnique({ where: { id: war.contestedLocationId } })
       contestedLocationName = contestedLocation?.name ?? null
 
-      if (!ctx.dryRun) {
+      // Guarded on the row we just fetched: the findUnique above was only
+      // being read for the name, so a contested Location that had gone
+      // missing still fell through to an update that throws P2025 — mid-tick,
+      // with no transaction to roll the rest of the turn back.
+      if (!ctx.dryRun && contestedLocation) {
         if (resolution.outcome === 'attacker') {
           // The prize goes only to the original attacker — an ally fighting
           // alongside doesn't inherit territory it never personally claimed.

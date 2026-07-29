@@ -6,7 +6,6 @@
 // Math.random(). Same tick number always produces the same weather for a
 // given location, so results are reproducible.
 
-import { prisma } from '@/lib/prisma'
 import type { Location, WeatherCondition } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, clamp, stableHash } from './types'
 
@@ -47,7 +46,7 @@ export function decideNextWeather(
 }
 
 export async function tickWeather(ctx: TickContext): Promise<TickHandlerResult> {
-  const locations = await prisma.location.findMany({
+  const locations = await ctx.db.location.findMany({
     where: { campaignId: ctx.campaignId },
   })
 
@@ -69,7 +68,7 @@ export async function tickWeather(ctx: TickContext): Promise<TickHandlerResult> 
     }
 
     if (!ctx.dryRun) {
-      await prisma.location.update({
+      await ctx.db.location.update({
         where: { id: location.id },
         data: {
           weather: decision.nextCondition,

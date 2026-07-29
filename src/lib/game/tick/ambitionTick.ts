@@ -22,7 +22,6 @@
 // active (incomplete) spawned clock, this handler leaves it alone until
 // that clock resolves.
 
-import { prisma } from '@/lib/prisma'
 import type { FactionGoal, FactionArchetype } from '@prisma/client'
 import { HIGH_BAND_MIN } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange, PendingAmbition, clamp, findRivalId, stableHash } from './types'
@@ -160,7 +159,7 @@ export function decideAmbitionTick(faction: {
 }
 
 export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandlerResult> {
-  const factions = await prisma.faction.findMany({
+  const factions = await ctx.db.faction.findMany({
     where: {
       campaignId: ctx.campaignId,
       isActive: true,
@@ -180,7 +179,7 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
   // tournament while its army bleeds. Because tickWars runs earlier in the
   // handler order (see worldTick.ts), this also covers wars declared or
   // joined THIS tick, not just pre-existing ones.
-  const warParticipants = await prisma.warParticipant.findMany({
+  const warParticipants = await ctx.db.warParticipant.findMany({
     where: { war: { campaignId: ctx.campaignId, status: 'ESCALATING' } },
     select: { factionId: true },
   })
@@ -210,7 +209,7 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
     let targetFactionName: string | undefined
     if (faction.goal === 'DESTABILIZE_RIVAL') {
       const rivalId = findRivalId(faction.relationships)
-      const rival = rivalId ? await prisma.faction.findUnique({ where: { id: rivalId } }) : null
+      const rival = rivalId ? await ctx.db.faction.findUnique({ where: { id: rivalId } }) : null
       if (rival?.isActive) {
         targetFactionId = rival.id
         targetFactionName = rival.name
@@ -219,7 +218,7 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
 
     const resourcesAfterCost = clamp(faction.resources - decision.resourceCost, 0, 100)
     if (!ctx.dryRun) {
-      await prisma.faction.update({
+      await ctx.db.faction.update({
         where: { id: faction.id },
         data: { resources: resourcesAfterCost },
       })

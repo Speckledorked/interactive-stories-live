@@ -52,7 +52,23 @@ export async function runWorldTurnIfDue(campaignId: string): Promise<{ ran: bool
     return { ran: false }
   }
 
-  await runWorldTurn(campaignId)
+  try {
+    await runWorldTurn(campaignId)
+  } catch (error) {
+    // Phase 3: runWorldTick's own writes now roll back cleanly on failure,
+    // but runWorldTurn does real work beyond it (clocks, offscreen AI
+    // narration, digests) that a transaction can't cover. Either way, the
+    // claim above already spent the banked hours — restore exactly what
+    // this attempt consumed (not overwrite) so a concurrent resolution's
+    // own banked hours in the meantime aren't clobbered, and the next
+    // heartbeat retries this turn instead of the hours being silently lost.
+    const consumedHours = worldMeta.hoursSinceWorldTurn - decision.remainingHours
+    await prisma.worldMeta.update({
+      where: { campaignId },
+      data: { hoursSinceWorldTurn: { increment: consumedHours } },
+    })
+    throw error
+  }
   return { ran: true }
 }
 

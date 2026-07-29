@@ -103,7 +103,7 @@ describeIfDb('War.contestedLocationId — real database fault injection', () => 
 
     const { tickWars } = await import('../warTick')
     const result = await tickWars({
-      campaignId, turnNumber: 2, factionCap: 10, npcCap: 20, dryRun: false,
+      campaignId, turnNumber: 2, factionCap: 10, npcCap: 20, dryRun: false, db: prisma,
     })
 
     const resolved = await prisma.war.findUniqueOrThrow({ where: { id: war.id } })

@@ -82,7 +82,13 @@ vi.mock('../historyLog', () => ({ logSignificantChanges: h.logSignificantChanges
 vi.mock('../wikiSync', () => ({ syncWikiEntriesForChanges: h.syncWikiEntriesForChanges }))
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { worldMeta: { findUnique: vi.fn(async () => ({ factionCap: 12, npcCap: 30 })) } },
+  prisma: {
+    worldMeta: { findUnique: vi.fn(async () => ({ factionCap: 12, npcCap: 30 })) },
+    // Phase 3: runWorldTick wraps every handler in one transaction on a
+    // real (non-dry-run) tick. The stub handlers above never touch `tx`
+    // themselves, so a bare pass-through is enough here.
+    $transaction: vi.fn(async (fn: any) => fn({})),
+  },
 }))
 
 import { runWorldTick } from '../../worldTick'

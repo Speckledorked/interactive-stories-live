@@ -18,7 +18,7 @@ import { tickFactionAmbitions } from '../ambitionTick'
 import type { TickContext } from '../types'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 function makeFaction(id: string, overrides: Record<string, any> = {}) {

@@ -35,7 +35,6 @@
 // tick, and wars declared this tick, don't get evaluated again until next
 // tick either, for the same reason.
 
-import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import { HIGH_BAND_MIN } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, parseFactionRelationships, stableHash } from './types'
@@ -243,7 +242,7 @@ type ActiveWar = Prisma.WarGetPayload<{
 }>
 
 export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
-  const activeWars = await prisma.war.findMany({
+  const activeWars = await ctx.db.war.findMany({
     where: { campaignId: ctx.campaignId, status: 'ESCALATING' },
     include: {
       attacker: true,
@@ -294,7 +293,7 @@ async function resolveWarProgress(
     if (attackerSide.length === 0 || defenderSide.length === 0) {
       resolvedWarIds.add(war.id)
       if (!ctx.dryRun) {
-        await prisma.war.update({
+        await ctx.db.war.update({
           where: { id: war.id },
           data: { status: 'RESOLVED', outcome: 'stalemate', resolvedTurn: ctx.turnNumber },
         })
@@ -304,7 +303,7 @@ async function resolveWarProgress(
           // The FK added alongside this makes a dangling id impossible at
           // rest, but the war row was read earlier in the tick, so a delete
           // landing in between would still take the whole turn down.
-          await prisma.location.updateMany({ where: { id: war.contestedLocationId }, data: { isContested: false } })
+          await ctx.db.location.updateMany({ where: { id: war.contestedLocationId }, data: { isContested: false } })
         }
       }
       changes.push({
@@ -332,7 +331,7 @@ async function resolveWarProgress(
     // the original two — a coalition shares the cost of fighting.
     if (!ctx.dryRun) {
       for (const p of attackerSide) {
-        await prisma.faction.update({
+        await ctx.db.faction.update({
           where: { id: p.factionId },
           data: {
             resources: clamp(p.faction.resources + progress.attackerResourceDelta, 0, 100),
@@ -341,7 +340,7 @@ async function resolveWarProgress(
         })
       }
       for (const p of defenderSide) {
-        await prisma.faction.update({
+        await ctx.db.faction.update({
           where: { id: p.factionId },
           data: {
             resources: clamp(p.faction.resources + progress.defenderResourceDelta, 0, 100),
@@ -356,7 +355,7 @@ async function resolveWarProgress(
 
     if (!resolution.resolves) {
       if (!ctx.dryRun) {
-        await prisma.war.update({ where: { id: war.id }, data: { momentum: newMomentum } })
+        await ctx.db.war.update({ where: { id: war.id }, data: { momentum: newMomentum } })
       }
       continue
     }
@@ -364,7 +363,7 @@ async function resolveWarProgress(
     resolvedWarIds.add(war.id)
 
     if (!ctx.dryRun) {
-      await prisma.war.update({
+      await ctx.db.war.update({
         where: { id: war.id },
         data: { momentum: newMomentum, status: 'RESOLVED', outcome: resolution.outcome, resolvedTurn: ctx.turnNumber },
       })
@@ -372,7 +371,7 @@ async function resolveWarProgress(
 
     let contestedLocationName: string | null = null
     if (war.contestedLocationId) {
-      const contestedLocation = await prisma.location.findUnique({ where: { id: war.contestedLocationId } })
+      const contestedLocation = await ctx.db.location.findUnique({ where: { id: war.contestedLocationId } })
       contestedLocationName = contestedLocation?.name ?? null
 
       // Guarded on the row we just fetched: the findUnique above was only
@@ -383,13 +382,13 @@ async function resolveWarProgress(
         if (resolution.outcome === 'attacker') {
           // The prize goes only to the original attacker — an ally fighting
           // alongside doesn't inherit territory it never personally claimed.
-          await prisma.location.update({
+          await ctx.db.location.update({
             where: { id: war.contestedLocationId },
             data: { ownerFactionId: war.attackerFactionId, isContested: false },
           })
         } else {
           // Defender holds, or it's a stalemate — either way the siege lifts.
-          await prisma.location.update({ where: { id: war.contestedLocationId }, data: { isContested: false } })
+          await ctx.db.location.update({ where: { id: war.contestedLocationId }, data: { isContested: false } })
         }
       }
     }
@@ -401,11 +400,11 @@ async function resolveWarProgress(
     if (!ctx.dryRun) {
       if (resolution.outcome === 'attacker') {
         for (const p of defenderSide) {
-          await prisma.faction.update({ where: { id: p.factionId }, data: { stability: clamp(p.faction.stability - 10, 0, 100) } })
+          await ctx.db.faction.update({ where: { id: p.factionId }, data: { stability: clamp(p.faction.stability - 10, 0, 100) } })
         }
       } else if (resolution.outcome === 'defender') {
         for (const p of attackerSide) {
-          await prisma.faction.update({ where: { id: p.factionId }, data: { stability: clamp(p.faction.stability - 10, 0, 100) } })
+          await ctx.db.faction.update({ where: { id: p.factionId }, data: { stability: clamp(p.faction.stability - 10, 0, 100) } })
         }
       }
     }
@@ -470,7 +469,7 @@ async function growWarCoalitions(
 
       if (candidateIds.size === 0) continue
 
-      const candidateFactions = await prisma.faction.findMany({
+      const candidateFactions = await ctx.db.faction.findMany({
         where: { id: { in: Array.from(candidateIds) }, campaignId: ctx.campaignId, isActive: true },
         select: { id: true, name: true, military: true },
       })
@@ -482,7 +481,7 @@ async function growWarCoalitions(
         if (!joiner) break
 
         if (!ctx.dryRun) {
-          await prisma.warParticipant.create({
+          await ctx.db.warParticipant.create({
             data: { warId: war.id, factionId: joiner.id, side, joinedTurn: ctx.turnNumber },
           })
         }
@@ -522,13 +521,13 @@ async function growWarCoalitions(
 async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): Promise<WorldChange[]> {
   const changes: WorldChange[] = []
 
-  const factions = await prisma.faction.findMany({
+  const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
     orderBy: { createdAt: 'asc' },
     take: ctx.factionCap,
   })
 
-  const locations = await prisma.location.findMany({
+  const locations = await ctx.db.location.findMany({
     where: { campaignId: ctx.campaignId },
     select: { id: true, name: true, ownerFactionId: true, isContested: true },
   })
@@ -536,7 +535,7 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
   // #79: the world remembers its own wars. Loaded once for the whole pass
   // rather than per pair — this is the read that was missing, not a new
   // write; resolvedTurn and outcome have been recorded since wars existed.
-  const priorWars = await prisma.war.findMany({
+  const priorWars = await ctx.db.war.findMany({
     where: { campaignId: ctx.campaignId, status: 'RESOLVED' },
     select: { attackerFactionId: true, defenderFactionId: true, resolvedTurn: true, outcome: true },
   })
@@ -566,7 +565,7 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
     const prizeLocation = locations.find((l) => l.id === decision.contestedLocationId)
 
     if (!ctx.dryRun) {
-      const createdWar = await prisma.war.create({
+      const createdWar = await ctx.db.war.create({
         data: {
           campaignId: ctx.campaignId,
           name: prizeLocation ? `War for ${prizeLocation.name}` : `${attacker.name} vs. ${defender.name}`,
@@ -576,7 +575,7 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
           startedTurn: ctx.turnNumber,
         },
       })
-      await prisma.warParticipant.createMany({
+      await ctx.db.warParticipant.createMany({
         data: [
           { warId: createdWar.id, factionId: attacker.id, side: 'ATTACKER', joinedTurn: ctx.turnNumber },
           { warId: createdWar.id, factionId: defender.id, side: 'DEFENDER', joinedTurn: ctx.turnNumber },

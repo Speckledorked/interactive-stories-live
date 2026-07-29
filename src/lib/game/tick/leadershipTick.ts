@@ -16,7 +16,6 @@
 // auto-promoted over a player, even if every affiliated NPC member outranks
 // them in importance. The player's leadership isn't a gap to fill.
 
-import { prisma } from '@/lib/prisma'
 import { TickContext, TickHandlerResult, WorldChange } from './types'
 
 /** One living, affiliated NPC considered for promotion. */
@@ -103,7 +102,7 @@ function compareCandidates(a: SuccessionCandidate, b: SuccessionCandidate): numb
 }
 
 export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandlerResult> {
-  const factions = await prisma.faction.findMany({
+  const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
     orderBy: { createdAt: 'asc' },
     take: ctx.factionCap,
@@ -124,7 +123,7 @@ export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandl
     if (!decision) continue
 
     if (!ctx.dryRun) {
-      await prisma.nPC.update({
+      await ctx.db.nPC.update({
         where: { id: decision.successorId },
         data: { factionRole: 'LEADER' },
       })

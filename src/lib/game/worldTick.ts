@@ -13,6 +13,15 @@
 // Phase 2+ features (rumors, economy, ecology, ...) plug in by adding
 // another handler to TICK_HANDLERS below. Nothing else about this file
 // needs to change for that to work.
+//
+// Integrity Engine Phase 3: a real (non-dry-run) tick runs every handler
+// inside one `prisma.$transaction`, via `ctx.db`. Previously a handler
+// throwing partway through left the turn partially applied — the pacing
+// accumulator that gated this turn had already been reset by the atomic
+// claim in worldTurn.ts, so a partial failure silently lost the banked
+// hours with no retry. Now a failed turn rolls back cleanly instead: every
+// handler writes through `ctx.db` (never the bare `prisma` singleton), and
+// worldTurn.ts restores the pacing accumulator when this throws.
 
 import { prisma } from '@/lib/prisma'
 import { tickWeather } from './tick/weatherTick'
@@ -65,6 +74,13 @@ import { resolveTickCaps } from './tick/caps'
 // last turn's. See its own file for what it does and doesn't repair.
 const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickFactionAmbitions, tickNpcs, tickNpcSocialTies, tickNpcJointSchemes, tickIntegrity]
 
+// Prisma's interactive-transaction default is 5s; this tick runs 10
+// handlers' worth of queries against real (if capped-at-10/20) rosters, well
+// past what that default budgets for. 20s leaves real headroom under the
+// cron sweep's per-invocation budget while still failing fast if a handler
+// is genuinely stuck rather than hanging the whole sweep.
+const TICK_TRANSACTION_TIMEOUT_MS = 20_000
+
 /**
  * Run one deterministic world tick for a campaign.
  *
@@ -86,14 +102,29 @@ export async function runWorldTick(
     select: { factionCap: true, npcCap: true },
   })
   const { factionCap, npcCap } = resolveTickCaps(worldMeta)
-  const ctx: TickContext = { campaignId, turnNumber, factionCap, npcCap, dryRun }
 
   const changes: WorldChange[] = []
   const pendingAmbitions: PendingAmbition[] = []
-  for (const handler of TICK_HANDLERS) {
-    const result = await handler(ctx)
-    changes.push(...result.changes)
-    if (result.pendingAmbitions) pendingAmbitions.push(...result.pendingAmbitions)
+
+  const runHandlers = async (db: TickContext['db']) => {
+    const ctx: TickContext = { campaignId, turnNumber, factionCap, npcCap, dryRun, db }
+    for (const handler of TICK_HANDLERS) {
+      const result = await handler(ctx)
+      changes.push(...result.changes)
+      if (result.pendingAmbitions) pendingAmbitions.push(...result.pendingAmbitions)
+    }
+  }
+
+  if (dryRun) {
+    // A preview has nothing to roll back — every handler already skips its
+    // own writes via ctx.dryRun — so this reads through the plain singleton
+    // rather than paying for a transaction that will never see a write.
+    await runHandlers(prisma)
+  } else {
+    // The real tick: one transaction across every handler, so a failure
+    // partway through (a thrown error, a violated constraint) leaves no
+    // partial state instead of committing whatever ran before the failure.
+    await prisma.$transaction(runHandlers, { timeout: TICK_TRANSACTION_TIMEOUT_MS })
   }
 
   // Dry run (World Sim Phase 8 debug tooling): every handler above already

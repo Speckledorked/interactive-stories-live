@@ -16,7 +16,7 @@ import { tickFactions } from '../factionTick'
 import type { TickContext } from '../types'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 describe('tickWeather dry run', () => {

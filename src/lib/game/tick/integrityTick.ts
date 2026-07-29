@@ -7,19 +7,18 @@
 // WorldMeta, the same bounded-history shape campaign-health.ts already
 // proved out, so the admin integrity panel has something to read.
 
-import { prisma } from '@/lib/prisma'
 import { TickContext, TickHandlerResult } from './types'
 import { runIntegrityPass } from '../integrity/runIntegrityPass'
 import { persistIntegrityReport } from '../integrity/persistReport'
 
 export async function tickIntegrity(ctx: TickContext): Promise<TickHandlerResult> {
-  const { changes, report } = await runIntegrityPass(prisma, ctx.campaignId, ctx.turnNumber, { dryRun: ctx.dryRun })
+  const { changes, report } = await runIntegrityPass(ctx.db, ctx.campaignId, ctx.turnNumber, { dryRun: ctx.dryRun })
 
   // A dry run (admin tick preview) must not persist a report — it's not a
   // real pass, and would pollute the history with a check that never
   // actually applied anything.
   if (!ctx.dryRun) {
-    await persistIntegrityReport(prisma, report)
+    await persistIntegrityReport(ctx.db, report)
   }
 
   if (report.violationsFound > 0) {

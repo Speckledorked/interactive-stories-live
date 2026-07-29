@@ -146,6 +146,24 @@ export interface SnapshotQuest {
   name: string
 }
 
+/**
+ * A recurrence pattern across turns that looks like a code bug, not routine
+ * drift — see integrity/escalation.ts. The engine surfaces this as
+ * evidence; it never attempts a fix. `sample` is deliberately full enough
+ * (entity, description, previous/new values) to seed a regression test by
+ * hand without going back to the DB.
+ */
+export interface Escalation {
+  checkKey: string
+  kind: 'recurring-entity' | 'systemic'
+  /** Distinct entities this checkKey has fired on. */
+  entityIds: string[]
+  /** Every turn this checkKey has fired on, across all entities, sorted ascending. */
+  turnNumbers: number[]
+  occurrences: number
+  sample: Violation
+}
+
 export interface IntegrityReport {
   campaignId: string
   turnNumber: number
@@ -155,6 +173,9 @@ export interface IntegrityReport {
   /** Violations flagged with no repair function, or that hit the
    * blast-radius cap before being applied — never silently dropped. */
   unrepaired: Violation[]
+  /** Recurrence patterns across turns that look like a code bug — see
+   * integrity/escalation.ts. Empty on nearly every pass. */
+  escalations: Escalation[]
   perCheckMs: Record<string, number>
 }
 
@@ -176,6 +197,12 @@ export function repairToWorldChange(repair: Repair, campaignId: string): WorldCh
     // is a more notable event than routine tick drift.
     significant: true,
     importance: 'NORMAL',
-    origin: 'tick',
+    // Distinct from the default 'tick' origin, and carrying checkKey, so
+    // escalation (integrity/escalation.ts) can tell an integrity repair
+    // apart from an ordinary write to the same field — Character.relationships
+    // changes constantly from normal scene play, and conflating the two
+    // would make every campaign look like a recurring bug.
+    origin: 'integrity',
+    checkKey: repair.violation.checkKey,
   }
 }

@@ -28,9 +28,16 @@ export interface WorldChange {
    * omitted. 'consequence' changes are player-caused (see src/lib/game/consequences.ts)
    * and get tagged with a more precise memory type (NPC_INTERACTION instead
    * of WORLD_EVENT) — same significance gating either way, just a more
-   * accurate label once it's already past that gate.
+   * accurate label once it's already past that gate. 'integrity' changes
+   * come from game/integrity/'s auto-repair, tagged with checkKey below so
+   * they're distinguishable from an ordinary write to the same field.
    */
-  origin?: 'tick' | 'consequence'
+  origin?: 'tick' | 'consequence' | 'integrity'
+  /** Set only when origin is 'integrity' — the IntegrityCheck.key that
+   * produced this repair, so escalation (integrity/escalation.ts) can tell
+   * "this got repaired again" apart from "this field just changed again in
+   * ordinary play". */
+  checkKey?: string
 }
 
 export interface TickContext {

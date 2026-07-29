@@ -17,7 +17,7 @@ describe('tickIntegrity', () => {
   it('returns the changes from runIntegrityPass, threading campaignId/turnNumber/dryRun through', async () => {
     runIntegrityPass.mockResolvedValue({
       changes: [{ entityType: 'CHARACTER', field: 'relationships' }],
-      report: { violationsFound: 1, repairsApplied: 1, unrepaired: [] },
+      report: { violationsFound: 1, repairsApplied: 1, unrepaired: [], escalations: [] },
     })
 
     const result = await tickIntegrity(baseCtx({ campaignId: 'camp1', turnNumber: 9, dryRun: true }))
@@ -29,9 +29,25 @@ describe('tickIntegrity', () => {
   it('returns an empty changes array on a clean pass', async () => {
     runIntegrityPass.mockResolvedValue({
       changes: [],
-      report: { violationsFound: 0, repairsApplied: 0, unrepaired: [] },
+      report: { violationsFound: 0, repairsApplied: 0, unrepaired: [], escalations: [] },
     })
     const result = await tickIntegrity(baseCtx())
     expect(result.changes).toEqual([])
+  })
+
+  it('mentions the escalation count in its summary log line when there is one', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    runIntegrityPass.mockResolvedValue({
+      changes: [],
+      report: {
+        violationsFound: 2, repairsApplied: 2, unrepaired: [],
+        escalations: [{ checkKey: 'x', kind: 'recurring-entity', entityIds: ['e1'], turnNumbers: [1, 2], occurrences: 2, sample: {} }],
+      },
+    })
+
+    await tickIntegrity(baseCtx())
+
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('1 escalation(s)'))
+    logSpy.mockRestore()
   })
 })

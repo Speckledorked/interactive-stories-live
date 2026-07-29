@@ -2497,6 +2497,16 @@ model WorldEvent {
   significant Boolean @default(false)
   importance  String  @default("NORMAL") // "NORMAL" | "MAJOR"
 
+  // Set only for events from an Integrity Engine repair (game/integrity/),
+  // to the IntegrityCheck.key that produced it — null for every ordinary
+  // tick/consequence write. Without this, an integrity repair to
+  // Character.relationships would be indistinguishable at the DB level from
+  // an everyday scene-driven trust change to the same field on the same
+  // character, which is the normal, frequent, entirely-expected case — the
+  // escalation signal in integrity/escalation.ts depends on telling those
+  // apart, not just "this field changed again."
+  checkKey String?
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId, turnNumber])

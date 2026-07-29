@@ -239,17 +239,26 @@ this table.
 | API route test coverage | 4 | 94 routes, roughly 9 dedicated test files. Targeted at risk — every fog-of-war-gated read, and writes that spend money, mutate scene state, or hand out access — not broad coverage of the full route surface. |
 | Auth / session | 4 | Real revocation: `requireAuth`/`verifyAuth`/`getUser` all check `isTokenRevoked`, and a token-version bump (`revokeAllSessions`, stamped by `createToken`) invalidates every existing session at once. Deliberately fails open for pre-revocation tokens and for an unreadable database, both to avoid a mass logout from a blip. Not a 5 — no refresh-token rotation, still 30-day JWTs. |
 | Rate limiting / abuse | 4 | Postgres-backed (`checkRateLimit`, correct for serverless, where in-memory wouldn't actually limit anything), applied at 17 route call sites, unit-tested. |
-| Admin tooling as simulation design (beyond CRUD) | 2 | Every tab but one is a thin PATCH wrapper (`handleUpdateNPC`, `handleUpdateFaction`, `handleUpdateLocation`, `handleTickClock`). The one genuinely deep feature — the tick dry-run preview (`handlePreviewTick`) — is real but read-only. A built, working health-check route is never actually called by the admin panel that was supposed to surface it (`setHealth` has zero call sites) — see Known Bugs. |
+| Admin tooling as simulation design (beyond CRUD) | 2 | Every tab but one is a thin PATCH wrapper (`handleUpdateNPC`, `handleUpdateFaction`, `handleUpdateLocation`, `handleTickClock`). The one genuinely deep feature — the tick dry-run preview (`handlePreviewTick`) — is real but read-only. |
+| Integrity Engine — structural/semantic data repair | 4 | Deterministic, per-tick checks (`runIntegrityPass`) detect and repair broken references, duplicate names, and (for one registered universe-scoped semantic family, `faction.leaderOptional`) AI-generated verdicts gated by confidence and a probation window (`isRuleActive`). Every repair is blast-radius-capped (`MAX_REPAIRS_PER_PASS`/`MAX_REPAIRS_PER_ENTITY`) and idempotent by construction; verified live against real Postgres, not just mocked. Not a 5 — only one semantic family exists, and Phase 4's planned oscillation-based rule retirement was never built (no repair-enabling family exists yet for it to fire against). |
+| Autonomous code-fix pipeline (`integrity-autofix.yml`) | 1 | A GitHub Actions workflow that hands a recurring, cross-campaign code-defect escalation to a single coding agent, then mechanically re-verifies the actual diff (not the agent's own claim) before allowing auto-merge — a genuinely sound *design* for the merge gate. Scored a 1, not higher, because it has never run against a real bug, ships disabled (`workflow_dispatch` only, `schedule` commented out), and an audit found a live shell-injection vulnerability in its own PR-creation step plus a missing retry cooldown that would re-attempt an unfixable escalation forever — see Known Bugs. |
 
 ## Known Bugs
 
 Confirmed and reproducible, verified against the current code — not
 speculation, not stale carryover.
 
+Severity follows Critical > Major > Minor. Critical is reserved for
+findings with a real exploit path, not just a functional gap.
+
 | Bug | Subsystem | Severity | Status |
 |---|---|---|---|
+| `.github/workflows/integrity-autofix.yml`'s PR-body heredoc (`` `$(cat <<EOF ... EOF)` ``) uses an unquoted delimiter, so bash performs command/variable substitution on its contents — including the `evidence` output, built from violation `entityName`/`description` text that ultimately traces back to AI-generated or player-influenced NPC/faction names — before `gh pr create` ever sees it. A name or description containing a `$(...)` or backtick expression would execute in the Actions runner. Found via audit; not yet fixed, and the workflow ships with `schedule` disabled so it cannot fire in production yet. | Integrity Engine / CI | Critical | Open |
+| The auto-fix pipeline's dedup check only looks for an *open* PR per checkKey (`gh pr list --label ... --state open`). A closed or rejected PR has no cooldown — an escalation the pipeline structurally cannot fix would generate a new agent invocation and a new PR on every subsequent scheduled run, indefinitely. | Integrity Engine / CI | Major | Open |
+| `escalationAggregation.ts` aggregates every `IntegrityReport` in a campaign's 14-day `integrityReportHistory`, not just the most recent one. An already-merged fix's original escalation can still be reported as actionable from an older, pre-fix report still inside the lookback window, re-triggering an attempt at an already-fixed bug. | Integrity Engine | Major | Open |
+| checkKeys are bare string literals duplicated across `checkRegistry.ts`, `escalationSourceMap.ts`, `oracleTechnique.ts`, and `LINT_GUARD_FILE_FOR`, with no shared enum/const tying them together. A rename in one place desyncs the others silently — caught only by an existence-consistency test, not the compiler. | Integrity Engine | Minor | Open |
 | Two competing Pusher server modules (`src/lib/pusher.ts` vs. `src/lib/realtime/pusher-server.ts`) read different env var names; the one 4 routes still use has no `isPusherConfigured()` gate and hangs the request indefinitely (reproduced live) in an unconfigured or partially-configured deploy. | Real-time / API routes | Major | Open |
-| `campaigns/[id]/health` is a fully built, correctly gated route, but the admin panel's `health` state is declared and rendered, and `setHealth` is never actually called anywhere — the panel silently never shows. | Admin tooling | Minor | Open |
+| `campaigns/[id]/health` is a fully built, correctly gated route; the admin panel's `health` state is declared and rendered. Fixed: `fetchData` now calls `/api/campaigns/[id]/health` and `setHealth`, so the panel actually renders. | Admin tooling | Minor | Fixed |
 | `consequences.ts`'s `findNpcByName`/`findFactionByName` use exact-then-`contains` matching, which can cross-match an entity whose name is a substring of another's (e.g. "Bob" matching "Bobby's Assistant") — the exact failure mode the safer fuzzy matcher elsewhere in the codebase was built to prevent. | Consequence engine | Minor | Open |
 | The identical "not a member of this campaign" check returns 403 at ~37 call sites but 404 at 2 (`members/[userId]/route.ts`, `.../ban/route.ts`), with different wording. | API routes | Minor | Open |
 | Four `substring`/`slice` truncation call sites append `'...'` unconditionally, regardless of whether the text actually exceeds the length limit, producing a spurious ellipsis on short strings. | UI / shared utilities | Minor | Open |
@@ -260,36 +269,47 @@ speculation, not stale carryover.
 Ordered by what most closes the gap between current state and the vision
 above. Items that block later ones are flagged.
 
-1. **Fix the two isolated, confirmed bugs** — unify the two Pusher modules
-   onto the gated pattern, and wire the admin panel's health state to the
-   route that already serves it. Both are cheap and carry no open design
-   question.
-2. **Decide the strict-structured-outputs question.** Needs a live API
+1. **Fix the shell-injection bug in `integrity-autofix.yml`** before this
+   workflow is ever exercised for real — quote the PR-body heredoc
+   delimiter (or drop the heredoc entirely) so `evidence` text can't be
+   interpreted by bash. Trivial fix, currently the single highest-severity
+   open item in the repo.
+2. **Close the auto-fix pipeline's infinite-retry gap** before ever
+   enabling its `schedule` trigger: add a cooldown after a closed/rejected
+   PR (not just a check for an open one), and filter
+   `escalationAggregation.ts` to each campaign's latest report only, so an
+   already-merged fix stops being re-flagged from stale history.
+3. **Fix the Pusher module split** — unify the two modules onto the gated
+   (`isPusherConfigured()`) pattern. Cheap, no open design question.
+4. **Decide the strict-structured-outputs question.** Needs a live API
    round-trip to verify the hand-rolled schema actually validates in
    production before it's safe to switch. *Prerequisite* for meaningfully
    shrinking the AI response validation ladder further.
-3. **Make outcome-band adherence visible to players**, not just logged
+5. **Make outcome-band adherence visible to players**, not just logged
    server-side — add the schema field and surface it in the transparency
    panel. The server-side half is already built; this is the highest-
    leverage single change toward "the world remembers, and you can trust
    that it does."
-4. **Add direct test coverage for the war stability-hit write path** — the
+6. **Add direct test coverage for the war stability-hit write path** — the
    one under-tested handler in an otherwise fully tested war/faction/tick
    pipeline.
-5. **Fix `consequences.ts`'s entity-matching bug** — give it the same
+7. **Fix `consequences.ts`'s entity-matching bug** — give it the same
    roster-plus-fuzzy-match treatment the state-updater appliers already
    use, closing the last `contains`-matching risk in the engine.
-6. **Broaden API route test coverage** past the current targeted set,
+8. **Broaden API route test coverage** past the current targeted set,
    prioritizing routes that mutate persisted state over ones that only
    read it.
-7. **Turn admin tooling into real simulation-design tooling.** This is the
+9. **Turn admin tooling into real simulation-design tooling.** This is the
    lowest-scoring row on the Scorecard and the most direct lever on the
    "admin surface as a real window" half of the vision — extend the tick
    dry-run preview's pattern (showing *why* the simulation decided
    something) to the faction/war/NPC tabs instead of leaving them as plain
    forms.
-8. **Decide whether dice/mechanics stay opt-in-only.** A product decision
-   that gates how far item 3's transparency-panel work can go by default.
+10. **Give checkKeys a shared type** across `checkRegistry.ts`,
+    `escalationSourceMap.ts`, and `oracleTechnique.ts` so a rename is a
+    compiler error, not a silent registry desync.
+11. **Decide whether dice/mechanics stay opt-in-only.** A product decision
+    that gates how far item 5's transparency-panel work can go by default.
 
 ## Features & Roadmap
 

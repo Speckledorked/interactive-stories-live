@@ -6,11 +6,38 @@
 // test", "the same technique covers every other id-keyed JSON blob") — so
 // this is exactly as hand-maintained and closed as escalationSourceMap.ts.
 //
-// A checkKey with no entry defaults to 'suite-only' — the weakest oracle,
-// and per the Phase 5 automation table, NEVER auto-merge-eligible. That is
-// the safe default, not a gap to fill in a hurry.
+// A checkKey with no entry defaults to 'suite-only' — the weakest oracle.
+//
+// Every tier now auto-merges (there is no human review step in this
+// pipeline at all — see regressionDetection.ts for what replaces it: the
+// system watches its own merges and reverts itself if one didn't actually
+// work, rather than a person approving each one). Because nothing else
+// checks a fix before it lands, this file also carries the one rule that
+// keeps a fix from cheating its own gate: STRENGTH_RANK below makes it a
+// mechanical, unconditional failure for any single diff to register a
+// checkKey's technique as WEAKER than it was before that diff — an agent
+// can raise its own bar (write a stronger test, upgrade an entry here) but
+// can never lower it, checked in verifyOracleTechnique.ts, not trusted
+// from the diff's own commit message.
 
 export type OracleTechnique = 'property' | 'fault-injection' | 'lint' | 'suite-only'
+
+/** property/fault-injection/lint are all real, objective proof — which one
+ * fits best is a judgment call about the bug shape, not a ranking worth
+ * enforcing against each other. The one line that must never be crossed
+ * unilaterally is real-oracle -> suite-only. */
+const STRENGTH_RANK: Record<OracleTechnique, number> = {
+  property: 2,
+  'fault-injection': 2,
+  lint: 2,
+  'suite-only': 1,
+}
+
+/** True if `next` is a weaker oracle than `prior` — the one thing a single
+ * diff is never allowed to do to its own checkKey's registered technique. */
+export function isWeakerTechnique(prior: OracleTechnique, next: OracleTechnique): boolean {
+  return STRENGTH_RANK[next] < STRENGTH_RANK[prior]
+}
 
 export const ORACLE_TECHNIQUE_FOR: Readonly<Record<string, OracleTechnique>> = {
   // The Phase 0 relationship bug's own shape, and the class every other
@@ -30,7 +57,8 @@ export const ORACLE_TECHNIQUE_FOR: Readonly<Record<string, OracleTechnique>> = {
   // Same "dangling id in a raw array/column, no FK possible" shape.
   'clock.participantNpcIds.resolve': 'fault-injection',
 
-  // Deliberately absent (defaults to 'suite-only', never auto-merge-eligible):
+  // Deliberately absent (defaults to 'suite-only' — still auto-merges, per
+  // the current design, but with the weakest available evidence):
   //
   // NOT 'character.relationships.keys.resolve' below, on purpose: it also
   // has a real, working AST-based structural guard (see
@@ -72,13 +100,6 @@ export const LINT_GUARD_FILE_FOR: Readonly<Record<string, string>> = {
   'character.relationships.keys.resolve':
     'src/lib/game/worldUpdaters/__tests__/entityResolutionConvention.test.ts',
 } as const
-
-/** Whether a checkKey's fix (once generated) can ever qualify for
- * auto-merge — i.e. whether it has a real oracle, not just "suite stays
- * green." */
-export function isAutoMergeEligibleTechnique(technique: OracleTechnique): boolean {
-  return technique !== 'suite-only'
-}
 
 /** The technique for a checkKey, defaulting to the weakest ('suite-only')
  * when nothing stronger has been declared for it. */

@@ -57,7 +57,6 @@ describe('findActionableEscalations', () => {
       campaignIds: ['camp1'],
       totalOccurrences: 2,
       oracleTechnique: 'property',
-      autoMergeEligible: true,
     })
     expect(result[0].sourceFiles).toContain('src/lib/game/worldUpdaters/characters.ts')
   })
@@ -85,21 +84,37 @@ describe('findActionableEscalations', () => {
     expect(result[0].totalOccurrences).toBe(5)
   })
 
-  it('does not double-count the same campaign appearing twice in its own history', async () => {
+  it('reads only the latest report per campaign, not the whole history', async () => {
     const tx = db()
     tx.worldMeta.findMany.mockResolvedValue([
       {
         campaignId: 'camp1',
         integrityReportHistory: [
           report({ turnNumber: 5, escalations: [escalation({ occurrences: 2 })] }),
-          report({ turnNumber: 6, escalations: [escalation({ occurrences: 2 })] }),
+          report({ turnNumber: 6, escalations: [escalation({ occurrences: 3 })] }),
         ],
       },
     ])
     const result = await findActionableEscalations(tx as any)
     expect(result[0].campaignIds).toEqual(['camp1'])
-    // Occurrences still sum across both history entries — that's real signal.
-    expect(result[0].totalOccurrences).toBe(4)
+    // Only turn 6's report counts — not 2+3.
+    expect(result[0].totalOccurrences).toBe(3)
+  })
+
+  it('does not replay a stale escalation from an old report once a newer report no longer has it — the fixed-bug case', async () => {
+    const tx = db()
+    tx.worldMeta.findMany.mockResolvedValue([
+      {
+        campaignId: 'camp1',
+        integrityReportHistory: [
+          // Turn 5: the bug was escalating.
+          report({ turnNumber: 5, escalations: [escalation()] }),
+          // Turn 6: the fix landed — the latest report has no escalations at all.
+          report({ turnNumber: 6, escalations: [] }),
+        ],
+      },
+    ])
+    expect(await findActionableEscalations(tx as any)).toEqual([])
   })
 
   it('keeps two different checkKeys as separate entries', async () => {

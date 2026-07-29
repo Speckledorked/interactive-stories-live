@@ -1,23 +1,35 @@
 // src/lib/game/integrity/verifyOracleTechnique.ts
-// Phase 5 (plan section 5g/5h) — the mechanical check that stops an
-// auto-fix PR from qualifying for auto-merge on the strength of the
-// agent's OWN claim that it used the right oracle. "The AI doesn't get to
-// grade its own homework" — a plain, honest content check on the actual
-// changed test file(s), not a semantic understanding of them, but enough
-// to catch the case that matters most: a fix whose only real evidence is
-// "the suite stays green" dressed up as a stronger oracle.
+// Phase 5 — the mechanical check that stops an auto-fix from merging on
+// the strength of the agent's OWN claim that it used the right oracle.
+// "The AI doesn't get to grade its own homework" — a plain, honest content
+// check on the actual changed test file(s), not a semantic understanding
+// of them, but enough to catch the case that matters most: a fix whose
+// only real evidence is "the suite stays green" dressed up as a stronger
+// oracle.
 //
-// Deliberately shallow. This never tries to understand whether a property
-// test is a GOOD property test — that's still a human's job on the
-// resulting PR. It only answers "does this changed file even attempt the
-// named technique," which is cheap, fast, and unambiguous.
+// There is no human review step in this pipeline — every technique tier
+// auto-merges once this check (and the full suite) passes. That's exactly
+// why the FIRST thing this checks isn't "does the new test look right,"
+// it's "did this diff quietly lower the bar for itself": `priorTechnique`
+// is what oracleTechnique.ts declared for this checkKey BEFORE the agent
+// ran, `currentTechnique` is what it declares AFTER (the agent is allowed
+// to raise its own bar — write a stronger test, register a stronger
+// technique — but never lower it). See regressionDetection.ts for the
+// other half of the safety story: if this check is ever wrong anyway, the
+// system notices the checkKey escalating again and reverts itself.
+//
+// Deliberately shallow otherwise. This never tries to understand whether a
+// property test is a GOOD property test — it only answers "does this
+// changed file even attempt the named technique," which is cheap, fast,
+// and unambiguous.
 
-import { OracleTechnique, LINT_GUARD_FILE_FOR } from './oracleTechnique'
+import { OracleTechnique, LINT_GUARD_FILE_FOR, isWeakerTechnique } from './oracleTechnique'
 
 export interface OracleTechniqueVerification {
   technique: OracleTechnique
   satisfied: boolean
   reason: string
+  weakened: boolean
 }
 
 const PROPERTY_MARKER = /from ['"]fast-check['"]/
@@ -37,22 +49,32 @@ const FAULT_INJECTION_MARKER = /RUN_DB_TESTS/
  */
 export function verifyOracleTechnique(
   checkKey: string,
-  technique: OracleTechnique,
+  priorTechnique: OracleTechnique,
+  currentTechnique: OracleTechnique,
   changedTestFiles: Record<string, string>,
   knownGuardFiles: ReadonlySet<string> = new Set()
 ): OracleTechniqueVerification {
+  if (isWeakerTechnique(priorTechnique, currentTechnique)) {
+    return {
+      technique: currentTechnique,
+      satisfied: false,
+      weakened: true,
+      reason: `oracleTechnique.ts now declares "${checkKey}" as "${currentTechnique}", weaker than its prior "${priorTechnique}" — a single diff can never lower its own bar`,
+    }
+  }
+
   const contents = Object.values(changedTestFiles)
 
-  switch (technique) {
+  switch (currentTechnique) {
     case 'property':
       return contents.some((c) => PROPERTY_MARKER.test(c))
-        ? { technique, satisfied: true, reason: 'a changed test file imports fast-check' }
-        : { technique, satisfied: false, reason: 'no changed test file imports fast-check — a round-trip property was required' }
+        ? { technique: currentTechnique, satisfied: true, weakened: false, reason: 'a changed test file imports fast-check' }
+        : { technique: currentTechnique, satisfied: false, weakened: false, reason: 'no changed test file imports fast-check — a round-trip property was required' }
 
     case 'fault-injection':
       return contents.some((c) => FAULT_INJECTION_MARKER.test(c))
-        ? { technique, satisfied: true, reason: 'a changed test file gates on RUN_DB_TESTS, the established real-DB fault-injection convention' }
-        : { technique, satisfied: false, reason: 'no changed test file gates on RUN_DB_TESTS — a real-database fault-injection test was required' }
+        ? { technique: currentTechnique, satisfied: true, weakened: false, reason: 'a changed test file gates on RUN_DB_TESTS, the established real-DB fault-injection convention' }
+        : { technique: currentTechnique, satisfied: false, weakened: false, reason: 'no changed test file gates on RUN_DB_TESTS — a real-database fault-injection test was required' }
 
     case 'lint': {
       // This repo has no ESLint installed at all — its AST-based
@@ -66,20 +88,20 @@ export function verifyOracleTechnique(
       const guardFile = LINT_GUARD_FILE_FOR[checkKey]
       if (!guardFile) {
         return {
-          technique,
+          technique: currentTechnique,
           satisfied: false,
+          weakened: false,
           reason: `no AST-based structural guard is registered for "${checkKey}" in LINT_GUARD_FILE_FOR — assign "lint" only once one exists`,
         }
       }
       return knownGuardFiles.has(guardFile)
-        ? { technique, satisfied: true, reason: `backed by the standing structural guard at ${guardFile}, already re-run by the full suite` }
-        : { technique, satisfied: false, reason: `LINT_GUARD_FILE_FOR names ${guardFile} for "${checkKey}", but that file no longer exists — the registry has drifted stale` }
+        ? { technique: currentTechnique, satisfied: true, weakened: false, reason: `backed by the standing structural guard at ${guardFile}, already re-run by the full suite` }
+        : { technique: currentTechnique, satisfied: false, weakened: false, reason: `LINT_GUARD_FILE_FOR names ${guardFile} for "${checkKey}", but that file no longer exists — the registry has drifted stale` }
     }
 
     case 'suite-only':
-      // The weakest oracle. Already covered by the workflow's general
-      // `npx vitest run` step, and never auto-merge-eligible regardless —
-      // nothing extra to check here.
-      return { technique, satisfied: true, reason: 'suite-only requires no additional verification (and is never auto-merge-eligible)' }
+      // The weakest oracle, but it still merges — the full suite passing
+      // (checked separately, unconditionally) is the whole proof here.
+      return { technique: currentTechnique, satisfied: true, weakened: false, reason: 'suite-only requires no additional verification beyond the full suite passing' }
   }
 }

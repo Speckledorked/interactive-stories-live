@@ -36,14 +36,12 @@ async function main() {
   const next = [...escalations].sort((a, b) => b.totalOccurrences - a.totalOccurrences)[0]
   console.log(
     `Actionable: ${next.checkKey} — ${next.totalOccurrences} occurrence(s) across ` +
-    `${next.campaignIds.length} campaign(s), oracle: ${next.oracleTechnique}` +
-    (next.autoMergeEligible ? ' (auto-merge eligible)' : ' (human review required)')
+    `${next.campaignIds.length} campaign(s), oracle: ${next.oracleTechnique}`
   )
 
   writeOutput('found', 'true')
   writeOutput('check_key', next.checkKey)
   writeOutput('oracle_technique', next.oracleTechnique)
-  writeOutput('auto_merge_eligible', String(next.autoMergeEligible))
   writeOutput('source_files', next.sourceFiles.join(','))
   writeOutput('campaign_count', String(next.campaignIds.length))
   writeOutput('total_occurrences', String(next.totalOccurrences))

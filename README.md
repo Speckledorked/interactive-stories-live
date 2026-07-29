@@ -241,7 +241,7 @@ this table.
 | Rate limiting / abuse | 4 | Postgres-backed (`checkRateLimit`, correct for serverless, where in-memory wouldn't actually limit anything), applied at 17 route call sites, unit-tested. |
 | Admin tooling as simulation design (beyond CRUD) | 2 | Every tab but one is a thin PATCH wrapper (`handleUpdateNPC`, `handleUpdateFaction`, `handleUpdateLocation`, `handleTickClock`). The one genuinely deep feature — the tick dry-run preview (`handlePreviewTick`) — is real but read-only. |
 | Integrity Engine — structural/semantic data repair | 4 | Deterministic, per-tick checks (`runIntegrityPass`) detect and repair broken references, duplicate names, and (for one registered universe-scoped semantic family, `faction.leaderOptional`) AI-generated verdicts gated by confidence and a probation window (`isRuleActive`). Every repair is blast-radius-capped (`MAX_REPAIRS_PER_PASS`/`MAX_REPAIRS_PER_ENTITY`) and idempotent by construction; verified live against real Postgres, not just mocked. Not a 5 — only one semantic family exists, and Phase 4's planned oscillation-based rule retirement was never built (no repair-enabling family exists yet for it to fire against). |
-| Autonomous code-fix pipeline (`integrity-autofix.yml`) | 1 | A GitHub Actions workflow that hands a recurring, cross-campaign code-defect escalation to a single coding agent, then mechanically re-verifies the actual diff (not the agent's own claim) before allowing auto-merge — a genuinely sound *design* for the merge gate. Scored a 1, not higher, because it has never run against a real bug, ships disabled (`workflow_dispatch` only, `schedule` commented out), and an audit found a live shell-injection vulnerability in its own PR-creation step plus a missing retry cooldown that would re-attempt an unfixable escalation forever — see Known Bugs. |
+| Autonomous code-fix pipeline (`integrity-autofix.yml`) | 2 | Fully autonomous by design — no human review tier at all, every oracle tier (including `suite-only`) merges itself. Since nothing else catches a bad merge first, the pipeline watches its own history instead: `regressionDetection.ts` reverts a merged fix automatically if its checkKey escalates again, `verifyOracleTechnique.ts` mechanically forbids a diff from registering a *weaker* oracle for its own checkKey than it had before (an agent can strengthen its own bar — see the growth step in the prompt — but never lower it), and scope is closed in advance (`escalationSourceMap.ts`) rather than judged per fix. The shell-injection vulnerability and the stale-escalation replay an earlier audit found are both fixed. Not higher than a 2 — it has still never run against a real bug (ships `workflow_dispatch`-only), and the revert mechanism's own correctness is unproven outside unit tests until that first real run happens. |
 
 ## Known Bugs
 
@@ -253,9 +253,9 @@ findings with a real exploit path, not just a functional gap.
 
 | Bug | Subsystem | Severity | Status |
 |---|---|---|---|
-| `.github/workflows/integrity-autofix.yml`'s PR-body heredoc (`` `$(cat <<EOF ... EOF)` ``) uses an unquoted delimiter, so bash performs command/variable substitution on its contents — including the `evidence` output, built from violation `entityName`/`description` text that ultimately traces back to AI-generated or player-influenced NPC/faction names — before `gh pr create` ever sees it. A name or description containing a `$(...)` or backtick expression would execute in the Actions runner. Found via audit; not yet fixed, and the workflow ships with `schedule` disabled so it cannot fire in production yet. | Integrity Engine / CI | Critical | Open |
-| The auto-fix pipeline's dedup check only looks for an *open* PR per checkKey (`gh pr list --label ... --state open`). A closed or rejected PR has no cooldown — an escalation the pipeline structurally cannot fix would generate a new agent invocation and a new PR on every subsequent scheduled run, indefinitely. | Integrity Engine / CI | Major | Open |
-| `escalationAggregation.ts` aggregates every `IntegrityReport` in a campaign's 14-day `integrityReportHistory`, not just the most recent one. An already-merged fix's original escalation can still be reported as actionable from an older, pre-fix report still inside the lookback window, re-triggering an attempt at an already-fixed bug. | Integrity Engine | Major | Open |
+| `.github/workflows/integrity-autofix.yml`'s PR-body heredoc (`` `$(cat <<EOF ... EOF)` ``) used an unquoted delimiter, so bash performed command/variable substitution on its contents — including the `evidence` output, built from violation `entityName`/`description` text that ultimately traces back to AI-generated or player-influenced NPC/faction names — before `gh pr create` ever saw it. Fixed: PR bodies are now built with `echo`/`printf '%s'` into a file and passed via `--body-file`, which never re-parses a variable's runtime value as shell source. | Integrity Engine / CI | Critical | Fixed |
+| The auto-fix pipeline's dedup check only looked for an *open* PR per checkKey. A closed/rejected PR had no cooldown, so an unfixable escalation could reopen a PR (and bill a new agent run) on every scheduled invocation, forever. Superseded by a stronger design, not just a cooldown: the pipeline no longer has a "closed without merging" case to worry about at all — every oracle tier now merges itself (see the Scorecard), and a merge that turns out wrong is caught by `regressionDetection.ts` and reverted automatically instead. | Integrity Engine / CI | Major | Fixed |
+| `escalationAggregation.ts` aggregated every `IntegrityReport` in a campaign's 14-day `integrityReportHistory`, not just the most recent one. An already-merged fix's original escalation could still be reported as actionable from an older, pre-fix report still inside the lookback window. Fixed: only the latest report per campaign is read now; live-verified against real Postgres. | Integrity Engine | Major | Fixed |
 | checkKeys are bare string literals duplicated across `checkRegistry.ts`, `escalationSourceMap.ts`, `oracleTechnique.ts`, and `LINT_GUARD_FILE_FOR`, with no shared enum/const tying them together. A rename in one place desyncs the others silently — caught only by an existence-consistency test, not the compiler. | Integrity Engine | Minor | Open |
 | Two competing Pusher server modules (`src/lib/pusher.ts` vs. `src/lib/realtime/pusher-server.ts`) read different env var names; the one 4 routes still use has no `isPusherConfigured()` gate and hangs the request indefinitely (reproduced live) in an unconfigured or partially-configured deploy. | Real-time / API routes | Major | Open |
 | `campaigns/[id]/health` is a fully built, correctly gated route; the admin panel's `health` state is declared and rendered. Fixed: `fetchData` now calls `/api/campaigns/[id]/health` and `setHealth`, so the panel actually renders. | Admin tooling | Minor | Fixed |
@@ -269,47 +269,44 @@ findings with a real exploit path, not just a functional gap.
 Ordered by what most closes the gap between current state and the vision
 above. Items that block later ones are flagged.
 
-1. **Fix the shell-injection bug in `integrity-autofix.yml`** before this
-   workflow is ever exercised for real — quote the PR-body heredoc
-   delimiter (or drop the heredoc entirely) so `evidence` text can't be
-   interpreted by bash. Trivial fix, currently the single highest-severity
-   open item in the repo.
-2. **Close the auto-fix pipeline's infinite-retry gap** before ever
-   enabling its `schedule` trigger: add a cooldown after a closed/rejected
-   PR (not just a check for an open one), and filter
-   `escalationAggregation.ts` to each campaign's latest report only, so an
-   already-merged fix stops being re-flagged from stale history.
-3. **Fix the Pusher module split** — unify the two modules onto the gated
+1. **Fire `integrity-autofix.yml` once, manually, against a real, deliberately
+   seeded bug** before ever enabling its `schedule` trigger. The pipeline's
+   individual pieces (aggregation, dedup, regression detection, oracle
+   verification) are all unit-tested; the agent step and the revert path
+   have never executed even once. This is the single highest-leverage item
+   on this list — everything else about the pipeline is design confidence,
+   not proven confidence, until this happens.
+2. **Fix the Pusher module split** — unify the two modules onto the gated
    (`isPusherConfigured()`) pattern. Cheap, no open design question.
-4. **Decide the strict-structured-outputs question.** Needs a live API
+3. **Decide the strict-structured-outputs question.** Needs a live API
    round-trip to verify the hand-rolled schema actually validates in
    production before it's safe to switch. *Prerequisite* for meaningfully
    shrinking the AI response validation ladder further.
-5. **Make outcome-band adherence visible to players**, not just logged
+4. **Make outcome-band adherence visible to players**, not just logged
    server-side — add the schema field and surface it in the transparency
    panel. The server-side half is already built; this is the highest-
    leverage single change toward "the world remembers, and you can trust
    that it does."
-6. **Add direct test coverage for the war stability-hit write path** — the
+5. **Add direct test coverage for the war stability-hit write path** — the
    one under-tested handler in an otherwise fully tested war/faction/tick
    pipeline.
-7. **Fix `consequences.ts`'s entity-matching bug** — give it the same
+6. **Fix `consequences.ts`'s entity-matching bug** — give it the same
    roster-plus-fuzzy-match treatment the state-updater appliers already
    use, closing the last `contains`-matching risk in the engine.
-8. **Broaden API route test coverage** past the current targeted set,
+7. **Broaden API route test coverage** past the current targeted set,
    prioritizing routes that mutate persisted state over ones that only
    read it.
-9. **Turn admin tooling into real simulation-design tooling.** This is the
+8. **Turn admin tooling into real simulation-design tooling.** This is the
    lowest-scoring row on the Scorecard and the most direct lever on the
    "admin surface as a real window" half of the vision — extend the tick
    dry-run preview's pattern (showing *why* the simulation decided
    something) to the faction/war/NPC tabs instead of leaving them as plain
    forms.
-10. **Give checkKeys a shared type** across `checkRegistry.ts`,
-    `escalationSourceMap.ts`, and `oracleTechnique.ts` so a rename is a
-    compiler error, not a silent registry desync.
-11. **Decide whether dice/mechanics stay opt-in-only.** A product decision
-    that gates how far item 5's transparency-panel work can go by default.
+9. **Give checkKeys a shared type** across `checkRegistry.ts`,
+   `escalationSourceMap.ts`, and `oracleTechnique.ts` so a rename is a
+   compiler error, not a silent registry desync.
+10. **Decide whether dice/mechanics stay opt-in-only.** A product decision
+    that gates how far item 4's transparency-panel work can go by default.
 
 ## Features & Roadmap
 

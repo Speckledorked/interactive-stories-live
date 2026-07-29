@@ -1433,6 +1433,16 @@ model WorldMeta {
   lastHealthCheck       DateTime? // Last time health was checked
   currentHealthScore    Int? // Current campaign health (0-100)
 
+  // Integrity Engine (world-data coherence — see game/integrity/), Phase 2.
+  // Deliberately separate from campaignHealthHistory above: that measures
+  // narrative/operational health (AI consistency, engagement, scene success
+  // rate), this measures whether the world's own data is internally
+  // consistent. Same bounded-history shape as recordHealthCheck(), storing
+  // full IntegrityReport objects (see integrity/types.ts) rather than a
+  // score, since there's no single number that means "coherent."
+  integrityReportHistory Json? // Bounded history of past IntegrityReport objects
+  lastIntegrityCheck     DateTime? // Last time an integrity pass ran
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 }
 

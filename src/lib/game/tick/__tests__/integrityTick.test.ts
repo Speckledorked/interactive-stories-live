@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const runIntegrityPass = vi.hoisted(() => vi.fn())
+const persistIntegrityReport = vi.hoisted(() => vi.fn())
 vi.mock('../../integrity/runIntegrityPass', () => ({ runIntegrityPass }))
+vi.mock('../../integrity/persistReport', () => ({ persistIntegrityReport }))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
 import { tickIntegrity } from '../integrityTick'
@@ -49,5 +51,25 @@ describe('tickIntegrity', () => {
 
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('1 escalation(s)'))
     logSpy.mockRestore()
+  })
+
+  it('persists the report on a real pass', async () => {
+    const report = { violationsFound: 0, repairsApplied: 0, unrepaired: [], escalations: [] }
+    runIntegrityPass.mockResolvedValue({ changes: [], report })
+
+    await tickIntegrity(baseCtx({ dryRun: false }))
+
+    expect(persistIntegrityReport).toHaveBeenCalledWith(expect.anything(), report)
+  })
+
+  it('does not persist on a dry run — it never actually applied anything', async () => {
+    runIntegrityPass.mockResolvedValue({
+      changes: [],
+      report: { violationsFound: 0, repairsApplied: 0, unrepaired: [], escalations: [] },
+    })
+
+    await tickIntegrity(baseCtx({ dryRun: true }))
+
+    expect(persistIntegrityReport).not.toHaveBeenCalled()
   })
 })

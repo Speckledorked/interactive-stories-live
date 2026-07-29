@@ -8,6 +8,8 @@
 // back a list of WorldChange entries so the engine can log the significant
 // ones to campaign history.
 
+import type { Prisma, PrismaClient } from '@prisma/client'
+
 export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT'
 
 export interface WorldChange {
@@ -50,13 +52,19 @@ export interface TickContext {
    * World Sim Phase 8: preview mode — handlers still read live DB state and
    * compute the same WorldChange list they normally would, but every write
    * call is skipped. Defaults to false (the normal, persisting tick).
-   * Deliberately NOT a transaction-rollback approach: the tick handlers
-   * write through the shared `prisma` singleton, not a transaction-scoped
-   * client, so wrapping runWorldTick in prisma.$transaction wouldn't
-   * actually make their writes rollback-able. Skipping the writes outright
-   * is simpler and equally safe — nothing is ever written to skip.
    */
   dryRun: boolean
+  /**
+   * World Sim Phase 3 (Integrity Engine plan) — every handler writes through
+   * this instead of importing the `prisma` singleton directly, so
+   * runWorldTick can wrap the whole deterministic tick in one
+   * `prisma.$transaction`: a real `Prisma.TransactionClient` on a normal
+   * tick (a failed turn now rolls back cleanly instead of leaving partial
+   * state), or the plain `PrismaClient` singleton on a dry run (a preview
+   * has nothing to roll back, and holding a transaction open for a
+   * read-only pass would just be overhead).
+   */
+  db: Prisma.TransactionClient | PrismaClient
 }
 
 /**

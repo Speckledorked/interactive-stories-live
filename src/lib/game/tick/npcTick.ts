@@ -20,7 +20,6 @@
 // turn. Leadership succession and defection on faction collapse live in
 // leadershipTick.ts and factionTick.ts respectively, not here.
 
-import { prisma } from '@/lib/prisma'
 import type { NPC } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, stableHash } from './types'
 
@@ -149,13 +148,13 @@ export function decideNpcTick(
 
 export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
   const [npcs, locations] = await Promise.all([
-    prisma.nPC.findMany({
+    ctx.db.nPC.findMany({
       where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
       orderBy: { importance: 'desc' },
       take: ctx.npcCap,
       include: { faction: { select: { name: true, goal: true, isActive: true } } },
     }),
-    prisma.location.findMany({
+    ctx.db.location.findMany({
       where: { campaignId: ctx.campaignId, isDiscovered: true },
       select: { id: true, name: true },
     }),
@@ -185,7 +184,7 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
     }
 
     if (!ctx.dryRun) {
-      await prisma.nPC.update({
+      await ctx.db.nPC.update({
         where: { id: npc.id },
         data: updateData,
       })

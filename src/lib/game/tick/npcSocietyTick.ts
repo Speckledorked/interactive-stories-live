@@ -36,7 +36,6 @@
 // lag needed — unlike relationshipTick/factionTick, this isn't a circular
 // dependency, just ties-then-consequences).
 
-import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, parseFactionRelationships, stableHash } from './types'
 import { tickPairwiseTies } from './relationshipEngine'
@@ -91,19 +90,19 @@ export function decideUnaffiliatedTie(
 
 export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerResult> {
   const [npcs, locations] = await Promise.all([
-    prisma.nPC.findMany({
+    ctx.db.nPC.findMany({
       where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
       orderBy: { importance: 'desc' },
       take: ctx.npcCap,
       select: { id: true, name: true, factionId: true, threat: true, socialTies: true },
     }),
-    prisma.location.findMany({ where: { campaignId: ctx.campaignId, isDiscovered: true }, select: { name: true } }),
+    ctx.db.location.findMany({ where: { campaignId: ctx.campaignId, isDiscovered: true }, select: { name: true } }),
   ])
   const sortedLocationNames = [...new Set(locations.map((l) => l.name))].sort()
 
   const factionIds = [...new Set(npcs.map((n) => n.factionId).filter((id): id is string => !!id))]
   const factions = factionIds.length > 0
-    ? await prisma.faction.findMany({ where: { id: { in: factionIds } }, select: { id: true, relationships: true } })
+    ? await ctx.db.faction.findMany({ where: { id: { in: factionIds } }, select: { id: true, relationships: true } })
     : []
   const factionRelById = new Map(factions.map((f) => [f.id, parseFactionRelationships(f.relationships)]))
 
@@ -166,7 +165,7 @@ export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerRe
 
   if (!ctx.dryRun) {
     for (const npcId of dirty) {
-      await prisma.nPC.update({ where: { id: npcId }, data: { socialTies: working.get(npcId) as unknown as Prisma.InputJsonValue } })
+      await ctx.db.nPC.update({ where: { id: npcId }, data: { socialTies: working.get(npcId) as unknown as Prisma.InputJsonValue } })
     }
   }
 
@@ -212,7 +211,7 @@ export function decideJointScheme(
 }
 
 export async function tickNpcJointSchemes(ctx: TickContext): Promise<TickHandlerResult> {
-  const npcs = await prisma.nPC.findMany({
+  const npcs = await ctx.db.nPC.findMany({
     where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
     orderBy: { importance: 'desc' },
     take: ctx.npcCap,
@@ -238,7 +237,7 @@ export async function tickNpcJointSchemes(ctx: TickContext): Promise<TickHandler
   }
   if (allyPairs.length === 0) return { changes }
 
-  const activeSchemeClocks = await prisma.clock.findMany({
+  const activeSchemeClocks = await ctx.db.clock.findMany({
     where: { campaignId: ctx.campaignId, resolvedAt: null, participantNpcIds: { isEmpty: false } },
     select: { participantNpcIds: true },
   })
@@ -252,7 +251,7 @@ export async function tickNpcJointSchemes(ctx: TickContext): Promise<TickHandler
     if (!decision.shouldSpawn) continue
 
     if (!ctx.dryRun) {
-      await prisma.clock.create({
+      await ctx.db.clock.create({
         data: {
           campaignId: ctx.campaignId,
           name: decision.name!,

@@ -20,7 +20,6 @@
 // dependency (relationships depend on goals; DESTABILIZE_RIVAL depends on
 // relationships) without needing a two-pass tick.
 
-import { prisma } from '@/lib/prisma'
 import type { FactionGoal, Prisma } from '@prisma/client'
 import { band } from './factionTick'
 import { FactionRelationshipEntry, TickContext, TickHandlerResult } from './types'
@@ -52,7 +51,7 @@ export function decideRelationshipTick(
 }
 
 export async function tickFactionRelationships(ctx: TickContext): Promise<TickHandlerResult> {
-  const factions = await prisma.faction.findMany({
+  const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
     orderBy: { createdAt: 'asc' },
     take: ctx.factionCap,
@@ -61,7 +60,7 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
   // Full campaign roster (uncapped, defunct included) for two jobs below:
   // knowing which relationship entries point at factions that no longer
   // exist as independent actors, and naming them in the change reason.
-  const allFactions = await prisma.faction.findMany({
+  const allFactions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId },
     select: { id: true, name: true, isActive: true },
   })
@@ -94,7 +93,7 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
 
   if (!ctx.dryRun) {
     for (const factionId of dirty) {
-      await prisma.faction.update({
+      await ctx.db.faction.update({
         where: { id: factionId },
         data: { relationships: working.get(factionId) as unknown as Prisma.InputJsonValue },
       })

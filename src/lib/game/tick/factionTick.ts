@@ -17,7 +17,6 @@
 // stability, military). Capped at 10 factions per campaign, consistent with
 // existing campaign scale elsewhere in the codebase.
 
-import { prisma } from '@/lib/prisma'
 import type { Faction, FactionGoal } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, hasActiveRival, parseFactionRelationships } from './types'
 
@@ -203,7 +202,7 @@ export function decideFactionFounding(collapsedFaction: {
 }
 
 export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult> {
-  const factions = await prisma.faction.findMany({
+  const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
     orderBy: { createdAt: 'asc' },
     take: ctx.factionCap,
@@ -224,7 +223,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
   // one turn, not the entire faction simulation.
   const turnsOnGoalByFaction = new Map<string, number>()
   try {
-    const goalChangeEvents = await prisma.worldEvent.findMany({
+    const goalChangeEvents = await ctx.db.worldEvent.findMany({
       where: { campaignId: ctx.campaignId, type: 'faction.goal' },
       select: { targetId: true, turnNumber: true },
       orderBy: { turnNumber: 'desc' },
@@ -247,7 +246,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
   // the set is kept current as collapses happen below.
   const activeFactionIds = new Set(
     (
-      await prisma.faction.findMany({
+      await ctx.db.faction.findMany({
         where: { campaignId: ctx.campaignId, isActive: true },
         select: { id: true },
       })
@@ -263,13 +262,13 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
 
     if (collapse.collapses) {
       const rivalId = findRivalId(relationships)
-      const absorber = rivalId ? await prisma.faction.findUnique({ where: { id: rivalId } }) : null
+      const absorber = rivalId ? await ctx.db.faction.findUnique({ where: { id: rivalId } }) : null
 
       let successorName: string | null = null
 
       if (absorber?.isActive) {
         if (!ctx.dryRun) {
-          await prisma.faction.update({
+          await ctx.db.faction.update({
             where: { id: absorber.id },
             data: {
               resources: clamp(absorber.resources + collapse.transferResources, 0, 100),
@@ -281,7 +280,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
           // MEMBER regardless of prior role, since the absorbing faction
           // already has its own leadership; tickFactionLeadership will fill
           // any resulting gap there if it somehow doesn't.
-          await prisma.nPC.updateMany({
+          await ctx.db.nPC.updateMany({
             where: { factionId: faction.id },
             data: { factionId: absorber.id, factionRole: 'MEMBER' },
           })
@@ -289,7 +288,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
           // Territory follows the same fate as the members — the absorber
           // takes it all, and nothing stays contested against an owner that
           // no longer exists.
-          await prisma.location.updateMany({
+          await ctx.db.location.updateMany({
             where: { ownerFactionId: faction.id },
             data: { ownerFactionId: absorber.id, isContested: false },
           })
@@ -301,7 +300,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
         successorName = successor.name
 
         if (!ctx.dryRun) {
-          const createdSuccessor = await prisma.faction.create({
+          const createdSuccessor = await ctx.db.faction.create({
             data: {
               campaignId: ctx.campaignId,
               name: successor.name,
@@ -320,7 +319,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
 
           // Members carry over to the remnant with their existing roles —
           // it's the same people, just organized smaller.
-          await prisma.nPC.updateMany({
+          await ctx.db.nPC.updateMany({
             where: { factionId: faction.id },
             data: { factionId: createdSuccessor.id },
           })
@@ -328,7 +327,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
           // The remnant inherits the predecessor's territory too — diminished
           // in strength, not in borders (borders erode later via rivals'
           // EXPAND ambitions, not by fiat at founding).
-          await prisma.location.updateMany({
+          await ctx.db.location.updateMany({
             where: { ownerFactionId: faction.id },
             data: { ownerFactionId: createdSuccessor.id, isContested: false },
           })
@@ -336,7 +335,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
       }
 
       if (!ctx.dryRun) {
-        await prisma.faction.update({
+        await ctx.db.faction.update({
           where: { id: faction.id },
           data: { resources: next.resources, stability: next.stability, military: next.military, isActive: false },
         })
@@ -379,7 +378,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
         })
 
     if (!ctx.dryRun) {
-      await prisma.faction.update({
+      await ctx.db.faction.update({
         where: { id: faction.id },
         data: {
           resources: next.resources,

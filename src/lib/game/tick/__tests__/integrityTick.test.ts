@@ -10,7 +10,7 @@ import { tickIntegrity } from '../integrityTick'
 import type { TickContext } from '../types'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'camp1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, ...overrides }
+  return { campaignId: 'camp1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: {} as any, ...overrides }
 }
 
 beforeEach(() => vi.clearAllMocks())

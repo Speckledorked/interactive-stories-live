@@ -19,6 +19,7 @@ export async function tickIntegrity(ctx: TickContext): Promise<TickHandlerResult
     console.log(
       `🩺 Integrity pass for ${ctx.campaignId}: ${report.violationsFound} violation(s), ` +
       `${report.repairsApplied} repaired, ${report.unrepaired.length} unrepaired` +
+      (report.escalations.length > 0 ? `, ${report.escalations.length} escalation(s)` : '') +
       (ctx.dryRun ? ' (dry run — nothing written)' : '')
     )
   }

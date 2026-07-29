@@ -9,6 +9,7 @@ const db = vi.hoisted(() => ({
   debt: { findMany: vi.fn(async (): Promise<any[]> => []), update: vi.fn(async (_args: any) => ({})) },
   war: { findMany: vi.fn(async (): Promise<any[]> => []), update: vi.fn(async (_args: any) => ({})) },
   quest: { findMany: vi.fn(async (): Promise<any[]> => []) },
+  worldEvent: { findMany: vi.fn(async (): Promise<any[]> => []) },
 }))
 
 import { runIntegrityPass } from '../runIntegrityPass'
@@ -24,6 +25,7 @@ beforeEach(() => {
   db.debt.findMany.mockResolvedValue([])
   db.war.findMany.mockResolvedValue([])
   db.quest.findMany.mockResolvedValue([])
+  db.worldEvent.findMany.mockResolvedValue([])
 })
 
 describe('runIntegrityPass — a clean campaign', () => {
@@ -74,6 +76,60 @@ describe('runIntegrityPass — detect-only violations', () => {
     expect(report.repairsApplied).toBe(0)
     expect(report.unrepaired).toHaveLength(2)
     expect(changes).toHaveLength(0)
+  })
+})
+
+describe('runIntegrityPass — escalation', () => {
+  it('reports no escalations for a normal, one-off repair', async () => {
+    db.character.findMany.mockResolvedValue([
+      { id: 'char1', name: 'Jason', relationships: { 'npc_123': { trust: 10 } }, resources: null },
+    ])
+    const { report } = await runIntegrityPass(db as any, 'camp1', 5)
+    expect(report.escalations).toEqual([])
+  })
+
+  it('escalates when the same entity was already repaired on a prior turn, per WorldEvent history', async () => {
+    // This exact (checkKey, entity) pair already shows up once in history —
+    // combined with this pass's own repair, that is TWO separate turns, the
+    // recurrence signal itself.
+    db.worldEvent.findMany.mockResolvedValue([{
+      checkKey: 'character.relationships.keys.resolve',
+      targetType: 'CHARACTER',
+      targetId: 'char1',
+      targetName: 'Jason',
+      turnNumber: 3,
+      reason: 'prior repair',
+    }])
+    db.character.findMany.mockResolvedValue([
+      { id: 'char1', name: 'Jason', relationships: { 'npc_123': { trust: 10 } }, resources: null },
+    ])
+
+    const { report } = await runIntegrityPass(db as any, 'camp1', 7)
+
+    expect(report.escalations).toHaveLength(1)
+    expect(report.escalations[0]).toMatchObject({
+      checkKey: 'character.relationships.keys.resolve',
+      kind: 'recurring-entity',
+      entityIds: ['char1'],
+      turnNumbers: [3, 7],
+    })
+  })
+
+  it('does not escalate when history shows a different entity or a different checkKey', async () => {
+    db.worldEvent.findMany.mockResolvedValue([{
+      checkKey: 'character.relationships.keys.resolve',
+      targetType: 'CHARACTER',
+      targetId: 'char-someone-else',
+      targetName: 'Someone Else',
+      turnNumber: 3,
+      reason: 'unrelated prior repair',
+    }])
+    db.character.findMany.mockResolvedValue([
+      { id: 'char1', name: 'Jason', relationships: { 'npc_123': { trust: 10 } }, resources: null },
+    ])
+
+    const { report } = await runIntegrityPass(db as any, 'camp1', 7)
+    expect(report.escalations).toHaveLength(0)
   })
 })
 

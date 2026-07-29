@@ -52,6 +52,7 @@ export async function persistWorldEvents(
         reason: change.reason,
         significant: change.significant,
         importance: change.importance,
+        checkKey: change.checkKey ?? null,
       })),
     })
 

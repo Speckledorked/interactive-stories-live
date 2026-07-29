@@ -6,11 +6,12 @@
 // themselves (see types.ts's doc comments for why that split matters).
 
 import type { Prisma, PrismaClient } from '@prisma/client'
-import { WorldChange } from '../tick/types'
+import { TickEntityType, WorldChange } from '../tick/types'
 import { INTEGRITY_CHECKS, INTEGRITY_REPAIRS } from './checkRegistry'
 import { loadIntegritySnapshot } from './snapshot'
 import { applyRepairWrite } from './applyRepairWrite'
 import { MAX_REPAIRS_PER_ENTITY, MAX_REPAIRS_PER_PASS } from './caps'
+import { detectEscalations, IntegrityEventRecord, loadRecentIntegrityEvents } from './escalation'
 import { IntegrityReport, IntegritySnapshot, Violation, repairToWorldChange } from './types'
 
 type Db = Prisma.TransactionClient | PrismaClient
@@ -40,6 +41,25 @@ export async function runIntegrityPass(
   const { violations, perCheckMs } = runChecks(snapshot)
   const { changes, unrepaired, repairsApplied } = await applyRepairs(db, snapshot, violations, dryRun)
 
+  // Recurrence is inherently a fixed-then-broke-again signal, so it's built
+  // from what actually got REPAIRED, not every violation — an unrepaired,
+  // detect-only violation (duplicate names) recurring means nothing more
+  // than "we haven't built a fix for this yet", which is already known.
+  // History predates this pass's own writes (persistWorldEvents runs after
+  // every TICK_HANDLERS entry finishes, not per-handler), so this pass's
+  // own just-applied repairs have to be added in-memory rather than
+  // re-queried.
+  const history = await loadRecentIntegrityEvents(db, campaignId)
+  const thisPass = changesToEventRecords(changes, turnNumber)
+  const escalations = detectEscalations([...history, ...thisPass])
+
+  if (escalations.length > 0) {
+    console.error(
+      `🚨 Integrity escalation for ${campaignId}: ${escalations.length} pattern(s) look like a code bug, not routine drift:\n` +
+      escalations.map(describeEscalation).join('\n')
+    )
+  }
+
   const report: IntegrityReport = {
     campaignId,
     turnNumber,
@@ -47,10 +67,30 @@ export async function runIntegrityPass(
     violationsFound: violations.length,
     repairsApplied,
     unrepaired,
+    escalations,
     perCheckMs,
   }
 
   return { changes, report }
+}
+
+function changesToEventRecords(changes: WorldChange[], turnNumber: number): IntegrityEventRecord[] {
+  return changes
+    .filter((c) => c.origin === 'integrity' && c.checkKey)
+    .map((c) => ({
+      checkKey: c.checkKey as string,
+      entityType: c.entityType as TickEntityType,
+      entityId: c.entityId,
+      entityName: c.entityName,
+      turnNumber,
+      description: c.reason,
+    }))
+}
+
+function describeEscalation(escalation: ReturnType<typeof detectEscalations>[number]): string {
+  return escalation.kind === 'recurring-entity'
+    ? `  - "${escalation.checkKey}" keeps recurring on ${escalation.sample.entityName} (${escalation.entityIds[0]}) across turns ${escalation.turnNumbers.join(', ')} — a correct repair should be permanent, so something keeps re-breaking this row`
+    : `  - "${escalation.checkKey}" has fired on ${escalation.entityIds.length} different entities — likely a systematic bug in whatever write path produces this shape, not isolated bad luck`
 }
 
 function runChecks(snapshot: IntegritySnapshot): { violations: Violation[]; perCheckMs: Record<string, number> } {

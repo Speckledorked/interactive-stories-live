@@ -1,12 +1,16 @@
-# Integrity Engine Phase 5 — self-contained auto-fix pipeline.
+# Integrity Engine Phase 5 — self-contained, fully autonomous auto-fix
+# pipeline. There is NO human review step anywhere in this workflow — every
+# fix merges itself once the mechanical checks below pass. That's a
+# deliberate choice, not an oversight; read on for what replaces a human.
 #
 # NOT YET ENABLED FOR AUTOPILOT — read this before turning on the
 # `schedule` trigger below. This workflow is a real, working draft. Its
-# interface against anthropics/claude-code-action HAS been verified
-# against that project's own README/docs/usage.md/docs/configuration.md
-# (current as of this writing: v1, composite action, `prompt` +
-# `anthropic_api_key` + `claude_args` inputs, explicitly supports scheduled/
-# automated runs with a direct prompt and no human @mention). One thing
+# interface against anthropics/claude-code-action HAS been verified against
+# that project's own README/docs/usage.md/docs/configuration.md (current as
+# of this writing: v1, composite action, `prompt` + `anthropic_api_key` +
+# `claude_args` inputs, explicitly supports scheduled/automated runs with a
+# direct prompt and no human @mention, and has NO bash/git access by default
+# — the `--allowedTools` grant below is what it actually gets). One thing
 # still needs to happen before this can run for real:
 #
 #   Repo secrets this workflow reads and does not create:
@@ -14,43 +18,54 @@
 #       data, so check-escalations.ts can see real escalations. Scope this
 #       to read-only if your database supports it; this workflow never
 #       writes through it.
-#     - ANTHROPIC_API_KEY — your own key, billed to you, independent of
-#       any chat session. This is what makes the diagnose-and-fix step not
-#       depend on any particular conversation or person being around.
+#     - ANTHROPIC_API_KEY — your own key, billed to you, independent of any
+#       chat session.
 #   GITHUB_TOKEN is provided automatically by Actions and is scoped by the
-#   `permissions:` block below — nothing extra to add for it.
+#   `permissions:` block below.
 #
-# Everything else here — the escalation check, the oracle-technique
-# verification, the merge gate — is plain, deterministic, unit-tested code
-# in this repo (see src/lib/game/integrity/escalation*.ts and
-# verifyOracleTechnique.ts) and needs no separate validation.
+# WHY THERE IS NO HUMAN GATE, AND WHAT REPLACES IT:
 #
-# Safety shape (see the plan's Phase 5 sections 5g/5h for the reasoning):
-#   - The agent does the creative work (diagnose, write a failing test,
-#     draft a fix). It does NOT decide whether its own fix qualifies for
-#     auto-merge — and this isn't just a prompt instruction it could
-#     ignore: claude-code-action has NO bash access by default, and the
-#     `--allowedTools` grant below deliberately omits `git push` and any
-#     `gh`/GitHub-API command, so the agent is mechanically incapable of
-#     pushing or opening a PR itself, not just asked not to.
-#   - A PR is ALWAYS opened, labeled with the checkKey, so every attempt is
-#     visible and reviewable regardless of outcome.
-#   - Auto-merge requires ALL of: the full suite passing, the SPECIFIC new
-#     test file actually using the oracle technique this checkKey
-#     requires (checked mechanically, not from the agent's own claim —
-#     see verify-oracle-technique.ts), and that technique being
-#     auto-merge-eligible in the first place (oracleTechnique.ts).
-#   - A checkKey with no attributed source (escalationSourceMap.ts) never
-#     reaches this workflow at all — check-escalations.ts filters it out
-#     upstream.
-#   - `--max-turns` bounds the agent's run so a confused loop fails closed
-#     (no commits to verify against) instead of burning cost unbounded.
+#   Every oracle tier (property, fault-injection, lint, and even suite-only)
+#   now merges automatically once its checks pass — there is no tier that
+#   waits for a person. Since nothing else is going to catch a bad merge
+#   before it lands, this pipeline watches its own past merges instead:
+#
+#   1. A fix can never lower its own bar. verifyOracleTechnique.ts checks,
+#      unconditionally, whether a diff downgraded its checkKey's registered
+#      oracle technique — an agent can propose a STRONGER oracle (see the
+#      growth instructions in the prompt below) but a single diff can never
+#      register a weaker one. This is mechanical, not a request the agent
+#      could ignore.
+#   2. A merge that didn't actually work gets reverted automatically.
+#      regressionDetection.ts / check-for-regression.ts ask: has this exact
+#      checkKey already had a merged auto-fix PR recently? If the bug is
+#      still escalating after that merge, the fix was wrong — the pipeline
+#      reverts its own commit immediately, with no one approving the
+#      revert either. See the revert-regression job below.
+#   3. Scope is a decided-in-advance boundary, not a per-fix judgment call.
+#      A checkKey with no entry in escalationSourceMap.ts never reaches
+#      this workflow at all (check-escalations.ts filters it out upstream)
+#      — the agent can only ever touch files someone already registered as
+#      fixable, never anywhere else in the repo.
+#   4. Tool access is restricted at the mechanism level, not by asking
+#      nicely: claude-code-action's `--allowedTools` grant below omits
+#      `git push` and any `gh`/GitHub-API command, so the agent is
+#      mechanically incapable of pushing or opening a PR itself — the
+#      workflow's own steps do that, based on what actually happened, not
+#      the agent's report of it.
+#
+# GROWTH: every fix generated against a checkKey whose only oracle is
+# 'suite-only' is also asked to write a STRONGER test (property or
+# fault-injection) for that bug shape and register it in oracleTechnique.ts
+# — so the system gets harder to fool over time by proving more things
+# objectively, not by trusting its own track record. See the prompt.
 
 name: Integrity auto-fix
 
 on:
-  # Uncomment once secrets are set and the claude-code-action step has
-  # been verified manually (workflow_dispatch, below) at least once.
+  # Uncomment once secrets are set and this has been fired manually
+  # (workflow_dispatch, below) at least once against a real, deliberately
+  # seeded escalation.
   # schedule:
   #   - cron: '0 8 * * *'  # daily, offset from the app's own 06:00 UTC world-tick sweep (vercel.json)
   workflow_dispatch: {}
@@ -66,7 +81,6 @@ jobs:
       found: ${{ steps.check.outputs.found }}
       check_key: ${{ steps.check.outputs.check_key }}
       oracle_technique: ${{ steps.check.outputs.oracle_technique }}
-      auto_merge_eligible: ${{ steps.check.outputs.auto_merge_eligible }}
       source_files: ${{ steps.check.outputs.source_files }}
       campaign_count: ${{ steps.check.outputs.campaign_count }}
       total_occurrences: ${{ steps.check.outputs.total_occurrences }}
@@ -86,21 +100,150 @@ jobs:
         run: npx prisma generate
 
       # Deliberately no AI call in this job at all — see
-      # escalationAggregation.ts. This is the "yours, not the agent's"
-      # decision of whether there's anything worth investigating.
+      # escalationAggregation.ts. This is the plain, deterministic decision
+      # of whether there's anything worth investigating.
       - name: Check for actionable escalations
         id: check
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL_READONLY }}
         run: npx tsx scripts/check-escalations.ts
 
-  diagnose-and-fix:
+  # Triage: is work on this checkKey already in flight, and if not, is
+  # today's escalation a FRESH bug or a past "fix" that didn't work? No AI
+  # here either — this is what decides which of the next two jobs runs.
+  triage:
     needs: check-for-escalations
     if: needs.check-for-escalations.outputs.found == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.decide.outputs.action }} # 'skip' | 'revert' | 'fix'
+      revert_sha: ${{ steps.regression.outputs.revert_sha }}
+      regression_pr: ${{ steps.regression.outputs.regression_pr }}
     env:
       CHECK_KEY: ${{ needs.check-for-escalations.outputs.check_key }}
-      ORACLE_TECHNIQUE: ${{ needs.check-for-escalations.outputs.oracle_technique }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Work already in flight (either a fix or a revert still open) —
+      # never spawn a second attempt at the same checkKey on top of one
+      # already running.
+      - name: Check for an already-open PR
+        id: open_check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          fix_open=$(gh pr list --label "integrity-autofix:${CHECK_KEY}" --state open --json number --jq 'length')
+          revert_open=$(gh pr list --label "integrity-autofix-revert:${CHECK_KEY}" --state open --json number --jq 'length')
+          if [ "$fix_open" -gt 0 ] || [ "$revert_open" -gt 0 ]; then
+            echo "already_open=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_open=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check whether this is a fix that already merged and didn't work
+        id: regression
+        if: steps.open_check.outputs.already_open == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npx tsx scripts/check-for-regression.ts "${CHECK_KEY}"
+
+      - name: Decide
+        id: decide
+        run: |
+          if [ "${{ steps.open_check.outputs.already_open }}" = "true" ]; then
+            echo "action=skip" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.regression.outputs.is_regression }}" = "true" ]; then
+            echo "action=revert" >> "$GITHUB_OUTPUT"
+          else
+            echo "action=fix" >> "$GITHUB_OUTPUT"
+          fi
+
+  # A previously-merged auto-fix for this exact checkKey didn't work — the
+  # bug is escalating again. No agent involved: revert the commit that
+  # claimed to fix it, mechanically, and let the next run attempt a fresh
+  # diagnosis once the bad fix is off main.
+  revert-regression:
+    needs: [check-for-escalations, triage]
+    if: needs.triage.outputs.action == 'revert'
+    runs-on: ubuntu-latest
+    env:
+      CHECK_KEY: ${{ needs.check-for-escalations.outputs.check_key }}
+      REVERT_SHA: ${{ needs.triage.outputs.revert_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Revert the commit that didn't work
+        run: |
+          git config user.name "integrity-autofix[bot]"
+          git config user.email "integrity-autofix@users.noreply.github.com"
+          git checkout -b "integrity-autofix/revert-${CHECK_KEY}-${{ github.run_id }}"
+          git revert --no-edit "${REVERT_SHA}"
+
+      # Reverting should restore known-good state, but confirm it rather
+      # than assume it — cheap insurance, not redundant with anything else.
+      - name: Confirm the reverted state is actually clean
+        run: |
+          npx tsc --noEmit
+          npx vitest run
+
+      - name: Push and merge the revert
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push origin HEAD
+          {
+            echo "## This reverts a previous auto-fix that didn't work"
+            echo ""
+            printf 'checkKey `%s` escalated again after PR #%s (commit `%s`) claimed to fix it.\n' \
+              "${CHECK_KEY}" "${{ needs.triage.outputs.regression_pr }}" "${REVERT_SHA}"
+            echo ""
+            echo "Reverted automatically — no human approved this revert either. The"
+            echo "underlying bug still exists; the next scheduled run will attempt a"
+            echo "fresh diagnosis now that the broken fix is off \`main\`."
+            echo ""
+            echo "---"
+            echo "_Reverted automatically by the Integrity Engine's Phase 5 pipeline._"
+          } > /tmp/pr_body.md
+          gh pr create \
+            --title "Revert auto-fix for ${CHECK_KEY} — recurred after merge" \
+            --label "integrity-autofix-revert:${CHECK_KEY}" \
+            --body-file /tmp/pr_body.md
+          gh pr merge --auto --squash
+
+  # The dynamic part: an agent reads the attributed source, writes a
+  # failing test using the required oracle technique, confirms it fails,
+  # drafts a fix, confirms the new test now passes and the full suite
+  # stays green — then STOPS. It never pushes or opens a PR, and it never
+  # decides whether its own fix merges; the steps below do both based on
+  # what it actually left behind.
+  diagnose-and-fix:
+    needs: [check-for-escalations, triage]
+    if: needs.triage.outputs.action == 'fix'
+    runs-on: ubuntu-latest
+    env:
+      CHECK_KEY: ${{ needs.check-for-escalations.outputs.check_key }}
+      PRIOR_ORACLE_TECHNIQUE: ${{ needs.check-for-escalations.outputs.oracle_technique }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -117,36 +260,13 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      # Dedup against work already in flight — a checkKey that's still
-      # escalating while its own fix PR is open must not spawn a second one.
-      - name: Skip if a PR for this checkKey is already open
-        id: dedup
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          existing=$(gh pr list --label "integrity-autofix:${CHECK_KEY}" --state open --json number --jq 'length')
-          if [ "$existing" -gt 0 ]; then
-            echo "An open PR already exists for ${CHECK_KEY} — skipping."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Create working branch
-        if: steps.dedup.outputs.skip == 'false'
         run: |
           git config user.name "integrity-autofix[bot]"
           git config user.email "integrity-autofix@users.noreply.github.com"
           git checkout -b "integrity-autofix/${CHECK_KEY}-${{ github.run_id }}"
 
-      # The dynamic part: an agent reads the attributed source, writes a
-      # failing test using the required oracle technique, confirms it
-      # fails, drafts a fix, confirms the new test now passes and the full
-      # suite stays green — then STOPS. It never pushes or opens a PR;
-      # the steps below do that based on what it actually left behind, not
-      # its own report.
       - name: Diagnose and draft a fix
-        if: steps.dedup.outputs.skip == 'false'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -162,7 +282,7 @@ jobs:
             defect rather than routine data drift:
 
             checkKey: ${{ needs.check-for-escalations.outputs.check_key }}
-            Required oracle technique: ${{ needs.check-for-escalations.outputs.oracle_technique }}
+            Currently registered oracle technique: ${{ needs.check-for-escalations.outputs.oracle_technique }}
             Suspected source file(s): ${{ needs.check-for-escalations.outputs.source_files }}
             Campaigns affected: ${{ needs.check-for-escalations.outputs.campaign_count }}
             Total occurrences: ${{ needs.check-for-escalations.outputs.total_occurrences }}
@@ -172,8 +292,8 @@ jobs:
             1. Read the suspected source file(s) above and the check in
                src/lib/game/integrity/checks/ that produced this checkKey, to
                understand what's actually wrong.
-            2. Write ONE new test that reproduces this bug using the REQUIRED
-               ORACLE TECHNIQUE above, specifically:
+            2. Write ONE new test that reproduces this bug using the currently
+               registered oracle technique above, specifically:
                - "property": a fast-check round-trip property (see
                  worldUpdaters/__tests__/characters.properties.test.ts for the
                  existing convention).
@@ -181,6 +301,8 @@ jobs:
                  `process.env.RUN_DB_TESTS === '1'` (see
                  tick/__tests__/warTick.faultInjection.test.ts for the existing
                  convention).
+               - "suite-only": there is no stronger convention to follow yet for
+                 this checkKey — see step 6 below before you settle for this.
                A test that only asserts against a worked example is NOT
                acceptable regardless of which technique is named — it must be
                the named technique specifically.
@@ -190,75 +312,81 @@ jobs:
             4. Write the smallest correct fix to the suspected source file(s).
             5. Confirm the new test now passes, and confirm `npx vitest run`
                (the full suite) still passes.
-            6. Commit the new test and the fix as two separate commits on this
-               branch, in that order.
-            7. Do NOT push this branch and do NOT open a pull request — a
+            6. GROWTH STEP — only if the currently registered technique above is
+               "suite-only": this checkKey's only proof, until now, has been
+               "the tests still pass," which this codebase has already learned
+               is not enough. Try to write a SECOND, STRONGER test for this same
+               bug shape — a fast-check round-trip property or a real-database
+               fault-injection test, whichever actually fits what this bug is.
+               If you succeed, update `src/lib/game/integrity/oracleTechnique.ts`'s
+               `ORACLE_TECHNIQUE_FOR` map, changing this checkKey's entry from
+               "suite-only" to whichever stronger technique you just proved out,
+               in the same commit as that new test. If you can't find a real
+               stronger oracle for this bug shape, leave oracleTechnique.ts
+               alone — do not register a technique you have not actually backed
+               with a passing test of that kind. You may only ever REGISTER A
+               STRONGER technique here, never a weaker one; a downgrade will be
+               rejected mechanically regardless of what you write here.
+            7. Commit the new test(s) and the fix as separate commits on this
+               branch, in a sensible order.
+            8. Do NOT push this branch and do NOT open a pull request — a
                later step in this workflow does both, based on the actual
                commits and test results, not on anything you report here.
 
       - name: Verify the full suite (grading the actual commits, not the agent's report)
-        if: steps.dedup.outputs.skip == 'false'
         id: verify
         run: |
           npx tsc --noEmit
           npx vitest run
 
-      - name: Verify the new test actually uses the required oracle technique
-        if: steps.dedup.outputs.skip == 'false'
+      - name: Verify the oracle technique — mechanically, not from the agent's claim
         id: verify_oracle
         run: |
-          if npx tsx scripts/verify-oracle-technique.ts "${CHECK_KEY}" "${ORACLE_TECHNIQUE}" origin/main; then
+          if npx tsx scripts/verify-oracle-technique.ts "${CHECK_KEY}" "${PRIOR_ORACLE_TECHNIQUE}" origin/main; then
             echo "oracle_satisfied=true" >> "$GITHUB_OUTPUT"
           else
             echo "oracle_satisfied=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Push branch and open PR
-        if: steps.dedup.outputs.skip == 'false' && success()
+      # By this point the full suite already passed (or this step never
+      # runs at all — a failed suite fails the job outright, no PR, no
+      # branch pushed, nothing to clean up). If the oracle check ALSO
+      # passed, this fix has everything it will ever get and merges itself
+      # immediately. If it didn't, there's no PR to leave open for no one
+      # to review — just end here; the next scheduled run gets a
+      # completely fresh attempt at this checkKey.
+      - name: Push, open PR, and merge — only once everything actually checks out
+        if: success() && steps.verify_oracle.outputs.oracle_satisfied == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          AUTO_MERGE_ELIGIBLE: ${{ needs.check-for-escalations.outputs.auto_merge_eligible }}
-          ORACLE_SATISFIED: ${{ steps.verify_oracle.outputs.oracle_satisfied }}
         run: |
           git push origin HEAD
-
-          qualifies="false"
-          if [ "$AUTO_MERGE_ELIGIBLE" = "true" ] && [ "$ORACLE_SATISFIED" = "true" ]; then
-            qualifies="true"
-          fi
-
+          {
+            echo "## Evidence"
+            echo ""
+            printf -- '- **checkKey:** `%s`\n' "${CHECK_KEY}"
+            printf -- '- **Campaigns affected:** %s\n' "${{ needs.check-for-escalations.outputs.campaign_count }}"
+            printf -- '- **Total occurrences:** %s\n' "${{ needs.check-for-escalations.outputs.total_occurrences }}"
+            printf -- '- **Oracle technique verified in this diff:** %s\n' "true"
+            echo ""
+            echo "Full evidence:"
+            echo '```json'
+            printf '%s\n' "${{ needs.check-for-escalations.outputs.evidence }}"
+            echo '```'
+            echo ""
+            echo "## Autonomy"
+            echo ""
+            echo "**Auto-merged.** There is no human review step in this pipeline —"
+            echo "the checked oracle technique above (never weaker than what this"
+            echo "checkKey had before this diff) is the whole proof. If this fix"
+            echo "didn't actually work, the next run will notice this checkKey"
+            echo "escalating again and revert this exact commit automatically."
+            echo ""
+            echo "---"
+            echo "_Opened and merged automatically by the Integrity Engine's Phase 5 pipeline._"
+          } > /tmp/pr_body.md
           gh pr create \
             --title "Integrity auto-fix: ${CHECK_KEY}" \
             --label "integrity-autofix:${CHECK_KEY}" \
-            --body "$(cat <<EOF
-          ## Evidence
-
-          - **checkKey:** \`${CHECK_KEY}\`
-          - **Campaigns affected:** ${{ needs.check-for-escalations.outputs.campaign_count }}
-          - **Total occurrences:** ${{ needs.check-for-escalations.outputs.total_occurrences }}
-          - **Required oracle technique:** \`${ORACLE_TECHNIQUE}\`
-          - **Oracle technique verified in this diff:** ${ORACLE_SATISFIED}
-
-          Full evidence: \`${{ needs.check-for-escalations.outputs.evidence }}\`
-
-          ## Autonomy
-
-          $(if [ "$qualifies" = "true" ]; then
-            echo "**Auto-merge eligible** — the required oracle (\`${ORACLE_TECHNIQUE}\`) is present in this diff and the full suite passes. This PR will merge itself."
-          else
-            echo "**Human review required** — either this checkKey's strongest available oracle is only \`suite-only\`, or the generated test didn't demonstrably use the required technique. A green suite alone was proven insufficient twice in this codebase's own history; it doesn't auto-merge here either."
-          fi)
-
-          ---
-          _Opened automatically by the Integrity Engine's Phase 5 pipeline — see the plan's Phase 5 section for the full design._
-          EOF
-          )"
-
-          echo "qualifies=$qualifies" >> "$GITHUB_OUTPUT"
-        id: pr
-
-      - name: Auto-merge if the oracle qualifies
-        if: steps.dedup.outputs.skip == 'false' && success() && steps.pr.outputs.qualifies == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh pr merge --auto --squash
+            --body-file /tmp/pr_body.md
+          gh pr merge --auto --squash

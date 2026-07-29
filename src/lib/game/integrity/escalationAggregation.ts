@@ -15,11 +15,19 @@
 // evidence (already surfaced per-campaign by escalation.ts/Phase 2's
 // panel) but not something this pipeline can act on, and it should not be
 // half-acted on either.
+//
+// Reads only each campaign's MOST RECENT report, not its whole history.
+// An earlier version of this function walked every report in the
+// lookback window, which meant an already-merged fix could be
+// "rediscovered" from a stale, pre-fix report still inside the window —
+// confirmed and fixed here (see README Known Bugs). This also matters for
+// regressionDetection.ts: a genuine recurrence has to be read from
+// current state, not replayed from history that predates the fix.
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { Escalation, IntegrityReport } from './types'
 import { ESCALATION_SOURCE_FILES, hasAttributedSource } from './escalationSourceMap'
-import { OracleTechnique, isAutoMergeEligibleTechnique, oracleTechniqueFor } from './oracleTechnique'
+import { OracleTechnique, oracleTechniqueFor } from './oracleTechnique'
 
 type Db = Prisma.TransactionClient | PrismaClient
 
@@ -31,7 +39,6 @@ export interface AggregatedEscalation {
   totalOccurrences: number
   sourceFiles: readonly string[]
   oracleTechnique: OracleTechnique
-  autoMergeEligible: boolean
   /** One representative Escalation (first one seen), enough to build a
    * fix-generation prompt without a second DB round-trip. */
   sample: Escalation
@@ -64,29 +71,32 @@ export async function findActionableEscalations(db: Db): Promise<AggregatedEscal
     const history = Array.isArray(row.integrityReportHistory)
       ? (row.integrityReportHistory as unknown as IntegrityReport[])
       : []
+    if (history.length === 0) continue
 
-    for (const report of history) {
-      for (const escalation of report.escalations ?? []) {
-        if (!hasAttributedSource(escalation.checkKey)) continue
+    // Only the most recent report — history is append-only and ordered by
+    // when tickIntegrity persisted it (see persistReport.ts), so the last
+    // entry is the campaign's current state. Anything earlier may already
+    // be resolved.
+    const latest = history[history.length - 1]
 
-        const existing = byCheckKey.get(escalation.checkKey)
-        if (existing) {
-          if (!existing.campaignIds.includes(row.campaignId)) {
-            existing.campaignIds.push(row.campaignId)
-          }
-          existing.totalOccurrences += escalation.occurrences
-        } else {
-          const technique = oracleTechniqueFor(escalation.checkKey)
-          byCheckKey.set(escalation.checkKey, {
-            checkKey: escalation.checkKey,
-            campaignIds: [row.campaignId],
-            totalOccurrences: escalation.occurrences,
-            sourceFiles: ESCALATION_SOURCE_FILES[escalation.checkKey] ?? [],
-            oracleTechnique: technique,
-            autoMergeEligible: isAutoMergeEligibleTechnique(technique),
-            sample: escalation,
-          })
+    for (const escalation of latest.escalations ?? []) {
+      if (!hasAttributedSource(escalation.checkKey)) continue
+
+      const existing = byCheckKey.get(escalation.checkKey)
+      if (existing) {
+        if (!existing.campaignIds.includes(row.campaignId)) {
+          existing.campaignIds.push(row.campaignId)
         }
+        existing.totalOccurrences += escalation.occurrences
+      } else {
+        byCheckKey.set(escalation.checkKey, {
+          checkKey: escalation.checkKey,
+          campaignIds: [row.campaignId],
+          totalOccurrences: escalation.occurrences,
+          sourceFiles: ESCALATION_SOURCE_FILES[escalation.checkKey] ?? [],
+          oracleTechnique: oracleTechniqueFor(escalation.checkKey),
+          sample: escalation,
+        })
       }
     }
   }

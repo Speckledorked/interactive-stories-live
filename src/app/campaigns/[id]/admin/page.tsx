@@ -16,6 +16,7 @@ import { AdminNav, type AdminTabKey } from '@/components/admin/AdminNav'
 import { AdminOverviewPanel } from '@/components/admin/AdminOverviewPanel'
 import { DataAdvancedPanel } from '@/components/admin/DataAdvancedPanel'
 import { PublicChroniclePanel } from '@/components/admin/PublicChroniclePanel'
+import { IntegrityPanel } from '@/components/admin/IntegrityPanel'
 import type { SetupChecklistItem } from '@/components/admin/SetupChecklist'
 import { FieldHelp } from '@/components/ui/field-help'
 
@@ -461,6 +462,13 @@ export default function AdminPage() {
       if (membersResponse.ok) {
         const membersData = await membersResponse.json()
         setMembers(membersData.members || [])
+      }
+
+      // Fetch campaign health (#57 — computed and persisted every 5 scenes,
+      // but never surfaced until now)
+      const healthResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/health`)
+      if (healthResponse.ok) {
+        setHealth(await healthResponse.json())
       }
     } catch (err) {
       setError('Failed to load admin data')
@@ -2182,6 +2190,11 @@ export default function AdminPage() {
                   ))}
                 </div>
               </div>
+            )}
+
+            {/* World Integrity Tab */}
+            {activeTab === 'integrity' && (
+              <IntegrityPanel campaignId={campaignId} />
             )}
 
             {/* Lore Tab */}

@@ -13,6 +13,7 @@ export type AdminTabKey =
   | 'map'
   | 'ai'
   | 'clocks'
+  | 'integrity'
   | 'members'
   | 'invites'
   | 'safety'
@@ -48,6 +49,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { key: 'ai', label: 'AI Settings' },
       { key: 'clocks', label: 'Clocks' },
+      { key: 'integrity', label: 'World Integrity' },
     ],
   },
   {

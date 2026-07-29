@@ -3,17 +3,24 @@
 // LAST in TICK_HANDLERS (see worldTick.ts) so it validates the state the
 // turn actually produced, after every other handler has already written.
 //
-// Structured, persistent reporting (a WorldMeta-backed history the admin
-// panel reads) is Phase 2 and not built yet — this phase logs a summary and
-// relies on the existing changes[] fan-out (persistWorldEvents in
-// particular) to make repairs visible and auditable in the interim.
+// Phase 2: every real pass (never a dry run) also persists its report to
+// WorldMeta, the same bounded-history shape campaign-health.ts already
+// proved out, so the admin integrity panel has something to read.
 
 import { prisma } from '@/lib/prisma'
 import { TickContext, TickHandlerResult } from './types'
 import { runIntegrityPass } from '../integrity/runIntegrityPass'
+import { persistIntegrityReport } from '../integrity/persistReport'
 
 export async function tickIntegrity(ctx: TickContext): Promise<TickHandlerResult> {
   const { changes, report } = await runIntegrityPass(prisma, ctx.campaignId, ctx.turnNumber, { dryRun: ctx.dryRun })
+
+  // A dry run (admin tick preview) must not persist a report — it's not a
+  // real pass, and would pollute the history with a check that never
+  // actually applied anything.
+  if (!ctx.dryRun) {
+    await persistIntegrityReport(prisma, report)
+  }
 
   if (report.violationsFound > 0) {
     console.log(

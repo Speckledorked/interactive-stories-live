@@ -11,9 +11,18 @@
 // more factions than the cap can have one sit leaderless past its tick
 // entirely. This check (and its repair) is what actually fixes that,
 // running last in TICK_HANDLERS with no cap of its own.
+//
+// Phase 4: "exactly one living LEADER" is universe-dependent, not a law of
+// physics — an anarchist collective or a hive-mind faction can be
+// leaderless on purpose. When this campaign's worldRules say so (via the
+// 'faction.leaderOptional' family, and only once that verdict is confident
+// and past its probation window — see worldRules.ts), this check simply
+// doesn't fire for that faction. Absent or inactive rules mean this runs
+// exactly as it always has.
 
 import { decideSuccession } from '../../tick/leadershipTick'
 import { IntegrityCheck, IntegritySnapshot, Repair, RepairFn, Violation } from '../types'
+import { isRuleActive, ruleFor } from '../worldRules'
 
 function membersFor(snapshot: IntegritySnapshot, factionId: string) {
   return snapshot.npcs
@@ -25,6 +34,9 @@ export const factionHasOneLivingLeader: IntegrityCheck = {
   key: 'faction.leadership.exactlyOneLivingLeader',
   description: 'An active Faction with living affiliated members should have exactly one living LEADER',
   run(snapshot: IntegritySnapshot): Violation[] {
+    const leaderOptional = isRuleActive(ruleFor(snapshot.worldRules, 'faction.leaderOptional'), snapshot.turnNumber)
+    if (leaderOptional) return []
+
     const violations: Violation[] = []
     for (const faction of snapshot.factions) {
       if (!faction.isActive) continue

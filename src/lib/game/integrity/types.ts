@@ -13,6 +13,7 @@
 // one hand-written invariant into a registry of them.
 
 import { TickEntityType, WorldChange } from '../tick/types'
+import { WorldRules } from './worldRules'
 
 /** One fact the engine asserts must hold for every campaign, regardless of
  * setting or fiction (see integrity/checks/ for the structural-tier list;
@@ -92,6 +93,9 @@ export interface IntegritySnapshot {
   debts: SnapshotDebt[]
   wars: SnapshotWar[]
   quests: SnapshotQuest[]
+  /** Phase 4 — this campaign's semantic-invariant verdicts, or null if it
+   * has none yet (always a safe state; see worldRules.ts). */
+  worldRules: WorldRules | null
 }
 
 export interface SnapshotNpc {

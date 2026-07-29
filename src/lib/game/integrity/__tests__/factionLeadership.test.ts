@@ -49,6 +49,48 @@ describe('factionHasOneLivingLeader', () => {
     })
     expect(factionHasOneLivingLeader.run(snapshot)).toHaveLength(0)
   })
+
+  describe('Phase 4 — faction.leaderOptional worldRule', () => {
+    const leaderlessSnapshot = (worldRules: any) =>
+      emptySnapshot({
+        turnNumber: 100,
+        factions: [{ id: 'f1', name: 'The Free Assembly', isActive: true, leaderCharacterId: null, relationships: {} }],
+        npcs: [npc({ id: 'npc1', name: 'Kessler', importance: 3 })],
+        worldRules,
+      })
+
+    it('still flags a leaderless faction when there is no rule on record', () => {
+      expect(factionHasOneLivingLeader.run(leaderlessSnapshot(null))).toHaveLength(1)
+    })
+
+    it('does not flag a leaderless faction once an active, confident, past-probation rule says leaders are optional', () => {
+      const snapshot = leaderlessSnapshot({
+        rules: [{ familyKey: 'faction.leaderOptional', applies: true, confidence: 0.9, rationale: 'x', sinceTurn: 0 }],
+      })
+      expect(factionHasOneLivingLeader.run(snapshot)).toHaveLength(0)
+    })
+
+    it('still flags it when the rule exists but says leaders are required (applies: false)', () => {
+      const snapshot = leaderlessSnapshot({
+        rules: [{ familyKey: 'faction.leaderOptional', applies: false, confidence: 0.9, rationale: 'x', sinceTurn: 0 }],
+      })
+      expect(factionHasOneLivingLeader.run(snapshot)).toHaveLength(1)
+    })
+
+    it('still flags it when the rule is too low-confidence to trust', () => {
+      const snapshot = leaderlessSnapshot({
+        rules: [{ familyKey: 'faction.leaderOptional', applies: true, confidence: 0.2, rationale: 'x', sinceTurn: 0 }],
+      })
+      expect(factionHasOneLivingLeader.run(snapshot)).toHaveLength(1)
+    })
+
+    it('still flags it while the rule is within its probation window', () => {
+      const snapshot = leaderlessSnapshot({
+        rules: [{ familyKey: 'faction.leaderOptional', applies: true, confidence: 0.9, rationale: 'x', sinceTurn: 99 }],
+      })
+      expect(factionHasOneLivingLeader.run(snapshot)).toHaveLength(1)
+    })
+  })
 })
 
 describe('repairFactionLeadership', () => {

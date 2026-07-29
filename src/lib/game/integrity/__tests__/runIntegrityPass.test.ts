@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const db = vi.hoisted(() => ({
+  campaign: { findUnique: vi.fn(async (): Promise<any> => ({ worldRules: null })) },
   location: { findMany: vi.fn(async (): Promise<any[]> => []) },
   nPC: { findMany: vi.fn(async (): Promise<any[]> => []), update: vi.fn(async (_args: any) => ({})) },
   faction: { findMany: vi.fn(async (): Promise<any[]> => []), update: vi.fn(async (_args: any) => ({})) },
@@ -17,6 +18,7 @@ import { MAX_REPAIRS_PER_PASS, MAX_REPAIRS_PER_ENTITY } from '../caps'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  db.campaign.findUnique.mockResolvedValue({ worldRules: null })
   db.location.findMany.mockResolvedValue([])
   db.nPC.findMany.mockResolvedValue([])
   db.faction.findMany.mockResolvedValue([])

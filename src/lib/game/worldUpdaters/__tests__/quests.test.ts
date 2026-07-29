@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { applyQuestChanges, QuestChange } from '../quests'
+import { uniqueConstraintError } from './testPrismaErrors'
 
 vi.mock('../../questRewards', () => ({
   applyQuestRewardGrant: vi.fn(async () => ['Jason received 50 gold from completing "Clear the Warrens"']),
@@ -69,6 +70,31 @@ describe('applyQuestChanges — new quest', () => {
     await applyQuestChanges(tx as any, 'camp1', 1, [{ changes: {} } as QuestChange])
     expect(tx.quest.create).not.toHaveBeenCalled()
     expect(tx.quest.findFirst).not.toHaveBeenCalled()
+  })
+
+  // Phase 1b's real DB uniqueness on (campaignId, name) — the findFirst
+  // above already confirmed no quest by this name exists, so this should be
+  // unreachable in the common case, but the create runs inside the same
+  // transaction as every other domain's changes for the scene (see the
+  // schema comment on Quest.objectiveKey), so a rare collision must degrade
+  // rather than abort it.
+  it('skips registration and does not throw when the name collides at write time', async () => {
+    tx.quest.findFirst.mockResolvedValue(null)
+    tx.quest.create.mockRejectedValueOnce(uniqueConstraintError('Quest_campaignId_name_lower_key'))
+
+    await expect(applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'Clear the Warrens', changes: { description: 'Rats.', status: 'ACTIVE' } } as QuestChange,
+    ])).resolves.toBeUndefined()
+
+    expect(applyQuestRewardGrant).not.toHaveBeenCalled()
+  })
+
+  it('still throws a non-uniqueness error from quest registration', async () => {
+    tx.quest.findFirst.mockResolvedValue(null)
+    tx.quest.create.mockRejectedValueOnce(new Error('connection lost'))
+    await expect(applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'Clear the Warrens', changes: { description: 'Rats.' } } as QuestChange,
+    ])).rejects.toThrow('connection lost')
   })
 })
 

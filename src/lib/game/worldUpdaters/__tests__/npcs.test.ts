@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { applyNpcChanges, NpcChange } from '../npcs'
 import type { NPC, Character } from '@prisma/client'
+import { uniqueConstraintError } from './testPrismaErrors'
 
 const makeTx = () => ({
   nPC: {
@@ -124,6 +125,28 @@ describe('applyNpcChanges — stub creation', () => {
       where: { id: 'new-npc' },
       data: expect.objectContaining({ goals: 'Vanish before dawn' }),
     })
+  })
+
+  // Phase 1b added a real DB uniqueness constraint on (campaignId, name).
+  // resolveEntityByNameOrId already confirmed no existing NPC matches before
+  // this create runs, so this should be unreachable in practice — but this
+  // create shares a transaction with every other domain's changes for the
+  // scene, so a rare collision must degrade, not take the whole scene down.
+  it('skips the stub and does not throw when the name collides at write time', async () => {
+    tx.nPC.create.mockRejectedValueOnce(uniqueConstraintError('NPC_campaignId_name_lower_key'))
+
+    const result = await applyNpcChanges(tx as any, 'camp1', [
+      { npc_name_or_id: 'A Mysterious Stranger', is_new: true, changes: { description: 'Cloaked.' } } as NpcChange,
+    ], [], [], true)
+
+    expect(result.involvedNpcIds).toEqual([])
+  })
+
+  it('still throws a non-uniqueness error from stub creation', async () => {
+    tx.nPC.create.mockRejectedValueOnce(new Error('connection lost'))
+    await expect(applyNpcChanges(tx as any, 'camp1', [
+      { npc_name_or_id: 'A Mysterious Stranger', is_new: true, changes: { description: 'Cloaked.' } } as NpcChange,
+    ], [], [], true)).rejects.toThrow('connection lost')
   })
 
   it('does not create a duplicate stub when the name is an ambiguous fuzzy match', async () => {

@@ -6,6 +6,7 @@ import { Prisma, Faction } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { resolveEntityByNameOrId } from '../entityResolution'
 import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
+import { isUniqueConstraintViolation } from './uniqueConstraintGuard'
 
 type Db = Prisma.TransactionClient
 export type FactionChange = NonNullable<WorldUpdates['faction_changes']>[number]
@@ -84,28 +85,37 @@ export async function applyFactionChanges(
         console.log(`  🏛️ Updated faction: ${faction.name}`)
       }
     } else if (factionResolution.kind === 'not_found' && (factionChange.is_new || factionChange.changes.description)) {
-      // Auto-create a stub faction when the AI introduces a new group mid-campaign
+      // Auto-create a stub faction when the AI introduces a new group
+      // mid-campaign. Same reasoning as npcs.ts's identical guard: this
+      // create runs inside the transaction covering every domain's changes
+      // for this scene, so a rare name collision must not take the whole
+      // scene down with it.
       const initialThreat = factionChange.changes.threat_level
         ? (THREAT_LEVEL_MAP[factionChange.changes.threat_level.toUpperCase()] || 1)
         : 1
-      const newFaction = await tx.faction.create({
-        data: {
-          campaignId,
-          name: factionChange.faction_name_or_id,
-          description: factionChange.changes.description || '',
-          goals: factionChange.changes.goals || '',
-          currentPlan: factionChange.changes.current_plan || '',
-          threatLevel: initialThreat,
-          gmNotes: factionChange.changes.gm_notes_append || '',
-          // Fog of war: a faction introduced offscreen exists but isn't
-          // "known" yet — undiscovered until a live scene actually
-          // involves it.
-          isDiscovered: sceneOrigin
-        }
-      })
-      factionsForResolution.push(newFaction)
-      involvedFactionIds.add(newFaction.id)
-      console.log(`  🏛️ Created new faction: ${newFaction.name}`)
+      try {
+        const newFaction = await tx.faction.create({
+          data: {
+            campaignId,
+            name: factionChange.faction_name_or_id,
+            description: factionChange.changes.description || '',
+            goals: factionChange.changes.goals || '',
+            currentPlan: factionChange.changes.current_plan || '',
+            threatLevel: initialThreat,
+            gmNotes: factionChange.changes.gm_notes_append || '',
+            // Fog of war: a faction introduced offscreen exists but isn't
+            // "known" yet — undiscovered until a live scene actually
+            // involves it.
+            isDiscovered: sceneOrigin
+          }
+        })
+        factionsForResolution.push(newFaction)
+        involvedFactionIds.add(newFaction.id)
+        console.log(`  🏛️ Created new faction: ${newFaction.name}`)
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) throw error
+        console.warn(`  ⚠️ Faction "${factionChange.faction_name_or_id}" collided with an existing name at write time — skipping this stub rather than aborting the scene`)
+      }
     } else if (factionResolution.kind === 'not_found') {
       console.warn(`  ⚠️ Faction not found and no stub info provided: ${factionChange.faction_name_or_id}`)
     }

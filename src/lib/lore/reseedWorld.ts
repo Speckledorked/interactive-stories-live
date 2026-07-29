@@ -40,6 +40,7 @@ import { isConfidentFuzzyMatch } from '@/lib/game/entityResolution'
 import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
 import { generateMoveFlavor } from '@/lib/ai/moveFlavor'
+import { generateWorldRules, generatedRulesToWorldRules } from '@/lib/ai/worldRulesGenerator'
 import { buildLoreDigest } from './loreDigest'
 import { createFactionsForCampaign, createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
@@ -65,6 +66,7 @@ export interface ReseedSummary {
   archetypesReplaced: number
   archetypesSkipped: boolean
   movesFlavored: number
+  worldRulesSet: boolean
 }
 
 export type ReseedResult =
@@ -458,6 +460,36 @@ export async function reseedWorldFromLore(campaignId: string, options: ReseedOpt
     }
   }
 
+  // --- World rules: Phase 4 semantic-invariant verdicts -----------------------
+  // Same wantX gate as the corruption theme above (fresh, or this campaign
+  // has never had a verdict) — never overwrites an admin/earlier-reseed
+  // verdict in live mode. Its own AI call rather than folded into extras:
+  // that call is already near its own token budget, and losing this to a
+  // truncated response there would silently cost archetypes/theme too, not
+  // just this.
+  let worldRulesSet = false
+  if (fresh || !campaign.worldRules) {
+    const generatedRules = await generateWorldRules(
+      campaign.title,
+      campaign.description || '',
+      campaign.universe || 'Original',
+      lore.digest.slice(0, EXTRAS_DIGEST_CHARS)
+    )
+    if (generatedRules && generatedRules.length > 0) {
+      const worldMeta = await prisma.worldMeta.findUnique({
+        where: { campaignId },
+        select: { currentTurnNumber: true },
+      })
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: {
+          worldRules: generatedRulesToWorldRules(generatedRules, worldMeta?.currentTurnNumber ?? 1) as object,
+        },
+      })
+      worldRulesSet = true
+    }
+  }
+
   // --- Shadow branches: keep the corruption invariant --------------------------
   // Themed campaign: secret scaffold nodes are the forbidden arts
   // (idempotent re-mark). Fresh campaign whose theme just went away: clear
@@ -490,6 +522,7 @@ export async function reseedWorldFromLore(campaignId: string, options: ReseedOpt
     archetypesReplaced,
     archetypesSkipped: !wantArchetypes,
     movesFlavored,
+    worldRulesSet,
   }
 
   console.log(

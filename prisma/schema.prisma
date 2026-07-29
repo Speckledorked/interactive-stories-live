@@ -286,6 +286,17 @@ model Campaign {
   // Shape: GeneratedCalendar (lib/game/calendar.ts)
   calendarConfig Json?
 
+  // Integrity Engine Phase 4 — universe-scoped semantic invariants. The
+  // catalogue of check families this can activate is closed and hard-coded
+  // (game/integrity/worldRules.ts); the AI only picks WHICH families apply
+  // to this universe and with what confidence, generated at reseed time
+  // (lib/ai/worldRulesGenerator.ts) the same way corruptionTheme is — never
+  // a free-form predicate. Null (the default) means every semantic check
+  // behaves exactly as it did before this column existed: absence is
+  // always a safe state here, same as corruptionTheme.
+  // Shape: { rules: WorldRule[] } (game/integrity/worldRules.ts)
+  worldRules Json?
+
   // True while a creation-time lore import + auto-reseed is in flight —
   // the campaign is unplayable (no characters, no scenes) until the world
   // has finished becoming its canon self, so a mid-import character can't

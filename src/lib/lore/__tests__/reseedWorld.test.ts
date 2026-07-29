@@ -7,6 +7,7 @@ import { planFactionMerge, planFrontMerge, reseedWorldFromLore } from '../reseed
 import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
 import { generateMoveFlavor } from '@/lib/ai/moveFlavor'
+import { generateWorldRules } from '@/lib/ai/worldRulesGenerator'
 import { createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 import { BASIC_MOVES } from '@/lib/pbta-moves'
 
@@ -20,6 +21,7 @@ const db = vi.hoisted(() => ({
   nPC: { findMany: vi.fn() },
   location: { findMany: vi.fn() },
   move: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
+  worldMeta: { findUnique: vi.fn() },
   $transaction: vi.fn(),
 }))
 
@@ -51,6 +53,12 @@ vi.mock('@/lib/ai/worldExtras', () => ({
 }))
 vi.mock('@/lib/ai/moveFlavor', () => ({
   generateMoveFlavor: vi.fn().mockResolvedValue(null),
+}))
+vi.mock('@/lib/ai/worldRulesGenerator', () => ({
+  generateWorldRules: vi.fn().mockResolvedValue(null),
+  generatedRulesToWorldRules: vi.fn((rules: any[], sinceTurn: number) => ({
+    rules: rules.map((r) => ({ ...r, sinceTurn })),
+  })),
 }))
 vi.mock('@/lib/templates/campaign-templates', () => ({
   createFactionsForCampaign: vi.fn(),
@@ -409,6 +417,78 @@ describe('reseedWorldFromLore — move flavor regeneration', () => {
     expect(generateMoveFlavor).toHaveBeenCalled()
     expect(db.move.deleteMany).not.toHaveBeenCalled()
     if (result.ok) expect(result.summary.movesFlavored).toBe(2)
+  })
+})
+
+describe('reseedWorldFromLore — Phase 4 world rules generation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    db.faction.findMany.mockResolvedValue([])
+    db.faction.updateMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.findMany.mockResolvedValue([])
+    db.campaignCapability.deleteMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.createMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.updateMany.mockResolvedValue({ count: 0 })
+    db.clock.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([])
+    db.location.findMany.mockResolvedValue([])
+    db.campaignArchetype.count.mockResolvedValue(4)
+    db.campaignArchetype.deleteMany.mockResolvedValue({ count: 0 })
+    db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
+    db.move.findMany.mockResolvedValue(BASIC_MOVES.map(m => ({ baseMoveKey: m.key })))
+    db.$transaction.mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops))
+  })
+
+  it('generates and persists rules when the campaign has none yet', async () => {
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'Test', description: '', universe: 'Original',
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null, worldRules: null,
+    })
+    db.character.count.mockResolvedValue(2) // live mode — worldRules absence is what gates this, not fresh/live
+    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 7 })
+    vi.mocked(generateWorldRules).mockResolvedValue([
+      { familyKey: 'faction.leaderOptional', applies: true, confidence: 0.8, rationale: 'Hive-mind collective.' },
+    ])
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(db.campaign.update).toHaveBeenCalledWith({
+      where: { id: 'camp1' },
+      data: {
+        worldRules: {
+          rules: [{ familyKey: 'faction.leaderOptional', applies: true, confidence: 0.8, rationale: 'Hive-mind collective.', sinceTurn: 7 }],
+        },
+      },
+    })
+    if (result.ok) expect(result.summary.worldRulesSet).toBe(true)
+  })
+
+  it('does not regenerate in live mode when the campaign already has rules', async () => {
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'Test', description: '', universe: 'Original',
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null,
+      worldRules: { rules: [{ familyKey: 'faction.leaderOptional', applies: false, confidence: 0.9, rationale: 'x', sinceTurn: 1 }] },
+    })
+    db.character.count.mockResolvedValue(2)
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(generateWorldRules).not.toHaveBeenCalled()
+    if (result.ok) expect(result.summary.worldRulesSet).toBe(false)
+  })
+
+  it('does not persist anything when generation fails (fail-open)', async () => {
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'Test', description: '', universe: 'Original',
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null, worldRules: null,
+    })
+    db.character.count.mockResolvedValue(0)
+    vi.mocked(generateWorldRules).mockResolvedValue(null)
+
+    const result = await reseedWorldFromLore('camp1')
+
+    expect(db.campaign.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ worldRules: expect.anything() }) }))
+    if (result.ok) expect(result.summary.worldRulesSet).toBe(false)
   })
 })
 

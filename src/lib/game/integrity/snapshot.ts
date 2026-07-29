@@ -10,6 +10,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { IntegritySnapshot } from './types'
+import { parseWorldRules } from './worldRules'
 
 type Db = Prisma.TransactionClient | PrismaClient
 
@@ -18,7 +19,8 @@ export async function loadIntegritySnapshot(
   campaignId: string,
   turnNumber: number
 ): Promise<IntegritySnapshot> {
-  const [locations, npcs, factions, characters, clocks, debts, wars, quests] = await Promise.all([
+  const [campaign, locations, npcs, factions, characters, clocks, debts, wars, quests] = await Promise.all([
+    db.campaign.findUnique({ where: { id: campaignId }, select: { worldRules: true } }),
     db.location.findMany({ where: { campaignId }, select: { id: true } }),
     db.nPC.findMany({
       where: { campaignId },
@@ -58,5 +60,6 @@ export async function loadIntegritySnapshot(
     debts,
     wars,
     quests,
+    worldRules: parseWorldRules(campaign?.worldRules),
   }
 }

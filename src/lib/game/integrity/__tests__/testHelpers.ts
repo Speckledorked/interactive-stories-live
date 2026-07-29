@@ -17,6 +17,7 @@ export function emptySnapshot(overrides: Partial<IntegritySnapshot> = {}): Integ
     debts: [],
     wars: [],
     quests: [],
+    worldRules: null,
     ...overrides,
   }
 }

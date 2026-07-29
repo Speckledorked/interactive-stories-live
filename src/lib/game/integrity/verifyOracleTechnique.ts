@@ -12,7 +12,7 @@
 // resulting PR. It only answers "does this changed file even attempt the
 // named technique," which is cheap, fast, and unambiguous.
 
-import { OracleTechnique } from './oracleTechnique'
+import { OracleTechnique, LINT_GUARD_FILE_FOR } from './oracleTechnique'
 
 export interface OracleTechniqueVerification {
   technique: OracleTechnique
@@ -28,10 +28,18 @@ const FAULT_INJECTION_MARKER = /RUN_DB_TESTS/
  * added or modified (not source files) — the caller (verify-oracle-
  * technique.ts) reads those off `git diff` and passes contents in, so
  * this stays a pure function with no filesystem/git access of its own.
+ *
+ * `knownGuardFiles` is only consulted for the 'lint' technique — the set
+ * of standing AST-guard file paths that actually exist on disk right now
+ * (the caller resolves this via LINT_GUARD_FILE_FOR + a real fs check;
+ * kept as a plain set here so this function stays pure and easy to test
+ * with a literal fixture instead of mocking the filesystem).
  */
 export function verifyOracleTechnique(
+  checkKey: string,
   technique: OracleTechnique,
-  changedTestFiles: Record<string, string>
+  changedTestFiles: Record<string, string>,
+  knownGuardFiles: ReadonlySet<string> = new Set()
 ): OracleTechniqueVerification {
   const contents = Object.values(changedTestFiles)
 
@@ -46,13 +54,27 @@ export function verifyOracleTechnique(
         ? { technique, satisfied: true, reason: 'a changed test file gates on RUN_DB_TESTS, the established real-DB fault-injection convention' }
         : { technique, satisfied: false, reason: 'no changed test file gates on RUN_DB_TESTS — a real-database fault-injection test was required' }
 
-    case 'lint':
-      // No custom ESLint rule exists in this repo yet (see the plan's
-      // Phase 1d) — a checkKey should never be assigned this technique
-      // until one does. Failing loudly here is the intended behavior, not
-      // a bug: it means oracleTechnique.ts and this verifier have drifted
-      // out of sync with what's actually enforceable.
-      return { technique, satisfied: false, reason: 'no ESLint rule is wired up to verify this yet — this checkKey should not be assigned "lint" until one exists' }
+    case 'lint': {
+      // This repo has no ESLint installed at all — its AST-based
+      // structural guards are real, standing vitest tests using the
+      // TypeScript compiler API instead (see entityResolutionConvention
+      // .test.ts). Unlike property/fault-injection, this checkKey doesn't
+      // need a NEW test generated per fix: the guard already exists and
+      // is already re-run by the workflow's general `npx vitest run` step
+      // — verification here only confirms the checkKey's claimed guard
+      // genuinely exists on disk, not that a new one was written.
+      const guardFile = LINT_GUARD_FILE_FOR[checkKey]
+      if (!guardFile) {
+        return {
+          technique,
+          satisfied: false,
+          reason: `no AST-based structural guard is registered for "${checkKey}" in LINT_GUARD_FILE_FOR — assign "lint" only once one exists`,
+        }
+      }
+      return knownGuardFiles.has(guardFile)
+        ? { technique, satisfied: true, reason: `backed by the standing structural guard at ${guardFile}, already re-run by the full suite` }
+        : { technique, satisfied: false, reason: `LINT_GUARD_FILE_FOR names ${guardFile} for "${checkKey}", but that file no longer exists — the registry has drifted stale` }
+    }
 
     case 'suite-only':
       // The weakest oracle. Already covered by the workflow's general

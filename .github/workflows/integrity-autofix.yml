@@ -1,25 +1,24 @@
 # Integrity Engine Phase 5 — self-contained auto-fix pipeline.
 #
 # NOT YET ENABLED FOR AUTOPILOT — read this before turning on the
-# `schedule` trigger below. This workflow is a real, working draft, but
-# two things need to happen first:
+# `schedule` trigger below. This workflow is a real, working draft. Its
+# interface against anthropics/claude-code-action HAS been verified
+# against that project's own README/docs/usage.md/docs/configuration.md
+# (current as of this writing: v1, composite action, `prompt` +
+# `anthropic_api_key` + `claude_args` inputs, explicitly supports scheduled/
+# automated runs with a direct prompt and no human @mention). One thing
+# still needs to happen before this can run for real:
 #
-#   1. Repo secrets this workflow reads and does not create:
-#      - PRODUCTION_DATABASE_URL_READONLY — read access to real campaign
-#        data, so check-escalations.ts can see real escalations. Scope
-#        this to read-only if your database supports it; this workflow
-#        never writes through it.
-#      - ANTHROPIC_API_KEY — your own key, billed to you, independent of
-#        any chat session. This is what makes the diagnose-and-fix step
-#        not depend on any particular conversation or person being around.
-#      GITHUB_TOKEN is provided automatically by Actions and is scoped by
-#      the `permissions:` block below — nothing extra to add for it.
-#
-#   2. Verify anthropics/claude-code-action's current inputs against its
-#      own docs/README before relying on this — the step below is a
-#      best-effort draft of that interface, not something exercised
-#      end-to-end in this repo yet (it needs real secrets and a real
-#      escalation to run against, neither of which exist in this sandbox).
+#   Repo secrets this workflow reads and does not create:
+#     - PRODUCTION_DATABASE_URL_READONLY — read access to real campaign
+#       data, so check-escalations.ts can see real escalations. Scope this
+#       to read-only if your database supports it; this workflow never
+#       writes through it.
+#     - ANTHROPIC_API_KEY — your own key, billed to you, independent of
+#       any chat session. This is what makes the diagnose-and-fix step not
+#       depend on any particular conversation or person being around.
+#   GITHUB_TOKEN is provided automatically by Actions and is scoped by the
+#   `permissions:` block below — nothing extra to add for it.
 #
 # Everything else here — the escalation check, the oracle-technique
 # verification, the merge gate — is plain, deterministic, unit-tested code
@@ -29,7 +28,11 @@
 # Safety shape (see the plan's Phase 5 sections 5g/5h for the reasoning):
 #   - The agent does the creative work (diagnose, write a failing test,
 #     draft a fix). It does NOT decide whether its own fix qualifies for
-#     auto-merge, and it does not push or open the PR itself.
+#     auto-merge — and this isn't just a prompt instruction it could
+#     ignore: claude-code-action has NO bash access by default, and the
+#     `--allowedTools` grant below deliberately omits `git push` and any
+#     `gh`/GitHub-API command, so the agent is mechanically incapable of
+#     pushing or opening a PR itself, not just asked not to.
 #   - A PR is ALWAYS opened, labeled with the checkKey, so every attempt is
 #     visible and reviewable regardless of outcome.
 #   - Auto-merge requires ALL of: the full suite passing, the SPECIFIC new
@@ -40,6 +43,8 @@
 #   - A checkKey with no attributed source (escalationSourceMap.ts) never
 #     reaches this workflow at all — check-escalations.ts filters it out
 #     upstream.
+#   - `--max-turns` bounds the agent's run so a confused loop fails closed
+#     (no commits to verify against) instead of burning cost unbounded.
 
 name: Integrity auto-fix
 
@@ -142,9 +147,15 @@ jobs:
       # its own report.
       - name: Diagnose and draft a fix
         if: steps.dedup.outputs.skip == 'false'
-        uses: anthropics/claude-code-action@v1 # verify current inputs before relying on this — see the header comment
+        uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # No bash/git access by default — grant exactly what diagnosing
+          # and fixing needs, and nothing that could push or open a PR.
+          # That boundary is enforced here, not left to the prompt alone.
+          claude_args: |
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npx vitest run:*),Bash(npx tsc --noEmit),Bash(git add:*),Bash(git commit:*),Bash(git status),Bash(git diff:*)"
+            --max-turns 30
           prompt: |
             A recurring integrity violation was detected across production campaigns,
             characterized (src/lib/game/integrity/escalation.ts) as evidence of a code
@@ -196,7 +207,7 @@ jobs:
         if: steps.dedup.outputs.skip == 'false'
         id: verify_oracle
         run: |
-          if npx tsx scripts/verify-oracle-technique.ts "${ORACLE_TECHNIQUE}" origin/main; then
+          if npx tsx scripts/verify-oracle-technique.ts "${CHECK_KEY}" "${ORACLE_TECHNIQUE}" origin/main; then
             echo "oracle_satisfied=true" >> "$GITHUB_OUTPUT"
           else
             echo "oracle_satisfied=false" >> "$GITHUB_OUTPUT"

@@ -21,6 +21,7 @@ import { generateWorldFromTemplate, GeneratedCapability, GeneratedStatLabels, Ge
 import { generateWorldExtras, GeneratedWorldExtras } from '@/lib/ai/worldExtras'
 import { generateMoveFlavor, GeneratedMoveFlavor } from '@/lib/ai/moveFlavor'
 import { generateCalendar } from '@/lib/ai/calendarGenerator'
+import { generateWorldRules, generatedRulesToWorldRules, GeneratedWorldRule } from '@/lib/ai/worldRulesGenerator'
 import { DEFAULT_CALENDAR, formatInGameDate, type GeneratedCalendar } from '@/lib/game/calendar'
 import { BASIC_MOVES } from '@/lib/pbta-moves'
 import { slugifyCapabilityKey, resolvePrerequisiteLinks } from '@/lib/game/capabilities'
@@ -96,12 +97,15 @@ export async function createCampaign(input: CreateCampaignInput) {
   let worldExtras: GeneratedWorldExtras | null = null
   let generatedMoveFlavor: GeneratedMoveFlavor[] | null = null
   let generatedCalendar: GeneratedCalendar | null = null
+  let generatedWorldRules: GeneratedWorldRule[] | null = null
   try {
     // Independent calls, run together: move flavor doesn't need factions/
-    // capabilities as input (only stat labels), and the calendar needs
-    // neither — see lib/ai/moveFlavor.ts's doc comment for why these are
+    // capabilities as input (only stat labels), the calendar needs
+    // neither, and world rules (Phase 4 semantic invariants) only needs
+    // the same title/description/universe every other call here already
+    // has — see lib/ai/moveFlavor.ts's doc comment for why these are
     // separate calls rather than folded into worldExtras.
-    const [extrasResult, moveFlavorResult, calendarResult] = await Promise.all([
+    const [extrasResult, moveFlavorResult, calendarResult, worldRulesResult] = await Promise.all([
       generateWorldExtras(
         title,
         description || '',
@@ -112,10 +116,12 @@ export async function createCampaign(input: CreateCampaignInput) {
       ),
       generateMoveFlavor(title, description || '', resolvedUniverse, generatedStatLabels),
       generateCalendar(title, description || '', resolvedUniverse),
+      generateWorldRules(title, description || '', resolvedUniverse),
     ])
     worldExtras = extrasResult
     generatedMoveFlavor = moveFlavorResult
     generatedCalendar = calendarResult
+    generatedWorldRules = worldRulesResult
     if (worldExtras) {
       generatedNpcs = worldExtras.npcs
       generatedLocations = worldExtras.locations
@@ -147,6 +153,15 @@ export async function createCampaign(input: CreateCampaignInput) {
         // Never null for a campaign created after this shipped — see
         // resolvedCalendar above.
         calendarConfig: resolvedCalendar as object,
+        // Integrity Engine Phase 4 semantic-invariant verdicts. Null is
+        // meaningful and safe here too — every semantic check just runs
+        // unconditionally, same as before this column existed. If canon
+        // arrives later (validatedLore below), reseedWorldFromLore's fresh
+        // mode regenerates this from the real imported lore instead of
+        // this provisional, title/description-only guess.
+        worldRules: (generatedWorldRules && generatedWorldRules.length > 0
+          ? (generatedRulesToWorldRules(generatedWorldRules, 1) as object)
+          : undefined),
         // Canon lore was provided: lock play until the import finishes
         // and the auto-reseed replaces this provisional world (see
         // lib/lore/seedingGate.ts).

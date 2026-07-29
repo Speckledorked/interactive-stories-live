@@ -5,12 +5,15 @@
 // auto-merge on the agent's own say-so: it never trusts a claim, only the
 // diff that actually landed.
 //
-// Usage: npx tsx scripts/verify-oracle-technique.ts <technique> <base-ref>
+// Usage: npx tsx scripts/verify-oracle-technique.ts <check-key> <technique> <base-ref>
 
 import { execSync } from 'child_process'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
+import { join } from 'path'
 import { verifyOracleTechnique } from '../src/lib/game/integrity/verifyOracleTechnique'
-import type { OracleTechnique } from '../src/lib/game/integrity/oracleTechnique'
+import { LINT_GUARD_FILE_FOR, type OracleTechnique } from '../src/lib/game/integrity/oracleTechnique'
+
+const REPO_ROOT = join(__dirname, '..')
 
 function changedTestFiles(baseRef: string): Record<string, string> {
   const diffOutput = execSync(`git diff --name-only --diff-filter=ACM ${baseRef}...HEAD`, { encoding: 'utf-8' })
@@ -32,16 +35,21 @@ function changedTestFiles(baseRef: string): Record<string, string> {
   return contents
 }
 
+function existingGuardFiles(): Set<string> {
+  return new Set(Object.values(LINT_GUARD_FILE_FOR).filter((path) => existsSync(join(REPO_ROOT, path))))
+}
+
 function main() {
-  const [technique, baseRef] = process.argv.slice(2)
-  if (!technique || !baseRef) {
-    console.error('Usage: verify-oracle-technique.ts <technique> <base-ref>')
+  const [checkKey, technique, baseRef] = process.argv.slice(2)
+  if (!checkKey || !technique || !baseRef) {
+    console.error('Usage: verify-oracle-technique.ts <check-key> <technique> <base-ref>')
     process.exit(2)
   }
 
   const files = changedTestFiles(baseRef)
-  const result = verifyOracleTechnique(technique as OracleTechnique, files)
+  const result = verifyOracleTechnique(checkKey, technique as OracleTechnique, files, existingGuardFiles())
 
+  console.log(`checkKey: ${checkKey}`)
   console.log(`Oracle technique: ${result.technique}`)
   console.log(`Changed test file(s): ${Object.keys(files).join(', ') || '(none)'}`)
   console.log(`Satisfied: ${result.satisfied} — ${result.reason}`)

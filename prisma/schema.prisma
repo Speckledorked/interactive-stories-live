@@ -474,22 +474,28 @@ model Quest {
   updatedAt  DateTime  @updatedAt
   resolvedAt DateTime?
 
-  // Indexed, NOT unique. A unique constraint here is what broke deploys:
-  // this project's build command is `prisma db push`, and Prisma classifies
-  // ADDING a unique constraint as a potentially-destructive change, so it
-  // refuses without --accept-data-loss — even against an empty database.
-  // Passing that flag would be a standing permission for Prisma to drop
-  // production columns on any future schema change, which is far too much
-  // to trade for one constraint.
-  //
-  // Uniqueness is enforced in application code instead: claimObjectiveKey
-  // (worldUpdaters/quests.ts) only claims a key no other quest holds, and
-  // it was already written that way — a unique-violation inside the
-  // scene-resolution transaction would abort the whole batch.
-  @@index([campaignId, objectiveKey])
+  // Was indexed-only, not unique: this project's build command used to be
+  // `prisma db push`, and Prisma classifies adding a unique constraint as a
+  // potentially-destructive change it refuses without --accept-data-loss.
+  // The build now runs `prisma migrate deploy` instead, so that restriction
+  // no longer applies (Phase 1b) — real enforcement is the unique index
+  // added by migration 20260729030000_phase1b_schema_invariants
+  // (Quest_campaignId_objectiveKey_key, replacing this index; NULLs stay
+  // distinct from each other under a unique index, so multiple unkeyed
+  // quests per campaign are still fine). claimObjectiveKey
+  // (worldUpdaters/quests.ts) still only claims a key no other quest holds
+  // first — the constraint is a backstop against the narrow check-then-act
+  // race that check has, not the primary defense — and the create call now
+  // catches a unique-violation and leaves the quest unkeyed rather than
+  // aborting the whole scene-resolution transaction.
+  @@unique([campaignId, objectiveKey], map: "Quest_campaignId_objectiveKey_key")
   @@index([campaignId, status])
   @@index([givenByNpcId])
   @@index([givenByFactionId])
+
+  // Real name uniqueness enforced by a case-insensitive functional index
+  // (same migration) — see NPC's identical comment for why this can't be a
+  // plain Prisma @@unique.
 }
 
 //
@@ -629,7 +635,7 @@ model FactionStanding {
   campaignId  String
   characterId String
   factionId   String
-  value       Int    @default(0) // -3..+3
+  value       Int    @default(0) // -3..+3 — DB CHECK FactionStanding_value_range (Phase 1b)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -701,11 +707,11 @@ model Character {
   originFamiliarity OriginFamiliarity @default(NATIVE)
 
   // PbtA specific fields
-  harm           Int   @default(0) // 0-6 harm track
+  harm           Int   @default(0) // 0-6 harm track — DB CHECK Character_harm_range (Phase 1b)
   // Corruption marks (0..5) toward this campaign's corruption theme.
   // Only meaningful when Campaign.corruptionTheme is set; never decreases
   // (the whole point is irreversibility) — see lib/game/corruption.ts.
-  corruption     Int   @default(0)
+  corruption     Int   @default(0) // 0-5 — DB CHECK Character_corruption_range (Phase 1b)
   // An open corruption bargain narrated to this character last scene —
   // their NEXT action can invoke it for an engine-enforced surge bonus
   // (and the mark). Cleared after that action, accepted or not.
@@ -818,7 +824,7 @@ model NPC {
   // harm_damage here via the same applyHarm() PCs use, and flips isAlive
   // false at 6 (Taken Out) — never flips it back true; NPC "recovery" is
   // narrative, not tracked.
-  harm Int @default(0)
+  harm Int @default(0) // 0-6 — DB CHECK NPC_harm_range (Phase 1b)
 
   // Fog of war: defaults true so existing/starting-world NPCs and any NPC
   // the AI introduces mid-scene (which is itself the discovery event) stay
@@ -882,6 +888,14 @@ model NPC {
   // it's what lets a FAILED quest reach back to the person who gave it.
   questsGiven Quest[] @relation("QuestGiverNpc")
 
+  // Real uniqueness enforced by a case-insensitive functional index
+  // (migration 20260729030000_phase1b_schema_invariants) — not expressible
+  // as a Prisma @@unique, which can't target lower(name). Case-insensitive
+  // to match how every write path already resolves names
+  // (entityResolution.ts's normalizeEntityName); a case-SENSITIVE
+  // constraint would just reproduce Location's own known bug (its
+  // @@unique([campaignId, name]) is case-sensitive while every writer
+  // matches insensitively, which has already caused split rows there).
   @@index([campaignId])
   @@index([factionId])
   @@index([locationId])
@@ -981,6 +995,9 @@ model Faction {
   // from a quest handed over by one of its members, which links to the NPC.
   questsGiven Quest[] @relation("QuestGiverFaction")
 
+  // Real uniqueness enforced by a case-insensitive functional index
+  // (migration 20260729030000_phase1b_schema_invariants) — see NPC's
+  // identical comment for why this can't be a plain Prisma @@unique.
   @@index([campaignId])
 }
 
@@ -1084,6 +1101,7 @@ model War {
   contestedLocationId String?
 
   // -100 (total defender advantage) .. +100 (total attacker advantage).
+  // DB CHECK War_momentum_range (Phase 1b).
   momentum Int       @default(0)
   status   WarStatus @default(ESCALATING)
   // Set only once resolved: 'attacker' | 'defender' | 'stalemate'.
@@ -1363,7 +1381,7 @@ model WorldMeta {
   // clock-advancement time: in a tense campaign, unattached threats close
   // faster. Both this and `phase` below spent a long time as dead columns
   // nothing wrote; they're real now (README #90).
-  tension   Int      @default(50)
+  tension   Int      @default(50) // 0-100 — DB CHECK WorldMeta_tension_range (Phase 1b)
   // Story-arc phase derived from tension and campaign length —
   // setup / rising / climax / aftermath. Steers narration pacing.
   phase     String?

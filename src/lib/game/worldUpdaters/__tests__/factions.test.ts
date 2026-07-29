@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { applyFactionChanges, FactionChange } from '../factions'
 import type { Faction } from '@prisma/client'
+import { uniqueConstraintError } from './testPrismaErrors'
 
 const makeTx = () => ({
   faction: {
@@ -97,6 +98,25 @@ describe('applyFactionChanges — stub creation', () => {
       where: { id: 'new-faction' },
       data: expect.objectContaining({ currentPlan: 'Corner the spice market' }),
     })
+  })
+
+  // Phase 1b's real DB uniqueness backstop — see npcs.test.ts's identical
+  // case for the full reasoning (shared transaction, must degrade not crash).
+  it('skips the stub and does not throw when the name collides at write time', async () => {
+    tx.faction.create.mockRejectedValueOnce(uniqueConstraintError('Faction_campaignId_name_lower_key'))
+
+    const result = await applyFactionChanges(tx as any, 'camp1', [
+      { faction_name_or_id: 'The Gilded Hand', is_new: true, changes: { description: 'x' } } as FactionChange,
+    ], [], true)
+
+    expect(result.involvedFactionIds).toEqual([])
+  })
+
+  it('still throws a non-uniqueness error from stub creation', async () => {
+    tx.faction.create.mockRejectedValueOnce(new Error('connection lost'))
+    await expect(applyFactionChanges(tx as any, 'camp1', [
+      { faction_name_or_id: 'The Gilded Hand', is_new: true, changes: { description: 'x' } } as FactionChange,
+    ], [], true)).rejects.toThrow('connection lost')
   })
 
   it('does not create a duplicate stub when the name is an ambiguous fuzzy match', async () => {

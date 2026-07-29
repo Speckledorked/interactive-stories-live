@@ -11,6 +11,7 @@ import { appendBounded, QUEST_PROGRESS_BOUNDS } from '../textAppend'
 import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData } from '../quests'
 import { checkCorruptionGate, hasCorruptionGate } from '../corruptionGates'
 import { applyQuestFailureCost, type QuestFailureStatus } from '../questFailure'
+import { isUniqueConstraintViolation } from './uniqueConstraintGuard'
 
 type Db = Prisma.TransactionClient
 export type QuestChange = NonNullable<WorldUpdates['quest_changes']>[number]
@@ -212,24 +213,38 @@ export async function applyQuestChanges(
           console.warn(`  ❓ quest "${questChange.name}": giver "${changes.given_by}" matched no NPC or faction — kept as display text only`)
         }
       }
-      await tx.quest.create({
-        data: {
-          campaignId,
-          name: questChange.name,
-          description: changes.description || questChange.name,
-          objective: changes.objective || null,
-          objectiveKey: await claimObjectiveKey(questChange.name),
-          givenBy: changes.given_by || null,
-          ...giverData,
-          reward: changes.reward || null,
-          minCorruption: changes.min_corruption ?? null,
-          maxCorruption: changes.max_corruption ?? null,
-          status: changes.status || 'ACTIVE',
-          progressLog: progressLine,
-          ...(changes.status && changes.status !== 'ACTIVE' ? { resolvedAt: new Date() } : {})
-        }
-      })
-      console.log(`  🎯 Registered quest: ${questChange.name}`)
+      // `existing` above just confirmed no quest with this name exists yet,
+      // and claimObjectiveKey already only returns a key nothing else
+      // holds — this create should never actually collide. It runs inside
+      // the same transaction as every other domain's changes for this
+      // scene, though, and the true remaining risk (two scenes for the same
+      // campaign resolving at the literal same instant) is exactly the kind
+      // of race a check-then-act can't fully close on its own — see the
+      // Phase 1b schema comment on Quest.objectiveKey.
+      try {
+        await tx.quest.create({
+          data: {
+            campaignId,
+            name: questChange.name,
+            description: changes.description || questChange.name,
+            objective: changes.objective || null,
+            objectiveKey: await claimObjectiveKey(questChange.name),
+            givenBy: changes.given_by || null,
+            ...giverData,
+            reward: changes.reward || null,
+            minCorruption: changes.min_corruption ?? null,
+            maxCorruption: changes.max_corruption ?? null,
+            status: changes.status || 'ACTIVE',
+            progressLog: progressLine,
+            ...(changes.status && changes.status !== 'ACTIVE' ? { resolvedAt: new Date() } : {})
+          }
+        })
+        console.log(`  🎯 Registered quest: ${questChange.name}`)
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) throw error
+        console.warn(`  ⚠️ Quest "${questChange.name}" collided with an existing quest at write time — skipping registration rather than aborting the scene`)
+        continue
+      }
       // A quest can (rarely) be registered already-resolved in the same
       // turn it's introduced — same deterministic payout either way.
       if (changes.status === 'COMPLETED' && changes.reward_grant) {

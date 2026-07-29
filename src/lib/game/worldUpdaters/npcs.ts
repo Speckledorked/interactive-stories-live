@@ -8,6 +8,7 @@ import { resolveEntityByNameOrId } from '../entityResolution'
 import { applyHarm, healHarm, HarmLevel } from '../harm'
 import { resolveDamageBonus } from '../inventory'
 import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
+import { isUniqueConstraintViolation } from './uniqueConstraintGuard'
 
 type Db = Prisma.TransactionClient
 export type NpcChange = NonNullable<WorldUpdates['npc_changes']>[number]
@@ -130,27 +131,39 @@ export async function applyNpcChanges(
         console.log(`  👤 Updated NPC: ${npc.name}`)
       }
     } else if (npcResolution.kind === 'not_found' && (npcChange.is_new || npcChange.changes.description)) {
-      // Auto-create a stub NPC when the AI introduces a new character mid-scene
-      const newNPC = await tx.nPC.create({
-        data: {
-          campaignId,
-          name: npcChange.npc_name_or_id,
-          description: npcChange.changes.description || null,
-          gmNotes: npcChange.changes.notes_append || null,
-          goals: npcChange.changes.goals || null,
-          importance: 1,
-          isAlive: true,
-          // Fog of war: an NPC introduced offscreen (e.g. a tournament
-          // winner) exists but isn't "met" yet — undiscovered until a
-          // live scene actually involves them.
-          isDiscovered: sceneOrigin,
-          minCorruption: npcChange.changes.min_corruption ?? null,
-          maxCorruption: npcChange.changes.max_corruption ?? null
-        }
-      })
-      npcsForResolution.push(newNPC)
-      involvedNpcIds.add(newNPC.id)
-      console.log(`  👤 Created new NPC: ${newNPC.name}`)
+      // Auto-create a stub NPC when the AI introduces a new character mid-scene.
+      // resolveEntityByNameOrId just confirmed no existing NPC matches this
+      // name, so the unique constraint below should never actually fire —
+      // but that exact "should never happen" reasoning was wrong twice this
+      // session (the Phase 0 bugs), and this create runs inside the same
+      // transaction as every other domain's changes for this scene. Losing
+      // one stub NPC is recoverable next turn; rolling back the whole
+      // scene's world_updates because of it would not be.
+      try {
+        const newNPC = await tx.nPC.create({
+          data: {
+            campaignId,
+            name: npcChange.npc_name_or_id,
+            description: npcChange.changes.description || null,
+            gmNotes: npcChange.changes.notes_append || null,
+            goals: npcChange.changes.goals || null,
+            importance: 1,
+            isAlive: true,
+            // Fog of war: an NPC introduced offscreen (e.g. a tournament
+            // winner) exists but isn't "met" yet — undiscovered until a
+            // live scene actually involves them.
+            isDiscovered: sceneOrigin,
+            minCorruption: npcChange.changes.min_corruption ?? null,
+            maxCorruption: npcChange.changes.max_corruption ?? null
+          }
+        })
+        npcsForResolution.push(newNPC)
+        involvedNpcIds.add(newNPC.id)
+        console.log(`  👤 Created new NPC: ${newNPC.name}`)
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) throw error
+        console.warn(`  ⚠️ NPC "${npcChange.npc_name_or_id}" collided with an existing name at write time — skipping this stub rather than aborting the scene`)
+      }
     } else if (npcResolution.kind === 'not_found') {
       console.warn(`  ⚠️ NPC not found and no stub info provided: ${npcChange.npc_name_or_id}`)
     }

@@ -483,6 +483,22 @@ export interface AIGMRequest {
   action_mechanics?: import('@/lib/game/resolution').ActionMechanics[]
 }
 
+// Prompt-caching params for a scene-resolution call. Scoped per campaign,
+// not per scene: the system prompt (role/rules/mechanics/response format/
+// etc., see scenePrompt.ts) is otherwise byte-identical for the campaign's
+// entire lifetime, and it's the large majority of the input tokens on
+// every call — sharing one cache lineage per campaign is what lets exchange
+// 2+ of a scene, and every scene after the first, actually hit it. '24h' is
+// the longest retention gpt-5.4/gpt-5.4-mini support, so a player returning
+// the next day still gets a hit, not just back-to-back exchanges in one
+// sitting. A miss just falls back to today's full-price behavior — no
+// downside to requesting it on every call.
+function cacheParams(campaignId?: string): { prompt_cache_key?: string; prompt_cache_retention?: string } {
+  return campaignId
+    ? { prompt_cache_key: `campaign-${campaignId}`, prompt_cache_retention: '24h' }
+    : {}
+}
+
 /**
  * Call the OpenAI API with a structured prompt
  * Phase 15: Enhanced with validation, caching, circuit breaker, and cost tracking
@@ -549,7 +565,8 @@ export async function callAIGM(
         ],
         temperature: 0.7, // Balanced creativity and consistency (updated from 0.8)
         max_tokens: 4000, // ~800-1000 word responses (cost optimization)
-        response_format: { type: 'json_object' } // Request JSON response
+        response_format: { type: 'json_object' }, // Request JSON response
+        ...cacheParams(campaignId)
       })
     })
 
@@ -619,7 +636,8 @@ export async function callAIGM(
             ],
             temperature: 0.7,
             max_tokens: 4000,
-            response_format: { type: 'json_object' }
+            response_format: { type: 'json_object' },
+            ...cacheParams(campaignId)
           })
         })
 
@@ -641,7 +659,7 @@ export async function callAIGM(
             outputTokens: repairUsage.completion_tokens || estimateTokenCount(repairContent),
             responseTimeMs: Date.now() - repairStartTime,
             success: true,
-            cacheHit: false,
+            cachedInputTokens: repairUsage.prompt_tokens_details?.cached_tokens || 0,
             sceneId,
             requestType: 'scene_resolution_repair'
           }).catch(console.error)
@@ -721,7 +739,7 @@ export async function callAIGM(
         // be perfectly well-formed and still ignore every roll in it.
         outcomeMismatches: adherence.mismatched,
         outcomeChecked: adherence.matched + adherence.mismatched,
-        cacheHit: false,
+        cachedInputTokens: usage.prompt_tokens_details?.cached_tokens || 0,
         sceneId,
         requestType: 'scene_resolution'
       })
@@ -741,7 +759,6 @@ export async function callAIGM(
         outputTokens: 0,
         responseTimeMs,
         success: false,
-        cacheHit: false,
         sceneId,
         requestType: 'scene_resolution'
       }).catch(console.error)

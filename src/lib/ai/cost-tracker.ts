@@ -36,15 +36,23 @@ export interface AIUsageMetrics {
  *     OpenAI's historical pricing pages — divide by 1_000, correctly, as
  *     before.
  */
-const AI_PRICING: Record<string, { inputTokenPrice: number; outputTokenPrice: number }> = {
+const AI_PRICING: Record<string, { inputTokenPrice: number; outputTokenPrice: number; cachedInputTokenPrice?: number }> = {
   // Current generation (see src/lib/ai/models.ts) — priced per 1M tokens.
+  // cachedInputTokenPrice is the rate for input tokens OpenAI's prompt
+  // caching served from cache (see callAIGM's prompt_cache_key/
+  // prompt_cache_retention and usage.prompt_tokens_details.cached_tokens) —
+  // 90% off the regular input rate for both models below. Absent for any
+  // model where caching isn't wired up/priced; recordRequest falls back to
+  // the regular input rate for those, i.e. no discount assumed.
   'gpt-5.4': {
     inputTokenPrice: 2.5 / 1_000_000,
-    outputTokenPrice: 15.0 / 1_000_000
+    outputTokenPrice: 15.0 / 1_000_000,
+    cachedInputTokenPrice: 0.25 / 1_000_000
   },
   'gpt-5.4-mini': {
     inputTokenPrice: 0.75 / 1_000_000,
-    outputTokenPrice: 4.5 / 1_000_000
+    outputTokenPrice: 4.5 / 1_000_000,
+    cachedInputTokenPrice: 0.075 / 1_000_000
   },
   // Embeddings have no output tokens — outputTokenPrice stays 0 and callers
   // always pass outputTokens: 0. Priced per 1K tokens.
@@ -114,7 +122,15 @@ export class AICostTracker {
     outputTokens: number
     responseTimeMs: number
     success: boolean
-    cacheHit?: boolean
+    /**
+     * How many of inputTokens were served from OpenAI's prompt cache (see
+     * usage.prompt_tokens_details.cached_tokens in client.ts) — 0 for a
+     * call that didn't hit cache, or for any caller that doesn't have
+     * caching wired up yet. Drives both the discounted cost calculation
+     * below and cacheHitRate; there's no separate cacheHit boolean to keep
+     * in sync — a real cached-token count is the only source of truth.
+     */
+    cachedInputTokens?: number
     sceneId?: string
     /** Which call this was — "scene_resolution", "map_generation", "consequence_extraction", etc. Powers the per-type cost breakdown. */
     requestType?: string
@@ -139,7 +155,14 @@ export class AICostTracker {
     outcomeChecked?: number
   }): Promise<void> {
     const pricing = this.getPricing()
-    const cost = (params.inputTokens * pricing.inputTokenPrice) +
+    // Clamp defensively — a cachedInputTokens count larger than inputTokens
+    // would only happen from a malformed API response, and should never be
+    // able to make the discounted portion exceed the total.
+    const cachedInputTokens = Math.min(params.cachedInputTokens ?? 0, params.inputTokens)
+    const uncachedInputTokens = params.inputTokens - cachedInputTokens
+    const cacheHit = cachedInputTokens > 0
+    const cost = (uncachedInputTokens * pricing.inputTokenPrice) +
+                 (cachedInputTokens * (pricing.cachedInputTokenPrice ?? pricing.inputTokenPrice)) +
                  (params.outputTokens * pricing.outputTokenPrice)
     const requestType = params.requestType || 'unknown'
 
@@ -172,8 +195,8 @@ export class AICostTracker {
         ) / (currentMetrics.totalRequests + 1),
 
         // Track cache hits
-        cacheHits: currentMetrics.cacheHits + (params.cacheHit ? 1 : 0),
-        cacheHitRate: params.cacheHit
+        cacheHits: currentMetrics.cacheHits + (cacheHit ? 1 : 0),
+        cacheHitRate: cacheHit
           ? ((currentMetrics.cacheHits + 1) / (currentMetrics.totalRequests + 1))
           : (currentMetrics.cacheHits / (currentMetrics.totalRequests + 1)),
 
@@ -203,7 +226,8 @@ export class AICostTracker {
             validationLevel: params.validationLevel,
             outcomeMismatches: params.outcomeMismatches,
             outcomeChecked: params.outcomeChecked,
-            cacheHit: params.cacheHit || false
+            cacheHit,
+            cachedInputTokens
           }
         ],
 

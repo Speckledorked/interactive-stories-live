@@ -35,7 +35,15 @@ export async function openaiFetch(url: string, init: RequestInit): Promise<Respo
 
   const swapMaxTokens = errorText.includes('max_tokens') && payload.max_tokens !== undefined
   const dropTemperature = errorText.includes('temperature') && payload.temperature !== undefined
-  if (!swapMaxTokens && !dropTemperature) {
+  // Same defensive shape as the two checks above: prompt caching
+  // (prompt_cache_key/prompt_cache_retention, see client.ts's cacheParams)
+  // is documented as valid for every model this app calls today, but isn't
+  // something this sandbox can verify against a live account — if some
+  // account/model combination rejects it, drop it and retry once rather
+  // than failing the whole scene resolution over a cost optimization.
+  const dropCacheParams = (errorText.includes('prompt_cache_key') || errorText.includes('prompt_cache_retention'))
+    && (payload.prompt_cache_key !== undefined || payload.prompt_cache_retention !== undefined)
+  if (!swapMaxTokens && !dropTemperature && !dropCacheParams) {
     return passthrough()
   }
 
@@ -46,9 +54,13 @@ export async function openaiFetch(url: string, init: RequestInit): Promise<Respo
   if (dropTemperature) {
     delete payload.temperature
   }
+  if (dropCacheParams) {
+    delete payload.prompt_cache_key
+    delete payload.prompt_cache_retention
+  }
 
   console.warn(
-    `OpenAI compat retry: ${[swapMaxTokens && 'max_tokens→max_completion_tokens', dropTemperature && 'temperature→default']
+    `OpenAI compat retry: ${[swapMaxTokens && 'max_tokens→max_completion_tokens', dropTemperature && 'temperature→default', dropCacheParams && 'dropped prompt cache params']
       .filter(Boolean)
       .join(', ')}`
   )

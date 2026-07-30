@@ -22,7 +22,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { prisma } from '@/lib/prisma'
-import { recordAICost } from '../cost-tracker'
+import { recordAICost, AICostTracker } from '../cost-tracker'
 
 const db = prisma as any
 
@@ -89,5 +89,61 @@ describe('AI_PRICING — per-million vs per-1K models', () => {
     // $0.03 + $0.06 = $0.09 = 90_000 micros, per OpenAI's real historical
     // per-1K-token gpt-4 pricing.
     expect(call.data.costMicros).toBe(90_000)
+  })
+})
+
+describe('AI_PRICING — cached input tokens (prompt caching)', () => {
+  it('bills tokens OpenAI served from cache at the 90%-off cached rate, not the full input rate', async () => {
+    const tracker = new AICostTracker('camp1', 'gpt-5.4')
+    await tracker.recordRequest({
+      inputTokens: 4000,
+      outputTokens: 800,
+      responseTimeMs: 1000,
+      success: true,
+      cachedInputTokens: 3000, // 3000 of the 4000 input tokens hit cache
+      sceneId: 'scene1',
+      requestType: 'scene_resolution',
+    })
+
+    const call = db.aICostEntry.create.mock.calls[0][0]
+    const costDollars = call.data.costMicros / 1_000_000
+    // 1000 uncached * (2.5/1e6) + 3000 cached * (0.25/1e6) + 800 out * (15/1e6)
+    // = 0.0025 + 0.00075 + 0.012 = $0.01525 — cheaper than the $0.022 an
+    // identical call with no cache hit would cost (see the test above).
+    expect(costDollars).toBeCloseTo(0.01525, 6)
+  })
+
+  it('never lets a malformed cachedInputTokens count (larger than inputTokens) invert into a negative uncached portion', async () => {
+    const tracker = new AICostTracker('camp1', 'gpt-5.4')
+    await tracker.recordRequest({
+      inputTokens: 1000,
+      outputTokens: 0,
+      responseTimeMs: 1000,
+      success: true,
+      cachedInputTokens: 5000, // larger than inputTokens — should clamp
+      sceneId: 'scene1',
+      requestType: 'scene_resolution',
+    })
+
+    const call = db.aICostEntry.create.mock.calls[0][0]
+    const costDollars = call.data.costMicros / 1_000_000
+    // Clamped to all 1000 tokens cached: 1000 * (0.25/1e6) = $0.00025.
+    expect(costDollars).toBeCloseTo(0.00025, 6)
+  })
+
+  it('defaults to zero cached tokens (full price) when a caller does not report any, same as before caching existed', async () => {
+    const tracker = new AICostTracker('camp1', 'gpt-5.4')
+    await tracker.recordRequest({
+      inputTokens: 4000,
+      outputTokens: 800,
+      responseTimeMs: 1000,
+      success: true,
+      sceneId: 'scene1',
+      requestType: 'scene_resolution',
+    })
+
+    const call = db.aICostEntry.create.mock.calls[0][0]
+    const costDollars = call.data.costMicros / 1_000_000
+    expect(costDollars).toBeCloseTo(0.022, 5)
   })
 })

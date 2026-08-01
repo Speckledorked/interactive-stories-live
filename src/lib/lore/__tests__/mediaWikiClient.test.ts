@@ -1,6 +1,6 @@
 // src/lib/lore/__tests__/mediaWikiClient.test.ts
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { detectApiBase, listAllPages, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from '../mediaWikiClient'
+import { detectApiBase, listAllPages, rankPagesByLength, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from '../mediaWikiClient'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -82,6 +82,74 @@ describe('listAllPages', () => {
 
     const result = await listAllPages('https://example.org/api.php', 1)
     expect(result).toHaveLength(1)
+  })
+})
+
+describe('rankPagesByLength', () => {
+  it('sorts candidates by real content length, descending, not their input order', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        query: {
+          pages: {
+            '1': { title: 'Stub Page', length: 40 },
+            '2': { title: 'The Real Lore', length: 4000 },
+            '3': { title: 'Medium Page', length: 800 },
+          },
+        },
+      }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const candidates = [
+      { pageId: 1, title: 'Stub Page' },
+      { pageId: 2, title: 'The Real Lore' },
+      { pageId: 3, title: 'Medium Page' },
+    ]
+    const ranked = await rankPagesByLength('https://example.org/api.php', candidates)
+    expect(ranked.map(p => p.title)).toEqual(['The Real Lore', 'Medium Page', 'Stub Page'])
+  })
+
+  it('batches length lookups instead of one request per candidate', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ query: { pages: {} } }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const candidates = Array.from({ length: 45 }, (_, i) => ({ pageId: i, title: `Page ${i}` }))
+    await rankPagesByLength('https://example.org/api.php', candidates, 20)
+    // 45 candidates at a batch size of 20 → 3 requests (20 + 20 + 5), not 45.
+    expect(fetchSpy).toHaveBeenCalledTimes(3)
+  })
+
+  it('sorts a candidate whose length lookup failed to the back rather than dropping it', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        query: {
+          pages: {
+            '1': { title: 'Has Length', length: 500 },
+            // 'No Length' is simply absent from the response.
+          },
+        },
+      }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const candidates = [
+      { pageId: 1, title: 'No Length' },
+      { pageId: 2, title: 'Has Length' },
+    ]
+    const ranked = await rankPagesByLength('https://example.org/api.php', candidates)
+    expect(ranked.map(p => p.title)).toEqual(['Has Length', 'No Length'])
+  })
+
+  it('does not throw when the length-lookup call itself fails — length lookups just come back empty', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+    const candidates = [{ pageId: 1, title: 'A' }, { pageId: 2, title: 'B' }]
+    const ranked = await rankPagesByLength('https://example.org/api.php', candidates)
+    expect(ranked).toHaveLength(2)
   })
 })
 

@@ -166,8 +166,11 @@ Rules for locations:
       // Archetypes are the heaviest item (gear/tie/backstory prompts x4)
       // — npcs/locations add a bounded amount on top. Canon-grounded
       // generation gets more headroom since named individuals/places
-      // pulled from real lore run longer than invented ones.
-      maxTokens: loreDigest ? 2600 : 2000,
+      // pulled from real lore run longer than invented ones. Raised from
+      // 2600 alongside loreDigest.ts's 3x digest-budget increase, so the
+      // extra grounding can surface more named NPCs/locations, not just
+      // richer flavor on the same count.
+      maxTokens: loreDigest ? 3400 : 2000,
       jsonMode: true,
     })
 

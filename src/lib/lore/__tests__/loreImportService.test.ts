@@ -16,6 +16,7 @@ vi.mock('@/lib/ai/embeddingService', () => ({
 vi.mock('../mediaWikiClient', () => ({
   detectApiBase: vi.fn(),
   listAllPages: vi.fn(),
+  rankPagesByLength: vi.fn(),
   fetchExtracts: vi.fn(),
   fetchPageViaParse: vi.fn(),
   pageTitleFromUrl: vi.fn(),
@@ -23,8 +24,8 @@ vi.mock('../mediaWikiClient', () => ({
 
 import { prisma } from '@/lib/prisma'
 import { generateEmbedding } from '@/lib/ai/embeddingService'
-import { detectApiBase, listAllPages, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from '../mediaWikiClient'
-import { runLoreImport } from '../loreImportService'
+import { detectApiBase, listAllPages, rankPagesByLength, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from '../mediaWikiClient'
+import { runLoreImport, WIKI_MAX_PAGES } from '../loreImportService'
 
 function makeJob(overrides: Partial<any> = {}) {
   return {
@@ -51,6 +52,9 @@ function makeJob(overrides: Partial<any> = {}) {
 describe('runLoreImport', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Identity by default — most tests aren't exercising ranking itself,
+    // just need the WIKI path to keep working with it in place.
+    vi.mocked(rankPagesByLength).mockImplementation(async (_apiBase, candidates) => candidates)
   })
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -202,6 +206,54 @@ describe('runLoreImport', () => {
       const job = makeJob({ sourceType: 'WIKI', sourceUrl: 'https://example.com' })
       await expect(runLoreImport(job as any)).resolves.toBeUndefined()
       expect(prisma.$executeRaw).not.toHaveBeenCalled()
+    })
+
+    it('lists a larger candidate pool than WIKI_MAX_PAGES so ranking has real breadth to choose from', async () => {
+      vi.mocked(detectApiBase).mockResolvedValue('https://example.com/api.php')
+      vi.mocked(listAllPages).mockResolvedValue([{ pageId: 1, title: 'Essence Magic' }])
+      vi.mocked(fetchExtracts).mockResolvedValue(new Map([['Essence Magic', 'Some lore.']]))
+
+      const job = makeJob({ sourceType: 'WIKI', sourceUrl: 'https://example.com' })
+      await runLoreImport(job as any)
+
+      const [, maxPagesArg] = vi.mocked(listAllPages).mock.calls[0]
+      expect(maxPagesArg).toBeGreaterThan(WIKI_MAX_PAGES)
+    })
+
+    it('ranks candidates by length and imports only the top WIKI_MAX_PAGES-worth', async () => {
+      vi.mocked(detectApiBase).mockResolvedValue('https://example.com/api.php')
+      const candidates = [
+        { pageId: 1, title: 'Stub Page' },
+        { pageId: 2, title: 'The Real Lore' },
+      ]
+      vi.mocked(listAllPages).mockResolvedValue(candidates)
+      // Ranking reverses the alphabetical/discovery order — the substantial
+      // page should end up imported first, the stub second.
+      vi.mocked(rankPagesByLength).mockResolvedValue([candidates[1], candidates[0]])
+      vi.mocked(fetchExtracts).mockResolvedValue(new Map([
+        ['The Real Lore', 'Substantial lore content.'],
+        ['Stub Page', 'Short.'],
+      ]))
+
+      const job = makeJob({ sourceType: 'WIKI', sourceUrl: 'https://example.com' })
+      await runLoreImport(job as any)
+
+      expect(rankPagesByLength).toHaveBeenCalledWith('https://example.com/api.php', candidates)
+      expect(prisma.loreImportJob.update).toHaveBeenCalledWith({
+        where: { id: 'job-1' },
+        data: { pagesFound: 2 },
+      })
+    })
+
+    it('falls back to the unranked (alphabetical) order if ranking itself throws, instead of failing the import', async () => {
+      vi.mocked(detectApiBase).mockResolvedValue('https://example.com/api.php')
+      vi.mocked(listAllPages).mockResolvedValue([{ pageId: 1, title: 'Essence Magic' }])
+      vi.mocked(rankPagesByLength).mockRejectedValue(new Error('ranking API down'))
+      vi.mocked(fetchExtracts).mockResolvedValue(new Map([['Essence Magic', 'Some lore.']]))
+
+      const job = makeJob({ sourceType: 'WIKI', sourceUrl: 'https://example.com' })
+      await expect(runLoreImport(job as any)).resolves.toBeUndefined()
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
     })
   })
 

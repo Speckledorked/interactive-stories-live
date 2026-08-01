@@ -11,8 +11,16 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 
-export const DIGEST_MAX_ENTRIES = 24
-export const DIGEST_MAX_CHARS = 12000
+// Raised 3x from the original 24/12000 — at that budget, formatLoreDigest's
+// per-entry share (maxChars/entries.length ≈ 500 chars) was already well
+// below a typical chunk's real size (textChunker.ts's DEFAULT_MAX_CHARS =
+// 1800), so almost every sampled entry was being truncated, not just
+// under-sampled. Both entry count and per-entry room needed to grow
+// together. All four consumers of this digest use AI_MODELS.EFFICIENT and
+// this only runs once per campaign creation/reseed, not per scene, so the
+// added cost is negligible (roughly a cent or two, one time).
+export const DIGEST_MAX_ENTRIES = 60
+export const DIGEST_MAX_CHARS = 36000
 // A slice smaller than this is too mangled to inform generation.
 const MIN_PER_ENTRY_CHARS = 200
 

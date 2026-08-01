@@ -2,7 +2,7 @@
 // World-visibility digest: fog-filtered selection and diegetic templates.
 
 import { describe, it, expect } from 'vitest'
-import { selectDigestChanges, formatDigestLine, MAX_DIGEST_LINES } from '../world-digest'
+import { selectDigestChanges, formatDigestLine } from '../world-digest'
 import type { WorldChange } from '@/lib/game/tick/types'
 
 const change = (overrides: Partial<WorldChange>): WorldChange => ({
@@ -32,12 +32,12 @@ describe('selectDigestChanges', () => {
     expect(selected[0].entityId).toBe('f1')
   })
 
-  it('caps the digest at MAX_DIGEST_LINES', () => {
+  it('no longer caps the raw selection itself — see groupDigestChangesByField in world-digest.test.ts, which caps after grouping', () => {
     const changes = Array.from({ length: 6 }, (_, i) =>
       change({ entityId: `f${i}` })
     )
     const selected = selectDigestChanges(changes, new Set(changes.map(c => c.entityId)))
-    expect(selected).toHaveLength(MAX_DIGEST_LINES)
+    expect(selected).toHaveLength(6)
   })
 })
 

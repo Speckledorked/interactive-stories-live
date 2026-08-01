@@ -9,8 +9,10 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 vi.mock('@/lib/ai/embeddingService', () => ({
-  generateEmbedding: vi.fn().mockResolvedValue(new Array(1536).fill(0.01)),
-  embeddingToPostgresVector: vi.fn((embedding: number[]) => `[${embedding.join(',')}]`),
+  embedBatchWithCostTracking: vi.fn(async (_campaignId: string, texts: string[]) =>
+    texts.map((_, i) => `[batch-vec-${i}]`)
+  ),
+  embedWithCostTracking: vi.fn(async () => '[single-vec]'),
 }))
 
 vi.mock('../mediaWikiClient', () => ({
@@ -23,7 +25,7 @@ vi.mock('../mediaWikiClient', () => ({
 }))
 
 import { prisma } from '@/lib/prisma'
-import { generateEmbedding } from '@/lib/ai/embeddingService'
+import { embedBatchWithCostTracking, embedWithCostTracking } from '@/lib/ai/embeddingService'
 import { detectApiBase, listAllPages, rankPagesByLength, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from '../mediaWikiClient'
 import { runLoreImport, WIKI_MAX_PAGES } from '../loreImportService'
 
@@ -65,7 +67,7 @@ describe('runLoreImport', () => {
       const job = makeJob({ sourceType: 'PASTE', rawText: 'A short piece of lore.', sourceTitle: 'My Lore' })
       await runLoreImport(job as any)
 
-      expect(generateEmbedding).toHaveBeenCalledWith('A short piece of lore.')
+      expect(embedBatchWithCostTracking).toHaveBeenCalledWith('campaign-1', ['A short piece of lore.'], 'lore_import_embedding')
       expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
       expect(prisma.loreImportJob.update).toHaveBeenCalledWith({
         where: { id: 'job-1' },
@@ -75,6 +77,37 @@ describe('runLoreImport', () => {
         where: { id: 'job-1' },
         data: { pagesDone: 1, entriesCreated: { increment: 1 } },
       })
+    })
+
+    it('embeds every chunk of a longer paste in ONE batched call, not one call per chunk', async () => {
+      // Comfortably over textChunker's paragraph-split threshold so this
+      // produces multiple chunks — the real behavior this guards against
+      // regressing to is a call per chunk, which live timing found was
+      // the actual bottleneck in a wiki crawl.
+      const longText = Array.from({ length: 5 }, (_, i) => `Paragraph ${i}. `.repeat(200)).join('\n\n')
+      const job = makeJob({ sourceType: 'PASTE', rawText: longText, sourceTitle: 'Long Lore' })
+
+      await runLoreImport(job as any)
+
+      expect(embedBatchWithCostTracking).toHaveBeenCalledTimes(1)
+      const [, texts] = vi.mocked(embedBatchWithCostTracking).mock.calls[0]
+      expect(texts.length).toBeGreaterThan(1)
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(texts.length)
+    })
+
+    it('falls back to embedding one chunk at a time if the batched embed call itself fails', async () => {
+      const longText = Array.from({ length: 5 }, (_, i) => `Paragraph ${i}. `.repeat(200)).join('\n\n')
+      const job = makeJob({ sourceType: 'PASTE', rawText: longText, sourceTitle: 'Long Lore' })
+      vi.mocked(embedBatchWithCostTracking).mockRejectedValueOnce(new Error('batch embed API down'))
+
+      await expect(runLoreImport(job as any)).resolves.toBeUndefined()
+
+      // Every chunk still got embedded (via the one-at-a-time fallback)
+      // and stored — a batch-level failure degrades gracefully rather
+      // than losing every chunk in that batch.
+      expect(embedWithCostTracking).toHaveBeenCalled()
+      const storedCount = vi.mocked(prisma.$executeRaw).mock.calls.length
+      expect(storedCount).toBeGreaterThan(1)
     })
 
     it('throws when there is no text', async () => {

@@ -8,7 +8,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { generateEmbedding, embeddingToPostgresVector } from './embeddingService';
+import { embedWithCostTracking } from './embeddingService';
 
 export interface RetrievedLoreEntry {
   id: string;
@@ -23,8 +23,14 @@ export interface LoreRetrievalOptions {
   minSimilarity?: number;
 }
 
+// maxEntries raised from 5 — a modest, not multiplied, increase since
+// this runs on every scene (a recurring per-scene cost), unlike the
+// one-time campaign-creation lore digest. minSimilarity is left
+// unchanged: loosening it would pull weaker matches into every single
+// scene call, a standing quality/cost trade-off paid every scene rather
+// than once, and wasn't asked for.
 const DEFAULT_OPTIONS: Required<LoreRetrievalOptions> = {
-  maxEntries: 5,
+  maxEntries: 8,
   minSimilarity: 0.75,
 };
 
@@ -47,8 +53,9 @@ export async function retrieveRelevantLore(
   }
 
   try {
-    const queryEmbedding = await generateEmbedding(queryText);
-    const embeddingString = embeddingToPostgresVector(queryEmbedding);
+    // Cost-tracked, matching memoryRetrieval.ts's equivalent memory-search
+    // embedding call — this call site previously went untracked entirely.
+    const embeddingString = await embedWithCostTracking(campaignId, queryText, 'lore_retrieval_embedding');
 
     const entries = await prisma.$queryRaw<any[]>`
       SELECT

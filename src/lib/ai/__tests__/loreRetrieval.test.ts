@@ -7,12 +7,11 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 vi.mock('../embeddingService', () => ({
-  generateEmbedding: vi.fn().mockResolvedValue(new Array(1536).fill(0.01)),
-  embeddingToPostgresVector: vi.fn((embedding: number[]) => `[${embedding.join(',')}]`),
+  embedWithCostTracking: vi.fn().mockResolvedValue('[0.01,0.01,0.01]'),
 }))
 
 import { prisma } from '@/lib/prisma'
-import { generateEmbedding } from '../embeddingService'
+import { embedWithCostTracking } from '../embeddingService'
 import { retrieveRelevantLore } from '../loreRetrieval'
 
 const db = prisma as any
@@ -36,7 +35,7 @@ describe('retrieveRelevantLore', () => {
   it('returns [] without querying when the query text is empty/whitespace', async () => {
     const result = await retrieveRelevantLore('camp1', '   ')
     expect(result).toEqual([])
-    expect(generateEmbedding).not.toHaveBeenCalled()
+    expect(embedWithCostTracking).not.toHaveBeenCalled()
     expect(db.$queryRaw).not.toHaveBeenCalled()
   })
 
@@ -48,7 +47,7 @@ describe('retrieveRelevantLore', () => {
 
     const result = await retrieveRelevantLore('camp1', 'what do we know about essence magic?', { minSimilarity: 0.7 })
 
-    expect(generateEmbedding).toHaveBeenCalledWith('what do we know about essence magic?')
+    expect(embedWithCostTracking).toHaveBeenCalledWith('camp1', 'what do we know about essence magic?', 'lore_retrieval_embedding')
     expect(result.map((e) => e.id)).toEqual(['a'])
   })
 
@@ -58,6 +57,14 @@ describe('retrieveRelevantLore', () => {
     )
     const result = await retrieveRelevantLore('camp1', 'query', { maxEntries: 3, minSimilarity: 0.5 })
     expect(result).toHaveLength(3)
+  })
+
+  it('defaults to up to 8 entries (raised from 5) when no maxEntries is given', async () => {
+    db.$queryRaw.mockResolvedValue(
+      Array.from({ length: 10 }, (_, i) => makeEntry({ id: `e${i}`, similarity: 0.9 }))
+    )
+    const result = await retrieveRelevantLore('camp1', 'query')
+    expect(result).toHaveLength(8)
   })
 
   it('returns [] instead of throwing when the DB call fails', async () => {

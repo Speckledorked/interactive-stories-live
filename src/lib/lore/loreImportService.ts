@@ -10,7 +10,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { LoreImportJob } from '@prisma/client'
-import { generateEmbedding, embeddingToPostgresVector } from '@/lib/ai/embeddingService'
+import { embedBatchWithCostTracking, embedWithCostTracking } from '@/lib/ai/embeddingService'
 import { chunkText, type TextChunk } from './textChunker'
 import { extractFromHtml } from './htmlExtractor'
 import { detectApiBase, listAllPages, rankPagesByLength, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from './mediaWikiClient'
@@ -24,13 +24,22 @@ import { detectApiBase, listAllPages, rankPagesByLength, fetchExtracts, fetchPag
 // is alphabetical by title, which would otherwise make the pages actually
 // imported an arbitrary function of the alphabet, not of what's actually
 // the meat of the wiki's lore.
-export const WIKI_MAX_PAGES = 150
+//
+// Raised from 150 alongside batching storeLoreChunks' embed calls
+// (EMBED_BATCH_SIZE below): live timing against a real wiki found the old
+// one-chunk-at-a-time embedding loop, not the MediaWiki API calls, was
+// the real ceiling on how many pages fit in one worker invocation —
+// batching that loop frees enough headroom to raise this safely. The
+// exact new number is an estimate from real API timing plus an assumed
+// (unconfirmed — no OPENAI_API_KEY available to measure directly)
+// embedding latency; verify against a real key before trusting it fully.
+export const WIKI_MAX_PAGES = 400
 // How many candidate titles to consider ranking before selecting the top
 // WIKI_MAX_PAGES by length — bigger than WIKI_MAX_PAGES so a large wiki's
 // alphabetically-early pages don't win by default just for being listed
 // first, but bounded so the extra prop=info ranking calls can't run away
 // on an enormous wiki.
-const WIKI_RANKING_CANDIDATE_CEILING = 1000
+const WIKI_RANKING_CANDIDATE_CEILING = 2500
 const WIKI_EXTRACT_BATCH_SIZE = 20
 
 /**
@@ -167,12 +176,22 @@ function pageUrl(wikiBaseUrl: string, title: string): string {
   }
 }
 
+// One batched embedding call per group instead of one call per chunk.
+// Live timing against a real wiki (harrypotter.fandom.com) found this
+// loop's old one-chunk-at-a-time embed calls were the dominant cost of a
+// wiki import — hundreds of sequential round-trips, well past the
+// MediaWiki API calls around it, which are already batched. Matches
+// WIKI_EXTRACT_BATCH_SIZE's existing group size for consistency.
+const EMBED_BATCH_SIZE = 20
+
 /**
  * Embed and insert each chunk as its own LoreEntry row. Uses raw SQL for
  * the vector column (Prisma has no native vector type — see
- * memoryCreation.ts for the same pattern). One chunk failing to embed
- * doesn't abort the rest; it's logged and skipped so a flaky embedding
- * call on page 80 of 150 doesn't lose everything already imported.
+ * memoryCreation.ts for the same pattern). A batch failing to embed
+ * degrades to one-at-a-time for just that batch rather than losing every
+ * chunk in it; a chunk that still fails there is logged and skipped — so
+ * a flaky embedding call on page 80 of 150 doesn't lose everything
+ * already imported.
  */
 async function storeLoreChunks(
   campaignId: string,
@@ -181,29 +200,50 @@ async function storeLoreChunks(
   sourceUrl?: string
 ): Promise<number> {
   let stored = 0
-  for (const chunk of chunks) {
-    try {
-      const embedding = await generateEmbedding(chunk.content)
-      const embeddingString = embeddingToPostgresVector(embedding)
 
-      await prisma.$executeRaw`
-        INSERT INTO lore_entries (
-          id, "campaignId", "jobId", title, "sourceUrl", content, embedding, tags, "createdAt"
-        ) VALUES (
-          gen_random_uuid(),
-          ${campaignId},
-          ${jobId},
-          ${chunk.title},
-          ${sourceUrl ?? null},
-          ${chunk.content},
-          ${embeddingString}::vector,
-          ARRAY[]::text[],
-          NOW()
-        )
-      `
-      stored++
+  for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
+    const batch = chunks.slice(i, i + EMBED_BATCH_SIZE)
+    let vectors: (string | null)[]
+    try {
+      vectors = await embedBatchWithCostTracking(campaignId, batch.map(c => c.content), 'lore_import_embedding')
     } catch (error) {
-      console.error(`Failed to embed/store lore chunk "${chunk.title}":`, error)
+      console.error(`Batch embed failed for ${batch.length} lore chunk(s) — falling back to one-at-a-time:`, error)
+      vectors = await Promise.all(
+        batch.map(async chunk => {
+          try {
+            return await embedWithCostTracking(campaignId, chunk.content, 'lore_import_embedding')
+          } catch (chunkError) {
+            console.error(`Failed to embed lore chunk "${chunk.title}":`, chunkError)
+            return null
+          }
+        })
+      )
+    }
+
+    for (let j = 0; j < batch.length; j++) {
+      const embeddingString = vectors[j]
+      if (!embeddingString) continue
+      const chunk = batch[j]
+      try {
+        await prisma.$executeRaw`
+          INSERT INTO lore_entries (
+            id, "campaignId", "jobId", title, "sourceUrl", content, embedding, tags, "createdAt"
+          ) VALUES (
+            gen_random_uuid(),
+            ${campaignId},
+            ${jobId},
+            ${chunk.title},
+            ${sourceUrl ?? null},
+            ${chunk.content},
+            ${embeddingString}::vector,
+            ARRAY[]::text[],
+            NOW()
+          )
+        `
+        stored++
+      } catch (error) {
+        console.error(`Failed to store lore chunk "${chunk.title}":`, error)
+      }
     }
   }
   return stored

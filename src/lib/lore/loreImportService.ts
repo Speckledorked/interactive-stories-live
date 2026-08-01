@@ -13,15 +13,24 @@ import type { LoreImportJob } from '@prisma/client'
 import { generateEmbedding, embeddingToPostgresVector } from '@/lib/ai/embeddingService'
 import { chunkText, type TextChunk } from './textChunker'
 import { extractFromHtml } from './htmlExtractor'
-import { detectApiBase, listAllPages, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from './mediaWikiClient'
+import { detectApiBase, listAllPages, rankPagesByLength, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from './mediaWikiClient'
 
 // A wiki crawl runs inside a single worker invocation (see the internal
 // route's maxDuration) — capped well short of "the whole internet" so one
 // job reliably finishes instead of timing out mid-crawl and leaving a job
 // stuck RUNNING until stale-recovery resets it (which would re-crawl from
-// scratch, not resume). Big wikis get their most-linked-first N pages,
-// which in practice is the actual lore, not stub/maintenance pages.
+// scratch, not resume). Big wikis get their most-substantial N pages by
+// content length (see rankPagesByLength) — listAllPages' own native order
+// is alphabetical by title, which would otherwise make the pages actually
+// imported an arbitrary function of the alphabet, not of what's actually
+// the meat of the wiki's lore.
 export const WIKI_MAX_PAGES = 150
+// How many candidate titles to consider ranking before selecting the top
+// WIKI_MAX_PAGES by length — bigger than WIKI_MAX_PAGES so a large wiki's
+// alphabetically-early pages don't win by default just for being listed
+// first, but bounded so the extra prop=info ranking calls can't run away
+// on an enormous wiki.
+const WIKI_RANKING_CANDIDATE_CEILING = 1000
 const WIKI_EXTRACT_BATCH_SIZE = 20
 
 /**
@@ -113,8 +122,21 @@ async function importWiki(job: LoreImportJob): Promise<void> {
     throw new Error('That URL does not look like a MediaWiki-based wiki (no api.php found) — try importing it as a single page instead')
   }
 
-  const pages = await listAllPages(apiBase, WIKI_MAX_PAGES)
-  if (pages.length === 0) throw new Error('No pages found on that wiki')
+  const candidates = await listAllPages(apiBase, WIKI_RANKING_CANDIDATE_CEILING)
+  if (candidates.length === 0) throw new Error('No pages found on that wiki')
+
+  // Rank by real content length so the hard WIKI_MAX_PAGES cap selects the
+  // wiki's most substantial pages rather than whatever sorts first
+  // alphabetically. Fails open to the unranked (alphabetical) order if
+  // ranking itself errors — a worse-ranked-but-successful import beats a
+  // failed one.
+  let ranked = candidates
+  try {
+    ranked = await rankPagesByLength(apiBase, candidates)
+  } catch (err) {
+    console.error('Wiki page length ranking failed — falling back to alphabetical order:', err)
+  }
+  const pages = ranked.slice(0, WIKI_MAX_PAGES)
 
   await prisma.loreImportJob.update({ where: { id: job.id }, data: { pagesFound: pages.length } })
 

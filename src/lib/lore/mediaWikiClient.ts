@@ -146,6 +146,75 @@ export async function fetchExtracts(apiBase: string, titles: string[]): Promise<
 }
 
 /**
+ * Fetch each candidate title's page length (bytes) via the core prop=info
+ * action, batched the same way fetchExtracts batches prop=extracts.
+ * prop=info needs no extension — unlike MediaWiki's actual "most linked"
+ * mechanism (list=querypage&qppage=Mostlinked), which depends on the
+ * QueryPage extension's periodically-rebuilt maintenance cache and is
+ * frequently stale or disabled on Fandom specifically (the primary host
+ * this import path targets, per fetchExtracts' own comment above) — page
+ * length is a reliable, universally-supported proxy for "how substantial
+ * is this page" with no such dependency.
+ */
+async function fetchPageLengths(apiBase: string, titles: string[]): Promise<Map<string, number>> {
+  const result = new Map<string, number>()
+  if (titles.length === 0) return result
+
+  const params = new URLSearchParams({
+    action: 'query',
+    prop: 'info',
+    titles: titles.join('|'),
+    format: 'json',
+  })
+
+  try {
+    const res = await fetch(`${apiBase}?${params.toString()}`, {
+      headers: { 'User-Agent': 'MythOS-LoreImport/1.0' },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      const pages = data?.query?.pages
+      if (pages && typeof pages === 'object') {
+        for (const page of Object.values(pages) as any[]) {
+          if (page?.title && typeof page.length === 'number') {
+            result.set(page.title, page.length)
+          }
+        }
+      }
+    }
+  } catch {
+    // Titles that don't get a length just sort to the back below — fail
+    // open, don't let a length-lookup error abort ranking entirely.
+  }
+
+  return result
+}
+
+/**
+ * Rank candidate pages by real content length (descending) instead of the
+ * alphabetical order listAllPages returns them in, so a hard cap on how
+ * many pages get imported (WIKI_MAX_PAGES) selects the most substantial
+ * pages rather than whatever happens to sort first by title. A candidate
+ * whose length couldn't be fetched sorts to the back rather than being
+ * dropped, so a partial length-lookup failure degrades ranking quality
+ * instead of losing pages outright.
+ */
+export async function rankPagesByLength(
+  apiBase: string,
+  candidates: WikiPageSummary[],
+  batchSize = 20
+): Promise<WikiPageSummary[]> {
+  const lengths = new Map<string, number>()
+  for (let i = 0; i < candidates.length; i += batchSize) {
+    const batch = candidates.slice(i, i + batchSize)
+    const batchLengths = await fetchPageLengths(apiBase, batch.map(p => p.title))
+    for (const [title, length] of batchLengths) lengths.set(title, length)
+  }
+
+  return [...candidates].sort((a, b) => (lengths.get(b.title) ?? -1) - (lengths.get(a.title) ?? -1))
+}
+
+/**
  * Extract a MediaWiki page title from a canonical article URL (the
  * ".../wiki/Page_Title" shape every MediaWiki site uses, Fandom included).
  * Returns null for a URL that isn't an article link (e.g. just the wiki's

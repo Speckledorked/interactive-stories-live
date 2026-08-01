@@ -226,8 +226,12 @@ Rules:
       // wiki digest even at 1900. Fronts add a bounded amount on top
       // regardless of lore. NPCs/locations are deliberately NOT part of
       // this call (see worldExtras.ts) — kept separate specifically so
-      // this response stays as small as the rules below allow.
-      maxTokens: loreDigest ? 3200 : 1300,
+      // this response stays as small as the rules below allow. Raised
+      // from 3200 alongside loreDigest.ts's 3x digest-budget increase —
+      // more grounding material should be able to surface more of what's
+      // actually in the lore, not just better-flavored versions of the
+      // same amount.
+      maxTokens: loreDigest ? 4200 : 1300,
       jsonMode: true,
     })
 

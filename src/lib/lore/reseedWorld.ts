@@ -47,8 +47,10 @@ import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 import { BASIC_MOVES } from '@/lib/pbta-moves'
 
 // The extras call already carries factions + capability keys, so it needs
-// less raw canon than base world generation does.
-const EXTRAS_DIGEST_CHARS = 6000
+// less raw canon than base world generation does. Raised 3x alongside
+// loreDigest.ts's DIGEST_MAX_CHARS, preserving the same ~50%-of-full-digest
+// ratio rather than leaving this squeeze at its old absolute size.
+const EXTRAS_DIGEST_CHARS = 18000
 
 export interface ReseedSummary {
   fresh: boolean

@@ -23,8 +23,14 @@ interface LoreJob {
   pagesFound: number
   pagesDone: number
   entriesCreated: number
+  excludeCategories: string[]
   createdAt: string
   finishedAt: string | null
+}
+
+interface WikiCategory {
+  title: string
+  pageCount: number
 }
 
 interface ReseedSummary {
@@ -107,6 +113,17 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
+  // WIKI-only: the real category list read from the wiki itself, so the
+  // admin picks what to exclude from an actual dropdown instead of typing
+  // names blind. Cleared whenever the URL changes, since a stale category
+  // list from a previously-checked wiki could otherwise get submitted
+  // against a different one.
+  const [wikiCategories, setWikiCategories] = useState<WikiCategory[] | null>(null)
+  const [categoriesLoading, setCategoriesLoading] = useState(false)
+  const [categoriesError, setCategoriesError] = useState<string | null>(null)
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set())
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchJobs = async () => {
@@ -177,6 +194,49 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reseedJob?.status])
 
+  // Any URL edit invalidates a previously-fetched category list — it
+  // belonged to whatever wiki was in the field before, and submitting
+  // exclusions from the wrong wiki against a new URL would silently
+  // exclude nothing (or the wrong pages) with no error to explain why.
+  const handleUrlChange = (value: string) => {
+    setUrl(value)
+    setWikiCategories(null)
+    setCategoriesError(null)
+    setCategoryFilter('')
+    setExcludedCategories(new Set())
+  }
+
+  const handleFindCategories = async () => {
+    if (!url.trim()) {
+      setCategoriesError('Enter the wiki URL above first.')
+      return
+    }
+    setCategoriesLoading(true)
+    setCategoriesError(null)
+    try {
+      const res = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/lore/wiki-categories?url=${encodeURIComponent(url.trim())}`
+      )
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to read categories from that wiki')
+      setWikiCategories(data.categories || [])
+    } catch (err) {
+      setCategoriesError(err instanceof Error ? err.message : 'Failed to read categories from that wiki')
+      setWikiCategories(null)
+    } finally {
+      setCategoriesLoading(false)
+    }
+  }
+
+  const toggleExcludedCategory = (title: string) => {
+    setExcludedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(title)) next.delete(title)
+      else next.add(title)
+      return next
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
@@ -199,6 +259,9 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
           sourceType,
           sourceTitle: title.trim() || undefined,
           ...(sourceType === 'PASTE' ? { rawText: text } : { sourceUrl: url.trim() }),
+          ...(sourceType === 'WIKI' && excludedCategories.size > 0
+            ? { excludeCategories: Array.from(excludedCategories) }
+            : {}),
         }),
       })
       const data = await res.json()
@@ -207,6 +270,9 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
       setTitle('')
       setText('')
       setUrl('')
+      setWikiCategories(null)
+      setCategoryFilter('')
+      setExcludedCategories(new Set())
       await fetchJobs()
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to start import')
@@ -319,13 +385,82 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
               <label className="mb-1 block text-sm font-medium text-myth-ink-muted">
                 {sourceType === 'WIKI' ? 'Any page URL on the wiki *' : 'URL *'}
               </label>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder={sourceType === 'WIKI' ? 'https://example.fandom.com/wiki/Main_Page' : 'https://example.com/article'}
-                className="block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={url}
+                  onChange={(e) => (sourceType === 'WIKI' ? handleUrlChange(e.target.value) : setUrl(e.target.value))}
+                  placeholder={sourceType === 'WIKI' ? 'https://example.fandom.com/wiki/Main_Page' : 'https://example.com/article'}
+                  className="block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
+                />
+                {sourceType === 'WIKI' && (
+                  <button
+                    type="button"
+                    onClick={handleFindCategories}
+                    disabled={categoriesLoading || !url.trim()}
+                    className="shrink-0 rounded-md border border-myth-border px-3 py-2 text-sm text-myth-ink-muted hover:border-myth-accent hover:text-myth-accent disabled:opacity-50"
+                  >
+                    {categoriesLoading ? 'Reading wiki…' : 'Find categories'}
+                  </button>
+                )}
+              </div>
+              {sourceType === 'WIKI' && (
+                <p className="mt-1 text-xs text-myth-ink-faint">
+                  Optional — reads the wiki&apos;s own categories so you can exclude some (e.g. a named cast you
+                  don&apos;t want) from the crawl instead of importing everything.
+                </p>
+              )}
+            </div>
+          )}
+
+          {sourceType === 'WIKI' && categoriesError && (
+            <p className="text-sm text-myth-danger">{categoriesError}</p>
+          )}
+
+          {sourceType === 'WIKI' && wikiCategories && (
+            <div className="rounded-md border border-myth-border p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <label className="text-sm font-medium text-myth-ink-muted">
+                  Exclude categories ({excludedCategories.size} selected)
+                </label>
+                {excludedCategories.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setExcludedCategories(new Set())}
+                    className="text-xs text-myth-ink-faint hover:text-myth-ink"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              {wikiCategories.length === 0 ? (
+                <p className="text-xs text-myth-ink-muted">This wiki has no categories to exclude.</p>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    placeholder="Filter categories…"
+                    className="mb-2 block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-1.5 text-sm text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none"
+                  />
+                  <div className="max-h-56 space-y-1 overflow-y-auto">
+                    {wikiCategories
+                      .filter(c => c.title.toLowerCase().includes(categoryFilter.trim().toLowerCase()))
+                      .map(c => (
+                        <label key={c.title} className="flex items-center gap-2 text-sm text-myth-ink-muted hover:text-myth-ink">
+                          <input
+                            type="checkbox"
+                            checked={excludedCategories.has(c.title)}
+                            onChange={() => toggleExcludedCategory(c.title)}
+                          />
+                          <span className="flex-1 truncate">{c.title}</span>
+                          <span className="text-xs text-myth-ink-faint">{c.pageCount} pages</span>
+                        </label>
+                      ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -429,6 +564,11 @@ function LoreJobRow({ job, onDelete }: { job: LoreJob; onDelete: () => void }) {
         )}
         {job.status === 'FAILED' && job.lastError && (
           <p className="mt-1 text-xs text-myth-danger">{job.lastError}</p>
+        )}
+        {job.sourceType === 'WIKI' && job.excludeCategories?.length > 0 && (
+          <p className="mt-1 text-xs text-myth-ink-faint">
+            Excluded: {job.excludeCategories.join(', ')}
+          </p>
         )}
       </div>
       <button

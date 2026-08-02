@@ -49,6 +49,7 @@ export async function GET(
         pagesFound: true,
         pagesDone: true,
         entriesCreated: true,
+        excludeCategories: true,
         createdAt: true,
         finishedAt: true,
       },
@@ -108,8 +109,20 @@ export async function POST(
       ? body.sourceTitle.trim().slice(0, 200)
       : null
 
+    // WIKI only — real category names the admin picked to skip (see
+    // /wiki-categories below for how the frontend gets the real list to
+    // choose from). Ignored for other source types, since there's no
+    // crawl to filter.
+    let excludeCategories: string[] = []
+    if (sourceType === 'WIKI' && Array.isArray(body?.excludeCategories)) {
+      excludeCategories = body.excludeCategories
+        .filter((c: unknown): c is string => typeof c === 'string' && c.trim().length > 0)
+        .map((c: string) => c.trim().slice(0, 200))
+        .slice(0, 100)
+    }
+
     const job = await prisma.loreImportJob.create({
-      data: { campaignId, sourceType, sourceUrl, sourceTitle, rawText },
+      data: { campaignId, sourceType, sourceUrl, sourceTitle, rawText, excludeCategories },
     })
 
     await kickLoreImportJob(job.id)

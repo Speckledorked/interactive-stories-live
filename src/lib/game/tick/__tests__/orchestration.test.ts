@@ -81,6 +81,7 @@ vi.mock('../npcSocietyTick', () => ({
   tickNpcJointSchemes: h.stub('jointSchemes'),
 }))
 vi.mock('../wakeTick', () => ({ tickWake: h.stub('wake') }))
+vi.mock('../economyTick', () => ({ tickEconomy: h.stub('economy') }))
 vi.mock('../integrityTick', () => ({ tickIntegrity: h.stub('integrity') }))
 
 vi.mock('../worldEventLog', () => ({ persistWorldEvents: h.persistWorldEvents }))
@@ -117,8 +118,8 @@ describe('runWorldTick — the handler sequence', () => {
   it('runs every registered handler exactly once', async () => {
     await runWorldTick('camp1', 7)
 
-    expect(callOrder).toHaveLength(16)
-    expect(new Set(callOrder).size).toBe(16)
+    expect(callOrder).toHaveLength(17)
+    expect(new Set(callOrder).size).toBe(17)
   })
 
   // Each case below is one of the five same-turn dependencies documented
@@ -199,21 +200,30 @@ describe('runWorldTick — the handler sequence', () => {
     expect(at('locationCondition')).toBeLessThan(at('migration'))
   })
 
-  it('runs wake right before integrity, after factions/leadership have recorded this turn\'s roughness', async () => {
+  it('runs wake right before economy, after factions/leadership have recorded this turn\'s roughness', async () => {
     // tickWake (#103) reads ctx.collapseRoughnessByFactionId/
     // ctx.successionRoughnessByFactionId, set by tickFactions/
     // tickFactionLeadership earlier in this same pass.
     await runWorldTick('camp1', 7)
     expect(at('factions')).toBeLessThan(at('wake'))
     expect(at('leadership')).toBeLessThan(at('wake'))
-    expect(at('wake')).toBeLessThan(at('integrity'))
+    expect(at('wake')).toBeLessThan(at('economy'))
+  })
+
+  it('runs economy right after wake, so a cascade\'s new ActiveWake row isn\'t decayed the same turn it was born', async () => {
+    // tickEconomy (#111) creates its own ActiveWake rows (cascading
+    // defaults) and must run AFTER tickWake's own decay phase this same
+    // tick, or its fresh row would get decayed the same turn it was born.
+    await runWorldTick('camp1', 7)
+    expect(at('wake')).toBeLessThan(at('economy'))
+    expect(at('economy')).toBeLessThan(at('integrity'))
   })
 
   it('validates integrity LAST, after every other handler has written', async () => {
     // tickIntegrity checks the state this turn actually produced — it has
     // to see every other handler's writes, not last turn's.
     await runWorldTick('camp1', 7)
-    for (const name of ['weather', 'season', 'relationships', 'beliefDrift', 'factions', 'leadership', 'wars', 'locationCondition', 'logistics', 'ambitions', 'npcs', 'migration', 'socialTies', 'jointSchemes', 'wake']) {
+    for (const name of ['weather', 'season', 'relationships', 'beliefDrift', 'factions', 'leadership', 'wars', 'locationCondition', 'logistics', 'ambitions', 'npcs', 'migration', 'socialTies', 'jointSchemes', 'wake', 'economy']) {
       expect(at(name)).toBeLessThan(at('integrity'))
     }
   })
@@ -244,7 +254,7 @@ describe('runWorldTick — context and accumulation', () => {
 
   it('collects every handler\'s changes, losing none', async () => {
     const result = await runWorldTick('camp1', 7)
-    expect(result.changes).toHaveLength(16)
+    expect(result.changes).toHaveLength(17)
     expect(result.changes.map(c => c.field).sort()).toEqual([...callOrder].sort())
   })
 
@@ -275,7 +285,7 @@ describe('runWorldTick — the fan-out to all three consumers', () => {
       const [campaignId, turnNumber, changes] = consumer.mock.calls[0] as any[]
       expect(campaignId).toBe('camp1')
       expect(turnNumber).toBe(7)
-      expect(changes).toHaveLength(16)
+      expect(changes).toHaveLength(17)
     }
   })
 
@@ -288,7 +298,7 @@ describe('runWorldTick — the fan-out to all three consumers', () => {
 describe('runWorldTick — dry run', () => {
   it('still runs every handler, so the preview reflects real decisions', async () => {
     await runWorldTick('camp1', 7, { dryRun: true })
-    expect(callOrder).toHaveLength(16)
+    expect(callOrder).toHaveLength(17)
   })
 
   it('tells every handler it is a dry run, since each skips its own writes', async () => {
@@ -309,7 +319,7 @@ describe('runWorldTick — dry run', () => {
 
   it('returns the changes it would have made, with a zeroed history count', async () => {
     const result = await runWorldTick('camp1', 7, { dryRun: true })
-    expect(result.changes).toHaveLength(16)
+    expect(result.changes).toHaveLength(17)
     expect(result.historyEntriesCreated).toBe(0)
     expect(result.pendingAmbitions).toEqual([pendingAmbition])
   })

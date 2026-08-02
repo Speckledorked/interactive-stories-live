@@ -38,6 +38,7 @@ import { tickNpcs } from './tick/npcTick'
 import { tickMigration } from './tick/migrationTick'
 import { tickNpcSocialTies, tickNpcJointSchemes } from './tick/npcSocietyTick'
 import { tickWake } from './tick/wakeTick'
+import { tickEconomy } from './tick/economyTick'
 import { tickIntegrity } from './tick/integrityTick'
 import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
@@ -101,18 +102,30 @@ import { resolveTickCaps } from './tick/caps'
 // exempt from fleeing it again), and it depends on tickLocationCondition's
 // conditionScore from earlier in this same pass as its distress signal.
 //
-// tickWake runs right before tickIntegrity, after everything else has had
-// a chance to collapse a faction or leave an NPC dead this same turn
-// (#103): it reads ctx.collapseRoughnessByFactionId (set by tickFactions)
-// and ctx.successionRoughnessByFactionId (set by tickFactionLeadership)
-// earlier in this same pass, so it never recomputes "how rough was this
-// transition" a second, independent way.
+// tickWake runs right before tickEconomy (see below), after everything
+// else has had a chance to collapse a faction or leave an NPC dead this
+// same turn (#103): it reads ctx.collapseRoughnessByFactionId (set by
+// tickFactions) and ctx.successionRoughnessByFactionId (set by
+// tickFactionLeadership) earlier in this same pass, so it never
+// recomputes "how rough was this transition" a second, independent way.
+//
+// tickEconomy runs right after tickWake, deliberately NOT before it
+// (#111): it also reads ctx.collapseRoughnessByFactionId, and it creates
+// its own ActiveWake rows (a cascading default's stability hit reuses
+// #103's decay mechanism, tagged sourceType 'FACTION_DEFAULT'). tickWake's
+// own decay phase runs unconditionally over every unresolved ActiveWake
+// row each tick — if tickEconomy created one BEFORE tickWake ran this same
+// pass, it would get decayed the same turn it was born, the exact
+// same-tick double-count tickWake's own internal decay-before-create
+// ordering exists to avoid. Running after sidesteps that entirely: a
+// cascade created this turn starts decaying next turn, like every other
+// wake.
 //
 // tickIntegrity runs LAST, deliberately: it validates the state every
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not
 // last turn's. See its own file for what it does and doesn't repair.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickIntegrity]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickEconomy, tickIntegrity]
 
 // Prisma's interactive-transaction default is 5s; this tick runs 10
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well

@@ -500,17 +500,15 @@ function cacheParams(campaignId?: string): { prompt_cache_key?: string; prompt_c
 }
 
 /**
- * Call the OpenAI API with a structured prompt
- * Phase 15: Enhanced with validation, caching, circuit breaker, and cost tracking
- *
- * @param request - The formatted request for the AI GM
- * @param campaignId - Campaign ID for tracking
- * @param sceneId - Scene ID for cost tracking
- * @param options - Additional options
- * @returns AI GM response with scene text and world updates
+ * One real attempt at the AI GM call against a specific model — the whole
+ * body callAIGM used to be, before #116 made the model a parameter instead
+ * of a hardcoded AI_MODELS.FLAGSHIP. Not exported: callAIGM below is the
+ * only entry point, and owns the fallback-chain decision of which model(s)
+ * to try this function against.
  */
-export async function callAIGM(
+async function attemptAIGM(
   request: AIGMRequest,
+  model: string,
   campaignId?: string,
   sceneId?: string,
   options?: {
@@ -522,15 +520,6 @@ export async function callAIGM(
 
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY is not configured')
-  }
-
-  // Phase 15.3: Check circuit breaker
-  if (campaignId) {
-    const circuitBreaker = circuitBreakerManager.getBreaker(campaignId)
-    if (!circuitBreaker.canAttempt()) {
-      console.error('🚫 Circuit breaker OPEN - AI service unavailable')
-      throw new Error('AI service temporarily unavailable - too many recent failures. Please try again later.')
-    }
   }
 
   // Build the full prompt for the AI
@@ -552,7 +541,7 @@ export async function callAIGM(
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: AI_MODELS.FLAGSHIP, // Flagship model: best instruction following and narrative quality
+        model, // #116: FLAGSHIP on the primary attempt, EFFICIENT on the one fallback attempt (see callAIGM)
         messages: [
           {
             role: 'system',
@@ -627,7 +616,7 @@ export async function callAIGM(
             'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
-            model: AI_MODELS.FLAGSHIP,
+            model,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt },
@@ -653,7 +642,7 @@ export async function callAIGM(
         // main resolution call so it's visible in cost breakdowns, not
         // silently folded into 'scene_resolution'.
         if (campaignId) {
-          const repairCostTracker = new AICostTracker(campaignId, AI_MODELS.FLAGSHIP)
+          const repairCostTracker = new AICostTracker(campaignId, model)
           await repairCostTracker.recordRequest({
             inputTokens: repairUsage.prompt_tokens || estimateTokenCount(systemPrompt + userPrompt + content + repairPrompt),
             outputTokens: repairUsage.completion_tokens || estimateTokenCount(repairContent),
@@ -722,7 +711,7 @@ export async function callAIGM(
 
     // Phase 15.5.1: Track costs
     if (campaignId) {
-      const costTracker = new AICostTracker(campaignId, AI_MODELS.FLAGSHIP)
+      const costTracker = new AICostTracker(campaignId, model)
       await costTracker.recordRequest({
         inputTokens: usage.prompt_tokens || estimatedInputTokens,
         outputTokens: usage.completion_tokens || estimateTokenCount(content),
@@ -757,7 +746,7 @@ export async function callAIGM(
 
     // Record failure in cost tracker
     if (campaignId) {
-      const costTracker = new AICostTracker(campaignId, AI_MODELS.FLAGSHIP)
+      const costTracker = new AICostTracker(campaignId, model)
       await costTracker.recordRequest({
         inputTokens: estimatedInputTokens,
         outputTokens: 0,
@@ -770,6 +759,52 @@ export async function callAIGM(
 
     throw error
   }
+}
+
+/**
+ * Call the OpenAI API with a structured prompt.
+ * Phase 15: validation, caching, circuit breaker, and cost tracking.
+ * #116: a multi-model fallback chain — AI_MODELS.FLAGSHIP first, then one
+ * fallback attempt against AI_MODELS.EFFICIENT if the primary attempt hard-
+ * fails OR the circuit breaker is already open for this campaign. Never
+ * chained further: a fallback failure surfaces to the caller exactly like
+ * today's single-model failure did.
+ *
+ * @param request - The formatted request for the AI GM
+ * @param campaignId - Campaign ID for tracking
+ * @param sceneId - Scene ID for cost tracking
+ * @param options - Additional options
+ * @returns AI GM response with scene text and world updates
+ */
+export async function callAIGM(
+  request: AIGMRequest,
+  campaignId?: string,
+  sceneId?: string,
+  options?: {
+    debugMode?: boolean
+  }
+): Promise<AIGMResponse & { _outcomeAdherence?: AdherenceResult }> {
+  // Phase 15.3: an open circuit skips straight to the fallback attempt
+  // instead of refusing the call outright — the breaker tracks overall
+  // AI-request health for this campaign, not FLAGSHIP specifically, so a
+  // cheaper attempt is still worth one try before giving up entirely.
+  const circuitOpen = campaignId ? !circuitBreakerManager.getBreaker(campaignId).canAttempt() : false
+
+  if (!circuitOpen) {
+    try {
+      const result = await attemptAIGM(request, AI_MODELS.FLAGSHIP, campaignId, sceneId, options)
+      console.log(`✅ Served by ${AI_MODELS.FLAGSHIP}`)
+      return result
+    } catch (primaryError) {
+      console.error(`⚠️ ${AI_MODELS.FLAGSHIP} call failed — falling back to ${AI_MODELS.EFFICIENT}:`, primaryError)
+    }
+  } else {
+    console.error(`🚫 Circuit breaker OPEN for campaign ${campaignId} — skipping ${AI_MODELS.FLAGSHIP}, trying ${AI_MODELS.EFFICIENT} as a fallback`)
+  }
+
+  const fallbackResult = await attemptAIGM(request, AI_MODELS.EFFICIENT, campaignId, sceneId, options)
+  console.log(`✅ Served by fallback model ${AI_MODELS.EFFICIENT}`)
+  return fallbackResult
 }
 
 // buildSystemPrompt moved to scenePrompt.ts (broken into one function/

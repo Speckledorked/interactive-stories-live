@@ -8,7 +8,8 @@
 
 import { prisma } from '@/lib/prisma'
 import { WorldChange, clamp, findRivalIds } from './types'
-import { decideAmbitionOutcome } from './ambitionTick'
+import { decideAmbitionOutcome, decideAgendaContinuation, buildAgendaContinuationName, AMBITION_SHAPES } from './ambitionTick'
+import { parseBeliefVector } from './beliefTick'
 import { decideTerritoryClaim } from './territory'
 import { persistWorldEvents } from './worldEventLog'
 import { logSignificantChanges } from './historyLog'
@@ -149,6 +150,66 @@ export async function resolveCompletedAmbitions(
           importance: 'MAJOR',
         })
         console.log(`  🗺️ ${reasonByKind[claim.kind]}`)
+      }
+    }
+
+    // #104: multi-stage ambitions — a successful ambition can spawn a new
+    // clock continuing the same agenda instead of resolving cleanly, gated
+    // on the faction's own drifted belief still supporting more of the
+    // same (see decideAgendaContinuation). DEFEND/CONSOLIDATE never reach
+    // here at all (only ambition-sourced clocks are in
+    // completedAmbitionClocks), so this only ever fires for the three
+    // goals that spawn ambitions in the first place.
+    if (faction.goal === 'ENRICH' || faction.goal === 'EXPAND' || faction.goal === 'DESTABILIZE_RIVAL') {
+      const rootAgendaId = clock.agendaId ?? clock.id
+      const priorStageCount = await prisma.clock.count({
+        where: { OR: [{ id: rootAgendaId }, { agendaId: rootAgendaId }] },
+      })
+      const belief = parseBeliefVector(faction.beliefVector)
+      const continues = decideAgendaContinuation({
+        outcomeSuccess: outcome.success,
+        goal: faction.goal,
+        belief,
+        priorStageCount,
+      })
+
+      if (continues) {
+        const stageNumber = priorStageCount + 1
+        const { name, flavor } = buildAgendaContinuationName(faction.name, faction.archetype, faction.goal, stageNumber)
+        const shape = AMBITION_SHAPES[faction.goal]!
+
+        await prisma.clock.create({
+          data: {
+            campaignId,
+            name,
+            description: shape.fallbackConsequence(faction.name),
+            category: shape.category,
+            maxTicks: shape.maxTicks,
+            currentTicks: 0,
+            consequence: shape.fallbackConsequence(faction.name),
+            gmNotes: clock.targetFactionId
+              ? `Ambition type: ${flavor} (continuing agenda, stage ${stageNumber}, targeting ${target?.name ?? 'its rival'})`
+              : `Ambition type: ${flavor} (continuing agenda, stage ${stageNumber})`,
+            sourceFactionId: faction.id,
+            targetFactionId: clock.targetFactionId,
+            agendaId: rootAgendaId,
+          },
+        })
+
+        changes.push({
+          entityType: 'FACTION',
+          entityId: faction.id,
+          entityName: faction.name,
+          campaignId,
+          field: 'agendaContinued',
+          previousValue: clock.name,
+          newValue: name,
+          reason: `${faction.name}'s success only whets its appetite — it presses on with ${name}`,
+          significant: true,
+          importance: 'NORMAL',
+        })
+
+        console.log(`  🔁 ${faction.name}'s agenda continues into stage ${stageNumber}: ${name}`)
       }
     }
 

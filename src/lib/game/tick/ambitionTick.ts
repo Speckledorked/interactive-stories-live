@@ -25,6 +25,7 @@
 import type { FactionGoal, FactionArchetype } from '@prisma/client'
 import { HIGH_BAND_MIN } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange, PendingAmbition, clamp, findRivalId, stableHash } from './types'
+import { BeliefVector } from './beliefTick'
 
 // The same HIGH cutoff the rest of the tick uses, referenced rather than
 // copied so a rebalance can't drift.
@@ -45,7 +46,10 @@ type AmbitionGoal = 'ENRICH' | 'EXPAND' | 'DESTABILIZE_RIVAL'
 // `category` is what gets persisted to Clock.category (drives tick speed in
 // worldTurn.ts's advanceClocks) and must never be confused with the flavor
 // category below, which is narrative only.
-const AMBITION_SHAPES: Partial<Record<FactionGoal, { maxTicks: number; category: string; fallbackConsequence: (factionName: string) => string }>> = {
+// Exported for ambitionResolution.ts's multi-stage continuation (#104),
+// which reuses the same mechanical shape for a continuing agenda's clock
+// rather than inventing a second pacing table.
+export const AMBITION_SHAPES: Partial<Record<FactionGoal, { maxTicks: number; category: string; fallbackConsequence: (factionName: string) => string }>> = {
   ENRICH: {
     maxTicks: 6,
     category: 'social',
@@ -111,7 +115,10 @@ export const AMBITION_CATEGORY_OPTIONS: Record<FactionArchetype, Record<Ambition
   },
 }
 
-function titleCase(s: string): string {
+// Exported for ambitionResolution.ts's multi-stage continuation naming
+// (#104), which reuses the exact same title-casing convention rather than
+// reimplementing it.
+export function titleCase(s: string): string {
   return s.replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
@@ -325,4 +332,59 @@ export function decideAmbitionOutcome(input: {
   return success
     ? { success: true, resourceDelta: 10, stabilityDelta: 2, militaryDelta: 0, threatLevelDelta: 1, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName} comes out ahead, and its coffers and reputation grow.` }
     : { success: false, resourceDelta: -6, stabilityDelta: -3, militaryDelta: 0, threatLevelDelta: 0, targetStabilityDelta: 0, targetResourceDelta: 0, consequenceText: `${input.factionName}'s effort falls flat, and the setback dents its standing.` }
+}
+
+// #104: multi-stage ambitions. A successful ambition can spawn a new clock
+// continuing the same agenda instead of resolving cleanly — see
+// Clock.agendaId's schema comment for the chain-of-custody id scheme.
+// Capped at MAX_AGENDA_STAGES so an agenda can't chain forever, and gated
+// on the faction's own belief still supporting more of the same, tying
+// this directly to beliefTick.ts rather than continuing unconditionally
+// every time.
+export const MAX_AGENDA_STAGES = 3
+const AGENDA_CONTINUATION_BELIEF_THRESHOLD = 60
+
+export interface AgendaContinuationInput {
+  outcomeSuccess: boolean
+  goal: AmbitionGoal
+  /** Parsed Faction.beliefVector, or null if the faction has never drifted. */
+  belief: BeliefVector | null
+  /** How many clocks already exist in this agenda's chain, including the
+   * one that just completed (1 for a first-ever ambition, 2+ once a prior
+   * continuation already happened). */
+  priorStageCount: number
+}
+
+/**
+ * Pure — whether a just-completed ambition spawns a new clock continuing
+ * the same agenda instead of resolving cleanly. A failure ends the arc, it
+ * never escalates it. No belief on record (never drifted) means no
+ * continuation — this mechanic is additive on top of existing behavior,
+ * not a new default for every faction.
+ */
+export function decideAgendaContinuation(input: AgendaContinuationInput): boolean {
+  if (!input.outcomeSuccess) return false
+  if (input.priorStageCount >= MAX_AGENDA_STAGES) return false
+  if (!input.belief) return false
+  const relevantAxis = input.goal === 'ENRICH' ? input.belief.mercantilism : input.belief.aggression
+  return relevantAxis >= AGENDA_CONTINUATION_BELIEF_THRESHOLD
+}
+
+/**
+ * Pure — deterministic name/flavor for a continuation clock, same
+ * archetype-keyed bounded-list convention as decideAmbitionTick's
+ * fallbackName (stableHash-selected, not AI-picked — a continuation is a
+ * mechanical extension of an already-committed agenda, not a fresh
+ * creative event that needs the AI narration pass).
+ */
+export function buildAgendaContinuationName(
+  factionName: string,
+  archetype: FactionArchetype,
+  goal: AmbitionGoal,
+  stageNumber: number
+): { name: string; flavor: string } {
+  const options = AMBITION_CATEGORY_OPTIONS[archetype]?.[goal] ?? ['undertaking']
+  const flavor = options[stableHash(`${factionName}:${goal}:${stageNumber}`) % options.length]
+  const stageLabel = stageNumber === 2 ? 'II' : stageNumber === 3 ? 'III' : `Stage ${stageNumber}`
+  return { name: `${factionName} ${titleCase(flavor)} ${stageLabel}`, flavor }
 }

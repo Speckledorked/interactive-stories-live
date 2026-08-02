@@ -27,6 +27,7 @@ import { prisma } from '@/lib/prisma'
 import { tickWeather } from './tick/weatherTick'
 import { tickSeasonalPressure } from './tick/seasonTick'
 import { tickFactionRelationships } from './tick/relationshipTick'
+import { tickBeliefDrift } from './tick/beliefTick'
 import { tickFactions } from './tick/factionTick'
 import { tickFactionLeadership } from './tick/leadershipTick'
 import { tickWars } from './tick/warTick'
@@ -49,6 +50,14 @@ import { resolveTickCaps } from './tick/caps'
 // freshly-updated relationship for this same turn's goal reassessment
 // (specifically, whether DESTABILIZE_RIVAL is reachable) without a circular
 // same-turn dependency. See relationshipTick.ts for the full reasoning.
+//
+// tickBeliefDrift runs right after tickFactionRelationships and before
+// tickFactions (#104): it reads each faction's own WorldEvent history from
+// the immediately preceding turn (wars resolved, ambitions resolved, a
+// wake ripple survived) and updates Faction.beliefVector, so
+// tickFactions's goal reassessment reads this turn's freshly-drifted
+// belief rather than stale data — same one-tick-lag shape as the
+// relationships/goal pair above, just for a different input.
 //
 // tickFactionLeadership runs right after tickFactions on purpose too: if a
 // faction collapsed this turn and its members just defected to a rival (see
@@ -94,7 +103,7 @@ import { resolveTickCaps } from './tick/caps'
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not
 // last turn's. See its own file for what it does and doesn't repair.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickIntegrity]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickIntegrity]
 
 // Prisma's interactive-transaction default is 5s; this tick runs 10
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well

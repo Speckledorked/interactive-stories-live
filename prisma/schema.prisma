@@ -383,6 +383,9 @@ model Campaign {
   // #108: flat adjacency edges between two of this campaign's locations.
   locationAdjacencies LocationAdjacency[]
 
+  // #111: faction-to-faction economic obligations.
+  factionDebts FactionDebt[]
+
   // Urban Shadows economy: per-character social position with factions.
   factionStandings FactionStanding[]
 
@@ -1043,6 +1046,10 @@ model Faction {
   // #106: supply routes this faction currently controls.
   controlledSupplyRoutes SupplyRoute[]
 
+  // #111: faction-to-faction debts — this faction as creditor/debtor.
+  creditFactionDebts FactionDebt[] @relation("FactionDebtCreditor")
+  debtFactionDebts   FactionDebt[] @relation("FactionDebtDebtor")
+
   // Real uniqueness enforced by a case-insensitive functional index
   // (migration 20260729030000_phase1b_schema_invariants) — see NPC's
   // identical comment for why this can't be a plain Prisma @@unique.
@@ -1097,6 +1104,58 @@ model ActiveWake {
   @@unique([sourceType, sourceEntityId, affectedFactionId])
   @@index([campaignId])
   @@index([affectedFactionId])
+}
+
+// #111: a real faction-to-faction economic obligation — the existing Debt
+// model is Character-centric (a required FK to Character, counterparty by
+// string type+id) and can't be repurposed for this; a genuine
+// creditor/debtor pair between two Factions needed its own model.
+//
+// Directional, like SupplyRoute's from/to (NOT undirected like
+// LocationAdjacency) — a debt "A owes B" is a different fact from "B owes
+// A", and amount is in the same Faction.resources 0-100 scale everything
+// else in the tick already uses, not gold (Character-facing gold only
+// exists at the questRewards.ts boundary via GOLD_PER_RESOURCE_POINT).
+// Deliberately no @@unique on the (creditor, debtor) pair — like
+// SupplyRoute, a faction pair can plausibly carry multiple debts over
+// time.
+//
+// Two origination paths, both in tick/economyTick.ts:
+//  - decideLoanExtension: an ally bails out a broke faction (reuses
+//    factionPayout.ts's assessPayout/MAX_RESOURCE_COST_PER_PAYOUT capacity
+//    math — the same shortfall logic that used to only produce a
+//    discarded log line for quest-reward payouts now produces a real,
+//    persisted row here instead).
+//  - decideDefaultCascade: an OUTSTANDING debt whose debtor has collapsed
+//    or gone broke (factionPayout.ts's BROKE_THRESHOLD) flips to
+//    DEFAULTED and applies a capped stability hit to its creditor via a
+//    real ActiveWake row (sourceType 'FACTION_DEFAULT') — reusing #103's
+//    decay mechanism rather than inventing a parallel one-time penalty.
+model FactionDebt {
+  id                String            @id @default(cuid())
+  campaignId        String
+  creditorFactionId String
+  debtorFactionId   String
+  amount            Int
+  status            FactionDebtStatus @default(OUTSTANDING)
+  turnCreated       Int
+  turnResolved      Int?
+  createdAt         DateTime          @default(now())
+  resolvedAt        DateTime?
+
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creditorFaction Faction  @relation("FactionDebtCreditor", fields: [creditorFactionId], references: [id], onDelete: Cascade)
+  debtorFaction   Faction  @relation("FactionDebtDebtor", fields: [debtorFactionId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([creditorFactionId])
+  @@index([debtorFactionId, status])
+}
+
+enum FactionDebtStatus {
+  OUTSTANDING
+  DEFAULTED
+  PAID
 }
 
 //

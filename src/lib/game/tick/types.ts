@@ -182,6 +182,16 @@ export function hasActiveRival(relationships: unknown, activeFactionIds: Set<str
   )
 }
 
+/** #111: every faction id on record as an ALLY — mirrors findRivalIds.
+ * Nothing acted on an ALLY tag mechanically before this except
+ * warTick.ts's coalition-building; economyTick.ts's loan-extension is the
+ * second. */
+export function findAllyIds(relationships: unknown): string[] {
+  return Object.entries(parseFactionRelationships(relationships))
+    .filter(([, r]) => r.type === 'ALLY')
+    .map(([id]) => id)
+}
+
 /**
  * Deterministic pseudo-variety helper. NOT a random number generator —
  * same inputs always produce the same output, so tick behavior stays

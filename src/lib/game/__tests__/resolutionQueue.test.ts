@@ -31,6 +31,7 @@ import {
   enqueueSceneResolution,
   processResolutionJob,
   classifyStaleJob,
+  kickJob,
   MAX_ATTEMPTS,
   RUNNING_STALE_MS,
   PENDING_STALE_MS,
@@ -61,6 +62,34 @@ describe('enqueueSceneResolution', () => {
       expect.stringContaining('/api/internal/resolve-job'),
       expect.objectContaining({ method: 'POST' })
     )
+  })
+})
+
+describe('kickJob (#120)', () => {
+  it('falls back to inline processing when the worker route responds fast but non-OK', async () => {
+    // A response arriving before the delivery-timeout abort fires is
+    // necessarily fast — the real pipeline takes far longer — so a
+    // non-OK status here (e.g. a misconfigured internal secret returning
+    // 403) means the job was never actually handed off.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }))
+    db.resolutionJob.updateMany.mockResolvedValue({ count: 1 })
+    db.resolutionJob.findUnique.mockResolvedValue({
+      id: 'job1', campaignId: 'camp1', sceneId: 'scene1', attempts: 1,
+    })
+
+    await kickJob('job1')
+
+    expect(db.resolutionJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'job1', status: 'PENDING' } })
+    )
+  })
+
+  it('does not fall back to inline processing on an OK response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }))
+
+    await kickJob('job1')
+
+    expect(db.resolutionJob.updateMany).not.toHaveBeenCalled()
   })
 })
 
@@ -101,6 +130,23 @@ describe('processResolutionJob', () => {
     expect(db.resolutionJob.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'PENDING', lastError: 'AI timeout' }) })
     )
+  })
+
+  it('reverts a stranded claim to PENDING when reading the job back fails (#120)', async () => {
+    // The atomic claim (PENDING -> RUNNING) already succeeded here; a
+    // transient DB error reading the row back must not leave it stuck
+    // RUNNING with no explanation for a full RUNNING_STALE_MS.
+    db.resolutionJob.updateMany.mockResolvedValue({ count: 1 })
+    db.resolutionJob.findUnique.mockRejectedValue(new Error('connection reset'))
+
+    const result = await processResolutionJob('job1')
+
+    expect(result.status).toBe('retry_scheduled')
+    expect(resolveScene).not.toHaveBeenCalled()
+    expect(db.resolutionJob.update).toHaveBeenCalledWith({
+      where: { id: 'job1' },
+      data: { status: 'PENDING' },
+    })
   })
 
   it('fails terminally once attempts are exhausted', async () => {

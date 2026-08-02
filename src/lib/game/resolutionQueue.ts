@@ -79,12 +79,23 @@ export async function enqueueSceneResolution(
  * listening. If delivery itself fails (local dev without a reachable
  * self-URL, network error), fall back to processing inline: slower and
  * timeout-prone, but never silently dropped.
+ *
+ * A response that arrives before the abort fires is necessarily a FAST
+ * one — the real pipeline takes ~150s+, so any request that resolves
+ * within KICK_DELIVERY_TIMEOUT_MS never actually reached the AI/world-turn
+ * work. A non-OK status here (403 from a misconfigured/rotated
+ * INTERNAL_JOB_SECRET, 400 from a malformed body) means the job was never
+ * handed to processResolutionJob at all — its `attempts` counter never
+ * increments, so it would otherwise loop through PENDING-stale recovery
+ * forever rather than ever reaching MAX_ATTEMPTS. Falling back to inline
+ * processing here closes that gap the same way a thrown network error
+ * already does below (#120).
  */
 export async function kickJob(jobId: string): Promise<void> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), KICK_DELIVERY_TIMEOUT_MS)
   try {
-    await fetch(`${getAppUrl()}/api/internal/resolve-job`, {
+    const response = await fetch(`${getAppUrl()}/api/internal/resolve-job`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -93,6 +104,10 @@ export async function kickJob(jobId: string): Promise<void> {
       body: JSON.stringify({ jobId }),
       signal: controller.signal,
     })
+    if (!response.ok) {
+      console.error(`Job kick got a non-OK response (${response.status}) — falling back to inline processing`)
+      await processResolutionJob(jobId)
+    }
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') {
       // Delivered; we just stopped waiting for the (long) response.
@@ -127,7 +142,20 @@ export async function processResolutionJob(jobId: string): Promise<ProcessResult
     return { status: 'skipped' }
   }
 
-  const job = await prisma.resolutionJob.findUnique({ where: { id: jobId } })
+  // The claim above already flipped this row to RUNNING. A failure reading
+  // it back (a transient DB blip, not a missing row) must not leave that
+  // claimed row stranded — with no catch here it would sit RUNNING,
+  // unexplained, for a full RUNNING_STALE_MS before recovery even notices
+  // it (#120). Best-effort revert to PENDING so ordinary recovery retries
+  // it immediately instead.
+  let job: Awaited<ReturnType<typeof prisma.resolutionJob.findUnique>>
+  try {
+    job = await prisma.resolutionJob.findUnique({ where: { id: jobId } })
+  } catch (error) {
+    console.error(`Failed to read back claimed resolution job ${jobId}:`, error)
+    await prisma.resolutionJob.update({ where: { id: jobId }, data: { status: 'PENDING' } }).catch(e => console.error('Failed to revert stranded claim:', e))
+    return { status: 'retry_scheduled', error: error instanceof Error ? error.message : String(error) }
+  }
   if (!job) return { status: 'skipped' }
 
   try {

@@ -76,6 +76,32 @@ describe('decideFactionCollapse', () => {
     expect(result.transferResources).toBeLessThan(100)
     expect(result.transferMilitary).toBeLessThan(100)
   })
+
+  // #112: a smooth handoff and a chaotic collapse used to transfer
+  // identically regardless of how far past the threshold stability fell.
+  it('reports roughness 0 for a non-collapse', () => {
+    expect(decideFactionCollapse({ stability: 50, resources: 50, military: 50 }).roughness).toBe(0)
+  })
+
+  it('reports roughness near 0 right at the crisis threshold, and 1 at zero stability', () => {
+    const atThreshold = decideFactionCollapse({ stability: 10, resources: 100, military: 100 })
+    const total = decideFactionCollapse({ stability: 0, resources: 100, military: 100 })
+    expect(atThreshold.roughness).toBeCloseTo(0, 5)
+    expect(total.roughness).toBe(1)
+  })
+
+  it('transfers strictly less the rougher the collapse, at identical resources/military', () => {
+    const shallow = decideFactionCollapse({ stability: 9, resources: 100, military: 100 })
+    const deep = decideFactionCollapse({ stability: 0, resources: 100, military: 100 })
+    expect(deep.transferResources).toBeLessThan(shallow.transferResources)
+    expect(deep.transferMilitary).toBeLessThan(shallow.transferMilitary)
+  })
+
+  it('never scatters everything even at total chaos (roughness 1)', () => {
+    const result = decideFactionCollapse({ stability: 0, resources: 100, military: 100 })
+    expect(result.transferResources).toBeGreaterThan(0)
+    expect(result.transferMilitary).toBeGreaterThan(0)
+  })
 })
 
 describe('decideFactionFounding', () => {
@@ -91,6 +117,29 @@ describe('decideFactionFounding', () => {
     // Stability is a fresh baseline, not derived from the parent's near-zero
     // collapse-time stability — otherwise the successor would be stillborn.
     expect(successor.stability).toBeGreaterThan(10)
+  })
+
+  // #112: a successor founded from a total-chaos collapse should inherit
+  // less than one founded from a collapse that barely tipped over the
+  // threshold, at the same predecessor resources/military.
+  it('inherits strictly less the rougher the collapse that spawned it', () => {
+    const smooth = decideFactionFounding({ name: 'Thornburg Guild', resources: 100, military: 100, roughness: 0 })
+    const chaotic = decideFactionFounding({ name: 'Thornburg Guild', resources: 100, military: 100, roughness: 1 })
+    expect(chaotic.resources).toBeLessThan(smooth.resources)
+    expect(chaotic.military).toBeLessThan(smooth.military)
+  })
+
+  it('defaults to roughness 0 (original flat-rate behavior) when omitted', () => {
+    const withDefault = decideFactionFounding({ name: 'Thornburg Guild', resources: 100, military: 100 })
+    const explicitZero = decideFactionFounding({ name: 'Thornburg Guild', resources: 100, military: 100, roughness: 0 })
+    expect(withDefault.resources).toBe(explicitZero.resources)
+    expect(withDefault.military).toBe(explicitZero.military)
+  })
+
+  it('never inherits nothing even at total chaos (roughness 1)', () => {
+    const chaotic = decideFactionFounding({ name: 'Thornburg Guild', resources: 100, military: 100, roughness: 1 })
+    expect(chaotic.resources).toBeGreaterThan(0)
+    expect(chaotic.military).toBeGreaterThan(0)
   })
 })
 

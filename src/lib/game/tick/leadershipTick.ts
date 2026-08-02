@@ -16,7 +16,7 @@
 // auto-promoted over a player, even if every affiliated NPC member outranks
 // them in importance. The player's leadership isn't a gap to fill.
 
-import { TickContext, TickHandlerResult, WorldChange } from './types'
+import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
 
 /** One living, affiliated NPC considered for promotion. */
 export interface SuccessionCandidate {
@@ -32,6 +32,45 @@ export interface SuccessionDecision {
   /** The role they actually held, for an honest history entry. */
   previousRole: string
   reason: string
+  /** #112: 0-1, how contested this transition was — multiple near-tied
+   * candidates competing for the seat, and/or a faction already
+   * destabilized when its leader was lost, make for a rougher transition
+   * than a lone obvious heir stepping up in an otherwise-stable faction.
+   * Reused by #103 (Wake) instead of computing "how bad was this
+   * transition" a second, separate way. */
+  successionRoughness: number
+}
+
+const NEUTRAL_STABILITY = 50
+const CONTEST_IMPORTANCE_GAP = 1
+
+/**
+ * Pure, no DB access. Two independent contributors, averaged:
+ * - contest: the fraction of OTHER living members whose importance is
+ *   within CONTEST_IMPORTANCE_GAP of the successor's — a crowded near-tie
+ *   is a rougher transition than an obvious single heir with no real
+ *   competition.
+ * - instability: how far below full stability the faction already was when
+ *   it lost its leader — losing a leader while already destabilized is
+ *   rougher than a clean handoff in an otherwise-healthy faction.
+ */
+function computeSuccessionRoughness(
+  members: SuccessionCandidate[],
+  successor: SuccessionCandidate,
+  stability: number | undefined
+): number {
+  const successorImportance = Number.isFinite(Number(successor.importance)) ? Number(successor.importance) : 0
+  const others = members.filter(m => m.id !== successor.id)
+  const contested = others.filter(m => {
+    const importance = Number.isFinite(Number(m.importance)) ? Number(m.importance) : 0
+    return importance >= successorImportance - CONTEST_IMPORTANCE_GAP
+  })
+  const contestFraction = others.length > 0 ? contested.length / others.length : 0
+
+  const effectiveStability = Number.isFinite(Number(stability)) ? Number(stability) : NEUTRAL_STABILITY
+  const instability = clamp((100 - effectiveStability) / 100, 0, 1)
+
+  return clamp((contestFraction + instability) / 2, 0, 1)
 }
 
 /**
@@ -60,6 +99,11 @@ export function decideSuccession(faction: {
   leaderCharacterId: string | null
   /** Living affiliated members only. */
   members: SuccessionCandidate[]
+  /** #112: the faction's stability at the moment its leader was lost.
+   * Optional — falls back to NEUTRAL_STABILITY when omitted, so existing
+   * callers that don't track it here still get a sane roughness estimate
+   * from contest alone. */
+  stability?: number
 }): SuccessionDecision | null {
   // A player character leading is not a gap to fill. No NPC is promoted
   // over a player, however important they are.
@@ -81,6 +125,7 @@ export function decideSuccession(faction: {
     // having lost a role they never held.
     previousRole: successor.factionRole ?? 'none',
     reason: `${successor.name} steps up to lead ${faction.name}`,
+    successionRoughness: computeSuccessionRoughness(members, successor, faction.stability),
   }
 }
 
@@ -114,6 +159,10 @@ export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandl
         orderBy: { importance: 'desc' },
       },
     },
+    // stability is a real column on Faction already selected by default
+    // (include doesn't restrict scalar fields) — called out here (#112)
+    // only because decideSuccession's roughness computation now depends on
+    // it reaching that call unchanged.
   })
 
   const changes: WorldChange[] = []

@@ -33,8 +33,12 @@ export interface WorldChange {
    * accurate label once it's already past that gate. 'integrity' changes
    * come from game/integrity/'s auto-repair, tagged with checkKey below so
    * they're distinguishable from an ordinary write to the same field.
+   * 'wake' changes (#103) come from tick/wakeTick.ts's institutional-memory
+   * ripple — reuses entityType 'FACTION' rather than adding a new
+   * TickEntityType, so this tag is what actually distinguishes a wake
+   * stability hit from an ordinary one.
    */
-  origin?: 'tick' | 'consequence' | 'integrity'
+  origin?: 'tick' | 'consequence' | 'integrity' | 'wake'
   /** Set only when origin is 'integrity' — the IntegrityCheck.key that
    * produced this repair, so escalation (integrity/escalation.ts) can tell
    * "this got repaired again" apart from "this field just changed again in
@@ -65,6 +69,19 @@ export interface TickContext {
    * read-only pass would just be overhead).
    */
   db: Prisma.TransactionClient | PrismaClient
+  /**
+   * #103 (Wake): same-turn handler-to-handler scratch space. tickFactions
+   * and tickFactionLeadership already compute "how rough was this
+   * transition" (collapse/successionRoughness) for their own purposes and
+   * then discard it — this lets tickWake, which runs later in the same
+   * pass over the same `ctx` reference, read those values back out instead
+   * of recomputing "how bad was this" a second, independent way. Optional
+   * so every existing test's literal TickContext fixture keeps compiling
+   * unchanged; only worldTick.ts's real ctx and the three handlers that
+   * touch this need to know it exists. Faction id -> roughness (0-1).
+   */
+  collapseRoughnessByFactionId?: Map<string, number>
+  successionRoughnessByFactionId?: Map<string, number>
 }
 
 /**

@@ -289,6 +289,11 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     const collapse = decideFactionCollapse(next)
 
     if (collapse.collapses) {
+      // #103: recorded before anything else so tickWake (later in this same
+      // pass) can look up this collapse's real roughness instead of
+      // assuming a default for a wake it didn't compute itself.
+      ctx.collapseRoughnessByFactionId?.set(faction.id, collapse.roughness)
+
       const rivalId = findRivalId(relationships)
       const absorber = rivalId ? await ctx.db.faction.findUnique({ where: { id: rivalId } }) : null
 

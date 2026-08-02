@@ -35,6 +35,7 @@ import { tickFactionAmbitions } from './tick/ambitionTick'
 import { tickNpcs } from './tick/npcTick'
 import { tickMigration } from './tick/migrationTick'
 import { tickNpcSocialTies, tickNpcJointSchemes } from './tick/npcSocietyTick'
+import { tickWake } from './tick/wakeTick'
 import { tickIntegrity } from './tick/integrityTick'
 import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
@@ -82,11 +83,18 @@ import { resolveTickCaps } from './tick/caps'
 // exempt from fleeing it again), and it depends on tickLocationCondition's
 // conditionScore from earlier in this same pass as its distress signal.
 //
+// tickWake runs right before tickIntegrity, after everything else has had
+// a chance to collapse a faction or leave an NPC dead this same turn
+// (#103): it reads ctx.collapseRoughnessByFactionId (set by tickFactions)
+// and ctx.successionRoughnessByFactionId (set by tickFactionLeadership)
+// earlier in this same pass, so it never recomputes "how rough was this
+// transition" a second, independent way.
+//
 // tickIntegrity runs LAST, deliberately: it validates the state every
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not
 // last turn's. See its own file for what it does and doesn't repair.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickIntegrity]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickIntegrity]
 
 // Prisma's interactive-transaction default is 5s; this tick runs 10
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well
@@ -121,7 +129,19 @@ export async function runWorldTick(
   const pendingAmbitions: PendingAmbition[] = []
 
   const runHandlers = async (db: TickContext['db']) => {
-    const ctx: TickContext = { campaignId, turnNumber, factionCap, npcCap, dryRun, db }
+    const ctx: TickContext = {
+      campaignId,
+      turnNumber,
+      factionCap,
+      npcCap,
+      dryRun,
+      db,
+      // #103: same-tick scratch space tickFactions/tickFactionLeadership
+      // write into and tickWake reads back out of — see its own comment
+      // on TickContext for why.
+      collapseRoughnessByFactionId: new Map(),
+      successionRoughnessByFactionId: new Map(),
+    }
     for (const handler of TICK_HANDLERS) {
       const result = await handler(ctx)
       changes.push(...result.changes)

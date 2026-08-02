@@ -377,6 +377,9 @@ model Campaign {
   // #103: institutional-memory wake effects from a death/collapse.
   activeWakes ActiveWake[]
 
+  // #106: flat supply routes between two of this campaign's locations.
+  supplyRoutes SupplyRoute[]
+
   // Urban Shadows economy: per-character social position with factions.
   factionStandings FactionStanding[]
 
@@ -1034,6 +1037,9 @@ model Faction {
   // INTO this faction's stability — see ActiveWake below.
   incomingWakes ActiveWake[] @relation("WakeAffectedFaction")
 
+  // #106: supply routes this faction currently controls.
+  controlledSupplyRoutes SupplyRoute[]
+
   // Real uniqueness enforced by a case-insensitive functional index
   // (migration 20260729030000_phase1b_schema_invariants) — see NPC's
   // identical comment for why this can't be a plain Prisma @@unique.
@@ -1153,6 +1159,16 @@ model Location {
   // silently start tracking a number nobody set.
   population Int?
 
+  // #106: freeform extractable-resource-type tags this location can
+  // produce (e.g. "ore", "lumber", "grain") — empty (the default) means
+  // nothing to extract here. No closed enum/parse-on-read helper on
+  // purpose: unlike Faction.beliefVector's fixed, individually-typed axes,
+  // this is just a flat list of tags with no per-element structure to
+  // validate, the same shape as Clock.participantNpcIds. Read by
+  // tick/logisticsTick.ts's decideExtraction, which gates a resource gain
+  // for this location's owner on an unblockaded SupplyRoute touching it.
+  resourceSlots String[] @default([])
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   // Reverse side of Character.locationId / NPC.locationId.
@@ -1160,6 +1176,9 @@ model Location {
   npcs       NPC[]
   // Reverse side of War.contestedLocationId.
   contestedInWars War[] @relation("WarContestedLocation")
+  // #106: reverse side of SupplyRoute.fromLocationId/toLocationId.
+  supplyRoutesFrom SupplyRoute[] @relation("SupplyRouteFrom")
+  supplyRoutesTo   SupplyRoute[] @relation("SupplyRouteTo")
 
   @@unique([campaignId, name])
   @@index([campaignId])
@@ -1253,6 +1272,43 @@ model WarParticipant {
   @@unique([warId, factionId])
   @@index([warId])
   @@index([factionId])
+}
+
+// #106: a flat, arbitrary supply line between two locations — not yet
+// validated against any real spatial/adjacency data (WorldGraph, #108,
+// doesn't exist yet). Ship now anyway per the decided approach: a flat
+// route stays schema-valid once real adjacency lands later; only the
+// pathing logic that creates/validates routes would need to improve, not
+// this table. tick/logisticsTick.ts's decideExtraction gates a location's
+// resource-slot yield on at least one non-blockaded route touching it —
+// deliberately NOT required to terminate at a specific "faction capital"
+// or validated for real reachability, since neither concept exists yet;
+// that refinement is exactly what #108 unlocks later.
+//
+// isBlockaded is kept in sync each tick from current ESCALATING wars (see
+// logisticsTick.ts, which reads the same war-presence signal
+// tick/locationConditionTick.ts already established for #109) rather than
+// war code writing to it directly — keeps warTick.ts's own responsibility
+// (military resolution) separate from this table's.
+model SupplyRoute {
+  id                   String   @id @default(cuid())
+  campaignId           String
+  fromLocationId       String
+  toLocationId         String
+  controllingFactionId String?
+  isBlockaded          Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  campaign           Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  fromLocation       Location @relation("SupplyRouteFrom", fields: [fromLocationId], references: [id], onDelete: Cascade)
+  toLocation         Location @relation("SupplyRouteTo", fields: [toLocationId], references: [id], onDelete: Cascade)
+  controllingFaction Faction? @relation(fields: [controllingFactionId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId])
+  @@index([fromLocationId])
+  @@index([toLocationId])
+  @@index([controllingFactionId])
 }
 
 //

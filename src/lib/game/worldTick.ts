@@ -32,6 +32,7 @@ import { tickFactions } from './tick/factionTick'
 import { tickFactionLeadership } from './tick/leadershipTick'
 import { tickWars } from './tick/warTick'
 import { tickLocationCondition } from './tick/locationConditionTick'
+import { tickLogistics } from './tick/logisticsTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
 import { tickNpcs } from './tick/npcTick'
 import { tickMigration } from './tick/migrationTick'
@@ -86,6 +87,14 @@ import { resolveTickCaps } from './tick/caps'
 // ESCALATING war, so a war that resolved THIS turn no longer counts as
 // "at war" for this same pass rather than lagging a full extra turn.
 //
+// tickLogistics runs right after tickLocationCondition on purpose (#106):
+// it reads the exact same ESCALATING-war-with-a-contestedLocationId signal
+// to sync SupplyRoute.isBlockaded, so a war resolved THIS turn already
+// lifts its blockade the same pass instead of lagging a full extra turn —
+// and it runs before tickFactionAmbitions so a faction's logistics-driven
+// resource gain this turn is visible to ambition commitment's resource
+// threshold the same turn it lands, not one turn late.
+//
 // tickMigration runs right after tickNpcs on purpose (#110): it reads each
 // NPC's post-commute currentLocation/locationId for this same turn (an NPC
 // tickNpcs just moved OUT of a distressed location this tick is correctly
@@ -103,7 +112,7 @@ import { resolveTickCaps } from './tick/caps'
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not
 // last turn's. See its own file for what it does and doesn't repair.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickIntegrity]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickIntegrity]
 
 // Prisma's interactive-transaction default is 5s; this tick runs 10
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well

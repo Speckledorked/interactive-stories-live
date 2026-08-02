@@ -186,9 +186,9 @@ Partial or weak, and honestly so:
 - Admin tooling is mostly thin CRUD. The one deep feature — the tick
   dry-run preview — is real but read-only.
 - AI response validation has a bounded repair round-trip and a
-  section-by-section salvage ladder, but the contract is still basic JSON
-  mode, not strict structured outputs — an open product decision that needs
-  a live API round-trip to verify before it can change.
+  section-by-section salvage ladder. The contract stays basic JSON mode —
+  decided against switching to strict structured outputs (2026-08-02),
+  rather than leave it open pending a live API check.
 
 ## Scorecard
 
@@ -213,7 +213,7 @@ this table.
 | Character progression (advancement) | 4 | Usage-gated growth with real PbtA constraint validation. AI-authored perks/Abilities carry a real per-arc grant budget (`countGrantsInArc`, applied in `applyOrganicGrowth`), not a level-up button. |
 | Memory retrieval (RAG) | 4 | Genuine pgvector cosine search, cost-tracked, with era-based consolidation bounding table growth. |
 | Memory importance/tag classification | 4 | The historical field-name mismatch is fixed and regression-tested; `determineImportance`/`extractTags` read the AI response's real field names. |
-| AI response validation | 4 | One bounded repair round-trip (`validateAIResponseWithRepair`), then a degradation ladder (`extractValidWorldUpdates`) that salvages `world_updates` through the real schemas section-by-section and element-by-element rather than zeroing the whole thing. The background world-turn call is validated too (`callAIForWorldTurn` → `validateWorldTurnResponse`), not a bare parse. Still basic JSON mode, not strict structured outputs — open, needs a live API round-trip to verify safely. |
+| AI response validation | 4 | One bounded repair round-trip (`validateAIResponseWithRepair`), then a degradation ladder (`extractValidWorldUpdates`) that salvages `world_updates` through the real schemas section-by-section and element-by-element rather than zeroing the whole thing. The background world-turn call is validated too (`callAIForWorldTurn` → `validateWorldTurnResponse`), not a bare parse. Basic JSON mode, not strict structured outputs — a deliberate decision (2026-08-02) to keep this contract rather than switch. |
 | Clock advancement (non-ambition clocks) | 4 | Deterministic, faction/relation-driven pacing (`decideClockAdvancement`), not a random coin flip. |
 | Quest lifecycle | 4 | A structured reward grant is applied deterministically the first time a quest completes. FAILED/ABANDONED are not inert — walking away costs trust and standing, failing honestly costs respect (`applyQuestFailureCost`). An unresolved quest-giver (`resolveQuestGiver` returning unresolved, guarded by `hasQuestGiver`) costs nothing rather than guessing. |
 | Combat / complex exchange resolution | 4 | Conflicting actions on the same target are ranked by actual roll outcome (`rankActionsByOutcome`/`compareActionsByOutcome`, surfaced via `detectConflicts`), not left to an AI punt. No dedicated combat subsystem beyond PbtA resolution — by design. |
@@ -274,27 +274,21 @@ above. Items that block later ones are flagged.
    have never executed even once. This is the single highest-leverage item
    on this list — everything else about the pipeline is design confidence,
    not proven confidence, until this happens.
-2. **Decide the strict-structured-outputs question.** Needs a live API
-   round-trip to verify the hand-rolled schema actually validates in
-   production before it's safe to switch. *Prerequisite* for meaningfully
-   shrinking the AI response validation ladder further.
-3. **Broaden API route test coverage** past the current targeted set,
+2. **Broaden API route test coverage** past the current targeted set,
    prioritizing routes that mutate persisted state over ones that only
    read it.
-4. **Turn admin tooling into real simulation-design tooling.** This is the
+3. **Turn admin tooling into real simulation-design tooling.** This is the
    lowest-scoring row on the Scorecard and the most direct lever on the
    "admin surface as a real window" half of the vision — extend the tick
    dry-run preview's pattern (showing *why* the simulation decided
    something) to the faction/war/NPC tabs instead of leaving them as plain
    forms.
-5. **Decide whether dice/mechanics stay opt-in-only.** A product decision
-   that gates how far the outcome-band-adherence transparency-panel work
-   (now shipped — see below) can go by default.
 
 *(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
 checkKeys a shared type, the war stability-hit write path's missing direct
-test coverage, and making outcome-band adherence visible to players — that
-used to be items 2, 6, 7, 4, and 3 here — are all fixed. See Known Bugs and
+test coverage, making outcome-band adherence visible to players, and the
+strict-structured-outputs and dice-opt-in-only decisions — that used to be
+items 2, 6, 7, 4, 3, 2, and 5 here — are all resolved. See Known Bugs and
 the Scorecard's War & coalition system row.)*
 
 ## Features & Roadmap
@@ -310,21 +304,18 @@ No code exists yet for any of these.
   social-media-sized card. Builds on the existing chronicle share link
   (which is real and shipped); the card-generation feature itself has no
   code yet.
-- **Public API / developer access** — no decision on record yet, and it
-  blocks monetization tiering until one is made.
 - **Platform admin dashboard** — a site-owner-only, metadata-only listing
   of users and the campaigns they've created. The design is decided
   (an env-var-gated allowlist, mirroring the existing cron-secret pattern,
   rather than a new schema field) but nothing is built; there is currently
   no platform-level admin concept in the data model at all.
-- **Strict structured outputs for the AI contract** — still basic JSON
-  mode. Blocked on a live API round-trip to verify the schema validates in
-  production before switching.
 - **Deliberately deferred, not overlooked**: native mobile app, voice/TTS,
-  a creator marketplace/UGC, VTT-style grid combat, and 5e-style
-  crunch/custom rule import. Explicit calls to prioritize deeper
-  world-simulation work first — worth revisiting only if real cohort
-  feedback contradicts that call.
+  a creator marketplace/UGC, VTT-style grid combat, 5e-style crunch/custom
+  rule import, and public API/developer access (decided against for now,
+  2026-08-02 — blocks monetization tiering until real demand justifies
+  revisiting it). Explicit calls to prioritize deeper world-simulation
+  work first — worth revisiting only if real cohort feedback contradicts
+  that call.
 
 ### In progress
 

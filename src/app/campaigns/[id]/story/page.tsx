@@ -8,7 +8,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
-import { pluralize } from '@/lib/format'
+import { pluralize, truncateWithEllipsis } from '@/lib/format'
 import type { MapData } from '@/lib/maps/map-service'
 import AILoadingState from '@/components/scene/AILoadingState'
 import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
@@ -1461,7 +1461,7 @@ export default function StoryPage() {
                         <h3 className="font-bold text-ember-100 mb-1">Last Scene Summary</h3>
                         <p className="text-sm text-ember-300/60 line-clamp-3">
                           {resolvedScenes[0].sceneResolutionText
-                            ? resolvedScenes[0].sceneResolutionText.slice(0, 200) + '...'
+                            ? truncateWithEllipsis(resolvedScenes[0].sceneResolutionText, 200)
                             : 'Scene resolved'}
                         </p>
                       </div>

@@ -375,7 +375,7 @@ async function performResolution(
           sceneId,
           sceneNumber: scene.sceneNumber,
           campaignId,
-          resolutionPreview: aiResponse.scene_text.substring(0, 200) + '...'
+          resolutionPreview: truncateWithEllipsis(aiResponse.scene_text, 200)
         })
         console.log('📡 Broadcasted scene:resolved event via Pusher')
       }

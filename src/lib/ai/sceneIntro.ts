@@ -291,7 +291,7 @@ Write ONLY the scene introduction. No JSON, no meta-commentary, no character she
       success: true
     }).catch(console.error)
 
-    console.log('✅ Scene intro generated:', sceneIntro.substring(0, 100) + '...')
+    console.log('✅ Scene intro generated:', truncateWithEllipsis(sceneIntro, 100))
 
     return sceneIntro
   } catch (error) {

@@ -23,7 +23,7 @@ export async function DELETE(
     const targetMembership = await getCampaignMembership(targetUserId, campaignId);
 
     if (!targetMembership) {
-      return NextResponse.json({ error: 'User is not a member of this campaign' }, { status: 404 });
+      return NextResponse.json({ error: 'This user is not a member of this campaign' }, { status: 403 });
     }
 
     // Prevent removing the last admin
@@ -84,7 +84,7 @@ export async function PATCH(
     const targetMembership = await getCampaignMembership(targetUserId, campaignId);
 
     if (!targetMembership) {
-      return NextResponse.json({ error: 'User is not a member of this campaign' }, { status: 404 });
+      return NextResponse.json({ error: 'This user is not a member of this campaign' }, { status: 403 });
     }
 
     // Prevent demoting the last admin

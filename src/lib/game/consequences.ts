@@ -18,6 +18,7 @@ import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './tick/npcTick'
 import { WorldChange, clamp } from './tick/types'
+import { resolveEntityByNameOrId } from './entityResolution'
 
 // Consequences that redefine an NPC's relationship to the party outright —
 // these always graduate a minor NPC into the simulated set, regardless of
@@ -54,22 +55,21 @@ function importanceForConsequence(action: ConsequenceAction, intensity: string):
   return ALWAYS_ESCALATE_ACTIONS.has(action) || intensity === 'major' ? 'MAJOR' : 'NORMAL'
 }
 
-/** Resolve an entity by exact/fuzzy name — same OR id/name-contains pattern stateUpdater.ts already uses. */
-async function findNpcByName(campaignId: string, name: string): Promise<NPC | null> {
-  return prisma.nPC.findFirst({
-    where: { campaignId, name: { equals: name, mode: 'insensitive' } },
-  }) ?? prisma.nPC.findFirst({
-    where: { campaignId, name: { contains: name, mode: 'insensitive' } },
-  })
-}
-
-async function findFactionByName(campaignId: string, name: string): Promise<Faction | null> {
-  return prisma.faction.findFirst({
-    where: { campaignId, name: { equals: name, mode: 'insensitive' } },
-  }) ?? prisma.faction.findFirst({
-    where: { campaignId, name: { contains: name, mode: 'insensitive' } },
-  })
-}
+// Entity resolution used to be hand-rolled here as
+// `findFirst({equals}) ?? findFirst({contains})` — two bugs at once, both
+// found live, not just in review:
+// 1. `promiseA ?? promiseB` evaluates to promiseA unconditionally, since a
+//    Promise object is never null/undefined — `??` only falls through on
+//    an actual nullish value, not on "resolves to null". The `contains`
+//    fallback was therefore dead code the entire time; a non-exact name
+//    (an AI paraphrase, a typo, different casing beyond simple case-fold)
+//    always resolved to nothing rather than ever reaching the fallback.
+// 2. Even if that were fixed, `contains` is exactly the unsafe match
+//    entityResolution.ts was built to replace — it can cross-match an
+//    entity whose name is a substring of another's (e.g. "Bob" matching
+//    "Bobby's Assistant"). See resolveEntityByNameOrId below, the same
+//    exact/fuzzy-with-confidence-gate resolver every other AI write-back
+//    applier (worldUpdaters/npcs.ts, factions.ts, characters.ts) uses.
 
 export function applyNpcConsequence(npc: NPC, consequence: ExtractedConsequence): { updateData: any; changes: WorldChange[] } {
   const updateData: any = {}
@@ -181,28 +181,53 @@ export async function applyConsequences(
   consequences: ExtractedConsequence[]
 ): Promise<WorldChange[]> {
   const changes: WorldChange[] = []
+  if (consequences.length === 0) return changes
+
+  // Fetched once for the whole batch, not once per consequence —
+  // resolveEntityByNameOrId is pure/synchronous specifically so callers can
+  // do this (see its own doc comment) instead of a DB round-trip per name.
+  // If a later consequence in this same batch affects an entity an earlier
+  // one already updated, the in-memory record is kept fresh via
+  // Object.assign after each write (below) rather than re-querying — same
+  // correctness as a fresh fetch, one query instead of N.
+  const [npcs, factions] = await Promise.all([
+    prisma.nPC.findMany({ where: { campaignId } }),
+    prisma.faction.findMany({ where: { campaignId } }),
+  ])
 
   for (const consequence of consequences) {
     if (consequence.entityType === 'NPC') {
-      const npc = await findNpcByName(campaignId, consequence.entityName)
-      if (!npc) {
-        console.warn(`⚠️ Consequence skipped — NPC not found: ${consequence.entityName}`)
+      const resolution = resolveEntityByNameOrId(npcs, consequence.entityName)
+      if (resolution.kind !== 'found') {
+        console.warn(
+          resolution.kind === 'ambiguous'
+            ? `⚠️ Consequence skipped — "${consequence.entityName}" matches multiple NPCs (${resolution.candidates.map(c => c.name).join(', ')}), not guessing`
+            : `⚠️ Consequence skipped — NPC not found: ${consequence.entityName}`
+        )
         continue
       }
+      const npc = resolution.entity
       const { updateData, changes: npcChanges } = applyNpcConsequence(npc, consequence)
       if (Object.keys(updateData).length > 0) {
         await prisma.nPC.update({ where: { id: npc.id }, data: updateData })
+        Object.assign(npc, updateData)
       }
       changes.push(...npcChanges)
     } else {
-      const faction = await findFactionByName(campaignId, consequence.entityName)
-      if (!faction) {
-        console.warn(`⚠️ Consequence skipped — Faction not found: ${consequence.entityName}`)
+      const resolution = resolveEntityByNameOrId(factions, consequence.entityName)
+      if (resolution.kind !== 'found') {
+        console.warn(
+          resolution.kind === 'ambiguous'
+            ? `⚠️ Consequence skipped — "${consequence.entityName}" matches multiple factions (${resolution.candidates.map(c => c.name).join(', ')}), not guessing`
+            : `⚠️ Consequence skipped — Faction not found: ${consequence.entityName}`
+        )
         continue
       }
+      const faction = resolution.entity
       const { updateData, changes: factionChanges } = applyFactionConsequence(faction, consequence)
       if (Object.keys(updateData).length > 0) {
         await prisma.faction.update({ where: { id: faction.id }, data: updateData })
+        Object.assign(faction, updateData)
       }
       changes.push(...factionChanges)
     }

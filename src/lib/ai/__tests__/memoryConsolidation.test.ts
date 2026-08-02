@@ -16,6 +16,7 @@ import { createCampaignMemory } from '../memoryCreation'
 import {
   decideConsolidationBuckets,
   consolidateOldMemories,
+  isFrequentlyRetrieved,
   ERA_SUMMARY_TAG,
   type EligibleMemoryRow,
 } from '../memoryConsolidation'
@@ -30,6 +31,8 @@ function makeRow(overrides: Partial<EligibleMemoryRow> = {}): EligibleMemoryRow 
     involvedNpcIds: [],
     involvedFactionIds: [],
     locationTags: [],
+    retrievalCount: 0,
+    lastRetrievedTurn: null,
     ...overrides,
   }
 }
@@ -82,6 +85,30 @@ describe('decideConsolidationBuckets (pure)', () => {
 
   it('returns an empty array for no eligible memories', () => {
     expect(decideConsolidationBuckets([])).toEqual([])
+  })
+})
+
+describe('isFrequentlyRetrieved (pure)', () => {
+  it('exempts a memory retrieved often and recently', () => {
+    expect(isFrequentlyRetrieved({ retrievalCount: 3, lastRetrievedTurn: 90 }, 100)).toBe(true)
+  })
+
+  it('does not exempt a memory retrieved fewer than the minimum count', () => {
+    expect(isFrequentlyRetrieved({ retrievalCount: 2, lastRetrievedTurn: 90 }, 100)).toBe(false)
+  })
+
+  it('does not exempt a memory retrieved often but not recently', () => {
+    // retrieved 10 times, but not for the last 30 turns — was useful once, not still useful now
+    expect(isFrequentlyRetrieved({ retrievalCount: 10, lastRetrievedTurn: 70 }, 100)).toBe(false)
+  })
+
+  it('does not exempt a memory that has never been retrieved', () => {
+    expect(isFrequentlyRetrieved({ retrievalCount: 0, lastRetrievedTurn: null }, 100)).toBe(false)
+  })
+
+  it('is inclusive at exactly the recency boundary', () => {
+    expect(isFrequentlyRetrieved({ retrievalCount: 3, lastRetrievedTurn: 85 }, 100)).toBe(true) // 100-85=15
+    expect(isFrequentlyRetrieved({ retrievalCount: 3, lastRetrievedTurn: 84 }, 100)).toBe(false) // 100-84=16
   })
 })
 
@@ -146,5 +173,37 @@ describe('consolidateOldMemories (DB wrapper)', () => {
     vi.mocked(prisma.$queryRaw).mockRejectedValueOnce(new Error('db down'))
     const result = await consolidateOldMemories('campaign-1', 25)
     expect(result).toEqual({ bucketsConsolidated: 0, memoriesRemoved: 0 })
+  })
+
+  it('exempts a frequently-and-recently-retrieved memory from an otherwise-full bucket', async () => {
+    const rows = [
+      makeRow({ id: 'a', turnNumber: 1, retrievalCount: 5, lastRetrievedTurn: 24 }), // frequent, exempt
+      makeRow({ id: 'b', turnNumber: 4 }),
+      makeRow({ id: 'c', turnNumber: 8 }),
+    ]
+    vi.mocked(prisma.$queryRaw).mockResolvedValueOnce(rows)
+
+    // Bucket now only has 'b' and 'c' — below MIN_BUCKET_SIZE_TO_CONSOLIDATE (3)
+    const result = await consolidateOldMemories('campaign-1', 25)
+
+    expect(result).toEqual({ bucketsConsolidated: 0, memoriesRemoved: 0 })
+    expect(createCampaignMemory).not.toHaveBeenCalled()
+  })
+
+  it('still consolidates a bucket once the frequently-retrieved memory is excluded, keeping only the rest', async () => {
+    const rows = [
+      makeRow({ id: 'a', turnNumber: 1, retrievalCount: 5, lastRetrievedTurn: 24 }), // frequent, exempt
+      makeRow({ id: 'b', turnNumber: 3 }),
+      makeRow({ id: 'c', turnNumber: 6 }),
+      makeRow({ id: 'd', turnNumber: 9 }),
+    ]
+    vi.mocked(prisma.$queryRaw).mockResolvedValueOnce(rows)
+
+    const result = await consolidateOldMemories('campaign-1', 25)
+
+    expect(result).toEqual({ bucketsConsolidated: 1, memoriesRemoved: 3 })
+    // The exempt memory 'a' must never appear among the deleted ids.
+    const deletedIds = vi.mocked(prisma.$executeRaw).mock.calls[0][1] as string[]
+    expect(deletedIds.sort()).toEqual(['b', 'c', 'd'])
   })
 })

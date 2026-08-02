@@ -19,6 +19,13 @@ const CONSOLIDATION_BUCKET_SIZE = 10 // group eligible memories into turn-number
 const MIN_BUCKET_SIZE_TO_CONSOLIDATE = 3 // skip buckets too small to be worth collapsing
 export const ERA_SUMMARY_TAG = 'era-summary' // marks a consolidated row so it's never re-consolidated
 
+// A memory retrieved often, and recently, keeps proving useful for recall —
+// exempt it the same way MAJOR/CRITICAL importance already is, rather than
+// flattening it into a "quieter stretch" summary just because it's old and
+// low-importance (see #107).
+const FREQUENT_RETRIEVAL_MIN_COUNT = 3 // retrieved at least this many times...
+const FREQUENT_RETRIEVAL_RECENCY_TURNS = 15 // ...with at least one of those within this many turns of now
+
 export interface EligibleMemoryRow {
   id: string
   turnNumber: number
@@ -28,6 +35,23 @@ export interface EligibleMemoryRow {
   involvedNpcIds: string[]
   involvedFactionIds: string[]
   locationTags: string[]
+  retrievalCount: number
+  lastRetrievedTurn: number | null
+}
+
+/**
+ * Pure exemption decision — no DB access, safe to unit test directly. See
+ * FREQUENT_RETRIEVAL_MIN_COUNT/FREQUENT_RETRIEVAL_RECENCY_TURNS above for
+ * why both a count and a recency bound are required: a memory retrieved
+ * many times but not recently was useful once, not still useful now.
+ */
+export function isFrequentlyRetrieved(
+  memory: { retrievalCount: number; lastRetrievedTurn: number | null },
+  currentTurn: number
+): boolean {
+  if (memory.retrievalCount < FREQUENT_RETRIEVAL_MIN_COUNT) return false
+  if (memory.lastRetrievedTurn === null) return false
+  return currentTurn - memory.lastRetrievedTurn <= FREQUENT_RETRIEVAL_RECENCY_TURNS
 }
 
 export interface ConsolidationBucket {
@@ -92,7 +116,9 @@ export async function consolidateOldMemories(
         "involvedCharacterIds" as "involvedCharacterIds",
         "involvedNpcIds" as "involvedNpcIds",
         "involvedFactionIds" as "involvedFactionIds",
-        "locationTags" as "locationTags"
+        "locationTags" as "locationTags",
+        "retrievalCount" as "retrievalCount",
+        "lastRetrievedTurn" as "lastRetrievedTurn"
       FROM campaign_memories
       WHERE
         "campaignId" = ${campaignId}
@@ -102,11 +128,16 @@ export async function consolidateOldMemories(
       ORDER BY "turnNumber" ASC
     `
 
-    if (eligible.length === 0) {
+    // Frequently-and-recently-retrieved memories are exempt, same idea as
+    // the importance filter above but computed in app code rather than SQL
+    // so the decision itself (isFrequentlyRetrieved) stays unit-testable.
+    const notFrequentlyRetrieved = eligible.filter((m) => !isFrequentlyRetrieved(m, currentTurn))
+
+    if (notFrequentlyRetrieved.length === 0) {
       return { bucketsConsolidated: 0, memoriesRemoved: 0 }
     }
 
-    const buckets = decideConsolidationBuckets(eligible)
+    const buckets = decideConsolidationBuckets(notFrequentlyRetrieved)
 
     let bucketsConsolidated = 0
     let memoriesRemoved = 0

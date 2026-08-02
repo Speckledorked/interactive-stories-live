@@ -2350,6 +2350,16 @@ model CampaignMemory {
   emotionalTone String? // "tense", "triumphant", "tragic", etc.
   tags          String[]         @default([]) // ["combat", "betrayal", "alliance", etc.]
 
+  // How often this memory has actually proven useful at retrieval time —
+  // distinct from importance (which is set once, at creation) or recency
+  // (turnNumber, when it happened). Bumped by memoryRetrieval.ts's
+  // retrieveRelevantHistory on every real retrieval; read by
+  // memoryConsolidation.ts to exempt frequently-useful memories from being
+  // rolled into an era summary, the same way MAJOR/CRITICAL importance
+  // already is (see #107).
+  retrievalCount    Int  @default(0)
+  lastRetrievedTurn Int?
+
   createdAt DateTime @default(now())
 
   @@index([campaignId, turnNumber])

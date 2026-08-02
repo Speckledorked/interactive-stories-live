@@ -5,27 +5,35 @@ import { RealtimeMessage, RealtimeNoteUpdate } from './pusher-client';
 
 let pusherServer: Pusher | null = null;
 
+// Reads the same NEXT_PUBLIC_-prefixed key/cluster vars the client-side
+// Pusher instance (lib/pusher.ts's getPusherClient, lib/realtime/pusher-
+// client.ts) needs anyway — those two MUST already be set for the client
+// to work at all, so having the server read a second, differently-named
+// pair (the old PUSHER_KEY/PUSHER_CLUSTER) meant a deploy could configure
+// the client-visible vars, see subscriptions "work," and still have every
+// server-side trigger() silently gate to null because the other pair was
+// never set. One pair of env vars now controls both sides.
 function isPusherConfigured(): boolean {
   return !!(
     process.env.PUSHER_APP_ID &&
-    process.env.PUSHER_KEY &&
+    process.env.NEXT_PUBLIC_PUSHER_KEY &&
     process.env.PUSHER_SECRET &&
-    process.env.PUSHER_CLUSTER
+    process.env.NEXT_PUBLIC_PUSHER_CLUSTER
   );
 }
 
 function getPusherServer(): Pusher | null {
   if (!isPusherConfigured()) {
-    console.warn('Pusher is not configured. Set PUSHER_APP_ID, PUSHER_KEY, PUSHER_SECRET, and PUSHER_CLUSTER environment variables to enable real-time features.');
+    console.warn('Pusher is not configured. Set PUSHER_APP_ID, NEXT_PUBLIC_PUSHER_KEY, PUSHER_SECRET, and NEXT_PUBLIC_PUSHER_CLUSTER environment variables to enable real-time features.');
     return null;
   }
 
   if (!pusherServer) {
     pusherServer = new Pusher({
       appId: process.env.PUSHER_APP_ID!,
-      key: process.env.PUSHER_KEY!,
+      key: process.env.NEXT_PUBLIC_PUSHER_KEY!,
       secret: process.env.PUSHER_SECRET!,
-      cluster: process.env.PUSHER_CLUSTER!,
+      cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
       useTLS: true,
     });
   }

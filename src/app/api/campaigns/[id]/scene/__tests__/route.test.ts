@@ -20,8 +20,8 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/auth', () => ({
   requireAuth: vi.fn(),
 }))
-vi.mock('@/lib/pusher', () => ({
-  pusherServer: { trigger: vi.fn().mockResolvedValue(undefined) },
+vi.mock('@/lib/realtime/pusher-server', () => ({
+  PusherServer: vi.fn(() => ({ trigger: vi.fn().mockResolvedValue(undefined) })),
 }))
 vi.mock('@/lib/rateLimit', () => ({
   AI_ACTION_LIMIT: { bucket: 'ai-action', limit: 10, windowSeconds: 60 },

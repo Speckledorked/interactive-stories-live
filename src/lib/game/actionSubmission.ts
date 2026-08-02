@@ -12,7 +12,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { Scene } from '@prisma/client'
-import { pusherServer } from '@/lib/pusher'
+import { PusherServer } from '@/lib/realtime/pusher-server'
 import { recordEvent } from '@/lib/analytics/events'
 
 export interface SceneParticipants {
@@ -109,19 +109,22 @@ export async function submitPlayerAction(
 
   // Trigger Pusher event to notify all clients
   try {
-    await pusherServer.trigger(
-      `campaign-${campaignId}`,
-      'action:created',
-      {
-        actionId: action.id,
-        sceneId: action.sceneId,
-        characterId: action.characterId,
-        characterName: action.character.name,
-        userId: action.userId,
-        actionText: action.actionText,
-        timestamp: action.createdAt
-      }
-    )
+    const pusher = PusherServer()
+    if (pusher) {
+      await pusher.trigger(
+        `campaign-${campaignId}`,
+        'action:created',
+        {
+          actionId: action.id,
+          sceneId: action.sceneId,
+          characterId: action.characterId,
+          characterName: action.character.name,
+          userId: action.userId,
+          actionText: action.actionText,
+          timestamp: action.createdAt
+        }
+      )
+    }
   } catch (pusherError) {
     console.error('Failed to trigger Pusher event:', pusherError)
     // Don't fail the request if Pusher fails

@@ -14,7 +14,7 @@ vi.mock('pusher', () => ({
   },
 }))
 
-import { triggerNoteUpdate, broadcastNoteUpdate } from '../pusher-server'
+import { triggerNoteUpdate, broadcastNoteUpdate, PusherServer } from '../pusher-server'
 
 const note = (over: Partial<RealtimeNoteUpdate> = {}): RealtimeNoteUpdate => ({
   id: 'note1',
@@ -31,9 +31,9 @@ const note = (over: Partial<RealtimeNoteUpdate> = {}): RealtimeNoteUpdate => ({
 beforeEach(() => {
   vi.clearAllMocks()
   process.env.PUSHER_APP_ID = 'id'
-  process.env.PUSHER_KEY = 'key'
+  process.env.NEXT_PUBLIC_PUSHER_KEY = 'key'
   process.env.PUSHER_SECRET = 'secret'
-  process.env.PUSHER_CLUSTER = 'eu'
+  process.env.NEXT_PUBLIC_PUSHER_CLUSTER = 'eu'
 })
 
 describe('triggerNoteUpdate', () => {
@@ -57,6 +57,35 @@ describe('triggerNoteUpdate', () => {
     delete process.env.PUSHER_SECRET
     await expect(triggerNoteUpdate(note())).resolves.toBeUndefined()
     expect(trigger).not.toHaveBeenCalled()
+  })
+})
+
+describe('PusherServer — env var unification', () => {
+  // The bug this guards against: the client MUST already have
+  // NEXT_PUBLIC_PUSHER_KEY/NEXT_PUBLIC_PUSHER_CLUSTER set to work at all
+  // (lib/pusher.ts's getPusherClient reads exactly those), so requiring a
+  // second, differently-named pair server-side (the old PUSHER_KEY/
+  // PUSHER_CLUSTER) meant a deploy could configure the client-visible
+  // vars, see subscriptions "work," and still have every server-side
+  // trigger() silently no-op because the other pair was never set.
+  it('is configured by the same NEXT_PUBLIC_-prefixed vars the client needs, not a separate pair', () => {
+    expect(PusherServer()).not.toBeNull()
+  })
+
+  it('is NOT configured by the old non-prefixed PUSHER_KEY/PUSHER_CLUSTER alone', () => {
+    delete process.env.NEXT_PUBLIC_PUSHER_KEY
+    delete process.env.NEXT_PUBLIC_PUSHER_CLUSTER
+    process.env.PUSHER_KEY = 'key'
+    process.env.PUSHER_CLUSTER = 'eu'
+    expect(PusherServer()).toBeNull()
+  })
+
+  it('returns null when unconfigured entirely', () => {
+    delete process.env.PUSHER_APP_ID
+    delete process.env.NEXT_PUBLIC_PUSHER_KEY
+    delete process.env.PUSHER_SECRET
+    delete process.env.NEXT_PUBLIC_PUSHER_CLUSTER
+    expect(PusherServer()).toBeNull()
   })
 })
 

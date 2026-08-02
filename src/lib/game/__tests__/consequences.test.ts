@@ -1,5 +1,14 @@
-import { describe, it, expect } from 'vitest'
-import { applyNpcConsequence, applyFactionConsequence, shouldEscalateImportance } from '../consequences'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    nPC: { findMany: vi.fn(), update: vi.fn().mockResolvedValue({}) },
+    faction: { findMany: vi.fn(), update: vi.fn().mockResolvedValue({}) },
+  },
+}))
+
+import { prisma } from '@/lib/prisma'
+import { applyNpcConsequence, applyFactionConsequence, applyConsequences, shouldEscalateImportance } from '../consequences'
 import type { ExtractedConsequence } from '@/lib/ai/consequenceExtraction'
 import type { NPC, Faction } from '@prisma/client'
 
@@ -149,5 +158,99 @@ describe('applyFactionConsequence', () => {
       entityType: 'FACTION', action: 'BETRAYED', updatedFactionGoal: 'DESTABILIZE_RIVAL',
     }))
     expect(updateData.goal).toBe('DESTABILIZE_RIVAL')
+  })
+})
+
+describe('applyConsequences', () => {
+  const db = prisma as any
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    db.faction.findMany.mockResolvedValue([])
+  })
+
+  it('resolves an NPC by exact name and applies the consequence', async () => {
+    db.nPC.findMany.mockResolvedValue([makeNpc({ id: 'npc-1', name: 'Grik', importance: 1 })])
+
+    // RECRUITED always escalates importance (see ALWAYS_ESCALATE_ACTIONS),
+    // so a successful resolution is guaranteed to produce a real DB write —
+    // SPARED/moderate on a fresh NPC can legitimately produce an empty
+    // updateData (see applyNpcConsequence's own tests above), which would
+    // make this assertion meaningless either way.
+    const changes = await applyConsequences('campaign-1', [makeConsequence({ entityName: 'Grik', action: 'RECRUITED' })])
+
+    expect(db.nPC.update).toHaveBeenCalledTimes(1)
+    expect(changes.length).toBeGreaterThan(0)
+  })
+
+  it('does NOT cross-match an entity whose name is a substring of another — the actual bug this guards against', async () => {
+    // The exact failure mode reported: "Bob" must never match "Bobby's Assistant".
+    db.nPC.findMany.mockResolvedValue([makeNpc({ id: 'npc-1', name: "Bobby's Assistant" })])
+
+    const changes = await applyConsequences('campaign-1', [makeConsequence({ entityName: 'Bob' })])
+
+    expect(db.nPC.update).not.toHaveBeenCalled()
+    expect(changes).toEqual([])
+  })
+
+  it('resolves a close typo/case variant via confident fuzzy matching — proves the fallback is no longer dead code', async () => {
+    // Before the fix, `findFirst(equals) ?? findFirst(contains)` always
+    // evaluated to the first (unresolved) promise — the fallback branch
+    // never ran regardless of whether the exact match resolved to null.
+    db.nPC.findMany.mockResolvedValue([makeNpc({ id: 'npc-1', name: 'Kessler', importance: 1 })])
+
+    const changes = await applyConsequences('campaign-1', [makeConsequence({ entityName: 'Kesler', action: 'RECRUITED' })])
+
+    expect(db.nPC.update).toHaveBeenCalledTimes(1)
+    expect(changes.length).toBeGreaterThan(0)
+  })
+
+  it('skips (does not guess) when a name fuzzy-matches more than one NPC', async () => {
+    db.nPC.findMany.mockResolvedValue([
+      makeNpc({ id: 'npc-1', name: 'Kessler' }),
+      makeNpc({ id: 'npc-2', name: 'Kestler' }),
+    ])
+
+    const changes = await applyConsequences('campaign-1', [makeConsequence({ entityName: 'Kesler' })])
+
+    expect(db.nPC.update).not.toHaveBeenCalled()
+    expect(changes).toEqual([])
+  })
+
+  it('skips when no NPC matches at all', async () => {
+    db.nPC.findMany.mockResolvedValue([makeNpc({ id: 'npc-1', name: 'Grik' })])
+
+    const changes = await applyConsequences('campaign-1', [makeConsequence({ entityName: 'Someone Else Entirely' })])
+
+    expect(db.nPC.update).not.toHaveBeenCalled()
+    expect(changes).toEqual([])
+  })
+
+  it('resolves factions the same way, fetched once for the whole batch', async () => {
+    db.nPC.findMany.mockResolvedValue([])
+    db.faction.findMany.mockResolvedValue([makeFaction({ id: 'faction-1', name: 'The Rustwatch' })])
+
+    await applyConsequences('campaign-1', [
+      makeConsequence({ entityType: 'FACTION', entityName: 'The Rustwatch', action: 'SABOTAGED' }),
+    ])
+
+    expect(db.faction.findMany).toHaveBeenCalledTimes(1)
+    expect(db.faction.update).toHaveBeenCalledTimes(1)
+  })
+
+  it('a second consequence in the same batch touching the same entity computes its delta from the just-written value, not stale pre-batch state', async () => {
+    db.nPC.findMany.mockResolvedValue([])
+    db.faction.findMany.mockResolvedValue([makeFaction({ id: 'faction-1', name: 'The Rustwatch', resources: 50 })])
+
+    await applyConsequences('campaign-1', [
+      makeConsequence({ entityType: 'FACTION', entityName: 'The Rustwatch', action: 'FAVORED', intensity: 'moderate' }), // +3
+      makeConsequence({ entityType: 'FACTION', entityName: 'The Rustwatch', action: 'FAVORED', intensity: 'moderate' }), // +3 again, on top of the first
+    ])
+
+    expect(db.faction.update).toHaveBeenCalledTimes(2)
+    const firstCall = db.faction.update.mock.calls[0][0]
+    const secondCall = db.faction.update.mock.calls[1][0]
+    expect(firstCall.data.resources).toBe(53) // 50 + 3
+    expect(secondCall.data.resources).toBe(56) // 53 + 3, not 50 + 3 again
   })
 })

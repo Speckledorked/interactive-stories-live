@@ -211,7 +211,7 @@ this table.
 | Capability / skill-tree progression | 4 | Glimpse → unlock → progress state machine, real branching prerequisites (`resolvePrerequisiteLinks`, enforced via `applyCapabilityChanges`/`prerequisiteUnlockBlocked`), cycle-proof by construction, feeds roll modifiers directly. |
 | Character harm/death state machine | 4 | Full model: auto-conditions (`applyHarm`), death saves (`makeDeathSave`), permanent injury (`performRecoveryRoll`), a `canAct()` gate, one parse boundary for the harm blob (`parseHarmState`). Three recovery speeds — medical attention (`applyMedicalAttention`), in-game time (`accrueNaturalRecovery`), and rest (`applyRest`) — all blocked by recurring-harm conditions (`blocksNaturalRecovery`). |
 | Corruption track | 4 | Irreversible, capped at +1/scene (`applyCorruptionMarks`), force-applied even if the AI forgets to narrate it. |
-| Consequence engine (player action → faction/NPC state) | 4 | Deterministic per-action deltas (`extractAndApplyConsequences`). One confirmed, still-open gap: entity lookup (`findNpcByName`/`findFactionByName`) uses exact-then-`contains` matching instead of the safer roster-based fuzzy match (`resolveEntityByNameOrId`) used elsewhere, which can cross-match a name that's a substring of another's — see Known Bugs. |
+| Consequence engine (player action → faction/NPC state) | 4 | Deterministic per-action deltas (`extractAndApplyConsequences`/`applyConsequences`). Entity lookup now goes through the same roster-based `resolveEntityByNameOrId` every other AI write-back applier uses (fetched once per batch, not once per name) — see Known Bugs, now fixed. |
 | Character progression (advancement) | 4 | Usage-gated growth with real PbtA constraint validation. AI-authored perks/Abilities carry a real per-arc grant budget (`countGrantsInArc`, applied in `applyOrganicGrowth`), not a level-up button. |
 | Memory retrieval (RAG) | 4 | Genuine pgvector cosine search, cost-tracked, with era-based consolidation bounding table growth. |
 | Memory importance/tag classification | 4 | The historical field-name mismatch is fixed and regression-tested; `determineImportance`/`extractTags` read the AI response's real field names. |
@@ -259,7 +259,7 @@ findings with a real exploit path, not just a functional gap.
 | checkKeys are bare string literals duplicated across `checkRegistry.ts`, `escalationSourceMap.ts`, `oracleTechnique.ts`, and `LINT_GUARD_FILE_FOR`, with no shared enum/const tying them together. A rename in one place desyncs the others silently — caught only by an existence-consistency test, not the compiler. | Integrity Engine | Minor | Open |
 | Two competing Pusher server modules (`src/lib/pusher.ts` vs. `src/lib/realtime/pusher-server.ts`) read different env var names; the one 4 routes still use has no `isPusherConfigured()` gate and hangs the request indefinitely (reproduced live) in an unconfigured or partially-configured deploy. | Real-time / API routes | Major | Open |
 | `campaigns/[id]/health` is a fully built, correctly gated route; the admin panel's `health` state is declared and rendered. Fixed: `fetchData` now calls `/api/campaigns/[id]/health` and `setHealth`, so the panel actually renders. | Admin tooling | Minor | Fixed |
-| `consequences.ts`'s `findNpcByName`/`findFactionByName` use exact-then-`contains` matching, which can cross-match an entity whose name is a substring of another's (e.g. "Bob" matching "Bobby's Assistant") — the exact failure mode the safer fuzzy matcher elsewhere in the codebase was built to prevent. | Consequence engine | Minor | Open |
+| `consequences.ts`'s entity lookup used `findFirst({equals}) ?? findFirst({contains})` — two real bugs, not one: two un-awaited promises combined with `??` always evaluate to the first one, since a Promise object is never nullish, so the `contains` fallback was dead code the whole time, and had it run, `contains` is exactly the unsafe match that can cross-match an entity whose name is a substring of another's (e.g. "Bob" matching "Bobby's Assistant"). Fixed: now resolves via the same roster-based `resolveEntityByNameOrId` (exact → confidence-gated fuzzy match, ambiguous → skip) every other AI write-back applier already uses, fetched once per batch. | Consequence engine | Minor | Fixed |
 | The identical "not a member of this campaign" check returns 403 at ~37 call sites but 404 at 2 (`members/[userId]/route.ts`, `.../ban/route.ts`), with different wording. | API routes | Minor | Open |
 | Four `substring`/`slice` truncation call sites append `'...'` unconditionally, regardless of whether the text actually exceeds the length limit, producing a spurious ellipsis on short strings. | UI / shared utilities | Minor | Open |
 | `formatDigestLine`'s leadership-change case checked `field === 'leader' \| 'leadership'`, but the real leadership-succession tick writes `field: 'factionRole'` — every real leadership-change notification silently fell through to the generic "there's talk of upheaval" line instead of the intended, more specific one. Found live via a production database check. Fixed: `factionRole` now maps to the same specific line. | Notifications / world tick | Minor | Fixed |
@@ -276,37 +276,35 @@ above. Items that block later ones are flagged.
    have never executed even once. This is the single highest-leverage item
    on this list — everything else about the pipeline is design confidence,
    not proven confidence, until this happens.
-2. **Fix the Pusher module split** — unify the two modules onto the gated
-   (`isPusherConfigured()`) pattern. Cheap, no open design question.
-3. **Decide the strict-structured-outputs question.** Needs a live API
+2. **Decide the strict-structured-outputs question.** Needs a live API
    round-trip to verify the hand-rolled schema actually validates in
    production before it's safe to switch. *Prerequisite* for meaningfully
    shrinking the AI response validation ladder further.
-4. **Make outcome-band adherence visible to players**, not just logged
+3. **Make outcome-band adherence visible to players**, not just logged
    server-side — add the schema field and surface it in the transparency
    panel. The server-side half is already built; this is the highest-
    leverage single change toward "the world remembers, and you can trust
    that it does."
-5. **Add direct test coverage for the war stability-hit write path** — the
+4. **Add direct test coverage for the war stability-hit write path** — the
    one under-tested handler in an otherwise fully tested war/faction/tick
    pipeline.
-6. **Fix `consequences.ts`'s entity-matching bug** — give it the same
-   roster-plus-fuzzy-match treatment the state-updater appliers already
-   use, closing the last `contains`-matching risk in the engine.
-7. **Broaden API route test coverage** past the current targeted set,
+5. **Broaden API route test coverage** past the current targeted set,
    prioritizing routes that mutate persisted state over ones that only
    read it.
-8. **Turn admin tooling into real simulation-design tooling.** This is the
+6. **Turn admin tooling into real simulation-design tooling.** This is the
    lowest-scoring row on the Scorecard and the most direct lever on the
    "admin surface as a real window" half of the vision — extend the tick
    dry-run preview's pattern (showing *why* the simulation decided
    something) to the faction/war/NPC tabs instead of leaving them as plain
    forms.
-9. **Give checkKeys a shared type** across `checkRegistry.ts`,
+7. **Give checkKeys a shared type** across `checkRegistry.ts`,
    `escalationSourceMap.ts`, and `oracleTechnique.ts` so a rename is a
    compiler error, not a silent registry desync.
-10. **Decide whether dice/mechanics stay opt-in-only.** A product decision
-    that gates how far item 4's transparency-panel work can go by default.
+8. **Decide whether dice/mechanics stay opt-in-only.** A product decision
+   that gates how far item 3's transparency-panel work can go by default.
+
+*(The Pusher module split and `consequences.ts`'s entity-matching bug that
+used to be items 2 and 6 here are both fixed — see Known Bugs.)*
 
 ## Features & Roadmap
 

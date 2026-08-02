@@ -130,9 +130,9 @@ Verified functional, end to end, as of this rewrite:
 
 - The dice/outcome engine — pure, RNG-injected, unit-tested, unconditional.
 - World tick orchestration, faction simulation, war/coalitions, weather, and
-  NPC goal/movement — deterministic, sequenced, tested. One real gap: the
-  handler that applies a losing faction's stability hit has no direct test,
-  only incidental coverage through broader war-resolution tests.
+  NPC goal/movement — deterministic, sequenced, tested, including the
+  losing-side stability hit, now directly tested rather than only
+  incidentally covered through broader war-resolution tests.
 - Debt, faction standing, relationships, harm, and corruption — all real,
   persisted, and mechanically consumed by the roll engine, not labels.
 - The capability tree — real branching prerequisites, cycle-proof by
@@ -203,7 +203,7 @@ this table.
 |---|:-:|---|
 | Server-rolled dice/outcome engine | 5 | Pure, RNG-injected, unit-tested (`computeMechanics`, `resolveActionMechanics`, `src/lib/game/resolution.ts`). The roll is unconditional, not gated by any setting. |
 | Faction simulation (goals/collapse/succession/territory) | 5 | Goal-driven stat deltas (`decideFactionTick`), banded reassessment (`decideFactionGoalReassessment`), collapse (`decideFactionCollapse`) → absorption or remnant succession, territory claims. `decideSuccession` is a standalone, tested, pure function with deterministic tie-breaking (`compareCandidates`). |
-| War & coalition system | 4 | Multi-turn momentum/attrition, allies join sides, decisive/stalemate resolution. The pure deciders (`decideWarDeclaration`, `decideWarProgress`, `decideWarResolution`, `decideWarJoiner`) and the tick-side functions that apply them (`declareNewWars`, `resolveWarProgress`, `growWarCoalitions`) are all unit-tested; the handler that applies the losing side's stability hit is covered only incidentally, not directly. |
+| War & coalition system | 4 | Multi-turn momentum/attrition, allies join sides, decisive/stalemate resolution. The pure deciders (`decideWarDeclaration`, `decideWarProgress`, `decideWarResolution`, `decideWarJoiner`) and the tick-side functions that apply them (`declareNewWars`, `resolveWarProgress`, `growWarCoalitions`) are all unit-tested, including the losing side's stability hit, now directly tested rather than only incidentally covered. |
 | World tick orchestration | 5 | Nine deterministic handlers (`runWorldTick`), sequenced same-tick dependencies, zero AI calls. Handler *order* is asserted by a pairwise test, not just per-handler correctness. |
 | Debt economy | 4 | Directional, persisted, and consumed as a real roll modifier (`debtModifier`), not a label. |
 | Faction standing | 4 | Same pattern — feeds `computeMechanics()` directly. |
@@ -285,26 +285,22 @@ above. Items that block later ones are flagged.
    panel. The server-side half is already built; this is the highest-
    leverage single change toward "the world remembers, and you can trust
    that it does."
-4. **Add direct test coverage for the war stability-hit write path** — the
-   one under-tested handler in an otherwise fully tested war/faction/tick
-   pipeline.
-5. **Broaden API route test coverage** past the current targeted set,
+4. **Broaden API route test coverage** past the current targeted set,
    prioritizing routes that mutate persisted state over ones that only
    read it.
-6. **Turn admin tooling into real simulation-design tooling.** This is the
+5. **Turn admin tooling into real simulation-design tooling.** This is the
    lowest-scoring row on the Scorecard and the most direct lever on the
    "admin surface as a real window" half of the vision — extend the tick
    dry-run preview's pattern (showing *why* the simulation decided
    something) to the faction/war/NPC tabs instead of leaving them as plain
    forms.
-7. **Give checkKeys a shared type** across `checkRegistry.ts`,
-   `escalationSourceMap.ts`, and `oracleTechnique.ts` so a rename is a
-   compiler error, not a silent registry desync.
-8. **Decide whether dice/mechanics stay opt-in-only.** A product decision
+6. **Decide whether dice/mechanics stay opt-in-only.** A product decision
    that gates how far item 3's transparency-panel work can go by default.
 
-*(The Pusher module split and `consequences.ts`'s entity-matching bug that
-used to be items 2 and 6 here are both fixed — see Known Bugs.)*
+*(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
+checkKeys a shared type, and the war stability-hit write path's missing
+direct test coverage — that used to be items 2, 6, 7, and 4 here — are all
+fixed. See Known Bugs and the Scorecard's War & coalition system row.)*
 
 ## Features & Roadmap
 

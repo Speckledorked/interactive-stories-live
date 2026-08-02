@@ -110,6 +110,148 @@ describe('tickWars coalitions', () => {
     expect(attritionUpdates).toHaveLength(3)
   })
 
+  // The stability hit a losing side takes on a decisive resolution, beyond
+  // the attrition it already paid every turn — previously only covered
+  // incidentally by tests asserting on other fields of the same tick.
+  it('applies a flat -10 stability hit to the losing (defender) side on a decisive attacker win', async () => {
+    const attackerA = makeFaction('att-a', { military: 90, stability: 50 })
+    const defender = makeFaction('def-a', { military: 10, stability: 50 })
+
+    const war = {
+      id: 'war-1',
+      campaignId: 'campaign-1',
+      name: 'Test War',
+      attackerFactionId: 'att-a',
+      defenderFactionId: 'def-a',
+      contestedLocationId: null,
+      // Edge 80 + momentum 55 mirrors the "writes nothing when dryRun" test
+      // below: the swing's floor (variance -10) still pushes momentum to at
+      // least 61, so this resolves decisively regardless of the tick's
+      // deterministic-but-unpredictable-from-here variance term.
+      momentum: 55,
+      startedTurn: 1,
+      attacker: attackerA,
+      defender,
+      participants: [
+        makeParticipant('war-1', 'att-a', 'ATTACKER', attackerA),
+        makeParticipant('war-1', 'def-a', 'DEFENDER', defender),
+      ],
+    }
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
+
+    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+
+    expect(result.changes.some((c) => c.field === 'warResolved' && c.newValue === 'attacker')).toBe(true)
+    const stabilityUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => (c[0] as any).where.id === 'def-a' && 'stability' in (c[0] as any).data
+    )
+    expect(stabilityUpdate).toBeTruthy()
+    expect((stabilityUpdate![0] as any).data.stability).toBe(40) // 50 - 10
+    // The winning side takes no stability hit.
+    const winnerStabilityUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => (c[0] as any).where.id === 'att-a' && 'stability' in (c[0] as any).data
+    )
+    expect(winnerStabilityUpdate).toBeFalsy()
+  })
+
+  it('applies the flat -10 stability hit to the losing (attacker) side on a decisive defender win', async () => {
+    const attackerA = makeFaction('att-a', { military: 10, stability: 50 })
+    const defender = makeFaction('def-a', { military: 90, stability: 50 })
+
+    const war = {
+      id: 'war-1',
+      campaignId: 'campaign-1',
+      name: 'Test War',
+      attackerFactionId: 'att-a',
+      defenderFactionId: 'def-a',
+      contestedLocationId: null,
+      momentum: -55, // mirror of the attacker-win case above — guaranteed decisive the same way
+      startedTurn: 1,
+      attacker: attackerA,
+      defender,
+      participants: [
+        makeParticipant('war-1', 'att-a', 'ATTACKER', attackerA),
+        makeParticipant('war-1', 'def-a', 'DEFENDER', defender),
+      ],
+    }
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
+
+    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+
+    expect(result.changes.some((c) => c.field === 'warResolved' && c.newValue === 'defender')).toBe(true)
+    const stabilityUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => (c[0] as any).where.id === 'att-a' && 'stability' in (c[0] as any).data
+    )
+    expect(stabilityUpdate).toBeTruthy()
+    expect((stabilityUpdate![0] as any).data.stability).toBe(40) // 50 - 10
+  })
+
+  it('applies the stability hit to every faction on a losing coalition, not just the primary', async () => {
+    const attackerA = makeFaction('att-a', { military: 90, stability: 50 })
+    const defenderA = makeFaction('def-a', { military: 5, stability: 50 })
+    const defenderB = makeFaction('def-b', { military: 5, stability: 30 }) // coalition partner, aggregate defender military still 10
+
+    const war = {
+      id: 'war-1',
+      campaignId: 'campaign-1',
+      name: 'Test War',
+      attackerFactionId: 'att-a',
+      defenderFactionId: 'def-a',
+      contestedLocationId: null,
+      momentum: 55,
+      startedTurn: 1,
+      attacker: attackerA,
+      defender: defenderA,
+      participants: [
+        makeParticipant('war-1', 'att-a', 'ATTACKER', attackerA),
+        makeParticipant('war-1', 'def-a', 'DEFENDER', defenderA),
+        makeParticipant('war-1', 'def-b', 'DEFENDER', defenderB),
+      ],
+    }
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
+
+    await tickWars(baseCtx({ turnNumber: 2 }))
+
+    const defAStability = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => (c[0] as any).where.id === 'def-a' && 'stability' in (c[0] as any).data
+    )
+    const defBStability = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => (c[0] as any).where.id === 'def-b' && 'stability' in (c[0] as any).data
+    )
+    expect((defAStability![0] as any).data.stability).toBe(40) // 50 - 10
+    expect((defBStability![0] as any).data.stability).toBe(20) // 30 - 10
+  })
+
+  it('clamps the losing side\'s stability hit at 0 rather than going negative', async () => {
+    const attackerA = makeFaction('att-a', { military: 90, stability: 50 })
+    const defender = makeFaction('def-a', { military: 10, stability: 5 }) // already near the floor
+
+    const war = {
+      id: 'war-1',
+      campaignId: 'campaign-1',
+      name: 'Test War',
+      attackerFactionId: 'att-a',
+      defenderFactionId: 'def-a',
+      contestedLocationId: null,
+      momentum: 55,
+      startedTurn: 1,
+      attacker: attackerA,
+      defender,
+      participants: [
+        makeParticipant('war-1', 'att-a', 'ATTACKER', attackerA),
+        makeParticipant('war-1', 'def-a', 'DEFENDER', defender),
+      ],
+    }
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
+
+    await tickWars(baseCtx({ turnNumber: 2 }))
+
+    const stabilityUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => (c[0] as any).where.id === 'def-a' && 'stability' in (c[0] as any).data
+    )
+    expect((stabilityUpdate![0] as any).data.stability).toBe(0)
+  })
+
   it('writes nothing when dryRun is true but still reports changes', async () => {
     const attackerA = makeFaction('att-a', { military: 90 })
     const defender = makeFaction('def-a', { military: 10 })

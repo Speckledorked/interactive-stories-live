@@ -328,7 +328,11 @@ async function performResolution(
       })
     }
 
-    await storeWorldStateChanges(sceneId, worldStateChanges)
+    // #91: the server-side outcome-adherence check (client.ts's
+    // checkOutcomeAdherence call) already ran during callAIGM above and fed
+    // a campaign-wide admin metric — this is what makes that same result
+    // reach the player, in the same panel that already shows dice receipts.
+    await storeWorldStateChanges(sceneId, worldStateChanges, aiResponse._outcomeAdherence)
     console.log(`✅ Tracked ${worldStateChanges.length} world state changes`)
 
     // 6.7. Create notifications for character progression

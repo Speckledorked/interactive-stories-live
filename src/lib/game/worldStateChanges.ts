@@ -10,6 +10,7 @@
 // compile time, so this file stays free of runtime dependencies.
 
 import type { WorldStateChange } from '@/components/scene/AITransparencyPanel'
+import type { AdherenceResult } from './outcomeAdherence'
 
 /**
  * Pull the world-state changes out of a scene's `consequences` blob.
@@ -22,4 +23,17 @@ import type { WorldStateChange } from '@/components/scene/AITransparencyPanel'
 export function extractWorldStateChanges(consequences: unknown): WorldStateChange[] {
   const changes = (consequences as any)?.worldStateChanges
   return Array.isArray(changes) ? changes : []
+}
+
+/**
+ * Pull the outcome-adherence result (#91) out of the same blob — did the
+ * narration actually match the roll it was told was binding? Same
+ * tolerate-anything-malformed shape as extractWorldStateChanges: an older
+ * scene resolved before this field existed simply has none, and that's a
+ * valid, silent "nothing to show" rather than an error.
+ */
+export function extractOutcomeAdherence(consequences: unknown): AdherenceResult | null {
+  const adherence = (consequences as any)?.outcomeAdherence
+  if (!adherence || !Array.isArray(adherence.entries)) return null
+  return adherence as AdherenceResult
 }

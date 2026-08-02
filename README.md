@@ -37,8 +37,8 @@ sitting unnoticed.
   roll is persisted as an auditable receipt, viewable in an opt-in
   transparency panel. Whether the *narration* then actually depicts the
   rolled outcome is tracked (an `outcome_echo` field the narrator reports
-  each turn) but not yet enforced or shown to players — see Known Bugs and
-  the Scorecard.
+  each turn), and any mismatch is now visible to players in that same
+  panel — deliberately still only observed, never enforced or rewritten.
 - **Living world simulation** — a deterministic "world tick," zero AI calls,
   advances NPCs, factions, weather, and territory once real in-game time has
   passed, independent of whether players are present. Factions pursue
@@ -189,8 +189,6 @@ Partial or weak, and honestly so:
   section-by-section salvage ladder, but the contract is still basic JSON
   mode, not strict structured outputs — an open product decision that needs
   a live API round-trip to verify before it can change.
-- Outcome-band adherence is measured and logged server-side but not
-  enforced and not yet visible to players.
 
 ## Scorecard
 
@@ -234,7 +232,7 @@ this table.
 | Capability tree (branching prerequisites) | 4 | A real tree gates unlocks: same-domain, strictly-lower-tier links (`resolvePrerequisiteLinks`) make cycles structurally impossible, not just detected. Not a 5 — prerequisites are single-parent and depth is whatever generation produces. |
 | Corruption as a content gate | 4 | Gates location entry, quest acquisition, and NPC leverage (`checkCorruptionGate`) — three real enforcement points at boundaries, never retroactive. Not a 5 — gates are authored by the fiction, not seeded at world generation. |
 | Cross-system economy (faction wealth ↔ items ↔ downtime ↔ quests) | 4 | Quest/downtime payouts are real transfers out of a faction's resources (`assessPayout`); a broke faction pays partially and defaults on the rest. Debt moves the dice in both directions. Any AI-reported gold change is bounds-checked (`clampGoldDelta`) and granted items merge through one shared path (`mergeGrantedItems`). Items carry value/rarity under a budget. No merchant/trading layer — a separate product question, not a gap. |
-| Outcome-band adherence (does the narration obey the roll?) | 4 | The narrator self-reports which band its prose depicts (`outcome_echo`); mismatches are logged (`checkOutcomeAdherence`) and feed a consistency metric. Deliberately observed, never enforced — rewriting prose to match a roll would be a worse product than an occasional drift. Not a 5 until a mismatch is visible to the player, which needs a schema field. |
+| Outcome-band adherence (does the narration obey the roll?) | 5 | The narrator self-reports which band its prose depicts (`outcome_echo`); mismatches are logged (`checkOutcomeAdherence`), feed a consistency metric, and are now persisted per-exchange and surfaced in the transparency panel (`AITransparencyPanel`) that already shows dice receipts. Deliberately still only observed, never enforced — rewriting prose to match a roll would be a worse product than an occasional, visible drift. |
 | Fog-of-war enforcement mechanism | 5 | One shared `visibleTo(model, role)` gate, correctly handling the polarity difference (clocks gate on hidden state, everything else on discovered state). An unknown role fails closed. A structural test fails if a new route bypasses the gate without an explicit, restricted exemption. |
 | API route test coverage | 4 | 94 routes, roughly 9 dedicated test files. Targeted at risk — every fog-of-war-gated read, and writes that spend money, mutate scene state, or hand out access — not broad coverage of the full route surface. |
 | Auth / session | 4 | Real revocation: `requireAuth`/`verifyAuth`/`getUser` all check `isTokenRevoked`, and a token-version bump (`revokeAllSessions`, stamped by `createToken`) invalidates every existing session at once. Deliberately fails open for pre-revocation tokens and for an unreadable database, both to avoid a mass logout from a blip. Not a 5 — no refresh-token rotation, still 30-day JWTs. |
@@ -280,27 +278,24 @@ above. Items that block later ones are flagged.
    round-trip to verify the hand-rolled schema actually validates in
    production before it's safe to switch. *Prerequisite* for meaningfully
    shrinking the AI response validation ladder further.
-3. **Make outcome-band adherence visible to players**, not just logged
-   server-side — add the schema field and surface it in the transparency
-   panel. The server-side half is already built; this is the highest-
-   leverage single change toward "the world remembers, and you can trust
-   that it does."
-4. **Broaden API route test coverage** past the current targeted set,
+3. **Broaden API route test coverage** past the current targeted set,
    prioritizing routes that mutate persisted state over ones that only
    read it.
-5. **Turn admin tooling into real simulation-design tooling.** This is the
+4. **Turn admin tooling into real simulation-design tooling.** This is the
    lowest-scoring row on the Scorecard and the most direct lever on the
    "admin surface as a real window" half of the vision — extend the tick
    dry-run preview's pattern (showing *why* the simulation decided
    something) to the faction/war/NPC tabs instead of leaving them as plain
    forms.
-6. **Decide whether dice/mechanics stay opt-in-only.** A product decision
-   that gates how far item 3's transparency-panel work can go by default.
+5. **Decide whether dice/mechanics stay opt-in-only.** A product decision
+   that gates how far the outcome-band-adherence transparency-panel work
+   (now shipped — see below) can go by default.
 
 *(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
-checkKeys a shared type, and the war stability-hit write path's missing
-direct test coverage — that used to be items 2, 6, 7, and 4 here — are all
-fixed. See Known Bugs and the Scorecard's War & coalition system row.)*
+checkKeys a shared type, the war stability-hit write path's missing direct
+test coverage, and making outcome-band adherence visible to players — that
+used to be items 2, 6, 7, 4, and 3 here — are all fixed. See Known Bugs and
+the Scorecard's War & coalition system row.)*
 
 ## Features & Roadmap
 
@@ -335,10 +330,6 @@ No code exists yet for any of these.
 
 Partial implementation exists in the codebase today.
 
-- **Outcome-band adherence, player-facing** — the server-side half
-  (`outcome_echo`, mismatch logging, the consistency metric) is fully
-  built. The player-visible half — a transparency-panel indicator — needs
-  a schema field and doesn't exist yet.
 - **Admin tooling as simulation design** — the tick dry-run preview proves
   the pattern works. Extending "let the host see why the simulation decided
   something" to the rest of the admin panel is unstarted design-and-build

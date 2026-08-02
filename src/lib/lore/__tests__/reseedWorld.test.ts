@@ -20,6 +20,7 @@ const db = vi.hoisted(() => ({
   campaignArchetype: { count: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   nPC: { findMany: vi.fn() },
   location: { findMany: vi.fn() },
+  locationAdjacency: { count: vi.fn().mockResolvedValue(0), findMany: vi.fn(), createMany: vi.fn() },
   move: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   worldMeta: { findUnique: vi.fn() },
   $transaction: vi.fn(),
@@ -59,6 +60,9 @@ vi.mock('@/lib/ai/worldRulesGenerator', () => ({
   generatedRulesToWorldRules: vi.fn((rules: any[], sinceTurn: number) => ({
     rules: rules.map((r) => ({ ...r, sinceTurn })),
   })),
+}))
+vi.mock('@/lib/ai/worldGraphGenerator', () => ({
+  generateWorldGraph: vi.fn().mockResolvedValue(null),
 }))
 vi.mock('@/lib/templates/campaign-templates', () => ({
   createFactionsForCampaign: vi.fn(),

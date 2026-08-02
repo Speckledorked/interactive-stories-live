@@ -16,6 +16,17 @@
 //      makes a future EXPAND a conquest instead of a coin-flip land grab.
 // So taking a rival's territory always takes two successful EXPANDs, not
 // one: pressure first, conquest second.
+//
+// World Sim #108: within EACH tier above, which one of several tied
+// candidates gets picked is now real nearest-neighbor selection (via
+// worldGraph.ts's shortestPath) from the claimant's home base, when
+// adjacency data exists — instead of always the alphabetically-first
+// candidate. Adjacency is OPTIONAL input, not a dependency: omitted (or a
+// candidate unreachable in the graph), the tier falls back to the exact
+// same alphabetical-first pick as before #108, so a campaign with no
+// backfilled graph yet behaves identically to pre-#108 code.
+
+import { AdjacencyEdge, nearestLocation } from '../worldGraph'
 
 export interface TerritoryView {
   id: string
@@ -30,17 +41,47 @@ export type TerritoryClaimAction =
   | { kind: 'contest'; locationId: string; locationName: string; ownerFactionId: string }
   | { kind: 'none' }
 
+export interface TerritoryAdjacencyContext {
+  edges: AdjacencyEdge[]
+  /** The claimant's own "home" location (e.g. its first-owned territory) —
+   * null when the faction owns nothing yet or none is known, in which case
+   * every tier below falls back to alphabetical-first regardless of edges. */
+  homeLocationId: string | null
+}
+
+/** Picks the nearest-to-home candidate when adjacency data can decide it,
+ * otherwise the first candidate in (already alphabetically-sorted) order —
+ * identical to this module's pre-#108 `.find()` behavior. */
+function pickCandidate(candidates: TerritoryView[], adjacency?: TerritoryAdjacencyContext): TerritoryView | undefined {
+  if (candidates.length === 0) return undefined
+  if (candidates.length > 1 && adjacency?.homeLocationId && adjacency.edges.length > 0) {
+    const nearest = nearestLocation(
+      adjacency.edges,
+      adjacency.homeLocationId,
+      candidates.map((c) => c.id)
+    )
+    if (nearest) {
+      const match = candidates.find((c) => c.id === nearest.locationId)
+      if (match) return match
+    }
+  }
+  return candidates[0]
+}
+
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideTerritoryClaim(
   locations: TerritoryView[],
   claimantFactionId: string,
-  rivalFactionIds: string[]
+  rivalFactionIds: string[],
+  adjacency?: TerritoryAdjacencyContext
 ): TerritoryClaimAction {
-  // Deterministic ordering — same world state always claims the same place.
+  // Deterministic ordering — same world state always claims the same place
+  // (and is what pickCandidate falls back to when adjacency can't decide).
   const sorted = [...locations].sort((a, b) => a.name.localeCompare(b.name))
 
-  const contestedRivalLand = sorted.find(
-    (l) => l.isContested && l.ownerFactionId !== null && l.ownerFactionId !== claimantFactionId
+  const contestedRivalLand = pickCandidate(
+    sorted.filter((l) => l.isContested && l.ownerFactionId !== null && l.ownerFactionId !== claimantFactionId),
+    adjacency
   )
   if (contestedRivalLand) {
     return {
@@ -51,13 +92,17 @@ export function decideTerritoryClaim(
     }
   }
 
-  const unowned = sorted.find((l) => l.ownerFactionId === null)
+  const unowned = pickCandidate(
+    sorted.filter((l) => l.ownerFactionId === null),
+    adjacency
+  )
   if (unowned) {
     return { kind: 'settle', locationId: unowned.id, locationName: unowned.name }
   }
 
-  const rivalLand = sorted.find(
-    (l) => l.ownerFactionId !== null && rivalFactionIds.includes(l.ownerFactionId) && !l.isContested
+  const rivalLand = pickCandidate(
+    sorted.filter((l) => l.ownerFactionId !== null && rivalFactionIds.includes(l.ownerFactionId) && !l.isContested),
+    adjacency
   )
   if (rivalLand) {
     return { kind: 'contest', locationId: rivalLand.id, locationName: rivalLand.name, ownerFactionId: rivalLand.ownerFactionId! }

@@ -22,6 +22,7 @@
 
 import type { NPC } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, stableHash } from './types'
+import { AdjacencyEdge, directNeighborsOf } from '../worldGraph'
 
 // Exported so other systems that touch NPC.importance (e.g. consequence-driven
 // escalation in src/lib/game/consequences.ts) use the exact same cutoff for
@@ -91,6 +92,16 @@ export interface NpcTickDecision {
   goalCompleted: boolean
 }
 
+/** #108: maps discovered location names to ids, plus the adjacency edges
+ * between them — optional. Omitted (or a home location with no adjacency
+ * data at all), decideNpcTick falls back to its exact pre-#108 hash-rotation
+ * "work" pick, so a campaign with no backfilled graph yet behaves
+ * identically to before. */
+export interface NpcLocationGraph {
+  idByName: Map<string, string>
+  edges: AdjacencyEdge[]
+}
+
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideNpcTick(
   npc: { id: string; goals: string | null; relationship: string | null; currentLocation: string | null; goalProgress: number },
@@ -100,7 +111,8 @@ export function decideNpcTick(
   // faction's current strategic posture, so "serving Iron Crown" reads
   // differently while that faction is pursuing EXPAND vs. DEFEND — the
   // affiliation isn't just a foreign key, it colors the NPC's own flavor text.
-  faction: { name: string; goal: string } | null = null
+  faction: { name: string; goal: string } | null = null,
+  locationGraph?: NpcLocationGraph
 ): NpcTickDecision {
   const timeOfDay = deriveTimeOfDay(turnNumber)
   const phaseIndex = phaseIndexAt(npc.id, turnNumber)
@@ -119,9 +131,30 @@ export function decideNpcTick(
   if (sorted.length >= 2) {
     const currentIdx = npc.currentLocation ? sorted.indexOf(npc.currentLocation) : -1
     const homeIdx = currentIdx !== -1 ? currentIdx : stableHash(npc.id) % sorted.length
-    const workIdx = (homeIdx + 1) % sorted.length
+    const homeName = sorted[homeIdx]
+
+    // #108: "work" is a REAL neighbor of home when adjacency data covers
+    // it — real nearest-neighbor selection instead of a blind hash
+    // rotation through every discovered location regardless of distance.
+    let workName: string | undefined
+    const homeId = locationGraph?.idByName.get(homeName)
+    if (homeId) {
+      const neighborNames = directNeighborsOf(locationGraph!.edges, homeId)
+        .map((id) => sorted.find((name) => locationGraph!.idByName.get(name) === id))
+        .filter((name): name is string => !!name && name !== homeName)
+      if (neighborNames.length > 0) {
+        const sortedNeighbors = [...new Set(neighborNames)].sort()
+        workName = sortedNeighbors[stableHash(`${npc.id}:work`) % sortedNeighbors.length]
+      }
+    }
+    // Fallback: the exact pre-#108 hash-rotation pick, unchanged, used
+    // whenever adjacency data doesn't cover this home location at all.
+    if (!workName) {
+      workName = sorted[(homeIdx + 1) % sorted.length]
+    }
+
     const isActiveHours = timeOfDay === 'morning' || timeOfDay === 'afternoon'
-    const desired = sorted[isActiveHours ? workIdx : homeIdx]
+    const desired = isActiveHours ? workName : homeName
     if (desired !== npc.currentLocation) {
       nextLocation = desired
     }
@@ -147,7 +180,7 @@ export function decideNpcTick(
 }
 
 export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
-  const [npcs, locations] = await Promise.all([
+  const [npcs, locations, adjacencyRows] = await Promise.all([
     ctx.db.nPC.findMany({
       where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
       orderBy: { importance: 'desc' },
@@ -158,6 +191,13 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
       where: { campaignId: ctx.campaignId, isDiscovered: true },
       select: { id: true, name: true },
     }),
+    // #108: optional input to decideNpcTick's "work" pick — falls back to
+    // the pre-#108 hash rotation when this is empty or doesn't cover a
+    // given home location.
+    ctx.db.locationAdjacency.findMany({
+      where: { campaignId: ctx.campaignId },
+      select: { locationAId: true, locationBId: true, distance: true },
+    }),
   ])
 
   const discoveredLocationNames = locations.map((l) => l.name)
@@ -167,11 +207,12 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
   // someone, the same as the AI write-back path does for PCs (see
   // README Known Bugs P1 — Location stored as free text, not an FK).
   const locationIdByName = new Map(locations.map((l) => [l.name, l.id]))
+  const locationGraph = { idByName: locationIdByName, edges: adjacencyRows as AdjacencyEdge[] }
   const changes: WorldChange[] = []
 
   for (const npc of npcs) {
     const factionContext = npc.faction?.isActive ? { name: npc.faction.name, goal: npc.faction.goal } : null
-    const decision = decideNpcTick(npc, ctx.turnNumber, discoveredLocationNames, factionContext)
+    const decision = decideNpcTick(npc, ctx.turnNumber, discoveredLocationNames, factionContext, locationGraph)
 
     const updateData: { currentPlan: string; currentLocation?: string; locationId?: string; goalProgress: number } = {
       currentPlan: decision.currentPlan,

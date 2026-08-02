@@ -51,12 +51,10 @@ The application requires several environment variables to function properly. Fol
    - Sign up at https://pusher.com
    - Create an app and get your credentials from the dashboard
    - Set the following variables in your `.env` or `.env.local`:
-     - `PUSHER_APP_ID` - Your Pusher app ID
-     - `PUSHER_KEY` - Your Pusher key (for server-side)
-     - `PUSHER_SECRET` - Your Pusher secret (keep this secure!)
-     - `PUSHER_CLUSTER` - Your Pusher cluster (e.g., "mt1", "us2", "eu")
-     - `NEXT_PUBLIC_PUSHER_KEY` - Your Pusher key (for client-side)
-     - `NEXT_PUBLIC_PUSHER_CLUSTER` - Your Pusher cluster (for client-side)
+     - `PUSHER_APP_ID` - Your Pusher app ID (server-only)
+     - `PUSHER_SECRET` - Your Pusher secret (server-only, keep this secure!)
+     - `NEXT_PUBLIC_PUSHER_KEY` - Your Pusher key (read by both the client and the server — there is no separate server-only key var)
+     - `NEXT_PUBLIC_PUSHER_CLUSTER` - Your Pusher cluster, e.g. "mt1", "us2", "eu" (also read by both)
    - **Note:** After adding/updating `.env.local`, restart your dev server for changes to take effect
    - Without Pusher, features like chat, notifications, and live scene updates won't work
 

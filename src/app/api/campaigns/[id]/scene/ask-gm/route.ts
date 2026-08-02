@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { pusherServer } from '@/lib/pusher'
+import { PusherServer } from '@/lib/realtime/pusher-server'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { moderatePlayerText } from '@/lib/ai/moderation'
 import { generateGmAnswer, MAX_QUESTION_CHARS } from '@/lib/ai/askGm'
@@ -99,15 +99,18 @@ export async function POST(
     // Broadcast so the whole party sees the clarification live — the same
     // "said out loud at the table" visibility a real question would have.
     try {
-      await pusherServer.trigger(`campaign-${campaignId}`, 'gm:clarification', {
-        id: clarification.id,
-        sceneId,
-        characterId: clarification.characterId,
-        characterName: clarification.character.name,
-        question: clarification.question,
-        answer: clarification.answer,
-        createdAt: clarification.createdAt,
-      })
+      const pusher = PusherServer()
+      if (pusher) {
+        await pusher.trigger(`campaign-${campaignId}`, 'gm:clarification', {
+          id: clarification.id,
+          sceneId,
+          characterId: clarification.characterId,
+          characterName: clarification.character.name,
+          question: clarification.question,
+          answer: clarification.answer,
+          createdAt: clarification.createdAt,
+        })
+      }
     } catch (pusherError) {
       console.error('Failed to trigger Pusher event (non-critical):', pusherError)
     }

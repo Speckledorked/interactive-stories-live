@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
-import { pusherServer } from '@/lib/pusher'
+import { PusherServer } from '@/lib/realtime/pusher-server'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
 export async function PATCH(
@@ -40,18 +40,27 @@ export async function PATCH(
       },
     })
 
-    // Broadcast clock update if not hidden
+    // Broadcast clock update if not hidden — best-effort, same as every
+    // other real-time broadcast in this codebase: a Pusher failure must
+    // never fail the write that already succeeded.
     if (!clock.isHidden) {
-      await pusherServer.trigger(
-        `campaign-${campaignId}`,
-        'clock:updated',
-        {
-          clockId: clock.id,
-          name: clock.name,
-          currentTicks: clock.currentTicks,
-          maxTicks: clock.maxTicks,
+      try {
+        const pusher = PusherServer()
+        if (pusher) {
+          await pusher.trigger(
+            `campaign-${campaignId}`,
+            'clock:updated',
+            {
+              clockId: clock.id,
+              name: clock.name,
+              currentTicks: clock.currentTicks,
+              maxTicks: clock.maxTicks,
+            }
+          )
         }
-      )
+      } catch (pusherError) {
+        console.error('Failed to broadcast clock update (non-critical):', pusherError)
+      }
     }
 
     return NextResponse.json({ clock })
@@ -110,19 +119,27 @@ export async function POST(
       data: { currentTicks: newCurrentTicks },
     })
 
-    // Broadcast clock update if not hidden
+    // Broadcast clock update if not hidden — best-effort, same reasoning
+    // as the PATCH handler above.
     if (!clock.isHidden) {
-      await pusherServer.trigger(
-        `campaign-${campaignId}`,
-        'clock:ticked',
-        {
-          clockId: clock.id,
-          name: clock.name,
-          currentTicks: clock.currentTicks,
-          maxTicks: clock.maxTicks,
-          action,
+      try {
+        const pusher = PusherServer()
+        if (pusher) {
+          await pusher.trigger(
+            `campaign-${campaignId}`,
+            'clock:ticked',
+            {
+              clockId: clock.id,
+              name: clock.name,
+              currentTicks: clock.currentTicks,
+              maxTicks: clock.maxTicks,
+              action,
+            }
+          )
         }
-      )
+      } catch (pusherError) {
+        console.error('Failed to broadcast clock tick (non-critical):', pusherError)
+      }
     }
 
     // Check if clock is full

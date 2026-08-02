@@ -1,32 +1,21 @@
 // src/lib/pusher.ts
-import Pusher from 'pusher'
+// Client-side Pusher only. The server-side instance used to live here too
+// (an ungated `pusherServer` singleton, constructed unconditionally with
+// 'placeholder' credentials when unconfigured) — that meant a `.trigger()`
+// call in an unconfigured or partially-configured deploy attempted a real
+// network call with garbage credentials instead of gating cleanly, and
+// could hang the request rather than failing fast. Server-side triggers
+// now go through lib/realtime/pusher-server.ts's getPusherServer(), which
+// returns null (no network call at all) when unconfigured, checked at
+// every call site.
 import PusherClient from 'pusher-js'
 
-// Check if Pusher is properly configured
+// Check if Pusher is properly configured (client-side only now — see the
+// header comment above for why the server-side branch this used to have
+// was removed rather than fixed in place).
 export function isPusherConfigured(): boolean {
-  if (typeof window !== 'undefined') {
-    // Client-side check
-    return !!(process.env.NEXT_PUBLIC_PUSHER_KEY && process.env.NEXT_PUBLIC_PUSHER_CLUSTER)
-  } else {
-    // Server-side check
-    return !!(
-      process.env.PUSHER_APP_ID &&
-      process.env.NEXT_PUBLIC_PUSHER_KEY &&
-      process.env.PUSHER_SECRET &&
-      process.env.NEXT_PUBLIC_PUSHER_CLUSTER
-    )
-  }
+  return !!(process.env.NEXT_PUBLIC_PUSHER_KEY && process.env.NEXT_PUBLIC_PUSHER_CLUSTER)
 }
-
-// Server-side Pusher instance
-// Provide defaults for build time when env vars may not be set
-export const pusherServer = new Pusher({
-  appId: process.env.PUSHER_APP_ID || 'placeholder',
-  key: process.env.NEXT_PUBLIC_PUSHER_KEY || 'placeholder',
-  secret: process.env.PUSHER_SECRET || 'placeholder',
-  cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER || 'us2',
-  useTLS: true,
-})
 
 // Client-side Pusher instance - only create if configured
 let pusherClientInstance: PusherClient | null = null

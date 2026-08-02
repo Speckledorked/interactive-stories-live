@@ -149,6 +149,17 @@ enum WorldEventTargetType {
   WAR
   CHARACTER
   DEBT
+  // #109: the DB enum value was added by migration
+  // 20260802185719_location_condition_score, but this declaration was
+  // missed at the time — Prisma's generated client validates enum writes
+  // against THIS list, not the live Postgres type, so any WorldChange
+  // tagged LOCATION_CONDITION would have failed at runtime despite the
+  // column/constraint/migration all being correct. Caught while touching
+  // this file for #110's LOCATION_POPULATION addition below.
+  LOCATION_CONDITION
+  // #110: background population shifts (tick/migrationTick.ts) are their
+  // own attributable entity type, distinct from conditionScore drift.
+  LOCATION_POPULATION
 }
 
 //
@@ -1066,6 +1077,14 @@ model Location {
   // same file computes it from conditionScore + isContested on read, so
   // the tag can never desync from the score that defines it.
   conditionScore Int @default(60)
+
+  // #110: background population count, distinct from the named Character[]/
+  // NPC[] rows below — a city can be "a city" without every resident being
+  // an individually modeled entity. Nullable and untouched by default: a
+  // location the GM never assigns a population to is never migrated into
+  // or out of by tick/migrationTick.ts, so existing campaigns don't
+  // silently start tracking a number nobody set.
+  population Int?
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 

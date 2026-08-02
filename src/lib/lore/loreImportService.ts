@@ -13,7 +13,7 @@ import type { LoreImportJob } from '@prisma/client'
 import { embedBatchWithCostTracking, embedWithCostTracking } from '@/lib/ai/embeddingService'
 import { chunkText, type TextChunk } from './textChunker'
 import { extractFromHtml } from './htmlExtractor'
-import { detectApiBase, listAllPages, rankPagesByLength, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from './mediaWikiClient'
+import { detectApiBase, listAllPages, rankPagesByLength, fetchCategoryMembers, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from './mediaWikiClient'
 
 // A wiki crawl runs inside a single worker invocation (see the internal
 // route's maxDuration) — capped well short of "the whole internet" so one
@@ -131,8 +131,29 @@ async function importWiki(job: LoreImportJob): Promise<void> {
     throw new Error('That URL does not look like a MediaWiki-based wiki (no api.php found) — try importing it as a single page instead')
   }
 
-  const candidates = await listAllPages(apiBase, WIKI_RANKING_CANDIDATE_CEILING)
+  let candidates = await listAllPages(apiBase, WIKI_RANKING_CANDIDATE_CEILING)
   if (candidates.length === 0) throw new Error('No pages found on that wiki')
+
+  // Drop anything in an admin-excluded category (e.g. "Characters") before
+  // ranking or fetching ever touches it — the whole point is to skip the
+  // fetch/embed cost on unwanted pages, not just hide them from the
+  // digest afterward. Best-effort per category: one category's lookup
+  // failing doesn't block the others or the import as a whole.
+  const excludeCategories = Array.isArray(job.excludeCategories) ? job.excludeCategories : []
+  if (excludeCategories.length > 0) {
+    const excludedTitles = new Set<string>()
+    for (const category of excludeCategories) {
+      try {
+        const members = await fetchCategoryMembers(apiBase, category)
+        for (const title of members) excludedTitles.add(title)
+      } catch (err) {
+        console.error(`Failed to resolve excluded category "${category}" — its pages will still be crawled:`, err)
+      }
+    }
+    if (excludedTitles.size > 0) {
+      candidates = candidates.filter(p => !excludedTitles.has(p.title))
+    }
+  }
 
   // Rank by real content length so the hard WIKI_MAX_PAGES cap selects the
   // wiki's most substantial pages rather than whatever sorts first

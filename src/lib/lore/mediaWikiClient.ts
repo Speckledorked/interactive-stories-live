@@ -14,6 +14,13 @@ export interface WikiPageSummary {
   title: string
 }
 
+export interface WikiCategorySummary {
+  /** Bare category name, e.g. "Characters" — no "Category:" prefix. */
+  title: string
+  /** Member article count (list=allcategories' acprop=size, "pages" field) — lets an admin gauge impact before excluding it. */
+  pageCount: number
+}
+
 const CANDIDATE_API_PATHS = ['/api.php', '/w/api.php']
 
 /**
@@ -255,4 +262,90 @@ export async function fetchPageViaParse(apiBase: string, title: string): Promise
   } catch {
     return null
   }
+}
+
+/**
+ * List every real content category on the wiki (namespace 14, i.e.
+ * "Category:" pages), with member-article counts, so an admin can pick
+ * ones to exclude from a crawl before it runs — e.g. skip "Characters"
+ * on a wiki whose named cast the GM doesn't want, without typing names.
+ * Paginates via list=allcategories the same way listAllPages does.
+ */
+export async function listCategories(apiBase: string, maxCategories = 500): Promise<WikiCategorySummary[]> {
+  const categories: WikiCategorySummary[] = []
+  let accontinue: string | undefined
+
+  while (categories.length < maxCategories) {
+    const params = new URLSearchParams({
+      action: 'query',
+      list: 'allcategories',
+      aclimit: '500',
+      acprop: 'size',
+      format: 'json',
+    })
+    if (accontinue) params.set('accontinue', accontinue)
+
+    const res = await fetch(`${apiBase}?${params.toString()}`, {
+      headers: { 'User-Agent': 'MythOS-LoreImport/1.0' },
+    })
+    if (!res.ok) break
+    const data = await res.json()
+
+    const batch = data?.query?.allcategories
+    if (!Array.isArray(batch) || batch.length === 0) break
+    for (const c of batch) {
+      if (c?.['*']) categories.push({ title: c['*'], pageCount: typeof c.pages === 'number' ? c.pages : 0 })
+    }
+
+    accontinue = data?.continue?.accontinue
+    if (!accontinue) break
+  }
+
+  return categories.slice(0, maxCategories)
+}
+
+/**
+ * Resolve a bare category name (no "Category:" prefix — matches what
+ * listCategories above returns) to its member article titles, via
+ * list=categorymembers. Used at crawl time to turn an admin's excluded
+ * category selections into the actual page titles to skip — namespace 0
+ * only, matching listAllPages, so subcategory/file members don't leak in.
+ */
+export async function fetchCategoryMembers(
+  apiBase: string,
+  categoryTitle: string,
+  maxMembers = 2000
+): Promise<string[]> {
+  const members: string[] = []
+  let cmcontinue: string | undefined
+  const fullTitle = categoryTitle.startsWith('Category:') ? categoryTitle : `Category:${categoryTitle}`
+
+  while (members.length < maxMembers) {
+    const params = new URLSearchParams({
+      action: 'query',
+      list: 'categorymembers',
+      cmtitle: fullTitle,
+      cmnamespace: '0',
+      cmlimit: '500',
+      format: 'json',
+    })
+    if (cmcontinue) params.set('cmcontinue', cmcontinue)
+
+    const res = await fetch(`${apiBase}?${params.toString()}`, {
+      headers: { 'User-Agent': 'MythOS-LoreImport/1.0' },
+    })
+    if (!res.ok) break
+    const data = await res.json()
+
+    const batch = data?.query?.categorymembers
+    if (!Array.isArray(batch) || batch.length === 0) break
+    for (const m of batch) {
+      if (m?.title) members.push(m.title)
+    }
+
+    cmcontinue = data?.continue?.cmcontinue
+    if (!cmcontinue) break
+  }
+
+  return members.slice(0, maxMembers)
 }

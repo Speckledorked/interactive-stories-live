@@ -19,6 +19,7 @@ vi.mock('../mediaWikiClient', () => ({
   detectApiBase: vi.fn(),
   listAllPages: vi.fn(),
   rankPagesByLength: vi.fn(),
+  fetchCategoryMembers: vi.fn(),
   fetchExtracts: vi.fn(),
   fetchPageViaParse: vi.fn(),
   pageTitleFromUrl: vi.fn(),
@@ -26,7 +27,7 @@ vi.mock('../mediaWikiClient', () => ({
 
 import { prisma } from '@/lib/prisma'
 import { embedBatchWithCostTracking, embedWithCostTracking } from '@/lib/ai/embeddingService'
-import { detectApiBase, listAllPages, rankPagesByLength, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from '../mediaWikiClient'
+import { detectApiBase, listAllPages, rankPagesByLength, fetchCategoryMembers, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from '../mediaWikiClient'
 import { runLoreImport, WIKI_MAX_PAGES } from '../loreImportService'
 
 function makeJob(overrides: Partial<any> = {}) {
@@ -40,6 +41,7 @@ function makeJob(overrides: Partial<any> = {}) {
     status: 'RUNNING',
     attempts: 1,
     lastError: null,
+    excludeCategories: [],
     pagesFound: 0,
     pagesDone: 0,
     entriesCreated: 0,
@@ -287,6 +289,76 @@ describe('runLoreImport', () => {
       const job = makeJob({ sourceType: 'WIKI', sourceUrl: 'https://example.com' })
       await expect(runLoreImport(job as any)).resolves.toBeUndefined()
       expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
+    })
+
+    describe('excludeCategories', () => {
+      it('drops pages belonging to an excluded category before ranking or fetching ever sees them', async () => {
+        vi.mocked(detectApiBase).mockResolvedValue('https://example.com/api.php')
+        vi.mocked(listAllPages).mockResolvedValue([
+          { pageId: 1, title: 'Jason Asano' },
+          { pageId: 2, title: 'Essence Magic' },
+        ])
+        vi.mocked(fetchCategoryMembers).mockResolvedValue(['Jason Asano'])
+        vi.mocked(fetchExtracts).mockResolvedValue(new Map([['Essence Magic', 'Some lore.']]))
+
+        const job = makeJob({ sourceType: 'WIKI', sourceUrl: 'https://example.com', excludeCategories: ['Characters'] })
+        await runLoreImport(job as any)
+
+        expect(fetchCategoryMembers).toHaveBeenCalledWith('https://example.com/api.php', 'Characters')
+        // rankPagesByLength (and everything after it) never even sees the excluded page.
+        const [, rankedCandidates] = vi.mocked(rankPagesByLength).mock.calls[0]
+        expect(rankedCandidates.map((p: any) => p.title)).toEqual(['Essence Magic'])
+        expect(prisma.loreImportJob.update).toHaveBeenCalledWith({
+          where: { id: 'job-1' },
+          data: { pagesFound: 1 },
+        })
+      })
+
+      it('resolves multiple excluded categories and unions their pages', async () => {
+        vi.mocked(detectApiBase).mockResolvedValue('https://example.com/api.php')
+        vi.mocked(listAllPages).mockResolvedValue([
+          { pageId: 1, title: 'Jason Asano' },
+          { pageId: 2, title: 'Team Biscuit' },
+          { pageId: 3, title: 'Essence Magic' },
+        ])
+        vi.mocked(fetchCategoryMembers).mockImplementation(async (_apiBase, category) =>
+          category === 'Characters' ? ['Jason Asano'] : category === 'Teams' ? ['Team Biscuit'] : []
+        )
+        vi.mocked(fetchExtracts).mockResolvedValue(new Map([['Essence Magic', 'Some lore.']]))
+
+        const job = makeJob({
+          sourceType: 'WIKI',
+          sourceUrl: 'https://example.com',
+          excludeCategories: ['Characters', 'Teams'],
+        })
+        await runLoreImport(job as any)
+
+        expect(fetchCategoryMembers).toHaveBeenCalledTimes(2)
+        const [, rankedCandidates] = vi.mocked(rankPagesByLength).mock.calls[0]
+        expect(rankedCandidates.map((p: any) => p.title)).toEqual(['Essence Magic'])
+      })
+
+      it('does not call fetchCategoryMembers at all when no categories are excluded', async () => {
+        vi.mocked(detectApiBase).mockResolvedValue('https://example.com/api.php')
+        vi.mocked(listAllPages).mockResolvedValue([{ pageId: 1, title: 'Essence Magic' }])
+        vi.mocked(fetchExtracts).mockResolvedValue(new Map([['Essence Magic', 'Some lore.']]))
+
+        const job = makeJob({ sourceType: 'WIKI', sourceUrl: 'https://example.com' })
+        await runLoreImport(job as any)
+
+        expect(fetchCategoryMembers).not.toHaveBeenCalled()
+      })
+
+      it('still imports everything (fails open) when resolving an excluded category itself fails', async () => {
+        vi.mocked(detectApiBase).mockResolvedValue('https://example.com/api.php')
+        vi.mocked(listAllPages).mockResolvedValue([{ pageId: 1, title: 'Jason Asano' }])
+        vi.mocked(fetchCategoryMembers).mockRejectedValue(new Error('categorymembers API down'))
+        vi.mocked(fetchExtracts).mockResolvedValue(new Map([['Jason Asano', 'Some lore.']]))
+
+        const job = makeJob({ sourceType: 'WIKI', sourceUrl: 'https://example.com', excludeCategories: ['Characters'] })
+        await expect(runLoreImport(job as any)).resolves.toBeUndefined()
+        expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
+      })
     })
   })
 

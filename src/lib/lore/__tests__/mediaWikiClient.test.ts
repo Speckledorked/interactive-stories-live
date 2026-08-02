@@ -1,6 +1,6 @@
 // src/lib/lore/__tests__/mediaWikiClient.test.ts
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { detectApiBase, listAllPages, rankPagesByLength, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from '../mediaWikiClient'
+import { detectApiBase, listAllPages, rankPagesByLength, listCategories, fetchCategoryMembers, fetchExtracts, fetchPageViaParse, pageTitleFromUrl } from '../mediaWikiClient'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -150,6 +150,109 @@ describe('rankPagesByLength', () => {
     const candidates = [{ pageId: 1, title: 'A' }, { pageId: 2, title: 'B' }]
     const ranked = await rankPagesByLength('https://example.org/api.php', candidates)
     expect(ranked).toHaveLength(2)
+  })
+})
+
+describe('listCategories', () => {
+  it('paginates via accontinue and returns title + pageCount for each category', async () => {
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          query: { allcategories: [{ '*': 'Characters', size: 11, pages: 11 }] },
+          continue: { accontinue: 'Locations' },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          query: { allcategories: [{ '*': 'Locations', size: 40, pages: 40 }] },
+        }),
+      })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const result = await listCategories('https://example.org/api.php')
+    expect(result).toEqual([
+      { title: 'Characters', pageCount: 11 },
+      { title: 'Locations', pageCount: 40 },
+    ])
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops at maxCategories', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        query: { allcategories: [{ '*': 'A', pages: 1 }, { '*': 'B', pages: 2 }] },
+        continue: { accontinue: 'next' },
+      }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const result = await listCategories('https://example.org/api.php', 1)
+    expect(result).toHaveLength(1)
+  })
+
+  it('returns [] when the API call fails, rather than throwing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+    const result = await listCategories('https://example.org/api.php')
+    expect(result).toEqual([])
+  })
+})
+
+describe('fetchCategoryMembers', () => {
+  it('returns member page titles, namespace-0 only, adding the Category: prefix if missing', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        query: { categorymembers: [{ title: 'Jason Asano' }, { title: 'Sera' }] },
+      }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const result = await fetchCategoryMembers('https://example.org/api.php', 'Characters')
+    expect(result).toEqual(['Jason Asano', 'Sera'])
+    const calledUrl = fetchSpy.mock.calls[0][0] as string
+    expect(calledUrl).toContain('cmtitle=Category%3ACharacters')
+    expect(calledUrl).toContain('cmnamespace=0')
+  })
+
+  it('does not double-prefix a title that already says "Category:"', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ query: { categorymembers: [] } }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    await fetchCategoryMembers('https://example.org/api.php', 'Category:Characters')
+    const calledUrl = fetchSpy.mock.calls[0][0] as string
+    expect(calledUrl).toContain('cmtitle=Category%3ACharacters')
+    expect(calledUrl).not.toContain('Category%3ACategory')
+  })
+
+  it('paginates via cmcontinue', async () => {
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          query: { categorymembers: [{ title: 'A' }] },
+          continue: { cmcontinue: 'next' },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ query: { categorymembers: [{ title: 'B' }] } }),
+      })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const result = await fetchCategoryMembers('https://example.org/api.php', 'Characters')
+    expect(result).toEqual(['A', 'B'])
+  })
+
+  it('returns [] when the API call fails, rather than throwing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
+    const result = await fetchCategoryMembers('https://example.org/api.php', 'Characters')
+    expect(result).toEqual([])
   })
 })
 

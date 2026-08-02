@@ -2404,6 +2404,14 @@ model LoreImportJob {
   // Campaign.pendingWorldSeed.
   autoReseedOnComplete Boolean @default(false)
 
+  // WIKI only: real category titles (as returned by the wiki's own
+  // list=allcategories, e.g. "Characters", "Teams") the admin picked to
+  // skip during the crawl — resolved to member page titles at crawl time
+  // (see mediaWikiClient.ts's fetchCategoryMembers), not stored here.
+  // Lets a wiki-heavy-on-named-cast import spend its page budget on
+  // world-building content instead.
+  excludeCategories String[] @default([])
+
   // Progress, shown to the admin while a wiki crawl is running.
   pagesFound     Int @default(0)
   pagesDone      Int @default(0)

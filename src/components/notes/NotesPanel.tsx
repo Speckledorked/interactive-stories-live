@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { PlayerNote } from '@prisma/client';
 import { getToken } from '@/lib/clientAuth';
 import { subscribeToCampaignMessages, RealtimeNoteUpdate } from '@/lib/realtime/pusher-client';
+import { truncateWithEllipsis } from '@/lib/format';
 
 interface NotesPanelProps {
   campaignId: string;
@@ -230,7 +231,7 @@ export default function NotesPanel({
       case 'faction':
         return factions.map(f => ({ id: f.id, name: f.name }));
       case 'scene':
-        return scenes.map(s => ({ id: s.id, name: s.description.substring(0, 50) + '...' }));
+        return scenes.map(s => ({ id: s.id, name: truncateWithEllipsis(s.description, 50) }));
       default:
         return [];
     }

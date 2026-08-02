@@ -16,7 +16,9 @@
 // same "detect-only is a real answer" shape INTEGRITY_REPAIRS already
 // uses for a checkKey with no repair function.
 
-export const ESCALATION_SOURCE_FILES: Readonly<Record<string, readonly string[]>> = {
+import { CheckKey } from './checkKeys'
+
+export const ESCALATION_SOURCE_FILES: Readonly<Partial<Record<CheckKey, readonly string[]>>> = {
   // Phase 0's original bug, and the shape every other id-keyed-JSON-blob
   // check shares (1d: "same technique covers every other id-keyed JSON
   // blob"). All four write through resolveEntityByNameOrId today; a

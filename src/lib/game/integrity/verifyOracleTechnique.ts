@@ -24,6 +24,7 @@
 // and unambiguous.
 
 import { OracleTechnique, LINT_GUARD_FILE_FOR, isWeakerTechnique } from './oracleTechnique'
+import { CheckKey } from './checkKeys'
 
 export interface OracleTechniqueVerification {
   technique: OracleTechnique
@@ -85,7 +86,7 @@ export function verifyOracleTechnique(
       // is already re-run by the workflow's general `npx vitest run` step
       // — verification here only confirms the checkKey's claimed guard
       // genuinely exists on disk, not that a new one was written.
-      const guardFile = LINT_GUARD_FILE_FOR[checkKey]
+      const guardFile = LINT_GUARD_FILE_FOR[checkKey as CheckKey]
       if (!guardFile) {
         return {
           technique: currentTechnique,

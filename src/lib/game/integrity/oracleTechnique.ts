@@ -20,6 +20,8 @@
 // can never lower it, checked in verifyOracleTechnique.ts, not trusted
 // from the diff's own commit message.
 
+import { CheckKey } from './checkKeys'
+
 export type OracleTechnique = 'property' | 'fault-injection' | 'lint' | 'suite-only'
 
 /** property/fault-injection/lint are all real, objective proof — which one
@@ -39,7 +41,7 @@ export function isWeakerTechnique(prior: OracleTechnique, next: OracleTechnique)
   return STRENGTH_RANK[next] < STRENGTH_RANK[prior]
 }
 
-export const ORACLE_TECHNIQUE_FOR: Readonly<Record<string, OracleTechnique>> = {
+export const ORACLE_TECHNIQUE_FOR: Readonly<Partial<Record<CheckKey, OracleTechnique>>> = {
   // The Phase 0 relationship bug's own shape, and the class every other
   // id-keyed-JSON-blob check shares: "for any entity_id the AI could emit,
   // the roll-time reader must locate it" is a round-trip property, not a
@@ -96,7 +98,7 @@ export const ORACLE_TECHNIQUE_FOR: Readonly<Record<string, OracleTechnique>> = {
  * generated per fix, a checkKey backed by one of these needs no new test
  * at all; the guard already exists and already runs.
  */
-export const LINT_GUARD_FILE_FOR: Readonly<Record<string, string>> = {
+export const LINT_GUARD_FILE_FOR: Readonly<Partial<Record<CheckKey, string>>> = {
   'character.relationships.keys.resolve':
     'src/lib/game/worldUpdaters/__tests__/entityResolutionConvention.test.ts',
 } as const
@@ -104,5 +106,5 @@ export const LINT_GUARD_FILE_FOR: Readonly<Record<string, string>> = {
 /** The technique for a checkKey, defaulting to the weakest ('suite-only')
  * when nothing stronger has been declared for it. */
 export function oracleTechniqueFor(checkKey: string): OracleTechnique {
-  return ORACLE_TECHNIQUE_FOR[checkKey] ?? 'suite-only'
+  return ORACLE_TECHNIQUE_FOR[checkKey as CheckKey] ?? 'suite-only'
 }

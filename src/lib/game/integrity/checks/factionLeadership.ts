@@ -23,6 +23,7 @@
 import { decideSuccession } from '../../tick/leadershipTick'
 import { IntegrityCheck, IntegritySnapshot, Repair, RepairFn, Violation } from '../types'
 import { isRuleActive, ruleFor } from '../worldRules'
+import { CheckKey } from '../checkKeys'
 
 function membersFor(snapshot: IntegritySnapshot, factionId: string) {
   return snapshot.npcs
@@ -31,7 +32,7 @@ function membersFor(snapshot: IntegritySnapshot, factionId: string) {
 }
 
 export const factionHasOneLivingLeader: IntegrityCheck = {
-  key: 'faction.leadership.exactlyOneLivingLeader',
+  key: 'faction.leadership.exactlyOneLivingLeader' satisfies CheckKey,
   description: 'An active Faction with living affiliated members should have exactly one living LEADER',
   run(snapshot: IntegritySnapshot): Violation[] {
     const leaderOptional = isRuleActive(ruleFor(snapshot.worldRules, 'faction.leaderOptional'), snapshot.turnNumber)

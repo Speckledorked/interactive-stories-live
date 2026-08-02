@@ -12,6 +12,8 @@ import { prisma } from '@/lib/prisma'
 import { band } from './factionTick'
 import { stableHash } from './types'
 import { TENSION_BASELINE, tensionClockBonus, refreshCampaignTension } from './tension'
+import { SEASON_MODIFIERS } from './seasonTick'
+import { GeneratedCalendar, deriveSeason } from '../calendar'
 
 export interface FactionForClockAdvancement {
   resources: number
@@ -43,7 +45,15 @@ export function decideClockAdvancement(
   // clocks with no faction/NPC driver — a driven clock's pace is a
   // statement about that actor's strength, and folding mood into it too
   // would double-count.
-  tension: number = TENSION_BASELINE
+  tension: number = TENSION_BASELINE,
+  // #118: only consulted for the same unattached-GM-clock branch tension
+  // is — a driven clock's pace is a statement about its actor's strength,
+  // not the season. 1 = neutral (spring/summer baseline); scales the
+  // category-based roll THRESHOLD (not the returned tick count directly,
+  // which must stay an integer 0/1/2) so a season can only ever nudge the
+  // probability of ticking this turn, never push a clock past its
+  // existing one-tick-per-turn cap on its own.
+  clockSpeedMultiplier: number = 1
 ): number {
   const roll = (salt: string) => stableHash(`${clock.id}:${turnNumber}:${salt}`) % 100
 
@@ -82,9 +92,12 @@ export function decideClockAdvancement(
   // one tick per turn on its own, so a tense campaign accelerates rather
   // than runs away.
   const tensionBonus = tensionClockBonus(tension)
+  // 'urgent' clocks always tick every turn regardless of season — there's
+  // no discretionary component left to modulate without breaking that
+  // guarantee.
   if (clock.category === 'urgent') return 1
-  if (clock.category === 'slow') return roll('category') < 20 ? 1 : Math.min(tensionBonus, 1)
-  return roll('category') < 40 ? 1 : Math.min(tensionBonus, 1)
+  if (clock.category === 'slow') return roll('category') < 20 * clockSpeedMultiplier ? 1 : Math.min(tensionBonus, 1)
+  return roll('category') < 40 * clockSpeedMultiplier ? 1 : Math.min(tensionBonus, 1)
 }
 
 /**
@@ -118,16 +131,29 @@ export async function advanceClocks(campaignId: string) {
 
   const worldMeta = await prisma.worldMeta.findUnique({
     where: { campaignId },
-    select: { currentTurnNumber: true },
+    select: {
+      currentTurnNumber: true,
+      totalElapsedGameHours: true,
+      campaign: { select: { calendarConfig: true } },
+    },
   })
   const turnNumber = worldMeta?.currentTurnNumber ?? 0
+
+  // #118: unattached-GM-clock speed. Computed here (not passed in) since
+  // advanceClocks runs outside TICK_HANDLERS — this is the only place that
+  // both loads the calendar and calls decideClockAdvancement.
+  const calendar = worldMeta?.campaign?.calendarConfig
+    ? (worldMeta.campaign.calendarConfig as unknown as GeneratedCalendar)
+    : null
+  const season = deriveSeason(worldMeta?.totalElapsedGameHours ?? 0, calendar)
+  const clockSpeedMultiplier = SEASON_MODIFIERS[season].clockSpeedMultiplier
 
   const tension = await refreshCampaignTension(campaignId, turnNumber, clocks)
 
   const advancedClocks: any[] = []
 
   for (const clock of clocks) {
-    const advanceAmount = decideClockAdvancement(clock, factionById, turnNumber, tension)
+    const advanceAmount = decideClockAdvancement(clock, factionById, turnNumber, tension, clockSpeedMultiplier)
 
     if (advanceAmount > 0) {
       const newTicks = Math.min(clock.currentTicks + advanceAmount, clock.maxTicks)

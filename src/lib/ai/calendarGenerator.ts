@@ -8,11 +8,15 @@
 // back to DEFAULT_CALENDAR (lib/game/calendar.ts) — a working, if
 // unthemed, 12-month grid rather than no calendar at all.
 //
-// Mechanics never come from here: the calendar only supplies structure for
-// display formatting (lib/game/calendar.ts's formatInGameDate). It has no
-// bearing on world-turn pacing, harm recovery, or any other consumer of
-// WorldMeta.totalElapsedGameHours — those all keep working in raw hours
-// regardless of what calendar (if any) a campaign has.
+// #118 update: this generated structure now DOES have real mechanical
+// weight, not just display formatting — lib/game/calendar.ts's deriveSeason
+// turns it into one of four seasons, which tick/seasonTick.ts uses to
+// nudge faction resource regen and unattached-GM-clock speed. A campaign
+// with no calendar (DEFAULT_CALENDAR) still gets a working season cycle —
+// it's just an unthemed one, the same fallback shape as everything else
+// here. Everything else this calendar touches (formatInGameDate, harm
+// recovery, and every other consumer of WorldMeta.totalElapsedGameHours)
+// is unaffected and still just reads raw hours.
 
 import { callChatCompletion } from './chatCompletion'
 import { AI_MODELS } from './models'

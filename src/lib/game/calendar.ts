@@ -123,6 +123,32 @@ export function formatInGameDate(
   return { totalDays, hourOfDay, year, monthIndex, monthName, dayOfMonth, weekdayName, display }
 }
 
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
+
+const SEASON_ORDER: Season[] = ['spring', 'summer', 'autumn', 'winter']
+
+/**
+ * #118: which of four generic seasons the campaign's current in-game date
+ * falls in — a quarter of the calendar's month count, not tied to any real
+ * month name (fantasy calendars have arbitrary, often unthemed month names
+ * — see DEFAULT_CALENDAR's own comment — so there is no "January" to key
+ * off). A 4-month calendar has one season per month; a 12-month one has
+ * three months per season, same as the real world's quarters. Deliberately
+ * NOT anchored to the calendar's authored theme (no "harvest festival"
+ * month lookup) — every campaign gets the same reliable quarter-cycle
+ * regardless of how its months are named.
+ */
+export function deriveSeason(
+  totalElapsedGameHours: number,
+  calendar: GeneratedCalendar | null
+): Season {
+  const cal = calendar || DEFAULT_CALENDAR
+  const { monthIndex } = formatInGameDate(totalElapsedGameHours, cal)
+  const monthCount = cal.months.length || 1
+  const seasonIndex = Math.min(SEASON_ORDER.length - 1, Math.floor((monthIndex / monthCount) * SEASON_ORDER.length))
+  return SEASON_ORDER[seasonIndex]
+}
+
 /**
  * Which absolute day numbers (the same 0-based totalDays formatInGameDate
  * returns, and what's stored in CampaignLog/TimelineEvent.inGameDayNumber)

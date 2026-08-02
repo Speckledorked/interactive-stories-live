@@ -5,6 +5,7 @@ import {
   formatInGameDate,
   dayNumberRangeForMonth,
   parseLegacyInGameDate,
+  deriveSeason,
   type GeneratedCalendar,
 } from '../calendar'
 
@@ -149,5 +150,56 @@ describe('parseLegacyInGameDate', () => {
     expect(parseLegacyInGameDate(null)).toBeNull()
     expect(parseLegacyInGameDate('')).toBeNull()
     expect(parseLegacyInGameDate('sometime next week')).toBeNull()
+  })
+})
+
+describe('deriveSeason (#118)', () => {
+  it('is spring at the very start of the campaign', () => {
+    expect(deriveSeason(0, DEFAULT_CALENDAR)).toBe('spring')
+  })
+
+  it('divides a 12-month calendar into four clean 3-month quarters', () => {
+    // DEFAULT_CALENDAR: 12 months x 30 days = 360 days/year.
+    expect(deriveSeason(24 * 30 * 0, DEFAULT_CALENDAR)).toBe('spring')  // month 0
+    expect(deriveSeason(24 * 30 * 3, DEFAULT_CALENDAR)).toBe('summer')  // month 3
+    expect(deriveSeason(24 * 30 * 6, DEFAULT_CALENDAR)).toBe('autumn')  // month 6
+    expect(deriveSeason(24 * 30 * 9, DEFAULT_CALENDAR)).toBe('winter')  // month 9
+  })
+
+  it('cycles back to spring in year 2', () => {
+    expect(deriveSeason(24 * 360, DEFAULT_CALENDAR)).toBe('spring')
+  })
+
+  it('falls back to DEFAULT_CALENDAR when given null, same as formatInGameDate', () => {
+    expect(deriveSeason(24 * 30 * 6, null)).toBe(deriveSeason(24 * 30 * 6, DEFAULT_CALENDAR))
+  })
+
+  it('gives every month its own season on a 4-month calendar', () => {
+    const fourMonth: GeneratedCalendar = {
+      epochLabel: '',
+      daysPerWeek: 7,
+      weekdayNames: ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+      months: [{ name: 'M1', days: 30 }, { name: 'M2', days: 30 }, { name: 'M3', days: 30 }, { name: 'M4', days: 30 }],
+      startingYear: 1,
+      startingMonthIndex: 0,
+      startingDay: 1,
+    }
+    expect(deriveSeason(24 * 30 * 0, fourMonth)).toBe('spring')
+    expect(deriveSeason(24 * 30 * 1, fourMonth)).toBe('summer')
+    expect(deriveSeason(24 * 30 * 2, fourMonth)).toBe('autumn')
+    expect(deriveSeason(24 * 30 * 3, fourMonth)).toBe('winter')
+  })
+
+  it('never returns an out-of-range season for the last month of a large calendar', () => {
+    const sixteenMonth: GeneratedCalendar = {
+      epochLabel: '',
+      daysPerWeek: 7,
+      weekdayNames: ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+      months: Array.from({ length: 16 }, (_, i) => ({ name: `M${i + 1}`, days: 20 })),
+      startingYear: 1,
+      startingMonthIndex: 0,
+      startingDay: 1,
+    }
+    expect(deriveSeason(24 * 20 * 15, sixteenMonth)).toBe('winter')
   })
 })

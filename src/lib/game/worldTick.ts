@@ -25,6 +25,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { tickWeather } from './tick/weatherTick'
+import { tickSeasonalPressure } from './tick/seasonTick'
 import { tickFactionRelationships } from './tick/relationshipTick'
 import { tickFactions } from './tick/factionTick'
 import { tickFactionLeadership } from './tick/leadershipTick'
@@ -72,7 +73,7 @@ import { resolveTickCaps } from './tick/caps'
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not
 // last turn's. See its own file for what it does and doesn't repair.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickFactionAmbitions, tickNpcs, tickNpcSocialTies, tickNpcJointSchemes, tickIntegrity]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickFactionAmbitions, tickNpcs, tickNpcSocialTies, tickNpcJointSchemes, tickIntegrity]
 
 // Prisma's interactive-transaction default is 5s; this tick runs 10
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well

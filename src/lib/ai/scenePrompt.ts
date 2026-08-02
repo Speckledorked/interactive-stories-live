@@ -703,7 +703,7 @@ export function buildUserPrompt(request: AIGMRequest): string {
   const { world_summary, current_scene_intro, player_actions } = request
 
   return `<world_state>
-Turn: ${world_summary.turn_number} | Date: ${world_summary.in_game_date}
+Turn: ${world_summary.turn_number} | Date: ${world_summary.in_game_date}${world_summary.season ? ` | Season: ${world_summary.season}` : ''}
 
 PLAYER CHARACTERS:
 ${buildCharactersSection(world_summary.characters)}

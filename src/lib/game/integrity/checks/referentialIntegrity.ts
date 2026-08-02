@@ -7,6 +7,7 @@
 // per-check oscillation tracking).
 
 import { IntegrityCheck, IntegritySnapshot, Violation } from '../types'
+import { CheckKey } from '../checkKeys'
 
 function idKeyedMapKeys(value: unknown): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return []
@@ -19,7 +20,7 @@ function idKeyedMapKeys(value: unknown): string[] {
  * violation impossible at rest. Kept as a check so dropping that constraint
  * in some future migration is caught here rather than by a crash mid-tick. */
 export const warContestedLocationResolves: IntegrityCheck = {
-  key: 'war.contestedLocationId.resolves',
+  key: 'war.contestedLocationId.resolves' satisfies CheckKey,
   description: 'War.contestedLocationId must reference an existing Location',
   run(snapshot: IntegritySnapshot): Violation[] {
     const violations: Violation[] = []
@@ -42,7 +43,7 @@ export const warContestedLocationResolves: IntegrityCheck = {
  * NPC row can be deleted (or, more commonly, never actually created if a
  * stub failed) while a joint-scheme Clock still lists it. */
 export const clockParticipantNpcsResolve: IntegrityCheck = {
-  key: 'clock.participantNpcIds.resolve',
+  key: 'clock.participantNpcIds.resolve' satisfies CheckKey,
   description: 'Every id in Clock.participantNpcIds must reference an existing NPC',
   run(snapshot: IntegritySnapshot): Violation[] {
     const npcIds = new Set(snapshot.npcs.map((n) => n.id))
@@ -69,7 +70,7 @@ export const clockParticipantNpcsResolve: IntegrityCheck = {
  * already exists in a campaign's data (the fix in worldUpdaters/characters.ts
  * only prevents NEW ones). */
 export const characterRelationshipKeysResolve: IntegrityCheck = {
-  key: 'character.relationships.keys.resolve',
+  key: 'character.relationships.keys.resolve' satisfies CheckKey,
   description: 'Every key in Character.relationships must reference an existing NPC',
   run(snapshot: IntegritySnapshot): Violation[] {
     const npcIds = new Set(snapshot.npcs.map((n) => n.id))
@@ -93,7 +94,7 @@ export const characterRelationshipKeysResolve: IntegrityCheck = {
 /** NPC.socialTies (schema:861) — same JSON-map-keyed-by-NPC-id shape as
  * Character.relationships, written by tick/npcSocietyTick.ts. */
 export const npcSocialTiesKeysResolve: IntegrityCheck = {
-  key: 'npc.socialTies.keys.resolve',
+  key: 'npc.socialTies.keys.resolve' satisfies CheckKey,
   description: 'Every key in NPC.socialTies must reference an existing NPC',
   run(snapshot: IntegritySnapshot): Violation[] {
     const npcIds = new Set(snapshot.npcs.map((n) => n.id))
@@ -118,7 +119,7 @@ export const npcSocialTiesKeysResolve: IntegrityCheck = {
  * faction's id. A deleted/collapsed-and-removed faction leaves stale keys
  * in every faction that used to track it. */
 export const factionRelationshipKeysResolve: IntegrityCheck = {
-  key: 'faction.relationships.keys.resolve',
+  key: 'faction.relationships.keys.resolve' satisfies CheckKey,
   description: 'Every key in Faction.relationships must reference an existing Faction',
   run(snapshot: IntegritySnapshot): Violation[] {
     const factionIds = new Set(snapshot.factions.map((f) => f.id))
@@ -143,7 +144,7 @@ export const factionRelationshipKeysResolve: IntegrityCheck = {
  * faction id — the third id-keyed-JSON-blob shape, same failure class as
  * the relationships checks above. */
 export const characterReputationKeysResolve: IntegrityCheck = {
-  key: 'character.resources.reputation.keys.resolve',
+  key: 'character.resources.reputation.keys.resolve' satisfies CheckKey,
   description: "Every key in Character.resources.reputation must reference an existing Faction",
   run(snapshot: IntegritySnapshot): Violation[] {
     const factionIds = new Set(snapshot.factions.map((f) => f.id))
@@ -174,7 +175,7 @@ export const characterReputationKeysResolve: IntegrityCheck = {
  * stays authoritative regardless, so this never blocks the debt from
  * displaying; it only flags that the id link has gone stale. */
 export const debtCounterpartyResolves: IntegrityCheck = {
-  key: 'debt.counterpartyId.resolves',
+  key: 'debt.counterpartyId.resolves' satisfies CheckKey,
   description: 'Debt.counterpartyId, when set, must reference an existing NPC or Faction',
   run(snapshot: IntegritySnapshot): Violation[] {
     const npcIds = new Set(snapshot.npcs.map((n) => n.id))
@@ -201,7 +202,7 @@ export const debtCounterpartyResolves: IntegrityCheck = {
  * faction is a real, reachable state: factionTick.ts's collapse path
  * deactivates the faction but doesn't touch clocks it originated. */
 export const clockSourceFactionActive: IntegrityCheck = {
-  key: 'clock.sourceFactionId.active',
+  key: 'clock.sourceFactionId.active' satisfies CheckKey,
   description: 'An unresolved Clock with a sourceFactionId should reference an active Faction',
   run(snapshot: IntegritySnapshot): Violation[] {
     const activeFactionIds = new Set(snapshot.factions.filter((f) => f.isActive).map((f) => f.id))

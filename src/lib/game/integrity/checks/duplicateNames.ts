@@ -14,10 +14,11 @@
 
 import { normalizeEntityName } from '../../entityResolution'
 import { IntegrityCheck, IntegritySnapshot, Violation } from '../types'
+import { CheckKey } from '../checkKeys'
 
 function findDuplicates(
   entities: Array<{ id: string; name: string }>,
-  checkKey: string,
+  checkKey: CheckKey,
   entityType: Violation['entityType']
 ): Violation[] {
   const byName = new Map<string, Array<{ id: string; name: string }>>()
@@ -46,19 +47,19 @@ function findDuplicates(
 }
 
 export const noDuplicateNpcNames: IntegrityCheck = {
-  key: 'npc.name.unique',
+  key: 'npc.name.unique' satisfies CheckKey,
   description: 'No two NPCs in a campaign should share a name',
   run: (snapshot: IntegritySnapshot) => findDuplicates(snapshot.npcs, 'npc.name.unique', 'NPC'),
 }
 
 export const noDuplicateFactionNames: IntegrityCheck = {
-  key: 'faction.name.unique',
+  key: 'faction.name.unique' satisfies CheckKey,
   description: 'No two Factions in a campaign should share a name',
   run: (snapshot: IntegritySnapshot) => findDuplicates(snapshot.factions, 'faction.name.unique', 'FACTION'),
 }
 
 export const noDuplicateQuestNames: IntegrityCheck = {
-  key: 'quest.name.unique',
+  key: 'quest.name.unique' satisfies CheckKey,
   description: 'No two Quests in a campaign should share a name',
   run: (snapshot: IntegritySnapshot) => findDuplicates(snapshot.quests, 'quest.name.unique', 'QUEST'),
 }

@@ -28,6 +28,7 @@ import type { Prisma, PrismaClient } from '@prisma/client'
 import { Escalation, IntegrityReport } from './types'
 import { ESCALATION_SOURCE_FILES, hasAttributedSource } from './escalationSourceMap'
 import { OracleTechnique, oracleTechniqueFor } from './oracleTechnique'
+import { CheckKey } from './checkKeys'
 
 type Db = Prisma.TransactionClient | PrismaClient
 
@@ -93,7 +94,7 @@ export async function findActionableEscalations(db: Db): Promise<AggregatedEscal
           checkKey: escalation.checkKey,
           campaignIds: [row.campaignId],
           totalOccurrences: escalation.occurrences,
-          sourceFiles: ESCALATION_SOURCE_FILES[escalation.checkKey] ?? [],
+          sourceFiles: ESCALATION_SOURCE_FILES[escalation.checkKey as CheckKey] ?? [],
           oracleTechnique: oracleTechniqueFor(escalation.checkKey),
           sample: escalation,
         })

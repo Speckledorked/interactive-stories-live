@@ -1038,6 +1038,37 @@ export async function resolveActionMechanics(
 }
 
 // ---------------------------------------------------------------------------
+// Outcome-band selection (#115) — which single band, if any, should drive
+// this exchange's narration tone/pacing instructions in scenePrompt.ts.
+// ---------------------------------------------------------------------------
+
+// Worst band wins: a miss is the highest-stakes narrative constraint — the
+// "hard GM move" framing both outcomeAdherence.ts's header comment and this
+// file's own <mechanical_outcomes> prompt section treat as the case that
+// matters most to get right — so if ANY rolled action this exchange missed,
+// the whole exchange is paced as a miss even when other actions in the same
+// exchange succeeded.
+const BAND_SEVERITY: Record<ActionMechanics['outcome'], number> = {
+  miss: 2,
+  weakHit: 1,
+  strongHit: 0,
+}
+
+/**
+ * Pure. Picks the single band that should drive this exchange's narration
+ * pacing, or null when no roll happened this exchange (pure dialogue,
+ * planning, low-stakes activity) — the same "fails open to freeform" case
+ * every other consumer of ActionMechanics[] in this file already handles.
+ */
+export function selectPrimaryOutcomeBand(actionMechanics: ActionMechanics[]): ActionMechanics['outcome'] | null {
+  if (!Array.isArray(actionMechanics) || actionMechanics.length === 0) return null
+  return actionMechanics.reduce(
+    (worst, m) => (BAND_SEVERITY[m.outcome] > BAND_SEVERITY[worst] ? m.outcome : worst),
+    actionMechanics[0].outcome
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Display helpers
 // ---------------------------------------------------------------------------
 

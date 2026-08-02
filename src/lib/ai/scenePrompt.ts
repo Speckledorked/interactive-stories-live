@@ -10,6 +10,7 @@
 // extraction, not a rewrite of any prompt content.
 
 import type { AIGMRequest } from './client'
+import { selectPrimaryOutcomeBand, type ActionMechanics } from '@/lib/game/resolution'
 
 // ---------------------------------------------------------------------------
 // System prompt sections
@@ -318,6 +319,26 @@ CAPABILITY CHANGES — report what the fiction did via capability_changes inside
 You decide WHAT happened; the game engine decides how much growth it's worth. Do not narrate sudden mastery — growth is slow, and the engine will cap it regardless of what the prose claims.
 </capabilities>`
 
+// #115: scene-wide tone/pacing framing derived from the WORST band any
+// rolled action this exchange landed on (see selectPrimaryOutcomeBand) —
+// distinct from <mechanical_outcomes> above, which governs each
+// individual action's outcome. This is about how the exchange as a whole
+// should be PACED, not what any one action's result was.
+function buildOutcomeBandSection(band: ActionMechanics['outcome'] | null): string {
+  if (!band) return ''
+
+  const guidance: Record<ActionMechanics['outcome'], string> = {
+    strongHit: `This exchange's outcome is a clean, unqualified success. Let the pacing quicken and the prose enjoy the win — earn a beat of triumph or relief before any new complication enters. Don't rush straight into the next threat; a strong hit deserves to land as one.`,
+    weakHit: `This exchange's outcome is a success with a real cost. Slow the pacing enough for the complication to actually register — don't resolve it in a single throwaway clause. The tension should sit in what this success is going to cost, not just that it succeeded.`,
+    miss: `This exchange's outcome is a genuine setback. Slow down here — dwell on the failure landing and its immediate consequence before offering any new opening. A miss that resolves too fast reads as if nothing happened.`,
+  }
+
+  return `
+<outcome_band_pacing>
+${guidance[band]}
+</outcome_band_pacing>`
+}
+
 function buildCorruptionSection(theme: AIGMRequest['corruption_theme']): string {
   return theme ? `
 <corruption>
@@ -441,6 +462,7 @@ ${DEBTS_SECTION}
 ${FACTION_STANDING_SECTION}
 
 ${MECHANICAL_OUTCOMES}
+${buildOutcomeBandSection(selectPrimaryOutcomeBand(request.action_mechanics ?? []))}
 
 ${CAPABILITIES_SECTION}
 ${buildCorruptionSection(request.corruption_theme)}

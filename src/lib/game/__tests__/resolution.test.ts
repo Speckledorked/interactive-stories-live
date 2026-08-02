@@ -14,8 +14,10 @@ import {
   parseClassifications,
   formatRollReceipt,
   describeOutcomeBand,
+  selectPrimaryOutcomeBand,
   CharacterForRoll,
   contestedPenalty,
+  ActionMechanics,
 } from '../resolution'
 
 // Deterministic RNG factory: yields the given values (0..1) in order.
@@ -493,6 +495,32 @@ describe('receipts and band text', () => {
     expect(describeOutcomeBand('strongHit')).toContain('STRONG HIT')
     expect(describeOutcomeBand('weakHit')).toContain('cost')
     expect(describeOutcomeBand('miss')).toContain('hard GM move')
+  })
+})
+
+describe('selectPrimaryOutcomeBand (#115)', () => {
+  const outcome = (band: ActionMechanics['outcome']): ActionMechanics => ({ outcome: band } as ActionMechanics)
+
+  it('returns null when no roll happened this exchange', () => {
+    expect(selectPrimaryOutcomeBand([])).toBeNull()
+  })
+
+  it('tolerates a missing array rather than throwing', () => {
+    expect(selectPrimaryOutcomeBand(null as unknown as ActionMechanics[])).toBeNull()
+  })
+
+  it('returns the single band when only one action rolled', () => {
+    expect(selectPrimaryOutcomeBand([outcome('weakHit')])).toBe('weakHit')
+  })
+
+  it('picks the worst band across multiple actions: miss beats weakHit beats strongHit', () => {
+    expect(selectPrimaryOutcomeBand([outcome('strongHit'), outcome('weakHit')])).toBe('weakHit')
+    expect(selectPrimaryOutcomeBand([outcome('weakHit'), outcome('miss')])).toBe('miss')
+    expect(selectPrimaryOutcomeBand([outcome('strongHit'), outcome('miss'), outcome('weakHit')])).toBe('miss')
+  })
+
+  it('returns strongHit only when every action this exchange was a strong hit', () => {
+    expect(selectPrimaryOutcomeBand([outcome('strongHit'), outcome('strongHit')])).toBe('strongHit')
   })
 })
 

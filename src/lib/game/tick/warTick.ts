@@ -37,7 +37,8 @@
 
 import type { Prisma } from '@prisma/client'
 import { HIGH_BAND_MIN } from './factionTick'
-import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, parseFactionRelationships, stableHash } from './types'
+import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, parseFactionRelationships } from './types'
+import { decideArcDelta, decideArcResolution } from '../arc'
 
 // Both sides must be genuinely strong — the same HIGH cutoff the rest of
 // the tick uses, referenced rather than copied so a rebalance can't drift.
@@ -184,6 +185,14 @@ export interface WarProgressDecision {
 // faction's, so a 3-faction coalition naturally hits harder than a lone
 // combatant without this function needing to know how many factions make
 // up either number.
+//
+// #119: the actual push math (edge * 0.2, +/-10 variance, clamped to
+// +/-20) is delegated to game/arc.ts's decideArcDelta with its default
+// options, which reproduce this exact shape — momentum was the pattern
+// that Arc generalized, so this function is now Arc's first real
+// consumer/proof rather than a second, independently-drifting copy of the
+// same arithmetic. War.momentum's own storage is untouched (see Arc's
+// schema comment for why); only the pure math moved.
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideWarProgress(
   war: { id: string },
@@ -191,9 +200,7 @@ export function decideWarProgress(
   defender: { military: number },
   turnNumber: number
 ): WarProgressDecision {
-  const militaryEdge = attacker.military - defender.military
-  const variance = (stableHash(`${war.id}:${turnNumber}`) % 21) - 10 // -10..10
-  const momentumDelta = clamp(Math.round(militaryEdge * 0.2) + variance, -20, 20)
+  const momentumDelta = decideArcDelta(war.id, turnNumber, { sideAStrength: attacker.military, sideBStrength: defender.military })
 
   return {
     momentumDelta,
@@ -209,15 +216,14 @@ export interface WarResolutionDecision {
   outcome: 'attacker' | 'defender' | 'stalemate' | null
 }
 
+// #119: delegates to game/arc.ts's decideArcResolution (side A = attacker,
+// side B = defender) — same >=threshold-then-timeout shape, just shared.
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideWarResolution(momentumAfterProgress: number, turnsElapsed: number): WarResolutionDecision {
-  if (Math.abs(momentumAfterProgress) >= WAR_DECISIVE_MOMENTUM) {
-    return { resolves: true, outcome: momentumAfterProgress > 0 ? 'attacker' : 'defender' }
-  }
-  if (turnsElapsed >= WAR_MAX_DURATION) {
-    return { resolves: true, outcome: 'stalemate' }
-  }
-  return { resolves: false, outcome: null }
+  const arcResolution = decideArcResolution(momentumAfterProgress, turnsElapsed, WAR_DECISIVE_MOMENTUM, WAR_MAX_DURATION)
+  if (!arcResolution.resolves) return { resolves: false, outcome: null }
+  const outcome = arcResolution.winner === 'A' ? 'attacker' : arcResolution.winner === 'B' ? 'defender' : 'stalemate'
+  return { resolves: true, outcome }
 }
 
 export interface WarJoinCandidate {

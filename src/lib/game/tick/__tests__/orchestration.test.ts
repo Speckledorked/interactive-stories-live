@@ -69,6 +69,7 @@ vi.mock('../beliefTick', () => ({ tickBeliefDrift: h.stub('beliefDrift') }))
 vi.mock('../factionTick', () => ({ tickFactions: h.stub('factions') }))
 vi.mock('../leadershipTick', () => ({ tickFactionLeadership: h.stub('leadership') }))
 vi.mock('../warTick', () => ({ tickWars: h.stub('wars') }))
+vi.mock('../territoryLoyaltyTick', () => ({ tickTerritoryLoyalty: h.stub('territoryLoyalty') }))
 vi.mock('../locationConditionTick', () => ({ tickLocationCondition: h.stub('locationCondition') }))
 vi.mock('../logisticsTick', () => ({ tickLogistics: h.stub('logistics') }))
 vi.mock('../ambitionTick', () => ({
@@ -118,8 +119,8 @@ describe('runWorldTick — the handler sequence', () => {
   it('runs every registered handler exactly once', async () => {
     await runWorldTick('camp1', 7)
 
-    expect(callOrder).toHaveLength(17)
-    expect(new Set(callOrder).size).toBe(17)
+    expect(callOrder).toHaveLength(18)
+    expect(new Set(callOrder).size).toBe(18)
   })
 
   // Each case below is one of the five same-turn dependencies documented
@@ -173,6 +174,16 @@ describe('runWorldTick — the handler sequence', () => {
     expect(at('wars')).toBeLessThan(at('locationCondition'))
   })
 
+  it('runs territory loyalty right after wars and before location condition, so a war-driven ownership flip lands this same turn (#119)', async () => {
+    // tickTerritoryLoyalty reads post-war ownership (a war resolving this
+    // tick can transfer a location), and a loyalty-driven flip this same
+    // turn must be visible to tickLocationCondition's own war-presence
+    // check, not lag a full extra turn.
+    await runWorldTick('camp1', 7)
+    expect(at('wars')).toBeLessThan(at('territoryLoyalty'))
+    expect(at('territoryLoyalty')).toBeLessThan(at('locationCondition'))
+  })
+
   it('runs logistics right after location condition and before ambitions, so a lifted blockade and its resource gain both land this same turn', async () => {
     // tickLogistics (#106) reads the same ESCALATING-war signal
     // tickLocationCondition already reads, and must land before ambitions
@@ -223,7 +234,7 @@ describe('runWorldTick — the handler sequence', () => {
     // tickIntegrity checks the state this turn actually produced — it has
     // to see every other handler's writes, not last turn's.
     await runWorldTick('camp1', 7)
-    for (const name of ['weather', 'season', 'relationships', 'beliefDrift', 'factions', 'leadership', 'wars', 'locationCondition', 'logistics', 'ambitions', 'npcs', 'migration', 'socialTies', 'jointSchemes', 'wake', 'economy']) {
+    for (const name of ['weather', 'season', 'relationships', 'beliefDrift', 'factions', 'leadership', 'wars', 'territoryLoyalty', 'locationCondition', 'logistics', 'ambitions', 'npcs', 'migration', 'socialTies', 'jointSchemes', 'wake', 'economy']) {
       expect(at(name)).toBeLessThan(at('integrity'))
     }
   })
@@ -254,7 +265,7 @@ describe('runWorldTick — context and accumulation', () => {
 
   it('collects every handler\'s changes, losing none', async () => {
     const result = await runWorldTick('camp1', 7)
-    expect(result.changes).toHaveLength(17)
+    expect(result.changes).toHaveLength(18)
     expect(result.changes.map(c => c.field).sort()).toEqual([...callOrder].sort())
   })
 
@@ -285,7 +296,7 @@ describe('runWorldTick — the fan-out to all three consumers', () => {
       const [campaignId, turnNumber, changes] = consumer.mock.calls[0] as any[]
       expect(campaignId).toBe('camp1')
       expect(turnNumber).toBe(7)
-      expect(changes).toHaveLength(17)
+      expect(changes).toHaveLength(18)
     }
   })
 
@@ -298,7 +309,7 @@ describe('runWorldTick — the fan-out to all three consumers', () => {
 describe('runWorldTick — dry run', () => {
   it('still runs every handler, so the preview reflects real decisions', async () => {
     await runWorldTick('camp1', 7, { dryRun: true })
-    expect(callOrder).toHaveLength(17)
+    expect(callOrder).toHaveLength(18)
   })
 
   it('tells every handler it is a dry run, since each skips its own writes', async () => {
@@ -319,7 +330,7 @@ describe('runWorldTick — dry run', () => {
 
   it('returns the changes it would have made, with a zeroed history count', async () => {
     const result = await runWorldTick('camp1', 7, { dryRun: true })
-    expect(result.changes).toHaveLength(17)
+    expect(result.changes).toHaveLength(18)
     expect(result.historyEntriesCreated).toBe(0)
     expect(result.pendingAmbitions).toEqual([pendingAmbition])
   })

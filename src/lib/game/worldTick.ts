@@ -31,6 +31,7 @@ import { tickBeliefDrift } from './tick/beliefTick'
 import { tickFactions } from './tick/factionTick'
 import { tickFactionLeadership } from './tick/leadershipTick'
 import { tickWars } from './tick/warTick'
+import { tickTerritoryLoyalty } from './tick/territoryLoyaltyTick'
 import { tickLocationCondition } from './tick/locationConditionTick'
 import { tickLogistics } from './tick/logisticsTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
@@ -83,6 +84,17 @@ import { resolveTickCaps } from './tick/caps'
 // don't feed back into it). tickNpcJointSchemes runs immediately after
 // that, in the same pass, so a scheme can use the ties this turn just
 // established rather than waiting a full extra tick (see npcSocietyTick.ts).
+// tickTerritoryLoyalty runs right after tickWars and before
+// tickLocationCondition on purpose (#119): a war resolving THIS turn can
+// flip a location's ownerFactionId (see warTick.ts's territory-transfer on
+// resolution), so pushing loyalty afterward means it reads this turn's
+// post-war owner, not last turn's. It runs before tickLocationCondition so
+// a loyalty-driven ownership flip this same turn is what
+// tickLocationCondition's own war-presence check sees, rather than lagging
+// a full extra turn. This is the second real consumer of the generic Arc
+// primitive (game/arc.ts) — the first being War.momentum itself, refactored
+// in warTick.ts to delegate to the exact same push/resolve math.
+//
 // tickLocationCondition runs right after tickWars on purpose (#109): it
 // checks whether a location is currently the contested prize of an
 // ESCALATING war, so a war that resolved THIS turn no longer counts as
@@ -125,7 +137,7 @@ import { resolveTickCaps } from './tick/caps'
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not
 // last turn's. See its own file for what it does and doesn't repair.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickEconomy, tickIntegrity]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickFactions, tickFactionLeadership, tickWars, tickTerritoryLoyalty, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickEconomy, tickIntegrity]
 
 // Prisma's interactive-transaction default is 5s; this tick runs 10
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well

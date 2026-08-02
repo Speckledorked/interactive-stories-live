@@ -374,6 +374,9 @@ model Campaign {
   // Urban Shadows economy: owed favors between PCs and NPCs/factions.
   debts Debt[]
 
+  // #103: institutional-memory wake effects from a death/collapse.
+  activeWakes ActiveWake[]
+
   // Urban Shadows economy: per-character social position with factions.
   factionStandings FactionStanding[]
 
@@ -1017,10 +1020,64 @@ model Faction {
   // from a quest handed over by one of its members, which links to the NPC.
   questsGiven Quest[] @relation("QuestGiverFaction")
 
+  // #103: wake effects (institutional memory decay) currently rippling
+  // INTO this faction's stability — see ActiveWake below.
+  incomingWakes ActiveWake[] @relation("WakeAffectedFaction")
+
   // Real uniqueness enforced by a case-insensitive functional index
   // (migration 20260729030000_phase1b_schema_invariants) — see NPC's
   // identical comment for why this can't be a plain Prisma @@unique.
   @@index([campaignId])
+}
+
+// #103: a temporary, decaying stability penalty rippling out from an NPC's
+// death or a faction's collapse — "this institution/legend doesn't stop
+// mattering the instant it's gone." One row per (source, affected faction)
+// pair: sourceType/sourceEntityId identify what died/collapsed (an NPC or
+// a Faction — kept as a plain checked string rather than a second Prisma
+// enum, since nothing else in the schema needs to query or join on it, and
+// a bare string here can't hit the #109-style enum/schema-sync trap at
+// all). affectedFactionId is the real FK — the ONE faction this specific
+// row's penalty applies to (a ripple to N related factions is N rows, same
+// shape as WarParticipant's one-row-per-participant convention, not one
+// row with an array, since each row decays independently on its own
+// countdown).
+//
+// totalStabilityPenalty is applied to affectedFactionId's stability in
+// full, in ONE step, the moment this row is created (see tick/wakeTick.ts)
+// — currentTicks/maxTicks then count a fixed number of subsequent turns
+// during which that penalty is gradually restored (the "decaying" part of
+// "decaying over a fixed number of turns"), same currentTicks/maxTicks
+// countdown shape as Clock. resolvedAt is set exactly once, the turn the
+// restoration finishes, so a fully-decayed wake is never re-processed —
+// same one-shot-completion-guard convention as Clock.resolvedAt.
+//
+// The @@unique constraint is what makes tickWake's detection idempotent:
+// it only ever tries to CREATE a row for a given (source, affected
+// faction) pair once — a repeat attempt (the same NPC still isAlive:false
+// next tick, before this row's creation is even visible to that later
+// read) fails with a real DB constraint violation, caught and skipped,
+// same defensive convention Phase 1b already established for
+// check-then-act name claims in npcs.ts/factions.ts/quests.ts.
+model ActiveWake {
+  id                    String    @id @default(cuid())
+  campaignId            String
+  sourceType            String // 'NPC' | 'FACTION'
+  sourceEntityId        String
+  sourceEntityName      String
+  affectedFactionId     String
+  affectedFaction       Faction   @relation("WakeAffectedFaction", fields: [affectedFactionId], references: [id], onDelete: Cascade)
+  totalStabilityPenalty Int // negative — the full amount applied at creation, then gradually restored
+  currentTicks          Int       @default(0)
+  maxTicks              Int       @default(5)
+  resolvedAt            DateTime?
+  createdAt             DateTime  @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceType, sourceEntityId, affectedFactionId])
+  @@index([campaignId])
+  @@index([affectedFactionId])
 }
 
 //

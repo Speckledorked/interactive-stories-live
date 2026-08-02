@@ -171,6 +171,11 @@ export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandl
     const decision = decideSuccession(faction)
     if (!decision) continue
 
+    // #103: recorded so tickWake (later in this same pass) can scale a
+    // leader's wake by how rough THIS faction's succession actually was,
+    // instead of assuming a flat default for every leader death.
+    ctx.successionRoughnessByFactionId?.set(faction.id, decision.successionRoughness)
+
     if (!ctx.dryRun) {
       await ctx.db.nPC.update({
         where: { id: decision.successorId },

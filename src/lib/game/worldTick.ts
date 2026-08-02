@@ -33,6 +33,7 @@ import { tickWars } from './tick/warTick'
 import { tickLocationCondition } from './tick/locationConditionTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
 import { tickNpcs } from './tick/npcTick'
+import { tickMigration } from './tick/migrationTick'
 import { tickNpcSocialTies, tickNpcJointSchemes } from './tick/npcSocietyTick'
 import { tickIntegrity } from './tick/integrityTick'
 import { logSignificantChanges } from './tick/historyLog'
@@ -75,11 +76,17 @@ import { resolveTickCaps } from './tick/caps'
 // ESCALATING war, so a war that resolved THIS turn no longer counts as
 // "at war" for this same pass rather than lagging a full extra turn.
 //
+// tickMigration runs right after tickNpcs on purpose (#110): it reads each
+// NPC's post-commute currentLocation/locationId for this same turn (an NPC
+// tickNpcs just moved OUT of a distressed location this tick is correctly
+// exempt from fleeing it again), and it depends on tickLocationCondition's
+// conditionScore from earlier in this same pass as its distress signal.
+//
 // tickIntegrity runs LAST, deliberately: it validates the state every
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not
 // last turn's. See its own file for what it does and doesn't repair.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickFactionAmbitions, tickNpcs, tickNpcSocialTies, tickNpcJointSchemes, tickIntegrity]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickIntegrity]
 
 // Prisma's interactive-transaction default is 5s; this tick runs 10
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well

@@ -13,6 +13,7 @@ const MEMORY_TYPE_BY_ENTITY: Record<TickEntityType, 'WORLD_EVENT' | 'FACTION_EVE
   NPC: 'WORLD_EVENT',
   FACTION: 'FACTION_EVENT',
   LOCATION_WEATHER: 'LOCATION_EVENT',
+  LOCATION_CONDITION: 'LOCATION_EVENT',
   // Integrity Engine repairs (game/integrity/) — filed as world events, same
   // as any other background correction with no more specific memory type.
   CLOCK: 'WORLD_EVENT',

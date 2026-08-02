@@ -1053,6 +1053,20 @@ model Location {
   minCorruption Int?
   maxCorruption Int?
 
+  // #109: a location's physical/social health — a city sieged twice looks
+  // identical to one that's been at peace for 20 years without this.
+  // 0-100, same DB-checked-range convention as War.momentum/NPC.harm
+  // (DB CHECK Location_conditionScore_range, Phase 1b-style). Drifted by
+  // tick/locationConditionTick.ts's decideConditionDrift: down while an
+  // ESCALATING war contests this location or it's merely isContested,
+  // recovering slowly in peacetime. 60 (STABLE) is the default baseline a
+  // newly-created location starts at. The six-tag vocabulary
+  // (RUINED/DAMAGED/STABLE/PROSPEROUS/CONTESTED/ABANDONED) this issue also
+  // named is deliberately NOT a stored column — deriveConditionTags in the
+  // same file computes it from conditionScore + isContested on read, so
+  // the tag can never desync from the score that defines it.
+  conditionScore Int @default(60)
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   // Reverse side of Character.locationId / NPC.locationId.

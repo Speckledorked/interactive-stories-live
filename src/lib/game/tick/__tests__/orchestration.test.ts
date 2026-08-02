@@ -68,6 +68,7 @@ vi.mock('../relationshipTick', () => ({ tickFactionRelationships: h.stub('relati
 vi.mock('../factionTick', () => ({ tickFactions: h.stub('factions') }))
 vi.mock('../leadershipTick', () => ({ tickFactionLeadership: h.stub('leadership') }))
 vi.mock('../warTick', () => ({ tickWars: h.stub('wars') }))
+vi.mock('../locationConditionTick', () => ({ tickLocationCondition: h.stub('locationCondition') }))
 vi.mock('../ambitionTick', () => ({
   tickFactionAmbitions: h.stub('ambitions', { pendingAmbitions: [h.pendingAmbition] }),
 }))
@@ -112,8 +113,8 @@ describe('runWorldTick — the handler sequence', () => {
   it('runs every registered handler exactly once', async () => {
     await runWorldTick('camp1', 7)
 
-    expect(callOrder).toHaveLength(11)
-    expect(new Set(callOrder).size).toBe(11)
+    expect(callOrder).toHaveLength(12)
+    expect(new Set(callOrder).size).toBe(12)
   })
 
   // Each case below is one of the five same-turn dependencies documented
@@ -153,6 +154,11 @@ describe('runWorldTick — the handler sequence', () => {
     expect(at('wars')).toBeLessThan(at('ambitions'))
   })
 
+  it('runs location condition right after wars, so a war resolved this tick no longer counts as "at war"', async () => {
+    await runWorldTick('camp1', 7)
+    expect(at('wars')).toBeLessThan(at('locationCondition'))
+  })
+
   it('derives NPC ties after NPCs move, then schemes from those ties, all in one pass', async () => {
     // Ties derive from faction/NPC state; schemes then use the ties this
     // turn established rather than waiting an extra tick.
@@ -165,7 +171,7 @@ describe('runWorldTick — the handler sequence', () => {
     // tickIntegrity checks the state this turn actually produced — it has
     // to see every other handler's writes, not last turn's.
     await runWorldTick('camp1', 7)
-    for (const name of ['weather', 'season', 'relationships', 'factions', 'leadership', 'wars', 'ambitions', 'npcs', 'socialTies', 'jointSchemes']) {
+    for (const name of ['weather', 'season', 'relationships', 'factions', 'leadership', 'wars', 'locationCondition', 'ambitions', 'npcs', 'socialTies', 'jointSchemes']) {
       expect(at(name)).toBeLessThan(at('integrity'))
     }
   })
@@ -196,7 +202,7 @@ describe('runWorldTick — context and accumulation', () => {
 
   it('collects every handler\'s changes, losing none', async () => {
     const result = await runWorldTick('camp1', 7)
-    expect(result.changes).toHaveLength(11)
+    expect(result.changes).toHaveLength(12)
     expect(result.changes.map(c => c.field).sort()).toEqual([...callOrder].sort())
   })
 
@@ -227,7 +233,7 @@ describe('runWorldTick — the fan-out to all three consumers', () => {
       const [campaignId, turnNumber, changes] = consumer.mock.calls[0] as any[]
       expect(campaignId).toBe('camp1')
       expect(turnNumber).toBe(7)
-      expect(changes).toHaveLength(11)
+      expect(changes).toHaveLength(12)
     }
   })
 
@@ -240,7 +246,7 @@ describe('runWorldTick — the fan-out to all three consumers', () => {
 describe('runWorldTick — dry run', () => {
   it('still runs every handler, so the preview reflects real decisions', async () => {
     await runWorldTick('camp1', 7, { dryRun: true })
-    expect(callOrder).toHaveLength(11)
+    expect(callOrder).toHaveLength(12)
   })
 
   it('tells every handler it is a dry run, since each skips its own writes', async () => {
@@ -261,7 +267,7 @@ describe('runWorldTick — dry run', () => {
 
   it('returns the changes it would have made, with a zeroed history count', async () => {
     const result = await runWorldTick('camp1', 7, { dryRun: true })
-    expect(result.changes).toHaveLength(11)
+    expect(result.changes).toHaveLength(12)
     expect(result.historyEntriesCreated).toBe(0)
     expect(result.pendingAmbitions).toEqual([pendingAmbition])
   })

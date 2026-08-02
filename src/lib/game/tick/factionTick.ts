@@ -19,6 +19,7 @@
 
 import type { Faction, FactionGoal } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, hasActiveRival, parseFactionRelationships } from './types'
+import { BeliefVector, parseBeliefVector } from './beliefTick'
 
 interface FactionDelta {
   resources: number
@@ -99,6 +100,14 @@ export function decideFactionTick(faction: {
  */
 export const GOAL_COMMITMENT_TURNS = 3
 
+// #104: how strongly a belief axis has to have drifted from NEUTRAL_BELIEF
+// (50) before it's allowed to redirect goal choice on its own. Deliberately
+// high — a faction has to have drifted substantially (many repeated events;
+// see beliefTick.ts's DRIFT_AMOUNT=4 per event) for disposition to override
+// what the stat bands alone would pick, matching "a small delta... as an
+// additional weighted input" rather than a dominant override at neutral.
+const BELIEF_OVERRIDE_THRESHOLD = 80
+
 export function decideFactionGoalReassessment(faction: {
   resources: number
   stability: number
@@ -112,6 +121,10 @@ export function decideFactionGoalReassessment(faction: {
    * the record of what it decided last time is what stops it thrashing.
    */
   turnsOnCurrentGoal?: number
+  /** #104: parsed Faction.beliefVector, or undefined/null when unset — a
+   * faction with no drift history yet is untouched by any of the override
+   * branches below, identical to pre-#104 behavior. */
+  beliefVector?: BeliefVector | null
 }): FactionGoal {
   const stabilityBand = band(faction.stability)
   const resourcesBand = band(faction.resources)
@@ -130,6 +143,25 @@ export function decideFactionGoalReassessment(faction: {
   }
   // Too poor to attempt anything ambitious — rebuild the treasury first.
   if (resourcesBand === 'LOW') return 'ENRICH'
+
+  // #104: a strongly-held disposition can redirect a faction toward a goal
+  // the raw stat bands alone wouldn't have picked — same shape as hasRival
+  // overriding pure stat-band logic below, just belief-driven instead.
+  // Isolationism is checked first: a faction that has drifted toward
+  // withdrawal turtles even if it's otherwise strong enough to push
+  // outward, and "withdraw" and "push outward" can't both win.
+  const belief = faction.beliefVector
+  if (belief) {
+    if (belief.isolationism >= BELIEF_OVERRIDE_THRESHOLD) return 'CONSOLIDATE'
+    if (belief.zealotry >= BELIEF_OVERRIDE_THRESHOLD && militaryBand !== 'LOW') {
+      return faction.hasRival ? 'DESTABILIZE_RIVAL' : 'EXPAND'
+    }
+    if (belief.mercantilism >= BELIEF_OVERRIDE_THRESHOLD && resourcesBand !== 'HIGH') return 'ENRICH'
+    if (belief.aggression >= BELIEF_OVERRIDE_THRESHOLD && militaryBand !== 'LOW') {
+      return faction.hasRival ? 'DESTABILIZE_RIVAL' : 'EXPAND'
+    }
+  }
+
   // Strong enough to act, and there's a known rival to act against —
   // prioritized over blind expansion, since undermining a specific
   // competitor is more strategically pointed than generic growth.
@@ -408,6 +440,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
           goal: faction.goal,
           hasRival: factionHasRival,
           turnsOnCurrentGoal: turnsOnGoalByFaction.get(faction.id),
+          beliefVector: parseBeliefVector(faction.beliefVector),
         })
 
     if (!ctx.dryRun) {

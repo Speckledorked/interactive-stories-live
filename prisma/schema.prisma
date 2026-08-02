@@ -957,6 +957,16 @@ model Faction {
   // World Sim Phase 2: see FactionArchetype above.
   archetype FactionArchetype @default(GENERIC)
 
+  // #104: how this faction's outward disposition has drifted based on what's
+  // actually happened to it — closed 4-axis schema (aggression, isolationism,
+  // mercantilism, zealotry, each 0-100), parsed via parseBeliefVector
+  // (tick/beliefTick.ts) with the same validate-on-read/null-on-malformed
+  // convention as parseCorruptionTheme/parseWorldRules. Null until the first
+  // real drift event writes it — decideFactionGoalReassessment and
+  // decideBeliefDrift both fall back to a neutral (50/50/50/50) default when
+  // this is null, so an unset vector is never treated as zero or missing data.
+  beliefVector Json?
+
   // Fog of war: defaults true so existing/starting-world factions and any
   // faction the AI registers mid-scene (the registration IS the discovery
   // event) stay visible without extra steps. Set false to build a faction
@@ -1304,11 +1314,23 @@ model Clock {
   relatedFactionId String?
   relatedFaction   Faction? @relation("FactionRelatedClocks", fields: [relatedFactionId], references: [id], onDelete: SetNull)
 
+  // #104: multi-stage ambitions. A plain id, NOT a self-relation FK — it
+  // holds the ROOT clock's own id for every clock in a continuing agenda
+  // chain, established lazily: stage 1 is created with agendaId null (no
+  // chain exists yet); when resolveCompletedAmbitions (ambitionResolution.ts)
+  // decides a successful ambition continues, the new stage-2 clock's
+  // agendaId becomes stage 1's own id (agendaId ?? id), and every later
+  // stage carries that same root id forward. A plain string avoids a
+  // nullable self-FK's added complexity for what's really just a shared
+  // grouping key.
+  agendaId String?
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])
   @@index([targetFactionId])
   @@index([sourceFactionId])
+  @@index([agendaId])
 }
 
 //

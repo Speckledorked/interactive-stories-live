@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { decideFactionTick, decideFactionGoalReassessment, decideFactionCollapse, decideFactionFounding } from '../factionTick'
-import { decideAmbitionTick, decideAmbitionOutcome } from '../ambitionTick'
+import { decideAmbitionTick, decideAmbitionOutcome, decideAgendaContinuation, buildAgendaContinuationName, MAX_AGENDA_STAGES } from '../ambitionTick'
+import { NEUTRAL_BELIEF } from '../beliefTick'
 import { decideRelationshipTick } from '../relationshipTick'
 import { decideTerritoryClaim } from '../territory'
 import { decideWarDeclaration, decideWarProgress, decideWarResolution, decideWarJoiner } from '../warTick'
@@ -56,6 +57,68 @@ describe('decideFactionGoalReassessment', () => {
   it('is deterministic for the same input', () => {
     const faction = { resources: 50, stability: 50, military: 50, goal: 'CONSOLIDATE' as const, hasRival: false }
     expect(decideFactionGoalReassessment(faction)).toEqual(decideFactionGoalReassessment(faction))
+  })
+
+  // #104: belief-driven overrides only fire once an axis has drifted well
+  // past neutral (50) — a faction with no beliefVector at all (undefined)
+  // behaves identically to pre-#104 code.
+  describe('belief-driven overrides (#104)', () => {
+    const base = { resources: 50, stability: 50, military: 80, goal: 'CONSOLIDATE' as const, hasRival: false }
+
+    it('ignores an absent beliefVector entirely, matching pre-#104 behavior', () => {
+      expect(decideFactionGoalReassessment(base)).toBe(decideFactionGoalReassessment({ ...base, beliefVector: undefined }))
+    })
+
+    it('a mildly-drifted belief (below the override threshold) does not redirect the goal', () => {
+      const mild = { aggression: 60, isolationism: 50, mercantilism: 50, zealotry: 50 }
+      expect(decideFactionGoalReassessment({ ...base, beliefVector: mild })).toBe(decideFactionGoalReassessment(base))
+    })
+
+    it('strong isolationism forces CONSOLIDATE even with high military and no rival', () => {
+      const isolationist = { aggression: 50, isolationism: 85, mercantilism: 50, zealotry: 50 }
+      expect(decideFactionGoalReassessment({ ...base, beliefVector: isolationist })).toBe('CONSOLIDATE')
+    })
+
+    it('isolationism wins over a strong aggression/zealotry belief on the same faction', () => {
+      const conflicted = { aggression: 90, isolationism: 90, mercantilism: 50, zealotry: 90 }
+      expect(decideFactionGoalReassessment({ ...base, beliefVector: conflicted })).toBe('CONSOLIDATE')
+    })
+
+    it('strong aggression pushes EXPAND when there is no rival', () => {
+      const aggressive = { aggression: 85, isolationism: 50, mercantilism: 50, zealotry: 50 }
+      expect(decideFactionGoalReassessment({ ...base, beliefVector: aggressive })).toBe('EXPAND')
+    })
+
+    it('strong aggression pushes DESTABILIZE_RIVAL when a rival exists', () => {
+      const aggressive = { aggression: 85, isolationism: 50, mercantilism: 50, zealotry: 50 }
+      expect(decideFactionGoalReassessment({ ...base, hasRival: true, beliefVector: aggressive })).toBe('DESTABILIZE_RIVAL')
+    })
+
+    it('strong aggression does not override with LOW military — no army to push outward with', () => {
+      const aggressive = { aggression: 85, isolationism: 50, mercantilism: 50, zealotry: 50 }
+      expect(decideFactionGoalReassessment({ ...base, military: 20, beliefVector: aggressive })).not.toBe('EXPAND')
+    })
+
+    it('strong zealotry pushes EXPAND/DESTABILIZE_RIVAL the same way aggression does', () => {
+      const zealous = { aggression: 50, isolationism: 50, mercantilism: 50, zealotry: 85 }
+      expect(decideFactionGoalReassessment({ ...base, beliefVector: zealous })).toBe('EXPAND')
+    })
+
+    it('strong mercantilism pushes ENRICH even when resources are not LOW', () => {
+      const mercantile = { aggression: 50, isolationism: 50, mercantilism: 85, zealotry: 50 }
+      expect(decideFactionGoalReassessment({ ...base, resources: 60, beliefVector: mercantile })).toBe('ENRICH')
+    })
+
+    it('mercantilism does not override once resources are already HIGH', () => {
+      const mercantile = { aggression: 50, isolationism: 50, mercantilism: 85, zealotry: 50 }
+      expect(decideFactionGoalReassessment({ ...base, resources: 90, beliefVector: mercantile })).not.toBe('ENRICH')
+    })
+
+    it('stability-LOW and the goal-commitment lock both still take priority over belief', () => {
+      const aggressive = { aggression: 90, isolationism: 50, mercantilism: 50, zealotry: 50 }
+      expect(decideFactionGoalReassessment({ ...base, stability: 20, beliefVector: aggressive })).toBe('DEFEND')
+      expect(decideFactionGoalReassessment({ ...base, goal: 'CONSOLIDATE', turnsOnCurrentGoal: 1, beliefVector: aggressive })).toBe('CONSOLIDATE')
+    })
   })
 })
 
@@ -558,6 +621,62 @@ describe('decideAmbitionOutcome', () => {
     const successCount = outcomes.filter((o) => o.success).length
     expect(successCount).toBeGreaterThan(0)
     expect(successCount).toBeLessThan(50)
+  })
+})
+
+describe('decideAgendaContinuation (#104)', () => {
+  const aggressive = { ...NEUTRAL_BELIEF, aggression: 80 }
+  const mercantile = { ...NEUTRAL_BELIEF, mercantilism: 80 }
+
+  it('never continues a failed ambition, regardless of belief', () => {
+    expect(decideAgendaContinuation({ outcomeSuccess: false, goal: 'EXPAND', belief: aggressive, priorStageCount: 1 })).toBe(false)
+  })
+
+  it('never continues once the stage cap is reached', () => {
+    expect(decideAgendaContinuation({ outcomeSuccess: true, goal: 'EXPAND', belief: aggressive, priorStageCount: MAX_AGENDA_STAGES })).toBe(false)
+  })
+
+  it('never continues with no belief on record at all', () => {
+    expect(decideAgendaContinuation({ outcomeSuccess: true, goal: 'EXPAND', belief: null, priorStageCount: 1 })).toBe(false)
+  })
+
+  it('continues a successful EXPAND when aggression is elevated', () => {
+    expect(decideAgendaContinuation({ outcomeSuccess: true, goal: 'EXPAND', belief: aggressive, priorStageCount: 1 })).toBe(true)
+  })
+
+  it('continues a successful DESTABILIZE_RIVAL the same way EXPAND does (both aggression-driven)', () => {
+    expect(decideAgendaContinuation({ outcomeSuccess: true, goal: 'DESTABILIZE_RIVAL', belief: aggressive, priorStageCount: 1 })).toBe(true)
+  })
+
+  it('does not continue EXPAND on elevated mercantilism alone', () => {
+    expect(decideAgendaContinuation({ outcomeSuccess: true, goal: 'EXPAND', belief: mercantile, priorStageCount: 1 })).toBe(false)
+  })
+
+  it('continues a successful ENRICH on elevated mercantilism, not aggression', () => {
+    expect(decideAgendaContinuation({ outcomeSuccess: true, goal: 'ENRICH', belief: mercantile, priorStageCount: 1 })).toBe(true)
+    expect(decideAgendaContinuation({ outcomeSuccess: true, goal: 'ENRICH', belief: aggressive, priorStageCount: 1 })).toBe(false)
+  })
+
+  it('does not continue with belief still at neutral', () => {
+    expect(decideAgendaContinuation({ outcomeSuccess: true, goal: 'EXPAND', belief: NEUTRAL_BELIEF, priorStageCount: 1 })).toBe(false)
+  })
+})
+
+describe('buildAgendaContinuationName (#104)', () => {
+  it('is deterministic for the same inputs', () => {
+    const a = buildAgendaContinuationName('Thornburg Guild', 'GENERIC', 'EXPAND', 2)
+    const b = buildAgendaContinuationName('Thornburg Guild', 'GENERIC', 'EXPAND', 2)
+    expect(a).toEqual(b)
+  })
+
+  it('picks a flavor from the faction archetype\'s real bounded option list', () => {
+    const { flavor } = buildAgendaContinuationName('Thornburg Guild', 'CRIMINAL', 'ENRICH', 2)
+    expect(['heist', 'smuggling run', 'extortion racket', 'black-market auction', 'protection racket expansion']).toContain(flavor)
+  })
+
+  it('labels stage 2 as "II" and stage 3 as "III"', () => {
+    expect(buildAgendaContinuationName('Thornburg Guild', 'GENERIC', 'EXPAND', 2).name).toContain('II')
+    expect(buildAgendaContinuationName('Thornburg Guild', 'GENERIC', 'EXPAND', 3).name).toContain('III')
   })
 })
 

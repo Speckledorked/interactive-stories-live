@@ -380,6 +380,9 @@ model Campaign {
   // #106: flat supply routes between two of this campaign's locations.
   supplyRoutes SupplyRoute[]
 
+  // #108: flat adjacency edges between two of this campaign's locations.
+  locationAdjacencies LocationAdjacency[]
+
   // Urban Shadows economy: per-character social position with factions.
   factionStandings FactionStanding[]
 
@@ -1179,6 +1182,9 @@ model Location {
   // #106: reverse side of SupplyRoute.fromLocationId/toLocationId.
   supplyRoutesFrom SupplyRoute[] @relation("SupplyRouteFrom")
   supplyRoutesTo   SupplyRoute[] @relation("SupplyRouteTo")
+  // #108: reverse side of LocationAdjacency.locationAId/locationBId.
+  adjacentAsA LocationAdjacency[] @relation("LocationAdjacencyA")
+  adjacentAsB LocationAdjacency[] @relation("LocationAdjacencyB")
 
   @@unique([campaignId, name])
   @@index([campaignId])
@@ -1309,6 +1315,38 @@ model SupplyRoute {
   @@index([fromLocationId])
   @@index([toLocationId])
   @@index([controllingFactionId])
+}
+
+// #108: a flat, undirected adjacency edge between two locations — the
+// WorldGraph SupplyRoute's own schema comment already named as the future
+// source of truth for real reachability. Undirected on purpose, unlike
+// SupplyRoute's directional from/to naming: physical adjacency has no
+// direction, and distance is symmetric by definition (distance(A,B) ===
+// distance(B,A)), so storing one row per pair avoids a duplicate-data
+// invariant nothing would enforce. Writers MUST always store the
+// lexicographically smaller id as locationAId (plain string comparison) —
+// this is what makes @@unique([locationAId, locationBId]) actually
+// prevent a reverse-direction duplicate row, and it means a reader can
+// look up either side with a single OR clause instead of checking both
+// orderings. worldGraph.ts's shortestPath/pure helpers always expand a row
+// into both directions when building their internal graph, regardless of
+// which side is stored as A vs B.
+model LocationAdjacency {
+  id          String   @id @default(cuid())
+  campaignId  String
+  locationAId String
+  locationBId String
+  distance    Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  campaign  Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  locationA Location @relation("LocationAdjacencyA", fields: [locationAId], references: [id], onDelete: Cascade)
+  locationB Location @relation("LocationAdjacencyB", fields: [locationBId], references: [id], onDelete: Cascade)
+
+  @@unique([locationAId, locationBId])
+  @@index([campaignId])
+  @@index([locationAId])
+  @@index([locationBId])
 }
 
 //

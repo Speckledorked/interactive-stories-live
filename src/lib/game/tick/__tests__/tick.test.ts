@@ -285,6 +285,50 @@ describe('decideTerritoryClaim', () => {
     const claim = decideTerritoryClaim(locations, claimant, [])
     expect(claim).toEqual({ kind: 'settle', locationId: 'l1', locationName: 'Ashford' })
   })
+
+  // #108: real nearest-neighbor selection among tied candidates, when
+  // adjacency data exists — falls back to alphabetical-first otherwise.
+  describe('with adjacency data (#108)', () => {
+    const locations = [
+      { id: 'l1', name: 'Ashford', ownerFactionId: null, isContested: false },
+      { id: 'l2', name: 'Briar Keep', ownerFactionId: null, isContested: false },
+      { id: 'l3', name: 'Cliffhold', ownerFactionId: null, isContested: false },
+    ]
+
+    it('picks the nearest unowned candidate to home instead of the alphabetically-first one', () => {
+      // home -- 1 -- Cliffhold, home -- 5 -- Ashford: Cliffhold is nearer,
+      // even though Ashford would win alphabetically.
+      const claim = decideTerritoryClaim(locations, claimant, [], {
+        edges: [
+          { locationAId: 'home', locationBId: 'l3', distance: 1 },
+          { locationAId: 'home', locationBId: 'l1', distance: 5 },
+        ],
+        homeLocationId: 'home',
+      })
+      expect(claim).toEqual({ kind: 'settle', locationId: 'l3', locationName: 'Cliffhold' })
+    })
+
+    it('falls back to alphabetical-first when no candidate is reachable in the graph', () => {
+      const claim = decideTerritoryClaim(locations, claimant, [], {
+        edges: [{ locationAId: 'home', locationBId: 'somewhere-unrelated', distance: 1 }],
+        homeLocationId: 'home',
+      })
+      expect(claim).toEqual({ kind: 'settle', locationId: 'l1', locationName: 'Ashford' })
+    })
+
+    it('falls back to alphabetical-first when homeLocationId is null', () => {
+      const claim = decideTerritoryClaim(locations, claimant, [], {
+        edges: [{ locationAId: 'l3', locationBId: 'l1', distance: 1 }],
+        homeLocationId: null,
+      })
+      expect(claim).toEqual({ kind: 'settle', locationId: 'l1', locationName: 'Ashford' })
+    })
+
+    it('falls back to alphabetical-first when no adjacency argument is given at all', () => {
+      const claim = decideTerritoryClaim(locations, claimant, [])
+      expect(claim).toEqual({ kind: 'settle', locationId: 'l1', locationName: 'Ashford' })
+    })
+  })
 })
 
 describe('decideWarDeclaration', () => {
@@ -500,6 +544,39 @@ describe('decideNpcTick', () => {
     expect(unaffiliated.currentPlan).not.toContain('Iron Crown')
     expect(affiliated.currentPlan).toContain('Iron Crown')
     expect(affiliated.currentPlan).toContain('EXPAND')
+  })
+
+  // #108: "work" becomes a real graph neighbor of home when adjacency data
+  // covers it — falls back to the old hash-rotation pick otherwise.
+  describe('with adjacency data (#108)', () => {
+    const locationNames = ['Harborview', 'Old Quarter', 'Docks']
+
+    it('picks the real graph neighbor as "work" instead of the old hash-rotation pick', () => {
+      const locationGraph = {
+        idByName: new Map([
+          ['Harborview', 'loc-harborview'],
+          ['Old Quarter', 'loc-oldquarter'],
+          ['Docks', 'loc-docks'],
+        ]),
+        edges: [{ locationAId: 'loc-harborview', locationBId: 'loc-docks', distance: 1 }],
+      }
+      // turn 0 -> morning -> "work"
+      const morning = decideNpcTick(npc, 0, locationNames, null, locationGraph)
+      expect(morning.nextLocation).toBe('Docks')
+    })
+
+    it('falls back to the old hash-rotation pick when adjacency data does not cover this home location', () => {
+      const emptyGraph = { idByName: new Map(), edges: [] }
+      const withEmptyGraph = decideNpcTick(npc, 0, locationNames, null, emptyGraph)
+      const withoutGraph = decideNpcTick(npc, 0, locationNames)
+      expect(withEmptyGraph.nextLocation).toBe(withoutGraph.nextLocation)
+    })
+
+    it('is unaffected by adjacency data entirely when omitted, matching pre-#108 behavior', () => {
+      const a = decideNpcTick(npc, 0, locationNames)
+      const b = decideNpcTick(npc, 0, locationNames)
+      expect(a).toEqual(b)
+    })
   })
 })
 

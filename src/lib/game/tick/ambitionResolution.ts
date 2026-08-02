@@ -11,6 +11,7 @@ import { WorldChange, clamp, findRivalIds } from './types'
 import { decideAmbitionOutcome, decideAgendaContinuation, buildAgendaContinuationName, AMBITION_SHAPES } from './ambitionTick'
 import { parseBeliefVector } from './beliefTick'
 import { decideTerritoryClaim } from './territory'
+import { AdjacencyEdge } from '../worldGraph'
 import { persistWorldEvents } from './worldEventLog'
 import { logSignificantChanges } from './historyLog'
 
@@ -109,15 +110,32 @@ export async function resolveCompletedAmbitions(
     // land, settle unowned land, or contest a rival holding — in that
     // escalation order (see territory.ts for why conquest takes two wins).
     if (outcome.success && faction.goal === 'EXPAND') {
-      const [locations, rivalIds] = [
-        await prisma.location.findMany({
+      const [locations, rivalIds, adjacencyRows, homeLocation] = await Promise.all([
+        prisma.location.findMany({
           where: { campaignId },
           select: { id: true, name: true, ownerFactionId: true, isContested: true },
         }),
         findRivalIds(faction.relationships),
-      ]
+        prisma.locationAdjacency.findMany({
+          where: { campaignId },
+          select: { locationAId: true, locationBId: true, distance: true },
+        }),
+        // #108: the claimant's own "home base" for nearest-neighbor
+        // selection — its first-owned territory by creation date. No
+        // stored "faction capital" concept exists; this is the simplest
+        // deterministic proxy for one.
+        prisma.location.findFirst({
+          where: { campaignId, ownerFactionId: faction.id },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        }),
+      ])
+      const adjacencyEdges: AdjacencyEdge[] = adjacencyRows
 
-      const claim = decideTerritoryClaim(locations, faction.id, rivalIds)
+      const claim = decideTerritoryClaim(locations, faction.id, rivalIds, {
+        edges: adjacencyEdges,
+        homeLocationId: homeLocation?.id ?? null,
+      })
 
       if (claim.kind === 'conquer' || claim.kind === 'settle') {
         await prisma.location.update({

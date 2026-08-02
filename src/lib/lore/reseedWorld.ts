@@ -41,6 +41,7 @@ import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
 import { generateMoveFlavor } from '@/lib/ai/moveFlavor'
 import { generateWorldRules, generatedRulesToWorldRules } from '@/lib/ai/worldRulesGenerator'
+import { generateWorldGraph } from '@/lib/ai/worldGraphGenerator'
 import { buildLoreDigest } from './loreDigest'
 import { createFactionsForCampaign, createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
@@ -69,6 +70,7 @@ export interface ReseedSummary {
   archetypesSkipped: boolean
   movesFlavored: number
   worldRulesSet: boolean
+  worldGraphEdgesSet: number
 }
 
 export type ReseedResult =
@@ -492,6 +494,50 @@ export async function reseedWorldFromLore(campaignId: string, options: ReseedOpt
     }
   }
 
+  // --- World graph: #108 one-time adjacency backfill --------------------------
+  // Row-count gate, not a single-column check, since LocationAdjacency is a
+  // table of rows, not one JSON field — same shape as archetypes'
+  // existingArchetypeCount gate above: a live campaign with zero rows is
+  // treated as "never backfilled" (a recovery path), never overwriting a
+  // prior/GM-adjusted graph otherwise.
+  let worldGraphEdgesSet = 0
+  const existingAdjacencyCount = await prisma.locationAdjacency.count({ where: { campaignId } })
+  if (fresh || existingAdjacencyCount === 0) {
+    const currentLocations = await prisma.location.findMany({
+      where: { campaignId },
+      select: { id: true, name: true, description: true },
+    })
+    if (currentLocations.length >= 2) {
+      const generatedEdges = await generateWorldGraph(
+        campaign.title,
+        campaign.description || '',
+        campaign.universe || 'Original',
+        currentLocations.map((l) => ({ name: l.name, description: l.description })),
+        lore.digest.slice(0, EXTRAS_DIGEST_CHARS)
+      )
+      if (generatedEdges && generatedEdges.length > 0) {
+        const idByName = new Map(currentLocations.map((l) => [l.name, l.id]))
+        const rows = generatedEdges
+          .map((edge) => {
+            const idA = idByName.get(edge.locationAName)
+            const idB = idByName.get(edge.locationBName)
+            if (!idA || !idB || idA === idB) return null
+            // Canonicalize: locationAId always the lexicographically
+            // smaller id, matching the schema's documented @@unique
+            // convention (LocationAdjacency's own comment).
+            const [locationAId, locationBId] = idA < idB ? [idA, idB] : [idB, idA]
+            return { campaignId, locationAId, locationBId, distance: edge.distance }
+          })
+          .filter((row): row is { campaignId: string; locationAId: string; locationBId: string; distance: number } => row !== null)
+
+        if (rows.length > 0) {
+          const created = await prisma.locationAdjacency.createMany({ data: rows, skipDuplicates: true })
+          worldGraphEdgesSet = created.count
+        }
+      }
+    }
+  }
+
   // --- Shadow branches: keep the corruption invariant --------------------------
   // Themed campaign: secret scaffold nodes are the forbidden arts
   // (idempotent re-mark). Fresh campaign whose theme just went away: clear
@@ -525,6 +571,7 @@ export async function reseedWorldFromLore(campaignId: string, options: ReseedOpt
     archetypesSkipped: !wantArchetypes,
     movesFlavored,
     worldRulesSet,
+    worldGraphEdgesSet,
   }
 
   console.log(

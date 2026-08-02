@@ -30,6 +30,7 @@ import { tickFactionRelationships } from './tick/relationshipTick'
 import { tickFactions } from './tick/factionTick'
 import { tickFactionLeadership } from './tick/leadershipTick'
 import { tickWars } from './tick/warTick'
+import { tickLocationCondition } from './tick/locationConditionTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
 import { tickNpcs } from './tick/npcTick'
 import { tickNpcSocialTies, tickNpcJointSchemes } from './tick/npcSocietyTick'
@@ -69,11 +70,16 @@ import { resolveTickCaps } from './tick/caps'
 // don't feed back into it). tickNpcJointSchemes runs immediately after
 // that, in the same pass, so a scheme can use the ties this turn just
 // established rather than waiting a full extra tick (see npcSocietyTick.ts).
+// tickLocationCondition runs right after tickWars on purpose (#109): it
+// checks whether a location is currently the contested prize of an
+// ESCALATING war, so a war that resolved THIS turn no longer counts as
+// "at war" for this same pass rather than lagging a full extra turn.
+//
 // tickIntegrity runs LAST, deliberately: it validates the state every
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not
 // last turn's. See its own file for what it does and doesn't repair.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickFactionAmbitions, tickNpcs, tickNpcSocialTies, tickNpcJointSchemes, tickIntegrity]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickFactions, tickFactionLeadership, tickWars, tickLocationCondition, tickFactionAmbitions, tickNpcs, tickNpcSocialTies, tickNpcJointSchemes, tickIntegrity]
 
 // Prisma's interactive-transaction default is 5s; this tick runs 10
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well

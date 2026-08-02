@@ -17,6 +17,7 @@ import {
   selectPrimaryOutcomeBand,
   CharacterForRoll,
   contestedPenalty,
+  locationConditionPenalty,
   ActionMechanics,
 } from '../resolution'
 
@@ -720,5 +721,33 @@ describe('contestedPenalty (#78)', () => {
     // Same magnitude as harm/weather so the modifiers stay comparable.
     expect(contestedPenalty(true)).toBe(harmPenalty(4))
     expect(contestedPenalty(true)).toBe(weatherPenalty({ condition: 'STORM', severity: 5 }))
+  })
+})
+
+describe('locationConditionPenalty (#109)', () => {
+  it('penalizes a ruined/abandoned location', () => {
+    expect(locationConditionPenalty(0)).toBe(-1)
+    expect(locationConditionPenalty(24)).toBe(-1)
+  })
+
+  it('is neutral in the stable middle band', () => {
+    expect(locationConditionPenalty(25)).toBe(0)
+    expect(locationConditionPenalty(60)).toBe(0)
+    expect(locationConditionPenalty(74)).toBe(0)
+  })
+
+  it('rewards a prosperous location', () => {
+    expect(locationConditionPenalty(75)).toBe(1)
+    expect(locationConditionPenalty(100)).toBe(1)
+  })
+
+  it('treats a missing score as neutral, never as a guess', () => {
+    expect(locationConditionPenalty(null)).toBe(0)
+    expect(locationConditionPenalty(undefined)).toBe(0)
+  })
+
+  it('composes with the other flat penalties on the same scale', () => {
+    expect(locationConditionPenalty(10)).toBe(harmPenalty(4))
+    expect(locationConditionPenalty(10)).toBe(contestedPenalty(true))
   })
 })

@@ -10,7 +10,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 
-export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT'
+export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'LOCATION_CONDITION' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT'
 
 export interface WorldChange {
   entityType: TickEntityType

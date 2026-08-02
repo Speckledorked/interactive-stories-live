@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { AIGMRequest } from './client'
 import { buildOptimizedContext, capForPrompt, clampPromptStrings } from './contextManager' // Phase 14.6: Context optimization
 import { describeTension, derivePhase } from '@/lib/game/tick/tension'
+import { GeneratedCalendar, deriveSeason } from '@/lib/game/calendar'
 import {
   MAX_NPCS_IN_PROMPT,
   MAX_FACTIONS_IN_PROMPT,
@@ -29,6 +30,11 @@ import {
  * null/empty (a genuinely open scene) returns the full roster unchanged.
  * Pure and exported so it's unit-testable without a DB.
  */
+/** "winter" -> "Winter" — season is otherwise a plain lowercase union value. */
+function capitalize(season: string): string {
+  return season.charAt(0).toUpperCase() + season.slice(1)
+}
+
 export function scopeCharactersToParticipants<T extends { id: string }>(
   characters: T[],
   participantCharacterIds?: string[] | null
@@ -65,7 +71,10 @@ export async function buildOptimizedWorldSummary(
 
   // Get current data
   const [worldMeta, characters, allNpcs, allFactions, locations, clocks, activeWars, activeQuests] = await Promise.all([
-    prisma.worldMeta.findUnique({ where: { campaignId } }),
+    prisma.worldMeta.findUnique({
+      where: { campaignId },
+      include: { campaign: { select: { calendarConfig: true } } },
+    }),
     prisma.character.findMany({
       where: { campaignId, isAlive: true },
       include: {
@@ -197,6 +206,12 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
     dramatic_tension: describeTension(worldMeta.tension),
     story_phase: worldMeta.phase || derivePhase(worldMeta.tension, worldMeta.currentTurnNumber),
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
+    // #118: narration flavor, alongside (not instead of) the mechanical
+    // resource-regen/clock-speed knobs — see tick/seasonTick.ts.
+    season: capitalize(deriveSeason(
+      worldMeta.totalElapsedGameHours,
+      worldMeta.campaign?.calendarConfig ? (worldMeta.campaign.calendarConfig as unknown as GeneratedCalendar) : null
+    )),
 
     // Include campaign summary in a special field (we'll handle this in the prompt)
     _campaignSummary: campaignSummaryText,
@@ -360,6 +375,12 @@ export async function buildWorldSummaryForAI(
     dramatic_tension: describeTension(worldMeta.tension),
     story_phase: worldMeta.phase || derivePhase(worldMeta.tension, worldMeta.currentTurnNumber),
     in_game_date: worldMeta.currentInGameDate || 'Day 1',
+    // #118: narration flavor, alongside (not instead of) the mechanical
+    // resource-regen/clock-speed knobs — see tick/seasonTick.ts.
+    season: capitalize(deriveSeason(
+      worldMeta.totalElapsedGameHours,
+      campaign.calendarConfig ? (campaign.calendarConfig as unknown as GeneratedCalendar) : null
+    )),
 
     characters: mapCharactersForPrompt(promptCharacters),
 

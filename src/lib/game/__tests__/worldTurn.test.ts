@@ -5,6 +5,8 @@
 
 import { describe, it, expect } from 'vitest'
 import { decideClockAdvancement, FactionForClockAdvancement } from '../worldTurn'
+import { TENSION_BASELINE } from '../tick/tension'
+import { SEASON_MODIFIERS } from '../tick/seasonTick'
 
 const strongFaction: FactionForClockAdvancement = { resources: 80, military: 80, stability: 80, isActive: true }
 const weakFaction: FactionForClockAdvancement = { resources: 10, military: 10, stability: 10, isActive: true }
@@ -114,5 +116,56 @@ describe('decideClockAdvancement — unlinked GM clocks (category fallback)', ()
       decideClockAdvancement(clock, new Map(), 7),
     ])
     expect(results.size).toBe(1)
+  })
+})
+
+describe('decideClockAdvancement — seasonal clock speed (#118)', () => {
+  // Only the unattached-GM-clock branch is season-aware — same scope as
+  // tension above it. A sweep across many turns (not one) since each
+  // individual call is a 0/1 coin flip; only the aggregate rate across a
+  // sample is where a faster/slower multiplier actually shows up.
+  const sampleSize = 300
+  const tickRateAt = (multiplier: number) => {
+    let ticks = 0
+    for (let t = 0; t < sampleSize; t++) {
+      const result = decideClockAdvancement(
+        baseClock({ id: `season-${multiplier}-${t}`, category: 'slow' }),
+        new Map(),
+        t,
+        TENSION_BASELINE,
+        multiplier
+      )
+      if (result > 0) ticks++
+    }
+    return ticks
+  }
+
+  it('ticks more often in autumn (faster) than in winter (slower), for the same clock category', () => {
+    expect(tickRateAt(SEASON_MODIFIERS.autumn.clockSpeedMultiplier))
+      .toBeGreaterThan(tickRateAt(SEASON_MODIFIERS.winter.clockSpeedMultiplier))
+  })
+
+  it('never pushes a clock past its normal 0/1-per-turn cap even at the fastest seasonal multiplier', () => {
+    for (let t = 0; t < 50; t++) {
+      const result = decideClockAdvancement(
+        baseClock({ id: `c${t}`, category: 'slow' }), new Map(), t, TENSION_BASELINE, SEASON_MODIFIERS.autumn.clockSpeedMultiplier
+      )
+      expect([0, 1]).toContain(result)
+    }
+  })
+
+  it('never affects an urgent clock — it always ticks regardless of season', () => {
+    for (let t = 0; t < 20; t++) {
+      expect(decideClockAdvancement(baseClock({ id: `c${t}`, category: 'urgent' }), new Map(), t, TENSION_BASELINE, 0.5)).toBe(1)
+    }
+  })
+
+  it('defaults to the neutral multiplier (1) when omitted, unchanged from before #118', () => {
+    for (let t = 0; t < 30; t++) {
+      const clock = baseClock({ id: `c${t}`, category: 'slow' })
+      const withDefault = decideClockAdvancement(clock, new Map(), t)
+      const explicitNeutral = decideClockAdvancement(clock, new Map(), t, TENSION_BASELINE, 1)
+      expect(withDefault).toBe(explicitNeutral)
+    }
   })
 })

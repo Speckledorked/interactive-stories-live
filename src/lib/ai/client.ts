@@ -313,6 +313,11 @@ export interface AIGMRequest {
   world_summary: {
     turn_number: number
     in_game_date: string
+    // #118: derived from the campaign's calendar (tick/seasonTick.ts /
+    // lib/game/calendar.ts's deriveSeason) — narration flavor, alongside
+    // (not instead of) the mechanical resource-regen/clock-speed knobs the
+    // same derived season also drives.
+    season?: string
     characters: Array<{
       id: string
       name: string

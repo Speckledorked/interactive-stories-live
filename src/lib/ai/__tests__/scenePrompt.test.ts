@@ -6,7 +6,7 @@
 // buildSystemPrompt's actual output, the same way a real caller would see it.
 
 import { describe, it, expect } from 'vitest'
-import { buildSystemPrompt } from '../scenePrompt'
+import { buildSystemPrompt, buildUserPrompt } from '../scenePrompt'
 import type { AIGMRequest } from '../client'
 import type { ActionMechanics } from '@/lib/game/resolution'
 
@@ -53,5 +53,32 @@ describe('buildSystemPrompt — outcome-band pacing (#115)', () => {
     const prompt = buildSystemPrompt(makeRequest([mechanic('strongHit'), mechanic('miss'), mechanic('weakHit')]))
     expect(prompt).toContain('genuine setback')
     expect(prompt).not.toContain('clean, unqualified success')
+  })
+})
+
+describe('buildUserPrompt — season in the world_state line (#118)', () => {
+  function makeUserRequest(season?: string): AIGMRequest {
+    return {
+      world_summary: {
+        turn_number: 12,
+        in_game_date: '5 Harvestmoon, Year 2',
+        season,
+        characters: [], npcs: [], factions: [], clocks: [], recent_timeline_events: [],
+      },
+      current_scene_intro: 'The market is quiet.',
+      player_actions: [],
+    } as unknown as AIGMRequest
+  }
+
+  it('includes the season alongside turn/date when present', () => {
+    const prompt = buildUserPrompt(makeUserRequest('Winter'))
+    expect(prompt).toContain('Turn: 12 | Date: 5 Harvestmoon, Year 2 | Season: Winter')
+  })
+
+  it('omits the season segment entirely when absent, rather than printing "undefined"', () => {
+    const prompt = buildUserPrompt(makeUserRequest(undefined))
+    expect(prompt).toContain('Turn: 12 | Date: 5 Harvestmoon, Year 2')
+    expect(prompt).not.toContain('Season:')
+    expect(prompt).not.toContain('undefined')
   })
 })

@@ -142,11 +142,30 @@ export function decideFactionGoalReassessment(faction: {
 
 const COLLAPSE_STABILITY_THRESHOLD = 10
 const ABSORPTION_TRANSFER_RATE = 0.3
+// #112: a smooth handoff and a chaotic collapse used to transfer faction
+// state identically. Even a total-chaos collapse (roughness 1) still
+// transfers at least this fraction of the base rate — a rougher collapse
+// scatters more of what's left, but never scatters everything.
+const ROUGHNESS_RATE_FLOOR = 0.5
 
 export interface FactionCollapseDecision {
   collapses: boolean
   transferResources: number
   transferMilitary: number
+  /** 0-1. How chaotic this specific collapse was — how far stability
+   * crashed past COLLAPSE_STABILITY_THRESHOLD rather than just barely
+   * tipping over it. Scales both this decision's own transfer rate and
+   * decideFactionFounding's inheritance rate below, so a faction that
+   * cratered to 0 stability hands off less than one that collapsed right
+   * at the threshold. */
+  roughness: number
+}
+
+/** 0 right at the threshold (smoothest possible collapse), 1 once stability
+ * has crashed all the way to 0 (total chaos). */
+function computeCollapseRoughness(stability: number): number {
+  const effectiveStability = Number.isFinite(Number(stability)) ? Number(stability) : COLLAPSE_STABILITY_THRESHOLD
+  return clamp((COLLAPSE_STABILITY_THRESHOLD - effectiveStability) / COLLAPSE_STABILITY_THRESHOLD, 0, 1)
 }
 
 // A faction that bottoms out doesn't just sit at LOW forever — past a
@@ -160,12 +179,15 @@ export function decideFactionCollapse(faction: {
   military: number
 }): FactionCollapseDecision {
   if (faction.stability > COLLAPSE_STABILITY_THRESHOLD) {
-    return { collapses: false, transferResources: 0, transferMilitary: 0 }
+    return { collapses: false, transferResources: 0, transferMilitary: 0, roughness: 0 }
   }
+  const roughness = computeCollapseRoughness(faction.stability)
+  const effectiveRate = ABSORPTION_TRANSFER_RATE * (1 - roughness * (1 - ROUGHNESS_RATE_FLOOR))
   return {
     collapses: true,
-    transferResources: Math.round(faction.resources * ABSORPTION_TRANSFER_RATE),
-    transferMilitary: Math.round(faction.military * ABSORPTION_TRANSFER_RATE),
+    transferResources: Math.round(faction.resources * effectiveRate),
+    transferMilitary: Math.round(faction.military * effectiveRate),
+    roughness,
   }
 }
 
@@ -192,12 +214,18 @@ export function decideFactionFounding(collapsedFaction: {
   name: string
   resources: number
   military: number
+  /** 0-1, from decideFactionCollapse's roughness (#112) — how chaotic the
+   * collapse that spawned this successor was. Defaults to 0 (smoothest,
+   * matching the original flat-rate behavior) when omitted. */
+  roughness?: number
 }): FactionFoundingDecision {
+  const roughness = Number.isFinite(Number(collapsedFaction.roughness)) ? Number(collapsedFaction.roughness) : 0
+  const effectiveRate = SUCCESSOR_INHERITANCE_RATE * (1 - roughness * (1 - ROUGHNESS_RATE_FLOOR))
   return {
     name: `${collapsedFaction.name} Remnant`,
-    resources: Math.round(collapsedFaction.resources * SUCCESSOR_INHERITANCE_RATE),
+    resources: Math.round(collapsedFaction.resources * effectiveRate),
     stability: SUCCESSOR_STARTING_STABILITY,
-    military: Math.round(collapsedFaction.military * SUCCESSOR_INHERITANCE_RATE),
+    military: Math.round(collapsedFaction.military * effectiveRate),
   }
 }
 
@@ -296,7 +324,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
       } else {
         // No rival to absorb it — a smaller successor rises from the
         // wreckage instead of the faction simply vanishing.
-        const successor = decideFactionFounding({ name: faction.name, resources: next.resources, military: next.military })
+        const successor = decideFactionFounding({ name: faction.name, resources: next.resources, military: next.military, roughness: collapse.roughness })
         successorName = successor.name
 
         if (!ctx.dryRun) {

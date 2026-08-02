@@ -28,7 +28,7 @@ export async function POST(
 
     const targetMembership = await getCampaignMembership(targetUserId, campaignId)
     if (!targetMembership) {
-      return NextResponse.json({ error: 'User is not a member of this campaign' }, { status: 404 })
+      return NextResponse.json({ error: 'This user is not a member of this campaign' }, { status: 403 })
     }
 
     if (targetMembership.role === UserRole.ADMIN) {

@@ -108,7 +108,22 @@ export const GOAL_COMMITMENT_TURNS = 3
 // additional weighted input" rather than a dominant override at neutral.
 const BELIEF_OVERRIDE_THRESHOLD = 80
 
-export function decideFactionGoalReassessment(faction: {
+export interface FactionGoalExplanation {
+  goal: FactionGoal
+  /** Human-readable trace of which check fired, in evaluation order — the
+   * same branches decideFactionGoalReassessment picks from, just narrated
+   * instead of discarded. #94: admin tooling reads this to show a host
+   * WHY a faction is about to reassess (or hold) its goal, not just that
+   * it did. */
+  reasoning: string[]
+}
+
+/**
+ * Pure — the full goal-reassessment decision, WITH the reasoning trace.
+ * decideFactionGoalReassessment below is a thin wrapper over this; the two
+ * can never drift apart because there's only one implementation.
+ */
+export function explainFactionGoalReassessment(faction: {
   resources: number
   stability: number
   military: number
@@ -125,24 +140,34 @@ export function decideFactionGoalReassessment(faction: {
    * faction with no drift history yet is untouched by any of the override
    * branches below, identical to pre-#104 behavior. */
   beliefVector?: BeliefVector | null
-}): FactionGoal {
+}): FactionGoalExplanation {
   const stabilityBand = band(faction.stability)
   const resourcesBand = band(faction.resources)
   const militaryBand = band(faction.military)
+  const reasoning: string[] = [
+    `Stability is ${stabilityBand} (${faction.stability}), resources ${resourcesBand} (${faction.resources}), military ${militaryBand} (${faction.military}).`,
+  ]
 
   // Internal cohesion is failing — shore it up before anything ambitious.
   // Checked BEFORE commitment on purpose: a faction coming apart does not
   // stay the course out of consistency, and a crisis is exactly the kind
   // of real change that should always be able to redirect it.
-  if (stabilityBand === 'LOW') return 'DEFEND'
+  if (stabilityBand === 'LOW') {
+    reasoning.push('Stability has cratered — internal cohesion takes priority over any ambition.')
+    return { goal: 'DEFEND', reasoning }
+  }
 
   // Otherwise, hold the current course until it has been given a fair run.
   const held = Number(faction.turnsOnCurrentGoal)
   if (Number.isFinite(held) && held >= 0 && held < GOAL_COMMITMENT_TURNS) {
-    return faction.goal
+    reasoning.push(`Has held its current goal (${faction.goal}) for only ${held} turn(s), short of the ${GOAL_COMMITMENT_TURNS}-turn commitment — staying the course rather than reassessing.`)
+    return { goal: faction.goal, reasoning }
   }
   // Too poor to attempt anything ambitious — rebuild the treasury first.
-  if (resourcesBand === 'LOW') return 'ENRICH'
+  if (resourcesBand === 'LOW') {
+    reasoning.push('Resources are too low to attempt anything ambitious — rebuilding the treasury first.')
+    return { goal: 'ENRICH', reasoning }
+  }
 
   // #104: a strongly-held disposition can redirect a faction toward a goal
   // the raw stat bands alone wouldn't have picked — same shape as hasRival
@@ -152,24 +177,46 @@ export function decideFactionGoalReassessment(faction: {
   // outward, and "withdraw" and "push outward" can't both win.
   const belief = faction.beliefVector
   if (belief) {
-    if (belief.isolationism >= BELIEF_OVERRIDE_THRESHOLD) return 'CONSOLIDATE'
-    if (belief.zealotry >= BELIEF_OVERRIDE_THRESHOLD && militaryBand !== 'LOW') {
-      return faction.hasRival ? 'DESTABILIZE_RIVAL' : 'EXPAND'
+    reasoning.push(`Belief vector: aggression ${belief.aggression}, isolationism ${belief.isolationism}, mercantilism ${belief.mercantilism}, zealotry ${belief.zealotry} (override threshold ${BELIEF_OVERRIDE_THRESHOLD}).`)
+    if (belief.isolationism >= BELIEF_OVERRIDE_THRESHOLD) {
+      reasoning.push(`Isolationism has drifted past the override threshold — the faction turtles inward regardless of its stat bands.`)
+      return { goal: 'CONSOLIDATE', reasoning }
     }
-    if (belief.mercantilism >= BELIEF_OVERRIDE_THRESHOLD && resourcesBand !== 'HIGH') return 'ENRICH'
+    if (belief.zealotry >= BELIEF_OVERRIDE_THRESHOLD && militaryBand !== 'LOW') {
+      const goal = faction.hasRival ? 'DESTABILIZE_RIVAL' : 'EXPAND'
+      reasoning.push(`Zealotry has drifted past the override threshold and military isn't LOW — fervor pushes it to ${faction.hasRival ? 'undermine its rival' : 'expand'}.`)
+      return { goal, reasoning }
+    }
+    if (belief.mercantilism >= BELIEF_OVERRIDE_THRESHOLD && resourcesBand !== 'HIGH') {
+      reasoning.push(`Mercantilism has drifted past the override threshold and resources aren't already HIGH — profit-seeking wins out.`)
+      return { goal: 'ENRICH', reasoning }
+    }
     if (belief.aggression >= BELIEF_OVERRIDE_THRESHOLD && militaryBand !== 'LOW') {
-      return faction.hasRival ? 'DESTABILIZE_RIVAL' : 'EXPAND'
+      const goal = faction.hasRival ? 'DESTABILIZE_RIVAL' : 'EXPAND'
+      reasoning.push(`Aggression has drifted past the override threshold and military isn't LOW — hostility pushes it to ${faction.hasRival ? 'undermine its rival' : 'expand'}.`)
+      return { goal, reasoning }
     }
   }
 
   // Strong enough to act, and there's a known rival to act against —
   // prioritized over blind expansion, since undermining a specific
   // competitor is more strategically pointed than generic growth.
-  if (faction.hasRival && militaryBand === 'HIGH') return 'DESTABILIZE_RIVAL'
+  if (faction.hasRival && militaryBand === 'HIGH') {
+    reasoning.push('Military is HIGH and a known rival exists — undermining a specific competitor beats blind expansion.')
+    return { goal: 'DESTABILIZE_RIVAL', reasoning }
+  }
   // Strong on every front that matters for pushing outward — safe to expand.
-  if (militaryBand === 'HIGH' && resourcesBand === 'HIGH') return 'EXPAND'
+  if (militaryBand === 'HIGH' && resourcesBand === 'HIGH') {
+    reasoning.push('Military and resources are both HIGH — strong enough on every front to push outward.')
+    return { goal: 'EXPAND', reasoning }
+  }
   // Otherwise, hold what it has.
-  return 'CONSOLIDATE'
+  reasoning.push('No threshold or override fired strongly enough to redirect it — holding what it has.')
+  return { goal: 'CONSOLIDATE', reasoning }
+}
+
+export function decideFactionGoalReassessment(faction: Parameters<typeof explainFactionGoalReassessment>[0]): FactionGoal {
+  return explainFactionGoalReassessment(faction).goal
 }
 
 const COLLAPSE_STABILITY_THRESHOLD = 10

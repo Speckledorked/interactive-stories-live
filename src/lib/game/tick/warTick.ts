@@ -226,6 +226,63 @@ export function decideWarResolution(momentumAfterProgress: number, turnsElapsed:
   return { resolves: true, outcome }
 }
 
+export interface WarMomentumExplanation {
+  currentMomentum: number
+  projectedMomentum: number
+  turnsElapsed: number
+  /** Human-readable trace of the same inputs decideWarProgress/
+   * decideWarResolution already compute, narrated instead of discarded —
+   * #94: admin tooling reads this to show a host WHY a war is trending the
+   * way it is, not just the raw momentum number. Additive: doesn't touch
+   * decideWarProgress/decideWarResolution's own tested signatures at all. */
+  reasoning: string[]
+}
+
+/**
+ * Pure — projects this war's next momentum push and resolution using the
+ * exact same functions resolveWarProgress calls for real, and narrates why.
+ */
+export function explainWarMomentum(
+  war: { id: string; momentum: number; startedTurn: number },
+  attackerName: string,
+  attackerMilitaryTotal: number,
+  defenderName: string,
+  defenderMilitaryTotal: number,
+  turnNumber: number
+): WarMomentumExplanation {
+  const progress = decideWarProgress(war, { military: attackerMilitaryTotal }, { military: defenderMilitaryTotal }, turnNumber)
+  const projectedMomentum = clamp(war.momentum + progress.momentumDelta, -100, 100)
+  const turnsElapsed = turnNumber - war.startedTurn
+  const resolution = decideWarResolution(projectedMomentum, turnsElapsed)
+
+  const reasoning: string[] = []
+  const edgeHolder =
+    attackerMilitaryTotal > defenderMilitaryTotal ? attackerName : defenderMilitaryTotal > attackerMilitaryTotal ? defenderName : null
+  reasoning.push(
+    edgeHolder
+      ? `${attackerName} (military ${attackerMilitaryTotal}) vs ${defenderName} (military ${defenderMilitaryTotal}) — the edge favors ${edgeHolder}.`
+      : `${attackerName} and ${defenderName} are evenly matched on military (${attackerMilitaryTotal} each) — this turn's push comes down to variance alone.`
+  )
+  reasoning.push(
+    `Momentum would shift by ${progress.momentumDelta >= 0 ? '+' : ''}${progress.momentumDelta}, from ${war.momentum} to ${projectedMomentum} (positive favors ${attackerName}, negative favors ${defenderName}).`
+  )
+  if (resolution.resolves) {
+    reasoning.push(
+      resolution.outcome === 'stalemate'
+        ? `This crosses the ${WAR_MAX_DURATION}-turn mark (started turn ${war.startedTurn}) without a decisive swing — the war would end in a stalemate.`
+        : `This crosses the decisive threshold (±${WAR_DECISIVE_MOMENTUM}) — ${resolution.outcome === 'attacker' ? attackerName : defenderName} would win outright.`
+    )
+  } else {
+    const marginNeeded = WAR_DECISIVE_MOMENTUM - Math.abs(projectedMomentum)
+    const turnsUntilStalemate = WAR_MAX_DURATION - turnsElapsed
+    reasoning.push(
+      `Still ${marginNeeded} short of a decisive swing (±${WAR_DECISIVE_MOMENTUM}), and ${turnsUntilStalemate} turn(s) away from being called a stalemate.`
+    )
+  }
+
+  return { currentMomentum: war.momentum, projectedMomentum, turnsElapsed, reasoning }
+}
+
 export interface WarJoinCandidate {
   id: string
   name: string

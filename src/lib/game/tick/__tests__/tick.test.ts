@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { decideFactionTick, decideFactionGoalReassessment, decideFactionCollapse, decideFactionFounding } from '../factionTick'
+import { decideFactionTick, decideFactionGoalReassessment, explainFactionGoalReassessment, decideFactionCollapse, decideFactionFounding, GOAL_COMMITMENT_TURNS } from '../factionTick'
 import { decideAmbitionTick, decideAmbitionOutcome, decideAgendaContinuation, buildAgendaContinuationName, MAX_AGENDA_STAGES } from '../ambitionTick'
 import { NEUTRAL_BELIEF } from '../beliefTick'
 import { decideRelationshipTick } from '../relationshipTick'
 import { decideTerritoryClaim } from '../territory'
-import { decideWarDeclaration, decideWarProgress, decideWarResolution, decideWarJoiner } from '../warTick'
+import { decideWarDeclaration, decideWarProgress, decideWarResolution, decideWarJoiner, explainWarMomentum } from '../warTick'
 import { decideNpcTick, deriveTimeOfDay } from '../npcTick'
 import { decideNextWeather } from '../weatherTick'
 
@@ -119,6 +119,49 @@ describe('decideFactionGoalReassessment', () => {
       expect(decideFactionGoalReassessment({ ...base, stability: 20, beliefVector: aggressive })).toBe('DEFEND')
       expect(decideFactionGoalReassessment({ ...base, goal: 'CONSOLIDATE', turnsOnCurrentGoal: 1, beliefVector: aggressive })).toBe('CONSOLIDATE')
     })
+  })
+})
+
+// #94: decideFactionGoalReassessment is a thin wrapper over this — the two
+// can never drift apart because there's only one implementation. These
+// tests pin that agreement plus the reasoning trace's content.
+describe('explainFactionGoalReassessment (#94)', () => {
+  it('agrees with decideFactionGoalReassessment across every branch', () => {
+    const cases = [
+      { resources: 90, stability: 20, military: 90, goal: 'EXPAND' as const, hasRival: false },
+      { resources: 20, stability: 60, military: 60, goal: 'CONSOLIDATE' as const, hasRival: false },
+      { resources: 80, stability: 50, military: 80, goal: 'CONSOLIDATE' as const, hasRival: false },
+      { resources: 80, stability: 50, military: 80, goal: 'CONSOLIDATE' as const, hasRival: true },
+      { resources: 50, stability: 50, military: 50, goal: 'EXPAND' as const, hasRival: false },
+      { resources: 50, stability: 50, military: 50, goal: 'CONSOLIDATE' as const, hasRival: false, turnsOnCurrentGoal: 1 },
+      { resources: 50, stability: 50, military: 80, goal: 'CONSOLIDATE' as const, hasRival: false, beliefVector: { aggression: 50, isolationism: 85, mercantilism: 50, zealotry: 50 } },
+    ]
+    for (const faction of cases) {
+      expect(explainFactionGoalReassessment(faction).goal).toBe(decideFactionGoalReassessment(faction))
+    }
+  })
+
+  it('explains a DEFEND decision by naming the stability crisis', () => {
+    const { reasoning } = explainFactionGoalReassessment({ resources: 90, stability: 20, military: 90, goal: 'EXPAND', hasRival: false })
+    expect(reasoning.some((line) => /stability/i.test(line) && /cratered/i.test(line))).toBe(true)
+  })
+
+  it('explains a goal-commitment hold by naming the turns held and the threshold', () => {
+    const { reasoning } = explainFactionGoalReassessment({ resources: 50, stability: 50, military: 50, goal: 'CONSOLIDATE', hasRival: false, turnsOnCurrentGoal: 1 })
+    expect(reasoning.some((line) => line.includes('1 turn') && line.includes(String(GOAL_COMMITMENT_TURNS)))).toBe(true)
+  })
+
+  it('explains a belief override by naming the specific axis that fired', () => {
+    const { reasoning } = explainFactionGoalReassessment({
+      resources: 50, stability: 50, military: 80, goal: 'CONSOLIDATE', hasRival: false,
+      beliefVector: { aggression: 50, isolationism: 85, mercantilism: 50, zealotry: 50 },
+    })
+    expect(reasoning.some((line) => /isolationism/i.test(line))).toBe(true)
+  })
+
+  it('always includes a leading line naming the raw stat bands', () => {
+    const { reasoning } = explainFactionGoalReassessment({ resources: 50, stability: 50, military: 50, goal: 'CONSOLIDATE', hasRival: false })
+    expect(reasoning[0]).toMatch(/stability is/i)
   })
 })
 
@@ -407,6 +450,47 @@ describe('decideWarResolution', () => {
 
   it('keeps escalating while momentum is inconclusive and duration is short', () => {
     expect(decideWarResolution(20, 3)).toEqual({ resolves: false, outcome: null })
+  })
+})
+
+describe('explainWarMomentum (#94)', () => {
+  it('projects the same momentum decideWarProgress would apply', () => {
+    const war = { id: 'war-1', momentum: 10, startedTurn: 2 }
+    const progress = decideWarProgress(war, { military: 80 }, { military: 60 }, 5)
+    const explanation = explainWarMomentum(war, 'Ashcrown', 80, 'Blackreach', 60, 5)
+    expect(explanation.projectedMomentum).toBe(Math.max(-100, Math.min(100, war.momentum + progress.momentumDelta)))
+    expect(explanation.currentMomentum).toBe(10)
+  })
+
+  it('names the side with the military edge', () => {
+    const war = { id: 'war-1', momentum: 0, startedTurn: 0 }
+    const explanation = explainWarMomentum(war, 'Ashcrown', 90, 'Blackreach', 30, 1)
+    expect(explanation.reasoning[0]).toContain('Ashcrown')
+    expect(explanation.reasoning[0]).toMatch(/favors Ashcrown/)
+  })
+
+  it('notes an even match when both sides have equal military', () => {
+    const war = { id: 'war-1', momentum: 0, startedTurn: 0 }
+    const explanation = explainWarMomentum(war, 'Ashcrown', 50, 'Blackreach', 50, 1)
+    expect(explanation.reasoning[0]).toMatch(/evenly matched/)
+  })
+
+  it('reports a decisive outright win once the projected momentum crosses the threshold', () => {
+    const war = { id: 'war-1', momentum: 90, startedTurn: 0 }
+    const explanation = explainWarMomentum(war, 'Ashcrown', 90, 'Blackreach', 10, 1)
+    expect(explanation.reasoning.some((line) => /decisive threshold/.test(line) && /win outright/.test(line))).toBe(true)
+  })
+
+  it('reports a stalemate once the war has dragged past its max duration without a decisive swing', () => {
+    const war = { id: 'war-1', momentum: 5, startedTurn: 0 }
+    const explanation = explainWarMomentum(war, 'Ashcrown', 50, 'Blackreach', 50, 10)
+    expect(explanation.reasoning.some((line) => /stalemate/.test(line))).toBe(true)
+  })
+
+  it('reports how far from decisive and how many turns remain when still inconclusive', () => {
+    const war = { id: 'war-1', momentum: 5, startedTurn: 0 }
+    const explanation = explainWarMomentum(war, 'Ashcrown', 51, 'Blackreach', 49, 1)
+    expect(explanation.reasoning.some((line) => /short of a decisive swing/.test(line))).toBe(true)
   })
 })
 

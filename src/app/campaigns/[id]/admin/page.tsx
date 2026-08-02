@@ -179,6 +179,13 @@ export default function AdminPage() {
   const [worldEventsLoading, setWorldEventsLoading] = useState(false)
   const [tickPreview, setTickPreview] = useState<any[] | null>(null)
   const [tickPreviewLoading, setTickPreviewLoading] = useState(false)
+  // #94: per-entity "show your reasoning" previews for the faction/NPC
+  // tabs, extending the tick dry-run preview's pattern below CRUD level —
+  // keyed by entity id so multiple cards can each show their own result.
+  const [factionReasoning, setFactionReasoning] = useState<Record<string, any>>({})
+  const [factionReasoningLoading, setFactionReasoningLoading] = useState<Record<string, boolean>>({})
+  const [npcReasoning, setNpcReasoning] = useState<Record<string, any>>({})
+  const [npcReasoningLoading, setNpcReasoningLoading] = useState<Record<string, boolean>>({})
   const [editingNpc, setEditingNpc] = useState<string | null>(null)
   const [editingFaction, setEditingFaction] = useState<string | null>(null)
   const [editingLocation, setEditingLocation] = useState<string | null>(null)
@@ -586,6 +593,40 @@ export default function AdminPage() {
       setError('Failed to preview world tick')
     } finally {
       setTickPreviewLoading(false)
+    }
+  }
+
+  const handlePreviewFactionReasoning = async (factionId: string) => {
+    setFactionReasoningLoading(prev => ({ ...prev, [factionId]: true }))
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/factions/${factionId}/reasoning`)
+      if (response.ok) {
+        const data = await response.json()
+        setFactionReasoning(prev => ({ ...prev, [factionId]: data }))
+      } else {
+        setError('Failed to preview faction reasoning')
+      }
+    } catch (err) {
+      setError('Failed to preview faction reasoning')
+    } finally {
+      setFactionReasoningLoading(prev => ({ ...prev, [factionId]: false }))
+    }
+  }
+
+  const handlePreviewNpcReasoning = async (npcId: string) => {
+    setNpcReasoningLoading(prev => ({ ...prev, [npcId]: true }))
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/npcs/${npcId}/reasoning`)
+      if (response.ok) {
+        const data = await response.json()
+        setNpcReasoning(prev => ({ ...prev, [npcId]: data }))
+      } else {
+        setError('Failed to preview NPC reasoning')
+      }
+    } catch (err) {
+      setError('Failed to preview NPC reasoning')
+    } finally {
+      setNpcReasoningLoading(prev => ({ ...prev, [npcId]: false }))
     }
   }
 
@@ -1463,13 +1504,35 @@ export default function AdminPage() {
                               </p>
                             )}
                           </div>
-                          <button
-                            onClick={() => setEditingNpc(npc.id)}
-                            className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
-                          >
-                            Edit
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handlePreviewNpcReasoning(npc.id)}
+                              disabled={npcReasoningLoading[npc.id]}
+                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
+                            >
+                              {npcReasoningLoading[npc.id] ? 'Thinking…' : 'Why?'}
+                            </button>
+                            <button
+                              onClick={() => setEditingNpc(npc.id)}
+                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
+                            >
+                              Edit
+                            </button>
+                          </div>
                         </div>
+                        {npcReasoning[npc.id] && (
+                          <div className="mt-3 rounded-md border border-myth-border bg-myth-surface-sunken p-3 text-sm">
+                            <p className="font-medium text-myth-ink">Next tick: {npcReasoning[npc.id].decision.currentPlan}</p>
+                            <p className="mt-1 text-myth-ink-muted">
+                              Phase: {npcReasoning[npc.id].decision.phase} ({npcReasoning[npc.id].decision.timeOfDay})
+                              {npcReasoning[npc.id].decision.nextLocation && ` · Moving to ${npcReasoning[npc.id].decision.nextLocation}`}
+                            </p>
+                            <p className="mt-1 text-myth-ink-muted">
+                              Goal progress: {npcReasoning[npc.id].decision.newGoalProgress}/100
+                              {npcReasoning[npc.id].decision.goalCompleted && ' — completes this tick'}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1798,13 +1861,46 @@ export default function AdminPage() {
                               {faction.leaderCharacterId && ` · Led by ${characters.find(c => c.id === faction.leaderCharacterId)?.name || 'a player'}`}
                             </p>
                           </div>
-                          <button
-                            onClick={() => setEditingFaction(faction.id)}
-                            className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
-                          >
-                            Edit
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handlePreviewFactionReasoning(faction.id)}
+                              disabled={factionReasoningLoading[faction.id]}
+                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
+                            >
+                              {factionReasoningLoading[faction.id] ? 'Thinking…' : 'Why?'}
+                            </button>
+                            <button
+                              onClick={() => setEditingFaction(faction.id)}
+                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
+                            >
+                              Edit
+                            </button>
+                          </div>
                         </div>
+                        {factionReasoning[faction.id] && (
+                          <div className="mt-3 rounded-md border border-myth-border bg-myth-surface-sunken p-3 text-sm">
+                            <p className="font-medium text-myth-ink">
+                              Next goal reassessment: {faction.goal} → {factionReasoning[faction.id].goalReasoning.goal}
+                            </p>
+                            <ul className="mt-1 list-disc pl-5 text-myth-ink-muted space-y-0.5">
+                              {factionReasoning[faction.id].goalReasoning.reasoning.map((line: string, i: number) => (
+                                <li key={i}>{line}</li>
+                              ))}
+                            </ul>
+                            {factionReasoning[faction.id].wars.map((war: any) => (
+                              <div key={war.warId} className="mt-2 border-t border-myth-border pt-2">
+                                <p className="font-medium text-myth-ink">
+                                  War: {war.name} ({war.currentMomentum} → {war.projectedMomentum} momentum)
+                                </p>
+                                <ul className="mt-1 list-disc pl-5 text-myth-ink-muted space-y-0.5">
+                                  {war.reasoning.map((line: string, i: number) => (
+                                    <li key={i}>{line}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

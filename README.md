@@ -183,8 +183,12 @@ Partial or weak, and honestly so:
 - API route test coverage is targeted, not broad — 94 routes, roughly 9
   dedicated test files, aimed at fog-of-war reads and money/state/
   access-mutating writes. Most of the surface remains untested.
-- Admin tooling is mostly thin CRUD. The one deep feature — the tick
-  dry-run preview — is real but read-only.
+- Admin tooling was mostly thin CRUD; the faction and NPC tabs now extend
+  the tick dry-run preview's "show your reasoning" pattern (a per-entity
+  `/reasoning` route backed by the same pure decide/explain functions the
+  real tick uses). Locations and clocks are still plain CRUD, and there's
+  no standalone war tab — war reasoning surfaces through whichever faction
+  is fighting it.
 - AI response validation has a bounded repair round-trip and a
   section-by-section salvage ladder. The contract stays basic JSON mode —
   decided against switching to strict structured outputs (2026-08-02),
@@ -237,7 +241,7 @@ this table.
 | API route test coverage | 4 | 94 routes, roughly 9 dedicated test files. Targeted at risk — every fog-of-war-gated read, and writes that spend money, mutate scene state, or hand out access — not broad coverage of the full route surface. |
 | Auth / session | 4 | Real revocation: `requireAuth`/`verifyAuth`/`getUser` all check `isTokenRevoked`, and a token-version bump (`revokeAllSessions`, stamped by `createToken`) invalidates every existing session at once. Deliberately fails open for pre-revocation tokens and for an unreadable database, both to avoid a mass logout from a blip. Not a 5 — no refresh-token rotation, still 30-day JWTs. |
 | Rate limiting / abuse | 4 | Postgres-backed (`checkRateLimit`, correct for serverless, where in-memory wouldn't actually limit anything), applied at 17 route call sites, unit-tested. |
-| Admin tooling as simulation design (beyond CRUD) | 2 | Every tab but one is a thin PATCH wrapper (`handleUpdateNPC`, `handleUpdateFaction`, `handleUpdateLocation`, `handleTickClock`). The one genuinely deep feature — the tick dry-run preview (`handlePreviewTick`) — is real but read-only. |
+| Admin tooling as simulation design (beyond CRUD) | 3 | Faction and NPC tabs now show real reasoning, not just fields: a faction card's "Why?" button previews its next goal reassessment (`explainFactionGoalReassessment`) plus any active war's momentum trajectory (`explainWarMomentum`) — new pure functions the real tick's `decideFactionGoalReassessment`/`decideWarProgress`/`decideWarResolution` now delegate to or share, run read-only via new per-entity `/reasoning` API routes. An NPC card's "Why?" preview surfaces its real next-tick decision (`decideNpcTick`) directly. Not higher than a 3 — `handleUpdateLocation`/`handleTickClock` are still thin PATCH wrappers, and there's no standalone war tab at all (war reasoning is folded into the faction fighting it, since no war admin surface exists to extend). |
 | Integrity Engine — structural/semantic data repair | 4 | Deterministic, per-tick checks (`runIntegrityPass`) detect and repair broken references, duplicate names, and (for one registered universe-scoped semantic family, `faction.leaderOptional`) AI-generated verdicts gated by confidence and a probation window (`isRuleActive`). Every repair is blast-radius-capped (`MAX_REPAIRS_PER_PASS`/`MAX_REPAIRS_PER_ENTITY`) and idempotent by construction; verified live against real Postgres, not just mocked. Not a 5 — only one semantic family exists, and Phase 4's planned oscillation-based rule retirement was never built (no repair-enabling family exists yet for it to fire against). |
 | Autonomous code-fix pipeline (`integrity-autofix.yml`) | 2 | Fully autonomous by design — no human review tier at all, every oracle tier (including `suite-only`) merges itself. Since nothing else catches a bad merge first, the pipeline watches its own history instead: `regressionDetection.ts` reverts a merged fix automatically if its checkKey escalates again, `verifyOracleTechnique.ts` mechanically forbids a diff from registering a *weaker* oracle for its own checkKey than it had before (an agent can strengthen its own bar — see the growth step in the prompt — but never lower it), and scope is closed in advance (`escalationSourceMap.ts`) rather than judged per fix. The shell-injection vulnerability and the stale-escalation replay an earlier audit found are both fixed. Not higher than a 2 — it has still never run against a real bug (ships `workflow_dispatch`-only), and the revert mechanism's own correctness is unproven outside unit tests until that first real run happens. |
 
@@ -277,19 +281,16 @@ above. Items that block later ones are flagged.
 2. **Broaden API route test coverage** past the current targeted set,
    prioritizing routes that mutate persisted state over ones that only
    read it.
-3. **Turn admin tooling into real simulation-design tooling.** This is the
-   lowest-scoring row on the Scorecard and the most direct lever on the
-   "admin surface as a real window" half of the vision — extend the tick
-   dry-run preview's pattern (showing *why* the simulation decided
-   something) to the faction/war/NPC tabs instead of leaving them as plain
-   forms.
 
 *(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
 checkKeys a shared type, the war stability-hit write path's missing direct
-test coverage, making outcome-band adherence visible to players, and the
-strict-structured-outputs and dice-opt-in-only decisions — that used to be
-items 2, 6, 7, 4, 3, 2, and 5 here — are all resolved. See Known Bugs and
-the Scorecard's War & coalition system row.)*
+test coverage, making outcome-band adherence visible to players, the
+strict-structured-outputs and dice-opt-in-only decisions, and extending
+the tick dry-run preview's reasoning pattern to the faction/NPC tabs —
+that used to be items 2, 6, 7, 4, 3, 2, 5, and 3 here — are all resolved
+(the admin-tooling item only partially — locations/clocks are still thin
+CRUD and there's no standalone war tab). See Known Bugs and the
+Scorecard's War & coalition system and Admin tooling rows.)*
 
 ## Features & Roadmap
 
@@ -321,10 +322,12 @@ No code exists yet for any of these.
 
 Partial implementation exists in the codebase today.
 
-- **Admin tooling as simulation design** — the tick dry-run preview proves
-  the pattern works. Extending "let the host see why the simulation decided
-  something" to the rest of the admin panel is unstarted design-and-build
-  work riding on an already-proven approach.
+- **Admin tooling as simulation design** — the faction and NPC tabs now
+  extend "let the host see why the simulation decided something" past the
+  tick dry-run preview via new per-entity `/reasoning` routes. Locations
+  and clocks are still thin CRUD, and there's no standalone war tab
+  (war reasoning rides along with the faction fighting it) — extending
+  further is the remaining work.
 - **API route test coverage** — targeted coverage exists for the
   highest-risk reads and writes; broadening it toward the rest of the
   route surface is ongoing, not finished.

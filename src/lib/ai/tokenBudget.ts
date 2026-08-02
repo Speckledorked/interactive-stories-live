@@ -1,0 +1,167 @@
+// src/lib/ai/tokenBudget.ts
+//
+// #117: buildOptimizedWorldSummary's entity-count caps (MAX_NPCS_IN_PROMPT
+// etc.) and clampPromptStrings' per-string character clamp are both FIXED —
+// applied the same regardless of how large the assembled request actually
+// ends up. This is the finer-grained final pass layered on top of them: a
+// real token-budget check against the fully-assembled world_summary +
+// current_scene_intro, trimming whole sections in priority order — never
+// individual strings, that's clampPromptStrings' job — until under a
+// configured ceiling.
+//
+// Priority order, LOWEST priority trimmed FIRST (decided 2026-08-02):
+//   1. World-summary macro detail — RAG recall (relevant_lore/
+//      relevant_campaign_history), the campaign-overview blurb, the
+//      timeline, then the npc/faction/war/quest/location/clock arrays.
+//   2. Recent-scene text (current_scene_intro).
+//   3. Character sheets (world_summary.characters) — protected longest,
+//      and even then only trimmed down to the PCs actually in this scene,
+//      never below that floor.
+//
+// estimateTokenCount (cost-tracker.ts) is a rough ~4-chars-per-token
+// heuristic, same one already used for cost logging — good enough for a
+// budget check, not meant to be exact.
+
+import { estimateTokenCount } from './cost-tracker'
+import { truncateWithEllipsis } from '@/lib/format'
+import type { AIGMRequest } from './client'
+
+// A starting estimate, not a measured figure (no live token-count
+// verification was available while building this — see the lore-seeding
+// plan's own caution about the same kind of number). Generous enough that
+// today's typical campaign never hits it, while still bounding the
+// pathological case (a large, long-running campaign with many discovered
+// entities) that the fixed entity-count caps alone don't protect against.
+export const DEFAULT_TOKEN_BUDGET = 12000
+
+export interface TokenBudgetInput {
+  worldSummary: AIGMRequest['world_summary']
+  currentSceneIntro: string
+  /** PCs actually in the current scene, or null for a genuinely open scene
+   * (the full living roster is in play, so there's no sub-list to prefer —
+   * see buildOptimizedWorldSummary's participantCharacterIds). Only used to
+   * decide how far character sheets can be trimmed in the last, most-
+   * protected tier. */
+  participantCharacterIds: string[] | null
+}
+
+export interface TokenBudgetResult {
+  worldSummary: AIGMRequest['world_summary']
+  currentSceneIntro: string
+  /** Which trim steps actually fired, in the order they fired. Empty when
+   * the input was already under budget. For logging/tests, not the prompt. */
+  stepsApplied: string[]
+}
+
+function estimatedTokens(worldSummary: AIGMRequest['world_summary'], currentSceneIntro: string): number {
+  return estimateTokenCount(JSON.stringify(worldSummary)) + estimateTokenCount(currentSceneIntro)
+}
+
+/** Keeps the first half of an array (callers already sort by
+ * importance/recency before this ever runs), leaving 0/1-length arrays
+ * alone since there's nothing left to usefully halve. */
+function halved<T>(arr: T[] | undefined): T[] | undefined {
+  if (!Array.isArray(arr) || arr.length <= 1) return arr
+  return arr.slice(0, Math.ceil(arr.length / 2))
+}
+
+/**
+ * Pure. Applies trim steps in priority order, re-checking the estimate
+ * after each one and stopping as soon as it's under budget — never trims
+ * more than it has to, and a well-behaved (small) request is returned
+ * completely unchanged.
+ */
+export function applyTokenBudget(
+  input: TokenBudgetInput,
+  maxTokens: number = DEFAULT_TOKEN_BUDGET
+): TokenBudgetResult {
+  let worldSummary = input.worldSummary
+  let currentSceneIntro = input.currentSceneIntro
+  const stepsApplied: string[] = []
+
+  const underBudget = () => estimatedTokens(worldSummary, currentSceneIntro) <= maxTokens
+
+  if (underBudget()) {
+    return { worldSummary, currentSceneIntro, stepsApplied }
+  }
+
+  // Tier 1 (lowest priority, trimmed first): world-summary macro detail.
+  // Ordered least-central-to-continuity first: imported reference lore and
+  // RAG-recalled history are recall AIDS, not the scene itself, so they go
+  // before anything the world state actually depends on. Each step also
+  // declares whether it has anything left to give — a step with nothing to
+  // trim is skipped (not applied, not logged) rather than counted as a
+  // no-op "trim" that didn't actually shrink anything.
+  const tier1Steps: Array<[string, () => boolean, () => void]> = [
+    ['relevant_lore',
+      () => (worldSummary.relevant_lore?.length ?? 0) > 0,
+      () => { worldSummary = { ...worldSummary, relevant_lore: [] } }],
+    ['relevant_campaign_history',
+      () => (worldSummary.relevant_campaign_history?.length ?? 0) > 0,
+      () => { worldSummary = { ...worldSummary, relevant_campaign_history: [] } }],
+    ['_campaignSummary',
+      () => !!worldSummary._campaignSummary,
+      () => { worldSummary = { ...worldSummary, _campaignSummary: undefined } }],
+    ['recent_timeline_events',
+      () => worldSummary.recent_timeline_events.length > 1,
+      () => { worldSummary = { ...worldSummary, recent_timeline_events: halved(worldSummary.recent_timeline_events) ?? [] } }],
+    ['wars_quests_locations_clocks',
+      () => [worldSummary.wars, worldSummary.quests, worldSummary.locations, worldSummary.clocks].some((arr) => (arr?.length ?? 0) > 1),
+      () => {
+        worldSummary = {
+          ...worldSummary,
+          wars: halved(worldSummary.wars),
+          quests: halved(worldSummary.quests),
+          locations: halved(worldSummary.locations),
+          clocks: halved(worldSummary.clocks) ?? worldSummary.clocks,
+        }
+      }],
+    ['npcs',
+      () => worldSummary.npcs.length > 1,
+      () => { worldSummary = { ...worldSummary, npcs: halved(worldSummary.npcs) ?? worldSummary.npcs } }],
+    ['factions',
+      () => worldSummary.factions.length > 1,
+      () => { worldSummary = { ...worldSummary, factions: halved(worldSummary.factions) ?? worldSummary.factions } }],
+  ]
+
+  for (const [name, hasContent, apply] of tier1Steps) {
+    if (underBudget()) break
+    if (!hasContent()) continue
+    apply()
+    stepsApplied.push(name)
+  }
+  if (underBudget()) {
+    return { worldSummary, currentSceneIntro, stepsApplied }
+  }
+
+  // Tier 2: recent-scene text. Halves it (word-aligned, via the same
+  // truncateWithEllipsis clampPromptStrings' sibling helpers use) rather
+  // than dropping it outright — some continuity beats none.
+  if (currentSceneIntro.length > 0) {
+    currentSceneIntro = truncateWithEllipsis(currentSceneIntro, Math.ceil(currentSceneIntro.length / 2))
+    stepsApplied.push('current_scene_intro')
+  }
+  if (underBudget()) {
+    return { worldSummary, currentSceneIntro, stepsApplied }
+  }
+
+  // Tier 3 (protected longest): character sheets. Only narrows to the PCs
+  // actually in THIS scene — never drops below that floor even if still
+  // over budget afterward, and does nothing at all for a genuinely open
+  // scene (participantCharacterIds === null), since there's no sub-list to
+  // prefer over the full roster in that case.
+  if (
+    input.participantCharacterIds !== null &&
+    Array.isArray(worldSummary.characters) &&
+    input.participantCharacterIds.length > 0
+  ) {
+    const participants = new Set(input.participantCharacterIds)
+    const onlyParticipants = worldSummary.characters.filter((c) => participants.has(c.id))
+    if (onlyParticipants.length > 0 && onlyParticipants.length < worldSummary.characters.length) {
+      worldSummary = { ...worldSummary, characters: onlyParticipants }
+      stepsApplied.push('characters')
+    }
+  }
+
+  return { worldSummary, currentSceneIntro, stepsApplied }
+}

@@ -15,6 +15,7 @@ import { resolveActionMechanics } from '@/lib/game/resolution'
 import { describeZone } from '@/lib/game/zones'
 import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
 import { buildOptimizedWorldSummary, buildWorldSummaryForAI } from './worldSummary'
+import { applyTokenBudget } from './tokenBudget'
 
 /**
  * Enhance system prompt with campaign memory instructions
@@ -411,11 +412,23 @@ export async function buildSceneResolutionRequest(
     }
   }
 
+  // #117: a real token-budget check on top of the fixed entity-count caps
+  // and per-string clamp already applied above — trims whole sections in
+  // priority order only if the assembled request is actually over budget.
+  const budgeted = applyTokenBudget({
+    worldSummary: worldSummaryWithMemories,
+    currentSceneIntro: sceneContext,
+    participantCharacterIds,
+  })
+  if (budgeted.stepsApplied.length > 0) {
+    console.log(`✂️ Token budget trimmed: ${budgeted.stepsApplied.join(', ')}`)
+  }
+
   return {
     campaign_universe: campaign.universe || 'Generic Fantasy',
     ai_system_prompt: enhancedSystemPrompt + (fullGuidance ? `\n\n${fullGuidance}` : ''),
-    world_summary: worldSummaryWithMemories,
-    current_scene_intro: sceneContext,
+    world_summary: budgeted.worldSummary,
+    current_scene_intro: budgeted.currentSceneIntro,
     corruption_theme: corruptionThemeForPrompt,
     safety_lines: safetySettings?.lines ?? [],
     safety_veils: safetySettings?.veils ?? [],

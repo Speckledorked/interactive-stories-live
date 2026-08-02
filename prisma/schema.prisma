@@ -386,6 +386,10 @@ model Campaign {
   // #111: faction-to-faction economic obligations.
   factionDebts FactionDebt[]
 
+  // #119: generic signed/contested-value arcs (territory loyalty, and any
+  // future consumer).
+  arcs Arc[]
+
   // Urban Shadows economy: per-character social position with factions.
   factionStandings FactionStanding[]
 
@@ -1158,6 +1162,47 @@ enum FactionDebtStatus {
   PAID
 }
 
+// #119: a generic, reusable signed/contested value — the pattern
+// War.momentum already established (a tug-of-war between two sides,
+// pushed each tick, clamped, resolved decisively past a threshold or by
+// timeout) extracted into real, additive storage for OTHER contested
+// values, starting with territory loyalty (Location.loyaltyArc).
+//
+// Deliberately NOT a storage migration for War itself: War.momentum stays
+// exactly the plain Int column it already is — a live DB CHECK
+// constraint, an AI-prompt display path (worldSummaryMappers.ts), and
+// full Integrity Engine coverage all already depend on that shape, and
+// nothing else needs to join against it. Only the PURE PUSH MATH is
+// shared (see game/arc.ts's decideArcDelta/decideArcResolution, which
+// decideWarProgress/decideWarResolution in tick/warTick.ts now delegate
+// to internally) — this table is new storage for consumers that don't
+// have their own dedicated column yet.
+//
+// `kind` is a plain string, not a Prisma enum: like ActiveWake.sourceType,
+// a new kind costs nothing structurally to add later, with no risk of
+// the #109-style schema/DB enum desync. `locationId` is the FIRST real
+// consumer's link (one Arc per contested location, at most — the
+// @@unique enforces that); a future second non-War consumer would add its
+// own optional unique FK the same way Clock already has separate
+// sourceFactionId/targetFactionId/relatedFactionId columns for different
+// link semantics, rather than a single polymorphic "ownerId" column.
+model Arc {
+  id          String   @id @default(cuid())
+  campaignId  String
+  kind        String // e.g. 'TERRITORY_LOYALTY'
+  value       Int      @default(0) // -100..100, DB CHECK Arc_value_range
+  startedTurn Int // the turn this arc's contest began — feeds decideArcResolution's timeout
+  locationId  String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  campaign Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  location Location? @relation("LocationLoyaltyArc", fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([locationId])
+}
+
 //
 // LOCATIONS
 //
@@ -1244,6 +1289,9 @@ model Location {
   // #108: reverse side of LocationAdjacency.locationAId/locationBId.
   adjacentAsA LocationAdjacency[] @relation("LocationAdjacencyA")
   adjacentAsB LocationAdjacency[] @relation("LocationAdjacencyB")
+  // #119: this location's territory-loyalty Arc, if it's ever been
+  // contested — see Arc below.
+  loyaltyArc Arc? @relation("LocationLoyaltyArc")
 
   @@unique([campaignId, name])
   @@index([campaignId])

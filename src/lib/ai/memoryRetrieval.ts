@@ -160,12 +160,44 @@ export async function retrieveRelevantHistory(
 
     console.log(`✓ Retrieved ${result.length} relevant memories for scene ${context.currentScene.sceneNumber}`);
 
+    // Fire-and-forget: bump retrievalCount/lastRetrievedTurn for the
+    // memories we actually surfaced — a frequency signal
+    // memoryConsolidation.ts uses to exempt memories that keep proving
+    // useful from being rolled into an era summary (see #107). Never
+    // awaited: this must not add latency to the synchronous, pre-callAIGM
+    // retrieval path, so a failure here is logged and dropped, never
+    // allowed to affect what's returned to the caller.
+    if (result.length > 0) {
+      recordMemoryRetrievals(campaignId, result.map((m) => m.id)).catch((err) =>
+        console.error('Failed to record memory retrieval stats (non-critical):', err)
+      );
+    }
+
     return result;
   } catch (error) {
     console.error('Error retrieving campaign memories:', error);
     // Don't fail scene resolution if memory retrieval fails
     return [];
   }
+}
+
+/**
+ * Best-effort write, never awaited by the caller (see the fire-and-forget
+ * call above). Reads the campaign's current turn from WorldMeta rather than
+ * taking it as a parameter — retrieveRelevantHistory's callers don't
+ * otherwise need turn context, and this write isn't latency-sensitive.
+ */
+async function recordMemoryRetrievals(campaignId: string, memoryIds: string[]): Promise<void> {
+  const worldMeta = await prisma.worldMeta.findUnique({
+    where: { campaignId },
+    select: { currentTurnNumber: true },
+  });
+
+  await prisma.$executeRaw`
+    UPDATE campaign_memories
+    SET "retrievalCount" = "retrievalCount" + 1, "lastRetrievedTurn" = ${worldMeta?.currentTurnNumber ?? null}
+    WHERE id = ANY(${memoryIds}::text[])
+  `;
 }
 
 /**

@@ -13,7 +13,8 @@ import type { MapData } from '@/lib/maps/map-service'
 import AILoadingState from '@/components/scene/AILoadingState'
 import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
 import AITransparencyPanel, { type WorldStateChange } from '@/components/scene/AITransparencyPanel'
-import { extractWorldStateChanges } from '@/lib/game/worldStateChanges'
+import { extractWorldStateChanges, extractOutcomeAdherence } from '@/lib/game/worldStateChanges'
+import type { AdherenceResult } from '@/lib/game/outcomeAdherence'
 import CharacterSnapshotModal from '@/components/character/CharacterSnapshotModal'
 import { useCommandPalette } from '@/contexts/CommandPaletteContext'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -109,6 +110,7 @@ export default function StoryPage() {
   const [showMap, setShowMap] = useState(true)
   const [showCharacterSnapshot, setShowCharacterSnapshot] = useState(false)
   const [sceneWorldStateChanges, setSceneWorldStateChanges] = useState<Record<string, WorldStateChange[]>>({})
+  const [sceneOutcomeAdherence, setSceneOutcomeAdherence] = useState<Record<string, AdherenceResult>>({})
   const [expandedTransparency, setExpandedTransparency] = useState<Record<string, boolean>>({})
   const [startingScene, setStartingScene] = useState(false)
   const [endingScene, setEndingScene] = useState(false)
@@ -224,6 +226,7 @@ export default function StoryPage() {
 
       // Load world state changes for scenes
       const changesMap: Record<string, WorldStateChange[]> = {}
+      const adherenceMap: Record<string, AdherenceResult> = {}
       for (const scene of sceneData.scenes || []) {
         // Shape lives in one place (world-state-tracker) rather than being
         // hand-read out of an untyped Json blob here.
@@ -231,8 +234,13 @@ export default function StoryPage() {
         if (sceneChanges.length > 0) {
           changesMap[scene.id] = sceneChanges
         }
+        const adherence = extractOutcomeAdherence(scene.consequences)
+        if (adherence) {
+          adherenceMap[scene.id] = adherence
+        }
       }
       setSceneWorldStateChanges(changesMap)
+      setSceneOutcomeAdherence(adherenceMap)
 
       // Get user's characters
       const userChars = campData.campaign?.characters?.filter(
@@ -1189,6 +1197,7 @@ export default function StoryPage() {
                           <div className="mt-4">
                             <AITransparencyPanel
                               changes={sceneWorldStateChanges[scene.id]}
+                              adherence={sceneOutcomeAdherence[scene.id]}
                               sceneNumber={scene.sceneNumber}
                               isOpen={expandedTransparency[scene.id] !== false}
                               onClose={() => setExpandedTransparency(prev => ({ ...prev, [scene.id]: false }))}

@@ -116,6 +116,7 @@ import { callAIGM } from '@/lib/ai/client';
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState';
 import { applyWorldUpdates } from '../stateUpdater';
 import { AIVisualService } from '@/lib/ai/ai-visual-service';
+import { storeWorldStateChanges } from '../world-state-tracker';
 
 describe('Scene Resolver', () => {
   beforeEach(() => {
@@ -246,6 +247,33 @@ describe('Scene Resolver', () => {
       // mockScene.sceneResolutionText is null — this is the scene's first
       // exchange, so a map should be generated.
       expect(AIVisualService.generateMapFromScene).toHaveBeenCalled();
+    });
+
+    // #91: client.ts's callAIGM stamps _outcomeAdherence onto its response
+    // (see client.ts's addValidationMetadata-style pattern); this confirms
+    // sceneResolver.ts actually forwards it to storeWorldStateChanges rather
+    // than letting it dead-end after the AI call.
+    it('passes the AI response\'s _outcomeAdherence through to storeWorldStateChanges', async () => {
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
+      const adherence = {
+        entries: [{ characterName: 'Kess', rolled: 'weakHit', narrated: 'miss', verdict: 'mismatch' }],
+        matched: 0,
+        mismatched: 1,
+        unreported: 0,
+        ambiguous: 0,
+        problems: ['Kess: engine rolled weakHit, narration reported miss'],
+      };
+      vi.mocked(callAIGM).mockResolvedValue({ ...mockAIResponse, _outcomeAdherence: adherence } as any);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [] });
+      vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false } as any);
+
+      await resolveScene(mockCampaignId, mockSceneId);
+
+      expect(storeWorldStateChanges).toHaveBeenCalledWith(mockSceneId, expect.any(Array), adherence);
     });
 
     it('does not generate a map when the campaign has map generation off (the default)', async () => {

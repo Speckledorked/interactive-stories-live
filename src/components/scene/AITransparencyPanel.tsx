@@ -4,6 +4,7 @@
 'use client'
 
 import { useState } from 'react'
+import type { AdherenceResult } from '@/lib/game/outcomeAdherence'
 
 export interface WorldStateChange {
   // 'roll' entries are the move-resolution receipts (see
@@ -17,6 +18,12 @@ export interface WorldStateChange {
 
 interface AITransparencyPanelProps {
   changes: WorldStateChange[]
+  // #91: did the narration actually match the roll it was told was
+  // binding? The check itself (checkOutcomeAdherence) already ran
+  // server-side during callAIGM; this is what makes that result reach the
+  // player, in the same panel that already shows the roll receipts it's
+  // checking against. Absent on scenes resolved before this field existed.
+  adherence?: AdherenceResult
   sceneNumber?: number
   isOpen?: boolean
   onClose?: () => void
@@ -24,6 +31,7 @@ interface AITransparencyPanelProps {
 
 export default function AITransparencyPanel({
   changes,
+  adherence,
   sceneNumber,
   isOpen = true,
   onClose
@@ -39,8 +47,11 @@ export default function AITransparencyPanel({
     // Receipts start collapsed — "behind the screen" is opt-in by design.
     roll: false
   })
+  const [adherenceExpanded, setAdherenceExpanded] = useState(false)
 
-  if (!isOpen || changes.length === 0) {
+  const hasAdherenceProblems = !!adherence && (adherence.mismatched > 0 || adherence.unreported > 0 || adherence.ambiguous > 0)
+
+  if (!isOpen || (changes.length === 0 && !adherence)) {
     return null
   }
 
@@ -137,6 +148,54 @@ export default function AITransparencyPanel({
         The AI GM made the following changes to the world state during this scene:
       </p>
 
+      {adherence && (adherence.matched + adherence.mismatched + adherence.unreported + adherence.ambiguous) > 0 && (
+        <div
+          className={`rounded-lg border mb-3 overflow-hidden ${
+            hasAdherenceProblems
+              ? 'bg-gradient-to-r from-wine-800/20 to-wine-900/10 border-wine-700/50'
+              : 'bg-gradient-to-r from-green-500/10 to-green-600/5 border-green-600/30'
+          }`}
+        >
+          <button
+            onClick={() => setAdherenceExpanded(prev => !prev)}
+            className="w-full p-3 flex items-center justify-between hover:bg-white/5 transition-colors"
+            disabled={!hasAdherenceProblems}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{hasAdherenceProblems ? '⚖️' : '✓'}</span>
+              <span className="font-semibold text-ember-100 text-sm">
+                {hasAdherenceProblems
+                  ? `Narration didn't match every roll (${adherence.matched}/${adherence.matched + adherence.mismatched} matched)`
+                  : `Narration matched every roll (${adherence.matched} checked)`}
+              </span>
+            </div>
+            {hasAdherenceProblems && (
+              <span className="text-ember-400/50">{adherenceExpanded ? '▼' : '▶'}</span>
+            )}
+          </button>
+
+          {hasAdherenceProblems && adherenceExpanded && (
+            <div className="p-3 pt-0 space-y-2">
+              {adherence.entries
+                .filter(e => e.verdict !== 'match')
+                .map((entry, idx) => (
+                  <div key={idx} className="bg-black/25 rounded-lg p-3 border border-ember-900/20">
+                    <div className="font-medium text-ember-100 text-sm mb-1">{entry.characterName}</div>
+                    <p className="text-sm text-ember-200/70">
+                      {entry.verdict === 'mismatch' &&
+                        `The engine rolled ${entry.rolled}, but the narration read like ${entry.narrated}.`}
+                      {entry.verdict === 'unreported' &&
+                        `The engine rolled ${entry.rolled}, and the narrator didn't report which band it depicted.`}
+                      {entry.verdict === 'ambiguous' &&
+                        `Multiple rolled actions this exchange — which one the narration matches couldn't be determined.`}
+                    </p>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="space-y-3">
         {Object.entries(groupedChanges).map(([category, categoryChanges]) => (
           <div
@@ -188,7 +247,7 @@ export default function AITransparencyPanel({
         ))}
       </div>
 
-      {changes.length === 0 && (
+      {changes.length === 0 && !adherence && (
         <div className="text-center py-8 text-ember-400/50">
           <div className="text-4xl mb-2">✨</div>
           <p className="text-sm">No world state changes this scene</p>

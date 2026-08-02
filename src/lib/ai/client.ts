@@ -7,7 +7,7 @@ import { openaiFetch } from '@/lib/ai/openaiCompat'
 import { callChatCompletion } from './chatCompletion'
 import { buildSystemPrompt, buildUserPrompt } from './scenePrompt'
 import { validateAIResponseWithRepair, addValidationMetadata } from './validation'
-import { checkOutcomeAdherence, type OutcomeBand } from '@/lib/game/outcomeAdherence'
+import { checkOutcomeAdherence, type OutcomeBand, type AdherenceResult } from '@/lib/game/outcomeAdherence'
 import { validateWorldTurnResponse } from './validation'
 import { circuitBreakerManager } from './circuit-breaker'
 import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
@@ -516,7 +516,7 @@ export async function callAIGM(
   options?: {
     debugMode?: boolean
   }
-): Promise<AIGMResponse> {
+): Promise<AIGMResponse & { _outcomeAdherence?: AdherenceResult }> {
   const startTime = Date.now()
   const apiKey = process.env.OPENAI_API_KEY
 
@@ -745,7 +745,11 @@ export async function callAIGM(
       })
     }
 
-    return validatedResponse
+    // Stamp the adherence result onto the response, the same convention
+    // addValidationMetadata uses above, so sceneResolver.ts can persist it
+    // per-exchange for the transparency panel (#91) without recomputing the
+    // comparison a second time from aiRequest/aiResponse.
+    return { ...validatedResponse, _outcomeAdherence: adherence }
 
   } catch (error) {
     const responseTimeMs = Date.now() - startTime

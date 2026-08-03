@@ -25,6 +25,8 @@ import { CampaignEntryCTA } from '@/components/campaigns/lobby/CampaignEntryCTA'
 import { CharacterRoster } from '@/components/campaigns/lobby/CharacterRoster'
 import { PlayersPanel } from '@/components/campaigns/lobby/PlayersPanel'
 import { WorldChronicle } from '@/components/campaigns/lobby/WorldChronicle'
+import { WorldGlance } from '@/components/campaigns/lobby/WorldGlance'
+import type { ChronicleGlance } from '@/lib/game/chronicleTypes'
 
 interface CampaignData {
   campaign: any
@@ -394,6 +396,11 @@ export default function CampaignLobbyPage() {
             />
           </div>
         </div>
+
+        <WorldGlance
+          glance={(campaign.worldMeta?.chronicleGlance as ChronicleGlance | null) ?? null}
+          turnNumber={campaign.worldMeta?.currentTurnNumber || 0}
+        />
 
         <WorldChronicle
           campaignId={campaignId}

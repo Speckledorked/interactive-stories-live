@@ -48,7 +48,7 @@ export function TavernNav({
     <nav
       className={
         myth
-          ? 'fixed bottom-0 inset-x-0 z-30 bg-myth-surface/90 backdrop-blur-md border-t border-myth-border pb-[env(safe-area-inset-bottom)]'
+          ? 'fixed bottom-0 inset-x-0 z-30 bg-myth-surface/90 backdrop-blur-md border-t border-myth-border pb-[env(safe-area-inset-bottom)] lg:hidden'
           : 'fixed bottom-0 inset-x-0 z-30 bg-black/70 backdrop-blur-md border-t border-ember-900/40 pb-[env(safe-area-inset-bottom)]'
       }
     >

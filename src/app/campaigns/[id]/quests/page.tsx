@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Scroll } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
-import { displayFont } from '@/lib/tavernTheme'
+import { fontDisplay } from '@/lib/fonts'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernCard, TavernEmptyState, TavernSpinner } from '@/components/tavern/ui'
+import { EmptyState } from '@/components/ui/empty-state'
 
 type QuestStatus = 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'ABANDONED'
 
@@ -39,10 +38,10 @@ const STATUS_GROUPS: { status: QuestStatus; label: string }[] = [
 ]
 
 const STATUS_BADGE: Record<QuestStatus, string> = {
-  ACTIVE: 'text-ember-300 bg-ember-900/30 border-ember-800/40',
-  COMPLETED: 'text-success-400 bg-success-900/20 border-success-800/40',
-  FAILED: 'text-wine-400 bg-wine-800/20 border-wine-600/40',
-  ABANDONED: 'text-ember-400/50 bg-black/30 border-ember-900/30',
+  ACTIVE: 'text-myth-info bg-myth-info/10 border-myth-info/30',
+  COMPLETED: 'text-myth-good bg-myth-good/10 border-myth-good/30',
+  FAILED: 'text-myth-danger bg-myth-danger/10 border-myth-danger/30',
+  ABANDONED: 'text-myth-ink-faint bg-myth-surface-sunken border-myth-border',
 }
 
 // The last appended beat, not the full log - a quest log entry should read
@@ -99,10 +98,12 @@ export default function QuestsPage() {
 
   if (loading) {
     return (
-      <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} />
+      <TavernPage background="myth">
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} variant="myth" />
         <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
-          <TavernSpinner className="h-16 w-16" />
+          <div className="flex justify-center py-16">
+            <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
+          </div>
         </main>
       </TavernPage>
     )
@@ -110,12 +111,12 @@ export default function QuestsPage() {
 
   if (error) {
     return (
-      <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} />
+      <TavernPage background="myth">
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} variant="myth" />
         <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
-          <TavernCard className="p-6 bg-wine-800/20 border-wine-600/40">
-            <p className="text-wine-400">{error}</p>
-          </TavernCard>
+          <div className="rounded-lg border border-myth-danger/30 bg-myth-danger/10 p-6">
+            <p className="text-myth-danger">{error}</p>
+          </div>
         </main>
       </TavernPage>
     )
@@ -124,17 +125,16 @@ export default function QuestsPage() {
   const activeCount = quests.filter(q => q.status === 'ACTIVE').length
 
   return (
-    <TavernPage>
-      <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} />
+    <TavernPage background="myth">
+      <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} variant="myth" />
 
       <main className="max-w-4xl mx-auto px-4 pt-28 pb-28">
-        <p className="text-ember-300/50 text-sm mb-6">
+        <p className="mb-6 text-sm text-myth-ink-faint">
           {campaign?.name || 'Campaign'} — {activeCount} active {activeCount === 1 ? 'quest' : 'quests'}
         </p>
 
         {quests.length === 0 ? (
-          <TavernEmptyState
-            icon={Scroll}
+          <EmptyState
             title="No quests yet"
             description="Quests appear here once one's given to the party in a scene"
           />
@@ -146,48 +146,51 @@ export default function QuestsPage() {
 
               return (
                 <div key={status}>
-                  <h2 className="text-xs font-medium text-ember-400/60 uppercase tracking-wide mb-3">
+                  <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-myth-ink-faint">
                     {label} ({group.length})
                   </h2>
-                  <div className="space-y-4">
+                  {/* Quest descriptions are narrative content meant to be
+                      read — flowing/divided, not individually boxed (see
+                      docs/design-system.md). */}
+                  <div className="divide-y divide-myth-border">
                     {group.map((quest) => {
                       const lastBeat = lastProgressBeat(quest.progressLog)
                       return (
-                        <TavernCard key={quest.id} className="p-5">
-                          <div className="flex items-start justify-between gap-4 mb-2">
-                            <h3 className={`${displayFont.className} text-lg text-ember-100`}>{quest.name}</h3>
+                        <div key={quest.id} className="py-5 first:pt-0">
+                          <div className="mb-2 flex items-start justify-between gap-4">
+                            <h3 className={`${fontDisplay.className} text-lg font-semibold text-myth-ink`}>{quest.name}</h3>
                             <span className={`text-xs font-medium border rounded px-2 py-1 whitespace-nowrap ${STATUS_BADGE[quest.status]}`}>
                               {quest.status.charAt(0) + quest.status.slice(1).toLowerCase()}
                             </span>
                           </div>
 
-                          <p className="text-ember-200/70 leading-relaxed mb-3 whitespace-pre-wrap text-sm">
+                          <p className="mb-3 whitespace-pre-wrap text-sm leading-relaxed text-myth-ink-muted">
                             {quest.description}
                           </p>
 
                           {quest.objective && (
-                            <p className="text-sm text-ember-300/60 mb-1">
-                              <span className="text-ember-400/50">Objective: </span>{quest.objective}
+                            <p className="mb-1 text-sm text-myth-ink-muted">
+                              <span className="text-myth-ink-faint">Objective: </span>{quest.objective}
                             </p>
                           )}
                           {quest.givenBy && (
-                            <p className="text-sm text-ember-300/60 mb-1">
-                              <span className="text-ember-400/50">Given by: </span>{quest.givenBy}
+                            <p className="mb-1 text-sm text-myth-ink-muted">
+                              <span className="text-myth-ink-faint">Given by: </span>{quest.givenBy}
                             </p>
                           )}
                           {quest.reward && (
-                            <p className="text-sm text-ember-300/60 mb-1">
-                              <span className="text-ember-400/50">Reward: </span>{quest.reward}
+                            <p className="mb-1 text-sm text-myth-ink-muted">
+                              <span className="text-myth-ink-faint">Reward: </span>{quest.reward}
                             </p>
                           )}
 
                           {lastBeat && (
-                            <div className="mt-3 pt-3 border-t border-ember-900/30">
-                              <p className="text-xs text-ember-400/50 mb-1">Latest</p>
-                              <p className="text-sm text-ember-300/70">{lastBeat}</p>
+                            <div className="mt-3 border-t border-myth-border pt-3">
+                              <p className="mb-1 text-xs text-myth-ink-faint">Latest</p>
+                              <p className="text-sm text-myth-ink-muted">{lastBeat}</p>
                             </div>
                           )}
-                        </TavernCard>
+                        </div>
                       )
                     })}
                   </div>
@@ -198,7 +201,7 @@ export default function QuestsPage() {
         )}
       </main>
 
-      <TavernNav active="quests" campaignId={campaignId} />
+      <TavernNav active="quests" campaignId={campaignId} variant="myth" />
     </TavernPage>
   )
 }

@@ -8,8 +8,8 @@ import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/cl
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernCard, TavernSpinner } from '@/components/tavern/ui'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
+import { EmptyState } from '@/components/ui/empty-state'
 
 export default function CharactersListPage() {
   const router = useRouter()
@@ -59,10 +59,12 @@ export default function CharactersListPage() {
 
   if (loading) {
     return (
-      <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Characters" campaignId={campaignId} />
+      <TavernPage background="myth">
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Characters" campaignId={campaignId} variant="myth" />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
-          <TavernSpinner className="h-16 w-16" />
+          <div className="flex justify-center py-16">
+            <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
+          </div>
         </main>
       </TavernPage>
     )
@@ -70,12 +72,12 @@ export default function CharactersListPage() {
 
   if (error || !campaign) {
     return (
-      <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Characters" campaignId={campaignId} />
+      <TavernPage background="myth">
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Characters" campaignId={campaignId} variant="myth" />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16 text-center">
-          <h2 className="text-2xl font-bold text-wine-400 mb-4">Error</h2>
-          <p className="text-ember-300/60 mb-4">{error || 'Campaign not found'}</p>
-          <Link href="/campaigns" className="text-ember-300 hover:text-ember-200">
+          <h2 className="mb-4 text-2xl font-bold text-myth-danger">Error</h2>
+          <p className="mb-4 text-myth-ink-muted">{error || 'Campaign not found'}</p>
+          <Link href="/campaigns" className="text-myth-accent hover:text-myth-accent-hover">
             ← Back to Campaigns
           </Link>
         </main>
@@ -84,14 +86,15 @@ export default function CharactersListPage() {
   }
 
   return (
-    <TavernPage>
+    <TavernPage background="myth">
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title="Characters"
         campaignId={campaignId}
         isAdmin={userRole === 'ADMIN'}
+        variant="myth"
         subrow={
-          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-ember-900/20 pt-2 pb-0">
+          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-myth-border pt-2 pb-0">
             <SubNavTabs
               tabs={[
                 { key: 'overview', label: 'Overview', icon: Home, href: `/campaigns/${campaignId}` },
@@ -99,6 +102,7 @@ export default function CharactersListPage() {
                 { key: 'characters', label: 'Characters', icon: User },
               ]}
               activeKey="characters"
+              variant="myth"
             />
           </nav>
         }
@@ -106,46 +110,45 @@ export default function CharactersListPage() {
 
       <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
         {characters.length === 0 ? (
-          <TavernCard className="p-12 text-center">
-            <p className="text-ember-300/60 mb-4">No characters in this campaign yet.</p>
-            <Link href={`/campaigns/${campaignId}`} className="text-ember-300 hover:text-ember-200">
-              Go to campaign overview to create a character
-            </Link>
-          </TavernCard>
+          <EmptyState
+            title="No characters in this campaign yet."
+            description="Go to the campaign overview to create a character."
+            action={{ label: 'Go to overview', href: `/campaigns/${campaignId}` }}
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {characters.map((character: any) => (
               <Link
                 key={character.id}
                 href={`/campaigns/${campaignId}/characters/${character.id}`}
-                className="group block p-6 rounded-2xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 hover:border-ember-700/50 shadow-lg shadow-black/30 transition-all duration-200"
+                className="group block rounded-lg border border-myth-border bg-myth-surface p-6 transition-colors hover:border-myth-border-strong"
               >
-                <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-xl font-bold text-ember-100 group-hover:text-ember-300 transition-colors">{character.name}</h3>
+                <div className="mb-4 flex items-start justify-between">
+                  <h3 className="font-display text-xl font-semibold text-myth-ink">{character.name}</h3>
                 </div>
 
                 {character.class && (
-                  <p className="text-ember-200/70 text-sm mb-3 font-medium">{character.class}</p>
+                  <p className="mb-3 text-sm font-medium text-myth-ink-muted">{character.class}</p>
                 )}
 
                 {character.description && (
-                  <p className="text-ember-300/60 text-sm line-clamp-2 mb-4 leading-relaxed">
+                  <p className="mb-4 line-clamp-2 text-sm leading-relaxed text-myth-ink-muted">
                     {character.description}
                   </p>
                 )}
 
                 {character.stats && (
-                  <div className="grid grid-cols-3 gap-3 text-xs mb-4">
+                  <div className="mb-4 grid grid-cols-3 gap-3 text-xs">
                     {Object.entries(character.stats as Record<string, number>)
                       .slice(0, 6)
                       .map(([stat, value]) => {
                         const custom = (campaign?.statLabels as any)?.[stat]
                         return (
-                          <div key={stat} className="text-center p-2 bg-black/25 rounded-lg border border-ember-900/30">
-                            <div className={`text-ember-400/50 font-medium mb-1 ${custom?.label ? '' : 'uppercase'}`}>
+                          <div key={stat} className="rounded-lg border border-myth-border bg-myth-surface-sunken p-2 text-center">
+                            <div className={`mb-1 font-medium text-myth-ink-faint ${custom?.label ? '' : 'uppercase'}`}>
                               {custom?.label || stat}
                             </div>
-                            <div className="text-ember-100 font-bold text-base">{value}</div>
+                            <div className="text-base font-bold text-myth-ink">{value}</div>
                           </div>
                         )
                       })}
@@ -153,9 +156,9 @@ export default function CharactersListPage() {
                 )}
 
                 {character.user && (
-                  <div className="mt-4 pt-4 border-t border-ember-900/30">
-                    <p className="text-xs text-ember-400/50 flex items-center gap-1">
-                      <User className="w-3 h-3" />
+                  <div className="mt-4 border-t border-myth-border pt-4">
+                    <p className="flex items-center gap-1 text-xs text-myth-ink-faint">
+                      <User className="h-3 w-3" />
                       {character.user.name || character.user.email || 'Unknown'}
                     </p>
                   </div>
@@ -166,7 +169,7 @@ export default function CharactersListPage() {
         )}
       </main>
 
-      <TavernNav active="characters" campaignId={campaignId} />
+      <TavernNav active="characters" campaignId={campaignId} variant="myth" />
     </TavernPage>
   )
 }

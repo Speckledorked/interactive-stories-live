@@ -12,6 +12,7 @@ import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
+import { SectionHeader } from '@/components/ui/section-header'
 
 type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
 // RUMORS isn't a WikiEntryType — it's a separate feed (offscreen
@@ -153,33 +154,35 @@ export default function WikiPage() {
 
   const getImportanceColor = (importance: string) => {
     switch (importance) {
-      case 'critical': return 'text-wine-400 bg-wine-800/30'
-      case 'major': return 'text-ember-300 bg-ember-900/30'
-      case 'normal': return 'text-ember-200 bg-ember-900/20'
-      default: return 'text-ember-400/60 bg-black/30'
+      case 'critical': return 'text-myth-danger bg-myth-danger/10'
+      case 'major': return 'text-myth-warn bg-myth-warn/10'
+      case 'normal': return 'text-myth-info bg-myth-info/10'
+      default: return 'text-myth-ink-faint bg-myth-surface-sunken'
     }
   }
 
   return (
-    <TavernPage>
+    <TavernPage background="myth">
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title="Campaign Wiki"
         campaignId={campaignId}
+        variant="myth"
         subrow={
-          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-ember-900/20 pt-2 pb-0">
+          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-myth-border pt-2 pb-0">
             <SubNavTabs
               tabs={tabs}
               activeKey={selectedType}
               onSelect={(key) => setSelectedType(key as WikiTab)}
               itemClassName="whitespace-nowrap flex-shrink-0"
+              variant="myth"
             />
           </nav>
         }
       />
 
       <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
-        <p className="text-ember-300/50 text-sm mb-6">A living knowledge base updated by the AI GM</p>
+        <p className="mb-6 text-sm text-myth-ink-faint">A living knowledge base updated by the AI GM</p>
 
         {/* Search */}
         <div className="relative mb-6">
@@ -188,73 +191,72 @@ export default function WikiPage() {
             placeholder="Search wiki entries..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full pl-10"
+            className="w-full rounded-lg border border-myth-border bg-myth-surface px-4 py-2.5 pl-10 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
           />
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ember-400/50" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-myth-ink-faint" />
         </div>
 
       {/* Rumors — a flat feed, not entity detail, so it gets its own
-          single-column layout instead of the list+detail split below */}
+          single-column narrative layout instead of the list+detail split
+          below (see docs/design-system.md: this is content meant to be
+          read, not reference material). */}
       {selectedType === 'RUMORS' ? (
-        <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-          <h3 className="text-sm font-bold text-ember-300/60 mb-3">Rumors ({filteredRumors.length})</h3>
-          <p className="text-xs text-ember-400/50 mb-4">
-            Word of things happening elsewhere in the world — not witnessed firsthand, just heard about.
-          </p>
+        <div>
+          <SectionHeader
+            as="h2"
+            title={`Rumors (${filteredRumors.length})`}
+            description="Word of things happening elsewhere in the world — not witnessed firsthand, just heard about."
+          />
+          <div className="mt-6">
           {loading ? (
             <div className="flex justify-center py-8">
-              <div className="relative">
-                <div className="spinner h-12 w-12"></div>
-                <div className="absolute inset-0 h-12 w-12 rounded-full bg-primary-500/20 animate-ping"></div>
-              </div>
+              <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-myth-accent" />
             </div>
           ) : filteredRumors.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-ember-400/50 text-sm">
+            <div className="py-8 text-center">
+              <p className="text-sm text-myth-ink-faint">
                 {searchQuery ? 'No rumors match your search' : 'No rumors yet'}
               </p>
-              <p className="text-xs text-ember-500/40 mt-2">
+              <p className="mt-2 text-xs text-myth-ink-faint">
                 Rumors surface as events happen offscreen, elsewhere in the world
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="divide-y divide-myth-border">
               {filteredRumors.map((rumor: any) => (
-                <div key={rumor.id} className="p-3 rounded-xl bg-black/25 border border-ember-900/30">
-                  <div className="flex items-start justify-between mb-1.5">
-                    <h4 className="font-semibold text-ember-100 text-sm">{rumor.title}</h4>
+                <div key={rumor.id} className="py-4 first:pt-0">
+                  <div className="mb-1.5 flex items-start justify-between">
+                    <h4 className="text-sm font-semibold text-myth-ink">{rumor.title}</h4>
                     {rumor.turnNumber && (
-                      <span className="text-xs text-ember-400/50 flex-shrink-0 ml-2">Turn {rumor.turnNumber}</span>
+                      <span className="ml-2 flex-shrink-0 text-xs text-myth-ink-faint">Turn {rumor.turnNumber}</span>
                     )}
                   </div>
-                  <p className="text-xs text-ember-300/70 leading-relaxed">{rumor.summary}</p>
+                  <p className="text-xs leading-relaxed text-myth-ink-muted">{rumor.summary}</p>
                 </div>
               ))}
             </div>
           )}
+          </div>
         </div>
       ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Entry List */}
+        {/* Entry List — reference content: clicking a row selects it. */}
         <div className="lg:col-span-1">
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-            <h3 className="text-sm font-bold text-ember-300/60 mb-3">
+          <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
+            <h3 className="mb-3 text-sm font-bold text-myth-ink-faint">
               {tabs.find(t => t.key === selectedType)?.label} ({filteredEntries.length})
             </h3>
 
             {loading ? (
               <div className="flex justify-center py-8">
-                <div className="relative">
-                  <div className="spinner h-12 w-12"></div>
-                  <div className="absolute inset-0 h-12 w-12 rounded-full bg-primary-500/20 animate-ping"></div>
-                </div>
+                <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-myth-accent" />
               </div>
             ) : filteredEntries.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-ember-400/50 text-sm">
+              <div className="py-8 text-center">
+                <p className="text-sm text-myth-ink-faint">
                   {searchQuery ? 'No entries match your search' : 'No entries yet'}
                 </p>
-                <p className="text-xs text-ember-500/40 mt-2">
+                <p className="mt-2 text-xs text-myth-ink-faint">
                   Entries are automatically created as the story unfolds
                 </p>
               </div>
@@ -264,21 +266,21 @@ export default function WikiPage() {
                   <button
                     key={entry.id}
                     onClick={() => setSelectedEntry(entry)}
-                    className={`w-full text-left p-3 rounded-xl transition-all duration-200 ${
+                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
                       selectedEntry?.id === entry.id
-                        ? 'bg-gradient-to-r from-ember-900/30 to-ember-900/10 border border-ember-700/50 shadow-lg shadow-black/20'
-                        : 'bg-black/25 border border-ember-900/30 hover:border-ember-700/40 hover:bg-black/35'
+                        ? 'border-myth-accent bg-myth-accent/5'
+                        : 'border-myth-border hover:border-myth-border-strong hover:bg-myth-surface-sunken'
                     }`}
                   >
-                    <div className="flex items-start justify-between mb-1.5">
-                      <h4 className="font-semibold text-ember-100 text-sm">{entry.name}</h4>
+                    <div className="mb-1.5 flex items-start justify-between">
+                      <h4 className="text-sm font-semibold text-myth-ink">{entry.name}</h4>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getImportanceColor(entry.importance)}`}>
                         {entry.importance}
                       </span>
                     </div>
-                    <p className="text-xs text-ember-300/60 line-clamp-2 leading-relaxed">{entry.summary}</p>
+                    <p className="line-clamp-2 text-xs leading-relaxed text-myth-ink-muted">{entry.summary}</p>
                     {entry.lastSeenTurn && (
-                      <p className="text-xs text-ember-400/50 mt-2 flex items-center gap-1">
+                      <p className="mt-2 flex items-center gap-1 text-xs text-myth-ink-faint">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -292,48 +294,49 @@ export default function WikiPage() {
           </div>
         </div>
 
-        {/* Entry Detail */}
+        {/* Entry Detail — narrative content: lore prose, no card chrome. */}
         <div className="lg:col-span-2">
           {selectedEntry ? (
-            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-              <div className="flex items-start justify-between mb-4">
+            <div>
+              <div className="mb-4 flex items-start justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold text-ember-100 mb-1">{selectedEntry.name}</h2>
+                  <h2 className="font-display text-2xl font-semibold text-myth-ink">{selectedEntry.name}</h2>
                   {selectedEntry.aliases && selectedEntry.aliases.length > 0 && (
-                    <p className="text-sm text-ember-400/50">
+                    <p className="mt-1 text-sm text-myth-ink-faint">
                       Also known as: {selectedEntry.aliases.join(', ')}
                     </p>
                   )}
                 </div>
-                <span className={`px-3 py-1 rounded ${getImportanceColor(selectedEntry.importance)}`}>
+                <span className={`rounded px-3 py-1 text-sm ${getImportanceColor(selectedEntry.importance)}`}>
                   {selectedEntry.importance}
                 </span>
               </div>
 
               {selectedEntry.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element -- no next/image remote-host config exists yet
                 <img
                   src={selectedEntry.imageUrl}
                   alt={selectedEntry.name}
-                  className="w-full h-48 object-cover rounded-lg mb-4"
+                  className="mb-4 h-48 w-full rounded-lg object-cover"
                 />
               )}
 
               <div className="mb-4">
-                <h3 className="text-sm font-bold text-ember-300/60 mb-2">Summary</h3>
-                <p className="text-ember-200/80">{selectedEntry.summary}</p>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">Summary</h3>
+                <p className="leading-relaxed text-myth-ink-muted">{selectedEntry.summary}</p>
               </div>
 
               <div className="mb-4">
-                <h3 className="text-sm font-bold text-ember-300/60 mb-2">Details</h3>
-                <p className="text-ember-200/80 whitespace-pre-wrap">{selectedEntry.description}</p>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">Details</h3>
+                <p className="whitespace-pre-wrap leading-relaxed text-myth-ink-muted">{selectedEntry.description}</p>
               </div>
 
               {selectedEntry.tags && selectedEntry.tags.length > 0 && (
                 <div className="mb-4">
-                  <h3 className="text-sm font-bold text-ember-300/60 mb-2">Tags</h3>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">Tags</h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedEntry.tags.map((tag: string, i: number) => (
-                      <span key={i} className="px-3 py-1 bg-black/30 border border-ember-900/30 text-ember-200/80 rounded-lg text-xs font-medium">
+                      <span key={i} className="rounded-lg border border-myth-border px-3 py-1 text-xs font-medium text-myth-ink-muted">
                         {tag}
                       </span>
                     ))}
@@ -343,17 +346,17 @@ export default function WikiPage() {
 
               {selectedEntry.relatedEntries && selectedEntry.relatedEntries.length > 0 && (
                 <div className="mb-4">
-                  <h3 className="text-sm font-bold text-ember-300/60 mb-2">Connections</h3>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">Connections</h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedEntry.relatedEntries.map((link: any, i: number) => (
                       <button
                         key={i}
                         onClick={() => followRelatedLink(link)}
-                        className="px-3 py-1.5 bg-black/30 border border-ember-900/30 hover:border-ember-700/60 hover:bg-black/50 rounded-lg text-xs text-left transition-colors"
+                        className="rounded-lg border border-myth-border px-3 py-1.5 text-left text-xs transition-colors hover:border-myth-border-strong hover:bg-myth-surface-sunken"
                       >
                         <span className="mr-1">{ENTRY_TYPE_ICONS[link.type as WikiEntryType] || '🔗'}</span>
-                        <span className="text-ember-200 font-medium">{link.id}</span>
-                        <span className="text-ember-400/60"> — {link.relationship}</span>
+                        <span className="font-medium text-myth-ink">{link.id}</span>
+                        <span className="text-myth-ink-faint"> — {link.relationship}</span>
                       </button>
                     ))}
                   </div>
@@ -361,25 +364,25 @@ export default function WikiPage() {
               )}
 
               {selectedEntry.changelog && selectedEntry.changelog.length > 0 && (
-                <div className="mt-6 pt-6 border-t border-ember-900/30">
-                  <h3 className="text-sm font-bold text-ember-300/60 mb-4 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-ember-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="mt-6 border-t border-myth-border pt-6">
+                  <h3 className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     History
                   </h3>
-                  <div className="space-y-3">
+                  <div className="divide-y divide-myth-border">
                     {selectedEntry.changelog.map((change: any, i: number) => (
-                      <div key={i} className="text-sm p-3 bg-black/25 rounded-lg border border-ember-900/30">
-                        <span className="text-ember-300 font-medium">Turn {change.turn}:</span>{' '}
-                        <span className="text-ember-200/80">{change.change}</span>
+                      <div key={i} className="py-2 text-sm first:pt-0">
+                        <span className="font-medium text-myth-ink">Turn {change.turn}:</span>{' '}
+                        <span className="text-myth-ink-muted">{change.change}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              <div className="mt-6 pt-4 border-t border-ember-900/30 flex items-center justify-between text-xs text-ember-400/50">
+              <div className="mt-6 flex items-center justify-between border-t border-myth-border pt-4 text-xs text-myth-ink-faint">
                 <span className="flex items-center gap-1">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -395,9 +398,9 @@ export default function WikiPage() {
               </div>
             </div>
           ) : (
-            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 text-center px-5 py-12">
-              <div className="text-6xl mb-4">📖</div>
-              <p className="text-ember-300/60">Select an entry to view details</p>
+            <div className="rounded-lg border border-dashed border-myth-border px-5 py-12 text-center">
+              <div className="mb-4 text-6xl">📖</div>
+              <p className="text-myth-ink-muted">Select an entry to view details</p>
             </div>
           )}
         </div>
@@ -405,7 +408,7 @@ export default function WikiPage() {
       )}
       </main>
 
-      <TavernNav campaignId={campaignId} />
+      <TavernNav campaignId={campaignId} variant="myth" />
     </TavernPage>
   )
 }

@@ -10,7 +10,6 @@ import { Home, Scroll, User } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernCard, TavernSpinner } from '@/components/tavern/ui'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 
 export default function CharacterPage() {
@@ -137,10 +136,12 @@ export default function CharacterPage() {
 
   if (loading) {
     return (
-      <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} />
+      <TavernPage background="myth">
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} variant="myth" />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
-          <TavernSpinner className="h-16 w-16" />
+          <div className="flex justify-center py-16">
+            <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
+          </div>
         </main>
       </TavernPage>
     )
@@ -148,12 +149,12 @@ export default function CharacterPage() {
 
   if (error || !character) {
     return (
-      <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Character" campaignId={campaignId} />
+      <TavernPage background="myth">
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Character" campaignId={campaignId} variant="myth" />
         <main className="max-w-6xl mx-auto px-4 pt-28 pb-16 text-center">
-          <h2 className="text-2xl font-bold text-wine-400 mb-4">Error</h2>
-          <p className="text-ember-300/60 mb-4">{error || 'Character not found'}</p>
-          <Link href={`/campaigns/${campaignId}`} className="text-ember-300 hover:text-ember-200">
+          <h2 className="mb-4 text-2xl font-bold text-myth-danger">Error</h2>
+          <p className="mb-4 text-myth-ink-muted">{error || 'Character not found'}</p>
+          <Link href={`/campaigns/${campaignId}`} className="text-myth-accent hover:text-myth-accent-hover">
             ← Back to Campaign
           </Link>
         </main>
@@ -162,14 +163,15 @@ export default function CharacterPage() {
   }
 
   return (
-    <TavernPage>
+    <TavernPage background="myth">
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title={character.name}
         campaignId={campaignId}
         isAdmin={campaign?.userRole === 'ADMIN'}
+        variant="myth"
         subrow={
-          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-ember-900/20 pt-2 pb-0">
+          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-myth-border pt-2 pb-0">
             <SubNavTabs
               tabs={[
                 { key: 'overview', label: 'Overview', icon: Home, href: `/campaigns/${campaignId}` },
@@ -177,29 +179,28 @@ export default function CharacterPage() {
                 { key: 'character', label: 'Character', icon: User },
               ]}
               activeKey="character"
+              variant="myth"
             />
           </nav>
         }
       />
 
       <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
-        <p className="text-ember-300/50 text-sm mb-4">{campaign?.campaign?.name}</p>
+        <p className="mb-4 text-sm text-myth-ink-faint">{campaign?.campaign?.name}</p>
 
         {/* Character Sheet (Downtime is one of its tabs) */}
-        <TavernCard className="p-5">
-          <CharacterSheetDisplay
-            character={character}
-            campaign={campaign?.campaign}
-            downtimeActivities={downtimeActivities}
-            downtimeSuggestions={downtimeSuggestions}
-            onCreateDowntimeActivity={handleCreateDowntimeActivity}
-            onAdvanceDowntimeTime={handleAdvanceDowntimeTime}
-            onRespondToDowntimeEvent={handleRespondToDowntimeEvent}
-          />
-        </TavernCard>
+        <CharacterSheetDisplay
+          character={character}
+          campaign={campaign?.campaign}
+          downtimeActivities={downtimeActivities}
+          downtimeSuggestions={downtimeSuggestions}
+          onCreateDowntimeActivity={handleCreateDowntimeActivity}
+          onAdvanceDowntimeTime={handleAdvanceDowntimeTime}
+          onRespondToDowntimeEvent={handleRespondToDowntimeEvent}
+        />
       </main>
 
-      <TavernNav active="characters" campaignId={campaignId} />
+      <TavernNav active="characters" campaignId={campaignId} variant="myth" />
     </TavernPage>
   )
 }

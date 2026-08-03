@@ -40,7 +40,7 @@ export function TavernHeader({
   const myth = variant === 'myth'
 
   const iconButtonClass = myth
-    ? 'p-2.5 -m-0.5 text-myth-ink-muted hover:text-myth-ink transition-colors touch-manipulation'
+    ? 'p-2.5 -m-0.5 rounded-lg text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink transition-colors touch-manipulation'
     : 'p-2.5 -m-0.5 text-ember-300/80 hover:text-ember-200 transition-colors touch-manipulation'
 
   return (
@@ -56,7 +56,7 @@ export function TavernHeader({
         {backHref ? (
           <Link
             href={backHref}
-            className={myth ? `p-2.5 -ml-2.5 text-myth-ink-muted hover:text-myth-ink transition-colors flex-shrink-0 touch-manipulation` : 'p-2.5 -ml-2.5 text-ember-300/80 hover:text-ember-200 transition-colors flex-shrink-0 touch-manipulation'}
+            className={myth ? `p-2.5 -ml-2.5 rounded-lg text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink transition-colors flex-shrink-0 touch-manipulation` : 'p-2.5 -ml-2.5 text-ember-300/80 hover:text-ember-200 transition-colors flex-shrink-0 touch-manipulation'}
             aria-label="Back"
           >
             <ArrowLeft className="w-5 h-5" />

@@ -10,6 +10,7 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { X, Beer, Settings as SettingsIcon, HelpCircle, BookOpen, ScrollText, ShieldCheck, LogOut, Users } from 'lucide-react'
 import { displayFont } from '@/lib/tavernTheme'
 import { logout } from '@/lib/clientAuth'
@@ -25,6 +26,7 @@ interface TavernMobileMenuProps {
 
 export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false, variant = 'tavern' }: TavernMobileMenuProps) {
   const myth = variant === 'myth'
+  const pathname = usePathname()
 
   useEscapeKey(onClose, isOpen)
 
@@ -36,13 +38,17 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false,
   }
 
   const links = [
-    { href: '/campaigns', label: 'Tavern', icon: Beer },
-    ...(campaignId ? [{ href: `/campaigns/${campaignId}/wiki`, label: 'Wiki', icon: BookOpen }] : []),
-    ...(campaignId && isAdmin ? [{ href: `/campaigns/${campaignId}/admin`, label: 'Admin', icon: ShieldCheck }] : []),
-    { href: '/friends', label: 'Friends', icon: Users },
-    { href: '/settings', label: 'Settings', icon: SettingsIcon },
-    { href: '/tutorial', label: 'Tutorial', icon: ScrollText },
-    { href: '/help', label: 'Help & Documentation', icon: HelpCircle },
+    { href: '/campaigns', label: 'Tavern', icon: Beer, isActive: pathname === '/campaigns' },
+    ...(campaignId
+      ? [{ href: `/campaigns/${campaignId}/wiki`, label: 'Wiki', icon: BookOpen, isActive: pathname.startsWith(`/campaigns/${campaignId}/wiki`) }]
+      : []),
+    ...(campaignId && isAdmin
+      ? [{ href: `/campaigns/${campaignId}/admin`, label: 'Admin', icon: ShieldCheck, isActive: pathname.startsWith(`/campaigns/${campaignId}/admin`) }]
+      : []),
+    { href: '/friends', label: 'Friends', icon: Users, isActive: pathname === '/friends' },
+    { href: '/settings', label: 'Settings', icon: SettingsIcon, isActive: pathname === '/settings' },
+    { href: '/tutorial', label: 'Tutorial', icon: ScrollText, isActive: pathname === '/tutorial' },
+    { href: '/help', label: 'Help & Documentation', icon: HelpCircle, isActive: pathname === '/help' },
   ]
 
   return (
@@ -66,7 +72,7 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false,
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-2">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
           {links.map((link) => (
             <Link
               key={link.href}
@@ -74,8 +80,12 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false,
               onClick={onClose}
               className={
                 myth
-                  ? 'flex items-center gap-3 px-4 py-3 text-myth-ink-muted hover:text-myth-ink hover:bg-myth-surface-sunken transition-colors'
-                  : 'flex items-center gap-3 px-4 py-3 text-ember-200/80 hover:text-ember-100 hover:bg-white/5 transition-colors'
+                  ? `flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ${
+                      link.isActive ? 'bg-myth-accent/10 text-myth-accent' : 'text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink'
+                    }`
+                  : `flex items-center gap-3 px-4 py-3 transition-colors ${
+                      link.isActive ? 'text-ember-100' : 'text-ember-200/80 hover:text-ember-100 hover:bg-white/5'
+                    }`
               }
             >
               <link.icon className="w-5 h-5 flex-shrink-0" />

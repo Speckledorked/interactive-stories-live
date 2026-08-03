@@ -40,6 +40,7 @@ import { kickReseedJob } from '../reseedQueue'
 import {
   processLoreImportJob,
   classifyStaleLoreJob,
+  kickLoreImportJob,
   MAX_ATTEMPTS,
   RUNNING_STALE_MS,
   PENDING_STALE_MS,
@@ -50,6 +51,28 @@ const db = prisma as any
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+})
+
+describe('kickLoreImportJob (#120 fix backported)', () => {
+  it('falls back to inline processing when the worker route responds fast but non-OK', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }))
+    db.loreImportJob.updateMany.mockResolvedValue({ count: 1 })
+    db.loreImportJob.findUnique.mockResolvedValue({
+      id: 'job1', campaignId: 'camp1', sourceType: 'PASTE', attempts: 1,
+    })
+
+    await kickLoreImportJob('job1')
+
+    expect(db.loreImportJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'job1', status: 'PENDING' } })
+    )
+  })
+
+  it('does not fall back to inline processing on an OK response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }))
+    await kickLoreImportJob('job1')
+    expect(db.loreImportJob.updateMany).not.toHaveBeenCalled()
+  })
 })
 
 describe('processLoreImportJob', () => {

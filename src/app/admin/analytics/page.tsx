@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
-import { TavernSpinner } from '@/components/tavern/ui'
+import { SectionHeader } from '@/components/ui/section-header'
 
 interface CohortMetric {
   retained: number
@@ -50,10 +50,10 @@ interface AnalyticsData {
 
 function StatTile({ label, value, sublabel }: { label: string; value: string | number; sublabel?: string }) {
   return (
-    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-4">
-      <p className="text-xs text-ember-300/50 mb-1">{label}</p>
-      <p className="text-2xl font-bold text-ember-100">{value}</p>
-      {sublabel && <p className="text-xs text-ember-400/40 mt-1">{sublabel}</p>}
+    <div className="rounded-lg border border-myth-border bg-myth-surface p-4">
+      <p className="mb-1 text-xs text-myth-ink-faint">{label}</p>
+      <p className="text-2xl font-bold text-myth-ink">{value}</p>
+      {sublabel && <p className="mt-1 text-xs text-myth-ink-faint">{sublabel}</p>}
     </div>
   )
 }
@@ -65,9 +65,9 @@ function pct(numerator: number, denominator: number): string {
 
 function RetentionCell({ metric, cohortSize }: { metric: CohortMetric; cohortSize: number }) {
   if (!metric.eligible) {
-    return <span className="text-ember-500/30">pending</span>
+    return <span className="text-myth-ink-faint">pending</span>
   }
-  return <span className="text-ember-200">{pct(metric.retained, cohortSize)}</span>
+  return <span className="text-myth-ink-muted">{pct(metric.retained, cohortSize)}</span>
 }
 
 export default function AnalyticsDashboardPage() {
@@ -104,31 +104,31 @@ export default function AnalyticsDashboardPage() {
   const maxDaily = data ? Math.max(1, ...data.signupsByDay.map(d => d.count)) : 1
 
   return (
-    <TavernPage>
-      <TavernHeader backHref="/campaigns" title="Alpha Instrumentation" />
+    <TavernPage background="myth">
+      <TavernHeader backHref="/campaigns" title="Alpha Instrumentation" variant="myth" />
 
       <main className="max-w-5xl mx-auto px-4 pt-28 pb-28">
         {loading && (
           <div className="flex justify-center py-16">
-            <TavernSpinner />
+            <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-myth-accent" />
           </div>
         )}
 
         {forbidden && (
-          <div className="rounded-xl bg-wine-900/30 border border-wine-700/40 p-6 text-center">
-            <p className="text-ember-100 font-semibold mb-1">Not authorized</p>
-            <p className="text-sm text-ember-300/60">This dashboard is restricted to platform operators.</p>
+          <div className="rounded-lg border border-myth-danger/30 bg-myth-danger/10 p-6 text-center">
+            <p className="mb-1 font-semibold text-myth-ink">Not authorized</p>
+            <p className="text-sm text-myth-ink-muted">This dashboard is restricted to platform operators.</p>
           </div>
         )}
 
-        {error && <p className="text-sm text-red-400 mb-4">{error}</p>}
+        {error && <p className="mb-4 text-sm text-myth-danger">{error}</p>}
 
         {data && (
           <div className="space-y-8">
             {/* Funnel */}
             <section>
-              <h2 className="text-sm font-bold text-ember-300/60 mb-3 uppercase tracking-wide">Activation Funnel</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <SectionHeader as="h2" title="Activation Funnel" />
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <StatTile label="Signed up" value={data.funnel.signups} />
                 <StatTile
                   label="Created a campaign"
@@ -155,19 +155,19 @@ export default function AnalyticsDashboardPage() {
 
             {/* Signups by day */}
             <section>
-              <h2 className="text-sm font-bold text-ember-300/60 mb-3 uppercase tracking-wide">Signups (last 30 days)</h2>
-              <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-4">
-                <div className="flex items-end gap-0.5 h-24">
+              <SectionHeader as="h2" title="Signups (last 30 days)" />
+              <div className="mt-3 rounded-lg border border-myth-border bg-myth-surface p-4">
+                <div className="flex h-24 items-end gap-0.5">
                   {data.signupsByDay.map(d => (
                     <div
                       key={d.date}
-                      className="flex-1 bg-ember-700/50 hover:bg-ember-500/60 rounded-t transition-colors min-h-[2px]"
+                      className="min-h-[2px] flex-1 rounded-t bg-myth-accent/50 transition-colors hover:bg-myth-accent"
                       style={{ height: `${(d.count / maxDaily) * 100}%` }}
                       title={`${d.date}: ${d.count}`}
                     />
                   ))}
                 </div>
-                <p className="text-xs text-ember-400/40 mt-2">
+                <p className="mt-2 text-xs text-myth-ink-faint">
                   {data.signupsByDay.reduce((sum, d) => sum + d.count, 0)} total · hover a bar for the day
                 </p>
               </div>
@@ -175,16 +175,14 @@ export default function AnalyticsDashboardPage() {
 
             {/* Retention */}
             <section>
-              <h2 className="text-sm font-bold text-ember-300/60 mb-3 uppercase tracking-wide">
-                Retention by Signup Cohort (weekly, UTC)
-              </h2>
-              <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-4 overflow-x-auto">
+              <SectionHeader as="h2" title="Retention by Signup Cohort (weekly, UTC)" />
+              <div className="mt-3 overflow-x-auto rounded-lg border border-myth-border bg-myth-surface p-4">
                 {data.retention.length === 0 ? (
-                  <p className="text-sm text-ember-400/50">No signups in the last 8 weeks yet.</p>
+                  <p className="text-sm text-myth-ink-faint">No signups in the last 8 weeks yet.</p>
                 ) : (
-                  <table className="w-full text-sm min-w-[420px]">
+                  <table className="w-full min-w-[420px] text-sm">
                     <thead>
-                      <tr className="text-left text-ember-400/50 text-xs uppercase">
+                      <tr className="text-left text-xs uppercase text-myth-ink-faint">
                         <th className="pb-2 pr-4">Week of</th>
                         <th className="pb-2 pr-4">Cohort</th>
                         <th className="pb-2 pr-4">D1</th>
@@ -194,9 +192,9 @@ export default function AnalyticsDashboardPage() {
                     </thead>
                     <tbody>
                       {[...data.retention].reverse().map(row => (
-                        <tr key={row.weekStart} className="border-t border-ember-900/20">
-                          <td className="py-2 pr-4 text-ember-200">{row.weekStart}</td>
-                          <td className="py-2 pr-4 text-ember-300/70">{row.cohortSize}</td>
+                        <tr key={row.weekStart} className="border-t border-myth-border">
+                          <td className="py-2 pr-4 text-myth-ink">{row.weekStart}</td>
+                          <td className="py-2 pr-4 text-myth-ink-muted">{row.cohortSize}</td>
                           <td className="py-2 pr-4"><RetentionCell metric={row.d1} cohortSize={row.cohortSize} /></td>
                           <td className="py-2 pr-4"><RetentionCell metric={row.d7} cohortSize={row.cohortSize} /></td>
                           <td className="py-2"><RetentionCell metric={row.d28} cohortSize={row.cohortSize} /></td>
@@ -210,28 +208,26 @@ export default function AnalyticsDashboardPage() {
 
             {/* Stuck jobs */}
             <section>
-              <h2 className="text-sm font-bold text-ember-300/60 mb-3 uppercase tracking-wide">
-                Stuck / Abandoned Jobs (recent)
-              </h2>
-              <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-4">
+              <SectionHeader as="h2" title="Stuck / Abandoned Jobs (recent)" />
+              <div className="mt-3 rounded-lg border border-myth-border bg-myth-surface p-4">
                 {data.stuckResolutionJobs.length === 0 && data.stuckLoreJobs.length === 0 ? (
-                  <p className="text-sm text-ember-400/50">Nothing stuck recently — the recovery sweeps are keeping up.</p>
+                  <p className="text-sm text-myth-ink-faint">Nothing stuck recently — the recovery sweeps are keeping up.</p>
                 ) : (
                   <div className="space-y-2">
                     {data.stuckResolutionJobs.map(job => (
-                      <div key={job.id} className="text-xs p-2.5 rounded-lg bg-black/25 border border-ember-900/30">
-                        <span className="font-mono text-ember-400/60">scene resolution</span>{' '}
-                        <span className="text-ember-200">{job.status}</span>{' '}
-                        <span className="text-ember-400/50">campaign {job.campaignId}</span>
-                        {job.lastError && <p className="text-red-400/80 mt-1">{job.lastError}</p>}
+                      <div key={job.id} className="rounded-lg border border-myth-border bg-myth-surface-sunken p-2.5 text-xs">
+                        <span className="font-mono text-myth-ink-faint">scene resolution</span>{' '}
+                        <span className="text-myth-ink">{job.status}</span>{' '}
+                        <span className="text-myth-ink-faint">campaign {job.campaignId}</span>
+                        {job.lastError && <p className="mt-1 text-myth-danger">{job.lastError}</p>}
                       </div>
                     ))}
                     {data.stuckLoreJobs.map(job => (
-                      <div key={job.id} className="text-xs p-2.5 rounded-lg bg-black/25 border border-ember-900/30">
-                        <span className="font-mono text-ember-400/60">lore import</span>{' '}
-                        <span className="text-ember-200">{job.status}</span>{' '}
-                        <span className="text-ember-400/50">campaign {job.campaignId}</span>
-                        {job.lastError && <p className="text-red-400/80 mt-1">{job.lastError}</p>}
+                      <div key={job.id} className="rounded-lg border border-myth-border bg-myth-surface-sunken p-2.5 text-xs">
+                        <span className="font-mono text-myth-ink-faint">lore import</span>{' '}
+                        <span className="text-myth-ink">{job.status}</span>{' '}
+                        <span className="text-myth-ink-faint">campaign {job.campaignId}</span>
+                        {job.lastError && <p className="mt-1 text-myth-danger">{job.lastError}</p>}
                       </div>
                     ))}
                   </div>

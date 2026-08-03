@@ -8,12 +8,13 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { Bell, UserCircle, Menu, ArrowLeft } from 'lucide-react'
 import { displayFont } from '@/lib/tavernTheme'
 import { getUser } from '@/lib/clientAuth'
 import { TavernMobileMenu } from './TavernMobileMenu'
+import { TavernSidebar } from './TavernSidebar'
 import NotificationPanel from '@/components/notifications/NotificationPanel'
 
 export function TavernHeader({
@@ -47,11 +48,11 @@ export function TavernHeader({
     <header
       className={
         myth
-          ? 'fixed top-0 inset-x-0 z-30 bg-myth-surface/90 backdrop-blur-md border-b border-myth-border'
+          ? 'fixed top-0 inset-x-0 lg:left-64 z-30 bg-myth-surface/90 backdrop-blur-md border-b border-myth-border'
           : 'fixed top-0 inset-x-0 z-30 bg-black/60 backdrop-blur-md border-b border-ember-900/40'
       }
     >
-      <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div className={myth ? 'max-w-2xl lg:max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3' : 'max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-3'}>
         {backHref ? (
           <Link
             href={backHref}
@@ -65,7 +66,7 @@ export function TavernHeader({
         )}
 
         {wordmark ? (
-          <div className="flex flex-col items-center">
+          <div className={myth ? 'flex flex-col items-center lg:hidden' : 'flex flex-col items-center'}>
             <div className="flex items-center gap-3">
               <span className={myth ? 'text-myth-ink-faint text-xs tracking-widest' : 'text-ember-700/60 text-xs tracking-widest'}>◈──</span>
               <h1
@@ -109,6 +110,11 @@ export function TavernHeader({
       {subrow}
     </header>
 
+    {myth && (
+      <Suspense fallback={<aside className="fixed left-0 top-0 bottom-0 z-30 hidden w-64 border-r border-myth-border bg-myth-surface lg:block" />}>
+        <TavernSidebar campaignId={campaignId} isAdmin={isAdmin} />
+      </Suspense>
+    )}
     <TavernMobileMenu isOpen={menuOpen} onClose={() => setMenuOpen(false)} campaignId={campaignId} isAdmin={isAdmin} variant={variant} />
     {user && (
       <NotificationPanel

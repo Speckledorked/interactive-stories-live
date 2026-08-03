@@ -18,7 +18,8 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { prisma } from '@/lib/prisma'
-import { buildChronicleNarrationInput } from '../chronicleContext'
+import { buildChronicleNarrationInput, deriveChronicleGlance } from '../chronicleContext'
+import type { ChronicleNarrationInput } from '../chronicleTypes'
 
 const db = prisma as any
 
@@ -105,5 +106,61 @@ describe('buildChronicleNarrationInput', () => {
     db.campaign.findUnique.mockResolvedValue({ title: 'T', universe: null })
     const result = await buildChronicleNarrationInput('camp1')
     expect(result?.universe).toBe('Generic Fantasy')
+  })
+})
+
+describe('deriveChronicleGlance', () => {
+  const baseInput: ChronicleNarrationInput = {
+    campaignTitle: 'The Iron Vigil',
+    universe: 'Grimdark Fantasy',
+    tension: 40,
+    phase: 'rising',
+    weather: null,
+    factionSignals: [],
+    activeWars: [],
+    recentEvents: [],
+  }
+
+  it('derives a null weatherLabel and topFaction, zero counts, from an empty input', () => {
+    expect(deriveChronicleGlance(baseInput)).toEqual({
+      weatherLabel: null,
+      topFaction: null,
+      activeConflictCount: 0,
+      recentEventCount: 0,
+    })
+  })
+
+  it('formats weatherLabel from condition + location name when weather is present', () => {
+    const result = deriveChronicleGlance({
+      ...baseInput,
+      weather: { locationName: 'Greenstone', condition: 'RAIN', severity: 3 },
+    })
+    expect(result.weatherLabel).toBe('RAIN in Greenstone')
+  })
+
+  it('takes the first (highest-threat) faction as topFaction, ignoring the rest', () => {
+    const result = deriveChronicleGlance({
+      ...baseInput,
+      factionSignals: [
+        { name: 'The Ashen Court', archetype: 'cabal', goal: 'seize the throne', stability: 40, threatLevel: 80, currentPlan: null },
+        { name: 'Free Traders', archetype: 'guild', goal: 'profit', stability: 70, threatLevel: 20, currentPlan: null },
+      ],
+    })
+    expect(result.topFaction).toEqual({ name: 'The Ashen Court', threatLevel: 80 })
+  })
+
+  it('counts active wars and recent events directly from their array lengths', () => {
+    const result = deriveChronicleGlance({
+      ...baseInput,
+      activeWars: [
+        { name: 'War of Ash', attackerName: 'A', defenderName: 'B', momentum: 10, status: 'ESCALATING' },
+      ],
+      recentEvents: [
+        { title: 'Ambush', summaryPublic: 'An ambush occurred.' },
+        { title: 'Treaty', summaryPublic: null },
+      ],
+    })
+    expect(result.activeConflictCount).toBe(1)
+    expect(result.recentEventCount).toBe(2)
   })
 })

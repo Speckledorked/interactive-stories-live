@@ -22,7 +22,10 @@ export function TavernPage({
   return (
     <div className={`${fontClassName} -mx-4 -my-8 min-h-screen`}>
       <TavernBackground variant={background} />
-      {children}
+      {/* lg:pl-64 makes room for TavernSidebar (mounted by TavernHeader,
+          fixed, so it doesn't push flow content on its own) — a no-op on
+          tavern-variant pages, which have no sidebar. */}
+      <div className={background === 'myth' ? 'lg:pl-64' : ''}>{children}</div>
     </div>
   )
 }

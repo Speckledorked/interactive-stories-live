@@ -7,7 +7,7 @@
 // atmosphere signals for a few sentences of flavor text.
 
 import { prisma } from '@/lib/prisma'
-import type { ChronicleNarrationInput } from './chronicleTypes'
+import type { ChronicleNarrationInput, ChronicleGlance } from './chronicleTypes'
 
 /**
  * Gathers the signals generateChronicleNarration needs, or null if the
@@ -108,5 +108,22 @@ export async function buildChronicleNarrationInput(campaignId: string): Promise<
       status: w.status,
     })),
     recentEvents: recentEvents.map(e => ({ title: e.title, summaryPublic: e.summaryPublic })),
+  }
+}
+
+/**
+ * Plain-data derivation of the lobby's "World at a Glance" tile facts,
+ * off the exact same input already gathered for the AI narration prompt —
+ * no new query, no AI call, can't fail. Called unconditionally whenever
+ * buildChronicleNarrationInput succeeds, regardless of whether the AI
+ * narration itself does.
+ */
+export function deriveChronicleGlance(input: ChronicleNarrationInput): ChronicleGlance {
+  const topFaction = input.factionSignals[0] ?? null
+  return {
+    weatherLabel: input.weather ? `${input.weather.condition} in ${input.weather.locationName}` : null,
+    topFaction: topFaction ? { name: topFaction.name, threatLevel: topFaction.threatLevel } : null,
+    activeConflictCount: input.activeWars.length,
+    recentEventCount: input.recentEvents.length,
   }
 }

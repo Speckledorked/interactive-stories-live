@@ -2,6 +2,7 @@
 // Background world turn system
 // This runs AFTER scenes resolve to advance villain plans and clocks
 
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { checkAndResolveCompletedClocks } from './stateUpdater'
 import { runWorldTick } from './worldTick'
@@ -13,7 +14,7 @@ import { resolveCompletedAmbitions } from './tick/ambitionResolution'
 import { applyNpcGoalFallbacks } from './tick/npcGoalFallback'
 import { generateOffscreenEvents } from './worldTurnOffscreenEvents'
 import { sendWorldDigest } from '@/lib/notifications/world-digest'
-import { buildChronicleNarrationInput } from './chronicleContext'
+import { buildChronicleNarrationInput, deriveChronicleGlance } from './chronicleContext'
 import { generateChronicleNarration } from '@/lib/ai/chronicleNarration'
 
 // Re-exported for existing importers (see __tests__/worldTurn.test.ts) —
@@ -152,13 +153,18 @@ export async function runWorldTurn(campaignId: string) {
     try {
       const chronicleInput = await buildChronicleNarrationInput(campaignId)
       if (chronicleInput) {
+        // Glance is a pure derivation of chronicleInput — persist it
+        // unconditionally, independent of whether the AI narration call
+        // below succeeds. See deriveChronicleGlance's own doc comment.
+        const glance = deriveChronicleGlance(chronicleInput)
         const narration = await generateChronicleNarration(campaignId, chronicleInput)
-        if (narration) {
-          await prisma.worldMeta.update({
-            where: { campaignId },
-            data: { chronicleNarration: narration, chronicleNarrationTurn: currentTurn },
-          })
-        }
+        await prisma.worldMeta.update({
+          where: { campaignId },
+          data: {
+            chronicleGlance: glance as unknown as Prisma.InputJsonValue,
+            ...(narration ? { chronicleNarration: narration, chronicleNarrationTurn: currentTurn } : {}),
+          },
+        })
       }
     } catch (error) {
       console.error('  ⚠️ Failed to generate chronicle narration:', error)

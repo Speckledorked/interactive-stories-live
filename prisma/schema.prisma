@@ -1739,6 +1739,13 @@ model WorldMeta {
   chronicleNarration      String? @db.Text
   chronicleNarrationTurn  Int?
 
+  // Plain-data snapshot of the same signals as chronicleNarration above
+  // (weather/top faction/conflicts/recent events), for the lobby's
+  // "World at a Glance" tile row. Derived, not fetched fresh — see
+  // deriveChronicleGlance in chronicleContext.ts. Shape: ChronicleGlance
+  // (src/lib/game/chronicleTypes.ts).
+  chronicleGlance Json?
+
   // World-turn pacing: the faction/NPC simulation advances with IN-GAME
   // time, not per player action. hoursSinceWorldTurn accumulates the AI's
   // time_passage each resolution; a world turn runs once it crosses

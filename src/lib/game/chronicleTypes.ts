@@ -21,3 +21,14 @@ export interface ChronicleNarrationInput {
   activeWars: Array<{ name: string; attackerName: string; defenderName: string; momentum: number; status: string }>
   recentEvents: Array<{ title: string; summaryPublic: string | null }>
 }
+
+// Plain-data snapshot of the same signals above, for the lobby's
+// "World at a Glance" tile row — no prose, just the raw facts a
+// glanceable card can render directly. Derived from
+// ChronicleNarrationInput by deriveChronicleGlance (chronicleContext.ts).
+export interface ChronicleGlance {
+  weatherLabel: string | null
+  topFaction: { name: string; threatLevel: number } | null
+  activeConflictCount: number
+  recentEventCount: number
+}

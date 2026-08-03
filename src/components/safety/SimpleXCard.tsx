@@ -59,7 +59,7 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
 
       {isOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-gradient-to-br from-tavern-800 to-tavern-950 rounded-lg p-6 max-w-md w-full border-2 border-red-500">
+          <div className="bg-myth-surface-raised rounded-lg p-6 max-w-md w-full border-2 border-red-500">
             {!submitted ? (
               <>
                 <h2 className="text-2xl font-bold mb-4 text-red-400">Use X-Card</h2>
@@ -72,13 +72,13 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
                 </div>
 
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-ember-200/80 mb-2">
+                  <label className="block text-sm font-medium text-myth-ink-muted mb-2">
                     What triggered this? (optional)
                   </label>
                   <select
                     value={trigger}
                     onChange={(e) => setTrigger(e.target.value)}
-                    className="w-full px-3 py-2 bg-black/30 border border-ember-900/40 rounded-lg text-ember-100 focus:outline-none focus:border-red-500"
+                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink focus:outline-none focus:border-red-500"
                   >
                     <option value="GENERAL">General discomfort</option>
                     <option value="VIOLENCE">Violence</option>
@@ -95,14 +95,14 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
                 </div>
 
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-ember-200/80 mb-2">
+                  <label className="block text-sm font-medium text-myth-ink-muted mb-2">
                     Additional details (optional, anonymous)
                   </label>
                   <textarea
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     placeholder="You don't need to explain, but you can if it helps..."
-                    className="w-full px-3 py-2 bg-black/30 border border-ember-900/40 rounded-lg text-ember-100 placeholder-ember-500/40 focus:outline-none focus:border-red-500 resize-none"
+                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink placeholder-myth-ink-faint focus:outline-none focus:border-red-500 resize-none"
                     rows={3}
                   />
                 </div>
@@ -120,7 +120,7 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
                       setIsOpen(false)
                       setReason('')
                     }}
-                    className="px-4 py-2 bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-200 rounded-lg transition-colors"
+                    className="px-4 py-2 border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink rounded-lg transition-colors"
                   >
                     Cancel
                   </button>
@@ -129,8 +129,8 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
             ) : (
               <div className="text-center py-8">
                 <div className="text-6xl mb-4">✅</div>
-                <h3 className="text-2xl font-bold text-ember-100 mb-2">X-Card Used</h3>
-                <p className="text-ember-200/70">
+                <h3 className="font-display text-2xl text-myth-ink mb-2">X-Card Used</h3>
+                <p className="text-myth-ink-muted">
                   The rest of the table has been notified. The scene will be adjusted.
                 </p>
               </div>

@@ -80,21 +80,6 @@ export default function AITransparencyPanel({
     }
   }
 
-  // Get color for change category
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'character': return 'from-green-500/20 to-green-600/10 border-green-500/50'
-      case 'npc': return 'from-blue-500/20 to-blue-600/10 border-blue-500/50'
-      case 'faction': return 'from-purple-500/20 to-purple-600/10 border-purple-500/50'
-      case 'clock': return 'from-orange-500/20 to-orange-600/10 border-orange-500/50'
-      case 'timeline': return 'from-yellow-500/20 to-yellow-600/10 border-yellow-500/50'
-      case 'relationship': return 'from-pink-500/20 to-pink-600/10 border-pink-500/50'
-      case 'consequence': return 'from-red-500/20 to-red-600/10 border-red-500/50'
-      case 'roll': return 'from-teal-500/20 to-teal-600/10 border-teal-500/50'
-      default: return 'from-gray-500/20 to-gray-600/10 border-gray-500/50'
-    }
-  }
-
   // Get icon for category
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -110,14 +95,15 @@ export default function AITransparencyPanel({
     }
   }
 
-  // Get impact color
+  // Get impact badge — the one place per-change color legitimately
+  // carries meaning (severity), on real semantic tokens.
   const getImpactBadge = (impact?: 'minor' | 'moderate' | 'major') => {
     if (!impact) return null
 
     const config = {
-      minor: { text: 'Minor', color: 'text-ember-400/60', bg: 'bg-black/30' },
-      moderate: { text: 'Moderate', color: 'text-ember-300', bg: 'bg-ember-900/30' },
-      major: { text: 'Major', color: 'text-wine-400', bg: 'bg-wine-800/30' }
+      minor: { text: 'Minor', color: 'text-myth-ink-faint', bg: 'bg-myth-surface-sunken' },
+      moderate: { text: 'Moderate', color: 'text-myth-warn', bg: 'bg-myth-warn/10' },
+      major: { text: 'Major', color: 'text-myth-danger', bg: 'bg-myth-danger/10' }
     }[impact]
 
     return (
@@ -128,23 +114,23 @@ export default function AITransparencyPanel({
   }
 
   return (
-    <div className="rounded-xl bg-gradient-to-br from-ember-900/20 to-wine-800/10 border border-ember-800/40 shadow-lg shadow-black/30 p-5">
+    <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-ember-100 flex items-center gap-2">
+        <h3 className="font-display text-lg text-myth-ink flex items-center gap-2">
           <span className="text-xl">🔍</span>
           AI Changes {sceneNumber ? `(Scene ${sceneNumber})` : ''}
         </h3>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-ember-300/60 hover:text-ember-100 transition-colors"
+            className="text-myth-ink-faint hover:text-myth-ink transition-colors"
           >
             ✕
           </button>
         )}
       </div>
 
-      <p className="text-sm text-ember-300/60 mb-4">
+      <p className="text-sm text-myth-ink-muted mb-4">
         The AI GM made the following changes to the world state during this scene:
       </p>
 
@@ -152,25 +138,25 @@ export default function AITransparencyPanel({
         <div
           className={`rounded-lg border mb-3 overflow-hidden ${
             hasAdherenceProblems
-              ? 'bg-gradient-to-r from-wine-800/20 to-wine-900/10 border-wine-700/50'
-              : 'bg-gradient-to-r from-green-500/10 to-green-600/5 border-green-600/30'
+              ? 'bg-myth-danger/10 border-myth-danger/30'
+              : 'bg-myth-good/10 border-myth-good/30'
           }`}
         >
           <button
             onClick={() => setAdherenceExpanded(prev => !prev)}
-            className="w-full p-3 flex items-center justify-between hover:bg-white/5 transition-colors"
+            className="w-full p-3 flex items-center justify-between hover:bg-myth-surface-sunken transition-colors"
             disabled={!hasAdherenceProblems}
           >
             <div className="flex items-center gap-2">
               <span className="text-lg">{hasAdherenceProblems ? '⚖️' : '✓'}</span>
-              <span className="font-semibold text-ember-100 text-sm">
+              <span className="font-medium text-myth-ink text-sm">
                 {hasAdherenceProblems
                   ? `Narration didn't match every roll (${adherence.matched}/${adherence.matched + adherence.mismatched} matched)`
                   : `Narration matched every roll (${adherence.matched} checked)`}
               </span>
             </div>
             {hasAdherenceProblems && (
-              <span className="text-ember-400/50">{adherenceExpanded ? '▼' : '▶'}</span>
+              <span className="text-myth-ink-faint">{adherenceExpanded ? '▼' : '▶'}</span>
             )}
           </button>
 
@@ -179,9 +165,9 @@ export default function AITransparencyPanel({
               {adherence.entries
                 .filter(e => e.verdict !== 'match')
                 .map((entry, idx) => (
-                  <div key={idx} className="bg-black/25 rounded-lg p-3 border border-ember-900/20">
-                    <div className="font-medium text-ember-100 text-sm mb-1">{entry.characterName}</div>
-                    <p className="text-sm text-ember-200/70">
+                  <div key={idx} className="bg-myth-surface-sunken rounded-lg p-3 border border-myth-border">
+                    <div className="font-medium text-myth-ink text-sm mb-1">{entry.characterName}</div>
+                    <p className="text-sm text-myth-ink-muted">
                       {entry.verdict === 'mismatch' &&
                         `The engine rolled ${entry.rolled}, but the narration read like ${entry.narrated}.`}
                       {entry.verdict === 'unreported' &&
@@ -196,49 +182,44 @@ export default function AITransparencyPanel({
         </div>
       )}
 
-      <div className="space-y-3">
+      <div>
         {Object.entries(groupedChanges).map(([category, categoryChanges]) => (
-          <div
-            key={category}
-            className={`rounded-lg border bg-gradient-to-r ${getCategoryColor(category)} overflow-hidden`}
-          >
+          <div key={category}>
             <button
               onClick={() => toggleCategory(category)}
-              className="w-full p-3 flex items-center justify-between hover:bg-white/5 transition-colors"
+              className="w-full flex items-center gap-2 py-2 border-b border-myth-border hover:text-myth-ink transition-colors"
             >
-              <div className="flex items-center gap-2">
-                <span className="text-lg">{getCategoryIcon(category)}</span>
-                <span className="font-semibold text-ember-100 capitalize">
-                  {category}
-                </span>
-                <span className="text-xs text-ember-400/50">
-                  ({categoryChanges.length})
-                </span>
-              </div>
-              <span className="text-ember-400/50">
+              <span className="text-lg">{getCategoryIcon(category)}</span>
+              <span className="text-sm font-medium uppercase tracking-wide text-myth-ink-muted">
+                {category}
+              </span>
+              <span className="text-xs text-myth-ink-faint">
+                ({categoryChanges.length})
+              </span>
+              <span className="ml-auto text-myth-ink-faint">
                 {expandedCategories[category] ? '▼' : '▶'}
               </span>
             </button>
 
             {expandedCategories[category] && (
-              <div className="p-3 pt-0 space-y-2">
+              <div>
                 {categoryChanges.map((change, idx) => (
                   <div
                     key={idx}
-                    className="bg-black/25 rounded-lg p-3 border border-ember-900/20"
+                    className="flex items-start justify-between gap-2 py-2 border-b border-myth-border/50 last:border-b-0"
                   >
-                    <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm">{getChangeIcon(change.type)}</span>
-                        <span className="font-medium text-ember-100 text-sm">
+                        <span className="font-medium text-myth-ink text-sm">
                           {change.entityName}
                         </span>
                       </div>
-                      {getImpactBadge(change.impact)}
+                      <p className="text-sm text-myth-ink-muted ml-6">
+                        {change.details}
+                      </p>
                     </div>
-                    <p className="text-sm text-ember-200/70 pl-6">
-                      {change.details}
-                    </p>
+                    {getImpactBadge(change.impact)}
                   </div>
                 ))}
               </div>
@@ -248,7 +229,7 @@ export default function AITransparencyPanel({
       </div>
 
       {changes.length === 0 && !adherence && (
-        <div className="text-center py-8 text-ember-400/50">
+        <div className="text-center py-8 text-myth-ink-faint">
           <div className="text-4xl mb-2">✨</div>
           <p className="text-sm">No world state changes this scene</p>
         </div>

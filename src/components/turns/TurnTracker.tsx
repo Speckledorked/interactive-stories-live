@@ -201,18 +201,16 @@ export default function TurnTracker({
 
   const getUrgencyColor = (ms: number): string => {
     const minutes = ms / (1000 * 60);
-    if (minutes <= 1) return 'text-wine-400';
-    if (minutes <= 5) return 'text-orange-400';
-    if (minutes <= 15) return 'text-yellow-400';
-    return 'text-success-400';
+    if (minutes <= 1) return 'text-myth-danger';
+    if (minutes <= 15) return 'text-myth-warn';
+    return 'text-myth-good';
   };
 
   const getProgressBarColor = (ms: number): string => {
     const minutes = ms / (1000 * 60);
-    if (minutes <= 1) return 'bg-wine-500';
-    if (minutes <= 5) return 'bg-orange-500';
-    if (minutes <= 15) return 'bg-yellow-500';
-    return 'bg-success-500';
+    if (minutes <= 1) return 'bg-myth-danger';
+    if (minutes <= 15) return 'bg-myth-warn';
+    return 'bg-myth-good';
   };
 
   const getProgressPercentage = (): number => {
@@ -229,9 +227,9 @@ export default function TurnTracker({
 
   if (!turnInfo) {
     return (
-      <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-        <div className="text-center text-ember-400/50">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-ember-600/40 mx-auto mb-2"></div>
+      <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
+        <div className="text-center text-myth-ink-faint">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-myth-accent mx-auto mb-2"></div>
           <p className="text-sm">Loading turn order…</p>
         </div>
       </div>
@@ -239,12 +237,12 @@ export default function TurnTracker({
   }
 
   return (
-    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30">
+    <div className="rounded-lg border border-myth-border bg-myth-surface">
       {/* Header */}
-      <div className="p-5 border-b border-ember-900/30">
+      <div className="p-5 border-b border-myth-border">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-ember-300/60 uppercase tracking-wide">Turn Order</h3>
-          <div className="text-xs text-ember-400/50">
+          <h3 className="text-sm font-medium text-myth-ink-faint uppercase tracking-wide">Turn Order</h3>
+          <div className="font-mono text-xs text-myth-ink-faint">
             Turn {turnInfo.turnIndex + 1} of {turnInfo.totalPlayers}
           </div>
         </div>
@@ -253,14 +251,14 @@ export default function TurnTracker({
       {/* Current Turn Info */}
       <div className="p-5">
         <div className={`border rounded-lg p-4 mb-4 ${
-          isMyTurn ? 'bg-ember-600/15 border-ember-500/40' : 'bg-black/20 border-ember-900/20'
+          isMyTurn ? 'bg-myth-accent/10 border-myth-accent/40' : 'bg-myth-surface-sunken border-myth-border'
         }`}>
           <div className="flex items-center justify-between mb-3">
             <div>
-              <div className="font-medium text-ember-100">
+              <div className="font-medium text-myth-ink">
                 {isMyTurn ? '🎯 Your Turn!' : `Waiting for ${turnInfo.currentPlayer.name}`}
               </div>
-              <div className="text-sm text-ember-300/60">
+              <div className="text-sm text-myth-ink-muted">
                 {turnInfo.currentPlayer.name}
               </div>
             </div>
@@ -273,7 +271,7 @@ export default function TurnTracker({
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full bg-black/30 rounded-full h-2 mb-3">
+          <div className="w-full bg-myth-surface-sunken rounded-full h-2 mb-3">
             <div
               className={`h-2 rounded-full transition-all duration-1000 ${getProgressBarColor(timeRemaining)}`}
               style={{ width: `${100 - getProgressPercentage()}%` }}
@@ -285,7 +283,7 @@ export default function TurnTracker({
             {showAdvanceButton && (
               <button
                 onClick={advanceTurn}
-                className="btn-primary py-2 px-4 text-sm"
+                className="rounded-md bg-myth-accent py-2 px-4 text-sm font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover"
               >
                 {isMyTurn ? 'End My Turn' : 'Advance Turn'}
               </button>
@@ -294,7 +292,7 @@ export default function TurnTracker({
             {isHost && (
               <button
                 onClick={skipTurn}
-                className="btn-secondary py-2 px-4 text-sm"
+                className="rounded-md border border-myth-border py-2 px-4 text-sm font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
               >
                 Skip Turn
               </button>
@@ -304,31 +302,31 @@ export default function TurnTracker({
 
         {/* Turn Order */}
         <div>
-          <h4 className="text-xs font-bold text-ember-300/60 uppercase tracking-wide mb-2">Order</h4>
+          <h4 className="text-xs font-medium text-myth-ink-faint uppercase tracking-wide mb-2">Order</h4>
           <div className="space-y-1">
             {turnInfo.turnOrder.map((player, index) => (
               <div
                 key={`${player.userId}-${index}`}
                 className={`flex items-center justify-between p-2 rounded ${
                   index === turnInfo.turnIndex
-                    ? 'bg-ember-600/15 border border-ember-500/30'
-                    : 'bg-black/15'
+                    ? 'bg-myth-accent/10 border border-myth-accent/30'
+                    : 'hover:bg-myth-surface-sunken'
                 }`}
               >
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${
-                    index === turnInfo.turnIndex ? 'bg-ember-400' : 'bg-ember-900/50'
+                    index === turnInfo.turnIndex ? 'bg-myth-accent' : 'bg-myth-border-strong'
                   }`} />
-                  <span className="text-sm font-medium text-ember-100">
+                  <span className="text-sm font-medium text-myth-ink">
                     {player.name}
                   </span>
                   {player.isNPC && (
-                    <span className="text-xs bg-black/30 text-ember-400/60 px-2 py-0.5 rounded">
+                    <span className="text-xs bg-myth-surface-sunken text-myth-ink-faint px-2 py-0.5 rounded">
                       NPC
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-ember-400/50">
+                <div className="text-xs text-myth-ink-faint">
                   {index < turnInfo.turnIndex ? '✓' :
                    index === turnInfo.turnIndex ? '⏳' : '⏸️'}
                 </div>

@@ -24,6 +24,13 @@ export interface SubNavTabsProps {
    * (e.g. `whitespace-nowrap flex-shrink-0` for a horizontally-scrolling nav).
    */
   itemClassName?: string
+  /**
+   * Opt-in myth-token styling for pages already ported to that design
+   * system (mirrors TavernHeader/TavernNav's own `variant` prop). Default
+   * `'tavern'` keeps every existing caller's classNames byte-identical —
+   * SubNavTabs.test.tsx pins the default variant's active-tab class.
+   */
+  variant?: 'tavern' | 'myth'
 }
 
 /**
@@ -37,13 +44,18 @@ export interface SubNavTabsProps {
  * current page's own tab) inert text — this component covers all three
  * per tab rather than assuming one for the whole bar.
  */
-export function SubNavTabs({ tabs, activeKey, onSelect, itemClassName = '' }: SubNavTabsProps) {
+export function SubNavTabs({ tabs, activeKey, onSelect, itemClassName = '', variant = 'tavern' }: SubNavTabsProps) {
+  const myth = variant === 'myth'
   return (
     <>
       {tabs.map((tab) => {
         const isActive = tab.key === activeKey
+        const activeClass = myth ? 'border-myth-accent text-myth-ink' : 'border-ember-400 text-ember-200'
+        const inactiveClass = myth
+          ? 'border-transparent text-myth-ink-faint hover:text-myth-ink-muted'
+          : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
         const className = `flex items-center gap-1.5 px-2.5 py-2 border-b-2 transition-colors${itemClassName ? ` ${itemClassName}` : ''} ${
-          isActive ? 'border-ember-400 text-ember-200' : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
+          isActive ? activeClass : inactiveClass
         }`
 
         const content = (
@@ -51,7 +63,11 @@ export function SubNavTabs({ tabs, activeKey, onSelect, itemClassName = '' }: Su
             {typeof tab.icon === 'string' ? <span>{tab.icon}</span> : <tab.icon className="w-3.5 h-3.5" />}
             <span>{tab.label}</span>
             {!!tab.badge && (
-              <span className="text-[10px] bg-wine-600 text-ember-100 rounded-full px-1.5 py-0.5 leading-none">
+              <span
+                className={`text-[10px] rounded-full px-1.5 py-0.5 leading-none ${
+                  myth ? 'bg-myth-accent text-myth-accent-ink' : 'bg-wine-600 text-ember-100'
+                }`}
+              >
                 {tab.badge}
               </span>
             )}

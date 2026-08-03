@@ -167,15 +167,15 @@ export function CompactClock({ name, current, max }: { name: string, current: nu
   const percentage = (current / max) * 100
 
   return (
-    <div className="flex items-center gap-3 p-2 rounded hover:bg-black/25 transition-colors">
+    <div className="flex items-center gap-3 p-2 rounded hover:bg-myth-surface-sunken transition-colors">
       <div className="relative w-12 h-12 flex-shrink-0">
         <svg className="transform -rotate-90" width="48" height="48">
-          <circle cx="24" cy="24" r="20" stroke="#3d2c15" strokeWidth="4" fill="none" />
+          <circle cx="24" cy="24" r="20" stroke="rgb(var(--myth-border))" strokeWidth="4" fill="none" />
           <circle
             cx="24"
             cy="24"
             r="20"
-            stroke={percentage >= 75 ? '#ef4444' : '#c99a3a'}
+            stroke={percentage >= 75 ? 'rgb(var(--myth-danger))' : 'rgb(var(--myth-accent))'}
             strokeWidth="4"
             fill="none"
             strokeDasharray={2 * Math.PI * 20}
@@ -183,13 +183,13 @@ export function CompactClock({ name, current, max }: { name: string, current: nu
             strokeLinecap="round"
           />
         </svg>
-        <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-ember-100">
+        <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-myth-ink">
           {current}/{max}
         </div>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-ember-100 truncate">{name}</p>
-        <p className="text-xs text-ember-400/50">{percentage.toFixed(0)}% complete</p>
+        <p className="text-sm font-medium text-myth-ink truncate">{name}</p>
+        <p className="text-xs text-myth-ink-faint">{percentage.toFixed(0)}% complete</p>
       </div>
     </div>
   )

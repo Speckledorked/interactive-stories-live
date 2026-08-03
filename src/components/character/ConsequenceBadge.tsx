@@ -15,34 +15,34 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
       case 'promise':
         return {
           label: '🤝 Promise',
-          bgColor: 'bg-ember-900/20',
-          borderColor: 'border-ember-700/40',
-          textColor: 'text-ember-200',
-          iconColor: 'text-ember-300'
+          bgColor: 'bg-myth-good/10',
+          borderColor: 'border-myth-good/30',
+          textColor: 'text-myth-ink',
+          iconColor: 'text-myth-good'
         }
       case 'debt':
         return {
           label: '⚖️ Debt',
-          bgColor: 'bg-ember-900/15',
-          borderColor: 'border-ember-800/30',
-          textColor: 'text-ember-200',
-          iconColor: 'text-ember-400'
+          bgColor: 'bg-myth-warn/10',
+          borderColor: 'border-myth-warn/30',
+          textColor: 'text-myth-ink',
+          iconColor: 'text-myth-warn'
         }
       case 'enemy':
         return {
           label: '⚔️ Enemy',
-          bgColor: 'bg-wine-800/25',
-          borderColor: 'border-wine-700/40',
-          textColor: 'text-wine-200',
-          iconColor: 'text-wine-400'
+          bgColor: 'bg-myth-danger/10',
+          borderColor: 'border-myth-danger/30',
+          textColor: 'text-myth-danger',
+          iconColor: 'text-myth-danger'
         }
       case 'longTermThreat':
         return {
           label: '☠️ Threat',
-          bgColor: 'bg-wine-800/15',
-          borderColor: 'border-wine-800/30',
-          textColor: 'text-wine-100',
-          iconColor: 'text-wine-300'
+          bgColor: 'bg-myth-danger/10',
+          borderColor: 'border-myth-danger/20',
+          textColor: 'text-myth-danger',
+          iconColor: 'text-myth-danger'
         }
     }
   }
@@ -70,7 +70,7 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
         {onRemove && (
           <button
             onClick={onRemove}
-            className="text-ember-400/50 hover:text-ember-200 transition-colors"
+            className="text-myth-ink-faint hover:text-myth-ink transition-colors"
             title="Remove"
           >
             ✕

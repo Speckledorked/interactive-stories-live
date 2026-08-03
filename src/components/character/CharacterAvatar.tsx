@@ -59,7 +59,7 @@ export default function CharacterAvatar({ name, size = 'md', className = '' }: C
         flex items-center justify-center
         font-bold text-white
         shadow-lg
-        ring-2 ring-ember-900/40
+        ring-2 ring-myth-border
         ${className}
       `}
     >

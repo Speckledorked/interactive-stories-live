@@ -152,16 +152,16 @@ export function CompactTimeline({ events }: { events: TimelineEvent[] }) {
   return (
     <div className="space-y-2">
       {events.slice(0, 5).map((event, index) => (
-        <div key={event.id} className="flex items-start gap-2 p-2 rounded hover:bg-black/25 transition-colors">
-          <div className="w-2 h-2 mt-2 rounded-full bg-ember-500 flex-shrink-0" />
+        <div key={event.id} className="flex items-start gap-2 p-2 rounded hover:bg-myth-surface-sunken transition-colors">
+          <div className="w-2 h-2 mt-2 rounded-full bg-myth-accent flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-ember-100 truncate">{event.title}</p>
-            <p className="text-xs text-ember-400/50">Turn {event.turnNumber}</p>
+            <p className="text-sm font-medium text-myth-ink truncate">{event.title}</p>
+            <p className="font-mono text-xs text-myth-ink-faint">Turn {event.turnNumber}</p>
           </div>
         </div>
       ))}
       {events.length > 5 && (
-        <p className="text-xs text-ember-400/40 text-center pt-2">
+        <p className="text-xs text-myth-ink-faint text-center pt-2">
           +{events.length - 5} more events
         </p>
       )}

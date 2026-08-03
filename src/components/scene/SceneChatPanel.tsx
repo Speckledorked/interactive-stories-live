@@ -16,16 +16,16 @@ interface SceneChatPanelProps {
 export function SceneChatPanel({ currentScene, user, campaignId, userCharacters }: SceneChatPanelProps) {
   if (!currentScene || !user) return null
 
+  // ChatPanel is already a complete, self-styled card — no outer wrapper
+  // here, to avoid the double card chrome the old ember theme had.
   return (
-    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-0">
-      <ChatPanel
-        campaignId={campaignId}
-        currentUserId={user.id}
-        currentUserName={user.name || user.email}
-        userCharacters={userCharacters}
-        sceneId={currentScene.id}
-        icOnly={true}
-      />
-    </div>
+    <ChatPanel
+      campaignId={campaignId}
+      currentUserId={user.id}
+      currentUserName={user.name || user.email}
+      userCharacters={userCharacters}
+      sceneId={currentScene.id}
+      icOnly={true}
+    />
   )
 }

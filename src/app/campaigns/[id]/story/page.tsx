@@ -943,8 +943,8 @@ export default function StoryPage() {
 
   if (loading) {
     return (
-      <TavernPage>
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} />
+      <TavernPage background="myth">
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} variant="myth" />
         <main className="max-w-7xl mx-auto px-4 pt-28 pb-16 flex justify-center items-center min-h-[60vh]">
           <AILoadingState type="scene" />
         </main>
@@ -984,23 +984,24 @@ export default function StoryPage() {
   ]
 
   return (
-    <TavernPage>
+    <TavernPage background="myth">
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title={campaign?.campaign?.name || 'Story'}
         campaignId={campaignId}
         isAdmin={isAdmin}
+        variant="myth"
         subrow={
-          <div className="max-w-7xl mx-auto px-4 flex items-center justify-between gap-3 border-t border-ember-900/20 pt-2 pb-0">
+          <div className="max-w-7xl mx-auto px-4 flex items-center justify-between gap-3 border-t border-myth-border pt-2 pb-0">
             <nav className="flex items-center gap-1 overflow-x-auto text-sm">
-              <SubNavTabs tabs={storyTabs} activeKey="story" itemClassName="whitespace-nowrap flex-shrink-0" />
+              <SubNavTabs tabs={storyTabs} activeKey="story" itemClassName="whitespace-nowrap flex-shrink-0" variant="myth" />
             </nav>
             <div className="flex items-center gap-1 flex-shrink-0 pb-1.5">
               <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
               <ReportContentModal campaignId={campaignId} />
               <button
                 onClick={() => setShowKeyboardShortcuts(true)}
-                className="p-1.5 text-ember-300/60 hover:text-ember-100 transition-colors"
+                className="p-1.5 text-myth-ink-faint hover:text-myth-ink transition-colors"
                 title="Keyboard shortcuts"
               >
                 <Keyboard className="w-4 h-4" />
@@ -1016,18 +1017,18 @@ export default function StoryPage() {
         <div className="lg:col-span-3 space-y-6">
           {/* Status Messages */}
           {error && (
-            <div className="bg-wine-800/20 border border-wine-600/40 text-wine-400 px-4 py-3 rounded-lg">
+            <div className="bg-myth-danger/10 border border-myth-danger/30 text-myth-danger px-4 py-3 rounded-lg">
               {error}
             </div>
           )}
           {success && (
-            <div className="bg-success-500/10 border border-success-500/60 text-success-400 px-4 py-3 rounded-lg">
+            <div className="bg-myth-good/10 border border-myth-good/30 text-myth-good px-4 py-3 rounded-lg">
               {success}
             </div>
           )}
           {resolvingMessage && (
-            <div className="bg-ember-900/20 border border-ember-700/40 text-ember-300 px-4 py-3 rounded-lg flex items-center gap-3">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-ember-600/40"></div>
+            <div className="bg-myth-info/10 border border-myth-info/30 text-myth-info px-4 py-3 rounded-lg flex items-center gap-3">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-myth-info/40"></div>
               <span>{resolvingMessage}</span>
             </div>
           )}
@@ -1037,9 +1038,9 @@ export default function StoryPage() {
               is selected: the party can be split even when the viewer's
               own character already has a scene to look at. */}
           {locationGroups.size >= 2 && (
-            <div className="rounded-xl bg-gradient-to-br from-wine-800/20 to-wine-800/10 border border-wine-700/40 shadow-lg shadow-black/30 p-5">
-              <h3 className="font-bold text-ember-100 mb-1">Your party is split</h3>
-              <p className="text-sm text-ember-300/60 mb-3">
+            <div className="rounded-lg border border-myth-warn/30 bg-myth-warn/10 p-5">
+              <h3 className="font-display text-myth-ink mb-1">Your party is split</h3>
+              <p className="text-sm text-myth-ink-muted mb-3">
                 {Array.from(locationGroups.values())
                   .map(({ label, characters }) => `${characters.map((c: any) => c.name).join(', ')} at ${label}`)
                   .join(' · ')}
@@ -1047,7 +1048,7 @@ export default function StoryPage() {
               <button
                 onClick={handleStartSplitPartyScenes}
                 disabled={startingScene}
-                className="btn-secondary py-2 px-4 text-sm"
+                className="rounded-md border border-myth-border px-4 py-2 text-sm font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
               >
                 {startingScene ? 'Starting…' : `Start ${locationGroups.size} scenes, one per location`}
               </button>
@@ -1066,8 +1067,8 @@ export default function StoryPage() {
                   onClick={() => setActiveSceneId(scene.id)}
                   className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
                     currentScene?.id === scene.id
-                      ? 'bg-wine-700 border-wine-500 text-ember-100'
-                      : 'bg-black/30 border-ember-900/40 text-ember-300/70 hover:text-ember-200'
+                      ? 'bg-myth-accent/10 border-myth-accent text-myth-ink'
+                      : 'bg-myth-surface-sunken border-myth-border text-myth-ink-faint hover:text-myth-ink-muted'
                   }`}
                 >
                   {sceneTabLabel(scene, campaign?.characters || [])}
@@ -1086,14 +1087,14 @@ export default function StoryPage() {
 
               return (
                 <div key={scene.id} className="space-y-4">
-                  <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+                  <div className="rounded-lg border border-myth-border/60 bg-myth-surface/40 p-5">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-bold text-ember-100">
+                        <h2 className="font-display text-xl text-myth-ink">
                           Scene {scene.sceneNumber}
                         </h2>
                         {campaign?.worldMeta?.currentInGameDate && (
-                          <span className="text-xs text-ember-400/50">
+                          <span className="font-mono text-xs text-myth-ink-faint">
                             {campaign.worldMeta.currentInGameDate}
                           </span>
                         )}
@@ -1106,16 +1107,16 @@ export default function StoryPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         {scene.isPaused && (
-                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400">
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-myth-danger/10 text-myth-danger">
                             ✋ paused
                           </span>
                         )}
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           scene.status === 'AWAITING_ACTIONS'
-                            ? 'bg-success-500/20 text-success-400'
+                            ? 'bg-myth-good/10 text-myth-good'
                             : scene.status === 'RESOLVING'
-                            ? 'bg-ember-900/30 text-ember-300'
-                            : 'bg-black/30 text-ember-300/60'
+                            ? 'bg-myth-info/10 text-myth-info'
+                            : 'bg-myth-surface-sunken text-myth-ink-faint'
                         }`}>
                           {scene.status.replace('_', ' ')}
                         </span>
@@ -1124,7 +1125,7 @@ export default function StoryPage() {
                           <button
                             onClick={() => handleRegenerateScene(scene.id)}
                             disabled={regeneratingSceneId === scene.id}
-                            className="text-xs px-2 py-1 bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 rounded transition-colors disabled:opacity-50"
+                            className="text-xs px-2 py-1 border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink rounded transition-colors disabled:opacity-50"
                             title="Regenerate this scene's opening — only available before anyone has acted"
                           >
                             {regeneratingSceneId === scene.id ? 'Regenerating…' : '🔄 Regenerate'}
@@ -1134,7 +1135,7 @@ export default function StoryPage() {
                           <button
                             onClick={() => handleDeleteScene(scene.id)}
                             disabled={deletingSceneId === scene.id}
-                            className="text-xs px-2 py-1 bg-black/30 hover:bg-wine-600 border border-ember-900/40 text-ember-300 hover:text-ember-100 rounded transition-colors disabled:opacity-50"
+                            className="text-xs px-2 py-1 border border-myth-border text-myth-ink-muted hover:border-myth-danger/40 hover:text-myth-danger rounded transition-colors disabled:opacity-50"
                             title="Permanently delete this scene"
                           >
                             {deletingSceneId === scene.id ? 'Deleting…' : '🗑️ Delete'}
@@ -1143,7 +1144,7 @@ export default function StoryPage() {
                         {scene.status === 'RESOLVING' && isAdmin && (
                           <button
                             onClick={() => handleResetScene(scene.id)}
-                            className="text-xs px-2 py-1 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded transition-colors"
+                            className="text-xs px-2 py-1 border border-myth-danger/40 text-myth-danger hover:bg-myth-danger/10 rounded transition-colors"
                             title="Reset stuck scene"
                           >
                             Reset
@@ -1153,17 +1154,17 @@ export default function StoryPage() {
                     </div>
 
                     {scene.isPaused && (
-                      <div className="bg-red-900/20 border border-red-500/40 rounded-lg p-4 mb-4 flex items-center justify-between gap-4">
+                      <div className="bg-myth-danger/10 border border-myth-danger/30 rounded-lg p-4 mb-4 flex items-center justify-between gap-4">
                         <div>
-                          <p className="text-red-300 font-medium">This scene is paused for a safety check-in.</p>
-                          <p className="text-red-200/60 text-sm mt-1">
+                          <p className="text-myth-danger font-medium">This scene is paused for a safety check-in.</p>
+                          <p className="text-myth-danger/70 text-sm mt-1">
                             {scene.pausedReason || 'A player used the X-Card.'} No new actions can be submitted until the campaign host resumes play.
                           </p>
                         </div>
                         {isAdmin && (
                           <button
                             onClick={() => handleResumeScene(scene.id)}
-                            className="flex-shrink-0 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium transition-colors"
+                            className="flex-shrink-0 px-4 py-2 bg-myth-danger text-myth-accent-ink hover:bg-myth-danger/90 rounded-lg text-sm font-medium transition-colors"
                           >
                             Resume Scene
                           </button>
@@ -1177,14 +1178,9 @@ export default function StoryPage() {
 
                     {/* Show intro text only if no resolutions exist yet */}
                     {!scene.sceneResolutionText && (
-                      <>
-                        <div className="prose prose-invert max-w-none">
-                          <p className="text-ember-200/80 whitespace-pre-wrap leading-relaxed">
-                            {currentStageText}
-                          </p>
-                        </div>
-
-                      </>
+                      <p className="max-w-prose whitespace-pre-wrap leading-relaxed text-myth-ink-muted">
+                        {currentStageText}
+                      </p>
                     )}
 
                     {/* Show resolutions if any exist */}
@@ -1202,19 +1198,19 @@ export default function StoryPage() {
                             className="mt-6 w-full max-h-96 object-cover rounded-lg"
                           />
                         )}
-                        <div className="mt-6 pt-6 border-t border-ember-900/30">
-                          <h3 className="text-lg font-bold text-ember-300 mb-3">
+                        <div className="mt-6 pt-6 border-t border-myth-border">
+                          <h3 className="font-display text-lg text-myth-ink mb-3">
                             {scene.sceneResolutionText.includes('---') ? 'Resolutions' : 'Resolution'}
                           </h3>
                           {/* Split multiple resolutions by separator */}
                           {scene.sceneResolutionText.split('\n\n---\n\n').map((resolution: string, idx: number) => (
-                            <div key={idx} className={idx > 0 ? 'mt-6 pt-6 border-t border-ember-900/40' : ''}>
+                            <div key={idx} className={idx > 0 ? 'mt-6 pt-6 border-t border-myth-border' : ''}>
                               {scene.sceneResolutionText.includes('---') && (
-                                <h4 className="text-sm font-medium text-ember-300/60 mb-2">
+                                <h4 className="text-sm font-medium text-myth-ink-faint mb-2">
                                   Exchange {idx + 1}
                                 </h4>
                               )}
-                              <p className="text-ember-200/80 whitespace-pre-wrap leading-relaxed">
+                              <p className="max-w-prose whitespace-pre-wrap leading-relaxed text-myth-ink-muted">
                                 {resolution}
                               </p>
                             </div>
@@ -1239,31 +1235,31 @@ export default function StoryPage() {
 
                   {/* Player Actions - Collapsible */}
                   {scene.playerActions && scene.playerActions.length > 0 && (
-                    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+                    <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
                       <button
                         onClick={() => setExpandedActions(prev => ({ ...prev, [scene.id]: !prev[scene.id] }))}
                         className="w-full flex items-center justify-between text-left"
                       >
-                        <h3 className="text-lg font-bold text-ember-100">
+                        <h3 className="font-display text-lg text-myth-ink">
                           Player Actions ({scene.playerActions.length})
                         </h3>
-                        <span className="text-ember-300/60">
+                        <span className="text-myth-ink-faint">
                           {expandedActions[scene.id] ? '▼' : '▶'}
                         </span>
                       </button>
                       {expandedActions[scene.id] && (
                         <div className="space-y-3 mt-4">
                           {scene.playerActions.map((action: any) => (
-                            <div key={action.id} className="bg-black/30 rounded-lg p-4">
+                            <div key={action.id} className="bg-myth-surface-sunken rounded-lg p-4">
                               <div className="flex items-start justify-between mb-2">
-                                <span className="font-medium text-ember-300">
+                                <span className="font-medium text-myth-ink">
                                   {action.character.name}
                                 </span>
-                                <span className="text-xs text-ember-400/50">
+                                <span className="font-mono text-xs text-myth-ink-faint">
                                   {new Date(action.createdAt).toLocaleTimeString()}
                                 </span>
                               </div>
-                              <p className="text-ember-200/80 text-sm">{action.actionText}</p>
+                              <p className="text-myth-ink-muted text-sm">{action.actionText}</p>
                             </div>
                           ))}
                         </div>
@@ -1278,13 +1274,13 @@ export default function StoryPage() {
                       which read as a dead end since neither button looked like
                       "take your turn"). */}
                   {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && !userHasSubmitted && selectedCharacterId && (
-                    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+                    <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
                       <div className="flex items-center justify-between gap-3 mb-4">
-                        <h3 className="text-lg font-bold text-ember-100">Your Action</h3>
+                        <h3 className="font-display text-lg text-myth-ink">Your Action</h3>
                         {scene.sceneResolutionText && (
                           <a
                             href={`/campaigns/${campaignId}/story-log`}
-                            className="text-xs text-ember-300/60 hover:text-ember-200 transition-colors whitespace-nowrap flex items-center gap-1"
+                            className="text-xs text-myth-ink-faint hover:text-myth-ink transition-colors whitespace-nowrap flex items-center gap-1"
                             title="Your progress is saved — come back anytime"
                           >
                             <span>Save &amp; read later</span>
@@ -1293,19 +1289,19 @@ export default function StoryPage() {
                         )}
                       </div>
                       {isWaitingOnUser && (
-                        <div className="bg-ember-900/20 border border-ember-700/40 text-ember-300 px-3 py-2 rounded-lg mb-4 text-sm">
+                        <div className="bg-myth-info/10 border border-myth-info/30 text-myth-info px-3 py-2 rounded-lg mb-4 text-sm">
                           ⏳ Waiting for your action...
                         </div>
                       )}
                       <form onSubmit={(e) => handleSubmitAction(e, scene.id)} className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-ember-200/80 mb-2">
+                          <label className="block text-sm font-medium text-myth-ink-muted mb-2">
                             What do you do?
                           </label>
                           <textarea
                             value={actionText[scene.id] || ''}
                             onChange={(e) => setActionText(prev => ({ ...prev, [scene.id]: e.target.value }))}
-                            className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 min-h-[100px]"
+                            className="px-4 py-2.5 rounded-lg bg-myth-surface-sunken border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent min-h-[100px]"
                             placeholder={`What does ${selectedCharacter?.name || 'your character'} do? Be specific about their actions, intentions, and approach...`}
                             required
                           />
@@ -1314,7 +1310,7 @@ export default function StoryPage() {
                         <button
                           type="submit"
                           disabled={submitting[scene.id]}
-                          className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center w-full disabled:opacity-50"
+                          className="px-4 py-2.5 rounded-lg bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink font-medium transition-colors text-center w-full disabled:opacity-50"
                         >
                           {submitting[scene.id] ? 'Submitting...' : 'Submit Action'}
                         </button>
@@ -1324,8 +1320,8 @@ export default function StoryPage() {
 
                   {/* User already submitted */}
                   {scene.status === 'AWAITING_ACTIONS' && userHasSubmitted && (
-                    <div className="rounded-xl bg-success-500/10 border border-success-500/40 shadow-lg shadow-black/30 p-5">
-                      <p className="text-success-400 text-sm">
+                    <div className="rounded-lg border border-myth-good/30 bg-myth-good/10 p-5">
+                      <p className="text-myth-good text-sm">
                         ✓ You've submitted your action. Waiting for other participants...
                       </p>
                     </div>
@@ -1337,19 +1333,19 @@ export default function StoryPage() {
                       shouldn't be blocked by having already committed your
                       action for this exchange. */}
                   {scene.status === 'AWAITING_ACTIONS' && selectedCharacterId && (
-                    <div className="rounded-xl bg-gradient-to-br from-tavern-800/50 to-tavern-900/50 border border-ember-900/20 shadow-lg shadow-black/20 p-5">
+                    <div className="rounded-lg border border-myth-border/40 bg-myth-surface/30 p-5">
                       <button
                         type="button"
                         onClick={() => setShowAskGm(prev => ({ ...prev, [scene.id]: !prev[scene.id] }))}
                         className="flex items-center justify-between w-full text-left"
                       >
                         <div>
-                          <h3 className="text-sm font-bold text-ember-300/70">💬 Ask the GM</h3>
-                          <p className="text-xs text-ember-400/50 mt-0.5">
+                          <h3 className="text-sm font-medium text-myth-ink-muted">💬 Ask the GM</h3>
+                          <p className="text-xs text-myth-ink-faint mt-0.5">
                             A clarifying question, out of character — this doesn&apos;t count as your action and nothing happens in the story because of it.
                           </p>
                         </div>
-                        <span className="text-ember-400/50 flex-shrink-0 ml-3">{showAskGm[scene.id] ? '▼' : '▶'}</span>
+                        <span className="text-myth-ink-faint flex-shrink-0 ml-3">{showAskGm[scene.id] ? '▼' : '▶'}</span>
                       </button>
 
                       {showAskGm[scene.id] && (
@@ -1357,21 +1353,21 @@ export default function StoryPage() {
                           {scene.gmClarifications && scene.gmClarifications.length > 0 && (
                             <div className="space-y-2">
                               {scene.gmClarifications.map((c: any) => (
-                                <div key={c.id} className="bg-black/25 rounded-lg p-3 text-sm">
-                                  <p className="text-ember-300/70">
-                                    <span className="text-xs uppercase tracking-wide text-ember-400/50 mr-1.5">[OOC]</span>
+                                <div key={c.id} className="bg-myth-surface-sunken rounded-lg p-3 text-sm">
+                                  <p className="text-myth-ink-muted">
+                                    <span className="text-xs uppercase tracking-wide text-myth-ink-faint mr-1.5">[OOC]</span>
                                     <span className="font-medium">{c.characterName || c.character?.name}</span>
                                     {' asks: '}
-                                    <span className="text-ember-200/80">{c.question}</span>
+                                    <span className="text-myth-ink-muted">{c.question}</span>
                                   </p>
-                                  <p className="text-ember-100/90 mt-1.5 pl-3 border-l-2 border-ember-700/40">{c.answer}</p>
+                                  <p className="text-myth-ink mt-1.5 pl-3 border-l-2 border-myth-border">{c.answer}</p>
                                 </div>
                               ))}
                             </div>
                           )}
 
                           {askGmError[scene.id] && (
-                            <p className="text-xs text-red-400">{askGmError[scene.id]}</p>
+                            <p className="text-xs text-myth-danger">{askGmError[scene.id]}</p>
                           )}
 
                           <form onSubmit={(e) => handleAskGm(e, scene.id)} className="flex gap-2">
@@ -1379,14 +1375,14 @@ export default function StoryPage() {
                               type="text"
                               value={askGmText[scene.id] || ''}
                               onChange={(e) => setAskGmText(prev => ({ ...prev, [scene.id]: e.target.value }))}
-                              className="flex-1 px-3 py-2 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 text-sm"
+                              className="flex-1 px-3 py-2 rounded-lg bg-myth-surface-sunken border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent text-sm"
                               placeholder="e.g. What can I see on this person?"
                               maxLength={500}
                             />
                             <button
                               type="submit"
                               disabled={askingGm[scene.id] || !askGmText[scene.id]?.trim()}
-                              className="px-4 py-2 rounded-lg bg-ember-900/40 hover:bg-ember-900/60 text-ember-200 text-sm font-medium border border-ember-800/50 transition-colors disabled:opacity-50 whitespace-nowrap"
+                              className="px-4 py-2 rounded-lg border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink transition-colors disabled:opacity-50 whitespace-nowrap"
                             >
                               {askingGm[scene.id] ? 'Asking...' : 'Ask'}
                             </button>
@@ -1414,21 +1410,21 @@ export default function StoryPage() {
                     const allParticipantsSubmitted = participantUserIds.length > 0 && participantUserIds.every((uid: string) => submittedUserIds.has(uid))
 
                     return (
-                      <div className={`rounded-xl border shadow-lg shadow-black/30 p-5 ${allParticipantsSubmitted ? 'bg-success-500/10 border-success-500/40' : 'bg-ember-900/20 border-ember-700/40'}`}>
+                      <div className={`rounded-lg border p-5 ${allParticipantsSubmitted ? 'bg-myth-good/10 border-myth-good/30' : 'bg-myth-info/10 border-myth-info/30'}`}>
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                           <div className="flex-1">
-                            <p className={`text-sm font-medium mb-1 ${allParticipantsSubmitted ? 'text-success-400' : 'text-ember-300'}`}>
+                            <p className={`text-sm font-medium mb-1 ${allParticipantsSubmitted ? 'text-myth-good' : 'text-myth-info'}`}>
                               🎲 Scene Controls
                             </p>
-                            <p className="text-ember-300/60 text-xs mb-2">
+                            <p className="text-myth-ink-muted text-xs mb-2">
                               {(scene.playerActions || []).length} action(s) submitted. Current exchange: {scene.currentExchange ?? 0}
                             </p>
                             {allParticipantsSubmitted ? (
-                              <p className="text-success-400 text-xs mb-1">
+                              <p className="text-myth-good text-xs mb-1">
                                 ✓ Everyone has submitted — resolution starts on its own.
                               </p>
                             ) : (
-                              <p className="text-ember-400/50 text-xs">
+                              <p className="text-myth-ink-faint text-xs">
                                 ⏳ Waiting for {participantUserIds.length - submittedUserIds.size} more player(s). The scene resolves automatically when everyone has acted.
                               </p>
                             )}
@@ -1443,7 +1439,7 @@ export default function StoryPage() {
                               <button
                                 onClick={() => handleResolveScene(scene.id)}
                                 disabled={resolving}
-                                className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
+                                className="px-4 py-2.5 rounded-lg bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink font-medium transition-colors text-center disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
                                 title={
                                   allParticipantsSubmitted
                                     ? 'Kick off resolution if auto-resolve did not start'
@@ -1461,7 +1457,7 @@ export default function StoryPage() {
                               onClick={() => handleEndScene(scene.id)}
                               disabled={endingScene}
                               title="Ends this scene for everyone. The player who ends a scene pays its AI cost."
-                              className="bg-wine-600 hover:bg-wine-500 text-ember-100 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
+                              className="border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink px-4 py-2 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap touch-manipulation min-h-[44px]"
                             >
                               {endingScene ? 'Ending...' : 'End Scene'}
                             </button>
@@ -1474,13 +1470,13 @@ export default function StoryPage() {
               )
             })
           ) : (
-            <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 px-5 py-12">
+            <div className="rounded-lg border border-myth-border bg-myth-surface px-5 py-12">
               <div className="text-center mb-8">
                 <div className="text-6xl mb-4">📜</div>
-                <h2 className="text-xl font-bold text-ember-100 mb-2">
+                <h2 className="font-display text-xl text-myth-ink mb-2">
                   {resolvedScenes.length > 0 ? 'Scene Complete!' : 'No Active Scene'}
                 </h2>
-                <p className="text-ember-300/60 mb-6">
+                <p className="text-myth-ink-muted mb-6">
                   {resolvedScenes.length > 0 ? (
                     <>The adventure continues... What happens next?</>
                   ) : (
@@ -1492,12 +1488,12 @@ export default function StoryPage() {
               {/* Show story context if there are resolved scenes */}
               {resolvedScenes.length > 0 && (
                 <div className="max-w-2xl mx-auto mb-8">
-                  <div className="bg-black/25 rounded-lg p-4 border border-ember-900/30">
+                  <div className="bg-myth-surface-sunken rounded-lg p-4 border border-myth-border">
                     <div className="flex items-start gap-3 mb-3">
                       <span className="text-2xl">📖</span>
                       <div className="flex-1">
-                        <h3 className="font-bold text-ember-100 mb-1">Last Scene Summary</h3>
-                        <p className="text-sm text-ember-300/60 line-clamp-3">
+                        <h3 className="font-display text-myth-ink mb-1">Last Scene Summary</h3>
+                        <p className="text-sm text-myth-ink-muted line-clamp-3">
                           {resolvedScenes[0].sceneResolutionText
                             ? truncateWithEllipsis(resolvedScenes[0].sceneResolutionText, 200)
                             : 'Scene resolved'}
@@ -1506,7 +1502,7 @@ export default function StoryPage() {
                     </div>
                     <Link
                       href={`/campaigns/${campaignId}/story-log`}
-                      className="text-xs text-ember-300 hover:text-ember-200 transition-colors"
+                      className="text-xs text-myth-ink-muted hover:text-myth-ink transition-colors"
                     >
                       View complete story log →
                     </Link>
@@ -1523,7 +1519,7 @@ export default function StoryPage() {
                       <button
                         onClick={handleContinueStory}
                         disabled={startingScene}
-                        className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center w-full disabled:opacity-50 text-lg py-4"
+                        className="px-4 py-2.5 rounded-lg bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink font-medium transition-colors text-center w-full disabled:opacity-50 text-lg py-4"
                       >
                         {startingScene ? (
                           <span className="flex items-center justify-center gap-2">
@@ -1540,28 +1536,28 @@ export default function StoryPage() {
                       {resolvedScenes.length > 0 && campaign?.characters?.length > 0 && (
                         <button
                           onClick={() => setShowSceneOptions(true)}
-                          className="w-full text-sm text-ember-300 hover:text-ember-200 transition-colors py-2"
+                          className="w-full text-sm text-myth-ink-muted hover:text-myth-ink transition-colors py-2"
                         >
                           ⚙️ More scene options...
                         </button>
                       )}
 
                       {resolvedScenes.length > 0 && (
-                        <p className="text-xs text-ember-400/50 text-center">
+                        <p className="text-xs text-myth-ink-faint text-center">
                           The AI will generate a scene that continues naturally from where you left off
                         </p>
                       )}
                     </>
                   ) : (
-                    <div className="bg-black/25 rounded-lg border border-ember-900/30 p-6 space-y-4">
+                    <div className="bg-myth-surface-sunken rounded-lg border border-myth-border p-6 space-y-4">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-bold text-ember-100 text-lg">Scene Creation Options</h3>
+                        <h3 className="font-display text-myth-ink text-lg">Scene Creation Options</h3>
                         <button
                           onClick={() => {
                             setShowSceneOptions(false)
                             setSelectedSceneCharacters([])
                           }}
-                          className="text-ember-300/60 hover:text-ember-100"
+                          className="text-myth-ink-faint hover:text-myth-ink"
                         >
                           ✕
                         </button>
@@ -1572,16 +1568,16 @@ export default function StoryPage() {
                         <button
                           onClick={handleContinueStory}
                           disabled={startingScene}
-                          className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center w-full disabled:opacity-50"
+                          className="px-4 py-2.5 rounded-lg bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink font-medium transition-colors text-center w-full disabled:opacity-50"
                         >
                           {startingScene ? 'Generating...' : '📖 Continue Story Naturally'}
                         </button>
-                        <p className="text-xs text-ember-400/50">
+                        <p className="text-xs text-myth-ink-faint">
                           AI chooses the next scene based on story flow and character goals
                         </p>
                       </div>
 
-                      <div className="border-t border-ember-900/30 my-4"></div>
+                      <div className="border-t border-myth-border my-4"></div>
 
                       {/* Option 2: Full Party Scene */}
                       {campaign?.characters?.length > 1 && (
@@ -1590,26 +1586,26 @@ export default function StoryPage() {
                             <button
                               onClick={handleFullPartyScene}
                               disabled={startingScene}
-                              className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center w-full disabled:opacity-50"
+                              className="px-4 py-2.5 rounded-lg border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink font-medium transition-colors text-center w-full disabled:opacity-50"
                             >
                               {startingScene ? 'Generating...' : '👥 Full Party Scene'}
                             </button>
-                            <p className="text-xs text-ember-400/50">
+                            <p className="text-xs text-myth-ink-faint">
                               Create a scene with all {campaign.characters.length} characters
                             </p>
                           </div>
 
-                          <div className="border-t border-ember-900/30 my-4"></div>
+                          <div className="border-t border-myth-border my-4"></div>
                         </>
                       )}
 
                       {/* Option 3: Character-Focused Scene */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <label className="font-bold text-ember-100 text-sm">
+                          <label className="font-display text-myth-ink text-sm">
                             🎭 Character-Focused Scene
                           </label>
-                          <span className="text-xs text-ember-400/50">
+                          <span className="text-xs text-myth-ink-faint">
                             {selectedSceneCharacters.length} selected
                           </span>
                         </div>
@@ -1620,19 +1616,19 @@ export default function StoryPage() {
                               key={character.id}
                               className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
                                 selectedSceneCharacters.includes(character.id)
-                                  ? 'bg-wine-800/20 border-wine-600/40'
-                                  : 'bg-black/20 border-ember-900/30 hover:border-ember-700/40'
+                                  ? 'bg-myth-accent/10 border-myth-accent/40'
+                                  : 'bg-myth-surface-sunken border-myth-border hover:border-myth-border-strong'
                               }`}
                             >
                               <input
                                 type="checkbox"
                                 checked={selectedSceneCharacters.includes(character.id)}
                                 onChange={() => toggleCharacterSelection(character.id)}
-                                className="w-4 h-4 accent-wine-500"
+                                className="w-4 h-4 accent-myth-accent"
                               />
                               <div className="flex-1">
-                                <div className="font-medium text-ember-100">{character.name}</div>
-                                <div className="text-xs text-ember-300/60 truncate">
+                                <div className="font-medium text-myth-ink">{character.name}</div>
+                                <div className="text-xs text-myth-ink-muted truncate">
                                   {character.concept || character.description}
                                 </div>
                               </div>
@@ -1643,13 +1639,13 @@ export default function StoryPage() {
                         <button
                           onClick={handleCharacterFocusedScene}
                           disabled={startingScene || selectedSceneCharacters.length === 0}
-                          className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center w-full disabled:opacity-50"
+                          className="px-4 py-2.5 rounded-lg border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink font-medium transition-colors text-center w-full disabled:opacity-50"
                         >
                           {startingScene
                             ? 'Generating...'
                             : `Create Scene with ${selectedSceneCharacters.length || 0} ${pluralize(selectedSceneCharacters.length, 'Character')}`}
                         </button>
-                        <p className="text-xs text-ember-400/50">
+                        <p className="text-xs text-myth-ink-faint">
                           AI will create a scene focused on the selected {pluralize(selectedSceneCharacters.length, 'character')}
                         </p>
                       </div>
@@ -1704,7 +1700,7 @@ export default function StoryPage() {
       </div>
       </main>
 
-      <TavernNav campaignId={campaignId} />
+      <TavernNav campaignId={campaignId} variant="myth" />
 
       {/* Character Snapshot Modal */}
       {selectedCharacterId && (
@@ -1733,11 +1729,11 @@ export default function StoryPage() {
 
           {/* Modal */}
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg">
-            <div className="bg-gradient-to-br from-tavern-800 to-tavern-900 border border-wine-600/40 rounded-2xl shadow-2xl shadow-black/50 p-6 animate-scale-in">
+            <div className="bg-myth-surface-raised border border-myth-danger/30 rounded-lg shadow-2xl shadow-black/50 p-6 animate-scale-in">
               <div className="flex items-start gap-4 mb-4">
-                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-wine-800/30 flex items-center justify-center">
+                <div className="flex-shrink-0 w-12 h-12 rounded-full bg-myth-danger/10 flex items-center justify-center">
                   <svg
-                    className="w-6 h-6 text-wine-400"
+                    className="w-6 h-6 text-myth-danger"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -1751,23 +1747,23 @@ export default function StoryPage() {
                   </svg>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-xl font-bold text-ember-100 mb-2">Insufficient Funds</h3>
-                  <p className="text-ember-200/80 text-sm leading-relaxed">
+                  <h3 className="font-display text-xl text-myth-ink mb-2">Insufficient Funds</h3>
+                  <p className="text-myth-ink-muted text-sm leading-relaxed">
                     {insufficientFundsDetails}
                   </p>
                 </div>
               </div>
 
-              <div className="bg-black/25 border border-ember-900/40 rounded-lg p-4 mb-6">
-                <p className="text-xs font-semibold text-ember-300/60 mb-2">Pricing:</p>
-                <div className="text-xs text-ember-300/60 space-y-1">
+              <div className="bg-myth-surface-sunken border border-myth-border rounded-lg p-4 mb-6">
+                <p className="text-xs font-semibold text-myth-ink-muted mb-2">Pricing:</p>
+                <div className="text-xs text-myth-ink-muted space-y-1">
                   <p>Each scene is billed once, when it ends, for the actual AI cost of everything that happened in it — split evenly across whoever took part. Typically a few cents per player; larger or longer scenes cost more, quiet ones cost less.</p>
                 </div>
               </div>
 
               {addFundsError && (
-                <div className="mb-4 p-3 bg-wine-800/20 border border-wine-600/40 rounded-lg">
-                  <p className="text-sm text-wine-400">{addFundsError}</p>
+                <div className="mb-4 p-3 bg-myth-danger/10 border border-myth-danger/30 rounded-lg">
+                  <p className="text-sm text-myth-danger">{addFundsError}</p>
                 </div>
               )}
 
@@ -1775,20 +1771,20 @@ export default function StoryPage() {
                 <button
                   onClick={handleAddFundsFromModal}
                   disabled={addFundsLoading}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-ember-600 to-ember-500 hover:from-ember-500 hover:to-ember-400 text-ember-100 font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2.5 bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {addFundsLoading ? 'Redirecting...' : 'Add Funds ($1.00)'}
                 </button>
                 <button
                   onClick={() => { setShowInsufficientFunds(false); setAddFundsError('') }}
                   disabled={addFundsLoading}
-                  className="px-4 py-2.5 bg-black/25 hover:bg-black/30 text-ember-200/80 font-medium rounded-lg transition-all duration-200"
+                  className="px-4 py-2.5 border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink font-medium rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
               </div>
 
-              <p className="text-xs text-ember-400/50 mt-4 text-center">
+              <p className="text-xs text-myth-ink-faint mt-4 text-center">
                 You will be redirected to Stripe to complete your payment securely.
               </p>
             </div>

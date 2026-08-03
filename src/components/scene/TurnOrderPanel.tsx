@@ -46,7 +46,7 @@ export function TurnOrderPanel({
         <button
           onClick={onEndTurnOrder}
           disabled={endingTurnOrder}
-          className="w-full text-xs text-ember-400/50 hover:text-ember-200 transition-colors disabled:opacity-50"
+          className="w-full text-xs text-myth-ink-faint hover:text-myth-ink transition-colors disabled:opacity-50"
         >
           {endingTurnOrder ? 'Ending…' : 'End turn order'}
         </button>
@@ -55,15 +55,15 @@ export function TurnOrderPanel({
   }
 
   return (
-    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-      <h3 className="text-sm font-bold text-ember-300/60 uppercase tracking-wide mb-2">Turn Order</h3>
-      <p className="text-xs text-ember-400/50 mb-3">
+    <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
+      <h3 className="text-sm font-medium text-myth-ink-faint uppercase tracking-wide mb-2">Turn Order</h3>
+      <p className="text-xs text-myth-ink-muted mb-3">
         Play is freeform by default — anyone can act anytime. Turn this on if you'd rather the party go in order for this scene; it's just a visible queue and timer, submitting an action is never blocked by it.
       </p>
       <button
         onClick={onEnableTurnOrder}
         disabled={enablingTurnOrder}
-        className="btn-secondary py-2 px-4 text-sm w-full"
+        className="rounded-md border border-myth-border py-2 px-4 text-sm font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink w-full disabled:opacity-50"
       >
         {enablingTurnOrder ? 'Enabling…' : 'Enable turn order'}
       </button>

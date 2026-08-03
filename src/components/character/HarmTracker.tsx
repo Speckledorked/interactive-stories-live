@@ -26,13 +26,13 @@ export default function HarmTracker({
 
     if (segmentPosition > remaining) {
       // This segment is filled (harm taken)
-      return 'bg-wine-600/30 border-wine-600/50'
+      return 'bg-myth-danger/20 border-myth-danger/40'
     }
 
-    // Remaining health - gradient from green to yellow
-    if (remaining >= 5) return 'bg-success-500 border-success-400'
-    if (remaining >= 3) return 'bg-ember-500 border-ember-400'
-    return 'bg-wine-500 border-wine-400'
+    // Remaining health - gradient from good to warn to danger
+    if (remaining >= 5) return 'bg-myth-good border-myth-good/70'
+    if (remaining >= 3) return 'bg-myth-warn border-myth-warn/70'
+    return 'bg-myth-danger border-myth-danger/70'
   }
 
   // Thresholds, labels and penalty text all come from the engine now.
@@ -47,16 +47,16 @@ export default function HarmTracker({
   // in the engine and this component would have gone on reporting the old
   // one, confidently.
   const STATUS_COLORS: Record<string, string> = {
-    'Taken Out': 'text-wine-400',
-    Impaired: 'text-ember-400',
-    Fine: 'text-success-400',
+    'Taken Out': 'text-myth-danger',
+    Impaired: 'text-myth-warn',
+    Fine: 'text-myth-good',
   }
 
   const clampedHarm = Math.max(0, Math.min(6, Math.trunc(current) || 0)) as HarmLevel
   const harmStatus = getHarmStatus(clampedHarm)
   const status = {
     text: harmStatus.status,
-    color: STATUS_COLORS[harmStatus.status] ?? 'text-ember-300',
+    color: STATUS_COLORS[harmStatus.status] ?? 'text-myth-ink-muted',
   }
 
   const sizeClasses = {
@@ -69,7 +69,7 @@ export default function HarmTracker({
     <div className="space-y-2">
       {showLabel && (
         <div className="flex items-center justify-between text-sm">
-          <span className="text-ember-300/60">
+          <span className="text-myth-ink-muted">
             Health: {remaining}/{max}
           </span>
           <span className={`font-medium ${status.color}`}>
@@ -93,7 +93,7 @@ export default function HarmTracker({
       </div>
 
       {harmStatus.status !== 'Fine' && (
-        <div className="text-xs text-ember-400 bg-ember-900/15 border border-ember-700/30 rounded px-2 py-1">
+        <div className="text-xs text-myth-warn bg-myth-warn/10 border border-myth-warn/30 rounded px-2 py-1">
           ⚠️ {harmStatus.description}
         </div>
       )}

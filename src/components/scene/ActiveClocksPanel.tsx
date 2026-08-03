@@ -14,8 +14,8 @@ export function ActiveClocksPanel({ clocks }: ActiveClocksPanelProps) {
   if (!clocks || clocks.length === 0) return null
 
   return (
-    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
-      <h3 className="text-sm font-bold text-ember-300/60 mb-3">ACTIVE CLOCKS</h3>
+    <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
+      <h3 className="text-sm font-medium uppercase tracking-wide text-myth-ink-faint mb-3">ACTIVE CLOCKS</h3>
       <div className="space-y-2">
         {clocks
           .filter((clock: any) => !clock.isHidden)

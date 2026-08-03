@@ -19,100 +19,61 @@ interface SceneMoodTagProps {
   size?: 'sm' | 'md' | 'lg'
 }
 
-export default function SceneMoodTag({ mood, size = 'md' }: SceneMoodTagProps) {
-  const getMoodConfig = () => {
-    switch (mood) {
-      case 'combat':
-        return {
-          icon: '⚔️',
-          label: 'Combat',
-          bg: 'bg-red-900/30',
-          border: 'border-red-700',
-          text: 'text-red-300',
-          glow: 'shadow-red-500/20'
-        }
-      case 'social':
-        return {
-          icon: '💬',
-          label: 'Social',
-          bg: 'bg-blue-900/30',
-          border: 'border-blue-700',
-          text: 'text-blue-300',
-          glow: 'shadow-blue-500/20'
-        }
-      case 'investigation':
-        return {
-          icon: '🔍',
-          label: 'Investigation',
-          bg: 'bg-purple-900/30',
-          border: 'border-purple-700',
-          text: 'text-purple-300',
-          glow: 'shadow-purple-500/20'
-        }
-      case 'stealth':
-        return {
-          icon: '🌙',
-          label: 'Stealth',
-          bg: 'bg-gray-900/30',
-          border: 'border-gray-700',
-          text: 'text-gray-300',
-          glow: 'shadow-gray-500/20'
-        }
-      case 'exploration':
-        return {
-          icon: '🗺️',
-          label: 'Exploration',
-          bg: 'bg-green-900/30',
-          border: 'border-green-700',
-          text: 'text-green-300',
-          glow: 'shadow-green-500/20'
-        }
-      case 'downtime':
-        return {
-          icon: '☕',
-          label: 'Downtime',
-          bg: 'bg-yellow-900/30',
-          border: 'border-yellow-700',
-          text: 'text-yellow-300',
-          glow: 'shadow-yellow-500/20'
-        }
-      case 'dramatic':
-        return {
-          icon: '🎭',
-          label: 'Dramatic',
-          bg: 'bg-pink-900/30',
-          border: 'border-pink-700',
-          text: 'text-pink-300',
-          glow: 'shadow-pink-500/20'
-        }
-      case 'tense':
-        return {
-          icon: '⚡',
-          label: 'Tense',
-          bg: 'bg-orange-900/30',
-          border: 'border-orange-700',
-          text: 'text-orange-300',
-          glow: 'shadow-orange-500/20'
-        }
-      case 'peaceful':
-        return {
-          icon: '🕊️',
-          label: 'Peaceful',
-          bg: 'bg-cyan-900/30',
-          border: 'border-cyan-700',
-          text: 'text-cyan-300',
-          glow: 'shadow-cyan-500/20'
-        }
-    }
-  }
+// Myth only has 4 semantic color slots (good/warn/danger/info) plus
+// neutral ink — collapsing the old 9 distinct hues by valence rather than
+// inventing new colors. Icons stay per-mood to carry the fine-grained
+// distinction the shared colors lose.
+const MOOD_ICONS: Record<SceneMood, string> = {
+  combat: '⚔️',
+  social: '💬',
+  investigation: '🔍',
+  stealth: '🌙',
+  exploration: '🗺️',
+  downtime: '☕',
+  dramatic: '🎭',
+  tense: '⚡',
+  peaceful: '🕊️',
+}
 
+const MOOD_LABELS: Record<SceneMood, string> = {
+  combat: 'Combat',
+  social: 'Social',
+  investigation: 'Investigation',
+  stealth: 'Stealth',
+  exploration: 'Exploration',
+  downtime: 'Downtime',
+  dramatic: 'Dramatic',
+  tense: 'Tense',
+  peaceful: 'Peaceful',
+}
+
+const MOOD_VALENCE: Record<SceneMood, 'danger' | 'info' | 'good' | 'neutral'> = {
+  combat: 'danger',
+  tense: 'danger',
+  social: 'info',
+  dramatic: 'info',
+  downtime: 'good',
+  peaceful: 'good',
+  investigation: 'neutral',
+  stealth: 'neutral',
+  exploration: 'neutral',
+}
+
+const VALENCE_CLASSES = {
+  danger: { bg: 'bg-myth-danger/10', border: 'border-myth-danger/30', text: 'text-myth-danger' },
+  info: { bg: 'bg-myth-info/10', border: 'border-myth-info/30', text: 'text-myth-info' },
+  good: { bg: 'bg-myth-good/10', border: 'border-myth-good/30', text: 'text-myth-good' },
+  neutral: { bg: 'bg-myth-surface-sunken', border: 'border-myth-border', text: 'text-myth-ink-muted' },
+}
+
+export default function SceneMoodTag({ mood, size = 'md' }: SceneMoodTagProps) {
   const sizeClasses = {
     sm: 'text-xs px-2 py-1',
     md: 'text-sm px-3 py-1.5',
     lg: 'text-base px-4 py-2'
   }
 
-  const config = getMoodConfig()
+  const config = VALENCE_CLASSES[MOOD_VALENCE[mood]]
 
   return (
     <div
@@ -122,13 +83,11 @@ export default function SceneMoodTag({ mood, size = 'md' }: SceneMoodTagProps) {
         border rounded-full
         ${sizeClasses[size]}
         font-medium
-        shadow-lg ${config.glow}
-        transition-all duration-200
-        hover:scale-105
+        transition-colors
       `}
     >
-      <span>{config.icon}</span>
-      <span>{config.label}</span>
+      <span>{MOOD_ICONS[mood]}</span>
+      <span>{MOOD_LABELS[mood]}</span>
     </div>
   )
 }

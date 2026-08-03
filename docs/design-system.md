@@ -59,6 +59,17 @@ the sense that clicking things inside does something? If yes, it's
 reference content — keep the border. If the block's only job is to be
 read, it's narrative — drop the box.
 
+## Mobile-first
+
+This app is mobile-first, not desktop-first: design and build for the
+bottom-tab-bar/drawer mobile chrome (`TavernNav`, `TavernMobileMenu`,
+`TavernHeader`'s mobile top bar) as the primary experience, then adapt up
+to wider viewports (`TavernSidebar` at `lg:+`) — not the other way around.
+When a chrome or content change lands on one nav surface (e.g. the
+sidebar's active-state pill), bring the equivalent mobile surface up to
+the same level in the same pass rather than treating desktop polish as
+sufficient on its own.
+
 ## Component opt-in
 
 Shared chrome (`TavernPage`, `TavernBackground`, `TavernHeader`,

@@ -103,6 +103,56 @@
   --myth-info: 122 165 199;
 }
 
+/* ---------------------------------------------------------------------- *
+ * Depth pass — every reference card (TavernCard's myth variant, and the
+ * ~46 pages/components that inline its exact `border-myth-border
+ * bg-myth-surface`/`-raised` classes rather than importing the shared
+ * component — see docs/design-system.md) shares one of these two class
+ * combinations, so one scoped rule here gives all of them real depth
+ * without a many-file edit. Deliberately subtle — a soft lift, not a
+ * skeuomorphic drop shadow.
+ * ---------------------------------------------------------------------- */
+.border-myth-border.bg-myth-surface,
+.border-myth-border.bg-myth-surface-raised {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .border-myth-border.bg-myth-surface,
+  .border-myth-border.bg-myth-surface-raised {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+}
+
+[data-theme='dark'] .border-myth-border.bg-myth-surface,
+[data-theme='dark'] .border-myth-border.bg-myth-surface-raised {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='light'] .border-myth-border.bg-myth-surface,
+[data-theme='light'] .border-myth-border.bg-myth-surface-raised {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* Dark-mode ambient vignette for TavernBackground's myth variant — a
+ * subtle depth cue in place of a flat single-color fill. No-op in light
+ * mode (warm parchment is already the intended flat look there). */
+@media (prefers-color-scheme: dark) {
+  .myth-canvas-vignette {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% 0%, rgba(176, 132, 214, 0.06), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 50% 100%, rgba(0, 0, 0, 0.35), transparent 70%);
+  }
+}
+[data-theme='dark'] .myth-canvas-vignette {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(176, 132, 214, 0.06), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(0, 0, 0, 0.35), transparent 70%);
+}
+[data-theme='light'] .myth-canvas-vignette {
+  background: none;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 10px;

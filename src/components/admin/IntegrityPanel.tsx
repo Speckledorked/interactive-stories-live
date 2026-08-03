@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
+import { SectionHeader } from '@/components/ui/section-header'
 
 interface Violation {
   checkKey: string
@@ -77,12 +78,12 @@ export function IntegrityPanel({ campaignId }: { campaignId: string }) {
 
   if (!data || !data.assessed || !data.latest) {
     return (
-      <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
-        <h3 className="font-medium text-myth-ink">World integrity</h3>
-        <p className="mt-1 text-xs text-myth-ink-faint">
+      <section>
+        <SectionHeader as="h2" title="World integrity" />
+        <p className="mt-3 text-xs text-myth-ink-faint">
           Checked automatically at the end of every world turn — this campaign hasn&apos;t had one yet.
         </p>
-      </div>
+      </section>
     )
   }
 
@@ -90,14 +91,13 @@ export function IntegrityPanel({ campaignId }: { campaignId: string }) {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-myth-border bg-myth-surface p-5">
-        <div className="mb-2 flex items-baseline justify-between gap-3">
-          <h3 className="font-medium text-myth-ink">World integrity — turn {latest.turnNumber}</h3>
-          <span className="text-xs text-myth-ink-faint">
-            {new Date(latest.timestamp).toLocaleString()}
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-3 text-center">
+      <section>
+        <SectionHeader
+          as="h2"
+          title="World integrity"
+          description={`Turn ${latest.turnNumber} · ${new Date(latest.timestamp).toLocaleString()}`}
+        />
+        <div className="mt-3 grid grid-cols-3 gap-3 rounded-lg border border-myth-border bg-myth-surface p-5 text-center">
           <div className="rounded-md border border-myth-border p-3">
             <p className="text-lg font-mono text-myth-ink">{latest.violationsFound}</p>
             <p className="text-xs text-myth-ink-faint">violations found</p>

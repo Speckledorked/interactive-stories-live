@@ -1,5 +1,5 @@
 // src/app/signup/page.tsx
-// Signup page — tavern theme
+// Signup page — myth design system.
 
 'use client'
 
@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { UserPlus, AlertTriangle, Check, X } from 'lucide-react'
 import { signup } from '@/lib/clientAuth'
-import { displayFont, bodyFont } from '@/lib/tavernTheme'
+import { fontDisplay, fontSans } from '@/lib/fonts'
 import { TavernBackground } from '@/components/tavern/TavernBackground'
 
 export default function SignupPage() {
@@ -56,40 +56,40 @@ export default function SignupPage() {
   }
 
   const passwordStrength = password.length === 0 ? 0 : password.length < 6 ? 25 : password.length < 8 ? 50 : password.length < 12 ? 75 : 100
-  const passwordStrengthColor = passwordStrength < 50 ? 'bg-wine-500' : passwordStrength < 75 ? 'bg-ember-500' : 'bg-success-500'
+  const passwordStrengthColor = passwordStrength < 50 ? 'bg-myth-danger' : passwordStrength < 75 ? 'bg-myth-warn' : 'bg-myth-good'
 
   return (
-    <div className={`${bodyFont.className} -mx-4 -my-8 min-h-screen flex items-center justify-center px-4 py-12`}>
-      <TavernBackground />
+    <div className={`${fontSans.className} -mx-4 -my-8 flex min-h-screen items-center justify-center px-4 py-12`}>
+      <TavernBackground variant="myth" />
 
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
+        <div className="mb-8 text-center">
           <div className="flex items-center justify-center gap-3">
-            <span className="text-ember-700/60 text-xs tracking-widest">◈──</span>
-            <h1 className={`${displayFont.className} text-4xl tracking-[0.15em] bg-gradient-to-b from-ember-200 to-ember-500 bg-clip-text text-transparent`}>
+            <span className="text-xs tracking-widest text-myth-ink-faint">◈──</span>
+            <h1 className={`${fontDisplay.className} text-4xl font-semibold tracking-[0.15em] text-myth-ink`}>
               MythOS
             </h1>
-            <span className="text-ember-700/60 text-xs tracking-widest">──◈</span>
+            <span className="text-xs tracking-widest text-myth-ink-faint">──◈</span>
           </div>
-          <p className="text-[11px] tracking-[0.2em] text-ember-300/50 mt-1">THE WORLD REMEMBERS.</p>
+          <p className="mt-1 text-[11px] tracking-[0.2em] text-myth-ink-faint">THE WORLD REMEMBERS.</p>
         </div>
 
-        <div className="rounded-2xl bg-gradient-to-br from-tavern-800/80 to-tavern-900/80 border border-ember-900/40 shadow-2xl shadow-black/50 p-8">
-          <div className="text-center mb-6">
-            <h2 className={`${displayFont.className} text-xl text-ember-100`}>Begin Your Tale</h2>
-            <p className="text-ember-300/50 text-sm mt-1">Create an account to start your adventure</p>
+        <div className="rounded-lg border border-myth-border bg-myth-surface p-8 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
+          <div className="mb-6 text-center">
+            <h2 className={`${fontDisplay.className} text-xl font-semibold text-myth-ink`}>Begin Your Tale</h2>
+            <p className="mt-1 text-sm text-myth-ink-muted">Create an account to start your adventure</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-wine-800/30 border border-wine-600/40 text-ember-100 text-sm">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-wine-400" />
+              <div className="flex items-center gap-2 rounded-lg border border-myth-danger/30 bg-myth-danger/10 px-4 py-3 text-sm text-myth-ink">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-myth-danger" />
                 <span>{error}</span>
               </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-ember-300/70 mb-2">
+              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                 Email Address
               </label>
               <input
@@ -97,7 +97,7 @@ export default function SignupPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60"
+                className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                 placeholder="your@email.com"
                 required
                 autoComplete="email"
@@ -105,7 +105,7 @@ export default function SignupPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-ember-300/70 mb-2">
+              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                 Password
               </label>
               <input
@@ -113,7 +113,7 @@ export default function SignupPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60"
+                className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                 placeholder="At least 6 characters"
                 required
                 minLength={6}
@@ -121,11 +121,11 @@ export default function SignupPage() {
               />
               {password.length > 0 && (
                 <div className="mt-2">
-                  <div className="flex items-center justify-between text-xs text-ember-400/50 mb-1">
+                  <div className="mb-1 flex items-center justify-between text-xs text-myth-ink-faint">
                     <span>Password strength</span>
                     <span>{passwordStrength < 50 ? 'Weak' : passwordStrength < 75 ? 'Fair' : passwordStrength < 100 ? 'Good' : 'Strong'}</span>
                   </div>
-                  <div className="h-1.5 bg-black/40 rounded-full overflow-hidden">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-myth-border">
                     <div
                       className={`h-full ${passwordStrengthColor} transition-all duration-300`}
                       style={{ width: `${passwordStrength}%` }}
@@ -136,7 +136,7 @@ export default function SignupPage() {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-semibold text-ember-300/70 mb-2">
+              <label htmlFor="confirmPassword" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                 Confirm Password
               </label>
               <input
@@ -144,7 +144,7 @@ export default function SignupPage() {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60"
+                className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                 placeholder="Re-enter your password"
                 required
                 minLength={6}
@@ -154,13 +154,13 @@ export default function SignupPage() {
                 <div className="mt-2 flex items-center gap-2 text-xs">
                   {password === confirmPassword ? (
                     <>
-                      <Check className="w-4 h-4 text-success-400" />
-                      <span className="text-success-400">Passwords match</span>
+                      <Check className="h-4 w-4 text-myth-good" />
+                      <span className="text-myth-good">Passwords match</span>
                     </>
                   ) : (
                     <>
-                      <X className="w-4 h-4 text-wine-400" />
-                      <span className="text-wine-400">Passwords don&rsquo;t match</span>
+                      <X className="h-4 w-4 text-myth-danger" />
+                      <span className="text-myth-danger">Passwords don&rsquo;t match</span>
                     </>
                   )}
                 </div>
@@ -170,29 +170,29 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-myth-accent px-4 py-3 font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover disabled:opacity-50"
             >
               {loading ? (
                 <>
-                  <div className="spinner h-5 w-5 border-white" />
+                  <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-myth-accent-ink" />
                   Creating account…
                 </>
               ) : (
                 <>
-                  <UserPlus className="w-4 h-4" />
+                  <UserPlus className="h-4 w-4" />
                   Create Account
                 </>
               )}
             </button>
           </form>
 
-          <div className="h-px bg-ember-900/30 my-6" />
+          <div className="my-6 h-px bg-myth-border" />
 
-          <p className="text-center text-ember-300/50 text-sm">
+          <p className="text-center text-sm text-myth-ink-muted">
             Already have an account?{' '}
             <Link
               href={safeReturnTo ? `/login?returnTo=${encodeURIComponent(safeReturnTo)}` : '/login'}
-              className="text-ember-300 hover:text-ember-200 font-semibold transition-colors"
+              className="font-semibold text-myth-accent transition-colors hover:text-myth-accent-hover"
             >
               Login here
             </Link>
@@ -200,11 +200,11 @@ export default function SignupPage() {
         </div>
 
         <div className="mt-6 text-center">
-          <p className="text-xs text-ember-500/40">
+          <p className="text-xs text-myth-ink-faint">
             By signing up, you agree to our{' '}
-            <Link href="/terms" className="hover:text-ember-300 transition-colors">Terms of Service</Link>
+            <Link href="/terms" className="transition-colors hover:text-myth-ink">Terms of Service</Link>
             {' '}and{' '}
-            <Link href="/privacy" className="hover:text-ember-300 transition-colors">Privacy Policy</Link>
+            <Link href="/privacy" className="transition-colors hover:text-myth-ink">Privacy Policy</Link>
           </p>
         </div>
       </div>

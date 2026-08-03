@@ -1,9 +1,8 @@
 // Bottom tab bar shared by every redesigned page.
 //
-// variant="myth" (opt-in, used only by the two MythOS-redesign pages)
-// swaps the permanently-dark bar for a flat, theme-adaptive myth-surface
-// one with the brass accent on the active item. Every other consumer
-// keeps the unchanged default.
+// variant="myth" (opt-in) swaps the permanently-dark bar for a flat,
+// theme-adaptive myth-surface one with the accent color on the active
+// item. Every other consumer keeps the unchanged default.
 
 'use client'
 

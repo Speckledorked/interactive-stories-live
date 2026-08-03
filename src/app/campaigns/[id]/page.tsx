@@ -19,6 +19,7 @@ import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { EmptyState } from '@/components/ui/empty-state'
+import { SectionHeader } from '@/components/ui/section-header'
 import { CampaignHero } from '@/components/campaigns/lobby/CampaignHero'
 import { CampaignEntryCTA } from '@/components/campaigns/lobby/CampaignEntryCTA'
 import { CharacterRoster } from '@/components/campaigns/lobby/CharacterRoster'
@@ -404,13 +405,11 @@ export default function CampaignLobbyPage() {
       {/* Progression/Story Log Tab */}
       {activeTab === 'progression' && data && (
         <div className="mx-auto max-w-6xl">
-          <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <h2 className="font-display text-lg font-semibold text-myth-ink">Campaign Story Log</h2>
-                <p className="mt-1 text-myth-ink-muted">A chronicle of your adventure, updated after each scene</p>
-              </div>
-              {userRole === 'ADMIN' && campaignLogs.length > 0 && (
+          <SectionHeader
+            title="Campaign Story Log"
+            description="A chronicle of your adventure, updated after each scene"
+            action={
+              userRole === 'ADMIN' && campaignLogs.length > 0 ? (
                 <div className="flex flex-col items-end gap-1">
                   <button
                     onClick={handleRegenerateLogs}
@@ -424,10 +423,10 @@ export default function CampaignLobbyPage() {
                     <p className="max-w-xs text-right text-xs text-myth-ink-faint">{regenerateLogsResult}</p>
                   )}
                 </div>
-              )}
-            </div>
-            <div className="mb-6" />
-
+              ) : undefined
+            }
+          />
+          <div className="mt-6">
             {logsLoading ? (
               <div className="flex justify-center py-8">
                 <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-myth-accent"></div>
@@ -473,13 +472,12 @@ export default function CampaignLobbyPage() {
                   )
                 })()}
 
-                {/* Log Entries */}
-                <div className="space-y-4">
+                {/* Log Entries — flowing/divided, not individually boxed: this
+                    is narrative content meant to be read, not a list of
+                    actionable rows (see docs/design-system.md). */}
+                <div className="divide-y divide-myth-border">
                   {campaignLogs.map((log: any) => (
-                    <div
-                      key={log.id}
-                      className="rounded-md border border-myth-border p-4 transition-colors hover:border-myth-border-strong"
-                    >
+                    <div key={log.id} className="py-4 first:pt-0">
                       {/* Header */}
                       <div className="mb-3 flex items-start justify-between">
                         <div className="flex-1">
@@ -560,19 +558,20 @@ export default function CampaignLobbyPage() {
       {/* Maps Tab */}
       {activeTab === 'maps' && data && (
         <div className="mx-auto max-w-6xl">
-          <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-display text-lg font-semibold text-myth-ink">Campaign Maps</h2>
-              {/* Any player can create maps — shared table content, not a
-                  GM power (there is no human GM in this product). */}
+          <SectionHeader
+            title="Campaign Maps"
+            action={
+              // Any player can create maps — shared table content, not a
+              // GM power (there is no human GM in this product).
               <button
                 onClick={() => setShowCreateMap(true)}
                 className="text-sm text-myth-ink-muted hover:text-myth-ink"
               >
                 + Create Map
               </button>
-            </div>
-
+            }
+          />
+          <div className="mt-6">
             {/* Create Map Form */}
             {showCreateMap && (
               <div className="mb-4 rounded-md border border-myth-border bg-myth-surface-sunken p-4">

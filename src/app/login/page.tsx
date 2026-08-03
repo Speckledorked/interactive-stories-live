@@ -1,5 +1,5 @@
 // src/app/login/page.tsx
-// Login page — tavern theme
+// Login page — myth design system.
 
 'use client'
 
@@ -8,7 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { LogIn, AlertTriangle, MailCheck } from 'lucide-react'
 import { login } from '@/lib/clientAuth'
-import { displayFont, bodyFont } from '@/lib/tavernTheme'
+import { fontDisplay, fontSans } from '@/lib/fonts'
 import { TavernBackground } from '@/components/tavern/TavernBackground'
 
 // Reads ?verified= from the email-verification redirect; isolated in a
@@ -18,16 +18,16 @@ function VerifiedBanner() {
   const verified = searchParams.get('verified')
   if (verified === '1') {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 mb-5 rounded-lg bg-ember-900/30 border border-ember-700/40 text-ember-100 text-sm">
-        <MailCheck className="w-4 h-4 flex-shrink-0 text-ember-300" />
-        <span>Email verified — welcome to the tavern.</span>
+      <div className="mb-5 flex items-center gap-2 rounded-lg border border-myth-good/30 bg-myth-good/10 px-4 py-3 text-sm text-myth-ink">
+        <MailCheck className="h-4 w-4 flex-shrink-0 text-myth-good" />
+        <span>Email verified — welcome to MythOS.</span>
       </div>
     )
   }
   if (verified === '0') {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 mb-5 rounded-lg bg-wine-800/30 border border-wine-600/40 text-ember-100 text-sm">
-        <AlertTriangle className="w-4 h-4 flex-shrink-0 text-wine-400" />
+      <div className="mb-5 flex items-center gap-2 rounded-lg border border-myth-danger/30 bg-myth-danger/10 px-4 py-3 text-sm text-myth-ink">
+        <AlertTriangle className="h-4 w-4 flex-shrink-0 text-myth-danger" />
         <span>That verification link is invalid or already used.</span>
       </div>
     )
@@ -69,25 +69,25 @@ export default function LoginPage() {
   }
 
   return (
-    <div className={`${bodyFont.className} -mx-4 -my-8 min-h-screen flex items-center justify-center px-4 py-12`}>
-      <TavernBackground />
+    <div className={`${fontSans.className} -mx-4 -my-8 flex min-h-screen items-center justify-center px-4 py-12`}>
+      <TavernBackground variant="myth" />
 
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
+        <div className="mb-8 text-center">
           <div className="flex items-center justify-center gap-3">
-            <span className="text-ember-700/60 text-xs tracking-widest">◈──</span>
-            <h1 className={`${displayFont.className} text-4xl tracking-[0.15em] bg-gradient-to-b from-ember-200 to-ember-500 bg-clip-text text-transparent`}>
+            <span className="text-xs tracking-widest text-myth-ink-faint">◈──</span>
+            <h1 className={`${fontDisplay.className} text-4xl font-semibold tracking-[0.15em] text-myth-ink`}>
               MythOS
             </h1>
-            <span className="text-ember-700/60 text-xs tracking-widest">──◈</span>
+            <span className="text-xs tracking-widest text-myth-ink-faint">──◈</span>
           </div>
-          <p className="text-[11px] tracking-[0.2em] text-ember-300/50 mt-1">THE WORLD REMEMBERS.</p>
+          <p className="mt-1 text-[11px] tracking-[0.2em] text-myth-ink-faint">THE WORLD REMEMBERS.</p>
         </div>
 
-        <div className="rounded-2xl bg-gradient-to-br from-tavern-800/80 to-tavern-900/80 border border-ember-900/40 shadow-2xl shadow-black/50 p-8">
-          <div className="text-center mb-6">
-            <h2 className={`${displayFont.className} text-xl text-ember-100`}>Welcome Back</h2>
-            <p className="text-ember-300/50 text-sm mt-1">Return to your tales in progress</p>
+        <div className="rounded-lg border border-myth-border bg-myth-surface p-8 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
+          <div className="mb-6 text-center">
+            <h2 className={`${fontDisplay.className} text-xl font-semibold text-myth-ink`}>Welcome Back</h2>
+            <p className="mt-1 text-sm text-myth-ink-muted">Return to your tales in progress</p>
           </div>
 
           <Suspense fallback={null}>
@@ -96,14 +96,14 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-wine-800/30 border border-wine-600/40 text-ember-100 text-sm">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-wine-400" />
+              <div className="flex items-center gap-2 rounded-lg border border-myth-danger/30 bg-myth-danger/10 px-4 py-3 text-sm text-myth-ink">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-myth-danger" />
                 <span>{error}</span>
               </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-ember-300/70 mb-2">
+              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                 Email Address
               </label>
               <input
@@ -111,7 +111,7 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60"
+                className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                 placeholder="your@email.com"
                 required
                 autoComplete="email"
@@ -119,7 +119,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-ember-300/70 mb-2">
+              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                 Password
               </label>
               <input
@@ -127,7 +127,7 @@ export default function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60"
+                className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                 placeholder="Enter your password"
                 required
                 autoComplete="current-password"
@@ -137,35 +137,35 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-myth-accent px-4 py-3 font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover disabled:opacity-50"
             >
               {loading ? (
                 <>
-                  <div className="spinner h-5 w-5 border-white" />
+                  <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-myth-accent-ink" />
                   Logging in…
                 </>
               ) : (
                 <>
-                  <LogIn className="w-4 h-4" />
+                  <LogIn className="h-4 w-4" />
                   Login
                 </>
               )}
             </button>
           </form>
 
-          <p className="text-center mt-4">
-            <Link href="/auth/forgot-password" className="text-sm text-ember-400/60 hover:text-ember-300 transition-colors">
+          <p className="mt-4 text-center">
+            <Link href="/auth/forgot-password" className="text-sm text-myth-ink-faint transition-colors hover:text-myth-ink">
               Forgot your password?
             </Link>
           </p>
 
-          <div className="h-px bg-ember-900/30 my-6" />
+          <div className="my-6 h-px bg-myth-border" />
 
-          <p className="text-center text-ember-300/50 text-sm">
+          <p className="text-center text-sm text-myth-ink-muted">
             Don&rsquo;t have an account?{' '}
             <Link
               href={safeReturnTo ? `/signup?returnTo=${encodeURIComponent(safeReturnTo)}` : '/signup'}
-              className="text-ember-300 hover:text-ember-200 font-semibold transition-colors"
+              className="font-semibold text-myth-accent transition-colors hover:text-myth-accent-hover"
             >
               Sign up for free
             </Link>
@@ -175,7 +175,7 @@ export default function LoginPage() {
         <div className="mt-6 text-center">
           <Link
             href="/help"
-            className="text-sm text-ember-400/50 hover:text-ember-300 transition-colors inline-flex items-center gap-1"
+            className="inline-flex items-center gap-1 text-sm text-myth-ink-faint transition-colors hover:text-myth-ink"
           >
             Need help?
           </Link>

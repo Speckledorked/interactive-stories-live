@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
+import { SectionHeader } from '@/components/ui/section-header'
 
 type SourceType = 'PASTE' | 'URL' | 'WIKI'
 type JobStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
@@ -332,14 +333,13 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-myth-border bg-myth-surface p-4">
-        <h3 className="mb-3 font-medium text-myth-ink">Import Lore</h3>
-        <p className="mb-3 text-xs text-myth-ink-muted">
-          Reference material the AI GM can draw on during play — a world bible, faction writeups, a wiki page,
-          or an entire fan wiki. Wiki crawling only works for MediaWiki-based sites (Fandom, wiki.gg, Wikipedia, etc);
-          give it any page URL on the wiki and it finds the rest itself.
-        </p>
-
+      <section>
+        <SectionHeader
+          as="h2"
+          title="Import Lore"
+          description="Reference material the AI GM can draw on during play — a world bible, faction writeups, a wiki page, or an entire fan wiki. Wiki crawling only works for MediaWiki-based sites (Fandom, wiki.gg, Wikipedia, etc); give it any page URL on the wiki and it finds the rest itself."
+        />
+        <div className="mt-3 rounded-lg border border-myth-border bg-myth-surface p-4">
         <div className="mb-3 flex gap-2">
           {SOURCE_TABS.map(tab => (
             <button
@@ -474,16 +474,16 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
             {submitting ? 'Starting import...' : 'Import'}
           </button>
         </form>
-      </div>
+        </div>
+      </section>
 
-      <div className="rounded-lg border border-myth-border bg-myth-surface p-4">
-        <h3 className="mb-2 font-medium text-myth-ink">World from Lore</h3>
-        <p className="mb-3 text-xs text-myth-ink-muted">
-          Campaigns created with a lore source do this automatically when the import finishes. Use this button
-          to re-run it — after adding more sources, or on a campaign whose lore came later. While no characters
-          exist the generated world is replaced by the canon one; once characters exist, canon factions and
-          systems are only added alongside what&apos;s already in play.
-        </p>
+      <section>
+        <SectionHeader
+          as="h2"
+          title="World from Lore"
+          description="Campaigns created with a lore source do this automatically when the import finishes. Use this button to re-run it — after adding more sources, or on a campaign whose lore came later. While no characters exist the generated world is replaced by the canon one; once characters exist, canon factions and systems are only added alongside what's already in play."
+        />
+        <div className="mt-3 rounded-lg border border-myth-border bg-myth-surface p-4">
         <label className="mb-3 flex items-start gap-2 text-xs text-myth-ink-muted">
           <input
             type="checkbox"
@@ -520,10 +520,11 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
         {!reseedInFlight && reseedJob?.status === 'FAILED' && (
           <p className="mt-3 text-sm text-myth-danger">{reseedJob.lastError || 'Reseed failed'}</p>
         )}
-      </div>
+        </div>
+      </section>
 
-      <div className="space-y-3">
-        <h3 className="font-medium text-myth-ink">Imported Sources</h3>
+      <section className="space-y-3">
+        <SectionHeader as="h2" title="Imported Sources" />
         {loading && <p className="text-sm text-myth-ink-muted">Loading...</p>}
         {error && <p className="text-sm text-myth-danger">{error}</p>}
         {!loading && jobs.length === 0 && (
@@ -532,7 +533,7 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
         {jobs.map(job => (
           <LoreJobRow key={job.id} job={job} onDelete={() => handleDelete(job.id)} />
         ))}
-      </div>
+      </section>
     </div>
   )
 }

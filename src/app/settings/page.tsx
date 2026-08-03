@@ -8,11 +8,10 @@ import { useRouter } from 'next/navigation'
 import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId, updateStoredUser } from '@/lib/clientAuth'
 import NotificationSettings from '@/components/settings/NotificationSettings'
 import BalanceDisplay from '@/components/BalanceDisplay'
-import { Bell, User, Lock, X } from 'lucide-react'
+import { Bell, User, Lock } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernSpinner } from '@/components/tavern/ui'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 
 type TabKey = 'notifications' | 'profile' | 'privacy'
@@ -178,10 +177,12 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <TavernPage>
-        <TavernHeader backHref="/campaigns" title="Settings" />
+      <TavernPage background="myth">
+        <TavernHeader backHref="/campaigns" title="Settings" variant="myth" />
         <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
-          <TavernSpinner className="h-16 w-16" />
+          <div className="flex justify-center py-16">
+            <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
+          </div>
         </main>
       </TavernPage>
     )
@@ -198,101 +199,96 @@ export default function SettingsPage() {
   ]
 
   return (
-    <TavernPage>
+    <TavernPage background="myth">
       <TavernHeader
         backHref="/campaigns"
         title="Settings"
+        variant="myth"
         subrow={
-          <nav className="max-w-4xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-ember-900/20 pt-2 pb-0">
-            <SubNavTabs tabs={tabs} activeKey={activeTab} onSelect={(key) => setActiveTab(key as TabKey)} />
+          <nav className="max-w-4xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-myth-border pt-2 pb-0">
+            <SubNavTabs tabs={tabs} activeKey={activeTab} onSelect={(key) => setActiveTab(key as TabKey)} variant="myth" />
           </nav>
         }
       />
 
       <main className="max-w-4xl mx-auto px-4 pt-28 pb-28 space-y-6">
-        <p className="text-ember-300/50 text-sm">Manage your account settings and preferences</p>
+        <p className="text-sm text-myth-ink-faint">Manage your account settings and preferences</p>
 
       {/* Tab Content */}
       <div className="space-y-6">
         {activeTab === 'notifications' && (
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-ember-900/15 to-transparent blur-3xl"></div>
-            <div className="relative">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="text-3xl">🔔</div>
-                <h2 className="text-2xl font-bold text-ember-100">Notification Preferences</h2>
-              </div>
-              <NotificationSettings />
+          <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="text-3xl">🔔</div>
+              <h2 className="text-2xl font-bold text-myth-ink">Notification Preferences</h2>
             </div>
+            <NotificationSettings />
           </div>
         )}
 
         {activeTab === 'profile' && (
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-wine-800/10 to-transparent blur-3xl"></div>
-            <div className="relative">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="text-3xl">👤</div>
-                <h2 className="text-2xl font-bold text-ember-100">Profile Settings</h2>
+          <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="text-3xl">👤</div>
+              <h2 className="text-2xl font-bold text-myth-ink">Profile Settings</h2>
+            </div>
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-myth-ink-muted mb-2">Email</label>
+                <input
+                  type="email"
+                  value={user.email}
+                  disabled
+                  className="px-4 py-2.5 rounded-lg bg-myth-surface-sunken border border-myth-border text-myth-ink w-full cursor-not-allowed opacity-75"
+                />
+                <p className="text-xs text-myth-ink-faint mt-2 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Email cannot be changed at this time
+                </p>
               </div>
-              <div className="space-y-5">
-                <div>
-                  <label className="block text-sm font-semibold text-ember-200/80 mb-2">Email</label>
-                  <input
-                    type="email"
-                    value={user.email}
-                    disabled
-                    className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full bg-black/20 cursor-not-allowed opacity-75"
-                  />
-                  <p className="text-xs text-ember-400/50 mt-2 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Email cannot be changed at this time
-                  </p>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-ember-200/80 mb-2">Display Name</label>
-                  <input
-                    type="text"
-                    placeholder="Your display name (optional)"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    maxLength={100}
-                    className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full"
-                  />
-                  <p className="text-xs text-ember-400/50 mt-2 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    This is how other players will see you
-                  </p>
-                </div>
+              <div>
+                <label className="block text-sm font-semibold text-myth-ink-muted mb-2">Display Name</label>
+                <input
+                  type="text"
+                  placeholder="Your display name (optional)"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={100}
+                  className="px-4 py-2.5 rounded-lg bg-myth-surface border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent w-full"
+                />
+                <p className="text-xs text-myth-ink-faint mt-2 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  This is how other players will see you
+                </p>
+              </div>
 
-                <div className="pt-4 border-t border-ember-900/30">
-                  <button
-                    className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center"
-                    onClick={handleSaveProfile}
-                    disabled={savingProfile}
-                  >
-                    {savingProfile ? (
-                      <div className="flex items-center gap-2">
-                        <div className="spinner h-4 w-4"></div>
-                        Saving...
-                      </div>
-                    ) : (
-                      'Save Profile'
-                    )}
-                  </button>
-                  {profileMessage && (
-                    <p className={`text-sm mt-3 flex items-center gap-1 ${
-                      profileMessage.startsWith('✓') ? 'text-success-400' : 'text-wine-400'
-                    }`}>
-                      {profileMessage}
-                    </p>
+              <div className="pt-4 border-t border-myth-border">
+                <button
+                  className="px-4 py-2.5 rounded-lg bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink font-medium transition-colors text-center"
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? (
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-myth-accent-ink" />
+                      Saving...
+                    </div>
+                  ) : (
+                    'Save Profile'
                   )}
-                </div>
+                </button>
+                {profileMessage && (
+                  <p className={`text-sm mt-3 flex items-center gap-1 ${
+                    profileMessage.startsWith('✓') ? 'text-myth-good' : 'text-myth-danger'
+                  }`}>
+                    {profileMessage}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -300,12 +296,12 @@ export default function SettingsPage() {
 
         {/* Balance - Separate Card */}
         {activeTab === 'profile' && (
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-6">
+          <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="text-3xl">💰</div>
-              <h2 className="text-2xl font-bold text-ember-100">Balance & Billing</h2>
+              <h2 className="text-2xl font-bold text-myth-ink">Balance & Billing</h2>
             </div>
-            <p className="text-sm text-ember-300/60 mb-4">
+            <p className="text-sm text-myth-ink-muted mb-4">
               Your current balance covers AI scene resolution costs. Click your balance below to add funds.
             </p>
             <BalanceDisplay userId={user.id} />
@@ -313,93 +309,87 @@ export default function SettingsPage() {
         )}
 
         {activeTab === 'privacy' && (
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-ember-900/15 to-transparent blur-3xl"></div>
-            <div className="relative">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="text-3xl">🔒</div>
-                <h2 className="text-2xl font-bold text-ember-100">Privacy & Security</h2>
-              </div>
-              <div className="space-y-0">
-                <div className="flex items-center justify-between py-4 border-b border-ember-900/30">
-                  <div>
-                    <h3 className="text-ember-100 font-semibold mb-1">Show Online Status</h3>
-                    <p className="text-sm text-ember-300/60">Let other players see when you're online</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div className="w-11 h-6 bg-black/40 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-ember-900/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-ember-900/40 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-ember-600 peer-checked:to-ember-500 shadow-inner"></div>
-                  </label>
+          <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="text-3xl">🔒</div>
+              <h2 className="text-2xl font-bold text-myth-ink">Privacy & Security</h2>
+            </div>
+            <div className="space-y-0">
+              <div className="flex items-center justify-between py-4 border-b border-myth-border">
+                <div>
+                  <h3 className="text-myth-ink font-semibold mb-1">Show Online Status</h3>
+                  <p className="text-sm text-myth-ink-muted">Let other players see when you're online</p>
                 </div>
-
-                <div className="flex items-center justify-between py-4 border-b border-ember-900/30">
-                  <div>
-                    <h3 className="text-ember-100 font-semibold mb-1">Allow Direct Messages</h3>
-                    <p className="text-sm text-ember-300/60">Allow other players to send you whispers</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div className="w-11 h-6 bg-black/40 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-ember-900/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-ember-900/40 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-ember-600 peer-checked:to-ember-500 shadow-inner"></div>
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between py-4 border-b border-ember-900/30">
-                  <div>
-                    <h3 className="text-ember-100 font-semibold mb-1">Public Profile</h3>
-                    <p className="text-sm text-ember-300/60">Make your profile visible to other players</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div className="w-11 h-6 bg-black/40 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-ember-900/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-ember-900/40 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-ember-600 peer-checked:to-ember-500 shadow-inner"></div>
-                  </label>
-                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" defaultChecked />
+                  <div className="w-11 h-6 bg-myth-surface-sunken peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-myth-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-myth-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-myth-accent"></div>
+                </label>
               </div>
 
-              <div className="pt-6 border-t border-ember-900/30 mt-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <svg className="w-5 h-5 text-ember-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                  </svg>
-                  <h3 className="text-ember-100 font-semibold">Change Password</h3>
+              <div className="flex items-center justify-between py-4 border-b border-myth-border">
+                <div>
+                  <h3 className="text-myth-ink font-semibold mb-1">Allow Direct Messages</h3>
+                  <p className="text-sm text-myth-ink-muted">Allow other players to send you whispers</p>
                 </div>
-                <p className="text-sm text-ember-300/60 mb-4">Update your password to keep your account secure</p>
-                <button className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center" onClick={() => setShowPasswordModal(true)}>
-                  Change Password
-                </button>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" defaultChecked />
+                  <div className="w-11 h-6 bg-myth-surface-sunken peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-myth-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-myth-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-myth-accent"></div>
+                </label>
               </div>
+
+              <div className="flex items-center justify-between py-4 border-b border-myth-border">
+                <div>
+                  <h3 className="text-myth-ink font-semibold mb-1">Public Profile</h3>
+                  <p className="text-sm text-myth-ink-muted">Make your profile visible to other players</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" defaultChecked />
+                  <div className="w-11 h-6 bg-myth-surface-sunken peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-myth-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-myth-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-myth-accent"></div>
+                </label>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-myth-border mt-6">
+              <div className="flex items-center gap-2 mb-3">
+                <svg className="w-5 h-5 text-myth-ink-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                <h3 className="text-myth-ink font-semibold">Change Password</h3>
+              </div>
+              <p className="text-sm text-myth-ink-muted mb-4">Update your password to keep your account secure</p>
+              <button className="px-4 py-2.5 rounded-lg border border-myth-border text-myth-ink-muted font-medium transition-colors hover:border-myth-border-strong hover:text-myth-ink text-center" onClick={() => setShowPasswordModal(true)}>
+                Change Password
+              </button>
             </div>
           </div>
         )}
 
         {/* Danger Zone - Separate Card */}
         {activeTab === 'privacy' && (
-          <div className="rounded-xl bg-gradient-to-br from-wine-800/20 to-wine-800/10 border border-wine-700/40 shadow-lg shadow-black/30 p-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-wine-700/10 to-transparent blur-3xl"></div>
-            <div className="relative">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="text-3xl">⚠️</div>
-                <h3 className="text-xl font-bold text-wine-400">Danger Zone</h3>
-              </div>
-              <p className="text-sm text-ember-200/80 mb-6 leading-relaxed">
-                Permanently delete your account and all associated data. This action cannot be undone.
-              </p>
-              <button className="px-4 py-2.5 rounded-lg bg-wine-700 hover:bg-wine-600 text-ember-100 font-medium transition-colors text-center flex items-center justify-center gap-2" onClick={() => setShowDeleteModal(true)}>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                Delete Account
-              </button>
+          <div className="rounded-lg border border-myth-danger/30 bg-myth-danger/10 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="text-3xl">⚠️</div>
+              <h3 className="text-xl font-bold text-myth-danger">Danger Zone</h3>
             </div>
+            <p className="text-sm text-myth-ink-muted mb-6 leading-relaxed">
+              Permanently delete your account and all associated data. This action cannot be undone.
+            </p>
+            <button className="px-4 py-2.5 rounded-lg bg-myth-danger hover:bg-myth-danger/90 text-white font-medium transition-colors text-center flex items-center justify-center gap-2" onClick={() => setShowDeleteModal(true)}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete Account
+            </button>
           </div>
         )}
       </div>
 
       {/* Password Change Modal */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 overflow-auto bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-6 max-w-md w-full relative animate-fade-in">
+        <div className="fixed inset-0 z-50 overflow-auto bg-black/50 flex items-center justify-center p-4">
+          <div className="rounded-lg border border-myth-border bg-myth-surface-raised p-6 max-w-md w-full shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-ember-100">Change Password</h3>
+              <h3 className="text-xl font-bold text-myth-ink">Change Password</h3>
               <button
                 onClick={() => {
                   setShowPasswordModal(false)
@@ -408,7 +398,7 @@ export default function SettingsPage() {
                   setNewPassword('')
                   setConfirmPassword('')
                 }}
-                className="text-ember-300/60 hover:text-ember-100 transition-colors text-xl"
+                className="text-myth-ink-faint hover:text-myth-ink transition-colors text-xl"
               >
                 ✕
               </button>
@@ -416,41 +406,41 @@ export default function SettingsPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-ember-200/80 mb-2">Current Password</label>
+                <label className="block text-sm font-semibold text-myth-ink-muted mb-2">Current Password</label>
                 <input
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full"
+                  className="px-4 py-2.5 rounded-lg bg-myth-surface border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent w-full"
                   placeholder="Enter current password"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-ember-200/80 mb-2">New Password</label>
+                <label className="block text-sm font-semibold text-myth-ink-muted mb-2">New Password</label>
                 <input
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full"
+                  className="px-4 py-2.5 rounded-lg bg-myth-surface border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent w-full"
                   placeholder="Enter new password (min 8 characters)"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-ember-200/80 mb-2">Confirm New Password</label>
+                <label className="block text-sm font-semibold text-myth-ink-muted mb-2">Confirm New Password</label>
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full"
+                  className="px-4 py-2.5 rounded-lg bg-myth-surface border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent w-full"
                   placeholder="Confirm new password"
                 />
               </div>
 
               {passwordMessage && (
                 <p className={`text-sm flex items-center gap-1 ${
-                  passwordMessage.startsWith('✓') ? 'text-success-400' : 'text-wine-400'
+                  passwordMessage.startsWith('✓') ? 'text-myth-good' : 'text-myth-danger'
                 }`}>
                   {passwordMessage}
                 </p>
@@ -460,11 +450,11 @@ export default function SettingsPage() {
                 <button
                   onClick={handleChangePassword}
                   disabled={changingPassword}
-                  className="px-4 py-2.5 rounded-lg bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 font-medium border border-ember-900/50 shadow-lg shadow-black/40 transition-all text-center flex-1"
+                  className="px-4 py-2.5 rounded-lg bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink font-medium transition-colors text-center flex-1"
                 >
                   {changingPassword ? (
                     <div className="flex items-center justify-center gap-2">
-                      <div className="spinner h-4 w-4"></div>
+                      <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-myth-accent-ink" />
                       Changing...
                     </div>
                   ) : (
@@ -479,7 +469,7 @@ export default function SettingsPage() {
                     setNewPassword('')
                     setConfirmPassword('')
                   }}
-                  className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center"
+                  className="px-4 py-2.5 rounded-lg border border-myth-border text-myth-ink-muted font-medium transition-colors hover:border-myth-border-strong hover:text-myth-ink text-center"
                 >
                   Cancel
                 </button>
@@ -491,12 +481,12 @@ export default function SettingsPage() {
 
       {/* Delete Account Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 overflow-auto bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="rounded-xl bg-gradient-to-br from-wine-800/20 to-tavern-900 border border-wine-700/40 shadow-lg shadow-black/30 p-6 max-w-md w-full relative animate-fade-in">
+        <div className="fixed inset-0 z-50 overflow-auto bg-black/50 flex items-center justify-center p-4">
+          <div className="rounded-lg border border-myth-danger/30 bg-myth-surface-raised p-6 max-w-md w-full shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">⚠️</span>
-                <h3 className="text-xl font-bold text-wine-400">Delete Account</h3>
+                <h3 className="text-xl font-bold text-myth-danger">Delete Account</h3>
               </div>
               <button
                 onClick={() => {
@@ -504,44 +494,44 @@ export default function SettingsPage() {
                   setDeleteMessage('')
                   setDeleteConfirmation('')
                 }}
-                className="text-ember-300/60 hover:text-ember-100 transition-colors text-xl"
+                className="text-myth-ink-faint hover:text-myth-ink transition-colors text-xl"
               >
                 ✕
               </button>
             </div>
 
             <div className="space-y-4">
-              <div className="bg-wine-800/20 border border-wine-700/40 rounded-lg p-4">
-                <p className="text-sm text-ember-200/80 leading-relaxed">
-                  This action is <strong className="text-wine-400">permanent</strong> and cannot be undone. All your:
+              <div className="rounded-lg border border-myth-danger/30 bg-myth-danger/10 p-4">
+                <p className="text-sm text-myth-ink-muted leading-relaxed">
+                  This action is <strong className="text-myth-danger">permanent</strong> and cannot be undone. All your:
                 </p>
-                <ul className="mt-3 space-y-1 text-sm text-ember-300/60">
+                <ul className="mt-3 space-y-1 text-sm text-myth-ink-muted">
                   <li>• Characters and their progress</li>
                   <li>• Campaign memberships</li>
                   <li>• Game history and actions</li>
                   <li>• Personal settings and preferences</li>
                 </ul>
-                <p className="mt-3 text-sm text-ember-200/80">
-                  will be <strong className="text-wine-400">permanently deleted</strong>.
+                <p className="mt-3 text-sm text-myth-ink-muted">
+                  will be <strong className="text-myth-danger">permanently deleted</strong>.
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-ember-200/80 mb-2">
-                  Type <span className="text-wine-400 font-mono">DELETE MY ACCOUNT</span> to confirm:
+                <label className="block text-sm font-semibold text-myth-ink-muted mb-2">
+                  Type <span className="text-myth-danger font-mono">DELETE MY ACCOUNT</span> to confirm:
                 </label>
                 <input
                   type="text"
                   value={deleteConfirmation}
                   onChange={(e) => setDeleteConfirmation(e.target.value)}
-                  className="px-4 py-2.5 rounded-lg bg-black/30 border border-ember-900/40 text-ember-100 placeholder:text-ember-500/30 focus:outline-none focus:border-ember-600/60 w-full font-mono"
+                  className="px-4 py-2.5 rounded-lg bg-myth-surface border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent w-full font-mono"
                   placeholder="DELETE MY ACCOUNT"
                 />
               </div>
 
               {deleteMessage && (
                 <p className={`text-sm flex items-center gap-1 ${
-                  deleteMessage.startsWith('✓') ? 'text-success-400' : 'text-wine-400'
+                  deleteMessage.startsWith('✓') ? 'text-myth-good' : 'text-myth-danger'
                 }`}>
                   {deleteMessage}
                 </p>
@@ -551,11 +541,11 @@ export default function SettingsPage() {
                 <button
                   onClick={handleDeleteAccount}
                   disabled={deletingAccount || deleteConfirmation !== 'DELETE MY ACCOUNT'}
-                  className="px-4 py-2.5 rounded-lg bg-wine-700 hover:bg-wine-600 text-ember-100 font-medium transition-colors text-center flex items-center justify-center gap-2 flex-1"
+                  className="px-4 py-2.5 rounded-lg bg-myth-danger hover:bg-myth-danger/90 text-white font-medium transition-colors text-center flex items-center justify-center gap-2 flex-1 disabled:opacity-50"
                 >
                   {deletingAccount ? (
                     <div className="flex items-center justify-center gap-2">
-                      <div className="spinner h-4 w-4"></div>
+                      <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
                       Deleting...
                     </div>
                   ) : (
@@ -568,7 +558,7 @@ export default function SettingsPage() {
                     setDeleteMessage('')
                     setDeleteConfirmation('')
                   }}
-                  className="px-4 py-2.5 rounded-lg bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-300 font-medium transition-colors text-center"
+                  className="px-4 py-2.5 rounded-lg border border-myth-border text-myth-ink-muted font-medium transition-colors hover:border-myth-border-strong hover:text-myth-ink text-center"
                 >
                   Cancel
                 </button>
@@ -579,7 +569,7 @@ export default function SettingsPage() {
       )}
       </main>
 
-      <TavernNav active="settings" campaignId={lastCampaignId || undefined} />
+      <TavernNav active="settings" campaignId={lastCampaignId || undefined} variant="myth" />
     </TavernPage>
   )
 }

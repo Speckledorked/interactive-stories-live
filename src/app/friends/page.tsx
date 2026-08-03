@@ -14,8 +14,9 @@ import { formatRelativeTime } from '@/lib/tavernUtils'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernButton, TavernErrorBanner, TavernEmptyState, TavernSpinner } from '@/components/tavern/ui'
+import { TavernButton } from '@/components/tavern/ui'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
+import { EmptyState } from '@/components/ui/empty-state'
 
 interface Friend {
   id: string
@@ -203,37 +204,44 @@ export default function FriendsPage() {
 
   if (loading) {
     return (
-      <TavernPage>
-        <TavernHeader backHref="/campaigns" title="Friends" campaignId={lastCampaignId || undefined} />
+      <TavernPage background="myth">
+        <TavernHeader backHref="/campaigns" title="Friends" campaignId={lastCampaignId || undefined} variant="myth" />
         <main className="max-w-2xl mx-auto px-4 pt-28 pb-16">
-          <TavernSpinner className="h-16 w-16" />
+          <div className="flex justify-center py-16">
+            <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
+          </div>
         </main>
-        <TavernNav campaignId={lastCampaignId || undefined} />
+        <TavernNav campaignId={lastCampaignId || undefined} variant="myth" />
       </TavernPage>
     )
   }
 
   return (
-    <TavernPage>
+    <TavernPage background="myth">
       <TavernHeader
         backHref="/campaigns"
         title="Friends"
         campaignId={lastCampaignId || undefined}
+        variant="myth"
         subrow={
-          <nav className="max-w-2xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-ember-900/20 pt-2 pb-0">
-            <SubNavTabs tabs={tabs} activeKey={activeTab} onSelect={(key) => setActiveTab(key as TabKey)} />
+          <nav className="max-w-2xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-myth-border pt-2 pb-0">
+            <SubNavTabs tabs={tabs} activeKey={activeTab} onSelect={(key) => setActiveTab(key as TabKey)} variant="myth" />
           </nav>
         }
       />
 
       <main className="max-w-2xl mx-auto px-4 pt-28 pb-28 space-y-4">
-        {error && <TavernErrorBanner>{error}</TavernErrorBanner>}
+        {error && (
+          <div className="rounded-lg border border-myth-danger/30 bg-myth-danger/10 px-4 py-3 text-sm text-myth-danger">
+            {error}
+          </div>
+        )}
 
         {activeTab === 'friends' && (
           <div className="space-y-3">
             {friends.length === 0 ? (
-              <TavernEmptyState
-                icon={Users}
+              <EmptyState
+                icon={<Users className="h-6 w-6" />}
                 title="No friends yet"
                 description="Find other players and send a friend request to see them here."
               />
@@ -241,16 +249,16 @@ export default function FriendsPage() {
               friends.map((friend) => (
                 <div
                   key={friend.id}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-4"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-myth-border bg-myth-surface p-4"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span
-                      className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${friend.isOnline ? 'bg-success-400' : 'bg-ember-700/50'}`}
+                      className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${friend.isOnline ? 'bg-myth-good' : 'bg-myth-ink-faint/40'}`}
                       title={friend.isOnline ? 'Online' : 'Offline'}
                     />
                     <div className="min-w-0">
-                      <p className="text-ember-100 font-medium truncate">{friend.name || friend.email}</p>
-                      <p className="text-xs text-ember-400/50">
+                      <p className="truncate font-medium text-myth-ink">{friend.name || friend.email}</p>
+                      <p className="text-xs text-myth-ink-faint">
                         {friend.isOnline
                           ? 'Online now'
                           : friend.lastSeenAt
@@ -262,7 +270,7 @@ export default function FriendsPage() {
                   <button
                     onClick={() => removeFriend(friend.id)}
                     disabled={pendingActionId === friend.id}
-                    className="p-2 text-ember-400/50 hover:text-wine-400 transition-colors disabled:opacity-50 touch-manipulation"
+                    className="p-2 text-myth-ink-faint transition-colors hover:text-myth-danger disabled:opacity-50 touch-manipulation"
                     aria-label="Remove friend"
                   >
                     <UserMinus className="w-4 h-4" />
@@ -276,22 +284,22 @@ export default function FriendsPage() {
         {activeTab === 'requests' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-semibold text-ember-300/70 mb-2">Incoming</h3>
+              <h3 className="mb-2 text-sm font-semibold text-myth-ink-muted">Incoming</h3>
               {incoming.length === 0 ? (
-                <p className="text-sm text-ember-400/40">No pending requests.</p>
+                <p className="text-sm text-myth-ink-faint">No pending requests.</p>
               ) : (
                 <div className="space-y-2">
                   {incoming.map((req) => (
                     <div
                       key={req.id}
-                      className="flex items-center justify-between gap-3 rounded-lg bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 p-4"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-myth-border bg-myth-surface p-4"
                     >
-                      <p className="text-ember-100 font-medium truncate">{req.sender.name || req.sender.email}</p>
+                      <p className="truncate font-medium text-myth-ink">{req.sender.name || req.sender.email}</p>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <button
                           onClick={() => respondToRequest(req.id, 'accept')}
                           disabled={pendingActionId === req.id}
-                          className="p-2 text-success-400 hover:text-success-300 transition-colors disabled:opacity-50 touch-manipulation"
+                          className="p-2 text-myth-good transition-colors hover:text-myth-good disabled:opacity-50 touch-manipulation"
                           aria-label="Accept"
                         >
                           <Check className="w-4 h-4" />
@@ -299,7 +307,7 @@ export default function FriendsPage() {
                         <button
                           onClick={() => respondToRequest(req.id, 'reject')}
                           disabled={pendingActionId === req.id}
-                          className="p-2 text-wine-400 hover:text-wine-300 transition-colors disabled:opacity-50 touch-manipulation"
+                          className="p-2 text-myth-danger transition-colors hover:text-myth-danger disabled:opacity-50 touch-manipulation"
                           aria-label="Reject"
                         >
                           <X className="w-4 h-4" />
@@ -312,21 +320,21 @@ export default function FriendsPage() {
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold text-ember-300/70 mb-2">Sent</h3>
+              <h3 className="mb-2 text-sm font-semibold text-myth-ink-muted">Sent</h3>
               {outgoing.length === 0 ? (
-                <p className="text-sm text-ember-400/40">No pending sent requests.</p>
+                <p className="text-sm text-myth-ink-faint">No pending sent requests.</p>
               ) : (
                 <div className="space-y-2">
                   {outgoing.map((req) => (
                     <div
                       key={req.id}
-                      className="flex items-center justify-between gap-3 rounded-lg bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 p-4"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-myth-border bg-myth-surface p-4"
                     >
-                      <p className="text-ember-100 font-medium truncate">{req.receiver.name || req.receiver.email}</p>
+                      <p className="truncate font-medium text-myth-ink">{req.receiver.name || req.receiver.email}</p>
                       <button
                         onClick={() => cancelRequest(req.id)}
                         disabled={pendingActionId === req.id}
-                        className="text-xs text-ember-400/60 hover:text-wine-400 transition-colors disabled:opacity-50 touch-manipulation"
+                        className="text-xs text-myth-ink-faint transition-colors hover:text-myth-danger disabled:opacity-50 touch-manipulation"
                       >
                         Cancel
                       </button>
@@ -341,40 +349,45 @@ export default function FriendsPage() {
         {activeTab === 'search' && (
           <div className="space-y-4">
             <div className="relative">
-              <Search className="w-4 h-4 text-ember-400/50 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-myth-ink-faint" />
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by name or email…"
-                className="w-full pl-9 pr-4 py-2.5 bg-black/30 border border-ember-900/40 rounded-lg text-ember-100 placeholder:text-ember-400/40 focus:border-ember-500/60 focus:outline-none"
+                className="w-full rounded-lg border border-myth-border bg-myth-surface py-2.5 pl-9 pr-4 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
               />
             </div>
 
-            {searching && <TavernSpinner className="h-8 w-8" />}
+            {searching && (
+              <div className="flex justify-center py-4">
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-myth-accent" />
+              </div>
+            )}
 
             {!searching && query.trim().length >= 2 && searchResults.length === 0 && (
-              <p className="text-sm text-ember-400/40 text-center py-4">No players found.</p>
+              <p className="py-4 text-center text-sm text-myth-ink-faint">No players found.</p>
             )}
 
             <div className="space-y-2">
               {searchResults.map((result) => (
                 <div
                   key={result.id}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 p-4"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-myth-border bg-myth-surface p-4"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${result.isOnline ? 'bg-success-400' : 'bg-ember-700/50'}`} />
-                    <p className="text-ember-100 font-medium truncate">{result.name || result.email}</p>
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${result.isOnline ? 'bg-myth-good' : 'bg-myth-ink-faint/40'}`} />
+                    <p className="truncate font-medium text-myth-ink">{result.name || result.email}</p>
                   </div>
                   {result.isFriend ? (
-                    <span className="text-xs text-ember-400/40 flex-shrink-0">Already friends</span>
+                    <span className="flex-shrink-0 text-xs text-myth-ink-faint">Already friends</span>
                   ) : result.friendRequest?.type === 'outgoing' ? (
-                    <span className="text-xs text-ember-400/40 flex-shrink-0">Request sent</span>
+                    <span className="flex-shrink-0 text-xs text-myth-ink-faint">Request sent</span>
                   ) : result.friendRequest?.type === 'incoming' ? (
-                    <span className="text-xs text-ember-400/40 flex-shrink-0">Check Requests tab</span>
+                    <span className="flex-shrink-0 text-xs text-myth-ink-faint">Check Requests tab</span>
                   ) : (
                     <TavernButton
+                      theme="myth"
                       onClick={() => sendRequest(result.id)}
                       disabled={pendingActionId === result.id}
                       className="!py-1.5 !px-3 text-xs flex-shrink-0"
@@ -390,7 +403,7 @@ export default function FriendsPage() {
         )}
       </main>
 
-      <TavernNav campaignId={lastCampaignId || undefined} />
+      <TavernNav campaignId={lastCampaignId || undefined} variant="myth" />
     </TavernPage>
   )
 }

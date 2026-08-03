@@ -70,7 +70,7 @@ function RelationshipBadge({ relationship }: { relationship?: string }) {
 function Panel({ icon: Icon, title, count, children }: { icon: React.ComponentType<{ className?: string }>; title: string; count: number; children: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
-      <h3 className="mb-4 flex items-center gap-2 font-display text-base font-semibold text-myth-ink">
+      <h3 className="mb-4 flex items-center gap-2 font-display text-lg font-semibold text-myth-ink">
         <Icon className="h-4 w-4 text-myth-ink-faint" />
         {title} ({count})
       </h3>

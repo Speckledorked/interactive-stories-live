@@ -4,12 +4,18 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------- *
- * MythOS redesign tokens — neutral surfaces + one brass accent + a
- * semantic palette, expressed as "R G B" triples so Tailwind's
+ * MythOS redesign tokens — neutral surfaces + one accent + a semantic
+ * palette, expressed as "R G B" triples so Tailwind's
  * rgb(var(...) / <alpha-value>) pattern can apply opacity on top.
  * Defaults to light (warm parchment); flips to dark (warm near-black)
  * on system preference, or via an explicit [data-theme] for a future
  * manual toggle.
+ *
+ * Type scale and the narrative-vs-reference card convention are
+ * documented in docs/design-system.md — use SectionHeader
+ * (src/components/ui/section-header.tsx) rather than hand-rolling a
+ * `font-display` heading, and reserve bordered card chrome for
+ * reference/utility content, not for prose meant to be read.
  * ---------------------------------------------------------------------- */
 :root {
   --myth-canvas: 247 243 236;
@@ -22,8 +28,12 @@
   --myth-ink-muted: 92 83 68;
   --myth-ink-faint: 118 109 88;
 
-  --myth-accent: 138 106 31;
-  --myth-accent-hover: 111 85 24;
+  /* Royal purple/jewel-violet (hue ~275°) — deliberately far from every
+     semantic hue below (good ~140°, warn ~37°, danger ~0°, info ~208°).
+     The old accent (138 106 31, hue ~42°) sat almost on top of --myth-warn,
+     which is why it read as dull/flat. See docs/design-system.md. */
+  --myth-accent: 91 45 120;
+  --myth-accent-hover: 72 33 98;
   --myth-accent-ink: 251 248 242;
 
   --myth-good: 42 111 61;
@@ -44,9 +54,9 @@
     --myth-ink-muted: 184 173 152;
     --myth-ink-faint: 142 132 110;
 
-    --myth-accent: 201 162 39;
-    --myth-accent-hover: 220 181 72;
-    --myth-accent-ink: 28 24 17;
+    --myth-accent: 176 132 214;
+    --myth-accent-hover: 193 153 224;
+    --myth-accent-ink: 26 16 36;
 
     --myth-good: 106 168 108;
     --myth-warn: 214 158 74;
@@ -65,8 +75,8 @@
   --myth-ink: 36 31 24;
   --myth-ink-muted: 92 83 68;
   --myth-ink-faint: 118 109 88;
-  --myth-accent: 138 106 31;
-  --myth-accent-hover: 111 85 24;
+  --myth-accent: 91 45 120;
+  --myth-accent-hover: 72 33 98;
   --myth-accent-ink: 251 248 242;
   --myth-good: 42 111 61;
   --myth-warn: 143 93 14;
@@ -84,9 +94,9 @@
   --myth-ink: 242 236 224;
   --myth-ink-muted: 184 173 152;
   --myth-ink-faint: 142 132 110;
-  --myth-accent: 201 162 39;
-  --myth-accent-hover: 220 181 72;
-  --myth-accent-ink: 28 24 17;
+  --myth-accent: 176 132 214;
+  --myth-accent-hover: 193 153 224;
+  --myth-accent-ink: 26 16 36;
   --myth-good: 106 168 108;
   --myth-warn: 214 158 74;
   --myth-danger: 214 100 90;

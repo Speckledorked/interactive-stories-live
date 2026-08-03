@@ -48,7 +48,7 @@ function StatInfo({ description }: { description: string }) {
         aria-controls={popoverId}
         aria-label="What this stat does"
         onClick={() => setOpen((v) => !v)}
-        className="text-xs text-ember-400/50 hover:text-ember-300/80 transition-colors touch-manipulation"
+        className="text-xs text-myth-ink-faint hover:text-myth-ink-muted transition-colors touch-manipulation"
       >
         ⓘ
       </button>
@@ -56,7 +56,7 @@ function StatInfo({ description }: { description: string }) {
         <div
           id={popoverId}
           role="tooltip"
-          className="absolute left-1/2 top-full z-20 mt-2 w-56 -translate-x-1/2 rounded-lg border border-ember-900/40 bg-tavern-900 p-3 text-xs text-ember-200/80 shadow-2xl shadow-black/50"
+          className="absolute left-1/2 top-full z-20 mt-2 w-56 -translate-x-1/2 rounded-lg border border-myth-border bg-myth-surface-raised p-3 text-xs text-myth-ink-muted shadow-2xl shadow-black/50"
         >
           {description}
         </div>
@@ -73,30 +73,30 @@ export default function StatBar({ name, value, description }: StatBarProps) {
   }
 
   const getColor = (val: number): string => {
-    if (val >= 2) return 'from-success-500 to-success-600'
-    if (val >= 1) return 'from-ember-400 to-ember-500'
-    if (val >= 0) return 'from-ember-700 to-ember-800'
-    if (val >= -1) return 'from-wine-500 to-wine-600'
-    return 'from-wine-700 to-wine-800'
+    if (val >= 2) return 'bg-myth-good'
+    if (val >= 1) return 'bg-myth-ink-muted'
+    if (val >= 0) return 'bg-myth-ink-faint'
+    if (val >= -1) return 'bg-myth-warn'
+    return 'bg-myth-danger'
   }
 
   const getTextColor = (val: number): string => {
-    if (val >= 2) return 'text-success-400'
-    if (val >= 1) return 'text-ember-300'
-    if (val >= 0) return 'text-ember-200/70'
-    if (val >= -1) return 'text-wine-400'
-    return 'text-wine-300'
+    if (val >= 2) return 'text-myth-good'
+    if (val >= 1) return 'text-myth-ink'
+    if (val >= 0) return 'text-myth-ink-muted'
+    if (val >= -1) return 'text-myth-warn'
+    return 'text-myth-danger'
   }
 
   const percentage = getPercentage(value)
-  const gradientColor = getColor(value)
+  const fillColor = getColor(value)
   const textColor = getTextColor(value)
 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium capitalize text-ember-200/70">
+          <span className="text-sm font-medium capitalize text-myth-ink-muted">
             {name}
           </span>
           {description && <StatInfo description={description} />}
@@ -106,13 +106,11 @@ export default function StatBar({ name, value, description }: StatBarProps) {
         </span>
       </div>
 
-      <div className="relative h-2 bg-black/30 rounded-full overflow-hidden border border-ember-900/30">
+      <div className="relative h-2 bg-myth-surface-sunken rounded-full overflow-hidden border border-myth-border">
         <div
-          className={`h-full bg-gradient-to-r ${gradientColor} transition-all duration-500 shadow-lg`}
+          className={`h-full ${fillColor} transition-all duration-500`}
           style={{ width: `${percentage}%` }}
-        >
-          <div className="w-full h-full bg-gradient-to-t from-transparent via-white/10 to-white/20" />
-        </div>
+        />
       </div>
     </div>
   )

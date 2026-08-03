@@ -18,18 +18,18 @@ export function MapViewerPanel({ activeMap, showMap, onToggleShowMap, characterN
   if (!activeMap) return null
 
   return (
-    <div className="rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 p-5">
+    <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-bold text-ember-300/60">MAP</h3>
+        <h3 className="text-sm font-medium uppercase tracking-wide text-myth-ink-faint">MAP</h3>
         <button
           onClick={onToggleShowMap}
-          className="text-xs text-ember-400/50 hover:text-ember-100 transition-colors"
+          className="text-xs text-myth-ink-faint hover:text-myth-ink transition-colors"
         >
           {showMap ? 'Hide' : 'Show'}
         </button>
       </div>
       {showMap && (
-        <div className="rounded-lg overflow-hidden border border-ember-900/30">
+        <div className="rounded-lg overflow-hidden border border-myth-border">
           <PlayerMapViewer
             map={activeMap}
             characterName={characterName}

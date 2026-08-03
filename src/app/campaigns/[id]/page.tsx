@@ -356,12 +356,15 @@ export default function CampaignLobbyPage() {
         )}
 
         <CampaignHero
+          campaignId={campaignId}
           title={campaign.title}
           description={campaign.description}
           universe={campaign.universe}
           turnNumber={campaign.worldMeta?.currentTurnNumber || 0}
           inGameDate={campaign.worldMeta?.currentInGameDate || 'Day 1'}
           heroImageUrl={campaign.heroImageStatus === 'READY' ? campaign.heroImageUrl : null}
+          heroImageStatus={campaign.heroImageStatus}
+          isAdmin={userRole === 'ADMIN'}
         />
 
       {/* Overview Tab - Existing Content */}

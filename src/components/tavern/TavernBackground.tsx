@@ -5,12 +5,20 @@
 //   top of it to keep foreground text legible regardless of how the image
 //   crops on a given viewport. Always dark — every page still using it
 //   hardcodes ember-toned text tuned for that.
-// - 'myth': flat myth-canvas fill for pages migrated to the MythOS token
-//   system (src/app/campaigns/[id]/{page,admin/page}.tsx) — theme-adaptive
-//   instead of permanently dark, no image, no gradient (flat surfaces).
+// - 'myth': myth-canvas fill for pages migrated to the MythOS token system
+//   (src/app/campaigns/[id]/{page,admin/page}.tsx) — theme-adaptive
+//   instead of permanently dark, no background image. Dark mode gets a
+//   soft radial vignette layered on top (subtler version of the tavern
+//   variant's own technique below) so it reads as moody depth rather than
+//   flat near-black; light mode stays a flat parchment fill, which needs
+//   no such treatment.
 export function TavernBackground({ variant = 'tavern' }: { variant?: 'tavern' | 'myth' }) {
   if (variant === 'myth') {
-    return <div className="fixed inset-0 -z-10 bg-myth-canvas" />
+    return (
+      <div className="fixed inset-0 -z-10 bg-myth-canvas">
+        <div className="myth-canvas-vignette absolute inset-0" />
+      </div>
+    )
   }
 
   return (

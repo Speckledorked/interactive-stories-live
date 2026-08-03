@@ -129,7 +129,7 @@ export function TavernSidebar({
         }`}
       >
         <link.icon className="h-4 w-4 flex-shrink-0" />
-        <span className="truncate">{link.label}</span>
+        <span className="truncate uppercase tracking-wide">{link.label}</span>
       </Link>
     )
   }

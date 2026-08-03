@@ -94,7 +94,7 @@ function TavernNavInner({
               } ${item.href ? hoverClass : 'cursor-default'}`}
             >
               <item.icon className="w-5 h-5" />
-              <span>{item.label}</span>
+              <span className={myth ? 'uppercase tracking-wide' : ''}>{item.label}</span>
             </div>
           )
           return item.href ? (

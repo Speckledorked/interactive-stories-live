@@ -89,7 +89,7 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false,
               }
             >
               <link.icon className="w-5 h-5 flex-shrink-0" />
-              <span>{link.label}</span>
+              <span className={myth ? 'uppercase tracking-wide' : ''}>{link.label}</span>
             </Link>
           ))}
         </nav>

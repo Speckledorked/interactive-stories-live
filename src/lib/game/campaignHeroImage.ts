@@ -22,10 +22,7 @@
 import { prisma } from '@/lib/prisma'
 import { buildCampaignHeroPrompt, generateHeroImage } from '@/lib/ai/imageGeneration'
 import { uploadCampaignHeroImage } from '@/lib/blob/campaignHeroStorage'
-import { getAppUrl } from '@/lib/appUrl'
-import { internalJobSecret } from '@/lib/game/resolutionQueue'
-
-const KICK_DELIVERY_TIMEOUT_MS = 3000
+import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
 
 /**
  * Hands hero-image generation to its own invocation via the internal
@@ -35,32 +32,11 @@ const KICK_DELIVERY_TIMEOUT_MS = 3000
  * silently losing the image.
  */
 export async function kickCampaignHeroImage(campaignId: string): Promise<void> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), KICK_DELIVERY_TIMEOUT_MS)
-  try {
-    const response = await fetch(`${getAppUrl()}/api/internal/generate-campaign-hero-image`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': internalJobSecret(),
-      },
-      body: JSON.stringify({ campaignId }),
-      signal: controller.signal,
-    })
-    if (!response.ok) {
-      console.error(`Hero image kick got a non-OK response (${response.status}) — falling back to inline processing`)
-      await generateCampaignHeroImage(campaignId)
-    }
-  } catch (error) {
-    if ((error as Error)?.name === 'AbortError') {
-      // Delivered; we just stopped waiting for the response.
-      return
-    }
-    console.error('Hero image kick failed — falling back to inline processing:', error)
-    await generateCampaignHeroImage(campaignId)
-  } finally {
-    clearTimeout(timer)
-  }
+  await kickInternalWorker(
+    '/api/internal/generate-campaign-hero-image',
+    { campaignId },
+    () => generateCampaignHeroImage(campaignId)
+  )
 }
 
 /**

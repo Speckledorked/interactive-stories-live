@@ -14,10 +14,10 @@
 
 import { prisma } from '@/lib/prisma'
 import { ResolutionJobStatus } from '@prisma/client'
-import { internalJobSecret } from './resolutionQueue'
 import { reportError } from '@/lib/monitoring'
-import { getAppUrl } from '@/lib/appUrl'
 import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
+import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
+import { classifyStaleJob as classifyStaleJobCore } from '@/lib/jobs/staleJobRecovery'
 import PusherServer from '@/lib/realtime/pusher-server'
 
 export const MAX_ATTEMPTS = 3
@@ -27,7 +27,6 @@ export const RUNNING_STALE_MS = 3 * 60 * 1000
 // Same reasoning as resolutionQueue.ts: a PENDING job should be picked up
 // within seconds of its kick; this old means the kick was lost.
 export const PENDING_STALE_MS = 45 * 1000
-const KICK_DELIVERY_TIMEOUT_MS = 3000
 
 export interface EnqueueResult {
   jobId: string
@@ -61,36 +60,12 @@ export async function enqueueSceneImageGeneration(
 
 /**
  * Hand the job to its own invocation via the internal worker route. See
- * resolutionQueue.ts's kickJob for the full reasoning (both the abort-on-
- * delivery and the non-OK-response fallback are carried over unchanged).
+ * kickInternalWorker.ts for the delivery/fallback mechanics (both the
+ * abort-on-delivery and the non-OK-response fallback are carried over
+ * unchanged from resolutionQueue.ts's original kickJob).
  */
 export async function kickImageJob(jobId: string): Promise<void> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), KICK_DELIVERY_TIMEOUT_MS)
-  try {
-    const response = await fetch(`${getAppUrl()}/api/internal/generate-scene-image`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': internalJobSecret(),
-      },
-      body: JSON.stringify({ jobId }),
-      signal: controller.signal,
-    })
-    if (!response.ok) {
-      console.error(`Image job kick got a non-OK response (${response.status}) — falling back to inline processing`)
-      await processImageGenJob(jobId)
-    }
-  } catch (error) {
-    if ((error as Error)?.name === 'AbortError') {
-      // Delivered; we just stopped waiting for the response.
-      return
-    }
-    console.error('Image job kick failed — falling back to inline processing:', error)
-    await processImageGenJob(jobId)
-  } finally {
-    clearTimeout(timer)
-  }
+  await kickInternalWorker('/api/internal/generate-scene-image', { jobId }, () => processImageGenJob(jobId))
 }
 
 export interface ProcessResult {
@@ -196,15 +171,11 @@ export type RecoveryDecision = 'kick' | 'reset_and_kick' | 'fail' | 'wait'
 
 /** Pure: what to do with one live image job during a recovery sweep. */
 export function classifyStaleImageJob(job: JobForRecovery, nowMs: number): RecoveryDecision {
-  if (job.status === 'PENDING') {
-    return nowMs - job.updatedAt.getTime() >= PENDING_STALE_MS ? 'kick' : 'wait'
-  }
-  if (job.status === 'RUNNING') {
-    const startedMs = job.startedAt?.getTime() ?? job.updatedAt.getTime()
-    if (nowMs - startedMs < RUNNING_STALE_MS) return 'wait'
-    return job.attempts >= MAX_ATTEMPTS ? 'fail' : 'reset_and_kick'
-  }
-  return 'wait'
+  return classifyStaleJobCore(job, nowMs, {
+    pendingStaleMs: PENDING_STALE_MS,
+    runningStaleMs: RUNNING_STALE_MS,
+    maxAttempts: MAX_ATTEMPTS,
+  })
 }
 
 /**

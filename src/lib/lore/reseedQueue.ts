@@ -18,11 +18,11 @@
 
 import { prisma } from '@/lib/prisma'
 import type { ReseedJobStatus } from '@prisma/client'
-import { internalJobSecret } from '@/lib/game/resolutionQueue'
 import { reportError } from '@/lib/monitoring'
-import { getAppUrl } from '@/lib/appUrl'
 import { reseedWorldFromLore, clearPendingWorldSeed } from './reseedWorld'
 import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
+import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
+import { classifyStaleJob as classifyStaleJobCore } from '@/lib/jobs/staleJobRecovery'
 
 export const MAX_ATTEMPTS = 3
 // Each attempt is at most one invocation's time budget — a RUNNING job
@@ -31,42 +31,23 @@ export const MAX_ATTEMPTS = 3
 // a single request/response cycle, not a multi-minute wiki crawl.
 export const RUNNING_STALE_MS = 90 * 1000
 export const PENDING_STALE_MS = 15 * 1000
-const KICK_DELIVERY_TIMEOUT_MS = 3000
 
 /**
  * Kick off (or reuse) the reseed job's worker invocation. Callers create
  * the ReseedJob row themselves — this just hands an already-created job
  * to the worker.
  *
- * Deliberately does NOT fall back to inline processing on a failed kick
- * (unlike kickLoreImportJob, which this otherwise mirrors) — the entire
- * point of this module is keeping reseedWorldFromLore's two AI calls off
- * the interactive request. Falling back here would silently run them
- * inline again on exactly the request path this was built to protect,
- * reproducing the 502s this was meant to fix. A failed kick just leaves
- * the job PENDING; the next admin poll's recoverStaleReseedJobs (or a
- * later kick attempt) picks it up within PENDING_STALE_MS.
+ * Deliberately passes no onDeliveryFailed to kickInternalWorker (unlike
+ * kickLoreImportJob, which this otherwise mirrors) — the entire point of
+ * this module is keeping reseedWorldFromLore's two AI calls off the
+ * interactive request. Falling back inline here would silently run them
+ * on exactly the request path this was built to protect, reproducing the
+ * 502s this was meant to fix. A failed kick just leaves the job PENDING;
+ * the next admin poll's recoverStaleReseedJobs (or a later kick attempt)
+ * picks it up within PENDING_STALE_MS.
  */
 export async function kickReseedJob(jobId: string): Promise<void> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), KICK_DELIVERY_TIMEOUT_MS)
-  try {
-    await fetch(`${getAppUrl()}/api/internal/process-reseed`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': internalJobSecret(),
-      },
-      body: JSON.stringify({ jobId }),
-      signal: controller.signal,
-    })
-  } catch (error) {
-    if ((error as Error)?.name !== 'AbortError') {
-      console.error('Reseed kick failed — job stays PENDING for the next recovery sweep:', error)
-    }
-  } finally {
-    clearTimeout(timer)
-  }
+  await kickInternalWorker('/api/internal/process-reseed', { jobId })
 }
 
 export interface ProcessResult {
@@ -172,15 +153,11 @@ export type RecoveryDecision = 'kick' | 'reset_and_kick' | 'fail' | 'wait'
 
 /** Pure: what to do with one live job during a recovery sweep. */
 export function classifyStaleReseedJob(job: JobForRecovery, nowMs: number): RecoveryDecision {
-  if (job.status === 'PENDING') {
-    return nowMs - job.updatedAt.getTime() >= PENDING_STALE_MS ? 'kick' : 'wait'
-  }
-  if (job.status === 'RUNNING') {
-    const startedMs = job.startedAt?.getTime() ?? job.updatedAt.getTime()
-    if (nowMs - startedMs < RUNNING_STALE_MS) return 'wait'
-    return job.attempts >= MAX_ATTEMPTS ? 'fail' : 'reset_and_kick'
-  }
-  return 'wait'
+  return classifyStaleJobCore(job, nowMs, {
+    pendingStaleMs: PENDING_STALE_MS,
+    runningStaleMs: RUNNING_STALE_MS,
+    maxAttempts: MAX_ATTEMPTS,
+  })
 }
 
 /**

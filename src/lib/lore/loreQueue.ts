@@ -12,49 +12,33 @@
 
 import { prisma } from '@/lib/prisma'
 import type { LoreImportJobStatus } from '@prisma/client'
-import { internalJobSecret } from '@/lib/game/resolutionQueue'
 import { reportError } from '@/lib/monitoring'
-import { getAppUrl } from '@/lib/appUrl'
 import { runLoreImport } from './loreImportService'
 import { clearPendingWorldSeed } from './reseedWorld'
 import { kickReseedJob } from './reseedQueue'
 import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
+import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
+import { classifyStaleJob as classifyStaleJobCore } from '@/lib/jobs/staleJobRecovery'
 
 export const MAX_ATTEMPTS = 3
 // A wiki crawl can legitimately run for minutes; a RUNNING job older than
 // this is presumed dead rather than just slow.
 export const RUNNING_STALE_MS = 8 * 60 * 1000
 export const PENDING_STALE_MS = 45 * 1000
-const KICK_DELIVERY_TIMEOUT_MS = 3000
 
 /**
  * Kick off (or reuse) the import job's worker invocation. Callers create
  * the LoreImportJob row themselves (via prisma.loreImportJob.create, from
  * the API route that also validates the request body) — this just hands
- * an already-created job to the worker.
+ * an already-created job to the worker. A non-OK response or a failed
+ * delivery falls back to processLoreImportJob inline (see
+ * kickInternalWorker.ts) — previously this file only handled a thrown
+ * delivery error, silently swallowing a non-OK response (e.g. a rotated
+ * INTERNAL_JOB_SECRET); this brings it in line with resolutionQueue.ts's
+ * kickJob, which already had both (#120).
  */
 export async function kickLoreImportJob(jobId: string): Promise<void> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), KICK_DELIVERY_TIMEOUT_MS)
-  try {
-    await fetch(`${getAppUrl()}/api/internal/process-lore-import`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': internalJobSecret(),
-      },
-      body: JSON.stringify({ jobId }),
-      signal: controller.signal,
-    })
-  } catch (error) {
-    if ((error as Error)?.name === 'AbortError') {
-      return
-    }
-    console.error('Lore import kick failed — falling back to inline processing:', error)
-    await processLoreImportJob(jobId)
-  } finally {
-    clearTimeout(timer)
-  }
+  await kickInternalWorker('/api/internal/process-lore-import', { jobId }, () => processLoreImportJob(jobId))
 }
 
 export interface ProcessResult {
@@ -169,15 +153,11 @@ export type RecoveryDecision = 'kick' | 'reset_and_kick' | 'fail' | 'wait'
 
 /** Pure: what to do with one live job during a recovery sweep. */
 export function classifyStaleLoreJob(job: JobForRecovery, nowMs: number): RecoveryDecision {
-  if (job.status === 'PENDING') {
-    return nowMs - job.updatedAt.getTime() >= PENDING_STALE_MS ? 'kick' : 'wait'
-  }
-  if (job.status === 'RUNNING') {
-    const startedMs = job.startedAt?.getTime() ?? job.updatedAt.getTime()
-    if (nowMs - startedMs < RUNNING_STALE_MS) return 'wait'
-    return job.attempts >= MAX_ATTEMPTS ? 'fail' : 'reset_and_kick'
-  }
-  return 'wait'
+  return classifyStaleJobCore(job, nowMs, {
+    pendingStaleMs: PENDING_STALE_MS,
+    runningStaleMs: RUNNING_STALE_MS,
+    maxAttempts: MAX_ATTEMPTS,
+  })
 }
 
 /**

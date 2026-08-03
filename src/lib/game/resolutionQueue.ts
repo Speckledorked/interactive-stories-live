@@ -14,10 +14,15 @@
 
 import { prisma } from '@/lib/prisma'
 import { ResolutionJobStatus } from '@prisma/client'
-import { getJwtSecret } from '@/lib/auth'
 import { reportError } from '@/lib/monitoring'
-import { getAppUrl } from '@/lib/appUrl'
 import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
+import { kickInternalWorker, internalJobSecret } from '@/lib/jobs/kickInternalWorker'
+import { classifyStaleJob as classifyStaleJobCore } from '@/lib/jobs/staleJobRecovery'
+
+// Re-exported for the many call sites that already import this from here
+// (the internal-worker routes, the other job queues) — canonical home is
+// now kickInternalWorker.ts, alongside the fetch mechanics that use it.
+export { internalJobSecret }
 
 export const MAX_ATTEMPTS = 3
 // A RUNNING job older than this is presumed dead (resolveScene's own
@@ -26,16 +31,6 @@ export const RUNNING_STALE_MS = 6 * 60 * 1000
 // A PENDING job should be picked up within seconds of its kick; one this
 // old means the kick was lost (network blip, cold start failure).
 export const PENDING_STALE_MS = 45 * 1000
-// How long the enqueuing request waits for the worker invocation to be
-// delivered before letting go — delivery is what matters, not completion.
-const KICK_DELIVERY_TIMEOUT_MS = 3000
-
-export function internalJobSecret(): string {
-  // Falls back to the JWT secret, which itself refuses to run in
-  // production without a real value (see lib/auth.ts) — no hardcoded
-  // fallback can reach production either way.
-  return process.env.INTERNAL_JOB_SECRET || getJwtSecret()
-}
 
 export interface EnqueueResult {
   jobId: string
@@ -73,51 +68,14 @@ export async function enqueueSceneResolution(
 }
 
 /**
- * Hand the job to its own invocation via the internal worker route.
- * Awaited only long enough to deliver the request — the worker's
- * invocation has its own lifetime and keeps running after we stop
- * listening. If delivery itself fails (local dev without a reachable
- * self-URL, network error), fall back to processing inline: slower and
- * timeout-prone, but never silently dropped.
- *
- * A response that arrives before the abort fires is necessarily a FAST
- * one — the real pipeline takes ~150s+, so any request that resolves
- * within KICK_DELIVERY_TIMEOUT_MS never actually reached the AI/world-turn
- * work. A non-OK status here (403 from a misconfigured/rotated
- * INTERNAL_JOB_SECRET, 400 from a malformed body) means the job was never
- * handed to processResolutionJob at all — its `attempts` counter never
- * increments, so it would otherwise loop through PENDING-stale recovery
- * forever rather than ever reaching MAX_ATTEMPTS. Falling back to inline
- * processing here closes that gap the same way a thrown network error
- * already does below (#120).
+ * Hand the job to its own invocation via the internal worker route. See
+ * kickInternalWorker.ts for the delivery/fallback mechanics — a non-OK
+ * response or a failed delivery here falls back to processResolutionJob
+ * inline (#120), since either means the job was never actually handed off
+ * and its `attempts` counter never incremented.
  */
 export async function kickJob(jobId: string): Promise<void> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), KICK_DELIVERY_TIMEOUT_MS)
-  try {
-    const response = await fetch(`${getAppUrl()}/api/internal/resolve-job`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': internalJobSecret(),
-      },
-      body: JSON.stringify({ jobId }),
-      signal: controller.signal,
-    })
-    if (!response.ok) {
-      console.error(`Job kick got a non-OK response (${response.status}) — falling back to inline processing`)
-      await processResolutionJob(jobId)
-    }
-  } catch (error) {
-    if ((error as Error)?.name === 'AbortError') {
-      // Delivered; we just stopped waiting for the (long) response.
-      return
-    }
-    console.error('Job kick failed — falling back to inline processing:', error)
-    await processResolutionJob(jobId)
-  } finally {
-    clearTimeout(timer)
-  }
+  await kickInternalWorker('/api/internal/resolve-job', { jobId }, () => processResolutionJob(jobId))
 }
 
 export interface ProcessResult {
@@ -210,15 +168,11 @@ export type RecoveryDecision = 'kick' | 'reset_and_kick' | 'fail' | 'wait'
 
 /** Pure: what to do with one live job during a recovery sweep. */
 export function classifyStaleJob(job: JobForRecovery, nowMs: number): RecoveryDecision {
-  if (job.status === 'PENDING') {
-    return nowMs - job.updatedAt.getTime() >= PENDING_STALE_MS ? 'kick' : 'wait'
-  }
-  if (job.status === 'RUNNING') {
-    const startedMs = job.startedAt?.getTime() ?? job.updatedAt.getTime()
-    if (nowMs - startedMs < RUNNING_STALE_MS) return 'wait'
-    return job.attempts >= MAX_ATTEMPTS ? 'fail' : 'reset_and_kick'
-  }
-  return 'wait'
+  return classifyStaleJobCore(job, nowMs, {
+    pendingStaleMs: PENDING_STALE_MS,
+    runningStaleMs: RUNNING_STALE_MS,
+    maxAttempts: MAX_ATTEMPTS,
+  })
 }
 
 /**

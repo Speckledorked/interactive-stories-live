@@ -180,9 +180,12 @@ Verified functional, end to end, as of this rewrite:
 
 Partial or weak, and honestly so:
 
-- API route test coverage is targeted, not broad — 94 routes, roughly 9
+- API route test coverage is targeted, not broad — 101 routes, 22
   dedicated test files, aimed at fog-of-war reads and money/state/
-  access-mutating writes. Most of the surface remains untested.
+  access-mutating writes (bans, member role changes, campaign deletion,
+  account deletion, the character anti-cheat field allowlist, Stripe
+  checkout, stuck-scene recovery, campaign-scoped user blocking). Most of
+  the surface remains untested.
 - Admin tooling was mostly thin CRUD; the faction and NPC tabs now extend
   the tick dry-run preview's "show your reasoning" pattern (a per-entity
   `/reasoning` route backed by the same pure decide/explain functions the
@@ -238,7 +241,7 @@ this table.
 | Cross-system economy (faction wealth ↔ items ↔ downtime ↔ quests) | 4 | Quest/downtime payouts are real transfers out of a faction's resources (`assessPayout`); a broke faction pays partially and defaults on the rest. Debt moves the dice in both directions. Any AI-reported gold change is bounds-checked (`clampGoldDelta`) and granted items merge through one shared path (`mergeGrantedItems`). Items carry value/rarity under a budget. No merchant/trading layer — a separate product question, not a gap. |
 | Outcome-band adherence (does the narration obey the roll?) | 5 | The narrator self-reports which band its prose depicts (`outcome_echo`); mismatches are logged (`checkOutcomeAdherence`), feed a consistency metric, and are now persisted per-exchange and surfaced in the transparency panel (`AITransparencyPanel`) that already shows dice receipts. Deliberately still only observed, never enforced — rewriting prose to match a roll would be a worse product than an occasional, visible drift. |
 | Fog-of-war enforcement mechanism | 5 | One shared `visibleTo(model, role)` gate, correctly handling the polarity difference (clocks gate on hidden state, everything else on discovered state). An unknown role fails closed. A structural test fails if a new route bypasses the gate without an explicit, restricted exemption. |
-| API route test coverage | 4 | 94 routes, roughly 9 dedicated test files. Targeted at risk — every fog-of-war-gated read, and writes that spend money, mutate scene state, or hand out access — not broad coverage of the full route surface. |
+| API route test coverage | 4 | 101 routes, 22 dedicated test files. Targeted at risk — every fog-of-war-gated read, and writes that spend money, mutate scene state, or hand out access. #93 extended the set outward past the original ~9 files to cover the highest-blast-radius previously-untested mutations: campaign bans, member removal/role changes (including the "last admin" guard on both paths), campaign PATCH/DELETE, account deletion, the character `PLAYER_EDITABLE_FIELDS` anti-cheat allowlist, Stripe checkout session creation, stuck-scene admin recovery, and campaign-scoped user blocking. Not a 5 — still targeted, not exhaustive; a meaningful tier of lower-risk mutating routes (individual NPC/faction/location PATCH, friend-request accept/reject, turn order) remains untested. |
 | Auth / session | 4 | Real revocation: `requireAuth`/`verifyAuth`/`getUser` all check `isTokenRevoked`, and a token-version bump (`revokeAllSessions`, stamped by `createToken`) invalidates every existing session at once. Deliberately fails open for pre-revocation tokens and for an unreadable database, both to avoid a mass logout from a blip. Not a 5 — no refresh-token rotation, still 30-day JWTs. |
 | Rate limiting / abuse | 4 | Postgres-backed (`checkRateLimit`, correct for serverless, where in-memory wouldn't actually limit anything), applied at 17 route call sites, unit-tested. |
 | Admin tooling as simulation design (beyond CRUD) | 3 | Faction and NPC tabs now show real reasoning, not just fields: a faction card's "Why?" button previews its next goal reassessment (`explainFactionGoalReassessment`) plus any active war's momentum trajectory (`explainWarMomentum`) — new pure functions the real tick's `decideFactionGoalReassessment`/`decideWarProgress`/`decideWarResolution` now delegate to or share, run read-only via new per-entity `/reasoning` API routes. An NPC card's "Why?" preview surfaces its real next-tick decision (`decideNpcTick`) directly. Not higher than a 3 — `handleUpdateLocation`/`handleTickClock` are still thin PATCH wrappers, and there's no standalone war tab at all (war reasoning is folded into the faction fighting it, since no war admin surface exists to extend). |
@@ -278,9 +281,11 @@ above. Items that block later ones are flagged.
    have never executed even once. This is the single highest-leverage item
    on this list — everything else about the pipeline is design confidence,
    not proven confidence, until this happens.
-2. **Broaden API route test coverage** past the current targeted set,
-   prioritizing routes that mutate persisted state over ones that only
-   read it.
+2. **Keep broadening API route test coverage.** #93 extended it past the
+   original ~9 files to cover the highest-blast-radius previously-untested
+   mutations (see the Scorecard row); still untested: individual NPC/
+   faction/location PATCH/DELETE, friend-request accept/reject, the turn
+   order route, and the rest of the long tail of lower-risk mutations.
 
 *(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
 checkKeys a shared type, the war stability-hit write path's missing direct
@@ -288,9 +293,10 @@ test coverage, making outcome-band adherence visible to players, the
 strict-structured-outputs and dice-opt-in-only decisions, and extending
 the tick dry-run preview's reasoning pattern to the faction/NPC tabs —
 that used to be items 2, 6, 7, 4, 3, 2, 5, and 3 here — are all resolved
-(the admin-tooling item only partially — locations/clocks are still thin
-CRUD and there's no standalone war tab). See Known Bugs and the
-Scorecard's War & coalition system and Admin tooling rows.)*
+(the admin-tooling and API-route-coverage items only partially — see
+their Scorecard rows for exactly what's still missing). See Known Bugs
+and the Scorecard's War & coalition system, Admin tooling, and API route
+test coverage rows.)*
 
 ## Features & Roadmap
 
@@ -329,8 +335,10 @@ Partial implementation exists in the codebase today.
   (war reasoning rides along with the faction fighting it) — extending
   further is the remaining work.
 - **API route test coverage** — targeted coverage exists for the
-  highest-risk reads and writes; broadening it toward the rest of the
-  route surface is ongoing, not finished.
+  highest-risk reads and writes; #93 broadened it to cover the
+  highest-blast-radius previously-untested mutations (see the Scorecard),
+  but a long tail of lower-risk routes remains untested — ongoing, not
+  finished.
 
 ## Architecture: Where the Depth Actually Lives
 

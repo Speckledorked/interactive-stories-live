@@ -3,14 +3,16 @@
 // campaign's chronicle share link (see api/campaigns/[id]/chronicle-share
 // for the GM toggle, api/public/chronicle/[token] for the data it reads).
 // No login, no character sheets, no admin data — just the resolved scenes,
-// in order, for anyone the link is shared with.
+// in order, for anyone the link is shared with. The strongest narrative
+// candidate in the app outside WorldChronicle itself — no card chrome,
+// flowing prose, divider lines between scenes (see docs/design-system.md).
 
 'use client'
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { displayFont } from '@/lib/tavernTheme'
-import { TavernSpinner } from '@/components/tavern/ui'
+import { fontDisplay, fontSans } from '@/lib/fonts'
+import { SectionHeader } from '@/components/ui/section-header'
 
 interface ChronicleScene {
   sceneNumber: number
@@ -48,55 +50,58 @@ export default function PublicChroniclePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-tavern-950 flex items-center justify-center">
-        <TavernSpinner />
+      <div className="-mx-4 -my-8 flex min-h-screen items-center justify-center bg-myth-canvas">
+        <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-myth-accent" />
       </div>
     )
   }
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-tavern-950 flex items-center justify-center px-4">
+      <div className="-mx-4 -my-8 flex min-h-screen items-center justify-center bg-myth-canvas px-4">
         <div className="text-center">
-          <p className={`text-xl text-ember-100 mb-2 ${displayFont.className}`}>Chronicle unavailable</p>
-          <p className="text-ember-300/60 text-sm">{error || 'This link may have been disabled.'}</p>
+          <p className={`mb-2 text-xl font-semibold text-myth-ink ${fontDisplay.className}`}>Chronicle unavailable</p>
+          <p className="text-sm text-myth-ink-muted">{error || 'This link may have been disabled.'}</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-tavern-950">
-      <header className="border-b border-ember-900/30 px-4 py-8 text-center">
-        <p className="text-xs uppercase tracking-widest text-ember-400/50 mb-2">A Chronicle From MythOS</p>
-        <h1 className={`text-3xl text-ember-100 mb-2 ${displayFont.className}`}>{data.campaign.title}</h1>
+    <div className={`${fontSans.className} -mx-4 -my-8 min-h-screen bg-myth-canvas`}>
+      <header className="border-b border-myth-border px-4 py-8 text-center">
+        <p className="mb-2 text-xs uppercase tracking-widest text-myth-ink-faint">A Chronicle From MythOS</p>
+        <h1 className={`mb-2 text-3xl font-semibold text-myth-ink ${fontDisplay.className}`}>{data.campaign.title}</h1>
         {data.campaign.universe && (
-          <p className="text-sm text-ember-300/50">{data.campaign.universe}</p>
+          <p className="text-sm text-myth-ink-faint">{data.campaign.universe}</p>
         )}
         {data.campaign.description && (
-          <p className="text-sm text-ember-300/60 max-w-xl mx-auto mt-3">{data.campaign.description}</p>
+          <p className="mx-auto mt-3 max-w-xl text-sm text-myth-ink-muted">{data.campaign.description}</p>
         )}
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-10 space-y-10">
+      <main className="mx-auto max-w-2xl px-4 py-10">
         {data.scenes.length === 0 ? (
-          <p className="text-center text-ember-300/50">No scenes have concluded yet — check back once the story's underway.</p>
+          <p className="text-center text-myth-ink-faint">No scenes have concluded yet — check back once the story's underway.</p>
         ) : (
-          data.scenes.map(scene => (
-            <article key={scene.sceneNumber} className="border-b border-ember-900/20 pb-8 last:border-0">
-              <h2 className={`text-lg text-ember-200 mb-3 ${displayFont.className}`}>
-                Scene {scene.sceneNumber}{scene.title ? ` — ${scene.title}` : ''}
-              </h2>
-              <p className="text-ember-100/90 leading-relaxed whitespace-pre-wrap">{scene.introText}</p>
-              {scene.resolutionText && (
-                <p className="text-ember-100/80 leading-relaxed whitespace-pre-wrap mt-4">{scene.resolutionText}</p>
-              )}
-            </article>
-          ))
+          <div className="divide-y divide-myth-border">
+            {data.scenes.map(scene => (
+              <article key={scene.sceneNumber} className="py-8 first:pt-0 last:pb-0">
+                <SectionHeader
+                  as="h2"
+                  title={`Scene ${scene.sceneNumber}${scene.title ? ` — ${scene.title}` : ''}`}
+                />
+                <p className="mt-3 whitespace-pre-wrap leading-relaxed text-myth-ink">{scene.introText}</p>
+                {scene.resolutionText && (
+                  <p className="mt-4 whitespace-pre-wrap leading-relaxed text-myth-ink-muted">{scene.resolutionText}</p>
+                )}
+              </article>
+            ))}
+          </div>
         )}
       </main>
 
-      <footer className="text-center text-xs text-ember-400/40 pb-8">
+      <footer className="pb-8 text-center text-xs text-myth-ink-faint">
         A read-only chronicle — no login required.
       </footer>
     </div>

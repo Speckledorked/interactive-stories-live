@@ -457,6 +457,49 @@ async function performResolution(
       console.error('⚠️  Map generation failed (non-critical):', errorMsg)
     }
 
+    // 7.5.5. Enqueue scene illustration (#96) — one image per SCENE, not
+    // per exchange, same isFirstSceneExchange gate map generation uses
+    // directly above, and the same per-campaign opt-in reasoning
+    // (sceneImageGenerationEnabled mirrors mapGenerationEnabled: real
+    // recurring cost many campaigns won't want by default).
+    //
+    // Deliberately NOT awaited to completion the way map generation is —
+    // this only awaits the job being CREATED and its worker KICKED (a few
+    // seconds at most; see imageGenQueue.ts's kickImageJob), never the
+    // actual image generation. That work runs in its own separate
+    // invocation (/api/internal/generate-scene-image), the whole reason
+    // this is a job queue and not an inline call: an optional, potentially
+    // slow illustration step must never be able to extend how long a
+    // scene resolution itself takes, even bounded by a timeout the way
+    // map generation's Promise.race is.
+    try {
+      const imageSettings = await prisma.campaign.findUnique({
+        where: { id: campaignId },
+        select: { sceneImageGenerationEnabled: true }
+      })
+
+      if (!imageSettings?.sceneImageGenerationEnabled) {
+        console.log('🖼️  Skipping scene image generation — disabled for this campaign')
+      } else if (!isFirstSceneExchange(existingResolutions)) {
+        console.log('🖼️  Skipping scene image generation — scene already has one from its first exchange')
+      } else {
+        const { buildScenePrompt } = await import('../ai/imageGeneration')
+        const { enqueueSceneImageGeneration } = await import('./imageGenQueue')
+        const prompt = buildScenePrompt({
+          sceneIntroText: scene.sceneIntroText,
+          sceneResolutionText: allResolutions,
+          framing: scene.framing,
+          location: scene.location,
+        })
+        await enqueueSceneImageGeneration(campaignId, sceneId, prompt)
+        console.log('🖼️  Scene image generation enqueued')
+      }
+    } catch (imageError) {
+      // Don't fail the entire scene resolution if enqueueing an image fails
+      const errorMsg = imageError instanceof Error ? imageError.message : String(imageError)
+      console.error('⚠️  Scene image enqueue failed (non-critical):', errorMsg)
+    }
+
     // 7.6. Sync wiki entries for NPCs, factions, and clocks (non-critical)
     try {
       await updateWikiEntries(campaignId, currentTurn, aiResponse)

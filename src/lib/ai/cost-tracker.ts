@@ -36,7 +36,27 @@ export interface AIUsageMetrics {
  *     OpenAI's historical pricing pages — divide by 1_000, correctly, as
  *     before.
  */
-const AI_PRICING: Record<string, { inputTokenPrice: number; outputTokenPrice: number; cachedInputTokenPrice?: number }> = {
+// #96: image generation is priced per-image, not per-token — OpenAI's
+// image endpoints don't expose an input/output token split the way chat
+// completions do. TokenPricing stays the shape every text/embedding call
+// already uses; FlatPricing is the new, additive alternative a pricing
+// entry can be instead, and recordRequest below branches on which shape
+// it got rather than forcing image cost through the token math.
+interface TokenPricing {
+  inputTokenPrice: number
+  outputTokenPrice: number
+  cachedInputTokenPrice?: number
+}
+interface FlatPricing {
+  /** Cost in USD for one request, regardless of any token counts passed. */
+  flatCostPerRequest: number
+}
+type PricingEntry = TokenPricing | FlatPricing
+function isFlatPricing(pricing: PricingEntry): pricing is FlatPricing {
+  return 'flatCostPerRequest' in pricing
+}
+
+const AI_PRICING: Record<string, PricingEntry> = {
   // Current generation (see src/lib/ai/models.ts) — priced per 1M tokens.
   // cachedInputTokenPrice is the rate for input tokens OpenAI's prompt
   // caching served from cache (see callAIGM's prompt_cache_key/
@@ -84,6 +104,15 @@ const AI_PRICING: Record<string, { inputTokenPrice: number; outputTokenPrice: nu
   'gpt-3.5-turbo': {
     inputTokenPrice: 0.0015 / 1000,
     outputTokenPrice: 0.002 / 1000
+  },
+
+  // #96: one standard-quality 1024x1024 image, OpenAI's published gpt-image-1
+  // pricing as of this codebase's last verification (see models.ts's own
+  // caveat) — re-verify against the live pricing page before enabling
+  // sceneImageGenerationEnabled in production; image pricing has no
+  // token-count self-check the way chat-completion usage.total_tokens does.
+  'gpt-image-1': {
+    flatCostPerRequest: 0.04
   }
 }
 
@@ -105,7 +134,7 @@ export class AICostTracker {
     this.model = model
   }
 
-  private getPricing() {
+  private getPricing(): PricingEntry {
     const pricing = AI_PRICING[this.model]
     if (!pricing) {
       console.warn(`⚠️ No pricing entry for model "${this.model}" — using gpt-5.4 pricing as an approximation. Update AI_PRICING in cost-tracker.ts.`)
@@ -161,9 +190,14 @@ export class AICostTracker {
     const cachedInputTokens = Math.min(params.cachedInputTokens ?? 0, params.inputTokens)
     const uncachedInputTokens = params.inputTokens - cachedInputTokens
     const cacheHit = cachedInputTokens > 0
-    const cost = (uncachedInputTokens * pricing.inputTokenPrice) +
-                 (cachedInputTokens * (pricing.cachedInputTokenPrice ?? pricing.inputTokenPrice)) +
-                 (params.outputTokens * pricing.outputTokenPrice)
+    // #96: a flat-priced model (image generation) ignores token counts
+    // entirely — callers pass inputTokens/outputTokens: 0 for these, same
+    // as embeddings already pass outputTokens: 0 for theirs.
+    const cost = isFlatPricing(pricing)
+      ? pricing.flatCostPerRequest
+      : (uncachedInputTokens * pricing.inputTokenPrice) +
+        (cachedInputTokens * (pricing.cachedInputTokenPrice ?? pricing.inputTokenPrice)) +
+        (params.outputTokens * pricing.outputTokenPrice)
     const requestType = params.requestType || 'unknown'
 
     try {
@@ -333,6 +367,7 @@ export class AICostTracker {
    */
   estimateCost(estimatedInputTokens: number, estimatedOutputTokens: number): number {
     const pricing = this.getPricing()
+    if (isFlatPricing(pricing)) return pricing.flatCostPerRequest
     return (estimatedInputTokens * pricing.inputTokenPrice) +
            (estimatedOutputTokens * pricing.outputTokenPrice)
   }

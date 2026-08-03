@@ -21,6 +21,7 @@
     "@stripe/stripe-js": "^8.5.2",
     "@types/nodemailer": "^7.0.4",
     "@types/web-push": "^3.6.4",
+    "@vercel/blob": "^2.6.1",
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.2.0",
     "jsonwebtoken": "^9.0.2",

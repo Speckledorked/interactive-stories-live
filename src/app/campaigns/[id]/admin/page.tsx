@@ -155,6 +155,7 @@ export default function AdminPage() {
     npcCap: number | null
     worldTurnHours: number | null
     mapGenerationEnabled: boolean
+    sceneImageGenerationEnabled: boolean
     defaultFactionCap: number
     defaultNpcCap: number
     defaultWorldTurnHours: number
@@ -547,6 +548,7 @@ export default function AdminPage() {
           npcCap: simulationSettings.npcCap,
           worldTurnHours: simulationSettings.worldTurnHours,
           mapGenerationEnabled: simulationSettings.mapGenerationEnabled,
+          sceneImageGenerationEnabled: simulationSettings.sceneImageGenerationEnabled,
         }),
       })
 
@@ -1211,6 +1213,30 @@ export default function AdminPage() {
                             Off by default. When on, the first exchange of each new scene makes an extra AI call to
                             draw a map of the location — useful for tactical play, and a real cost per scene if your
                             table never opens the map. Older maps are cleaned up automatically as new ones are made.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="mt-4 rounded-md border border-myth-border bg-myth-surface/50 p-3">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={simulationSettings.sceneImageGenerationEnabled}
+                          onChange={(e) =>
+                            setSimulationSettings({
+                              ...simulationSettings,
+                              sceneImageGenerationEnabled: e.target.checked,
+                            })
+                          }
+                          className="mt-1 h-4 w-4 rounded border-myth-border bg-myth-surface text-myth-accent focus:ring-myth-accent"
+                        />
+                        <span>
+                          <span className="block text-sm font-medium text-myth-ink">Generate scene illustrations</span>
+                          <span className="block text-xs text-myth-ink-faint mt-1">
+                            Off by default. When on, the first exchange of each new scene generates one AI
+                            illustration from the resolved narration — a real, recurring cost per scene if your
+                            table never looks at the image.
                           </span>
                         </span>
                       </label>

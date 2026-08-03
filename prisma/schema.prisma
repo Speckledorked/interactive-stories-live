@@ -327,6 +327,12 @@ model Campaign {
   // something unused. See README Known Bugs (#9, #59).
   mapGenerationEnabled Boolean @default(false)
 
+  // #96: AI-generated scene illustration, one image per resolved scene.
+  // Off by default and opt-in per campaign, same reasoning as
+  // mapGenerationEnabled directly above — real recurring image-generation
+  // cost that many campaigns won't want paid for every scene by default.
+  sceneImageGenerationEnabled Boolean @default(false)
+
   // #13 first-party templates: which static template (campaign-templates.ts)
   // this campaign was created from, if any — a compile-time id, not a DB
   // relation, since templates are TypeScript objects. Lets a template's
@@ -2980,6 +2986,46 @@ model ResolutionJob {
   finishedAt DateTime?
 
   @@index([sceneId, status])
+  @@index([campaignId, status])
+}
+
+// #96: one generated illustration per resolved scene. Combines job
+// tracking and the final artifact in one row (rather than a separate job
+// table + relation) — the same shape ResolutionJob would have if its
+// result were a single field instead of living on Scene itself. Reuses
+// ResolutionJobStatus rather than a near-duplicate enum: identical
+// PENDING/RUNNING/COMPLETED/FAILED lifecycle.
+//
+// No @relation to Campaign/Scene, matching this codebase's existing
+// convention for generated-content-per-scene rows (see ResolutionJob and
+// Map above — both plain campaignId/sceneId with indexes, no FK).
+// @@unique on sceneId enforces "one per scene": a second attempt after a
+// failure updates the same row rather than creating a duplicate.
+model SceneImage {
+  id         String              @id @default(cuid())
+  campaignId String
+  sceneId    String              @unique
+  status     ResolutionJobStatus @default(PENDING)
+  // The deterministic prompt built from the scene's own text — stored so
+  // a failed/retried generation, or a human looking at the admin panel,
+  // can see exactly what was asked for.
+  prompt     String?             @db.Text
+  // The permanent Vercel Blob URL, set only once COMPLETED — never the
+  // image provider's own (often short-lived) URL.
+  imageUrl   String?
+  attempts   Int                 @default(0)
+  lastError  String?
+
+  // Set once a global stuck-job sweep (lib/jobs/stuckJobAlert.ts) has fired
+  // an alert for this job, so a dead job gets reported exactly once instead
+  // of on every sweep. Cleared implicitly by the job leaving PENDING/RUNNING.
+  alertedStuckAt DateTime?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  startedAt  DateTime?
+  finishedAt DateTime?
+
   @@index([campaignId, status])
 }
 

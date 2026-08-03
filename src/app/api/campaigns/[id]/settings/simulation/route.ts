@@ -32,7 +32,7 @@ export async function GET(
       }),
       prisma.campaign.findUnique({
         where: { id: campaignId },
-        select: { mapGenerationEnabled: true },
+        select: { mapGenerationEnabled: true, sceneImageGenerationEnabled: true },
       }),
     ])
 
@@ -41,6 +41,7 @@ export async function GET(
       npcCap: worldMeta?.npcCap ?? null,
       worldTurnHours: worldMeta?.worldTurnHours ?? null,
       mapGenerationEnabled: campaign?.mapGenerationEnabled ?? false,
+      sceneImageGenerationEnabled: campaign?.sceneImageGenerationEnabled ?? false,
       defaultFactionCap: DEFAULT_FACTION_CAP,
       defaultNpcCap: DEFAULT_NPC_CAP,
       defaultWorldTurnHours: DEFAULT_WORLD_TURN_HOURS,
@@ -84,23 +85,34 @@ export async function PATCH(
     // Battle-map generation lives on Campaign, not WorldMeta, but belongs
     // in this same admin surface — it's the same class of per-campaign
     // simulation-cost knob. Boolean-only; anything else is rejected rather
-    // than coerced, matching the numeric fields above.
+    // than coerced, matching the numeric fields above. Scene illustration
+    // (#96) is the same shape, checked the same way.
     if (body.mapGenerationEnabled !== undefined && typeof body.mapGenerationEnabled !== 'boolean') {
       return NextResponse.json(
         { error: 'mapGenerationEnabled must be a boolean' },
         { status: 400 }
       )
     }
+    if (body.sceneImageGenerationEnabled !== undefined && typeof body.sceneImageGenerationEnabled !== 'boolean') {
+      return NextResponse.json(
+        { error: 'sceneImageGenerationEnabled must be a boolean' },
+        { status: 400 }
+      )
+    }
 
-    const updatedCampaign = body.mapGenerationEnabled === undefined
+    const campaignUpdateData: { mapGenerationEnabled?: boolean; sceneImageGenerationEnabled?: boolean } = {}
+    if (body.mapGenerationEnabled !== undefined) campaignUpdateData.mapGenerationEnabled = body.mapGenerationEnabled
+    if (body.sceneImageGenerationEnabled !== undefined) campaignUpdateData.sceneImageGenerationEnabled = body.sceneImageGenerationEnabled
+
+    const updatedCampaign = Object.keys(campaignUpdateData).length === 0
       ? await prisma.campaign.findUnique({
           where: { id: campaignId },
-          select: { mapGenerationEnabled: true },
+          select: { mapGenerationEnabled: true, sceneImageGenerationEnabled: true },
         })
       : await prisma.campaign.update({
           where: { id: campaignId },
-          data: { mapGenerationEnabled: body.mapGenerationEnabled },
-          select: { mapGenerationEnabled: true },
+          data: campaignUpdateData,
+          select: { mapGenerationEnabled: true, sceneImageGenerationEnabled: true },
         })
 
     const worldMeta = await prisma.worldMeta.update({
@@ -118,6 +130,7 @@ export async function PATCH(
       npcCap: worldMeta.npcCap,
       worldTurnHours: worldMeta.worldTurnHours,
       mapGenerationEnabled: updatedCampaign?.mapGenerationEnabled ?? false,
+      sceneImageGenerationEnabled: updatedCampaign?.sceneImageGenerationEnabled ?? false,
       defaultFactionCap: DEFAULT_FACTION_CAP,
       defaultNpcCap: DEFAULT_NPC_CAP,
       defaultWorldTurnHours: DEFAULT_WORLD_TURN_HOURS,

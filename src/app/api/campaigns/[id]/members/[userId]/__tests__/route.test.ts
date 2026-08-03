@@ -1,0 +1,130 @@
+// src/app/api/campaigns/[id]/members/[userId]/__tests__/route.test.ts
+// #93 — untested despite carrying the "last admin" guard on both the
+// remove and demote paths; a regression here either strands a campaign
+// with zero admins or blocks a legitimate removal forever.
+
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { NextRequest } from 'next/server'
+
+vi.mock('@/lib/auth', () => ({ requireAuth: vi.fn() }))
+vi.mock('@/lib/db/campaignAccess', () => ({
+  requireCampaignAdmin: vi.fn(),
+  getCampaignMembership: vi.fn(),
+}))
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    campaignMembership: { count: vi.fn(), delete: vi.fn(), update: vi.fn() },
+  },
+}))
+
+import { requireAuth } from '@/lib/auth'
+import { requireCampaignAdmin, getCampaignMembership } from '@/lib/db/campaignAccess'
+import { prisma } from '@/lib/prisma'
+import { DELETE, PATCH } from '../route'
+
+const db = prisma as any
+
+function deleteRequest() {
+  return new NextRequest('http://localhost/api/campaigns/camp1/members/user2', { method: 'DELETE' })
+}
+
+function patchRequest(body: unknown) {
+  return new NextRequest('http://localhost/api/campaigns/camp1/members/user2', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  ;(requireAuth as any).mockResolvedValue({ userId: 'admin1', email: 'admin@example.com' })
+  ;(requireCampaignAdmin as any).mockResolvedValue({ membership: { role: 'ADMIN' } })
+})
+
+describe('DELETE', () => {
+  it('rejects a non-admin', async () => {
+    ;(requireCampaignAdmin as any).mockResolvedValue({ response: new Response(null, { status: 403 }) })
+    const response = await DELETE(deleteRequest(), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(403)
+    expect(db.campaignMembership.delete).not.toHaveBeenCalled()
+  })
+
+  it('403s when the target is not a member', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue(null)
+    const response = await DELETE(deleteRequest(), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(403)
+  })
+
+  it('removes an ordinary player without checking the admin count', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
+    const response = await DELETE(deleteRequest(), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(200)
+    expect(db.campaignMembership.count).not.toHaveBeenCalled()
+    expect(db.campaignMembership.delete).toHaveBeenCalledWith({
+      where: { userId_campaignId: { userId: 'user2', campaignId: 'camp1' } },
+    })
+  })
+
+  it('refuses to remove the last admin', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
+    db.campaignMembership.count.mockResolvedValue(1)
+    const response = await DELETE(deleteRequest(), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(400)
+    expect(db.campaignMembership.delete).not.toHaveBeenCalled()
+  })
+
+  it('allows removing an admin when another admin remains', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
+    db.campaignMembership.count.mockResolvedValue(2)
+    const response = await DELETE(deleteRequest(), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(200)
+    expect(db.campaignMembership.delete).toHaveBeenCalled()
+  })
+})
+
+describe('PATCH', () => {
+  it('rejects an invalid role before even checking admin status', async () => {
+    const response = await PATCH(patchRequest({ role: 'SUPERUSER' }), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(400)
+    expect(requireCampaignAdmin).not.toHaveBeenCalled()
+  })
+
+  it('rejects a non-admin', async () => {
+    ;(requireCampaignAdmin as any).mockResolvedValue({ response: new Response(null, { status: 403 }) })
+    const response = await PATCH(patchRequest({ role: 'ADMIN' }), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(403)
+    expect(db.campaignMembership.update).not.toHaveBeenCalled()
+  })
+
+  it('403s when the target is not a member', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue(null)
+    const response = await PATCH(patchRequest({ role: 'ADMIN' }), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(403)
+  })
+
+  it('refuses to demote the last admin to PLAYER', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
+    db.campaignMembership.count.mockResolvedValue(1)
+    const response = await PATCH(patchRequest({ role: 'PLAYER' }), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(400)
+    expect(db.campaignMembership.update).not.toHaveBeenCalled()
+  })
+
+  it('allows demoting an admin when another admin remains', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
+    db.campaignMembership.count.mockResolvedValue(2)
+    db.campaignMembership.update.mockResolvedValue({ role: 'PLAYER' })
+    const response = await PATCH(patchRequest({ role: 'PLAYER' }), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(200)
+    expect(db.campaignMembership.update).toHaveBeenCalled()
+  })
+
+  it('does not check the admin count when promoting a player to admin', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
+    db.campaignMembership.update.mockResolvedValue({ role: 'ADMIN' })
+    const response = await PATCH(patchRequest({ role: 'ADMIN' }), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(200)
+    expect(db.campaignMembership.count).not.toHaveBeenCalled()
+  })
+})

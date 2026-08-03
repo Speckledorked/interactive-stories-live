@@ -110,6 +110,11 @@ export default function StoryPage() {
   const [showMap, setShowMap] = useState(true)
   const [showCharacterSnapshot, setShowCharacterSnapshot] = useState(false)
   const [sceneWorldStateChanges, setSceneWorldStateChanges] = useState<Record<string, WorldStateChange[]>>({})
+  // #96: scene illustration — real-time only (populated by the
+  // scene:image-ready Pusher event below), not persisted across a page
+  // reload. A future pass could thread this through the campaign GET
+  // response for reload-durability; out of scope for this first cut.
+  const [sceneImageUrls, setSceneImageUrls] = useState<Record<string, string>>({})
   const [sceneOutcomeAdherence, setSceneOutcomeAdherence] = useState<Record<string, AdherenceResult>>({})
   const [expandedTransparency, setExpandedTransparency] = useState<Record<string, boolean>>({})
   const [startingScene, setStartingScene] = useState(false)
@@ -400,6 +405,18 @@ export default function StoryPage() {
         : `Scene resolution encountered an issue: ${data.error}. The scene is ready to try again.`
       setError(message)
       loadData()
+    })
+
+    // Listen for a completed scene illustration (#96) — arrives well after
+    // scene:resolved since it runs in its own worker invocation; patches
+    // the image in directly rather than a full loadData() refetch, since
+    // this is the one piece of scene state this page doesn't otherwise
+    // reload for.
+    channel.bind('scene:image-ready', (data: any) => {
+      console.log('Scene image ready:', data)
+      if (data.sceneId && data.imageUrl) {
+        setSceneImageUrls(prev => ({ ...prev, [data.sceneId]: data.imageUrl }))
+      }
     })
 
     // Listen for scene resets
@@ -1173,6 +1190,18 @@ export default function StoryPage() {
                     {/* Show resolutions if any exist */}
                     {scene.sceneResolutionText && (
                       <>
+                        {/* #96: scene illustration, when generation is on for this
+                            campaign and the worker has finished. Plain <img>, not
+                            next/image — matches this app's only other existing
+                            image-rendering convention (wiki/page.tsx), since
+                            next/image isn't configured for any remote host yet. */}
+                        {sceneImageUrls[scene.id] && (
+                          <img
+                            src={sceneImageUrls[scene.id]}
+                            alt={`Illustration for scene ${scene.sceneNumber}`}
+                            className="mt-6 w-full max-h-96 object-cover rounded-lg"
+                          />
+                        )}
                         <div className="mt-6 pt-6 border-t border-ember-900/30">
                           <h3 className="text-lg font-bold text-ember-300 mb-3">
                             {scene.sceneResolutionText.includes('---') ? 'Resolutions' : 'Resolution'}

@@ -147,3 +147,41 @@ describe('AI_PRICING — cached input tokens (prompt caching)', () => {
     expect(costDollars).toBeCloseTo(0.022, 5)
   })
 })
+
+describe('AI_PRICING — flat-priced models (#96, image generation)', () => {
+  it('bills a flat-priced model at its flat rate regardless of token counts', async () => {
+    const tracker = new AICostTracker('camp1', 'gpt-image-1')
+    await tracker.recordRequest({
+      inputTokens: 0,
+      outputTokens: 0,
+      responseTimeMs: 1000,
+      success: true,
+      sceneId: 'scene1',
+      requestType: 'scene_image_generation',
+    })
+
+    const call = db.aICostEntry.create.mock.calls[0][0]
+    expect(call.data.costMicros).toBe(40_000) // $0.04
+  })
+
+  it('ignores any (incorrectly) passed token counts for a flat-priced model — the flat rate always wins', async () => {
+    const tracker = new AICostTracker('camp1', 'gpt-image-1')
+    await tracker.recordRequest({
+      inputTokens: 999_999,
+      outputTokens: 999_999,
+      responseTimeMs: 1000,
+      success: true,
+      sceneId: 'scene1',
+      requestType: 'scene_image_generation',
+    })
+
+    const call = db.aICostEntry.create.mock.calls[0][0]
+    expect(call.data.costMicros).toBe(40_000)
+  })
+
+  it('estimateCost returns the flat rate for a flat-priced model too', () => {
+    const tracker = new AICostTracker('camp1', 'gpt-image-1')
+    expect(tracker.estimateCost(0, 0)).toBeCloseTo(0.04, 5)
+    expect(tracker.estimateCost(5000, 5000)).toBeCloseTo(0.04, 5) // unaffected by token counts
+  })
+})

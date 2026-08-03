@@ -110,6 +110,17 @@ vi.mock('../consequences', () => ({
   extractAndApplyConsequences: vi.fn().mockResolvedValue({ consequencesFound: 0, changes: [], historyEntriesCreated: 0 }),
 }));
 
+// #96: scene illustration — resolveScene reaches these via a dynamic
+// await import(...), same as its existing generateNewSceneIntro call, but
+// vi.mock still intercepts them since the mock registration is hoisted
+// above any import (static or dynamic) that resolves at runtime.
+vi.mock('../../ai/imageGeneration', () => ({
+  buildScenePrompt: vi.fn().mockReturnValue('a generated illustration prompt'),
+}));
+vi.mock('../imageGenQueue', () => ({
+  enqueueSceneImageGeneration: vi.fn().mockResolvedValue({ jobId: 'img1', deduped: false }),
+}));
+
 // Import mocked modules
 import { prisma } from '@/lib/prisma';
 import { callAIGM } from '@/lib/ai/client';
@@ -117,6 +128,8 @@ import { buildSceneResolutionRequest } from '@/lib/ai/worldState';
 import { applyWorldUpdates } from '../stateUpdater';
 import { AIVisualService } from '@/lib/ai/ai-visual-service';
 import { storeWorldStateChanges } from '../world-state-tracker';
+import { buildScenePrompt } from '../../ai/imageGeneration';
+import { enqueueSceneImageGeneration } from '../imageGenQueue';
 
 describe('Scene Resolver', () => {
   beforeEach(() => {
@@ -311,6 +324,83 @@ describe('Scene Resolver', () => {
       // otherwise-successful scene resolution.
       expect(result.success).toBe(true);
       expect(AIVisualService.generateMapFromScene).not.toHaveBeenCalled();
+      // Same non-critical guarantee applies to the (separate) scene-image
+      // settings lookup, which fails from the same rejected mock.
+      expect(enqueueSceneImageGeneration).not.toHaveBeenCalled();
+    });
+
+    // #96: scene illustration — mirrors the map-generation tests directly
+    // above, since it's gated the same way (per-campaign opt-in,
+    // isFirstSceneExchange).
+    it('enqueues scene image generation when enabled for this campaign', async () => {
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
+      vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [] });
+      vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: true } as any);
+
+      const result = await resolveScene(mockCampaignId, mockSceneId);
+
+      expect(result.success).toBe(true);
+      expect(buildScenePrompt).toHaveBeenCalledWith(
+        expect.objectContaining({ sceneIntroText: mockScene.sceneIntroText, framing: undefined, location: undefined })
+      );
+      expect(enqueueSceneImageGeneration).toHaveBeenCalledWith(mockCampaignId, mockSceneId, 'a generated illustration prompt');
+    });
+
+    it('does not enqueue scene image generation when the campaign has it off (the default)', async () => {
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
+      vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [] });
+      vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: false } as any);
+
+      const result = await resolveScene(mockCampaignId, mockSceneId);
+
+      expect(result.success).toBe(true);
+      expect(enqueueSceneImageGeneration).not.toHaveBeenCalled();
+    });
+
+    it('does not enqueue a second scene image on a later exchange of the same scene', async () => {
+      const sceneWithExistingResolution = { ...mockScene, sceneResolutionText: 'Something already happened here.' };
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(sceneWithExistingResolution as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(sceneWithExistingResolution as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
+      vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [] });
+      vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: true } as any);
+
+      const result = await resolveScene(mockCampaignId, mockSceneId);
+
+      expect(result.success).toBe(true);
+      expect(enqueueSceneImageGeneration).not.toHaveBeenCalled();
+    });
+
+    it('still resolves the scene when enqueueing the image itself throws', async () => {
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
+      vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [] });
+      vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: true } as any);
+      vi.mocked(enqueueSceneImageGeneration).mockRejectedValueOnce(new Error('worker kick failed'));
+
+      const result = await resolveScene(mockCampaignId, mockSceneId);
+
+      // Enqueueing the image job is non-critical, same as map generation —
+      // a failure there must never take down an otherwise-successful scene
+      // resolution.
+      expect(result.success).toBe(true);
     });
 
     it('should throw error if scene not found', async () => {

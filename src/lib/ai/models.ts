@@ -15,4 +15,10 @@ export const AI_MODELS = {
   // is appropriate: map layout extraction, consequence extraction, offscreen
   // event generation, stub NPC/faction enrichment, world generation.
   EFFICIENT: 'gpt-5.4-mini',
+  // #96: scene illustration. Image generation is branded separately from
+  // the chat-completion lineup above (OpenAI's own naming, not this file's
+  // convention) — verify this is still the current model before enabling
+  // sceneImageGenerationEnabled in production; image models roll over
+  // independently of the gpt-5.4 series.
+  IMAGE: 'gpt-image-1',
 } as const

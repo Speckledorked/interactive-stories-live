@@ -304,9 +304,6 @@ test coverage rows.)*
 
 No code exists yet for any of these.
 
-- **Scene illustration** — one generated image per resolved scene. Async
-  resolution already keeps cost/latency off the request path, so this is
-  additive infrastructure, not a redesign.
 - **Shareable session recaps** — package a resolved scene or short arc as a
   social-media-sized card. Builds on the existing chronicle share link
   (which is real and shipped); the card-generation feature itself has no
@@ -328,6 +325,25 @@ No code exists yet for any of these.
 
 Partial implementation exists in the codebase today.
 
+- **Scene illustration** — one generated image per resolved scene, opt-in
+  per campaign (`Campaign.sceneImageGenerationEnabled`, off by default,
+  same shape as `mapGenerationEnabled`). A new `SceneImage` job/artifact
+  table, `imageGenQueue.ts` (copies `resolutionQueue.ts`'s hardened
+  claim/retry/recovery pattern, including both of its #120 fixes from day
+  one), a new internal worker route
+  (`/api/internal/generate-scene-image`), and a Vercel Blob upload wrapper
+  (`src/lib/blob/sceneImageStorage.ts`) are all built, tested, and
+  live-verified against real Postgres — the full job lifecycle (real
+  enqueue, real self-fetch kick, real retry-then-terminal-failure
+  bookkeeping, real cost-tracking entries, the real `@@unique([sceneId])`
+  constraint) was exercised end-to-end against `camp_uitest`. **Not
+  verified**: this sandbox has no `OPENAI_API_KEY` or
+  `BLOB_READ_WRITE_TOKEN`, so the actual image-generation call and Blob
+  upload have only ever been unit-tested with mocks, never run for real —
+  confirm both work against a real account before enabling the toggle in
+  production. `gpt-image-1`'s flat per-image cost also needs re-verifying
+  against OpenAI's live pricing page (`cost-tracker.ts`'s `AI_PRICING`
+  entry is a documented estimate, not a re-confirmed one).
 - **Admin tooling as simulation design** — the faction and NPC tabs now
   extend "let the host see why the simulation decided something" past the
   tick dry-run preview via new per-entity `/reasoning` routes. Locations

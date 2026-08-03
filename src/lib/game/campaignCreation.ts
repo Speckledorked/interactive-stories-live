@@ -27,6 +27,7 @@ import { BASIC_MOVES } from '@/lib/pbta-moves'
 import { slugifyCapabilityKey, resolvePrerequisiteLinks } from '@/lib/game/capabilities'
 import { kickLoreImportJob } from '@/lib/lore/loreQueue'
 import { clearPendingWorldSeed } from '@/lib/lore/reseedWorld'
+import { kickCampaignHeroImage } from '@/lib/game/campaignHeroImage'
 
 export interface ValidatedLoreImport {
   sourceType: 'URL' | 'WIKI' | 'PASTE'
@@ -363,6 +364,14 @@ export async function createCampaign(input: CreateCampaignInput) {
 
     return newCampaign
   })
+
+  // Cosmetic, non-blocking: never await this into the response — a slow
+  // or failed hero image must never delay or fail campaign creation. Any
+  // failure (no API key, generation error) just leaves heroImageStatus
+  // 'FAILED', and CampaignHero renders its plain gradient background
+  // either way. See campaignHeroImage.ts for why this goes through a
+  // self-fetch kick rather than a bare unawaited call.
+  kickCampaignHeroImage(campaign.id).catch(err => console.error('Hero image kick failed:', err))
 
   // Kick off the canon import AFTER the campaign exists. The kick has a
   // short delivery timeout, so this doesn't hold the response long; when

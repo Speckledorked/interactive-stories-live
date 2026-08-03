@@ -105,3 +105,64 @@ export async function generateSceneImage(campaignId: string, sceneId: string, pr
     }).catch(console.error)
   }
 }
+
+// --- Campaign lobby hero banner image (generated once per campaign) -------
+// Same API/cost-tracking shape as generateSceneImage above, but sourced
+// from the campaign's own title/description/universe rather than a
+// scene's narration, and framed as a wide establishing shot rather than a
+// specific in-scene moment. Generated exactly once, at campaign creation
+// (see lib/game/campaignHeroImage.ts) — never per-scene, never retried on
+// a schedule, so this deliberately does NOT reuse imageGenQueue.ts's
+// job-queue machinery (built for a recurring, latency-sensitive concern
+// this one-shot cosmetic call isn't).
+
+export interface CampaignHeroPromptInput {
+  title: string
+  description: string | null
+  universe: string | null
+}
+
+/** Pure — no DB access, no AI call, safe to unit test directly. */
+export function buildCampaignHeroPrompt(input: CampaignHeroPromptInput): string {
+  const universeNote = input.universe ? `${input.universe}. ` : ''
+  const descriptionNote = input.description ? truncateWithEllipsis(input.description.trim(), PROMPT_MAX_CHARS) : ''
+  const body = `${universeNote}"${input.title}"${descriptionNote ? `: ${descriptionNote}` : ''}`
+  return `Wide cinematic establishing shot. ${body} ${IMAGE_STYLE_SUFFIX}`.trim()
+}
+
+/**
+ * Calls the image-generation endpoint for a campaign hero banner. Same
+ * throw-on-failure contract as generateSceneImage — the caller
+ * (campaignHeroImage.ts) owns retry/status bookkeeping, though unlike
+ * scene images this is a one-shot, best-effort call with no retry loop.
+ */
+export async function generateHeroImage(campaignId: string, prompt: string): Promise<GeneratedImage> {
+  const startTime = Date.now()
+  let success = false
+  try {
+    const response = await getOpenAI().images.generate({
+      model: AI_MODELS.IMAGE,
+      prompt,
+      size: '1024x1024',
+      n: 1,
+    })
+
+    const b64 = response.data?.[0]?.b64_json
+    if (!b64) {
+      throw new Error('Image generation returned no image data')
+    }
+
+    success = true
+    return { imageBuffer: Buffer.from(b64, 'base64'), contentType: 'image/png' }
+  } finally {
+    await recordAICost({
+      campaignId,
+      model: AI_MODELS.IMAGE,
+      requestType: 'campaign_hero_image',
+      inputTokens: 0,
+      outputTokens: 0,
+      responseTimeMs: Date.now() - startTime,
+      success,
+    }).catch(console.error)
+  }
+}

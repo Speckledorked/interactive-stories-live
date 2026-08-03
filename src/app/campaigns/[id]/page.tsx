@@ -23,7 +23,7 @@ import { CampaignHero } from '@/components/campaigns/lobby/CampaignHero'
 import { CampaignEntryCTA } from '@/components/campaigns/lobby/CampaignEntryCTA'
 import { CharacterRoster } from '@/components/campaigns/lobby/CharacterRoster'
 import { PlayersPanel } from '@/components/campaigns/lobby/PlayersPanel'
-import { WorldSummaryPanel } from '@/components/campaigns/lobby/WorldSummaryPanel'
+import { WorldChronicle } from '@/components/campaigns/lobby/WorldChronicle'
 
 interface CampaignData {
   campaign: any
@@ -333,32 +333,19 @@ export default function CampaignLobbyPage() {
             persisted as dismissed (it naturally won't reappear once
             lastViewedAt advances past these events). */}
         {awayRecap && (
-          <div className="mb-6 rounded-lg border border-myth-border bg-myth-surface-sunken px-5 py-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-display font-medium text-myth-ink">
-                  While you were away ({awayRecap.awayLabel})…
-                </p>
-                <p className="mt-0.5 text-xs text-myth-ink-faint">The world kept moving without you.</p>
-              </div>
-              <button
-                onClick={() => setAwayRecap(null)}
-                className="flex-shrink-0 text-sm text-myth-ink-faint hover:text-myth-ink-muted"
-                aria-label="Dismiss"
-              >
-                ✕
-              </button>
-            </div>
-            <ul className="mt-3 space-y-2">
-              {awayRecap.events.map((e) => (
-                <li key={e.id} className="border-l-2 border-myth-border pl-3 text-sm text-myth-ink-muted">
-                  <span className="font-medium text-myth-ink">{e.title}.</span> {e.summary}
-                </li>
+          <div className="mb-6 space-y-2">
+            <p className="font-display text-myth-ink">While you were away ({awayRecap.awayLabel})…</p>
+            <p className="leading-relaxed text-myth-ink-muted">
+              {awayRecap.events.map((e, i) => (
+                <span key={e.id}>
+                  {i > 0 && ' '}
+                  <span className="text-myth-ink">{e.title}.</span> {e.summary}
+                </span>
               ))}
-            </ul>
+            </p>
             <Link
               href={`/campaigns/${campaignId}/wiki?type=RUMORS`}
-              className="mt-3 inline-block text-xs text-myth-ink-muted underline hover:text-myth-ink"
+              className="text-sm text-myth-ink-faint hover:text-myth-ink hover:underline"
             >
               See everything that's happened →
             </Link>
@@ -371,6 +358,7 @@ export default function CampaignLobbyPage() {
           universe={campaign.universe}
           turnNumber={campaign.worldMeta?.currentTurnNumber || 0}
           inGameDate={campaign.worldMeta?.currentInGameDate || 'Day 1'}
+          heroImageUrl={campaign.heroImageStatus === 'READY' ? campaign.heroImageUrl : null}
         />
 
       {/* Overview Tab - Existing Content */}
@@ -406,14 +394,9 @@ export default function CampaignLobbyPage() {
           </div>
         </div>
 
-        <WorldSummaryPanel
+        <WorldChronicle
           campaignId={campaignId}
-          factionCount={campaign.factions.length}
-          clockCount={campaign.clocks.length}
-          inGameDate={campaign.worldMeta?.currentInGameDate || 'Day 1'}
-          characterCount={campaign.characters.length}
-          npcCount={campaign.npcs.length}
-          locationCount={campaign.locations?.length ?? 0}
+          narration={campaign.worldMeta?.chronicleNarration ?? null}
         />
       </div>
       )}

@@ -333,6 +333,16 @@ model Campaign {
   // cost that many campaigns won't want paid for every scene by default.
   sceneImageGenerationEnabled Boolean @default(false)
 
+  // Campaign lobby hero banner image: generated exactly ONCE per campaign,
+  // fire-and-forget at creation (campaignCreation.ts) — not opt-in, unlike
+  // the two recurring-cost toggles above, since this is a single flat
+  // ~$0.04 cost in the same order of magnitude as the calendar/world-rules
+  // generation every campaign already gets unconditionally. NONE (never
+  // attempted or no API key) / PENDING / READY / FAILED; heroImageUrl is
+  // only ever read when status is READY.
+  heroImageUrl    String?
+  heroImageStatus String  @default("NONE")
+
   // #13 first-party templates: which static template (campaign-templates.ts)
   // this campaign was created from, if any — a compile-time id, not a DB
   // relation, since templates are TypeScript objects. Lets a template's
@@ -1718,6 +1728,16 @@ model WorldMeta {
   otherMeta Json?
   gmNotes   String?
   updatedAt DateTime @updatedAt
+
+  // Campaign lobby "World Chronicle": a few sentences of generated
+  // atmosphere (weather/faction posture/conflicts), regenerated once per
+  // world turn by runWorldTurn (never per page view — see
+  // chronicleNarration.ts). Null until the first world turn runs.
+  // chronicleNarrationTurn tracks which turn it reflects so the lobby
+  // never regenerates on every view; a stale/failed generation just
+  // leaves the previous turn's text in place rather than blocking.
+  chronicleNarration      String? @db.Text
+  chronicleNarrationTurn  Int?
 
   // World-turn pacing: the faction/NPC simulation advances with IN-GAME
   // time, not per player action. hoursSinceWorldTurn accumulates the AI's

@@ -13,6 +13,8 @@ import { resolveCompletedAmbitions } from './tick/ambitionResolution'
 import { applyNpcGoalFallbacks } from './tick/npcGoalFallback'
 import { generateOffscreenEvents } from './worldTurnOffscreenEvents'
 import { sendWorldDigest } from '@/lib/notifications/world-digest'
+import { buildChronicleNarrationInput } from './chronicleContext'
+import { generateChronicleNarration } from '@/lib/ai/chronicleNarration'
 
 // Re-exported for existing importers (see __tests__/worldTurn.test.ts) —
 // the pure decider now lives beside advanceClocks in tick/clockTick.ts,
@@ -135,6 +137,33 @@ export async function runWorldTurn(campaignId: string) {
       await generateOffscreenEvents(campaignId, currentTurn, advancedClocks, completedClocks, completedGoalNpcs, worldTick.pendingAmbitions, inGameDayNumber)
     } else {
       console.log('  No significant clock or NPC activity - skipping offscreen events')
+    }
+
+    // 3a. Campaign lobby "World Chronicle": a few sentences of generated
+    // atmosphere (weather/faction posture/conflicts/recent happenings),
+    // cached on WorldMeta and regenerated once per world turn — never on
+    // every page view. Runs unconditionally (unlike offscreen events
+    // above, which gate on clock/NPC activity): the world's mood can
+    // shift — worse weather, a faction growing bolder, tension rising —
+    // even on a turn with no clock/goal completions. Best-effort: a
+    // failed/skipped generation just leaves the previous turn's
+    // narration in place, same "never block the turn" contract
+    // sendWorldDigest below already has.
+    try {
+      const chronicleInput = await buildChronicleNarrationInput(campaignId)
+      if (chronicleInput) {
+        const narration = await generateChronicleNarration(campaignId, chronicleInput)
+        if (narration) {
+          await prisma.worldMeta.update({
+            where: { campaignId },
+            data: { chronicleNarration: narration, chronicleNarrationTurn: currentTurn },
+          })
+        }
+      }
+    } catch (error) {
+      console.error('  ⚠️ Failed to generate chronicle narration:', error)
+      // Don't throw — the world turn continues; the lobby just keeps
+      // last turn's narration (or none, if there's never been one).
     }
 
     // 3b. Deterministic fallback for completed NPC goals the AI didn't

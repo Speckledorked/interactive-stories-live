@@ -93,6 +93,12 @@ sitting unnoticed.
   image-generation call and storage upload still need to be confirmed
   against a real account before enabling it in production — see Features
   & Roadmap.
+- **Living chronicle lobby** — the campaign lobby's world-state panel is
+  generated in-world prose (weather/faction posture/conflicts/recent
+  happenings woven into a few sentences), not a stat-tile dashboard,
+  regenerated once per world turn and never re-run per page view. A
+  generated hero banner image accompanies it. Same real-credential caveat
+  as scene illustration above.
 - **Payments** — Stripe integration with metered per-call AI cost tracking
   (not a flat per-scene guess), balance gating, and Postgres-backed
   per-user rate limiting.
@@ -268,6 +274,7 @@ this table.
 | Multi-model fallback chain | 4 | `callAIGM` (`client.ts`) tries `AI_MODELS.FLAGSHIP` first and falls back to `AI_MODELS.EFFICIENT` exactly once — either on a hard failure of the primary attempt, or up front when the campaign's circuit breaker is already open (skipping a call already known to be failing) — never chained further, so a fallback failure surfaces to the caller the same way a primary failure without a fallback chain always did. Not a 5 — the chain is fixed at two OpenAI tiers, no second vendor. |
 | Token-budget message pruning | 3 | A real token-budget pass (`applyTokenBudget`, `tokenBudget.ts`) sits on top of the existing fixed entity-count caps and per-string character clamps — not a replacement for them — trimming whole prompt *sections* in a decided priority order (world-summary macro detail first, recent-scene text second, character sheets protected longest and only trimmed down to the scene's actual participants) until the assembled request is back under a configured ceiling. Not a 4 — the token estimate is the same rough ~4-chars-per-token heuristic used for cost logging, not a real tokenizer count. |
 | Outcome-band → narration routing | 4 | The scene prompt's tone/pacing instructions are now derived from the actual worst roll outcome this exchange landed on (`selectPrimaryOutcomeBand` feeding `buildOutcomeBandSection` in `scenePrompt.ts`) rather than left for the model to infer from context alone — a mechanical signal routed into narration guidance, not a new AI judgment call. Not a 5 — only the single worst band across all rolled actions this exchange is used, not a per-character breakdown. |
+| Campaign lobby "World Chronicle" | 3 | The lobby overview tab's old stat-tile grid (`WorldSummaryPanel`, bare labeled counts) is replaced by a few sentences of generated in-world prose (`generateChronicleNarration`, `AI_MODELS.EFFICIENT`) synthesizing weather/faction posture/active conflicts/recent happenings — the design principle behind it: "a dashboard shows you data, a chronicle tells you a story about the same data." Regenerated once per world turn (`WorldMeta.chronicleNarration`/`chronicleNarrationTurn`) inside `runWorldTurn`, never live per page view. Fog-of-war-safe: undiscovered factions/wars are filtered out of the input (`chronicleContext.ts`) before the prompt is ever built. Also adds a one-shot generated campaign hero banner image (`generateCampaignHeroImage`, reusing #96's OpenAI image-gen call shape but not its job-queue machinery — a one-time cosmetic generation doesn't need retry/recovery). Not a 4 — same as #96, the real OpenAI/Vercel Blob calls are only unit-tested with mocks in this sandbox; needs a real credential check before relying on it in production (see Known Bugs/Priority List). |
 
 ## Known Bugs
 
@@ -373,6 +380,22 @@ Partial implementation exists in the codebase today.
   production. `gpt-image-1`'s flat per-image cost also needs re-verifying
   against OpenAI's live pricing page (`cost-tracker.ts`'s `AI_PRICING`
   entry is a documented estimate, not a re-confirmed one).
+- **Campaign lobby "Living Chronicle"** — the lobby overview tab's old
+  stat-tile grid (`WorldSummaryPanel`) is replaced by generated in-world
+  prose (`generateChronicleNarration`, `WorldChronicle.tsx`), regenerated
+  once per world turn (`WorldMeta.chronicleNarration`/
+  `chronicleNarrationTurn`, written from `runWorldTurn`) rather than live
+  per page view, plus a one-shot generated campaign hero banner image
+  (`generateCampaignHeroImage`, reusing #96's image-gen call shape but not
+  its job-queue machinery, kicked via a self-fetch to
+  `/api/internal/generate-campaign-hero-image` at campaign creation). All
+  built, unit-tested, and live-verified against real Postgres (the
+  `WorldMeta`/`Campaign` schema round-trip, the fog-of-war filtering in
+  `chronicleContext.ts`, and the hero-image status lifecycle degrading to
+  `FAILED` gracefully with no API key). **Not verified**: same gap as
+  scene illustration above — no real `OPENAI_API_KEY`/
+  `BLOB_READ_WRITE_TOKEN` in this sandbox, so the actual narration/image
+  API calls have only ever been unit-tested with mocks.
 - **Admin tooling as simulation design** — the faction and NPC tabs now
   extend "let the host see why the simulation decided something" past the
   tick dry-run preview via new per-entity `/reasoning` routes. Locations

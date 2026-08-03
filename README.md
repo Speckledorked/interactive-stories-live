@@ -80,11 +80,19 @@ sitting unnoticed.
   player's screen immediately, content reporting, campaign bans,
   per-player blocking, and lines/veils fed into the AI prompt.
 - **Admin tooling** — a faction relationship/territory map, a tick-log
-  viewer explaining the reasoning behind every simulated change, and a
-  dry-run "preview next tick" mode. This is also the weakest part of the
-  product today — see the Scorecard's last row.
+  viewer explaining the reasoning behind every simulated change, a dry-run
+  "preview next tick" mode, and now a per-entity "why" preview on the
+  faction/NPC tabs. Still the weakest part of the product overall — see
+  the Scorecard's "Admin tooling as simulation design" row.
 - **Real-time collaboration** — Pusher-backed live chat, notifications, and
   scene updates.
+- **Scene illustration** — an opt-in, per-campaign AI-generated image for
+  each resolved scene, generated off the request path in its own async
+  job (never able to slow down scene resolution itself even if the image
+  API is slow or down). Built and tested this session; the real
+  image-generation call and storage upload still need to be confirmed
+  against a real account before enabling it in production — see Features
+  & Roadmap.
 - **Payments** — Stripe integration with metered per-call AI cost tracking
   (not a flat per-scene guess), balance gating, and Postgres-backed
   per-user rate limiting.
@@ -110,12 +118,13 @@ living in a story — is the next real milestone toward the vision, not a
 finished feature.
 
 It also means the admin/host surface should be a real window into the
-simulation, not a settings page. Today the one genuinely deep admin feature
-is a read-only tick dry-run preview; everything else is a thin CRUD wrapper.
-A host who wants to understand why the world is doing what it's doing has
-to read logs. A fully realized MythOS gives the table a way to watch the
-simulation reason about itself at least as deeply as the tick-log debugger
-already reaches for developers.
+simulation, not a settings page. The tick dry-run preview and the faction/
+NPC "why" panels are real progress toward that; locations, clocks, and wars
+still have no equivalent, and a host who wants to understand why the world
+is doing what it's doing there still has to read logs. A fully realized
+MythOS gives the table a way to watch the simulation reason about itself,
+everywhere, at least as deeply as the tick-log debugger already reaches for
+developers.
 
 Finally, the vision assumes nothing here is finished just because it works.
 Every subsystem in this codebase has already been through one honest audit
@@ -207,9 +216,9 @@ this table.
 | System | Score | Status |
 |---|:-:|---|
 | Server-rolled dice/outcome engine | 5 | Pure, RNG-injected, unit-tested (`computeMechanics`, `resolveActionMechanics`, `src/lib/game/resolution.ts`). The roll is unconditional, not gated by any setting. |
-| Faction simulation (goals/collapse/succession/territory) | 5 | Goal-driven stat deltas (`decideFactionTick`), banded reassessment (`decideFactionGoalReassessment`), collapse (`decideFactionCollapse`) → absorption or remnant succession, territory claims. `decideSuccession` is a standalone, tested, pure function with deterministic tie-breaking (`compareCandidates`). |
+| Faction simulation (goals/collapse/succession/territory) | 5 | Goal-driven stat deltas (`decideFactionTick`), banded reassessment (`decideFactionGoalReassessment`, now also overridable by a drifted `beliefVector` — see the Cultural drift row), collapse (`decideFactionCollapse`) → absorption or remnant succession, territory claims. `decideSuccession` is a standalone, tested, pure function with deterministic tie-breaking (`compareCandidates`); its `successionRoughness` output scales both the absorption transfer rate and the successor's inheritance rate (`ABSORPTION_TRANSFER_RATE`/`SUCCESSOR_INHERITANCE_RATE` in `factionTick.ts`) instead of using them as flat constants — a collapse that barely tipped over the threshold hands off more cleanly than one that cratered to zero stability. |
 | War & coalition system | 4 | Multi-turn momentum/attrition, allies join sides, decisive/stalemate resolution. The pure deciders (`decideWarDeclaration`, `decideWarProgress`, `decideWarResolution`, `decideWarJoiner`) and the tick-side functions that apply them (`declareNewWars`, `resolveWarProgress`, `growWarCoalitions`) are all unit-tested, including the losing side's stability hit, now directly tested rather than only incidentally covered. |
-| World tick orchestration | 5 | Nine deterministic handlers (`runWorldTick`), sequenced same-tick dependencies, zero AI calls. Handler *order* is asserted by a pairwise test, not just per-handler correctness. |
+| World tick orchestration | 5 | 18 deterministic handlers (`runWorldTick`/`TICK_HANDLERS`), sequenced same-tick dependencies, zero AI calls, all inside one `prisma.$transaction` — a failed turn rolls back cleanly instead of committing partial state. Handler *order* is asserted by a pairwise test (`orchestration.test.ts`), not just per-handler correctness — the suite has already caught a silent handler reorder once. |
 | Debt economy | 4 | Directional, persisted, and consumed as a real roll modifier (`debtModifier`), not a label. |
 | Faction standing | 4 | Same pattern — feeds `computeMechanics()` directly. |
 | Relationships (trust/tension/respect/fear) | 4 | Feeds `computeMechanics()` via a banded `relationshipModifier`. Deliberately never rendered to players as raw numbers. |
@@ -247,6 +256,18 @@ this table.
 | Admin tooling as simulation design (beyond CRUD) | 3 | Faction and NPC tabs now show real reasoning, not just fields: a faction card's "Why?" button previews its next goal reassessment (`explainFactionGoalReassessment`) plus any active war's momentum trajectory (`explainWarMomentum`) — new pure functions the real tick's `decideFactionGoalReassessment`/`decideWarProgress`/`decideWarResolution` now delegate to or share, run read-only via new per-entity `/reasoning` API routes. An NPC card's "Why?" preview surfaces its real next-tick decision (`decideNpcTick`) directly. Not higher than a 3 — `handleUpdateLocation`/`handleTickClock` are still thin PATCH wrappers, and there's no standalone war tab at all (war reasoning is folded into the faction fighting it, since no war admin surface exists to extend). |
 | Integrity Engine — structural/semantic data repair | 4 | Deterministic, per-tick checks (`runIntegrityPass`) detect and repair broken references, duplicate names, and (for one registered universe-scoped semantic family, `faction.leaderOptional`) AI-generated verdicts gated by confidence and a probation window (`isRuleActive`). Every repair is blast-radius-capped (`MAX_REPAIRS_PER_PASS`/`MAX_REPAIRS_PER_ENTITY`) and idempotent by construction; verified live against real Postgres, not just mocked. Not a 5 — only one semantic family exists, and Phase 4's planned oscillation-based rule retirement was never built (no repair-enabling family exists yet for it to fire against). |
 | Autonomous code-fix pipeline (`integrity-autofix.yml`) | 2 | Fully autonomous by design — no human review tier at all, every oracle tier (including `suite-only`) merges itself. Since nothing else catches a bad merge first, the pipeline watches its own history instead: `regressionDetection.ts` reverts a merged fix automatically if its checkKey escalates again, `verifyOracleTechnique.ts` mechanically forbids a diff from registering a *weaker* oracle for its own checkKey than it had before (an agent can strengthen its own bar — see the growth step in the prompt — but never lower it), and scope is closed in advance (`escalationSourceMap.ts`) rather than judged per fix. The shell-injection vulnerability and the stale-escalation replay an earlier audit found are both fixed. Not higher than a 2 — it has still never run against a real bug (ships `workflow_dispatch`-only), and the revert mechanism's own correctness is unproven outside unit tests until that first real run happens. |
+| Institutional memory (wake ripples on death/collapse) | 4 | A major NPC's death or a faction's collapse leaves a real, decaying mark: `decideWakeStabilityPenalty` hits the affected faction's stability immediately (leader deaths and collapse ripples weighted higher than an ordinary member loss), then `decideWakeDecayStep` restores it gradually over a fixed window rather than snapping back — `tickWake`'s own three-phase ordering (decay existing wakes, then detect new NPC deaths, then new faction collapses) exists specifically so a wake created this same tick is never also decayed the same tick it was born. Feeds `Faction.stability`, a real roll input, not a cosmetic log line. Not a 5 — only stability is affected; no mechanical consumer reads *how many* wakes a faction is currently carrying. |
+| Cultural drift, belief evolution & multi-stage ambitions | 4 | `Faction.beliefVector` (`aggression`/`isolationism`/`mercantilism`/`zealotry`, 0-100) drifts from the faction's own recent history (`decideBeliefDrift` reading `WAR_WON`/`WAR_LOST`/`COLLAPSE_RIPPLE_SURVIVED`/`AMBITION_SUCCEEDED`/`AMBITION_FAILED` events) and can override the stat-band-driven goal reassessment once an axis drifts far enough past neutral (see the Faction simulation row). A completed ambition can also spawn a continuation clock (`decideAgendaContinuation`, capped at `MAX_AGENDA_STAGES`) instead of just resolving cleanly, so a faction's trajectory compounds across multiple stages rather than resetting to nothing. Not a 5 — belief axes are a fixed, closed set, not something new fiction can add to. |
+| Resource infrastructure & logistics | 3 | A location with `resourceSlots` only pays out to its owning faction while at least one `SupplyRoute` touching it is unblockaded (`decideExtraction`); an ESCALATING war over a contested location automatically blockades routes through it and lifts the blockade the same turn the war resolves. Routes are flat/arbitrary rows (`SupplyRoute.fromLocationId`/`toLocationId`), not yet validated against real spatial adjacency — a deliberate, decided-in-advance scope, not an oversight. Not higher than a 3 until routes are generated from (or checked against) `WorldGraph` adjacency. |
+| WorldGraph (location adjacency) | 3 | A real, if flat, adjacency graph (`LocationAdjacency`, undirected, distance-weighted) backs `directNeighborsOf`/`shortestPath`/`nearestLocation` (`worldGraph.ts`), and two real consumers already use it instead of a blind pick: `decideTerritoryClaim`'s candidate selection and `decideNpcTick`'s "work" location both prefer a genuine graph neighbor of "home" when adjacency data covers it, falling back to their exact pre-adjacency behavior (alphabetical-first / hash-rotation) otherwise. AI-authored backfill (`worldGraphGenerator.ts`) infers a plausible graph from existing lore for campaigns with none. Not a 4 — shortest-path uses simple O(V²) node selection, fine at the real scale (tens of locations) but not built for more. |
+| Environmental state & location aging | 3 | `Location.conditionScore` (0-100, DB-range-checked) drifts from war/contested-territory presence (`decideConditionDrift`) and derives a closed condition-tag vocabulary on read (`deriveConditionTags`: `RUINED`/`DAMAGED`/`STABLE`/`PROSPEROUS`/`CONTESTED`/`ABANDONED`) rather than a free-form label. Feeds migration's own distress signal directly (see the next row). Not a 4 — nothing yet gates quest/roll access on condition the way corruption or fog-of-war do. |
+| Migration & population flows | 3 | `decideMigration` moves NPCs out of locations whose `conditionScore` has crossed a distress threshold toward the nearest condition-viable destination, plus a background population-flight fraction for the location's own `population` count — reads this same turn's post-commute NPC positions, not last turn's, so an NPC that already fled isn't double-counted. Not a 4 — population is currently a single number with no per-NPC identity tracked once it moves in the aggregate. |
+| Economic contagion & cascading collapse | 3 | A real faction-to-faction `FactionDebt` (directional, distinct from the Character-centric `Debt` model): a broke or newly-active ally can be extended a loan (`decideLoanExtension`, reusing `factionPayout.ts`'s existing capacity math as the lender's affordability check), and a debtor that collapses or stays broke defaults, cascading a real stability hit to the creditor through the same wake mechanism deaths use (`decideDefaultCascade`, tagged `sourceType: 'FACTION_DEFAULT'`). Not a 4 — at most one outstanding debt per debtor pair is tracked at a time, and origination is loan-only (no other path currently creates faction-to-faction debt). |
+| Signed push / contested value model (Arc) | 4 | `War.momentum`'s existing tug-of-war math (military edge + deterministic per-tick variance, clamped, resolved decisively past a threshold or by timeout) is now a real, shared, reusable primitive (`decideArcDelta`/`applyArcDelta`/`decideArcResolution` in `arc.ts`), proven genuinely reusable rather than a one-off: `decideWarProgress`/`decideWarResolution` (`warTick.ts`) delegate to it directly (verified byte-identical against the full pre-existing war test suite), and a second, independent consumer — contested territory loyalty (`tickTerritoryLoyalty`) — pushes a location's ownership between its owner and on-record rival each turn, resolving to cement the hold, flip the location outright, or settle as a stalemate, instead of sitting `isContested` forever unless a war was separately declared over it. Not a 5 — only two consumers exist, and `War.momentum`'s own column deliberately stays untouched (see `Arc`'s schema comment for why). |
+| Seasonal pressure + calendar mechanics | 3 | The in-fiction calendar (`Campaign.calendarConfig`, previously display-only) now drives two closed mechanical knobs (`SEASON_MODIFIERS` in `seasonTick.ts`, decided 2026-08-02 as the fixed set): faction resource regen (autumn boosts, winter slows) and unattached-GM-clock speed (passed into `decideClockAdvancement` as a multiplier, since clock advancement runs outside `TICK_HANDLERS`). `calendarGenerator.ts`'s old "mechanics never come from here" doc comment is updated to match, not left silently stale. Not a 4 — exactly two knobs by design; no other system reads season yet. |
+| Multi-model fallback chain | 4 | `callAIGM` (`client.ts`) tries `AI_MODELS.FLAGSHIP` first and falls back to `AI_MODELS.EFFICIENT` exactly once — either on a hard failure of the primary attempt, or up front when the campaign's circuit breaker is already open (skipping a call already known to be failing) — never chained further, so a fallback failure surfaces to the caller the same way a primary failure without a fallback chain always did. Not a 5 — the chain is fixed at two OpenAI tiers, no second vendor. |
+| Token-budget message pruning | 3 | A real token-budget pass (`applyTokenBudget`, `tokenBudget.ts`) sits on top of the existing fixed entity-count caps and per-string character clamps — not a replacement for them — trimming whole prompt *sections* in a decided priority order (world-summary macro detail first, recent-scene text second, character sheets protected longest and only trimmed down to the scene's actual participants) until the assembled request is back under a configured ceiling. Not a 4 — the token estimate is the same rough ~4-chars-per-token heuristic used for cost logging, not a real tokenizer count. |
+| Outcome-band → narration routing | 4 | The scene prompt's tone/pacing instructions are now derived from the actual worst roll outcome this exchange landed on (`selectPrimaryOutcomeBand` feeding `buildOutcomeBandSection` in `scenePrompt.ts`) rather than left for the model to infer from context alone — a mechanical signal routed into narration guidance, not a new AI judgment call. Not a 5 — only the single worst band across all rolled actions this exchange is used, not a per-character breakdown. |
 
 ## Known Bugs
 
@@ -268,6 +289,8 @@ findings with a real exploit path, not just a functional gap.
 | The identical "not a member of this campaign" check returns 403 at ~37 call sites but 404 at 2 (`members/[userId]/route.ts`, `.../ban/route.ts`), with different wording. Fixed: both now return 403 with matching wording. | API routes | Minor | Fixed |
 | Four `substring`/`slice` truncation call sites append `'...'` unconditionally, regardless of whether the text actually exceeds the length limit, producing a spurious ellipsis on short strings. Fixed: all four (`sceneResolver.ts`, `sceneIntro.ts`, `story/page.tsx`, `NotesPanel.tsx`) now route through `truncateWithEllipsis`, which only appends the ellipsis when the text is actually cut. | UI / shared utilities | Minor | Fixed |
 | `formatDigestLine`'s leadership-change case checked `field === 'leader' \| 'leadership'`, but the real leadership-succession tick writes `field: 'factionRole'` — every real leadership-change notification silently fell through to the generic "there's talk of upheaval" line instead of the intended, more specific one. Found live via a production database check. Fixed: `factionRole` now maps to the same specific line. | Notifications / world tick | Minor | Fixed |
+| `kickJob` (`resolutionQueue.ts`) only treated a *thrown* fetch error as a lost delivery. A response that arrives before the 3s delivery-timeout abort fires is necessarily fast — the real resolution pipeline takes ~150s+ — so a non-OK status there (403 from a misconfigured/rotated `INTERNAL_JOB_SECRET`) meant the job was silently never handed to `processResolutionJob` at all: its `attempts` counter never increments, so it would loop through stale-job recovery forever instead of ever reaching `MAX_ATTEMPTS`. Fixed: a non-OK response now falls back to inline processing, same as a thrown error already did. | Async scene resolution | Major | Fixed |
+| `processResolutionJob`'s read-back of the job row it had just claimed (`PENDING`→`RUNNING`) had no error handling. A transient DB failure there left the claimed row stuck `RUNNING`, with no recorded error, for a full `RUNNING_STALE_MS` (6 minutes) before recovery even noticed. Fixed: a read-back failure now reverts the stranded claim to `PENDING` immediately. | Async scene resolution | Minor | Fixed |
 
 ## Priority List
 
@@ -286,6 +309,12 @@ above. Items that block later ones are flagged.
    mutations (see the Scorecard row); still untested: individual NPC/
    faction/location PATCH/DELETE, friend-request accept/reject, the turn
    order route, and the rest of the long tail of lower-risk mutations.
+3. **Check whether `computeTension` should weight the newer simulation
+   signals.** Small and genuinely ready now, not blocked on anything:
+   Environmental aging (`Location.conditionScore`) and Economic Contagion
+   (`FactionDebt`) — the two systems `tension.ts`'s own doc comment named
+   as worth revisiting — both landed this session. Confirm whether either
+   belongs in `TensionInputs` before treating this as done (#122).
 
 *(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
 checkKeys a shared type, the war stability-hit write path's missing direct
@@ -393,15 +422,41 @@ those changes into prose is delegated to the AI.
 Factions can autonomously commit to major ambitions once their resources and
 goals justify it — the tick decides *whether*; a bounded, archetype-specific
 AI call decides *what*, with a deterministic fallback if that call fails, so
-an ambition never silently disappears. Territory is real state: factions can
-contest and conquer land, and sustained conflicts escalate into multi-turn,
-attrition-driven wars that can grow into coalitions as allies join a side.
+an ambition never silently disappears. A completed ambition can chain into a
+continuation stage instead of just resolving cleanly, so a faction's
+trajectory can compound across a campaign rather than resetting each time.
+Territory is real state: factions can contest and conquer land, and
+sustained conflicts escalate into multi-turn, attrition-driven wars that can
+grow into coalitions as allies join a side. Contested territory that never
+escalates into a declared war isn't stuck in limbo either — the same signed,
+bidirectional push/resolve math wars use (`game/arc.ts`) independently
+resolves who ends up holding a contested location.
+
+A faction's own outward disposition (`beliefVector` — aggression,
+isolationism, mercantilism, zealotry) drifts from its actual recent history
+and can redirect its goal reassessment once an axis drifts far enough from
+neutral, and a death or a faction's collapse leaves a real, gradually-healing
+stability wound on whoever it affected rather than resolving instantly.
+Locations age and take real, tagged condition damage from war and neglect,
+which drives distressed NPCs to migrate toward more viable ground; a
+location's resource output depends on an actual unblockaded supply route to
+it, not just ownership; and a broke or collapsed faction's debts can cascade
+a real stability hit to whichever ally extended it credit. A real (if flat)
+location-adjacency graph backs nearest-neighbor territory/movement choices
+where adjacency data exists, falling back to the exact pre-adjacency
+behavior where it doesn't. The in-fiction calendar drives two small
+mechanical knobs — seasonal resource regen and unattached-clock pacing — on
+top of its narration-flavor role.
 
 Every active faction is simulated automatically — there is no opt-in. The
 admin panel's Simulation Goal and Archetype controls are a steering wheel,
 not an ignition switch, except for player-led factions, whose chosen goal is
 deliberately preserved rather than overwritten by the tick's own
-reassessment.
+reassessment. A deterministic, per-tick Integrity Engine (`runIntegrityPass`)
+validates the state every handler above just produced — broken references,
+duplicate names, and a closed catalogue of universe-scoped semantic
+invariants — and repairs what it safely can before the turn's changes are
+ever narrated.
 
 ## Prerequisites
 
@@ -520,7 +575,9 @@ npm run prisma:generate    # Generate Prisma Client
 - **Framework**: Next.js 14 (App Router)
 - **Database**: PostgreSQL 15+ with Prisma ORM
 - **Vector Search**: pgvector for semantic similarity
-- **AI**: OpenAI GPT-4 for story generation
+- **AI**: OpenAI (configurable model tiers — see `src/lib/ai/models.ts`) for
+  story generation, with a multi-model fallback chain and an opt-in
+  per-scene image-generation model
 - **Real-time**: Pusher for live updates
 - **Styling**: Tailwind CSS
 - **Testing**: Vitest

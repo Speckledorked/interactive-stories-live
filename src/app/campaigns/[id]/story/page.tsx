@@ -1090,7 +1090,7 @@ export default function StoryPage() {
                   <div className="rounded-lg border border-myth-border/60 bg-myth-surface/40 p-5">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <h2 className="font-display text-xl text-myth-ink">
+                        <h2 className="font-display text-xl font-semibold text-myth-ink">
                           Scene {scene.sceneNumber}
                         </h2>
                         {campaign?.worldMeta?.currentInGameDate && (
@@ -1199,7 +1199,7 @@ export default function StoryPage() {
                           />
                         )}
                         <div className="mt-6 pt-6 border-t border-myth-border">
-                          <h3 className="font-display text-lg text-myth-ink mb-3">
+                          <h3 className="font-display text-lg font-semibold text-myth-ink mb-3">
                             {scene.sceneResolutionText.includes('---') ? 'Resolutions' : 'Resolution'}
                           </h3>
                           {/* Split multiple resolutions by separator */}
@@ -1240,7 +1240,7 @@ export default function StoryPage() {
                         onClick={() => setExpandedActions(prev => ({ ...prev, [scene.id]: !prev[scene.id] }))}
                         className="w-full flex items-center justify-between text-left"
                       >
-                        <h3 className="font-display text-lg text-myth-ink">
+                        <h3 className="font-display text-lg font-semibold text-myth-ink">
                           Player Actions ({scene.playerActions.length})
                         </h3>
                         <span className="text-myth-ink-faint">
@@ -1276,7 +1276,7 @@ export default function StoryPage() {
                   {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && !userHasSubmitted && selectedCharacterId && (
                     <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
                       <div className="flex items-center justify-between gap-3 mb-4">
-                        <h3 className="font-display text-lg text-myth-ink">Your Action</h3>
+                        <h3 className="font-display text-lg font-semibold text-myth-ink">Your Action</h3>
                         {scene.sceneResolutionText && (
                           <a
                             href={`/campaigns/${campaignId}/story-log`}
@@ -1473,7 +1473,7 @@ export default function StoryPage() {
             <div className="rounded-lg border border-myth-border bg-myth-surface px-5 py-12">
               <div className="text-center mb-8">
                 <div className="text-6xl mb-4">📜</div>
-                <h2 className="font-display text-xl text-myth-ink mb-2">
+                <h2 className="font-display text-xl font-semibold text-myth-ink mb-2">
                   {resolvedScenes.length > 0 ? 'Scene Complete!' : 'No Active Scene'}
                 </h2>
                 <p className="text-myth-ink-muted mb-6">
@@ -1747,7 +1747,7 @@ export default function StoryPage() {
                   </svg>
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-display text-xl text-myth-ink mb-2">Insufficient Funds</h3>
+                  <h3 className="font-display text-xl font-semibold text-myth-ink mb-2">Insufficient Funds</h3>
                   <p className="text-myth-ink-muted text-sm leading-relaxed">
                     {insufficientFundsDetails}
                   </p>

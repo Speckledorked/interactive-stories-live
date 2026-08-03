@@ -7,14 +7,23 @@ import { displayFont } from '@/lib/tavernTheme'
 export function TavernButton({
   children,
   variant = 'primary',
+  theme = 'tavern',
   className = '',
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' }) {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'secondary'
+  /** Visual theme, distinct from `variant` (primary/secondary) above. */
+  theme?: 'tavern' | 'myth'
+}) {
   const base = 'px-4 py-2.5 rounded-lg border font-medium transition-all disabled:opacity-50 text-sm'
   const styles =
-    variant === 'primary'
-      ? 'bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 border-ember-900/50 shadow-lg shadow-black/40'
-      : 'bg-black/30 hover:bg-black/40 border-ember-900/40 text-ember-300'
+    theme === 'myth'
+      ? variant === 'primary'
+        ? 'bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink border-transparent'
+        : 'border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink'
+      : variant === 'primary'
+        ? 'bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 text-ember-100 border-ember-900/50 shadow-lg shadow-black/40'
+        : 'bg-black/30 hover:bg-black/40 border-ember-900/40 text-ember-300'
   return (
     <button className={`${base} ${styles} ${className}`} {...props}>
       {children}
@@ -22,14 +31,25 @@ export function TavernButton({
   )
 }
 
-export function TavernCard({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
+export function TavernCard({
+  children,
+  variant = 'tavern',
+  className = '',
+  onClick,
+}: {
+  children: React.ReactNode
+  variant?: 'tavern' | 'myth'
+  className?: string
+  onClick?: () => void
+}) {
+  const styles =
+    variant === 'myth'
+      ? `rounded-lg border border-myth-border bg-myth-surface ${onClick ? 'cursor-pointer hover:border-myth-border-strong transition-colors' : ''}`
+      : `rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 ${
+          onClick ? 'cursor-pointer hover:border-ember-700/50 transition-colors' : ''
+        }`
   return (
-    <div
-      onClick={onClick}
-      className={`rounded-xl bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 border border-ember-900/30 shadow-lg shadow-black/30 ${
-        onClick ? 'cursor-pointer hover:border-ember-700/50 transition-colors' : ''
-      } ${className}`}
-    >
+    <div onClick={onClick} className={`${styles} ${className}`}>
       {children}
     </div>
   )

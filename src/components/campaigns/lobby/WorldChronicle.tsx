@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SectionHeader } from '@/components/ui/section-header'
 
 // Replaces the old WorldSummaryPanel stat-tile grid. The design principle:
 // "A dashboard shows you data. A chronicle tells you a story about the
@@ -6,7 +7,8 @@ import Link from 'next/link'
 // regenerated once per world turn, never live per view) — single column,
 // no borders, no card chrome, no counts. The index below is the one
 // concession to genuine reference material, and deliberately carries no
-// counts either.
+// counts either. Tier-2 SectionHeader (not Tier 3) since this is the
+// flagship de-boxed section, not a card-scoped title.
 export function WorldChronicle({
   campaignId,
   narration,
@@ -16,7 +18,7 @@ export function WorldChronicle({
 }) {
   return (
     <div className="space-y-3">
-      <h2 className="font-display text-lg font-semibold text-myth-ink">The World, Now</h2>
+      <SectionHeader as="h2" title="The World, Now" />
       {narration ? (
         <p className="leading-relaxed text-myth-ink-muted">{narration}</p>
       ) : (

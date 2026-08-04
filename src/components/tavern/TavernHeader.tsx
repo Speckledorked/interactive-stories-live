@@ -25,6 +25,7 @@ export function TavernHeader({
   campaignId,
   isAdmin = false,
   variant = 'tavern',
+  minimalHeaderAtDesktop = false,
 }: {
   title?: string
   backHref?: string
@@ -33,6 +34,14 @@ export function TavernHeader({
   campaignId?: string
   isAdmin?: boolean
   variant?: 'tavern' | 'myth'
+  /** Opt-in: drop this header's background/border/blur at lg:, leaving
+   * only a floating icon cluster — for pages whose sidebar (and, for the
+   * lobby specifically, its own hero) already make the bar's title/subrow
+   * redundant at desktop width. Do NOT set this on a page whose `subrow`
+   * has no sidebar equivalent (e.g. wiki's category tabs, story's scene
+   * tabs) — that subrow currently relies on inheriting this header's
+   * background to stay legible over scrolling content. */
+  minimalHeaderAtDesktop?: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -48,7 +57,7 @@ export function TavernHeader({
     <header
       className={
         myth
-          ? 'fixed top-0 inset-x-0 lg:left-64 z-30 bg-myth-surface/90 backdrop-blur-md border-b border-myth-border'
+          ? `fixed top-0 inset-x-0 lg:left-64 z-30 bg-myth-surface/90 backdrop-blur-md border-b border-myth-border ${minimalHeaderAtDesktop ? 'lg:border-none lg:bg-transparent lg:backdrop-blur-none' : ''}`
           : 'fixed top-0 inset-x-0 z-30 bg-black/60 backdrop-blur-md border-b border-ember-900/40'
       }
     >
@@ -86,7 +95,7 @@ export function TavernHeader({
           <h1
             className={
               myth
-                ? 'font-display text-base sm:text-lg tracking-wide text-myth-ink truncate text-center flex-1'
+                ? 'font-display text-base sm:text-lg tracking-wide text-myth-ink truncate text-center flex-1 lg:hidden'
                 : `${displayFont.className} text-base sm:text-lg tracking-wide text-ember-100 truncate text-center flex-1`
             }
           >

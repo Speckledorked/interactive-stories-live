@@ -7,6 +7,7 @@
 
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
@@ -24,7 +25,14 @@ import {
   Settings as SettingsIcon,
   LogOut,
 } from 'lucide-react'
-import { logout } from '@/lib/clientAuth'
+import { authenticatedFetch, logout } from '@/lib/clientAuth'
+
+interface CampaignIdentity {
+  title: string
+  universe: string | null
+  turnNumber: number
+  inGameDate: string | null
+}
 
 interface NavLink {
   href: string
@@ -46,6 +54,32 @@ export function TavernSidebar({
 
   const campaignHome = campaignId ? `/campaigns/${campaignId}` : null
   const isCampaignHome = campaignHome !== null && pathname === campaignHome
+
+  // Small campaign-identity summary shown below the nav list — the
+  // sidebar otherwise only carries links, never the campaign's own
+  // title/genre/turn/date, unlike the lobby hero which already has all
+  // of it. One lightweight fetch on mount against the existing campaign
+  // GET route (no new endpoint); silently renders nothing on failure,
+  // same graceful-degradation convention as the lobby's own widgets.
+  const [identity, setIdentity] = useState<CampaignIdentity | null>(null)
+  useEffect(() => {
+    if (!campaignId) {
+      setIdentity(null)
+      return
+    }
+    authenticatedFetch(`/api/campaigns/${campaignId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.campaign) return
+        setIdentity({
+          title: data.campaign.title,
+          universe: data.campaign.universe ?? null,
+          turnNumber: data.campaign.worldMeta?.currentTurnNumber ?? 0,
+          inGameDate: data.campaign.worldMeta?.currentInGameDate ?? null,
+        })
+      })
+      .catch(() => {})
+  }, [campaignId])
 
   const globalLinks: NavLink[] = [
     { href: '/campaigns', label: 'Campaigns', icon: Beer, isActive: (p) => p === '/campaigns' },
@@ -122,7 +156,7 @@ export function TavernSidebar({
       <Link
         key={link.href}
         href={link.href}
-        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
           active
             ? 'bg-myth-accent/10 text-myth-accent'
             : 'text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink'
@@ -152,6 +186,17 @@ export function TavernSidebar({
           <div>
             <p className="mb-1 px-3 font-mono text-xs uppercase tracking-wider text-myth-ink-faint">Campaign</p>
             <div className="space-y-1">{campaignLinks.map(renderLink)}</div>
+          </div>
+        )}
+
+        {identity && (
+          <div className="rounded-lg border border-myth-border bg-myth-surface-raised px-3 py-3">
+            <p className="truncate font-display text-sm font-semibold text-myth-ink">{identity.title}</p>
+            {identity.universe && <p className="mt-0.5 truncate text-xs italic text-myth-ink-faint">{identity.universe}</p>}
+            <p className="mt-2 font-mono text-xs text-myth-ink-muted">
+              Turn {identity.turnNumber}
+              {identity.inGameDate ? ` · ${identity.inGameDate}` : ''}
+            </p>
           </div>
         )}
 

@@ -21,10 +21,10 @@ import { TavernNav } from '@/components/tavern/TavernNav'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SectionHeader } from '@/components/ui/section-header'
 import { CampaignHero } from '@/components/campaigns/lobby/CampaignHero'
-import { CampaignEntryCTA } from '@/components/campaigns/lobby/CampaignEntryCTA'
 import { CharacterRoster } from '@/components/campaigns/lobby/CharacterRoster'
 import { PlayersPanel } from '@/components/campaigns/lobby/PlayersPanel'
 import { WorldChronicle } from '@/components/campaigns/lobby/WorldChronicle'
+import { CurrentObjective } from '@/components/campaigns/lobby/CurrentObjective'
 import { WorldGlance } from '@/components/campaigns/lobby/WorldGlance'
 import type { ChronicleGlance } from '@/lib/game/chronicleTypes'
 
@@ -247,7 +247,7 @@ export default function CampaignLobbyPage() {
   if (loading) {
     return (
       <TavernPage background="myth">
-        <TavernHeader backHref="/campaigns" title="Loading…" campaignId={campaignId} variant="myth" />
+        <TavernHeader backHref="/campaigns" title="Loading…" campaignId={campaignId} variant="myth" minimalHeaderAtDesktop />
         <main className="flex justify-center max-w-6xl mx-auto px-4 pt-28 pb-16">
           <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
         </main>
@@ -287,8 +287,14 @@ export default function CampaignLobbyPage() {
         campaignId={campaignId}
         isAdmin={userRole === 'ADMIN'}
         variant="myth"
+        minimalHeaderAtDesktop
         subrow={
-          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-myth-border pt-2 pb-0">
+          // lg:hidden — TavernSidebar already lists all five of these as
+          // nav items, so this tab strip is redundant once the sidebar is
+          // visible. Scoped to this file only: wiki/story pages' subrows
+          // have no sidebar equivalent and must keep rendering at every
+          // width (see TavernHeader's minimalHeaderAtDesktop doc comment).
+          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-myth-border pt-2 pb-0 lg:hidden">
             {[
               { key: 'overview', label: 'Overview' },
               { key: 'progression', label: 'Story Log' },
@@ -331,30 +337,6 @@ export default function CampaignLobbyPage() {
           </div>
         )}
 
-        {/* "While you were away" — offscreen world-turn fallout the player
-            missed since they last opened this lobby. Dismissible; not
-            persisted as dismissed (it naturally won't reappear once
-            lastViewedAt advances past these events). */}
-        {awayRecap && (
-          <div className="mb-6 space-y-2">
-            <p className="font-display text-myth-ink">While you were away ({awayRecap.awayLabel})…</p>
-            <p className="leading-relaxed text-myth-ink-muted">
-              {awayRecap.events.map((e, i) => (
-                <span key={e.id}>
-                  {i > 0 && ' '}
-                  <span className="text-myth-ink">{e.title}.</span> {e.summary}
-                </span>
-              ))}
-            </p>
-            <Link
-              href={`/campaigns/${campaignId}/wiki?type=RUMORS`}
-              className="text-sm text-myth-ink-faint hover:text-myth-ink hover:underline"
-            >
-              See everything that's happened →
-            </Link>
-          </div>
-        )}
-
         <CampaignHero
           campaignId={campaignId}
           title={campaign.title}
@@ -365,16 +347,14 @@ export default function CampaignLobbyPage() {
           heroImageUrl={campaign.heroImageStatus === 'READY' ? campaign.heroImageUrl : null}
           heroImageStatus={campaign.heroImageStatus}
           isAdmin={userRole === 'ADMIN'}
+          hasCharacter={userCharacters.length > 0}
+          onCreateCharacter={() => setShowCreateCharacter(true)}
         />
 
       {/* Overview Tab - Existing Content */}
       {activeTab === 'overview' && (
       <div className="space-y-6">
-        <CampaignEntryCTA
-          campaignId={campaignId}
-          hasCharacter={userCharacters.length > 0}
-          onCreateCharacter={() => setShowCreateCharacter(true)}
-        />
+        <CurrentObjective campaignId={campaignId} />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
@@ -409,6 +389,30 @@ export default function CampaignLobbyPage() {
           campaignId={campaignId}
           narration={campaign.worldMeta?.chronicleNarration ?? null}
         />
+
+        {/* World Timeline — offscreen world-turn fallout the player missed
+            since they last opened this lobby. Not persisted as dismissed
+            (it naturally won't reappear once lastViewedAt advances past
+            these events). */}
+        {awayRecap && (
+          <div className="space-y-2">
+            <SectionHeader as="h2" title="World Timeline" description={`While you were away (${awayRecap.awayLabel})`} />
+            <p className="leading-relaxed text-myth-ink-muted">
+              {awayRecap.events.map((e, i) => (
+                <span key={e.id}>
+                  {i > 0 && ' '}
+                  <span className="text-myth-ink">{e.title}.</span> {e.summary}
+                </span>
+              ))}
+            </p>
+            <Link
+              href={`/campaigns/${campaignId}/wiki?type=RUMORS`}
+              className="text-sm text-myth-ink-faint hover:text-myth-ink hover:underline"
+            >
+              See everything that's happened →
+            </Link>
+          </div>
+        )}
       </div>
       )}
 

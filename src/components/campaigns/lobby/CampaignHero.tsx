@@ -1,6 +1,9 @@
-// Left-aligned page hero for the campaign lobby: display-serif title, a
-// single italic log-line instead of a paragraph, and Universe/Turn/Date
-// collapsed into one row of tabular-mono chips.
+// Left-aligned page hero for the campaign lobby: big display-serif title,
+// a single italic log-line instead of a paragraph, the primary entry CTA,
+// and Universe/Turn/Date collapsed into one row of tabular-mono chips.
+// Absorbs what used to be a separate CampaignEntryCTA card below the hero
+// — title, subtitle, and the primary action now read as one cohesive
+// block instead of two visually separate pieces.
 //
 // heroImageUrl is generated exactly once, at campaign creation
 // (campaignCreation.ts) — a campaign created before that feature shipped,
@@ -14,6 +17,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
+import { CampaignEntryCTA } from './CampaignEntryCTA'
 
 const POLL_INTERVAL_MS = 4000
 const MAX_POLLS = 15 // ~60s
@@ -37,6 +41,8 @@ export function CampaignHero({
   heroImageUrl,
   heroImageStatus,
   isAdmin = false,
+  hasCharacter,
+  onCreateCharacter,
 }: {
   campaignId: string
   title: string
@@ -47,6 +53,8 @@ export function CampaignHero({
   heroImageUrl?: string | null
   heroImageStatus?: string | null
   isAdmin?: boolean
+  hasCharacter: boolean
+  onCreateCharacter: () => void
 }) {
   const [imageUrl, setImageUrl] = useState(heroImageUrl ?? null)
   const [status, setStatus] = useState(heroImageStatus ?? 'NONE')
@@ -116,9 +124,10 @@ export function CampaignHero({
         </>
       )}
       <div className={imageUrl ? 'relative px-5 py-10 sm:py-14' : ''}>
-        <h1 className="font-display text-3xl font-semibold text-myth-ink sm:text-4xl">{title}</h1>
-        {description && <p className="mt-2 italic text-myth-ink-muted">{description}</p>}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <h1 className="font-display text-4xl font-semibold leading-tight text-myth-ink sm:text-6xl">{title}</h1>
+        {description && <p className="mt-3 italic text-myth-ink-muted">{description}</p>}
+        <CampaignEntryCTA campaignId={campaignId} hasCharacter={hasCharacter} onCreateCharacter={onCreateCharacter} />
+        <div className="mt-5 flex flex-wrap items-center gap-2">
           {universe && <MetaChip label="Universe" value={universe} />}
           <MetaChip label="Turn" value={String(turnNumber)} />
           <MetaChip label="Date" value={inGameDate} />

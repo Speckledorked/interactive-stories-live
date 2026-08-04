@@ -85,6 +85,9 @@ export function CampaignHero({
       }
       if (pollCount.current >= MAX_POLLS) {
         clearInterval(interval)
+        // Gave up without ever seeing READY/FAILED — leaving `status` stuck
+        // on PENDING would show "Generating…" forever with no way to retry.
+        setStatus('FAILED')
       }
     }, POLL_INTERVAL_MS)
 
@@ -94,7 +97,10 @@ export function CampaignHero({
   const handleGenerate = async () => {
     setStatus('PENDING')
     try {
-      await authenticatedFetch(`/api/campaigns/${campaignId}/hero-image`, { method: 'POST' })
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/hero-image`, { method: 'POST' })
+      if (!response.ok) {
+        setStatus('FAILED')
+      }
     } catch {
       setStatus('FAILED')
     }

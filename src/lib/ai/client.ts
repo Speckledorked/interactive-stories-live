@@ -310,6 +310,26 @@ export interface AIGMResponse {
   }
 }
 
+// PbtA stat block — see prisma/schema.prisma's Character.stats column
+// comment for the canonical shape this is read from ({cool, hard, hot,
+// sharp, weird}, each -1..3). Partial because a freshly-created character
+// can have any subset unset.
+type CharacterStatBlock = Partial<Record<'cool' | 'hard' | 'hot' | 'sharp' | 'weird', number>>
+
+// Per-NPC/faction rapport, keyed by entity id — see
+// prisma/schema.prisma's Character.relationships column comment, and
+// RelationshipForRoll in lib/game/resolution.ts which reads this same shape
+// off the DB record to compute relationshipModifier.
+type CharacterRelationshipMap = Record<string, { trust: number; tension: number; respect: number; fear: number }>
+
+// See prisma/schema.prisma's Character.consequences column comment.
+interface CharacterConsequences {
+  promises?: string[]
+  debts?: string[]
+  enemies?: string[]
+  longTermThreats?: string[]
+}
+
 /**
  * AI GM Request Structure
  * This is what we send to the AI when asking it to resolve a scene
@@ -334,12 +354,12 @@ export interface AIGMRequest {
       // pc_changes.appearance_changes/personality_changes below.
       appearance: string | null
       personality: string | null
-      stats: any
+      stats: CharacterStatBlock | null
       backstory: string | null
       goals: string | null
       location: string | null
-      relationships?: any
-      consequences?: any
+      relationships?: CharacterRelationshipMap | null
+      consequences?: CharacterConsequences | null
       // Knowledge-relative sheet (see lib/game/capabilities.ts): what this
       // character knows exists and can do — qualitative bands only.
       origin_familiarity?: string
@@ -831,7 +851,7 @@ export async function callAIGM(
 export async function callAIForWorldTurn(
   campaignUniverse: string,
   aiSystemPrompt: string,
-  worldSummary: any,
+  worldSummary: AIGMRequest['world_summary'],
   clocksAboutToComplete: any[],
   campaignId?: string,
   completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = [],

@@ -19,6 +19,13 @@ import { AMBITION_CATEGORY_OPTIONS } from '@/lib/game/tick/ambitionTick'
 // section (see that file's header comment).
 export { buildSystemPrompt, buildUserPrompt }
 
+// Purely informational chatter (prompt lengths, "call succeeded", which
+// model served the request) — useful while developing, just noise in
+// production logs. Actual problems (parse failures, degraded validation,
+// circuit breaker trips) stay on console.error/warn unconditionally so
+// they still surface in prod log aggregators.
+const devLog = process.env.NODE_ENV === 'production' ? (..._args: unknown[]) => {} : console.log
+
 /**
  * AI GM Response Structure
  * This is what we expect back from the AI after resolving a scene
@@ -531,9 +538,9 @@ async function attemptAIGM(
   const systemPrompt = buildSystemPrompt(request)
   const userPrompt = buildUserPrompt(request)
 
-  console.log('🤖 Calling AI GM...')
-  console.log('System prompt length:', systemPrompt.length)
-  console.log('User prompt length:', userPrompt.length)
+  devLog('🤖 Calling AI GM...')
+  devLog('System prompt length:', systemPrompt.length)
+  devLog('User prompt length:', userPrompt.length)
 
   // Estimate token count for cost tracking
   const estimatedInputTokens = estimateTokenCount(systemPrompt + userPrompt)
@@ -580,8 +587,8 @@ async function attemptAIGM(
     const content = data.choices[0].message.content
     const usage = data.usage || {}
 
-    console.log('✅ AI GM response received')
-    console.log('Response length:', content.length)
+    devLog('✅ AI GM response received')
+    devLog('Response length:', content.length)
 
     // Phase 15.6: Debug mode - log raw prompts and response
     if (options?.debugMode) {
@@ -687,7 +694,7 @@ async function attemptAIGM(
     } else if (validationResult.level === 'emergency') {
       console.warn('⚠️ Using emergency fallback template')
     } else {
-      console.log('✅ Full AI response validation passed')
+      devLog('✅ Full AI response validation passed')
     }
 
     // Outcome adherence (#93): did the prose obey the dice? The engine
@@ -706,7 +713,7 @@ async function attemptAIGM(
       console.warn(`⚖️ Narration contradicted the roll on ${adherence.mismatched} action(s):`)
       for (const problem of adherence.problems) console.warn(`  - ${problem}`)
     } else if (adherence.unreported > 0) {
-      console.log(`⚖️ ${adherence.unreported} rolled action(s) not reported back by the narrator`)
+      devLog(`⚖️ ${adherence.unreported} rolled action(s) not reported back by the narrator`)
     }
 
     // Phase 15.3: Record success in circuit breaker
@@ -793,12 +800,12 @@ export async function callAIGM(
   // instead of refusing the call outright — the breaker tracks overall
   // AI-request health for this campaign, not FLAGSHIP specifically, so a
   // cheaper attempt is still worth one try before giving up entirely.
-  const circuitOpen = campaignId ? !circuitBreakerManager.getBreaker(campaignId).canAttempt() : false
+  const circuitOpen = campaignId ? !(await circuitBreakerManager.ensureHydrated(campaignId)).canAttempt() : false
 
   if (!circuitOpen) {
     try {
       const result = await attemptAIGM(request, AI_MODELS.FLAGSHIP, campaignId, sceneId, options)
-      console.log(`✅ Served by ${AI_MODELS.FLAGSHIP}`)
+      devLog(`✅ Served by ${AI_MODELS.FLAGSHIP}`)
       return result
     } catch (primaryError) {
       console.error(`⚠️ ${AI_MODELS.FLAGSHIP} call failed — falling back to ${AI_MODELS.EFFICIENT}:`, primaryError)
@@ -808,7 +815,7 @@ export async function callAIGM(
   }
 
   const fallbackResult = await attemptAIGM(request, AI_MODELS.EFFICIENT, campaignId, sceneId, options)
-  console.log(`✅ Served by fallback model ${AI_MODELS.EFFICIENT}`)
+  devLog(`✅ Served by fallback model ${AI_MODELS.EFFICIENT}`)
   return fallbackResult
 }
 

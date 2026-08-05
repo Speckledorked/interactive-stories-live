@@ -92,8 +92,21 @@ export class AICircuitBreaker {
       console.error(`🚫 Circuit breaker OPEN for campaign ${this.campaignId} - too many failures`)
 
       // Log to database for campaign health monitoring
-      this.logCircuitBreakerEvent('OPENED').catch(console.error)
+      this.logCircuitBreakerEvent('OPENED').catch(error => {
+        console.error(`⚠️ Circuit breaker persistence failed for campaign ${this.campaignId} (event=OPENED) — aiHealth record was not updated:`, error)
+      })
     }
+  }
+
+  /**
+   * Restore state persisted in WorldMeta.aiHealth from a previous process —
+   * used on cold start so a campaign that tripped the breaker before a
+   * serverless restart doesn't silently reopen at CLOSED.
+   */
+  hydrate(failureCount: number, lastFailureTime: number | null): void {
+    this.failureCount = failureCount
+    this.lastFailureTime = lastFailureTime
+    this.state = failureCount >= this.config.failureThreshold ? CircuitState.OPEN : CircuitState.CLOSED
   }
 
   /**
@@ -143,6 +156,10 @@ export class AICircuitBreaker {
           failureCount: this.failureCount
         })
 
+        // Unbounded growth otherwise — a campaign with many flaky AI calls
+        // would bloat this JSON column forever. Keep only recent history.
+        aiHealth.circuitBreakerEvents = aiHealth.circuitBreakerEvents.slice(-50)
+
         aiHealth.consecutiveFailures = this.failureCount
         aiHealth.lastFailureTimestamp = this.lastFailureTime ? new Date(this.lastFailureTime).toISOString() : null
 
@@ -154,7 +171,7 @@ export class AICircuitBreaker {
         })
       }
     } catch (error) {
-      console.error('Failed to log circuit breaker event:', error)
+      console.error(`Failed to log circuit breaker event (campaign=${this.campaignId}, event=${event}):`, error)
     }
   }
 }
@@ -165,12 +182,49 @@ export class AICircuitBreaker {
  */
 class CircuitBreakerManager {
   private breakers: Map<string, AICircuitBreaker> = new Map()
+  // Campaigns whose breaker has already been hydrated from the DB in this
+  // process — hydration only needs to happen once per campaign per process,
+  // not on every call.
+  private hydratedCampaigns: Set<string> = new Set()
 
   getBreaker(campaignId: string): AICircuitBreaker {
     if (!this.breakers.has(campaignId)) {
       this.breakers.set(campaignId, new AICircuitBreaker(campaignId))
     }
     return this.breakers.get(campaignId)!
+  }
+
+  /**
+   * Same as getBreaker, but on first access per campaign in this process
+   * also restores state from WorldMeta.aiHealth — without this, a breaker
+   * that was OPEN before a serverless cold start comes back CLOSED and the
+   * protection it was providing is lost until 3 more failures happen.
+   */
+  async ensureHydrated(campaignId: string): Promise<AICircuitBreaker> {
+    const breaker = this.getBreaker(campaignId)
+    if (this.hydratedCampaigns.has(campaignId)) {
+      return breaker
+    }
+    this.hydratedCampaigns.add(campaignId)
+
+    try {
+      const worldMeta = await prisma.worldMeta.findUnique({ where: { campaignId } })
+      const aiHealth = worldMeta?.aiHealth as
+        | { consecutiveFailures?: number; lastFailureTimestamp?: string | null }
+        | null
+        | undefined
+
+      if (aiHealth?.consecutiveFailures) {
+        const lastFailureTime = aiHealth.lastFailureTimestamp
+          ? new Date(aiHealth.lastFailureTimestamp).getTime()
+          : null
+        breaker.hydrate(aiHealth.consecutiveFailures, lastFailureTime)
+      }
+    } catch (error) {
+      console.warn(`Circuit breaker hydration failed for campaign ${campaignId} — starting CLOSED:`, error)
+    }
+
+    return breaker
   }
 
   resetBreaker(campaignId: string): void {

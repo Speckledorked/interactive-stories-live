@@ -349,6 +349,25 @@ No code exists yet for any of these.
   (an env-var-gated allowlist, mirroring the existing cron-secret pattern,
   rather than a new schema field) but nothing is built; there is currently
   no platform-level admin concept in the data model at all.
+- **Per-campaign move sets (AI-selected, not admin-authored)** — every
+  campaign currently plays the same 7 moves with the same stat mappings and
+  the same 10+/7-9/6- thresholds (`BASIC_MOVES` in `lib/pbta-moves.ts`);
+  `moveFlavor.ts` only reskins names/outcome text per campaign, never the
+  underlying math. Explored 2026-08-05: a small, hand-authored catalogue of
+  genuinely distinct move sets (e.g. a grittier one with tougher thresholds
+  and violence routed through `hard` instead of `hot`; a political-intrigue
+  one with no combat move at all and a new debt-leveraging move) that the AI
+  picks between at campaign creation from a few tone questions — never
+  free-form invention, reusing the same closed-catalogue discipline
+  `worldRulesGenerator.ts` already uses for semantic-invariant verdicts
+  (`FAMILY_QUESTIONS`, can't invent an unreviewed rule). Three draft move
+  sets were sketched to test whether the mechanical difference would
+  actually be felt (stat-mapping shifts, threshold shifts, roster
+  differences, not just relabeling). Shelved, not built: value is entirely
+  contingent on hand-designing genuinely distinct move sets first (a
+  content task, not an engineering one), and that design work hasn't
+  happened — revisit only if there's real appetite to author 2-3 mechanically
+  distinct game feels, not as a first step on its own.
 - **Deliberately deferred, not overlooked**: native mobile app, voice/TTS,
   a creator marketplace/UGC, VTT-style grid combat, 5e-style crunch/custom
   rule import, and public API/developer access (decided against for now,

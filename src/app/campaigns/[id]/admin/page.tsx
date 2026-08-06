@@ -988,7 +988,6 @@ export default function AdminPage() {
               <AdminOverviewPanel
                 campaignId={campaignId}
                 campaign={campaign}
-                worldMeta={campaign.worldMeta ?? null}
                 onCampaignChange={(next) => setCampaign({ ...campaign, ...next })}
                 onSaveCampaignInfo={handleSaveCampaignInfo}
                 saving={saving}
@@ -2324,7 +2323,7 @@ export default function AdminPage() {
 
             {/* World Integrity Tab */}
             {activeTab === 'integrity' && (
-              <IntegrityPanel campaignId={campaignId} />
+              <IntegrityPanel campaignId={campaignId} worldMeta={campaign?.worldMeta ?? null} />
             )}
 
             {/* Lore Tab */}

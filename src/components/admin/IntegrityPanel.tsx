@@ -43,7 +43,68 @@ interface IntegrityData {
   history: IntegrityReport[]
 }
 
-export function IntegrityPanel({ campaignId }: { campaignId: string }) {
+interface WorldMetaPacing {
+  currentTurnNumber: number
+  currentInGameDate: string | null
+  hoursSinceWorldTurn: number
+  worldTurnHours: number | null
+  lastRealTimeTickAt: string | null
+}
+
+const DEFAULT_WORLD_TURN_HOURS = 24
+
+// Plain-English read of the same threshold check runWorldTurnIfDue makes
+// (src/lib/game/worldTurn.ts) — this card doesn't run anything, it just
+// shows the live accumulator so an admin can tell "not due yet" apart from
+// "should have run and didn't" without digging through logs. Lives here
+// rather than on Overview because "is the world actually advancing" is a
+// world-health question, same family as the referential-integrity checks
+// below it — even though under the hood they're unrelated subsystems
+// (pacing/scheduling vs. data-consistency repair), they answer the same
+// kind of question for an admin looking at this tab.
+function describePacing(worldMeta: WorldMetaPacing): { label: string; detail: string } {
+  const threshold = worldMeta.worldTurnHours ?? DEFAULT_WORLD_TURN_HOURS
+  const remaining = threshold - worldMeta.hoursSinceWorldTurn
+  if (remaining <= 0) {
+    return {
+      label: 'Turn is due',
+      detail: `${worldMeta.hoursSinceWorldTurn.toFixed(1)}h banked ≥ ${threshold}h threshold — should tick on the next cron sweep. If this stays true across multiple days, the sweep is failing for this campaign specifically.`,
+    }
+  }
+  return {
+    label: 'Not due yet',
+    detail: `${worldMeta.hoursSinceWorldTurn.toFixed(1)}h banked of ${threshold}h threshold — about ${remaining.toFixed(1)}h of banked time left before the next turn fires.`,
+  }
+}
+
+function WorldTurnPacingCard({ worldMeta }: { worldMeta: WorldMetaPacing }) {
+  const pacing = describePacing(worldMeta)
+  return (
+    <section>
+      <SectionHeader as="h2" title="World Turn Pacing" />
+      <div className="mt-3 space-y-3 rounded-lg border border-myth-border bg-myth-surface p-5">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-sm">
+          <span className="text-myth-ink-muted">
+            Turn <span className="text-myth-ink">{worldMeta.currentTurnNumber}</span>
+            {worldMeta.currentInGameDate && <span className="text-myth-ink-faint"> · {worldMeta.currentInGameDate}</span>}
+          </span>
+          <span className="text-myth-ink-muted">
+            Last heartbeat{' '}
+            <span className="text-myth-ink">
+              {worldMeta.lastRealTimeTickAt ? new Date(worldMeta.lastRealTimeTickAt).toLocaleString() : 'never swept'}
+            </span>
+          </span>
+        </div>
+        <div>
+          <p className="text-sm font-medium text-myth-ink">{pacing.label}</p>
+          <p className="mt-1 text-sm text-myth-ink-faint">{pacing.detail}</p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+export function IntegrityPanel({ campaignId, worldMeta }: { campaignId: string; worldMeta?: WorldMetaPacing | null }) {
   const [data, setData] = useState<IntegrityData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -78,12 +139,15 @@ export function IntegrityPanel({ campaignId }: { campaignId: string }) {
 
   if (!data || !data.assessed || !data.latest) {
     return (
-      <section>
-        <SectionHeader as="h2" title="World integrity" />
-        <p className="mt-3 text-xs text-myth-ink-faint">
-          Checked automatically at the end of every world turn — this campaign hasn&apos;t had one yet.
-        </p>
-      </section>
+      <div className="space-y-6">
+        {worldMeta && <WorldTurnPacingCard worldMeta={worldMeta} />}
+        <section>
+          <SectionHeader as="h2" title="World integrity" />
+          <p className="mt-3 text-xs text-myth-ink-faint">
+            Checked automatically at the end of every world turn — this campaign hasn&apos;t had one yet.
+          </p>
+        </section>
+      </div>
     )
   }
 
@@ -91,6 +155,7 @@ export function IntegrityPanel({ campaignId }: { campaignId: string }) {
 
   return (
     <div className="space-y-6">
+      {worldMeta && <WorldTurnPacingCard worldMeta={worldMeta} />}
       <section>
         <SectionHeader
           as="h2"

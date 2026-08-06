@@ -3,11 +3,18 @@
 // coverage: the auth gate, and moderation blocking a flagged response
 // before it ever reaches the AI (mirroring scene action submission), were
 // both unverified.
+//
+// Follow-up: also previously missing a character-ownership check — any
+// authenticated user could respond to any event, regardless of who owns
+// the character it belongs to. Now gated by requireDowntimeEventOwner,
+// which resolves event -> activity -> character itself rather than
+// trusting a client-supplied id.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/auth', () => ({ verifyAuth: vi.fn() }))
+vi.mock('@/lib/db/characterAccess', () => ({ requireDowntimeEventOwner: vi.fn() }))
 vi.mock('@/lib/rateLimit', () => ({
   AI_ACTION_LIMIT: { bucket: 'ai-action', limit: 20, windowSeconds: 60 },
   checkRateLimit: vi.fn(),
@@ -19,6 +26,7 @@ vi.mock('@/lib/downtime/ai-downtime-service', () => ({
 }))
 
 import { verifyAuth } from '@/lib/auth'
+import { requireDowntimeEventOwner } from '@/lib/db/characterAccess'
 import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { moderatePlayerText } from '@/lib/ai/moderation'
 import { AIDrivenDowntimeService } from '@/lib/downtime/ai-downtime-service'
@@ -35,6 +43,7 @@ function req(body: unknown) {
 beforeEach(() => {
   vi.clearAllMocks()
   ;(verifyAuth as any).mockResolvedValue({ userId: 'player1' })
+  ;(requireDowntimeEventOwner as any).mockResolvedValue({ character: { id: 'char1', userId: 'player1' } })
   ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
   ;(moderatePlayerText as any).mockResolvedValue({ flagged: false })
 })
@@ -49,6 +58,20 @@ describe('POST', () => {
   it('rejects an empty response', async () => {
     const response = await POST(req({ response: '' }), { params: { id: 'event1' } })
     expect(response.status).toBe(400)
+  })
+
+  it('404s for an event that does not exist', async () => {
+    ;(requireDowntimeEventOwner as any).mockResolvedValue({ response: new Response(null, { status: 404 }) })
+    const response = await POST(req({ response: 'I flee' }), { params: { id: 'event1' } })
+    expect(response.status).toBe(404)
+    expect(checkRateLimit).not.toHaveBeenCalled()
+  })
+
+  it('rejects an event whose character belongs to someone else', async () => {
+    ;(requireDowntimeEventOwner as any).mockResolvedValue({ response: new Response(null, { status: 403 }) })
+    const response = await POST(req({ response: 'I flee' }), { params: { id: 'event1' } })
+    expect(response.status).toBe(403)
+    expect(AIDrivenDowntimeService.respondToDynamicEvent).not.toHaveBeenCalled()
   })
 
   it('is rate limited before ever calling moderation', async () => {

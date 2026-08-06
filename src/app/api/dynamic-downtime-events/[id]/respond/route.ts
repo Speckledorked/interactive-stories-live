@@ -6,6 +6,7 @@ import { AIDrivenDowntimeService } from '@/lib/downtime/ai-downtime-service'
 import { z } from 'zod'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { moderatePlayerText } from '@/lib/ai/moderation'
+import { requireDowntimeEventOwner } from '@/lib/db/characterAccess'
 
 const respondSchema = z.object({
   response: z.string().min(1, 'Response is required'),
@@ -26,6 +27,9 @@ export async function POST(
     const eventId = params.id
     const body = await request.json()
     const { response, campaignContext } = respondSchema.parse(body)
+
+    const ownerCheck = await requireDowntimeEventOwner(user.userId, eventId)
+    if ('response' in ownerCheck) return ownerCheck.response
 
     // Rate limit + moderation before the AI call — this route sends player
     // free-text to the completion model, same as scene action submission.

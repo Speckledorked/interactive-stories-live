@@ -4,16 +4,17 @@
 // it ever reaches the AI, and the rate limit on both the AI-calling POST
 // and PUT, were all unverified.
 //
-// NOTE — not fixed here (tests describe current behavior, not a
-// production-code change): none of GET/POST/PUT verify the
-// authenticated user actually owns `characterId`. Any authenticated
-// user can read, create dynamic activities for, or advance time on any
-// character's downtime, regardless of who owns it.
+// Follow-up: GET/POST/PUT previously verified only that the caller was
+// authenticated, never that they owned `characterId` — any authenticated
+// user could read, create dynamic activities for, or advance time on any
+// character's downtime. Now gated by requireCharacterOwner; see the
+// "rejects a character that belongs to someone else" cases below.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/auth', () => ({ verifyAuth: vi.fn() }))
+vi.mock('@/lib/db/characterAccess', () => ({ requireCharacterOwner: vi.fn() }))
 vi.mock('@/lib/rateLimit', () => ({
   AI_ACTION_LIMIT: { bucket: 'ai-action', limit: 20, windowSeconds: 60 },
   checkRateLimit: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { verifyAuth } from '@/lib/auth'
+import { requireCharacterOwner } from '@/lib/db/characterAccess'
 import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { moderatePlayerText } from '@/lib/ai/moderation'
 import { AIDrivenDowntimeService } from '@/lib/downtime/ai-downtime-service'
@@ -59,6 +61,7 @@ function putRequest(body: unknown) {
 beforeEach(() => {
   vi.clearAllMocks()
   ;(verifyAuth as any).mockResolvedValue({ userId: 'player1' })
+  ;(requireCharacterOwner as any).mockResolvedValue({ character: { id: 'char1', userId: 'player1' } })
   ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
   ;(moderatePlayerText as any).mockResolvedValue({ flagged: false })
   db.downtimeActivity.findMany.mockResolvedValue([])
@@ -69,6 +72,13 @@ describe('GET', () => {
     ;(verifyAuth as any).mockResolvedValue(null)
     const response = await GET(getRequest(), { params: { id: 'char1' } })
     expect(response.status).toBe(401)
+  })
+
+  it('rejects a character that belongs to someone else', async () => {
+    ;(requireCharacterOwner as any).mockResolvedValue({ response: new Response(null, { status: 403 }) })
+    const response = await GET(getRequest(), { params: { id: 'char1' } })
+    expect(response.status).toBe(403)
+    expect(db.downtimeActivity.findMany).not.toHaveBeenCalled()
   })
 
   it('excludes completed activities by default', async () => {
@@ -96,6 +106,14 @@ describe('POST', () => {
   it('rejects an empty description', async () => {
     const response = await POST(postRequest({ description: '' }), { params: { id: 'char1' } })
     expect(response.status).toBe(400)
+  })
+
+  it('rejects a character that belongs to someone else, before rate limit or moderation', async () => {
+    ;(requireCharacterOwner as any).mockResolvedValue({ response: new Response(null, { status: 403 }) })
+    const response = await POST(postRequest({ description: 'Go fishing' }), { params: { id: 'char1' } })
+    expect(response.status).toBe(403)
+    expect(checkRateLimit).not.toHaveBeenCalled()
+    expect(AIDrivenDowntimeService.createDynamicActivity).not.toHaveBeenCalled()
   })
 
   it('is rate limited before ever calling moderation', async () => {
@@ -132,6 +150,13 @@ describe('PUT', () => {
   it('rejects days outside 1-30', async () => {
     const response = await PUT(putRequest({ days: 0 }), { params: { id: 'char1' } })
     expect(response.status).toBe(400)
+  })
+
+  it('rejects a character that belongs to someone else', async () => {
+    ;(requireCharacterOwner as any).mockResolvedValue({ response: new Response(null, { status: 403 }) })
+    const response = await PUT(putRequest({ days: 3 }), { params: { id: 'char1' } })
+    expect(response.status).toBe(403)
+    expect(AIDrivenDowntimeService.advanceDynamicDowntime).not.toHaveBeenCalled()
   })
 
   it('is rate limited', async () => {

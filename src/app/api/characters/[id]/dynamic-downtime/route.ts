@@ -7,6 +7,7 @@ import { AIDrivenDowntimeService } from '@/lib/downtime/ai-downtime-service'
 import { z } from 'zod'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { moderatePlayerText } from '@/lib/ai/moderation'
+import { requireCharacterOwner } from '@/lib/db/characterAccess'
 
 const createDynamicActivitySchema = z.object({
   description: z.string().min(1, 'Description is required'),
@@ -29,6 +30,9 @@ export async function GET(
     }
 
     const characterId = params.id
+    const ownerCheck = await requireCharacterOwner(user.userId, characterId)
+    if ('response' in ownerCheck) return ownerCheck.response
+
     const { searchParams } = new URL(request.url)
     const includeCompleted = searchParams.get('includeCompleted') === 'true'
 
@@ -102,6 +106,9 @@ export async function POST(
     const body = await request.json()
     const { description, campaignContext } = createDynamicActivitySchema.parse(body)
 
+    const ownerCheck = await requireCharacterOwner(user.userId, characterId)
+    if ('response' in ownerCheck) return ownerCheck.response
+
     // Rate limit + moderation before the AI call — this route sends player
     // free-text to the completion model.
     const rateLimit = await checkRateLimit(user.userId, AI_ACTION_LIMIT.bucket, AI_ACTION_LIMIT.limit, AI_ACTION_LIMIT.windowSeconds)
@@ -158,6 +165,9 @@ export async function PUT(
     const characterId = params.id
     const body = await request.json()
     const { days } = advanceTimeSchema.parse(body)
+
+    const ownerCheck = await requireCharacterOwner(user.userId, characterId)
+    if ('response' in ownerCheck) return ownerCheck.response
 
     // Rate limit — advancing downtime can fan out into multiple AI calls
     // (event generation per day advanced).

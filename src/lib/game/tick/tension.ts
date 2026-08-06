@@ -50,6 +50,22 @@ export const TENSION_BASELINE = 25
  * War and injured characters raise the floor. Standing threat level
  * contributes least — a dangerous faction that isn't *doing* anything is
  * background dread, not tension.
+ *
+ * #122: checked whether Environmental aging (Location.conditionScore,
+ * locationConditionTick.ts) or Economic Contagion (FactionDebt cascades,
+ * economyTick.ts) belong in TensionInputs — decided against, 2026-08-06,
+ * neither clears the bar the rationale above sets. Environmental aging is
+ * mostly a slow, lagging consequence of wars (WAR_DAMAGE there is the
+ * dominant driver), which activeWarCount below already counts directly —
+ * adding it would double-weight the same underlying signal, and its own
+ * drift (±1-8 over a 0-100 range per tick) reads as background scenery,
+ * not the moment-to-moment stakes this function measures. Economic
+ * contagion hits Faction.stability, which nothing here reads at all —
+ * factionThreatLevels (the one per-faction signal this file does read) is
+ * only ever moved by ambition outcomes (see threatLevelDelta in
+ * ambitionTick.ts/ambitionResolution.ts), never by stability or a default —
+ * so a cascading default is strictly quieter than the threat-level signal
+ * this file already calls its weakest, most discounted input.
  */
 export function computeTension(inputs: TensionInputs): number {
   // Clocks: the nearest-to-firing clock matters far more than the count of

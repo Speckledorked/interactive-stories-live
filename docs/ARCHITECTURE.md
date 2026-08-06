@@ -193,12 +193,15 @@ Verified functional, end to end, as of this rewrite:
 
 Partial or weak, and honestly so:
 
-- API route test coverage is targeted, not broad — 104 routes, 72
-  dedicated test files, aimed at fog-of-war reads and money/state/
-  access-mutating writes (bans, member role changes, campaign deletion,
-  account deletion, the character anti-cheat field allowlist, Stripe
-  checkout, stuck-scene recovery, campaign-scoped user blocking). ~12
-  lower-risk routes remain untested.
+- API route test coverage now covers all 104 routes (#135's final
+  batches closed out the base list/create endpoints — campaigns,
+  characters, factions, locations, members, notes, npcs, scenes,
+  friends, friends/requests — plus admin/analytics). Coverage depth is
+  still uneven: the highest-risk routes (fog-of-war reads, money/state/
+  access-mutating writes) got the most scrutiny, while the last tiers
+  covered mostly gate + shape assertions rather than exhaustive
+  behavior. 100% file coverage is not the same claim as 100% behavior
+  coverage — see the Scorecard row for what's actually asserted.
 - Admin tooling was mostly thin CRUD; the faction and NPC tabs now extend
   the tick dry-run preview's "show your reasoning" pattern (a per-entity
   `/reasoning` route backed by the same pure decide/explain functions the
@@ -254,7 +257,7 @@ this table.
 | Cross-system economy (faction wealth ↔ items ↔ downtime ↔ quests) | 4 | Quest/downtime payouts are real transfers out of a faction's resources (`assessPayout`); a broke faction pays partially and defaults on the rest. Debt moves the dice in both directions. Any AI-reported gold change is bounds-checked (`clampGoldDelta`) and granted items merge through one shared path (`mergeGrantedItems`). Items carry value/rarity under a budget. No merchant/trading layer — a separate product question, not a gap. |
 | Outcome-band adherence (does the narration obey the roll?) | 5 | The narrator self-reports which band its prose depicts (`outcome_echo`); mismatches are logged (`checkOutcomeAdherence`), feed a consistency metric, and are now persisted per-exchange and surfaced in the transparency panel (`AITransparencyPanel`) that already shows dice receipts. Deliberately still only observed, never enforced — rewriting prose to match a roll would be a worse product than an occasional, visible drift. |
 | Fog-of-war enforcement mechanism | 5 | One shared `visibleTo(model, role)` gate, correctly handling the polarity difference (clocks gate on hidden state, everything else on discovered state). An unknown role fails closed. A structural test fails if a new route bypasses the gate without an explicit, restricted exemption. |
-| API route test coverage | 4 | 104 routes, 92 dedicated test files. Targeted at risk — every fog-of-war-gated read, and writes that spend money, mutate scene state, or hand out access. #93 extended the set outward past the original ~9 files to cover the highest-blast-radius previously-untested mutations: campaign bans, member removal/role changes (including the "last admin" guard on both paths), campaign PATCH/DELETE, account deletion, the character `PLAYER_EDITABLE_FIELDS` anti-cheat allowlist, Stripe checkout session creation, stuck-scene admin recovery, and campaign-scoped user blocking. #134 further extended it to individual NPC/faction/location PATCH/DELETE, friend-request accept/reject, and the turn-order route. #135 covered the auth/session/password family (login, logout-all, password reset, email verification, change-password) plus four continuation batches: the safety/moderation tier (X-Card, content reports and their GM resolution, the ban list, invites, campaign health), the AI-triggering scene-action tier (start/end-scene including the billing preflight/charge sequence and the "still mark RESOLVED even if final resolution fails" fallback, Ask-the-GM, AI settings, the world-tick dry-run preview), the social/notification tier (campaign join-by-invite including the ban check and best-effort admin notification, notification CRUD and settings, friend search), the quests/messages/notes/clocks tier, the world-info tier (the admin-only world-event log with its turn-number filter, the rumors feed's summaryPublic-only exposure, the wiki index's discovery re-filter and admin bypass, the typing indicator's boolean coercion, and the character-creation archetype list), and the campaign admin/GM-tools tier (the away-recap checkpoint's first-visit skip, the chronicle-share link's mint-fresh/clear-not-flip toggle, campaign data export's per-section flags, the Integrity Engine read side's not-yet-assessed case, the Story Log's member-read/admin-write split, the Story Log resummarization pass's rate limit/consolidation/per-entry-failure handling, and the archetype/corruption-theme backfill's idempotence guard). Not a 5 — still targeted, not exhaustive; ~12 lower-risk routes remain untested. |
+| API route test coverage | 4 | All 104 routes now have a dedicated test file (104/104, up from 30 at the start of #93). Depth is uneven by design: the highest-blast-radius routes — campaign bans, member removal/role changes (including the "last admin" guard on both paths), campaign PATCH/DELETE, account deletion, the character `PLAYER_EDITABLE_FIELDS` anti-cheat allowlist, Stripe checkout, stuck-scene recovery, campaign-scoped user blocking, individual NPC/faction/location PATCH/DELETE, friend-request accept/reject, the turn-order route, the auth/session/password family, and the AI-triggering scene-action tier (billing preflight/charge sequence, moderation-before-AI-call) — got real behavioral coverage: validation branches, cross-campaign scoping, fog-of-war redaction, and failure paths, not just the auth gate. The routes closed out last (base list/create endpoints, health checks, internal worker routes, lore/tutorial CRUD) got gate + shape assertions — auth, membership/admin checks, required fields, and the response shape — which catches regressions in access control and routing but not every business-logic edge case. One real, not-yet-fixed finding surfaced while writing this pass: none of the three dynamic-downtime routes (`characters/[id]/dynamic-downtime[/suggestions]`, `dynamic-downtime-events/[id]/respond`) verify the caller owns the character they're acting on — any authenticated user can read, create AI-interpreted activities for, or advance time on any character's downtime. Not a 5 — file coverage isn't behavior coverage, and that ownership gap is open. |
 | Auth / session | 4 | Real revocation: `requireAuth`/`verifyAuth`/`getUser` all check `isTokenRevoked`, and a token-version bump (`revokeAllSessions`, stamped by `createToken`) invalidates every existing session at once. Deliberately fails open for pre-revocation tokens and for an unreadable database, both to avoid a mass logout from a blip. Not a 5 — no refresh-token rotation, still 30-day JWTs. |
 | Rate limiting / abuse | 4 | Postgres-backed (`checkRateLimit`, correct for serverless, where in-memory wouldn't actually limit anything), applied at 17 route call sites, unit-tested. |
 | Admin tooling as simulation design (beyond CRUD) | 3 | Faction and NPC tabs now show real reasoning, not just fields: a faction card's "Why?" button previews its next goal reassessment (`explainFactionGoalReassessment`) plus any active war's momentum trajectory (`explainWarMomentum`) — new pure functions the real tick's `decideFactionGoalReassessment`/`decideWarProgress`/`decideWarResolution` now delegate to or share, run read-only via new per-entity `/reasoning` API routes. An NPC card's "Why?" preview surfaces its real next-tick decision (`decideNpcTick`) directly. Not higher than a 3 — `handleUpdateLocation`/`handleTickClock` are still thin PATCH wrappers, and there's no standalone war tab at all (war reasoning is folded into the faction fighting it, since no war admin surface exists to extend). |
@@ -309,20 +312,15 @@ above. Items that block later ones are flagged.
    have never executed even once. This is the single highest-leverage item
    on this list — everything else about the pipeline is design confidence,
    not proven confidence, until this happens.
-2. **Keep broadening API route test coverage.** #93, #134, and #135 have
-   now covered every route this list ever named specifically, plus the
-   safety/moderation, scene-action, social/notification, world-info
-   (world-event log, rumors, wiki index, typing indicator, character
-   archetypes), campaign admin/GM-tools (away-recap, chronicle-share,
-   export, integrity, Story Log + its resummarization pass, world-extras
-   backfill), health-check, tutorial, internal cron/job, lore, maps,
-   dynamic-downtime, and misc (resolve-scene, regenerate-intro, push
-   notifications, public chronicle, balance) tiers (see the Scorecard
-   row); ~12 routes remain untested — the base list/create endpoints
-   (campaigns, characters, factions, locations, members, notes, npcs,
-   scenes, friends, friends/requests) already covered at the
-   single-resource level, plus admin/analytics, none individually
-   high-stakes enough yet to name out ahead of the rest.
+2. **Fix the dynamic-downtime ownership gap.** Found while closing out API
+   route test coverage (below): `characters/[id]/dynamic-downtime` (GET/
+   POST/PUT), its `/suggestions` GET, and `dynamic-downtime-events/[id]/
+   respond` POST all check that the caller is *authenticated*, never that
+   they *own* the character in question. Any logged-in user can currently
+   read, spend AI calls creating activities for, or advance time on any
+   other player's character. Needs a character-ownership check (mirroring
+   the campaign-membership pattern everywhere else) added to all three
+   routes, plus regression tests proving a non-owner gets 403.
 
 *(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
 checkKeys a shared type, the war stability-hit write path's missing direct
@@ -330,12 +328,15 @@ test coverage, making outcome-band adherence visible to players, the
 strict-structured-outputs and dice-opt-in-only decisions, extending the
 tick dry-run preview's reasoning pattern to the faction/NPC tabs, checking
 whether `computeTension` should weight Environmental aging/Economic
-Contagion, and the individual NPC/faction/location PATCH/DELETE +
-friend-request + turn-order test-coverage gap — that used to be items 2,
-6, 7, 4, 3, 2, 5, 3, 3, and part of 2 here — are all resolved (the
-admin-tooling and API-route-coverage items only partially — see their
-Scorecard rows for exactly what's still missing; the `computeTension` item
-resolved to a decided "no," recorded in `tension.ts` itself — see #122).
+Contagion, the individual NPC/faction/location PATCH/DELETE + friend-
+request + turn-order test-coverage gap, and broadening API route test
+coverage to every route (104/104, #93/#134/#135) — that used to be items
+2, 6, 7, 4, 3, 2, 5, 3, 3, part of 2, and 2 again here — are all resolved
+(the admin-tooling item only partially — see its Scorecard row for what's
+still missing; the `computeTension` item resolved to a decided "no,"
+recorded in `tension.ts` itself — see #122; API route test coverage is
+file-complete but not behavior-complete, and surfaced the
+dynamic-downtime ownership gap now sitting at item 2 above).
 See Known Bugs and the Scorecard's War & coalition system, Admin tooling,
 and API route test coverage rows.)*
 
@@ -426,15 +427,13 @@ Partial implementation exists in the codebase today.
   and clocks are still thin CRUD, and there's no standalone war tab
   (war reasoning rides along with the faction fighting it) — extending
   further is the remaining work.
-- **API route test coverage** — targeted coverage exists for the
-  highest-risk reads and writes; #93 broadened it to cover the
-  highest-blast-radius previously-untested mutations, #134 covered
-  individual NPC/faction/location PATCH/DELETE, friend-request accept/
-  reject, and the turn-order route, and #135 covered the auth/session/
-  password family plus the safety/moderation, scene-action, social/
-  notification, quests/messages/notes/clocks, world-info, and campaign
-  admin/GM-tools, health-check, tutorial, internal cron/job, lore, maps, dynamic-downtime, and misc tiers (see the Scorecard) — but ~12 lower-risk routes
-  remain untested — ongoing, not finished.
+- **API route test coverage** — every one of the 104 routes now has a
+  dedicated test file (#93 → #134 → #135, ending with the base
+  list/create endpoints and admin/analytics). File-complete, not
+  behavior-complete: the highest-risk routes got real behavioral
+  coverage, the last tiers got gate + shape assertions. Writing that
+  last stretch surfaced a real, still-open finding — see the Priority
+  List's dynamic-downtime ownership-gap item.
 
 ## Architecture: Where the Depth Actually Lives
 

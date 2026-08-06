@@ -56,12 +56,18 @@ const RELATIONSHIP_LABEL: Record<'friendly' | 'allied' | 'neutral' | 'hostile', 
 
 function RelationshipBadge({ relationship }: { relationship?: string }) {
   if (!relationship) return null
-  // NPC.relationship is free AI-narrated text ("wary ally, owes a debt"),
-  // not guaranteed to be one of the four known keywords — fall back to a
-  // neutral badge showing the raw text instead of crashing on lookup miss.
+  // NPC.relationship is free AI-narrated text ("wary ally, owes a debt")
+  // and can run to a full sentence — not guaranteed to be one of the four
+  // known keywords, so this falls back to a badge showing the raw text
+  // instead of crashing on lookup miss. That raw text needs to wrap and
+  // cap its width rather than force a single unbroken line: an
+  // unconstrained shrink-0 span with long text overflows its flex row on
+  // narrow viewports and visually bleeds over whatever renders below it.
   const config = RELATIONSHIP_LABEL[relationship as keyof typeof RELATIONSHIP_LABEL]
   return (
-    <span className={`shrink-0 rounded px-2 py-0.5 text-xs ${config?.className || 'bg-myth-ink/5 text-myth-ink-muted'}`}>
+    <span
+      className={`max-w-[45%] shrink-0 whitespace-normal break-words rounded px-2 py-0.5 text-right text-xs ${config?.className || 'bg-myth-ink/5 text-myth-ink-muted'}`}
+    >
       {config?.label || relationship}
     </span>
   )

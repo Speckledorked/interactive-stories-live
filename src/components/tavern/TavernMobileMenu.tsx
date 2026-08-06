@@ -37,19 +37,53 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false,
     logout()
   }
 
-  const links = [
-    { href: '/campaigns', label: 'Tavern', icon: Beer, isActive: pathname === '/campaigns' },
+  const globalLinks = [{ href: '/campaigns', label: 'Tavern', icon: Beer, isActive: pathname === '/campaigns' }]
+
+  // Only ever non-empty inside a specific campaign — Wiki/Admin are scoped
+  // to whichever campaignId this menu was mounted with, unlike the account
+  // links below. Rendered under its own "Campaign" heading (mirroring
+  // TavernSidebar's identical Campaign/Account split) so that scoping is
+  // visible rather than silently mixed into one flat list.
+  const campaignLinks = [
     ...(campaignId
       ? [{ href: `/campaigns/${campaignId}/wiki`, label: 'Wiki', icon: BookOpen, isActive: pathname.startsWith(`/campaigns/${campaignId}/wiki`) }]
       : []),
     ...(campaignId && isAdmin
       ? [{ href: `/campaigns/${campaignId}/admin`, label: 'Admin', icon: ShieldCheck, isActive: pathname.startsWith(`/campaigns/${campaignId}/admin`) }]
       : []),
+  ]
+
+  const accountLinks = [
     { href: '/friends', label: 'Friends', icon: Users, isActive: pathname === '/friends' },
     { href: '/settings', label: 'Settings', icon: SettingsIcon, isActive: pathname === '/settings' },
     { href: '/tutorial', label: 'Tutorial', icon: ScrollText, isActive: pathname === '/tutorial' },
     { href: '/help', label: 'Help & Documentation', icon: HelpCircle, isActive: pathname === '/help' },
   ]
+
+  type MenuLink = { href: string; label: string; icon: typeof Beer; isActive: boolean }
+  const renderLinkGroup = (group: MenuLink[]) => (
+    <div className="space-y-0.5">
+      {group.map((link) => (
+        <Link
+          key={link.href}
+          href={link.href}
+          onClick={onClose}
+          className={
+            myth
+              ? `flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ${
+                  link.isActive ? 'bg-myth-accent/10 text-myth-accent' : 'text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink'
+                }`
+              : `flex items-center gap-3 px-4 py-3 transition-colors ${
+                  link.isActive ? 'text-ember-100' : 'text-ember-200/80 hover:text-ember-100 hover:bg-white/5'
+                }`
+          }
+        >
+          <link.icon className="w-5 h-5 flex-shrink-0" />
+          <span className={myth ? 'uppercase tracking-wide' : ''}>{link.label}</span>
+        </Link>
+      ))}
+    </div>
+  )
 
   return (
     <div className="fixed inset-0 z-50">
@@ -72,26 +106,18 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false,
           </button>
         </div>
 
-        <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={onClose}
-              className={
-                myth
-                  ? `flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ${
-                      link.isActive ? 'bg-myth-accent/10 text-myth-accent' : 'text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink'
-                    }`
-                  : `flex items-center gap-3 px-4 py-3 transition-colors ${
-                      link.isActive ? 'text-ember-100' : 'text-ember-200/80 hover:text-ember-100 hover:bg-white/5'
-                    }`
-              }
-            >
-              <link.icon className="w-5 h-5 flex-shrink-0" />
-              <span className={myth ? 'uppercase tracking-wide' : ''}>{link.label}</span>
-            </Link>
-          ))}
+        <nav className={myth ? 'flex-1 space-y-4 overflow-y-auto p-2' : 'flex-1 space-y-0.5 overflow-y-auto p-2'}>
+          {renderLinkGroup(globalLinks)}
+          {campaignLinks.length > 0 && (
+            <div>
+              {myth && <p className="mb-1 px-3 font-mono text-xs uppercase tracking-wider text-myth-ink-faint">Campaign</p>}
+              {renderLinkGroup(campaignLinks)}
+            </div>
+          )}
+          <div>
+            {myth && <p className="mb-1 px-3 font-mono text-xs uppercase tracking-wider text-myth-ink-faint">Account</p>}
+            {renderLinkGroup(accountLinks)}
+          </div>
         </nav>
 
         <div className={myth ? 'border-t border-myth-border p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]' : 'border-t border-ember-900/30 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]'}>

@@ -314,23 +314,19 @@ above. Items that block later ones are flagged.
    mutations (see the Scorecard row); still untested: individual NPC/
    faction/location PATCH/DELETE, friend-request accept/reject, the turn
    order route, and the rest of the long tail of lower-risk mutations.
-3. **Check whether `computeTension` should weight the newer simulation
-   signals.** Small and genuinely ready now, not blocked on anything:
-   Environmental aging (`Location.conditionScore`) and Economic Contagion
-   (`FactionDebt`) — the two systems `tension.ts`'s own doc comment named
-   as worth revisiting — both landed this session. Confirm whether either
-   belongs in `TensionInputs` before treating this as done (#122).
 
 *(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
 checkKeys a shared type, the war stability-hit write path's missing direct
 test coverage, making outcome-band adherence visible to players, the
-strict-structured-outputs and dice-opt-in-only decisions, and extending
-the tick dry-run preview's reasoning pattern to the faction/NPC tabs —
-that used to be items 2, 6, 7, 4, 3, 2, 5, and 3 here — are all resolved
-(the admin-tooling and API-route-coverage items only partially — see
-their Scorecard rows for exactly what's still missing). See Known Bugs
-and the Scorecard's War & coalition system, Admin tooling, and API route
-test coverage rows.)*
+strict-structured-outputs and dice-opt-in-only decisions, extending the
+tick dry-run preview's reasoning pattern to the faction/NPC tabs, and
+checking whether `computeTension` should weight Environmental aging/
+Economic Contagion — that used to be items 2, 6, 7, 4, 3, 2, 5, 3, and 3
+here — are all resolved (the admin-tooling and API-route-coverage items
+only partially — see their Scorecard rows for exactly what's still
+missing; the `computeTension` item resolved to a decided "no," recorded
+in `tension.ts` itself — see #122). See Known Bugs and the Scorecard's War
+& coalition system, Admin tooling, and API route test coverage rows.)*
 
 ## Features & Roadmap
 

@@ -257,7 +257,7 @@ this table.
 | Cross-system economy (faction wealth ↔ items ↔ downtime ↔ quests) | 4 | Quest/downtime payouts are real transfers out of a faction's resources (`assessPayout`); a broke faction pays partially and defaults on the rest. Debt moves the dice in both directions. Any AI-reported gold change is bounds-checked (`clampGoldDelta`) and granted items merge through one shared path (`mergeGrantedItems`). Items carry value/rarity under a budget. No merchant/trading layer — a separate product question, not a gap. |
 | Outcome-band adherence (does the narration obey the roll?) | 5 | The narrator self-reports which band its prose depicts (`outcome_echo`); mismatches are logged (`checkOutcomeAdherence`), feed a consistency metric, and are now persisted per-exchange and surfaced in the transparency panel (`AITransparencyPanel`) that already shows dice receipts. Deliberately still only observed, never enforced — rewriting prose to match a roll would be a worse product than an occasional, visible drift. |
 | Fog-of-war enforcement mechanism | 5 | One shared `visibleTo(model, role)` gate, correctly handling the polarity difference (clocks gate on hidden state, everything else on discovered state). An unknown role fails closed. A structural test fails if a new route bypasses the gate without an explicit, restricted exemption. |
-| API route test coverage | 4 | All 104 routes now have a dedicated test file (104/104, up from 30 at the start of #93). Depth is uneven by design: the highest-blast-radius routes — campaign bans, member removal/role changes (including the "last admin" guard on both paths), campaign PATCH/DELETE, account deletion, the character `PLAYER_EDITABLE_FIELDS` anti-cheat allowlist, Stripe checkout, stuck-scene recovery, campaign-scoped user blocking, individual NPC/faction/location PATCH/DELETE, friend-request accept/reject, the turn-order route, the auth/session/password family, and the AI-triggering scene-action tier (billing preflight/charge sequence, moderation-before-AI-call) — got real behavioral coverage: validation branches, cross-campaign scoping, fog-of-war redaction, and failure paths, not just the auth gate. The routes closed out last (base list/create endpoints, health checks, internal worker routes, lore/tutorial CRUD) got gate + shape assertions — auth, membership/admin checks, required fields, and the response shape — which catches regressions in access control and routing but not every business-logic edge case. One real, not-yet-fixed finding surfaced while writing this pass: none of the three dynamic-downtime routes (`characters/[id]/dynamic-downtime[/suggestions]`, `dynamic-downtime-events/[id]/respond`) verify the caller owns the character they're acting on — any authenticated user can read, create AI-interpreted activities for, or advance time on any character's downtime. Not a 5 — file coverage isn't behavior coverage, and that ownership gap is open. |
+| API route test coverage | 4 | All 104 routes now have a dedicated test file (104/104, up from 30 at the start of #93). Depth is uneven by design: the highest-blast-radius routes — campaign bans, member removal/role changes (including the "last admin" guard on both paths), campaign PATCH/DELETE, account deletion, the character `PLAYER_EDITABLE_FIELDS` anti-cheat allowlist, Stripe checkout, stuck-scene recovery, campaign-scoped user blocking, individual NPC/faction/location PATCH/DELETE, friend-request accept/reject, the turn-order route, the auth/session/password family, and the AI-triggering scene-action tier (billing preflight/charge sequence, moderation-before-AI-call) — got real behavioral coverage: validation branches, cross-campaign scoping, fog-of-war redaction, and failure paths, not just the auth gate. The routes closed out last (base list/create endpoints, health checks, internal worker routes, lore/tutorial CRUD) got gate + shape assertions — auth, membership/admin checks, required fields, and the response shape — which catches regressions in access control and routing but not every business-logic edge case. Writing this pass surfaced a real access-control gap — none of the three dynamic-downtime routes (`characters/[id]/dynamic-downtime[/suggestions]`, `dynamic-downtime-events/[id]/respond`) verified the caller owned the character they were acting on — since fixed: `requireCharacterOwner`/`requireDowntimeEventOwner` (`lib/db/characterAccess.ts`) now gate all three, with regression tests proving a non-owner gets 403 (or 404 for a nonexistent event). Not a 5 — file coverage isn't behavior coverage, and the last-closed tiers only have gate + shape assertions, not exhaustive business-logic coverage. |
 | Auth / session | 4 | Real revocation: `requireAuth`/`verifyAuth`/`getUser` all check `isTokenRevoked`, and a token-version bump (`revokeAllSessions`, stamped by `createToken`) invalidates every existing session at once. Deliberately fails open for pre-revocation tokens and for an unreadable database, both to avoid a mass logout from a blip. Not a 5 — no refresh-token rotation, still 30-day JWTs. |
 | Rate limiting / abuse | 4 | Postgres-backed (`checkRateLimit`, correct for serverless, where in-memory wouldn't actually limit anything), applied at 17 route call sites, unit-tested. |
 | Admin tooling as simulation design (beyond CRUD) | 3 | Faction and NPC tabs now show real reasoning, not just fields: a faction card's "Why?" button previews its next goal reassessment (`explainFactionGoalReassessment`) plus any active war's momentum trajectory (`explainWarMomentum`) — new pure functions the real tick's `decideFactionGoalReassessment`/`decideWarProgress`/`decideWarResolution` now delegate to or share, run read-only via new per-entity `/reasoning` API routes. An NPC card's "Why?" preview surfaces its real next-tick decision (`decideNpcTick`) directly. Not higher than a 3 — `handleUpdateLocation`/`handleTickClock` are still thin PATCH wrappers, and there's no standalone war tab at all (war reasoning is folded into the faction fighting it, since no war admin surface exists to extend). |
@@ -312,16 +312,6 @@ above. Items that block later ones are flagged.
    have never executed even once. This is the single highest-leverage item
    on this list — everything else about the pipeline is design confidence,
    not proven confidence, until this happens.
-2. **Fix the dynamic-downtime ownership gap.** Found while closing out API
-   route test coverage (below): `characters/[id]/dynamic-downtime` (GET/
-   POST/PUT), its `/suggestions` GET, and `dynamic-downtime-events/[id]/
-   respond` POST all check that the caller is *authenticated*, never that
-   they *own* the character in question. Any logged-in user can currently
-   read, spend AI calls creating activities for, or advance time on any
-   other player's character. Needs a character-ownership check (mirroring
-   the campaign-membership pattern everywhere else) added to all three
-   routes, plus regression tests proving a non-owner gets 403.
-
 *(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
 checkKeys a shared type, the war stability-hit write path's missing direct
 test coverage, making outcome-band adherence visible to players, the
@@ -329,14 +319,17 @@ strict-structured-outputs and dice-opt-in-only decisions, extending the
 tick dry-run preview's reasoning pattern to the faction/NPC tabs, checking
 whether `computeTension` should weight Environmental aging/Economic
 Contagion, the individual NPC/faction/location PATCH/DELETE + friend-
-request + turn-order test-coverage gap, and broadening API route test
-coverage to every route (104/104, #93/#134/#135) — that used to be items
-2, 6, 7, 4, 3, 2, 5, 3, 3, part of 2, and 2 again here — are all resolved
-(the admin-tooling item only partially — see its Scorecard row for what's
-still missing; the `computeTension` item resolved to a decided "no,"
-recorded in `tension.ts` itself — see #122; API route test coverage is
-file-complete but not behavior-complete, and surfaced the
-dynamic-downtime ownership gap now sitting at item 2 above).
+request + turn-order test-coverage gap, broadening API route test
+coverage to every route (104/104, #93/#134/#135), and the dynamic-downtime
+ownership gap that same sweep surfaced — that used to be items 2, 6, 7, 4,
+3, 2, 5, 3, 3, part of 2, 2 again, and 2 a third time here — are all
+resolved (the admin-tooling item only partially — see its Scorecard row
+for what's still missing; the `computeTension` item resolved to a decided
+"no," recorded in `tension.ts` itself — see #122; the dynamic-downtime fix
+added `requireCharacterOwner`/`requireDowntimeEventOwner`
+(`lib/db/characterAccess.ts`) to all three affected routes, mirroring the
+campaign-membership pattern everywhere else, with regression tests
+proving a non-owner gets 403/404).
 See Known Bugs and the Scorecard's War & coalition system, Admin tooling,
 and API route test coverage rows.)*
 
@@ -432,8 +425,8 @@ Partial implementation exists in the codebase today.
   list/create endpoints and admin/analytics). File-complete, not
   behavior-complete: the highest-risk routes got real behavioral
   coverage, the last tiers got gate + shape assertions. Writing that
-  last stretch surfaced a real, still-open finding — see the Priority
-  List's dynamic-downtime ownership-gap item.
+  last stretch surfaced a real access-control gap in the dynamic-downtime
+  routes, since fixed (see the Scorecard row).
 
 ## Architecture: Where the Depth Actually Lives
 

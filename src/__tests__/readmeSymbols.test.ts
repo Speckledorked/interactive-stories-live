@@ -1,6 +1,9 @@
 // src/__tests__/readmeSymbols.test.ts
 //
-// The README makes claims about code, and nothing checked them.
+// The README (and, since 2026-08-06, docs/ARCHITECTURE.md — the technical
+// audit split out of the README so it could speak to players instead of
+// leading with a scorecard) make claims about code, and nothing checked
+// them.
 //
 // This file is long, it is written as a running ledger, and an entry from
 // six sections ago can be quietly falsified by a later change. That is not
@@ -9,7 +12,7 @@
 // below explained why it had been removed. The file contradicted itself,
 // tsc was clean, and 1346 tests passed.
 //
-// So: every camelCase symbol the README names in backticks must either
+// So: every camelCase symbol either doc names in backticks must either
 // exist in the codebase, or be listed below as deliberately gone.
 //
 // The second half is what keeps this from rotting into a suppression
@@ -18,7 +21,7 @@
 // prunes itself the moment that stops being true.
 //
 // Adding a line here is a small cost paid at exactly the right moment:
-// when you delete something the README talks about, which is precisely
+// when you delete something either doc talks about, which is precisely
 // when you should be re-reading what it says about it.
 
 import { describe, it, expect } from 'vitest'
@@ -131,7 +134,13 @@ const corpus = SEARCH_ROOTS.flatMap(root => collectSource(root))
   .map(f => stripComments(readFileSync(f, 'utf8')))
   .join('\n')
 
-const readme = readFileSync('README.md', 'utf8')
+// The two docs that make claims about code — kept as separate labeled
+// entries, not concatenated into one blob, so the sentence-boundary check
+// below never reads across a file boundary as if it were one paragraph.
+const DOCS: Array<{ label: string; text: string }> = [
+  { label: 'README.md', text: readFileSync('README.md', 'utf8') },
+  { label: 'docs/ARCHITECTURE.md', text: readFileSync('docs/ARCHITECTURE.md', 'utf8') },
+]
 
 /**
  * Backticked camelCase identifiers, with or without trailing parens.
@@ -144,9 +153,11 @@ const readme = readFileSync('README.md', 'utf8')
  */
 function symbolsNamedInReadme(): string[] {
   const found = new Set<string>()
-  for (const match of readme.matchAll(/`([a-z][a-zA-Z0-9]*)\(?\)?`/g)) {
-    const name = match[1]
-    if (/[A-Z]/.test(name)) found.add(name)
+  for (const { text } of DOCS) {
+    for (const match of text.matchAll(/`([a-z][a-zA-Z0-9]*)\(?\)?`/g)) {
+      const name = match[1]
+      if (/[A-Z]/.test(name)) found.add(name)
+    }
   }
   return [...found].sort()
 }
@@ -174,24 +185,24 @@ describe('README symbol claims', () => {
 
     expect(
       phantom,
-      `README names ${phantom.length} symbol(s) that do not exist in src/ or prisma/.\n` +
+      `README.md / docs/ARCHITECTURE.md name ${phantom.length} symbol(s) that do not exist in src/ or prisma/.\n` +
       `Either the prose is stale, or the symbol was removed on purpose — if so, add it ` +
-      `to DELIBERATELY_ABSENT in this file WITH the reason, and re-read what the README ` +
+      `to DELIBERATELY_ABSENT in this file WITH the reason, and re-read what that doc ` +
       `says about it while you are there.\n  ${phantom.join('\n  ')}`
     ).toEqual([])
   })
 
   it('does not carry allowlist entries for symbols that came back', () => {
     // What stops this from becoming a suppression list nobody prunes. A
-    // resurrected symbol means the README's past-tense prose about it is
+    // resurrected symbol means the docs' past-tense prose about it is
     // now wrong in the other direction.
     const resurrected = Object.keys(DELIBERATELY_ABSENT).filter(exists)
 
     expect(
       resurrected,
-      `These are listed as deliberately absent but exist again. The README almost ` +
-      `certainly still describes them as deleted — fix the prose, then drop them from ` +
-      `DELIBERATELY_ABSENT.\n  ${resurrected.join('\n  ')}`
+      `These are listed as deliberately absent but exist again. README.md / ` +
+      `docs/ARCHITECTURE.md almost certainly still describe them as deleted — fix the ` +
+      `prose, then drop them from DELIBERATELY_ABSENT.\n  ${resurrected.join('\n  ')}`
     ).toEqual([])
   })
 
@@ -204,15 +215,20 @@ describe('README symbol claims', () => {
     // Scoped to the SENTENCE containing the mention, not a proximity
     // window. A window would find the word "removed" elsewhere in the
     // same dense paragraph and pass the very sentence that contradicts it.
+    //
+    // Each doc is scanned independently (not concatenated) so a sentence
+    // never accidentally spans a file boundary.
     const failures: string[] = []
 
-    for (const name of Object.keys(DELIBERATELY_ABSENT)) {
-      for (const match of readme.matchAll(new RegExp('`' + name + '\\(?\\)?`', 'g'))) {
-        const start = readme.lastIndexOf('. ', match.index!) + 1
-        const end = readme.indexOf('. ', match.index! + match[0].length)
-        const sentence = readme.slice(start, end > 0 ? end : match.index! + 200)
-        if (!ABSENCE_MARKER.test(sentence)) {
-          failures.push(`${name}: "${sentence.trim().slice(0, 120)}"`)
+    for (const { label, text } of DOCS) {
+      for (const name of Object.keys(DELIBERATELY_ABSENT)) {
+        for (const match of text.matchAll(new RegExp('`' + name + '\\(?\\)?`', 'g'))) {
+          const start = text.lastIndexOf('. ', match.index!) + 1
+          const end = text.indexOf('. ', match.index! + match[0].length)
+          const sentence = text.slice(start, end > 0 ? end : match.index! + 200)
+          if (!ABSENCE_MARKER.test(sentence)) {
+            failures.push(`${label} — ${name}: "${sentence.trim().slice(0, 120)}"`)
+          }
         }
       }
     }

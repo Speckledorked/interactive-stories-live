@@ -29,6 +29,13 @@ interface Campaign {
   initialWorldSeed: string
   contentModerationLevel: string
   scenes?: unknown[]
+  worldMeta?: {
+    currentTurnNumber: number
+    currentInGameDate: string | null
+    hoursSinceWorldTurn: number
+    worldTurnHours: number | null
+    lastRealTimeTickAt: string | null
+  } | null
 }
 
 interface NPC {
@@ -981,6 +988,7 @@ export default function AdminPage() {
               <AdminOverviewPanel
                 campaignId={campaignId}
                 campaign={campaign}
+                worldMeta={campaign.worldMeta ?? null}
                 onCampaignChange={(next) => setCampaign({ ...campaign, ...next })}
                 onSaveCampaignInfo={handleSaveCampaignInfo}
                 saving={saving}

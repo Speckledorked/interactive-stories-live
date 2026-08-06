@@ -254,7 +254,7 @@ this table.
 | Cross-system economy (faction wealth ↔ items ↔ downtime ↔ quests) | 4 | Quest/downtime payouts are real transfers out of a faction's resources (`assessPayout`); a broke faction pays partially and defaults on the rest. Debt moves the dice in both directions. Any AI-reported gold change is bounds-checked (`clampGoldDelta`) and granted items merge through one shared path (`mergeGrantedItems`). Items carry value/rarity under a budget. No merchant/trading layer — a separate product question, not a gap. |
 | Outcome-band adherence (does the narration obey the roll?) | 5 | The narrator self-reports which band its prose depicts (`outcome_echo`); mismatches are logged (`checkOutcomeAdherence`), feed a consistency metric, and are now persisted per-exchange and surfaced in the transparency panel (`AITransparencyPanel`) that already shows dice receipts. Deliberately still only observed, never enforced — rewriting prose to match a roll would be a worse product than an occasional, visible drift. |
 | Fog-of-war enforcement mechanism | 5 | One shared `visibleTo(model, role)` gate, correctly handling the polarity difference (clocks gate on hidden state, everything else on discovered state). An unknown role fails closed. A structural test fails if a new route bypasses the gate without an explicit, restricted exemption. |
-| API route test coverage | 4 | 101 routes, 30 dedicated test files. Targeted at risk — every fog-of-war-gated read, and writes that spend money, mutate scene state, or hand out access. #93 extended the set outward past the original ~9 files to cover the highest-blast-radius previously-untested mutations: campaign bans, member removal/role changes (including the "last admin" guard on both paths), campaign PATCH/DELETE, account deletion, the character `PLAYER_EDITABLE_FIELDS` anti-cheat allowlist, Stripe checkout session creation, stuck-scene admin recovery, and campaign-scoped user blocking. #133 further extended it to individual NPC/faction/location PATCH/DELETE, friend-request accept/reject, and the turn-order route (GET/POST/DELETE, including the host-only skip-turn gate and the best-effort Pusher broadcast). Not a 5 — still targeted, not exhaustive; a long tail of lower-risk mutating routes remains untested. |
+| API route test coverage | 4 | 101 routes, 36 dedicated test files. Targeted at risk — every fog-of-war-gated read, and writes that spend money, mutate scene state, or hand out access. #93 extended the set outward past the original ~9 files to cover the highest-blast-radius previously-untested mutations: campaign bans, member removal/role changes (including the "last admin" guard on both paths), campaign PATCH/DELETE, account deletion, the character `PLAYER_EDITABLE_FIELDS` anti-cheat allowlist, Stripe checkout session creation, stuck-scene admin recovery, and campaign-scoped user blocking. #134 further extended it to individual NPC/faction/location PATCH/DELETE, friend-request accept/reject, and the turn-order route (GET/POST/DELETE, including the host-only skip-turn gate and the best-effort Pusher broadcast). #135 covered the auth/session/password family: login (no-enumeration + OAuth-only-account guard), logout-all (session revocation + rate limiting), the request/reset password-reset pair (no-enumeration, expired-token, best-effort email send), email verification's redirect-not-error-page degradation, and changing your own password while authenticated. Not a 5 — still targeted, not exhaustive; ~60 lower-risk routes (health checks, admin reads, tutorial/lore/wiki CRUD, internal cron/job endpoints) remain untested. |
 | Auth / session | 4 | Real revocation: `requireAuth`/`verifyAuth`/`getUser` all check `isTokenRevoked`, and a token-version bump (`revokeAllSessions`, stamped by `createToken`) invalidates every existing session at once. Deliberately fails open for pre-revocation tokens and for an unreadable database, both to avoid a mass logout from a blip. Not a 5 — no refresh-token rotation, still 30-day JWTs. |
 | Rate limiting / abuse | 4 | Postgres-backed (`checkRateLimit`, correct for serverless, where in-memory wouldn't actually limit anything), applied at 17 route call sites, unit-tested. |
 | Admin tooling as simulation design (beyond CRUD) | 3 | Faction and NPC tabs now show real reasoning, not just fields: a faction card's "Why?" button previews its next goal reassessment (`explainFactionGoalReassessment`) plus any active war's momentum trajectory (`explainWarMomentum`) — new pure functions the real tick's `decideFactionGoalReassessment`/`decideWarProgress`/`decideWarResolution` now delegate to or share, run read-only via new per-entity `/reasoning` API routes. An NPC card's "Why?" preview surfaces its real next-tick decision (`decideNpcTick`) directly. Not higher than a 3 — `handleUpdateLocation`/`handleTickClock` are still thin PATCH wrappers, and there's no standalone war tab at all (war reasoning is folded into the faction fighting it, since no war admin surface exists to extend). |
@@ -309,13 +309,11 @@ above. Items that block later ones are flagged.
    have never executed even once. This is the single highest-leverage item
    on this list — everything else about the pipeline is design confidence,
    not proven confidence, until this happens.
-2. **Keep broadening API route test coverage.** #93 extended it past the
-   original ~9 files to cover the highest-blast-radius previously-untested
-   mutations, and #133 covered the specific tier named here previously
-   (individual NPC/faction/location PATCH/DELETE, friend-request accept/
-   reject, the turn order route — see the Scorecard row); what's left is
-   the long, unnamed tail of remaining lower-risk mutations, no longer a
-   specific enumerable list.
+2. **Keep broadening API route test coverage.** #93, #134, and #135 have
+   now covered every route this list ever named specifically (see the
+   Scorecard row); ~60 routes remain untested — health checks, admin
+   reads, tutorial/lore/wiki CRUD, and internal cron/job endpoints, none
+   individually high-stakes enough yet to name out ahead of the rest.
 
 *(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
 checkKeys a shared type, the war stability-hit write path's missing direct
@@ -421,10 +419,11 @@ Partial implementation exists in the codebase today.
   further is the remaining work.
 - **API route test coverage** — targeted coverage exists for the
   highest-risk reads and writes; #93 broadened it to cover the
-  highest-blast-radius previously-untested mutations, and #133 covered
+  highest-blast-radius previously-untested mutations, #134 covered
   individual NPC/faction/location PATCH/DELETE, friend-request accept/
-  reject, and the turn-order route (see the Scorecard), but a long tail of
-  lower-risk routes remains untested — ongoing, not finished.
+  reject, and the turn-order route, and #135 covered the auth/session/
+  password family (see the Scorecard) — but ~60 lower-risk routes remain
+  untested — ongoing, not finished.
 
 ## Architecture: Where the Depth Actually Lives
 

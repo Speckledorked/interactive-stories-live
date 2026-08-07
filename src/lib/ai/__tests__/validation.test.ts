@@ -3,7 +3,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { z } from 'zod'
-import { validateAIResponse, validateAIResponseWithRepair, buildRepairPrompt, validateWorldTurnResponse, extractValidWorldUpdates } from '../validation'
+import { validateAIResponse, validateAIResponseWithRepair, buildRepairPrompt, validateWorldTurnResponse, extractValidWorldUpdates, extractValidTimePassage } from '../validation'
 
 describe('AI Response Validation (Phase 15)', () => {
   describe('Full Schema Validation', () => {
@@ -510,6 +510,60 @@ describe('extractValidWorldUpdates — salvage without bypassing validation', ()
 
   it('ignores keys that are not real update sections', () => {
     expect(extractValidWorldUpdates({ made_up_section: [{ x: 1 }] })).toEqual({})
+  })
+})
+
+// A response can fail full validation over something with nothing to do
+// with time_passage — a malformed NPC entry, an out-of-range harm value —
+// while still having reported a perfectly good time_passage. Before this,
+// the degradation ladder discarded it anyway: only scene_text and
+// world_updates survived past Level 1, so the world-turn clock silently
+// stalled for that exchange even when the AI got the one field that
+// mattered right.
+describe('extractValidTimePassage — salvage independent of everything else', () => {
+  it('keeps a valid time_passage', () => {
+    expect(extractValidTimePassage({ hours: 3 })).toEqual({ hours: 3 })
+  })
+
+  it('keeps an explicit zero', () => {
+    expect(extractValidTimePassage({ hours: 0 })).toEqual({ hours: 0 })
+  })
+
+  it('rejects a time_passage with neither days nor hours', () => {
+    expect(extractValidTimePassage({ description: 'a while' })).toBeUndefined()
+  })
+
+  it('returns undefined for input that is not a time_passage object', () => {
+    for (const junk of [null, undefined, 'text', 42, []]) {
+      expect(extractValidTimePassage(junk), String(junk)).toBeUndefined()
+    }
+  })
+})
+
+describe('validateAIResponse salvages time_passage even when the rest of the response degrades', () => {
+  it('carries a valid time_passage through to the partial level', () => {
+    const response = {
+      scene_text: 'The heroes burst through the door, weapons drawn. The villain turns to face them with a cruel smile.',
+      time_passage: { hours: 3 },
+      // Malformed on purpose — harm_damage is capped at 6 — so the whole
+      // response fails full validation and degrades to partial.
+      world_updates: { pc_changes: [{ character_name_or_id: 'char1', changes: { harm_damage: 9999 } }] },
+    }
+    const result = validateAIResponse(response)
+    if (!result.success) throw new Error('Expected at least partial validation to succeed')
+    expect(result.level).toBe('partial')
+    expect((result.data as any).time_passage).toEqual({ hours: 3 })
+  })
+
+  it('omits time_passage from the partial result when the AI never reported one', () => {
+    const response = {
+      scene_text: 'The heroes burst through the door, weapons drawn. The villain turns to face them with a cruel smile.',
+      world_updates: { pc_changes: [{ character_name_or_id: 'char1', changes: { harm_damage: 9999 } }] },
+    }
+    const result = validateAIResponse(response)
+    if (!result.success) throw new Error('Expected at least partial validation to succeed')
+    expect(result.level).toBe('partial')
+    expect((result.data as any).time_passage).toBeUndefined()
   })
 })
 

@@ -8,6 +8,7 @@ import { callChatCompletion } from './chatCompletion'
 import { buildSystemPrompt, buildUserPrompt } from './scenePrompt'
 import { validateAIResponseWithRepair, addValidationMetadata } from './validation'
 import { checkOutcomeAdherence, type OutcomeBand, type AdherenceResult } from '@/lib/game/outcomeAdherence'
+import { repairUnreportedAdherence } from './outcomeEchoRepair'
 import { validateWorldTurnResponse } from './validation'
 import { circuitBreakerManager } from './circuit-breaker'
 import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
@@ -723,12 +724,22 @@ async function attemptAIGM(
     // observed — never rewrites the scene, never fails the turn — because
     // the gap being closed is that nothing MEASURED it, and a constraint
     // nobody measures is a request.
-    const adherence = checkOutcomeAdherence(
+    let adherence = checkOutcomeAdherence(
       (request.player_actions ?? [])
         .filter(a => a.mechanics?.outcome)
         .map(a => ({ characterName: a.character_name, outcome: a.mechanics!.outcome as OutcomeBand })),
       (validatedResponse as { outcome_echo?: unknown }).outcome_echo
     )
+
+    // Backstop for the unreported case specifically: one small follow-up
+    // call per unreported roll, asking the model which band its own prose
+    // actually depicted. Never blocks or delays the scene otherwise — a
+    // failed backfill just leaves those entries unreported, same as
+    // before this existed. See outcomeEchoRepair.ts.
+    if (campaignId && adherence.unreported > 0) {
+      adherence = await repairUnreportedAdherence(campaignId, validatedResponse.scene_text, adherence)
+    }
+
     if (adherence.mismatched > 0) {
       console.warn(`⚖️ Narration contradicted the roll on ${adherence.mismatched} action(s):`)
       for (const problem of adherence.problems) console.warn(`  - ${problem}`)

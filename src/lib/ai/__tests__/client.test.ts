@@ -33,7 +33,7 @@ function jsonResponse(content: object, ok = true) {
   }
 }
 
-const validContent = { scene_text: 'A'.repeat(60), world_updates: {} }
+const validContent = { scene_text: 'A'.repeat(60), time_passage: { hours: 0 }, world_updates: {} }
 
 function makeRequest(): AIGMRequest {
   return {

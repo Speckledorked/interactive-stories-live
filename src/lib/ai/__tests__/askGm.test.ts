@@ -16,6 +16,7 @@ describe('buildAskGmPrompt', () => {
     characterSummary: { id: 'char1', capabilities: { known: [] } },
     sceneText: 'The allomancer squares up, coins glinting in his palm.',
     question: 'What can I see on his person?',
+    relevantLore: [],
   }
 
   it('tells the model this is not a turn — no dice, no consequences, no reactions', () => {
@@ -48,5 +49,22 @@ describe('buildAskGmPrompt', () => {
 
   it('is deterministic for the same input (no randomness in prompt construction)', () => {
     expect(buildAskGmPrompt(baseCtx)).toEqual(buildAskGmPrompt(baseCtx))
+  })
+
+  it('omits the lore block entirely when nothing relevant was retrieved', () => {
+    const { user } = buildAskGmPrompt(baseCtx)
+    expect(user).not.toContain('CAMPAIGN LORE')
+  })
+
+  it('includes retrieved lore as canon, and tells the model to answer setting-wide questions from it directly', () => {
+    const { system, user } = buildAskGmPrompt({
+      ...baseCtx,
+      relevantLore: [{ title: 'Guidance Systems', content: 'Every being in this universe has an intuitive guidance system.' }],
+    })
+    expect(user).toContain('CAMPAIGN LORE')
+    expect(user).toContain('Guidance Systems')
+    expect(user).toContain('Every being in this universe has an intuitive guidance system.')
+    expect(system).toMatch(/how does .* actually work/i)
+    expect(system).toMatch(/established fact/i)
   })
 })

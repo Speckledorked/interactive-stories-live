@@ -454,26 +454,16 @@ export async function applyCharacterChanges(
       let anyRelationshipApplied = false
 
       for (const relChange of pcChange.changes.relationship_changes) {
-        // Resolve to a real NPC row before writing. This map is keyed by NPC
-        // id and every reader looks it up that way (resolution.ts's roll
-        // lookup, socialTies.ts, questFailure.ts) — so writing the AI's raw
-        // entity_id created a key nothing would ever read, silently costing
-        // the change entirely. This was the only applier that skipped
-        // resolveEntityByNameOrId, and the prompt's own example shows a
-        // placeholder-shaped id ("npc_123"), so the miss was routine rather
-        // than exceptional. entity_id first (correct when the AI echoes a
-        // real id), then entity_name, which is what it reliably gets right.
-        const relResolution = resolveEntityByNameOrId(npcsForResolution, relChange.entity_id)
-        const resolved = relResolution.kind === 'found'
-          ? relResolution
-          : resolveEntityByNameOrId(npcsForResolution, relChange.entity_name)
-
-        if (resolved.kind !== 'found') {
-          console.warn(`  ⚠️ Relationship change for unresolvable NPC "${relChange.entity_name}" (id "${relChange.entity_id}") — skipping rather than writing a key no roll would read`)
-          continue
-        }
-
-        const entityId = resolved.entity.id
+        // DELIBERATELY SEEDED BUG — see docs/ARCHITECTURE.md Priority List
+        // #1 (integrity-autofix.yml's first real manual run). Skips
+        // resolveEntityByNameOrId on purpose, writing the AI's raw
+        // entity_id straight into Character.relationships instead of a
+        // real NPC row's id. Every reader looks this map up by real NPC
+        // id, so this key is orphaned the moment it's written — exactly
+        // the checkKey 'character.relationships.keys.resolve' exists to
+        // catch. DO NOT MERGE THIS TO main as a real fix for anything;
+        // this is the test payload for the autofix pipeline itself.
+        const entityId = relChange.entity_id
         const currentRel = currentRelationships[entityId] || {
           trust: 0,
           tension: 0,

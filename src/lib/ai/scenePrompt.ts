@@ -80,14 +80,14 @@ REQUIRED WRITING STYLE:
 ✓ Use CHARACTER DIALOGUE for 30%+ of your response
 ✓ ACTIONS and their CONSEQUENCES, not descriptions
 ✓ NPCs SPEAK and ACT - they don't just exist
-✓ End with a DECISION POINT or NEW PROBLEM
+✓ End with FORWARD PROGRESS - a decision point, a new problem, OR a genuine resolution. A resolution is not a failure to hit this rule; manufacturing a new complication when the fiction has actually earned a clean ending is what breaks it. See the pacing guidance below for when a thread has earned the resolution.
 ✓ Every sentence must advance the plot or reveal character through action
 ✓ Minimize atmospheric padding - focus on what matters
 
 STRUCTURE EVERY RESPONSE:
 1. First sentence: Immediate outcome of player action (15 words max)
 2. Middle: Dialogue + reactions + new developments
-3. Last sentence: What happens next / new challenge
+3. Last sentence: what happens next - forward progress, which is a resolution as often as it is a new problem
 
 BAD EXAMPLE (NEVER DO THIS):
 "Metallic shrieks echo through the air, a cacophony of crumpling steel and splintering circuits. The colossal shadow of the main robot looms over the evaluation area, its mechanical limbs poised like the claws of a predator ready to strike."
@@ -97,6 +97,25 @@ GOOD EXAMPLE (ALWAYS DO THIS):
 
 REMEMBER: If you're describing atmosphere instead of showing action and dialogue, you're doing it WRONG.
 </storytelling_principles>`
+
+// A player who reported: "I keep saying 'I comply' to move things along
+// and it's just more of the same." Root cause: the narrator only ever sees
+// its last 2 exchanges of prose (recentResolutions in
+// sceneResolutionRequest.ts), so nothing told it a scene had run long
+// enough to be stuck — it kept meeting compliance with a fresh
+// complication instead of ever letting the thread pay off. This is the
+// number that lets it notice. Two thresholds: a first nudge, then a
+// stronger one once it's clearly gone on too long.
+const PACING_NUDGE_THRESHOLD = 8
+const PACING_URGENT_THRESHOLD = 15
+
+function buildPacingSection(exchangeNumber: number): string {
+  if (exchangeNumber < PACING_NUDGE_THRESHOLD) return ''
+  const urgent = exchangeNumber >= PACING_URGENT_THRESHOLD
+  return `<pacing>
+This scene has run ${exchangeNumber} exchanges without resolving${urgent ? ' — this is unusually long' : ''}. If the player has been cooperating, de-escalating, or complying across recent exchanges, that has to actually work now: let the current thread genuinely resolve, or shift to something materially different — not another complication of the same kind. Meeting a player who keeps trying to move things along with an endless string of fresh obstacles is a failure of pacing, not tension.${urgent ? ' Resolve this now — the situation moves forward, cleanly, this exchange.' : ''}
+</pacing>`
+}
 
 const PLAYER_CHARACTER_CONTROL = `<player_character_control>
 🚨 CRITICAL: RESPECT PLAYER AGENCY 🚨
@@ -468,6 +487,7 @@ ${buildCampaignPrinciplesSection(request.ai_system_prompt)}
 ${CRITICAL_INSTRUCTIONS}
 
 ${STORYTELLING_PRINCIPLES}
+${buildPacingSection(request.current_exchange_number ?? 0)}
 
 ${PLAYER_CHARACTER_CONTROL}
 

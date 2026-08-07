@@ -433,6 +433,7 @@ export async function buildSceneResolutionRequest(
     safety_lines: safetySettings?.lines ?? [],
     safety_veils: safetySettings?.veils ?? [],
     player_actions: playerActions,
-    action_mechanics: actionMechanics
+    action_mechanics: actionMechanics,
+    current_exchange_number: scene.currentExchange ?? 0
   }
 }

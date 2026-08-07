@@ -116,11 +116,17 @@ export default function StoryPage() {
   const [showMap, setShowMap] = useState(true)
   const [showCharacterSnapshot, setShowCharacterSnapshot] = useState(false)
   const [sceneWorldStateChanges, setSceneWorldStateChanges] = useState<Record<string, WorldStateChange[]>>({})
-  // #96: scene illustration — real-time only (populated by the
-  // scene:image-ready Pusher event below), not persisted across a page
-  // reload. A future pass could thread this through the campaign GET
-  // response for reload-durability; out of scope for this first cut.
+  // #96: scene illustration. Populated two ways: on load, from each
+  // scene's sceneImage field (attached by GET /scene, since SceneImage
+  // has no Prisma relation to ride an `include` on); live, from the
+  // scene:image-ready Pusher event below for a generation kicked off
+  // while the page is open.
   const [sceneImageUrls, setSceneImageUrls] = useState<Record<string, string>>({})
+  // Admin-only manual backfill (generate-image route) for a scene that
+  // never got — or failed to get — its automatic first-exchange image,
+  // e.g. one already open when sceneImageGenerationEnabled was turned on.
+  const [generatingImageFor, setGeneratingImageFor] = useState<Record<string, boolean>>({})
+  const [imageGenError, setImageGenError] = useState<Record<string, string>>({})
   const [sceneOutcomeAdherence, setSceneOutcomeAdherence] = useState<Record<string, AdherenceResult>>({})
   const [expandedTransparency, setExpandedTransparency] = useState<Record<string, boolean>>({})
   const [startingScene, setStartingScene] = useState(false)
@@ -221,6 +227,15 @@ export default function StoryPage() {
       if (!sceneResponse.ok) throw new Error('Failed to load scenes')
       const sceneData = await sceneResponse.json()
       setActiveScenes(sceneData.scenes || [])
+      const loadedImages: Record<string, string> = {}
+      for (const s of sceneData.scenes || []) {
+        if (s.sceneImage?.status === 'COMPLETED' && s.sceneImage?.imageUrl) {
+          loadedImages[s.id] = s.sceneImage.imageUrl
+        }
+      }
+      if (Object.keys(loadedImages).length > 0) {
+        setSceneImageUrls(prev => ({ ...loadedImages, ...prev }))
+      }
 
       // Load all scenes to find resolved ones
       try {
@@ -422,6 +437,7 @@ export default function StoryPage() {
       console.log('Scene image ready:', data)
       if (data.sceneId && data.imageUrl) {
         setSceneImageUrls(prev => ({ ...prev, [data.sceneId]: data.imageUrl }))
+        setGeneratingImageFor(prev => (prev[data.sceneId] ? { ...prev, [data.sceneId]: false } : prev))
       }
     })
 
@@ -839,6 +855,39 @@ export default function StoryPage() {
     }
   }
 
+  // Admin-only manual backfill for a scene that never got — or failed to
+  // get — its automatic first-exchange image (e.g. one already open when
+  // sceneImageGenerationEnabled was turned on). Relies on the existing
+  // scene:image-ready Pusher listener to pick up a success; on a server-
+  // side failure there is no equivalent push event, so a bounded timeout
+  // clears the "Generating…" state instead of hanging forever — the same
+  // stuck-button bug already found and fixed once this session for the
+  // campaign hero image, not worth reintroducing here.
+  const handleGenerateSceneImage = async (sceneId: string) => {
+    setImageGenError(prev => ({ ...prev, [sceneId]: '' }))
+    setGeneratingImageFor(prev => ({ ...prev, [sceneId]: true }))
+    try {
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/scenes/${sceneId}/generate-image`,
+        { method: 'POST' }
+      )
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to start scene image generation')
+      }
+      setTimeout(() => {
+        setGeneratingImageFor(prev => {
+          if (!prev[sceneId]) return prev
+          setImageGenError(errPrev => ({ ...errPrev, [sceneId]: 'Still processing — refresh in a bit to check.' }))
+          return { ...prev, [sceneId]: false }
+        })
+      }, 60000)
+    } catch (err) {
+      setImageGenError(prev => ({ ...prev, [sceneId]: err instanceof Error ? err.message : 'Failed to start scene image generation' }))
+      setGeneratingImageFor(prev => ({ ...prev, [sceneId]: false }))
+    }
+  }
+
   const handleResetScene = async (sceneId: string) => {
     if (!confirm('Are you sure you want to reset this stuck scene? This will set it back to AWAITING_ACTIONS state.')) {
       return
@@ -1203,6 +1252,26 @@ export default function StoryPage() {
                             alt={`Illustration for scene ${scene.sceneNumber}`}
                             className="mt-6 w-full max-h-96 object-cover rounded-lg"
                           />
+                        )}
+                        {/* Admin-only manual backfill for a scene that never got
+                            (or failed to get) its automatic first-exchange image —
+                            e.g. one already open when the campaign toggle was
+                            turned on. Uses the scene's FIRST exchange for the
+                            prompt regardless of how far the scene has moved on
+                            since (see generate-image/route.ts). */}
+                        {isAdmin && campaign?.sceneImageGenerationEnabled && !sceneImageUrls[scene.id] && (
+                          <div className="mt-4 flex items-center gap-3">
+                            <button
+                              onClick={() => handleGenerateSceneImage(scene.id)}
+                              disabled={generatingImageFor[scene.id]}
+                              className="px-3 py-1.5 rounded-lg border border-myth-border text-sm text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink transition-colors disabled:opacity-50"
+                            >
+                              {generatingImageFor[scene.id] ? 'Generating…' : '🖼️ Generate scene image'}
+                            </button>
+                            {imageGenError[scene.id] && (
+                              <span className="text-xs text-myth-danger">{imageGenError[scene.id]}</span>
+                            )}
+                          </div>
                         )}
                         <div className="mt-6 pt-6 border-t border-myth-border">
                           <h3 className="font-display text-lg font-semibold text-myth-ink mb-3">

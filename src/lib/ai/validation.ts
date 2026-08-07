@@ -5,12 +5,14 @@ import { z } from 'zod'
 import {
   AIGMResponseSchema,
   MinimalAIResponseSchema,
+  TimePassageSchema,
   WorldTurnResponseSchema,
   WorldTurnNarrativeOnlySchema,
   WorldUpdatesSchema,
   type AIGMResponseValidated,
   type WorldTurnResponseValidated,
   type WorldUpdates,
+  type TimePassage,
 } from './schema'
 import type { AIGMResponse } from './client'
 import { prisma } from '@/lib/prisma'
@@ -25,8 +27,8 @@ import { prisma } from '@/lib/prisma'
 // levels actually produce now.
 export type ValidationResult =
   | { success: true; data: AIGMResponseValidated; level: 'full' }
-  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates> }; level: 'partial' }
-  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates> }; level: 'emergency'; template: string }
+  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates>; time_passage?: TimePassage }; level: 'partial' }
+  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates>; time_passage?: TimePassage }; level: 'emergency'; template: string }
   | { success: false; error: string; rawData?: any }
 
 /**
@@ -150,7 +152,13 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
         // have passed at Level 1, so no applier sees unvalidated input —
         // but a scene no longer loses every mechanical consequence over
         // one bad field somewhere else in the response.
-        world_updates: extractValidWorldUpdates((rawResponse as any)?.world_updates)
+        world_updates: extractValidWorldUpdates((rawResponse as any)?.world_updates),
+        // Same salvage discipline for time_passage: a response can fail
+        // full validation over something unrelated (a malformed NPC entry,
+        // say) while still having reported perfectly good time_passage —
+        // that shouldn't cost the world-turn clock a bank it actually
+        // earned. See extractValidTimePassage.
+        time_passage: extractValidTimePassage((rawResponse as any)?.time_passage)
       },
       level: 'partial'
     }
@@ -168,7 +176,8 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
       success: true,
       data: {
         scene_text: extractedText,
-        world_updates: extractValidWorldUpdates((rawResponse as any)?.world_updates)
+        world_updates: extractValidWorldUpdates((rawResponse as any)?.world_updates),
+        time_passage: extractValidTimePassage((rawResponse as any)?.time_passage)
       },
       level: 'partial'
     }
@@ -182,11 +191,29 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
     success: true,
     data: {
       scene_text: template,
-      world_updates: {}
+      world_updates: {},
+      // Still worth salvaging even here: the response was unusable as
+      // prose, but if it happened to carry a valid time_passage, the
+      // world-turn clock shouldn't stall just because the narration did.
+      time_passage: extractValidTimePassage((rawResponse as any)?.time_passage)
     },
     level: 'emergency',
     template: 'default'
   }
+}
+
+/**
+ * Salvage a valid time_passage independently of the rest of the response.
+ * Mirrors extractValidWorldUpdates's reasoning: a response can fail full
+ * schema validation over a field that has nothing to do with time_passage
+ * (a malformed NPC entry, an out-of-range harm value) while still having
+ * reported a perfectly good time_passage — the degradation ladder
+ * shouldn't cost the world-turn clock a bank it actually earned just
+ * because something else in the same response was wrong.
+ */
+export function extractValidTimePassage(rawTimePassage: unknown): TimePassage | undefined {
+  const parsed = TimePassageSchema.safeParse(rawTimePassage)
+  return parsed.success ? parsed.data : undefined
 }
 
 /**

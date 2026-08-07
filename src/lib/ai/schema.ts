@@ -557,6 +557,7 @@ export type WorldTurnResponseValidated = z.infer<typeof WorldTurnResponseSchema>
 export type AIGMResponseValidated = z.infer<typeof AIGMResponseSchema>
 export type MinimalAIResponse = z.infer<typeof MinimalAIResponseSchema>
 export type WorldUpdates = z.infer<typeof WorldUpdatesSchema>
+export type TimePassage = z.infer<typeof TimePassageSchema>
 export type PCChanges = z.infer<typeof PCChangesSchema>
 export type RelationshipChange = z.infer<typeof RelationshipChangeSchema>
 export type OrganicAdvancement = z.infer<typeof OrganicAdvancementSchema>

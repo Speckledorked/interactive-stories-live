@@ -185,7 +185,26 @@ describe('generateWorldFromTemplate', () => {
       )
 
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as any).body)
-      expect(body.messages[1].content).toMatch(/REUSE those real canon names/)
+      expect(body.messages[1].content).toMatch(/exact canon names/)
+    })
+
+    // Soft "map what fits" guidance let the model reuse only 3 of 4 real
+    // canon stats in practice (confirmed against a real campaign) — it
+    // needs to be a hard, countable requirement, not a suggestion.
+    it('makes reusing every canon-named stat a hard requirement, not a suggestion', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-key')
+      const fetchSpy = mockCompletion({ world_seed: 'x', factions: [] })
+      vi.stubGlobal('fetch', fetchSpy)
+
+      await generateWorldFromTemplate(
+        null, 'Title', 'desc', 'He Who Fights With Monsters', undefined,
+        'Attributes in this world are Power, Speed, Spirit, and Recovery.'
+      )
+
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as any).body)
+      expect(body.messages[1].content).toMatch(/HARD REQUIREMENT/)
+      expect(body.messages[1].content).toMatch(/MUST include EVERY/)
+      expect(body.messages[1].content).toMatch(/not a suggestion/)
     })
 
     it('omits the canon-reuse instruction when there is no lore digest', async () => {
@@ -196,7 +215,7 @@ describe('generateWorldFromTemplate', () => {
       await generateWorldFromTemplate('pbta-fantasy', 'Title', 'desc')
 
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as any).body)
-      expect(body.messages[1].content).not.toMatch(/REUSE those real canon names/)
+      expect(body.messages[1].content).not.toMatch(/HARD REQUIREMENT/)
     })
   })
 })

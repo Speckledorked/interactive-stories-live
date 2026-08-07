@@ -315,6 +315,7 @@ findings with a real exploit path, not just a functional gap.
 | `STORYTELLING_PRINCIPLES` unconditionally required every exchange to end with a new problem or decision point, and the narrator's context window covers only the last 2 exchanges of prose — with no signal that a scene had run long, a stalled scene had no way to escalate toward resolution and instead looped fresh manufactured complications indefinitely regardless of player choices (confirmed via a real transcript showing repeated exchange openings). Fixed: the ending rule now allows genuine resolution as often as a new problem, and a new pacing section nudges — then, past a higher exchange-count threshold, forces — resolution. | AI narration / pacing | Major | Fixed |
 | Promises, enemies, and long-term threats had no "call it back before resolving it" guidance in the prompt, unlike debts and quests, which both already had it — so once created they only ever accumulated narratively, with nothing telling the model it was safe or expected to resolve one the story had moved past. Fixed: added matching call-back-and-resolve guidance for all three. | AI narration | Minor | Fixed |
 | World generation's `stat_labels` instruction only ever told the model to invent new flavor names for the 5 fixed stats, with no instruction to ground them in canon — even though a lore digest, when present, was already marked "highest authority" for every other generated field (factions, capability systems). Campaigns with real lore imported got made-up stats instead of the setting's own named attribute system. A first fix added soft "reuse real canon names where they map" guidance, but confirmed live against a real campaign (a wiki whose real system names 4 stats) it only reused 3 of 4 — the broad lore digest also samples evenly by chunk index across the whole corpus, which can dilute a short, single-chunk reference page (an "Attributes" page) behind long multi-chunk ones purely by chance. Fixed in two parts: a targeted semantic lookup for the campaign's stat/attribute system specifically (reaches the prompt regardless of the broad digest's luck), and a hard, countable requirement — every canon-named stat, up to 5, must appear verbatim — replacing the earlier soft "map what fits" guidance. | World generation / lore grounding | Minor | Fixed |
+| `enqueueSceneImageGeneration` only ever checked for a live PENDING/RUNNING `SceneImage` row before `create()`-ing a new one, never a COMPLETED or FAILED one — a second enqueue attempt for a scene that already had either would throw on the `@@unique([sceneId])` constraint. Previously unreachable (the automatic first-exchange trigger only ever calls this once per scene), but a real path once a manual backfill trigger exists, since it's called for exactly the scenes most likely to already have a FAILED row. Fixed: looks up by the unique `sceneId` key now, dedupes onto PENDING/RUNNING/COMPLETED, and resets a FAILED row for a fresh retry instead of colliding. | Scene illustration | Minor | Fixed |
 
 ## Priority List
 
@@ -406,13 +407,20 @@ Partial implementation exists in the codebase today.
   live-verified against real Postgres — the full job lifecycle (real
   enqueue, real self-fetch kick, real retry-then-terminal-failure
   bookkeeping, real cost-tracking entries, the real `@@unique([sceneId])`
-  constraint) was exercised end-to-end against `camp_uitest`. **Not
-  verified**: this sandbox has no `OPENAI_API_KEY` or
-  `BLOB_READ_WRITE_TOKEN`, so the actual image-generation call and Blob
-  upload have only ever been unit-tested with mocks, never run for real —
-  confirm both work against a real account before enabling the toggle in
-  production. `gpt-image-1`'s flat per-image cost also needs re-verifying
-  against OpenAI's live pricing page (`cost-tracker.ts`'s `AI_PRICING`
+  constraint) was exercised end-to-end against `camp_uitest`. The
+  automatic trigger only ever fires once, at a scene's first exchange —
+  an admin-only manual backfill
+  (`POST /api/campaigns/[id]/scenes/[sceneId]/generate-image`, a button
+  on the story page) covers a scene already open when the toggle got
+  turned on, or one whose one attempt failed, building the prompt from
+  the scene's FIRST exchange specifically so it still fits how the scene
+  opened even if it's moved on since. **Not verified**: this sandbox has
+  no `OPENAI_API_KEY` or `BLOB_READ_WRITE_TOKEN`, so the actual
+  image-generation call and Blob upload have only ever been unit-tested
+  with mocks, never run for real — confirm both work against a real
+  account before enabling the toggle in production. `gpt-image-1`'s flat
+  per-image cost also needs re-verifying against OpenAI's live pricing
+  page (`cost-tracker.ts`'s `AI_PRICING`
   entry is a documented estimate, not a re-confirmed one).
 - **Campaign lobby "Living Chronicle"** — the lobby overview tab's old
   stat-tile grid (`WorldSummaryPanel`) is replaced by generated in-world

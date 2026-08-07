@@ -109,6 +109,50 @@ describe('buildSystemPrompt — outcome_echo appears in the response template, n
   })
 })
 
+describe('buildSystemPrompt — long-scene pacing pressure', () => {
+  // A player reported: "I keep saying 'I comply' to move things along and
+  // it's just more of the same." Root cause: the narrator only ever sees
+  // its last 2 exchanges of prose, so nothing told it a scene had run long
+  // enough to be stuck in a loop of manufactured complications.
+  function makeRequestWithExchange(exchangeNumber: number): AIGMRequest {
+    return {
+      campaign_universe: 'Test Universe',
+      ai_system_prompt: 'Be a good GM.',
+      current_exchange_number: exchangeNumber,
+    } as unknown as AIGMRequest
+  }
+
+  it('omits <pacing> for a short scene', () => {
+    const prompt = buildSystemPrompt(makeRequestWithExchange(3))
+    expect(prompt).not.toContain('<pacing>')
+  })
+
+  it('omits <pacing> when current_exchange_number is absent from the request', () => {
+    const request = { campaign_universe: 'Test', ai_system_prompt: 'x' } as unknown as AIGMRequest
+    expect(buildSystemPrompt(request)).not.toContain('<pacing>')
+  })
+
+  it('nudges toward resolution once a scene crosses the first threshold', () => {
+    const prompt = buildSystemPrompt(makeRequestWithExchange(8))
+    expect(prompt).toContain('<pacing>')
+    expect(prompt).toMatch(/let the current thread genuinely resolve/i)
+  })
+
+  it('escalates to an urgent resolve-now instruction well past the threshold', () => {
+    const prompt = buildSystemPrompt(makeRequestWithExchange(15))
+    expect(prompt).toMatch(/unusually long/i)
+    expect(prompt).toMatch(/Resolve this now/i)
+  })
+})
+
+describe('buildSystemPrompt — storytelling rules allow a genuine resolution, not only new problems', () => {
+  it('no longer mandates a new problem/decision point as the only valid ending', () => {
+    const prompt = buildSystemPrompt(makeRequest([]))
+    expect(prompt).toMatch(/forward progress/i)
+    expect(prompt).toMatch(/resolution as often as it is a new problem/i)
+  })
+})
+
 describe('buildSystemPrompt — player action text is not treated as literal dialogue', () => {
   // A submitted action like "I go along with the questioning because I'm
   // bored" mixes the in-fiction action with the player's own real-world

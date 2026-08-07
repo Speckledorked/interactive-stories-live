@@ -166,4 +166,37 @@ describe('generateWorldFromTemplate', () => {
     expect(body.messages[1].content).toContain('Helios wakes in an alley')
     expect(body.messages[1].content).toContain('treat it as canon')
   })
+
+  describe('stat_labels grounding in canon lore (#124)', () => {
+    // A campaign like "He Who Fights With Monsters" establishes its own
+    // named attribute system in the source material. Without this, the
+    // prompt only ever told the model to invent new flavor names for the
+    // 5 fixed PbtA stats — even when canon already names real ones — so
+    // campaigns with lore imported got made-up stats instead of the
+    // series' actual ones.
+    it('tells the model to reuse real canon-named stats when a lore digest is present', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-key')
+      const fetchSpy = mockCompletion({ world_seed: 'x', factions: [] })
+      vi.stubGlobal('fetch', fetchSpy)
+
+      await generateWorldFromTemplate(
+        null, 'Title', 'desc', 'He Who Fights With Monsters', undefined,
+        'Attributes in this world are Strength, Speed, Stamina, and Mana.'
+      )
+
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as any).body)
+      expect(body.messages[1].content).toMatch(/REUSE those real canon names/)
+    })
+
+    it('omits the canon-reuse instruction when there is no lore digest', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-key')
+      const fetchSpy = mockCompletion({ world_seed: 'x', factions: [] })
+      vi.stubGlobal('fetch', fetchSpy)
+
+      await generateWorldFromTemplate('pbta-fantasy', 'Title', 'desc')
+
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as any).body)
+      expect(body.messages[1].content).not.toMatch(/REUSE those real canon names/)
+    })
+  })
 })

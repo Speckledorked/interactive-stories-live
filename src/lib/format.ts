@@ -24,3 +24,13 @@ export function pluralize(count: number, word: string): string {
 export function truncateWithEllipsis(text: string, maxChars: number, cutChars: number = maxChars): string {
   return text.length > maxChars ? text.substring(0, cutChars) + '...' : text
 }
+
+/**
+ * The mirror of truncateWithEllipsis: keeps the END of `text` and drops the
+ * beginning, prefixing '...' once `text` exceeds `maxChars`. For content
+ * where what happened most recently matters more than what came first — the
+ * tail is the freshest information, not filler.
+ */
+export function truncateFromStart(text: string, maxChars: number): string {
+  return text.length > maxChars ? '...' + text.slice(text.length - maxChars) : text
+}

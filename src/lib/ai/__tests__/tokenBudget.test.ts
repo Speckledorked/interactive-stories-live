@@ -79,6 +79,25 @@ describe('applyTokenBudget', () => {
     expect(result.currentSceneIntro.length).toBeLessThan(currentSceneIntro.length)
   })
 
+  it('keeps the END of current_scene_intro, not the start, when trimming', () => {
+    // sceneResolutionRequest.ts builds this as [scene framing] + "What Has
+    // Happened Recently" + [last two exchanges, oldest first]. The most
+    // recent exchange is always at the very end — cutting from the end
+    // (like truncateWithEllipsis does) would throw away exactly the
+    // continuity that stops the next exchange from re-narrating a beat
+    // that just happened. This pins the fix: the tail must survive.
+    const worldSummary = makeWorldSummary()
+    const currentSceneIntro = 'STALE OPENING '.repeat(200) + 'FRESHEST EXCHANGE JUST NOW'
+    const bare = estimate(worldSummary, '')
+    const result = applyTokenBudget({ worldSummary, currentSceneIntro, participantCharacterIds: null }, bare + 100)
+    expect(result.stepsApplied).toEqual(['current_scene_intro'])
+    // The tail survives, and it's the trimmed input that grew a leading
+    // '...' marker — proof the cut happened at the front, not the back.
+    expect(result.currentSceneIntro.endsWith('FRESHEST EXCHANGE JUST NOW')).toBe(true)
+    expect(result.currentSceneIntro.startsWith('...')).toBe(true)
+    expect(result.currentSceneIntro.length).toBeLessThan(currentSceneIntro.length)
+  })
+
   it('narrows characters to only the current scene\'s participants as the last, most-protected tier', () => {
     const worldSummary = makeWorldSummary({
       characters: [makeCharacter('c1', 'Alice'), makeCharacter('c2', 'Bob'), makeCharacter('c3', 'Carol')],

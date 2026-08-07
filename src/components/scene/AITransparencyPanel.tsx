@@ -151,7 +151,7 @@ export default function AITransparencyPanel({
               <span className="text-lg">{hasAdherenceProblems ? '⚖️' : '✓'}</span>
               <span className="font-medium text-myth-ink text-sm">
                 {hasAdherenceProblems
-                  ? `Narration didn't match every roll (${adherence.matched}/${adherence.matched + adherence.mismatched} matched)`
+                  ? `Narration didn't match every roll (${adherence.matched}/${adherence.matched + adherence.mismatched + adherence.unreported + adherence.ambiguous} matched)`
                   : `Narration matched every roll (${adherence.matched} checked)`}
               </span>
             </div>

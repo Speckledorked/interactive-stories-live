@@ -23,7 +23,7 @@
 // budget check, not meant to be exact.
 
 import { estimateTokenCount } from './cost-tracker'
-import { truncateWithEllipsis } from '@/lib/format'
+import { truncateFromStart } from '@/lib/format'
 import type { AIGMRequest } from './client'
 
 // A starting estimate, not a measured figure (no live token-count
@@ -134,11 +134,18 @@ export function applyTokenBudget(
     return { worldSummary, currentSceneIntro, stepsApplied }
   }
 
-  // Tier 2: recent-scene text. Halves it (word-aligned, via the same
-  // truncateWithEllipsis clampPromptStrings' sibling helpers use) rather
-  // than dropping it outright — some continuity beats none.
+  // Tier 2: recent-scene text. Halves it rather than dropping it outright —
+  // some continuity beats none. Critically, this keeps the END of the
+  // string, not the start: sceneResolutionRequest.ts builds this as
+  // [original scene framing] + "What Has Happened Recently" + [the last
+  // two exchanges, oldest first, MOST RECENT LAST]. Cutting from the end
+  // (truncateWithEllipsis) would throw away exactly the freshest exchange
+  // first — the one piece of continuity that actually prevents the next
+  // exchange from re-narrating a beat that just happened. The original
+  // scene-intro framing is comparatively cheap to lose once several
+  // exchanges have piled up; what just happened is not.
   if (currentSceneIntro.length > 0) {
-    currentSceneIntro = truncateWithEllipsis(currentSceneIntro, Math.ceil(currentSceneIntro.length / 2))
+    currentSceneIntro = truncateFromStart(currentSceneIntro, Math.ceil(currentSceneIntro.length / 2))
     stepsApplied.push('current_scene_intro')
   }
   if (underBudget()) {

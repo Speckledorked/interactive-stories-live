@@ -454,16 +454,38 @@ export async function applyCharacterChanges(
       let anyRelationshipApplied = false
 
       for (const relChange of pcChange.changes.relationship_changes) {
-        // DELIBERATELY SEEDED BUG — see docs/ARCHITECTURE.md Priority List
-        // #1 (integrity-autofix.yml's first real manual run). Skips
-        // resolveEntityByNameOrId on purpose, writing the AI's raw
-        // entity_id straight into Character.relationships instead of a
-        // real NPC row's id. Every reader looks this map up by real NPC
-        // id, so this key is orphaned the moment it's written — exactly
-        // the checkKey 'character.relationships.keys.resolve' exists to
-        // catch. DO NOT MERGE THIS TO main as a real fix for anything;
-        // this is the test payload for the autofix pipeline itself.
-        const entityId = relChange.entity_id
+        // Resolve to a REAL NPC row's id before using it as a key. This map
+        // is read back by real NPC id everywhere (resolution.ts's roll
+        // lookup, socialTies.ts, questFailure.ts), so writing the AI's raw
+        // entity_id here orphans the entry the moment it's written — the
+        // checkKey 'character.relationships.keys.resolve'. It also splits
+        // one NPC into two half-histories whenever the narrator names them
+        // by id one turn and by name the next.
+        //
+        // entity_name is tried as a fallback because the two fields are a
+        // pair the AI fills in freely: an id it invented alongside a name
+        // it got right is a recoverable report, not a lost one. Same
+        // recover-by-name preference the integrity repair for this checkKey
+        // already applies to data that got through (repairs/
+        // referentialIntegrity.ts).
+        const byReportedId = resolveEntityByNameOrId(npcsForResolution, relChange.entity_id)
+        const relResolution = byReportedId.kind === 'found'
+          ? byReportedId
+          : resolveEntityByNameOrId(npcsForResolution, relChange.entity_name)
+
+        if (relResolution.kind !== 'found') {
+          // Ambiguous is treated exactly like not-found, per
+          // entityResolution.ts's contract — guessing which NPC a
+          // relationship belongs to is the corruption this avoids.
+          console.warn(
+            `  ⚠️ ${character.name}: relationship change names an NPC that couldn't be resolved ` +
+            `(id "${relChange.entity_id}", name "${relChange.entity_name}") — skipped rather than ` +
+            `writing a key no reader can look up`
+          )
+          continue
+        }
+
+        const entityId = relResolution.entity.id
         const currentRel = currentRelationships[entityId] || {
           trust: 0,
           tension: 0,

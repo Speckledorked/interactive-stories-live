@@ -15,6 +15,7 @@ vi.mock('@/lib/prisma', () => ({
     character: { findUnique: vi.fn(), findMany: vi.fn() },
     scene: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     playerAction: { create: vi.fn(), findMany: vi.fn() },
+    campaignMembership: { findMany: vi.fn() },
   },
 }))
 vi.mock('@/lib/auth', () => ({
@@ -92,6 +93,14 @@ beforeEach(() => {
   // same as before this was made to actually wait. Tests that care about
   // a bigger living roster override this.
   db.character.findMany.mockResolvedValue([{ userId: 'user1' }])
+  // Default: every userId submitPlayerAction checks membership for is an
+  // active member — matches every test's implicit assumption from before
+  // this filter existed. Echoes back whatever was queried rather than a
+  // fixed list, so it stays correct as tests below override the living
+  // roster to include user2/etc. without each needing its own override.
+  db.campaignMembership.findMany.mockImplementation(({ where }: any) =>
+    Promise.resolve((where?.userId?.in ?? []).map((userId: string) => ({ userId })))
+  )
   db.scene.findUnique.mockResolvedValue(makeBaseScene())
   db.scene.findMany.mockResolvedValue([])
   db.scene.update.mockResolvedValue({})

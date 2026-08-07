@@ -154,6 +154,23 @@ export async function submitPlayerAction(
     participantUserIds = [...new Set(livingCharacters.map(c => c.userId))]
   }
 
+  // A removed or banned member's Character row isn't touched (removing
+  // someone from a campaign shouldn't narratively kill their character),
+  // so without this filter a departed player would count as required
+  // forever — nobody left who could ever submit that action, and this
+  // scene would silently wait for them until a GM manually noticed and
+  // force-resolved. Applies to both branches above: an open scene's
+  // freshly-computed roster and a scoped/split-party scene's fixed one,
+  // since either can list someone who's since left.
+  if (participantUserIds.length > 0) {
+    const activeMembers = await prisma.campaignMembership.findMany({
+      where: { campaignId, userId: { in: participantUserIds } },
+      select: { userId: true }
+    })
+    const activeMemberIds = new Set(activeMembers.map(m => m.userId))
+    participantUserIds = participantUserIds.filter(uid => activeMemberIds.has(uid))
+  }
+
   // Get all actions for this scene's current exchange (not all exchanges)
   const allActions = await prisma.playerAction.findMany({
     where: {

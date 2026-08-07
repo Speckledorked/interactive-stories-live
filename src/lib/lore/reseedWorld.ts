@@ -43,6 +43,7 @@ import { generateMoveFlavor } from '@/lib/ai/moveFlavor'
 import { generateWorldRules, generatedRulesToWorldRules } from '@/lib/ai/worldRulesGenerator'
 import { generateWorldGraph } from '@/lib/ai/worldGraphGenerator'
 import { buildLoreDigest } from './loreDigest'
+import { retrieveRelevantLore } from '@/lib/ai/loreRetrieval'
 import { createFactionsForCampaign, createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 import { BASIC_MOVES } from '@/lib/pbta-moves'
@@ -177,6 +178,25 @@ export async function reseedWorldFromLore(campaignId: string, options: ReseedOpt
   const lore = await buildLoreDigest(prisma, campaignId)
   if (!lore) return { ok: false, reason: 'no_lore' }
 
+  // buildLoreDigest samples evenly across the whole corpus BY CHUNK INDEX,
+  // which systematically under-represents a short, single-chunk reference
+  // page (e.g. a page that just lists a series' named stat system) against
+  // long multi-chunk ones (a 30KB chapter-summary page can eat dozens of
+  // sample slots). A campaign's stat system is exactly the kind of short,
+  // high-signal page that gets diluted out by chance alone. Targeted
+  // semantic retrieval guarantees it survives regardless of the broad
+  // digest's luck. minSimilarity is lower than loreRetrieval's per-scene
+  // default (0.75) since this is a synthetic query, not a real question,
+  // and this runs once per reseed rather than once per scene.
+  const statLore = await retrieveRelevantLore(
+    campaignId,
+    'character attributes stats abilities power system status',
+    { maxEntries: 2, minSimilarity: 0.5 }
+  )
+  const statLoreBlock = statLore.length > 0
+    ? `\n\n### Character attribute/stat system (if this is a real, named system in canon)\n${statLore.map(e => `${e.title}: ${e.content}`).join('\n\n')}`
+    : ''
+
   const characterCount = await prisma.character.count({ where: { campaignId } })
   const fresh = characterCount === 0
 
@@ -188,7 +208,7 @@ export async function reseedWorldFromLore(campaignId: string, options: ReseedOpt
     // The existing opening situation stays canon — reseeding restructures
     // the world's pillars, it doesn't retcon how the story opened.
     campaign.initialWorldSeed || undefined,
-    lore.digest
+    lore.digest + statLoreBlock
   )
   if (!generated) return { ok: false, reason: 'generation_failed' }
 

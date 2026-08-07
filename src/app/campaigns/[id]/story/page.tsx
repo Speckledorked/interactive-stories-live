@@ -106,6 +106,12 @@ export default function StoryPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [expandedActions, setExpandedActions] = useState<Record<string, boolean>>({})
+  // Per-scene, per-exchange collapse overrides for a scene's resolution
+  // history. Absent = default (only the most recent exchange starts
+  // expanded) — see isExchangeExpanded below. Keeping this as sparse
+  // overrides rather than a full map means a brand-new exchange always
+  // defaults correctly without this state needing to be seeded anywhere.
+  const [expandedExchanges, setExpandedExchanges] = useState<Record<string, Record<number, boolean>>>({})
   const [activeMap, setActiveMap] = useState<MapData | null>(null)
   const [showMap, setShowMap] = useState(true)
   const [showCharacterSnapshot, setShowCharacterSnapshot] = useState(false)
@@ -1202,19 +1208,49 @@ export default function StoryPage() {
                           <h3 className="font-display text-lg font-semibold text-myth-ink mb-3">
                             {scene.sceneResolutionText.includes('---') ? 'Resolutions' : 'Resolution'}
                           </h3>
-                          {/* Split multiple resolutions by separator */}
-                          {scene.sceneResolutionText.split('\n\n---\n\n').map((resolution: string, idx: number) => (
-                            <div key={idx} className={idx > 0 ? 'mt-6 pt-6 border-t border-myth-border' : ''}>
-                              {scene.sceneResolutionText.includes('---') && (
-                                <h4 className="text-sm font-medium text-myth-ink-faint mb-2">
-                                  Exchange {idx + 1}
-                                </h4>
-                              )}
-                              <p className="max-w-prose whitespace-pre-wrap leading-relaxed text-myth-ink-muted">
-                                {resolution}
-                              </p>
-                            </div>
-                          ))}
+                          {/* Split multiple resolutions by separator. Only the
+                              most recent exchange is expanded by default —
+                              earlier ones collapse to a one-line preview so a
+                              long-running scene doesn't turn into an endless
+                              scroll. Each collapses/reopens independently. */}
+                          {(() => {
+                            const resolutions = scene.sceneResolutionText!.split('\n\n---\n\n')
+                            const lastIdx = resolutions.length - 1
+                            const overrides = expandedExchanges[scene.id]
+                            return resolutions.map((resolution: string, idx: number) => {
+                              const isExpanded = overrides?.[idx] ?? idx === lastIdx
+                              return (
+                                <div key={idx} className={idx > 0 ? 'mt-4 pt-4 border-t border-myth-border' : ''}>
+                                  {resolutions.length > 1 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedExchanges(prev => ({
+                                        ...prev,
+                                        [scene.id]: { ...prev[scene.id], [idx]: !isExpanded },
+                                      }))}
+                                      className="w-full flex items-center justify-between text-left mb-2 group"
+                                    >
+                                      <h4 className="text-sm font-medium text-myth-ink-faint group-hover:text-myth-ink transition-colors">
+                                        Exchange {idx + 1}
+                                      </h4>
+                                      <span className="text-myth-ink-faint text-xs flex-shrink-0 ml-2">
+                                        {isExpanded ? '▼' : '▶'}
+                                      </span>
+                                    </button>
+                                  ) : null}
+                                  {isExpanded ? (
+                                    <p className="max-w-prose whitespace-pre-wrap leading-relaxed text-myth-ink-muted">
+                                      {resolution}
+                                    </p>
+                                  ) : (
+                                    <p className="max-w-prose truncate text-sm text-myth-ink-faint italic">
+                                      {resolution.trim().slice(0, 140)}{resolution.trim().length > 140 ? '…' : ''}
+                                    </p>
+                                  )}
+                                </div>
+                              )
+                            })
+                          })()}
                         </div>
 
                         {/* AI Transparency Panel - Show world state changes */}

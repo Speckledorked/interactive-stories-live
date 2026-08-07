@@ -56,6 +56,40 @@ describe('buildSystemPrompt — outcome-band pacing (#115)', () => {
   })
 })
 
+describe('buildSystemPrompt — second-person narrative voice for solo scenes', () => {
+  function makeRequestWithCharacters(characterCount: number): AIGMRequest {
+    return {
+      campaign_universe: 'Test Universe',
+      ai_system_prompt: 'Be a good GM.',
+      world_summary: {
+        characters: Array.from({ length: characterCount }, (_, i) => ({ id: `char-${i}`, name: `PC ${i}` })),
+      },
+    } as unknown as AIGMRequest
+  }
+
+  it('addresses the player in second person when exactly one PC is in the scene', () => {
+    const prompt = buildSystemPrompt(makeRequestWithCharacters(1))
+    expect(prompt).toContain('<narrative_voice>')
+    expect(prompt).toMatch(/second person/i)
+  })
+
+  it('omits the section for a multi-PC scene, staying third-person-by-name', () => {
+    const prompt = buildSystemPrompt(makeRequestWithCharacters(3))
+    expect(prompt).not.toContain('<narrative_voice>')
+  })
+
+  it('omits the section when there are zero characters (nothing to be solo about)', () => {
+    const prompt = buildSystemPrompt(makeRequestWithCharacters(0))
+    expect(prompt).not.toContain('<narrative_voice>')
+  })
+
+  it('does not throw and omits the section when world_summary is entirely absent from the request', () => {
+    const request = { campaign_universe: 'Test', ai_system_prompt: 'x' } as unknown as AIGMRequest
+    expect(() => buildSystemPrompt(request)).not.toThrow()
+    expect(buildSystemPrompt(request)).not.toContain('<narrative_voice>')
+  })
+})
+
 describe('buildSystemPrompt — outcome_echo appears in the response template, not just prose', () => {
   // The model was consistently omitting outcome_echo from real responses.
   // Root cause: <response_format>'s example JSON — the literal structure

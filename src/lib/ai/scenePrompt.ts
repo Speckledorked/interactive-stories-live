@@ -24,6 +24,21 @@ Players control ONLY their own characters and their actions.
 </role>`
 }
 
+// Exactly one PC in play — either a genuinely solo campaign (world_summary.
+// characters only ever lists one character) or a split-party scene scoped
+// to a single character (see participantCharacterIds in
+// sceneResolutionRequest.ts). Either way "you" is unambiguous, so second
+// person reads more immersive than constantly naming the one PC in the
+// room. A scene with 2+ PCs never gets this — "you" would be ambiguous
+// about which of them it means, so those stay third-person-by-name as
+// they always have.
+function buildNarrativeVoiceSection(isSoloScene: boolean): string {
+  if (!isSoloScene) return ''
+  return `<narrative_voice>
+Exactly one player character is active here. Address them directly in the second person ("you") instead of by name or third person — "You duck behind the crate as the shot goes wide," not "Kess ducks behind the crate." Every OTHER character (NPCs, allies, anyone else) still gets normal third person by name. Stay consistent for the whole response - don't drift back to third person for the POV character partway through.
+</narrative_voice>`
+}
+
 function buildCampaignPrinciplesSection(aiSystemPrompt: string): string {
   return `<campaign_principles>
 ${aiSystemPrompt}
@@ -442,8 +457,10 @@ Be creative, dramatic, and true to the ${universe} universe while maintaining ga
  * Updated with modern prompt engineering best practices (XML structure, clearer hierarchy)
  */
 export function buildSystemPrompt(request: AIGMRequest): string {
+  const isSoloScene = (request.world_summary?.characters?.length ?? 0) === 1
   return `${buildRoleSection(request.campaign_universe)}
 
+${buildNarrativeVoiceSection(isSoloScene)}
 ${buildCampaignPrinciplesSection(request.ai_system_prompt)}
 
 ${CRITICAL_INSTRUCTIONS}

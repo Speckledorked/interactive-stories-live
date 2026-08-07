@@ -121,21 +121,23 @@ describe('deriveChronicleGlance', () => {
     recentEvents: [],
   }
 
-  it('derives a null weatherLabel and topFaction, zero counts, from an empty input', () => {
+  it('derives a null weatherLabel/weatherLocationName and topFaction, zero counts, from an empty input', () => {
     expect(deriveChronicleGlance(baseInput)).toEqual({
       weatherLabel: null,
+      weatherLocationName: null,
       topFaction: null,
       activeConflictCount: 0,
       recentEventCount: 0,
     })
   })
 
-  it('formats weatherLabel from condition + location name when weather is present', () => {
+  it('formats weatherLabel from condition + location name, and carries the bare location name separately, when weather is present', () => {
     const result = deriveChronicleGlance({
       ...baseInput,
       weather: { locationName: 'Greenstone', condition: 'RAIN', severity: 3 },
     })
     expect(result.weatherLabel).toBe('RAIN in Greenstone')
+    expect(result.weatherLocationName).toBe('Greenstone')
   })
 
   it('takes the first (highest-threat) faction as topFaction, ignoring the rest', () => {

@@ -28,6 +28,12 @@ export interface ChronicleNarrationInput {
 // ChronicleNarrationInput by deriveChronicleGlance (chronicleContext.ts).
 export interface ChronicleGlance {
   weatherLabel: string | null
+  // Separate from weatherLabel so the lobby tile can deep-link straight to
+  // this location's wiki entry instead of just the general Locations tab.
+  // Optional: existing campaigns' already-persisted chronicleGlance JSON
+  // predates this field and won't have it until their next world turn —
+  // callers must treat it as possibly absent, not just possibly null.
+  weatherLocationName?: string | null
   topFaction: { name: string; threatLevel: number } | null
   activeConflictCount: number
   recentEventCount: number

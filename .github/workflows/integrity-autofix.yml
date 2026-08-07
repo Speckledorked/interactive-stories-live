@@ -231,6 +231,12 @@ jobs:
             echo "---"
             echo "_Reverted automatically by the Integrity Engine's Phase 5 pipeline._"
           } > /tmp/pr_body.md
+          # Same fix as the diagnose-and-fix job's push step — gh pr create
+          # --label requires the label to already exist.
+          gh label create "integrity-autofix-revert:${CHECK_KEY}" \
+            --color "B60205" \
+            --description "Opened by the Integrity Engine's autofix pipeline reverting a fix for this checkKey" \
+            2>/dev/null || true
           gh pr create \
             --title "Revert auto-fix for ${CHECK_KEY} — recurred after merge" \
             --label "integrity-autofix-revert:${CHECK_KEY}" \
@@ -415,6 +421,19 @@ jobs:
             echo "---"
             echo "_Opened and merged automatically by the Integrity Engine's Phase 5 pipeline._"
           } > /tmp/pr_body.md
+          # `gh pr create --label` requires the label to already exist —
+          # it does not create one on the fly. Run #5 died here outright
+          # ("could not add label ... not found") on the very first
+          # checkKey this pipeline ever fixed, since nothing had ever
+          # created "integrity-autofix:<checkKey>" before. Create it
+          # (idempotently — `|| true` covers the label already existing
+          # on a later run for the same checkKey) immediately before the
+          # PR that needs it, rather than requiring every checkKey's label
+          # to be pre-provisioned by hand.
+          gh label create "integrity-autofix:${CHECK_KEY}" \
+            --color "5319E7" \
+            --description "Opened by the Integrity Engine's autofix pipeline for this checkKey" \
+            2>/dev/null || true
           gh pr create \
             --title "Integrity auto-fix: ${CHECK_KEY}" \
             --label "integrity-autofix:${CHECK_KEY}" \

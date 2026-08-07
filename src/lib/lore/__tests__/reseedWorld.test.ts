@@ -8,6 +8,7 @@ import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
 import { generateMoveFlavor } from '@/lib/ai/moveFlavor'
 import { generateWorldRules } from '@/lib/ai/worldRulesGenerator'
+import { retrieveRelevantLore } from '@/lib/ai/loreRetrieval'
 import { createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
 import { BASIC_MOVES } from '@/lib/pbta-moves'
 
@@ -29,6 +30,9 @@ const db = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 vi.mock('../loreDigest', () => ({
   buildLoreDigest: vi.fn().mockResolvedValue({ digest: 'canon excerpt', totalEntries: 3, sampledEntries: 3 }),
+}))
+vi.mock('@/lib/ai/loreRetrieval', () => ({
+  retrieveRelevantLore: vi.fn().mockResolvedValue([]),
 }))
 vi.mock('@/lib/ai/worldGenerator', () => ({
   generateWorldFromTemplate: vi.fn().mockResolvedValue({
@@ -261,6 +265,34 @@ describe('reseedWorldFromLore — stat labels', () => {
 
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.summary.statLabelsSet).toBe(true)
+  })
+
+  it('appends targeted stat/attribute lore to the digest passed to generation, when found', async () => {
+    db.character.count.mockResolvedValue(0)
+    vi.mocked(retrieveRelevantLore).mockResolvedValue([
+      { id: 'l1', title: 'Attributes', content: 'Power, Speed, Spirit, Recovery', sourceUrl: null, similarity: 0.8 },
+    ] as any)
+
+    await reseedWorldFromLore('camp1')
+
+    expect(retrieveRelevantLore).toHaveBeenCalledWith(
+      'camp1',
+      expect.stringMatching(/attributes/i),
+      expect.objectContaining({ maxEntries: 2 })
+    )
+    const digestArg = vi.mocked(generateWorldFromTemplate).mock.calls[0][5]
+    expect(digestArg).toContain('canon excerpt')
+    expect(digestArg).toContain('Power, Speed, Spirit, Recovery')
+  })
+
+  it('does not alter the digest when no targeted stat/attribute lore is found', async () => {
+    db.character.count.mockResolvedValue(0)
+    vi.mocked(retrieveRelevantLore).mockResolvedValue([])
+
+    await reseedWorldFromLore('camp1')
+
+    const digestArg = vi.mocked(generateWorldFromTemplate).mock.calls[0][5]
+    expect(digestArg).toBe('canon excerpt')
   })
 })
 

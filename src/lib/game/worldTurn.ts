@@ -11,6 +11,7 @@ import { resolveWorldTurnHours, decideWorldTurnPacing } from './tick/pacing'
 import { advanceClocks, decideClockAdvancement } from './tick/clockTick'
 import type { FactionForClockAdvancement } from './tick/clockTick'
 import { resolveCompletedAmbitions } from './tick/ambitionResolution'
+import { resolveGenericClockEffects } from './tick/clockResolutionEffects'
 import { applyNpcGoalFallbacks } from './tick/npcGoalFallback'
 import { generateOffscreenEvents } from './worldTurnOffscreenEvents'
 import { sendWorldDigest } from '@/lib/notifications/world-digest'
@@ -123,6 +124,18 @@ export async function runWorldTurn(campaignId: string) {
     const completedAmbitionClocks = completedClocks.filter((c: any) => c.sourceFactionId)
     if (completedAmbitionClocks.length > 0) {
       await resolveCompletedAmbitions(campaignId, currentTurn, completedAmbitionClocks, inGameDayNumber)
+    }
+
+    // 2a-ii. GM/world clocks (no sourceFactionId — not an ambition) get an
+    // AI-decided, bounded mechanical follow-through on top of the narrated
+    // event checkAndResolveCompletedClocks already created for them above
+    // — a completed clock can spawn a continuing clock, dent a real
+    // location's condition, or nudge a real faction's stats, instead of
+    // only ever producing flavor text. Best-effort per clock; never blocks
+    // the turn (see resolveGenericClockEffects's own try/catch).
+    const completedGenericClocks = completedClocks.filter((c: any) => !c.sourceFactionId)
+    if (completedGenericClocks.length > 0) {
+      await resolveGenericClockEffects(campaignId, currentTurn, completedGenericClocks as any)
     }
 
     // 2b. Major NPCs whose goal just completed this tick — these need AI

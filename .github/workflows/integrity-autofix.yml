@@ -211,13 +211,18 @@ jobs:
       - name: Push and merge the revert
         env:
           GH_TOKEN: ${{ github.token }}
+          # See the matching comment in the diagnose-and-fix job's push step
+          # — pass through env, not spliced with ${{ }} directly into the
+          # script body, so this stays safe even though regression_pr is
+          # low-risk (an integer PR number) today.
+          REGRESSION_PR: ${{ needs.triage.outputs.regression_pr }}
         run: |
           git push origin HEAD
           {
             echo "## This reverts a previous auto-fix that didn't work"
             echo ""
             printf 'checkKey `%s` escalated again after PR #%s (commit `%s`) claimed to fix it.\n' \
-              "${CHECK_KEY}" "${{ needs.triage.outputs.regression_pr }}" "${REVERT_SHA}"
+              "${CHECK_KEY}" "${REGRESSION_PR}" "${REVERT_SHA}"
             echo ""
             echo "Reverted automatically — no human approved this revert either. The"
             echo "underlying bug still exists; the next scheduled run will attempt a"
@@ -360,6 +365,21 @@ jobs:
         if: success() && steps.verify_oracle.outputs.oracle_satisfied == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          # Threaded through env, not interpolated with ${{ }} directly into
+          # the script body below. GitHub Actions substitutes ${{ }}
+          # expressions into the run script's SOURCE TEXT before bash ever
+          # parses it — evidence/campaign_count/total_occurrences are built
+          # from real campaign data (NPC names, descriptions), so any quote,
+          # backtick, or $ in there corrupts or hijacks the script. Run #4
+          # hit exactly this: the evidence JSON's own double quotes broke
+          # bash's quoting and cascaded into an unrelated syntax error two
+          # lines later. env: values are passed as real OS environment
+          # variables, never spliced into the script text, which is the
+          # documented fix for this class of GitHub Actions script-injection
+          # bug — see "$VAR" usage below instead of ${{ }} splicing.
+          CAMPAIGN_COUNT: ${{ needs.check-for-escalations.outputs.campaign_count }}
+          TOTAL_OCCURRENCES: ${{ needs.check-for-escalations.outputs.total_occurrences }}
+          EVIDENCE_JSON: ${{ needs.check-for-escalations.outputs.evidence }}
         run: |
           # The checkout step's persisted git credential can no longer be
           # trusted here — the diagnose-and-fix step above runs
@@ -375,13 +395,13 @@ jobs:
             echo "## Evidence"
             echo ""
             printf -- '- **checkKey:** `%s`\n' "${CHECK_KEY}"
-            printf -- '- **Campaigns affected:** %s\n' "${{ needs.check-for-escalations.outputs.campaign_count }}"
-            printf -- '- **Total occurrences:** %s\n' "${{ needs.check-for-escalations.outputs.total_occurrences }}"
+            printf -- '- **Campaigns affected:** %s\n' "${CAMPAIGN_COUNT}"
+            printf -- '- **Total occurrences:** %s\n' "${TOTAL_OCCURRENCES}"
             printf -- '- **Oracle technique verified in this diff:** %s\n' "true"
             echo ""
             echo "Full evidence:"
             echo '```json'
-            printf '%s\n' "${{ needs.check-for-escalations.outputs.evidence }}"
+            printf '%s\n' "${EVIDENCE_JSON}"
             echo '```'
             echo ""
             echo "## Autonomy"

@@ -282,6 +282,17 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Run #6 failed with the actual Claude Code SDK run itself
+          # reporting is_error:true after 15 turns / $0.69 spent, with
+          # permission_denials_count:0 — so it wasn't blocked by
+          # allowedTools below, something else went wrong mid-diagnosis.
+          # The action hides the full turn-by-turn transcript by default
+          # ("hidden for security"), so there was nothing to diagnose from.
+          # This is a private repo's own Actions log, and the value of
+          # being able to see WHY an autonomous run failed outweighs the
+          # default caution here — keep this on so future failures in this
+          # step are debuggable instead of a black box.
+          show_full_output: true
           # No bash/git access by default — grant exactly what diagnosing
           # and fixing needs, and nothing that could push or open a PR.
           # That boundary is enforced here, not left to the prompt alone.

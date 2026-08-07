@@ -128,8 +128,10 @@ GOOD EXAMPLES (ALWAYS DO THIS):
 ✓ "The sword Maria drew catches the light. The bandit leader grins. 'A fighter. Good.'"
 ✓ "The corridor splits. Left passage: torchlight. Right passage: darkness and dripping water"
 
-IF THE PLAYER SAID IT: You can quote it exactly as written
-IF THE PLAYER DIDN'T SAY IT: The player character doesn't say it
+IF THE PLAYER WROTE ACTUAL DIALOGUE for their character (words in quotes, or "I say/tell them..."): you can quote that exactly.
+IF THE PLAYER DIDN'T WRITE DIALOGUE: The player character doesn't say anything you invent for them.
+
+OUT-OF-CHARACTER ASIDES ARE NOT DIALOGUE: a submitted action often mixes what the character actually does with the player's own real-world reason for choosing it — "I go along with the questioning because I'm bored," "I take the shortcut to speed this up," "I attack him for the loot." That reasoning is a note to YOU about why the player picked this action, never something the character says, thinks, or feels in the fiction. Narrate only the in-fiction action itself ("Kess goes along with the questioning") and never voice the player's out-of-character rationale as the character's own words.
 
 REMEMBER: Players want to make their own choices and speak their own words. Give them situations to respond to, not responses you've decided for them.
 </player_character_control>`
@@ -649,7 +651,12 @@ ${lore.map(l =>
 
 function buildPlayerActionsSection(playerActions: AIGMRequest['player_actions']): string {
   return playerActions.map(a => {
-    const lines = [`${a.character_name}: "${a.action_text}"`]
+    // Not quote-wrapped like a dialogue line on purpose — see
+    // <player_character_control>'s out-of-character-asides rule. Quoting
+    // the whole submitted action as if it were spoken visually primed the
+    // model to treat a player's real-world rationale within it ("...
+    // because I'm bored") as something their character says out loud.
+    const lines = [`${a.character_name}'s submitted action: ${a.action_text}`]
     if (a.mechanics) {
       lines.push(`  → MECHANICAL OUTCOME (binding, already rolled): ${a.mechanics.move_name} — ${a.mechanics.outcome === 'strongHit' ? 'STRONG HIT' : a.mechanics.outcome === 'weakHit' ? 'WEAK HIT' : 'MISS'}. ${a.mechanics.outcome_text}`)
       if (a.mechanics.position) lines.push(`  → POSITION (binding): they acted from ${a.mechanics.position}. Narrate them there`)

@@ -109,6 +109,48 @@ describe('buildSystemPrompt — outcome_echo appears in the response template, n
   })
 })
 
+describe('buildSystemPrompt — player action text is not treated as literal dialogue', () => {
+  // A submitted action like "I go along with the questioning because I'm
+  // bored" mixes the in-fiction action with the player's own real-world
+  // reason for choosing it. The model was voicing that reasoning as if the
+  // character said it out loud. Root cause: <player_character_control>'s
+  // old "IF THE PLAYER SAID IT: quote it exactly" rule gave no way to
+  // distinguish in-character dialogue from an out-of-character aside.
+  it('tells the model an out-of-character aside within an action is not something the character says', () => {
+    const prompt = buildSystemPrompt(makeRequest([]))
+    expect(prompt).toMatch(/out-of-character/i)
+    expect(prompt).toMatch(/because I'm bored/i)
+  })
+
+  it('only treats explicit written dialogue as quotable, not the whole submitted action', () => {
+    const prompt = buildSystemPrompt(makeRequest([]))
+    expect(prompt).toMatch(/PLAYER WROTE ACTUAL DIALOGUE/i)
+  })
+})
+
+describe('buildUserPrompt — player actions are not quote-wrapped like dialogue', () => {
+  // Presenting the whole action as `Name: "text"` visually primed the
+  // model to treat it as a spoken line, reinforcing the same bug the
+  // system-prompt fix above addresses from the other direction.
+  function makeActionRequest(actionText: string): AIGMRequest {
+    return {
+      world_summary: {
+        turn_number: 1,
+        in_game_date: 'Day 1',
+        characters: [], npcs: [], factions: [], clocks: [], recent_timeline_events: [],
+      },
+      current_scene_intro: 'The room is quiet.',
+      player_actions: [{ character_name: 'Kess', action_text: actionText }],
+    } as unknown as AIGMRequest
+  }
+
+  it('presents the action without wrapping it in quotes like a dialogue line', () => {
+    const prompt = buildUserPrompt(makeActionRequest("I go along with the questioning because I'm bored"))
+    expect(prompt).toContain("Kess's submitted action: I go along with the questioning because I'm bored")
+    expect(prompt).not.toContain('Kess: "')
+  })
+})
+
 describe('buildUserPrompt — season in the world_state line (#118)', () => {
   function makeUserRequest(season?: string): AIGMRequest {
     return {

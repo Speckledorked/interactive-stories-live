@@ -14,6 +14,7 @@
 
 import { TickEntityType, WorldChange } from '../tick/types'
 import { WorldRules } from './worldRules'
+import { ValidationDegradation } from './checks/validationDegradation'
 
 /** One fact the engine asserts must hold for every campaign, regardless of
  * setting or fiction (see integrity/checks/ for the structural-tier list;
@@ -181,6 +182,12 @@ export interface IntegrityReport {
    * integrity/escalation.ts. Empty on nearly every pass. */
   escalations: Escalation[]
   perCheckMs: Record<string, number>
+  /** Set by persistReport.ts, not runIntegrityPass — see
+   * checks/validationDegradation.ts for why this rate signal lives
+   * outside the structural-tier Violation/Escalation machinery above.
+   * Absent when there isn't yet a full window of scene-resolution
+   * history for this campaign to judge. */
+  validationDegradation?: ValidationDegradation
 }
 
 /** Converts an applied repair into the same WorldChange shape every other

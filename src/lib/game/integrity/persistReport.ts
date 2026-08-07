@@ -8,6 +8,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { IntegrityReport } from './types'
+import { detectValidationDegradation } from './checks/validationDegradation'
 
 type Db = Prisma.TransactionClient | PrismaClient
 
@@ -24,10 +25,30 @@ export async function persistIntegrityReport(db: Db, report: IntegrityReport): P
     const worldMeta = await db.worldMeta.findUnique({ where: { campaignId: report.campaignId } })
     if (!worldMeta) return
 
+    // Computed here, not in runIntegrityPass — this is the one place that
+    // already loads WorldMeta.aiMetrics for a real (non-dry-run) pass, so
+    // this rides along at zero extra queries. See
+    // checks/validationDegradation.ts for why it isn't a structural-tier
+    // IntegrityCheck.
+    const validationDegradation = detectValidationDegradation(
+      (worldMeta.aiMetrics as { requestHistory?: unknown } | null)?.requestHistory
+    )
+    const reportToPersist: IntegrityReport = validationDegradation
+      ? { ...report, validationDegradation }
+      : report
+
+    if (validationDegradation?.degraded) {
+      console.error(
+        `🚨 AI validation degrading for ${report.campaignId}: ` +
+        `${validationDegradation.degradedCount}/${validationDegradation.sampleSize} of the ` +
+        `last scene resolutions fell back to partial/emergency validation`
+      )
+    }
+
     const history = Array.isArray(worldMeta.integrityReportHistory)
       ? (worldMeta.integrityReportHistory as unknown as IntegrityReport[])
       : []
-    history.push(report)
+    history.push(reportToPersist)
     const recentHistory = history.slice(-MAX_HISTORY)
 
     await db.worldMeta.update({

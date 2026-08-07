@@ -1,13 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { persistIntegrityReport } from '../persistReport'
 import type { IntegrityReport } from '../types'
+import { VALIDATION_DEGRADATION_WINDOW } from '../checks/validationDegradation'
 
 const db = () => ({
   worldMeta: {
-    findUnique: vi.fn(async (): Promise<any> => ({ id: 'wm1', integrityReportHistory: null })),
+    findUnique: vi.fn(async (): Promise<any> => ({ id: 'wm1', integrityReportHistory: null, aiMetrics: null })),
     update: vi.fn(async () => ({})),
   },
 })
+
+function sceneResolution(validationLevel: string) {
+  return { requestType: 'scene_resolution', validationLevel }
+}
 
 const report = (over: Partial<IntegrityReport> = {}): IntegrityReport => ({
   campaignId: 'camp1',
@@ -78,6 +83,63 @@ describe('persistIntegrityReport', () => {
 
     await expect(persistIntegrityReport(tx as any, report())).resolves.toBeUndefined()
     expect(errorSpy).toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it('leaves the report untouched when there is not yet a full window of scene-resolution history', async () => {
+    const tx = db()
+    tx.worldMeta.findUnique.mockResolvedValue({
+      id: 'wm1',
+      integrityReportHistory: null,
+      aiMetrics: { requestHistory: [sceneResolution('full')] },
+    })
+
+    await persistIntegrityReport(tx as any, report())
+
+    const data = (tx.worldMeta.update as any).mock.calls[0][0].data
+    expect(data.integrityReportHistory[0]).toEqual(report())
+    expect(data.integrityReportHistory[0].validationDegradation).toBeUndefined()
+  })
+
+  it('attaches validationDegradation to the persisted report once a full window is available', async () => {
+    const tx = db()
+    tx.worldMeta.findUnique.mockResolvedValue({
+      id: 'wm1',
+      integrityReportHistory: null,
+      aiMetrics: {
+        requestHistory: Array.from({ length: VALIDATION_DEGRADATION_WINDOW }, () => sceneResolution('full')),
+      },
+    })
+
+    await persistIntegrityReport(tx as any, report())
+
+    const data = (tx.worldMeta.update as any).mock.calls[0][0].data
+    expect(data.integrityReportHistory[0].validationDegradation).toEqual({
+      window: VALIDATION_DEGRADATION_WINDOW,
+      sampleSize: VALIDATION_DEGRADATION_WINDOW,
+      degradedCount: 0,
+      rate: 0,
+      degraded: false,
+    })
+  })
+
+  it('logs an error when the degradation rate is over threshold', async () => {
+    const tx = db()
+    tx.worldMeta.findUnique.mockResolvedValue({
+      id: 'wm1',
+      integrityReportHistory: null,
+      aiMetrics: {
+        requestHistory: [
+          ...Array.from({ length: 5 }, () => sceneResolution('emergency')),
+          ...Array.from({ length: 5 }, () => sceneResolution('full')),
+        ],
+      },
+    })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await persistIntegrityReport(tx as any, report())
+
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('AI validation degrading'))
     errorSpy.mockRestore()
   })
 })

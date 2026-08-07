@@ -26,6 +26,14 @@ interface Escalation {
   sample: Violation
 }
 
+interface ValidationDegradation {
+  window: number
+  sampleSize: number
+  degradedCount: number
+  rate: number
+  degraded: boolean
+}
+
 interface IntegrityReport {
   turnNumber: number
   timestamp: string
@@ -34,6 +42,10 @@ interface IntegrityReport {
   unrepaired: Violation[]
   escalations: Escalation[]
   perCheckMs: Record<string, number>
+  // Not a structural violation — a rate signal over recent AI responses
+  // (see game/integrity/checks/validationDegradation.ts). Absent when this
+  // campaign hasn't yet had a full window of scene resolutions to judge.
+  validationDegradation?: ValidationDegradation
 }
 
 interface IntegrityData {
@@ -195,6 +207,29 @@ export function IntegrityPanel({ campaignId, worldMeta }: { campaignId: string; 
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {latest.validationDegradation && (
+        <section
+          className={`rounded-lg border p-5 ${
+            latest.validationDegradation.degraded
+              ? 'border-red-700/40'
+              : 'border-myth-border bg-myth-surface'
+          }`}
+        >
+          <h3 className="font-medium text-myth-ink">
+            {latest.validationDegradation.degraded
+              ? 'AI response validation is degrading'
+              : 'AI response validation'}
+          </h3>
+          <p className="mt-1 text-xs text-myth-ink-faint">
+            {latest.validationDegradation.degradedCount}/{latest.validationDegradation.sampleSize} of the
+            last scene resolutions fell back to partial/emergency validation instead of a full response
+            ({Math.round(latest.validationDegradation.rate * 100)}%).
+            {latest.validationDegradation.degraded &&
+              ' Worth checking whether a required field is silently being dropped somewhere in the validation ladder.'}
+          </p>
         </section>
       )}
 

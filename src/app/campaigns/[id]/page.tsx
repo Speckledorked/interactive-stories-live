@@ -389,6 +389,8 @@ export default function CampaignLobbyPage() {
         <WorldChronicle
           campaignId={campaignId}
           narration={campaign.worldMeta?.chronicleNarration ?? null}
+          hoursSinceWorldTurn={campaign.worldMeta?.hoursSinceWorldTurn ?? null}
+          worldTurnHours={campaign.worldMeta?.worldTurnHours ?? null}
         />
 
         {/* World Timeline — offscreen world-turn fallout the player missed

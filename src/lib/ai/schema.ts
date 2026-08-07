@@ -440,10 +440,20 @@ export const WorldUpdatesSchema = z.object({
 // one existed previously but was never read consistently (a report using
 // it alone banked zero hours toward the world-turn clock while still
 // jumping the displayed date), so it's not part of the contract.
+//
+// days/hours require at least one to actually be present (0 is fine — an
+// instant exchange should say so) rather than letting the whole object be
+// silently absent. Before this, the AI could (and in practice did) just
+// omit time_passage entirely on some responses, which meant zero hours
+// ever banked toward the world-turn clock for that exchange with no
+// signal anything was wrong — nothing failed validation, so the existing
+// "reformat and retry" loop (validation.ts) never had a reason to kick in.
 export const TimePassageSchema = z.object({
   days: z.number().optional(),
   hours: z.number().optional(),
   description: z.string().optional()
+}).refine((v) => v.days !== undefined || v.hours !== undefined, {
+  message: 'time_passage must report at least one of days or hours — use 0 if truly no time passed (e.g. mid-conversation), never omit it',
 })
 
 // Full AI GM response schema
@@ -472,7 +482,12 @@ export const AIGMResponseSchema = z.object({
     character_name_or_id: z.string().max(SHORT_TEXT),
     outcome: z.enum(['strongHit', 'weakHit', 'miss'])
   })).optional(),
-  time_passage: TimePassageSchema.optional(),
+  // Required, not optional — see TimePassageSchema's own comment for why:
+  // an absent time_passage silently banked zero hours with no validation
+  // failure to catch it. Required here routes a response that skips it
+  // through the same reformat-and-retry loop as any other schema
+  // violation (validation.ts) instead of resolving successfully.
+  time_passage: TimePassageSchema,
   world_updates: WorldUpdatesSchema
 })
 

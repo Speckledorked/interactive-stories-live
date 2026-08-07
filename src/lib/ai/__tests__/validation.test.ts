@@ -10,6 +10,7 @@ describe('AI Response Validation (Phase 15)', () => {
     it('should validate a complete valid AI response', () => {
       const validResponse = {
         scene_text: 'The heroes burst through the door, weapons drawn. The villain turns to face them with a cruel smile.',
+        time_passage: { hours: 0 },
         world_updates: {
           pc_changes: [
             {
@@ -41,6 +42,7 @@ describe('AI Response Validation (Phase 15)', () => {
     it('should validate response with relationship changes', () => {
       const validResponse = {
         scene_text: 'The guard captain nods appreciatively at your bravery.',
+        time_passage: { hours: 0 },
         world_updates: {
           pc_changes: [
             {
@@ -70,6 +72,7 @@ describe('AI Response Validation (Phase 15)', () => {
     it('should validate response with consequences', () => {
       const validResponse = {
         scene_text: 'You promise the merchant you\'ll return with the stolen goods.',
+        time_passage: { hours: 0 },
         world_updates: {
           pc_changes: [
             {
@@ -89,6 +92,45 @@ describe('AI Response Validation (Phase 15)', () => {
 
       const result = validateAIResponse(validResponse)
 
+      if (!result.success) throw new Error('Expected validation to succeed')
+      expect(result.level).toBe('full')
+    })
+  })
+
+  describe('time_passage is required, not optional', () => {
+    // A response omitting time_passage entirely used to validate as
+    // 'full' and silently bank zero hours toward the world-turn clock —
+    // no error, no retry, no signal anything was wrong. Now it degrades
+    // instead, which is what routes it through the reformat-and-retry
+    // loop (validateAIResponseWithRepair) rather than resolving quietly.
+    it('degrades a response missing time_passage entirely', () => {
+      const response = {
+        scene_text: 'The heroes burst through the door, weapons drawn. The villain turns to face them with a cruel smile.',
+        world_updates: {},
+      }
+      const result = validateAIResponse(response)
+      if (!result.success) throw new Error('Expected at least partial validation to succeed')
+      expect(result.level).not.toBe('full')
+    })
+
+    it('degrades a response whose time_passage has neither days nor hours', () => {
+      const response = {
+        scene_text: 'The heroes burst through the door, weapons drawn. The villain turns to face them with a cruel smile.',
+        time_passage: { description: 'a little while' },
+        world_updates: {},
+      }
+      const result = validateAIResponse(response)
+      if (!result.success) throw new Error('Expected at least partial validation to succeed')
+      expect(result.level).not.toBe('full')
+    })
+
+    it('accepts an explicit zero — the AI must say so, not omit it', () => {
+      const response = {
+        scene_text: 'The heroes burst through the door, weapons drawn. The villain turns to face them with a cruel smile.',
+        time_passage: { hours: 0 },
+        world_updates: {},
+      }
+      const result = validateAIResponse(response)
       if (!result.success) throw new Error('Expected validation to succeed')
       expect(result.level).toBe('full')
     })
@@ -214,6 +256,7 @@ describe('AI Response Validation (Phase 15)', () => {
     it('should validate harm values within range', () => {
       const validHarm = {
         scene_text: 'You take a glancing blow from the sword. The blade cuts across your arm, drawing blood, but you manage to stay on your feet.',
+        time_passage: { hours: 0 },
         world_updates: {
           pc_changes: [
             {
@@ -268,10 +311,12 @@ describe('buildRepairPrompt', () => {
 describe('validateAIResponseWithRepair (depth-hardening #36)', () => {
   const validResponse = {
     scene_text: 'The heroes burst through the door, weapons drawn. The villain turns to face them with a cruel smile.',
+    time_passage: { hours: 0 },
     world_updates: { pc_changes: [{ character_name_or_id: 'character_123', changes: { harm_damage: 2 } }] },
   }
   const invalidResponse = {
     scene_text: 'You take massive damage.',
+    time_passage: { hours: 0 },
     world_updates: { pc_changes: [{ character_name_or_id: 'hero_001', changes: { harm_damage: 10 } }] },
   }
 

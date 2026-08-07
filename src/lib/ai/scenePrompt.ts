@@ -263,7 +263,7 @@ ORGANIC CHARACTER GROWTH:
 
 TIME PASSAGE:
 - Combat: minutes | Travel: hours | Investigation: hours | Rest: days
-- Be realistic and include time_passage in response
+- REQUIRED on every response — time_passage.hours or time_passage.days must always be present, even when the answer is 0. A response missing it fails validation and gets bounced back to you for correction.
 - Examples: {"days": 0, "hours": 0, "description": "Mere moments"} | {"days": 1, "hours": 6, "description": "A day and a half"}
 </mechanics>`
 

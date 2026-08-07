@@ -148,17 +148,22 @@ export default function VisualTimeline({ events, compact = false }: VisualTimeli
 }
 
 // Compact version for sidebars
-export function CompactTimeline({ events }: { events: TimelineEvent[] }) {
+export function CompactTimeline({ events, onSelectEvent }: { events: TimelineEvent[]; onSelectEvent?: (event: TimelineEvent) => void }) {
   return (
     <div className="space-y-2">
       {events.slice(0, 5).map((event, index) => (
-        <div key={event.id} className="flex items-start gap-2 p-2 rounded hover:bg-myth-surface-sunken transition-colors">
+        <button
+          key={event.id}
+          onClick={() => onSelectEvent?.(event)}
+          disabled={!onSelectEvent}
+          className="flex w-full items-start gap-2 p-2 rounded hover:bg-myth-surface-sunken transition-colors text-left disabled:cursor-default"
+        >
           <div className="w-2 h-2 mt-2 rounded-full bg-myth-accent flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-myth-ink truncate">{event.title}</p>
             <p className="font-mono text-xs text-myth-ink-faint">Turn {event.turnNumber}</p>
           </div>
-        </div>
+        </button>
       ))}
       {events.length > 5 && (
         <p className="text-xs text-myth-ink-faint text-center pt-2">

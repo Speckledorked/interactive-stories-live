@@ -113,7 +113,6 @@ export default function StoryPage() {
   // defaults correctly without this state needing to be seeded anywhere.
   const [expandedExchanges, setExpandedExchanges] = useState<Record<string, Record<number, boolean>>>({})
   const [activeMap, setActiveMap] = useState<MapData | null>(null)
-  const [showMap, setShowMap] = useState(true)
   const [showCharacterSnapshot, setShowCharacterSnapshot] = useState(false)
   const [sceneWorldStateChanges, setSceneWorldStateChanges] = useState<Record<string, WorldStateChange[]>>({})
   // #96: scene illustration. Populated two ways: on load, from each
@@ -1066,10 +1065,10 @@ export default function StoryPage() {
         }
       />
 
-      <main className="max-w-7xl mx-auto px-4 pt-28 pb-28">
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 pt-28 pb-28">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6">
         {/* Main Story Column */}
-        <div className="lg:col-span-3 space-y-6">
+        <div className="lg:col-span-3 space-y-4 lg:space-y-6">
           {/* Status Messages */}
           {error && (
             <div className="bg-myth-danger/10 border border-myth-danger/30 text-myth-danger px-4 py-3 rounded-lg">
@@ -1142,9 +1141,9 @@ export default function StoryPage() {
 
               return (
                 <div key={scene.id} className="space-y-4">
-                  <div className="rounded-lg border border-myth-border/60 bg-myth-surface/40 p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
+                  <div className="rounded-lg border border-myth-border/60 bg-myth-surface/40 p-4 sm:p-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                         <h2 className="font-display text-xl font-semibold text-myth-ink">
                           Scene {scene.sceneNumber}
                         </h2>
@@ -1160,7 +1159,7 @@ export default function StoryPage() {
                           ))}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {scene.isPaused && (
                           <span className="px-3 py-1 rounded-full text-xs font-medium bg-myth-danger/10 text-myth-danger">
                             ✋ paused
@@ -1763,7 +1762,7 @@ export default function StoryPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
+        <div className="space-y-4 lg:space-y-6">
           <CharacterSelectorPanel
             userCharacters={userCharacters}
             selectedCharacterId={selectedCharacterId}
@@ -1786,8 +1785,6 @@ export default function StoryPage() {
 
           <MapViewerPanel
             activeMap={activeMap}
-            showMap={showMap}
-            onToggleShowMap={() => setShowMap(!showMap)}
             characterName={selectedCharacter?.name || ''}
           />
 
@@ -1798,9 +1795,9 @@ export default function StoryPage() {
             userCharacters={userCharacters}
           />
 
-          <ActiveClocksPanel clocks={campaign?.campaign?.clocks} />
+          <ActiveClocksPanel clocks={campaign?.campaign?.clocks} campaignId={campaignId} />
 
-          <RecentTimelinePanel timeline={campaign?.campaign?.timeline} />
+          <RecentTimelinePanel timeline={campaign?.campaign?.timeline} campaignId={campaignId} />
         </div>
       </div>
       </main>

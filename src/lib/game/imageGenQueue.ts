@@ -35,20 +35,37 @@ export interface EnqueueResult {
 
 /**
  * Create (or reuse) the SceneImage row for a scene and kick the worker.
- * One row per scene (the schema's @@unique([sceneId])): if a PENDING/
- * RUNNING attempt already exists, this is a no-op returning it.
+ * One row per scene (the schema's @@unique([sceneId])), so this looks up
+ * by that unique key rather than just PENDING/RUNNING — a second call for
+ * a scene whose row is already COMPLETED or FAILED would otherwise hit
+ * the unique constraint on `create()` (this was a real, previously
+ * unreachable gap: the automatic first-exchange trigger only ever calls
+ * this once per scene, but a manual retry/backfill trigger calls it again
+ * for exactly the scenes most likely to already have a FAILED row).
+ * PENDING/RUNNING/COMPLETED all dedupe onto the existing row; FAILED
+ * resets for a fresh retry instead of colliding.
  */
 export async function enqueueSceneImageGeneration(
   campaignId: string,
   sceneId: string,
   prompt: string
 ): Promise<EnqueueResult> {
-  const existing = await prisma.sceneImage.findFirst({
-    where: { sceneId, status: { in: ['PENDING', 'RUNNING'] } },
-    select: { id: true },
+  const existing = await prisma.sceneImage.findUnique({
+    where: { sceneId },
+    select: { id: true, status: true },
   })
-  if (existing) {
+
+  if (existing && existing.status !== 'FAILED') {
     return { jobId: existing.id, deduped: true }
+  }
+
+  if (existing) {
+    const job = await prisma.sceneImage.update({
+      where: { id: existing.id },
+      data: { status: 'PENDING', prompt, attempts: 0, lastError: null, finishedAt: null, imageUrl: null },
+    })
+    await kickImageJob(job.id)
+    return { jobId: job.id, deduped: false }
   }
 
   const job = await prisma.sceneImage.create({

@@ -53,19 +53,44 @@ beforeEach(() => {
 })
 
 describe('enqueueSceneImageGeneration', () => {
-  it('dedupes onto an existing live job', async () => {
-    db.sceneImage.findFirst.mockResolvedValue({ id: 'img1' })
+  it('dedupes onto an existing PENDING/RUNNING job', async () => {
+    db.sceneImage.findUnique.mockResolvedValue({ id: 'img1', status: 'PENDING' })
     const result = await enqueueSceneImageGeneration('camp1', 'scene1', 'a prompt')
     expect(result).toEqual({ jobId: 'img1', deduped: true })
     expect(db.sceneImage.create).not.toHaveBeenCalled()
+    expect(db.sceneImage.update).not.toHaveBeenCalled()
   })
 
-  it('creates and kicks a new job when none is live', async () => {
-    db.sceneImage.findFirst.mockResolvedValue(null)
+  it('dedupes onto an existing COMPLETED job rather than regenerating', async () => {
+    db.sceneImage.findUnique.mockResolvedValue({ id: 'img1', status: 'COMPLETED' })
+    const result = await enqueueSceneImageGeneration('camp1', 'scene1', 'a prompt')
+    expect(result).toEqual({ jobId: 'img1', deduped: true })
+    expect(db.sceneImage.create).not.toHaveBeenCalled()
+    expect(db.sceneImage.update).not.toHaveBeenCalled()
+  })
+
+  it('creates and kicks a new job when none exists yet', async () => {
+    db.sceneImage.findUnique.mockResolvedValue(null)
     db.sceneImage.create.mockResolvedValue({ id: 'img2' })
     const result = await enqueueSceneImageGeneration('camp1', 'scene1', 'a prompt')
     expect(result).toEqual({ jobId: 'img2', deduped: false })
     expect(db.sceneImage.create).toHaveBeenCalledWith({ data: { campaignId: 'camp1', sceneId: 'scene1', prompt: 'a prompt' } })
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/internal/generate-scene-image'),
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('resets a FAILED job and retries instead of colliding with the unique constraint', async () => {
+    db.sceneImage.findUnique.mockResolvedValue({ id: 'img3', status: 'FAILED' })
+    db.sceneImage.update.mockResolvedValue({ id: 'img3' })
+    const result = await enqueueSceneImageGeneration('camp1', 'scene1', 'a new prompt')
+    expect(result).toEqual({ jobId: 'img3', deduped: false })
+    expect(db.sceneImage.create).not.toHaveBeenCalled()
+    expect(db.sceneImage.update).toHaveBeenCalledWith({
+      where: { id: 'img3' },
+      data: { status: 'PENDING', prompt: 'a new prompt', attempts: 0, lastError: null, finishedAt: null, imageUrl: null },
+    })
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/internal/generate-scene-image'),
       expect.objectContaining({ method: 'POST' })

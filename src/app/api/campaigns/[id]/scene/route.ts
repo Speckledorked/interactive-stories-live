@@ -104,10 +104,34 @@ export async function GET(
       }
     }
 
-    // For backwards compatibility, also return the first scene as "scene"
-    const currentScene = activeScenes.length > 0 ? activeScenes[0] : null
+    // SceneImage.sceneId is a plain indexed string, not a Prisma relation
+    // (see its schema comment — deliberately no FK), so it can't ride
+    // along in the `include` above; fetched separately and attached here
+    // so the story page knows whether a scene already has (or failed to
+    // get) an illustration on initial load, not just via the
+    // scene:image-ready Pusher event fired after a fresh generation
+    // completes.
+    let scenesWithImages = activeScenes
+    if (activeScenes.length > 0) {
+      try {
+        const images = await prisma.sceneImage.findMany({
+          where: { sceneId: { in: activeScenes.map(s => s.id) } },
+          select: { sceneId: true, status: true, imageUrl: true },
+        })
+        const imagesBySceneId = new Map(images.map(img => [img.sceneId, img]))
+        scenesWithImages = activeScenes.map(scene => ({
+          ...scene,
+          sceneImage: imagesBySceneId.get(scene.id) ?? null,
+        }))
+      } catch (imageLookupError) {
+        console.error('Scene image lookup failed (non-critical):', imageLookupError)
+      }
+    }
 
-    return NextResponse.json({ scene: currentScene, scenes: activeScenes })
+    // For backwards compatibility, also return the first scene as "scene"
+    const currentScene = scenesWithImages.length > 0 ? scenesWithImages[0] : null
+
+    return NextResponse.json({ scene: currentScene, scenes: scenesWithImages })
   } catch (error) {
     return handleRouteError(error, 'Get scene error', 'Internal server error')
   }

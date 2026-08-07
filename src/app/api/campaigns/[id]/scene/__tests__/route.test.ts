@@ -15,7 +15,8 @@ vi.mock('@/lib/prisma', () => ({
     character: { findUnique: vi.fn(), findMany: vi.fn() },
     scene: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     playerAction: { create: vi.fn(), findMany: vi.fn() },
-    campaignMembership: { findMany: vi.fn() },
+    campaignMembership: { findMany: vi.fn(), findUnique: vi.fn() },
+    sceneImage: { findMany: vi.fn() },
   },
 }))
 vi.mock('@/lib/auth', () => ({
@@ -43,6 +44,7 @@ vi.mock('@/lib/game/exchange-manager', () => ({
 }))
 vi.mock('@/lib/game/resolutionQueue', () => ({
   enqueueSceneResolution: vi.fn().mockResolvedValue(undefined),
+  recoverStaleJobs: vi.fn().mockResolvedValue(undefined),
 }))
 
 import { prisma } from '@/lib/prisma'
@@ -50,7 +52,7 @@ import { requireAuth } from '@/lib/auth'
 import { checkRateLimit } from '@/lib/rateLimit'
 import { moderatePlayerText } from '@/lib/ai/moderation'
 import { enqueueSceneResolution } from '@/lib/game/resolutionQueue'
-import { POST } from '../route'
+import { GET, POST } from '../route'
 
 const db = prisma as any
 
@@ -105,6 +107,8 @@ beforeEach(() => {
   db.scene.findMany.mockResolvedValue([])
   db.scene.update.mockResolvedValue({})
   db.scene.updateMany.mockResolvedValue({ count: 1 })
+  db.campaignMembership.findUnique.mockResolvedValue({ userId: 'user1', campaignId: 'camp1', role: 'PLAYER' })
+  db.sceneImage.findMany.mockResolvedValue([])
   db.playerAction.create.mockResolvedValue({
     id: 'action1',
     sceneId: 'scene1',
@@ -275,5 +279,72 @@ describe('POST /api/campaigns/[id]/scene', () => {
     expect(db.scene.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { waitingOnUsers: ['user1'] } })
     )
+  })
+})
+
+describe('GET /api/campaigns/[id]/scene — sceneImage attachment', () => {
+  // SceneImage.sceneId is a plain indexed string, not a Prisma relation
+  // (see the schema comment), so route.ts fetches it separately and
+  // merges it in rather than riding along in scene.findMany's `include`.
+  const call = () => GET(new NextRequest('http://localhost/api/campaigns/camp1/scene'), { params: { id: 'camp1' } })
+
+  function makeActiveScene(id: string) {
+    return {
+      id,
+      campaignId: 'camp1',
+      status: 'AWAITING_ACTIONS',
+      sceneNumber: 1,
+      playerActions: [],
+      gmClarifications: [],
+    }
+  }
+
+  it('attaches sceneImage status/url when a row exists for the scene', async () => {
+    db.scene.findMany.mockResolvedValue([makeActiveScene('scene1')])
+    db.sceneImage.findMany.mockResolvedValue([
+      { sceneId: 'scene1', status: 'COMPLETED', imageUrl: 'https://blob.example/scene1.png' },
+    ])
+
+    const response = await call()
+    const body = await response.json()
+
+    expect(db.sceneImage.findMany).toHaveBeenCalledWith({
+      where: { sceneId: { in: ['scene1'] } },
+      select: { sceneId: true, status: true, imageUrl: true },
+    })
+    expect(body.scene.sceneImage).toEqual({ sceneId: 'scene1', status: 'COMPLETED', imageUrl: 'https://blob.example/scene1.png' })
+    expect(body.scenes[0].sceneImage).toEqual({ sceneId: 'scene1', status: 'COMPLETED', imageUrl: 'https://blob.example/scene1.png' })
+  })
+
+  it('attaches sceneImage: null when no row exists for the scene', async () => {
+    db.scene.findMany.mockResolvedValue([makeActiveScene('scene1')])
+    db.sceneImage.findMany.mockResolvedValue([])
+
+    const response = await call()
+    const body = await response.json()
+
+    expect(body.scene.sceneImage).toBeNull()
+  })
+
+  it('degrades gracefully — still returns scenes — if the sceneImage lookup fails', async () => {
+    db.scene.findMany.mockResolvedValue([makeActiveScene('scene1')])
+    db.sceneImage.findMany.mockRejectedValue(new Error('db unreachable'))
+
+    const response = await call()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.scene.id).toBe('scene1')
+  })
+
+  it('skips the lookup entirely when there are no active scenes', async () => {
+    db.scene.findMany.mockResolvedValue([])
+
+    const response = await call()
+    const body = await response.json()
+
+    expect(db.sceneImage.findMany).not.toHaveBeenCalled()
+    expect(body.scene).toBeNull()
+    expect(body.scenes).toEqual([])
   })
 })

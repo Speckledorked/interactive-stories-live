@@ -361,6 +361,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The checkout step's persisted git credential can no longer be
+          # trusted here — the diagnose-and-fix step above runs
+          # anthropics/claude-code-action@v1, which does its own OIDC token
+          # exchange and reconfigures git's local credential for its own
+          # git-status/diff/add/commit access, displacing whatever checkout
+          # set up. Re-assert a known-good credential immediately before the
+          # operation that actually needs to authenticate, instead of
+          # depending on ambient state left behind by an unrelated step.
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin HEAD
           {
             echo "## Evidence"

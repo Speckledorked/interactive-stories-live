@@ -54,16 +54,20 @@ export function TurnOrderPanel({
     )
   }
 
+  // Compact single row rather than a full card — most scenes never turn
+  // this on, so the common case shouldn't cost a whole card's worth of
+  // height explaining an opt-in feature. Full explanation lives in a
+  // title tooltip instead of always-visible body text.
   return (
-    <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
-      <h3 className="text-sm font-medium text-myth-ink-faint uppercase tracking-wide mb-2">Turn Order</h3>
-      <p className="text-xs text-myth-ink-muted mb-3">
-        Play is freeform by default — anyone can act anytime. Turn this on if you'd rather the party go in order for this scene; it's just a visible queue and timer, submitting an action is never blocked by it.
-      </p>
+    <div
+      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-myth-border bg-myth-surface px-4 py-3"
+      title="Play is freeform by default — anyone can act anytime. Turn order is just a visible queue and timer; submitting an action is never blocked by it."
+    >
+      <p className="text-xs text-myth-ink-faint">Play is freeform — anyone can act anytime.</p>
       <button
         onClick={onEnableTurnOrder}
         disabled={enablingTurnOrder}
-        className="rounded-md border border-myth-border py-2 px-4 text-sm font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink w-full disabled:opacity-50"
+        className="shrink-0 rounded-md border border-myth-border px-3 py-1.5 text-xs font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
       >
         {enablingTurnOrder ? 'Enabling…' : 'Enable turn order'}
       </button>

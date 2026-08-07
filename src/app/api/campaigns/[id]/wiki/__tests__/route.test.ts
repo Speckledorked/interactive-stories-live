@@ -18,6 +18,7 @@ vi.mock('@/lib/prisma', () => ({
     location: { findMany: vi.fn() },
     clock: { findMany: vi.fn() },
     campaignMembership: { findFirst: vi.fn() },
+    character: { findFirst: vi.fn() },
   },
 }))
 
@@ -48,6 +49,7 @@ beforeEach(() => {
   db.faction.findMany.mockResolvedValue([])
   db.location.findMany.mockResolvedValue([])
   db.clock.findMany.mockResolvedValue([])
+  db.character.findFirst.mockResolvedValue(null)
 })
 
 describe('GET', () => {
@@ -134,6 +136,42 @@ describe('GET', () => {
     expect(db.wikiEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { campaignId: 'camp1', entryType: 'NPC' },
     }))
+  })
+
+  it('attaches diegetic myStanding labels from the requesting user\'s own character', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([{ entryType: 'NPC', name: 'Elder Rowan' }])
+    db.nPC.findMany.mockResolvedValue([{ id: 'npc1', name: 'Elder Rowan' }])
+    db.character.findFirst.mockResolvedValue({
+      relationships: { npc1: { trust: 60, tension: 0, respect: 0, fear: 0 } },
+    })
+
+    const response = await GET(getRequest(), { params: { id: 'camp1' } })
+    const body = await response.json()
+
+    const entry = body.entries.find((e: any) => e.name === 'Elder Rowan')
+    expect(entry.myStanding).toEqual(['Trusts you'])
+    // Never the raw numbers.
+    expect(JSON.stringify(entry)).not.toContain('60')
+  })
+
+  it('gives an empty myStanding when the user has no character in this campaign yet', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([{ entryType: 'NPC', name: 'Elder Rowan' }])
+    db.nPC.findMany.mockResolvedValue([{ id: 'npc1', name: 'Elder Rowan' }])
+    db.character.findFirst.mockResolvedValue(null)
+
+    const response = await GET(getRequest(), { params: { id: 'camp1' } })
+    const body = await response.json()
+
+    expect(body.entries.find((e: any) => e.name === 'Elder Rowan').myStanding).toEqual([])
+  })
+
+  it('skips the character lookup entirely when no NPC entries are in play', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([{ entryType: 'FACTION', name: 'Thieves Guild' }])
+    db.faction.findMany.mockResolvedValue([{ id: 'f1', name: 'Thieves Guild' }])
+
+    await GET(getRequest('?type=FACTION'), { params: { id: 'camp1' } })
+
+    expect(db.character.findFirst).not.toHaveBeenCalled()
   })
 })
 

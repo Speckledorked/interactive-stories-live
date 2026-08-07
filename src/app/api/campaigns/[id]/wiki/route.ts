@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { UserRole } from '@prisma/client'
 import { visibleTo } from '@/lib/api/visibility'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { summarizeNpcRelationship, type NpcRelationshipValues } from '@/lib/game/npcRelationship'
 
 // Fog of war: WikiEntry rows are matched to their source entity by name, not
 // a real FK, so there's no isDiscovered column to filter on directly here.
@@ -134,6 +135,49 @@ async function visibleEntityStubs(
   return stubs
 }
 
+/**
+ * Attaches `myStanding: string[]` to every NPC-type entry — diegetic labels
+ * (never numbers) drawn from the REQUESTING USER's own character, not a
+ * shared campaign-wide value. This is what makes the wiki's NPC page
+ * genuinely per-viewer: two different players looking at the same NPC can
+ * see different labels, because each reads their own Character.relationships
+ * blob (see worldUpdaters/characters.ts's relationship_changes handling).
+ *
+ * WikiEntry rows (and the synthetic stubs above) are matched to their real
+ * NPC row by name, same as the fog-of-war filter above — there's no FK to
+ * follow directly. Safe since Phase 1b added real case-insensitive
+ * uniqueness on (campaignId, name) for NPCs.
+ *
+ * No-ops entirely (zero extra queries) when the requested type excludes
+ * NPCs, and degrades to an empty array per entry when the user has no
+ * character in this campaign yet.
+ */
+async function attachMyNpcStanding<T extends { entryType: string; name: string }>(
+  campaignId: string,
+  userId: string,
+  entries: T[]
+): Promise<Array<T & { myStanding?: string[] }>> {
+  if (!entries.some((e) => e.entryType === 'NPC')) return entries
+
+  const [npcs, myCharacter] = await Promise.all([
+    prisma.nPC.findMany({ where: { campaignId }, select: { id: true, name: true } }),
+    prisma.character.findFirst({
+      where: { campaignId, userId, isAlive: true },
+      select: { relationships: true },
+    }),
+  ])
+
+  const npcIdByName = new Map(npcs.map((n) => [n.name.toLowerCase(), n.id]))
+  const relationships = (myCharacter?.relationships as Record<string, NpcRelationshipValues> | null) || {}
+
+  return entries.map((entry) => {
+    if (entry.entryType !== 'NPC') return entry
+    const npcId = npcIdByName.get(entry.name.toLowerCase())
+    const myStanding = npcId ? summarizeNpcRelationship(relationships[npcId]) : []
+    return { ...entry, myStanding }
+  })
+}
+
 // GET /api/campaigns/[id]/wiki - Get wiki entries
 export async function GET(
   request: NextRequest,
@@ -184,7 +228,12 @@ export async function GET(
     // still deserve a row — see visibleEntityStubs above.
     const stubs = await visibleEntityStubs(campaignId, isAdmin, entryType, visibleEntries)
 
-    return NextResponse.json({ entries: [...visibleEntries, ...stubs] })
+    // Attach the requesting user's own per-character NPC standing — must
+    // run after fog-of-war filtering above, so an undiscovered NPC's name
+    // never gets a chance to match an entry the user shouldn't see exists.
+    const combined = await attachMyNpcStanding(campaignId, user.userId, [...visibleEntries, ...stubs])
+
+    return NextResponse.json({ entries: combined })
   } catch (error) {
     console.error('Error fetching wiki entries:', error)
     return NextResponse.json({ error: 'Failed to fetch wiki entries' }, { status: 500 })

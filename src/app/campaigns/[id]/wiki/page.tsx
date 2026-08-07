@@ -312,6 +312,32 @@ export default function WikiPage() {
                 </span>
               </div>
 
+              {/* Per-viewer, not campaign-wide: drawn from the logged-in
+                  player's own hidden trust/tension/respect/fear with this
+                  NPC (see npcRelationship.ts) — two players looking at the
+                  same NPC can see different labels here, same as the
+                  character sheet's own Reputation section. Numbers never
+                  leave the server; only these diegetic labels do. */}
+              {selectedEntry.entryType === 'NPC' && selectedEntry.myStanding && selectedEntry.myStanding.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">Your Standing</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedEntry.myStanding.map((label: string, i: number) => (
+                      <span
+                        key={i}
+                        className={`rounded-full border px-3 py-1.5 text-sm ${
+                          label.startsWith('Fear') || label.includes('hostile') || label.startsWith('Distrust') || label.startsWith('Dismiss')
+                            ? 'border-myth-danger/30 bg-myth-danger/10 text-myth-danger'
+                            : 'border-myth-border bg-myth-surface-sunken text-myth-ink-muted'
+                        }`}
+                      >
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {selectedEntry.imageUrl && (
                 // eslint-disable-next-line @next/next/no-img-element -- no next/image remote-host config exists yet
                 <img

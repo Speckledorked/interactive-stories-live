@@ -36,9 +36,13 @@ export interface WorldChange {
    * 'wake' changes (#103) come from tick/wakeTick.ts's institutional-memory
    * ripple — reuses entityType 'FACTION' rather than adding a new
    * TickEntityType, so this tag is what actually distinguishes a wake
-   * stability hit from an ordinary one.
+   * stability hit from an ordinary one. 'clockResolution' changes come
+   * from tick/clockResolutionEffects.ts — a completed GM/world clock's
+   * AI-decided mechanical follow-through (spawned clock, location
+   * condition hit, faction stat nudge), distinguishing it from an
+   * ordinary tick or ambition-resolution write to the same field.
    */
-  origin?: 'tick' | 'consequence' | 'integrity' | 'wake'
+  origin?: 'tick' | 'consequence' | 'integrity' | 'wake' | 'clockResolution'
   /** Set only when origin is 'integrity' — the IntegrityCheck.key that
    * produced this repair, so escalation (integrity/escalation.ts) can tell
    * "this got repaired again" apart from "this field just changed again in

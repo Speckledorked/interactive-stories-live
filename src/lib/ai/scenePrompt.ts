@@ -124,6 +124,7 @@ You MUST respond with a JSON object matching this structure:
 {
   "scene_text": "Full narrated resolution (200-400 words MAX, mostly dialogue and action)...",
   "scene_summary": "One or two plain-prose sentences recapping what actually happened this scene — a real summary, not a shortened copy of scene_text.",
+  "outcome_echo": [{"character_name_or_id": "CHARACTER_NAME", "outcome": "weakHit"}],
   "time_passage": {"days": 0, "hours": 2, "description": "..."},
   "world_updates": {
     "pc_changes": [

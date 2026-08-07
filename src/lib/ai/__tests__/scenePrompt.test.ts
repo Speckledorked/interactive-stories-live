@@ -56,6 +56,25 @@ describe('buildSystemPrompt — outcome-band pacing (#115)', () => {
   })
 })
 
+describe('buildSystemPrompt — outcome_echo appears in the response template, not just prose', () => {
+  // The model was consistently omitting outcome_echo from real responses.
+  // Root cause: <response_format>'s example JSON — the literal structure
+  // the model is told it "MUST" match — never included the field; it was
+  // only described in a paragraph of prose elsewhere in the prompt. A
+  // field that's explained but never demonstrated in the example template
+  // is exactly the kind of thing a model reliably drops. This pins the
+  // fix: the field must be present in the actual example object, not just
+  // mentioned in <mechanical_outcomes>.
+  it('includes outcome_echo in the <response_format> example structure', () => {
+    const prompt = buildSystemPrompt(makeRequest([]))
+    const responseFormatSection = prompt.slice(
+      prompt.indexOf('<response_format>'),
+      prompt.indexOf('</response_format>')
+    )
+    expect(responseFormatSection).toContain('"outcome_echo"')
+  })
+})
+
 describe('buildUserPrompt — season in the world_state line (#118)', () => {
   function makeUserRequest(season?: string): AIGMRequest {
     return {

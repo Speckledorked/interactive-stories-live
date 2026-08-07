@@ -40,6 +40,13 @@ export default function WikiPage() {
   const campaignId = params.id as string
   const initialType = (searchParams.get('type') as WikiTab) || 'NPC'
   const initialSearch = searchParams.get('search') || ''
+  // Deep-link support (e.g. the lobby's "World at a Glance" tiles): a
+  // caller can land here with ?type=FACTION&entry=<name> and have that
+  // specific entry auto-select once it loads, reusing the exact same
+  // pendingEntryName resolution the in-page cross-reference links below
+  // already do — loadEntries' initial-load effect doesn't care whether the
+  // pending name came from a URL param or a click.
+  const initialEntry = searchParams.get('entry')
 
   const [entries, setEntries] = useState<any[]>([])
   const [rumors, setRumors] = useState<any[]>([])
@@ -51,7 +58,7 @@ export default function WikiPage() {
   // Set when a cross-reference link points at an entry on a different tab:
   // the tab switch triggers a reload, and the entry can only be selected
   // once that reload lands.
-  const [pendingEntryName, setPendingEntryName] = useState<string | null>(null)
+  const [pendingEntryName, setPendingEntryName] = useState<string | null>(initialEntry)
 
   useEffect(() => {
     if (!isAuthenticated()) {

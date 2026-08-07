@@ -87,7 +87,7 @@ export function AdminOverviewPanel({
       <section>
         <SectionHeader title="World Summary" as="h2" />
         <div className="mt-3">
-          <WorldStateDashboard npcs={npcs} factions={factions} clocks={clocks} worldNotes={worldNotes} />
+          <WorldStateDashboard campaignId={campaignId} npcs={npcs} factions={factions} clocks={clocks} worldNotes={worldNotes} />
         </div>
       </section>
     </div>

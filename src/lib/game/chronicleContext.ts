@@ -122,6 +122,7 @@ export function deriveChronicleGlance(input: ChronicleNarrationInput): Chronicle
   const topFaction = input.factionSignals[0] ?? null
   return {
     weatherLabel: input.weather ? `${input.weather.condition} in ${input.weather.locationName}` : null,
+    weatherLocationName: input.weather?.locationName ?? null,
     topFaction: topFaction ? { name: topFaction.name, threatLevel: topFaction.threatLevel } : null,
     activeConflictCount: input.activeWars.length,
     recentEventCount: input.recentEvents.length,

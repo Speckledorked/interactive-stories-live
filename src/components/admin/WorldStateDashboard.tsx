@@ -5,6 +5,7 @@
 
 'use client'
 
+import Link from 'next/link'
 import { Users, Landmark, Clock as ClockIcon, StickyNote } from 'lucide-react'
 import { CompactClock } from '@/components/clock/ClockProgress'
 
@@ -35,6 +36,7 @@ interface Clock {
 }
 
 interface WorldStateDashboardProps {
+  campaignId: string
   npcs?: NPC[]
   factions?: Faction[]
   clocks?: Clock[]
@@ -86,6 +88,7 @@ function Panel({ icon: Icon, title, count, children }: { icon: React.ComponentTy
 }
 
 export default function WorldStateDashboard({
+  campaignId,
   npcs = [],
   factions = [],
   clocks = [],
@@ -103,7 +106,11 @@ export default function WorldStateDashboard({
             npcs.map((npc) => {
               const status = NPC_STATUS_LABEL[npc.status]
               return (
-                <div key={npc.id} className="rounded-md border border-myth-border p-3">
+                <Link
+                  key={npc.id}
+                  href={`/campaigns/${campaignId}/wiki?type=NPC&entry=${encodeURIComponent(npc.name)}`}
+                  className="block rounded-md border border-myth-border p-3 transition-colors hover:border-myth-border-strong hover:bg-myth-surface-sunken"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -115,7 +122,7 @@ export default function WorldStateDashboard({
                     </div>
                     <RelationshipBadge relationship={npc.relationship} />
                   </div>
-                </div>
+                </Link>
               )
             })
           )}
@@ -126,7 +133,11 @@ export default function WorldStateDashboard({
             <p className="text-sm italic text-myth-ink-faint">No factions tracked yet</p>
           ) : (
             factions.map((faction) => (
-              <div key={faction.id} className="rounded-md border border-myth-border p-3">
+              <Link
+                key={faction.id}
+                href={`/campaigns/${campaignId}/wiki?type=FACTION&entry=${encodeURIComponent(faction.name)}`}
+                className="block rounded-md border border-myth-border p-3 transition-colors hover:border-myth-border-strong hover:bg-myth-surface-sunken"
+              >
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <h4 className="font-medium text-myth-ink">{faction.name}</h4>
                   <RelationshipBadge relationship={faction.relationship} />
@@ -141,7 +152,7 @@ export default function WorldStateDashboard({
                     <div className="h-full bg-myth-ink-muted" style={{ width: `${(faction.influence / 10) * 100}%` }} />
                   </div>
                 </div>
-              </div>
+              </Link>
             ))
           )}
         </Panel>

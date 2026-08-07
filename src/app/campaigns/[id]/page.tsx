@@ -381,6 +381,7 @@ export default function CampaignLobbyPage() {
         </div>
 
         <WorldGlance
+          campaignId={campaignId}
           glance={(campaign.worldMeta?.chronicleGlance as ChronicleGlance | null) ?? null}
           turnNumber={campaign.worldMeta?.currentTurnNumber || 0}
         />

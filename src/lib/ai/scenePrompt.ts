@@ -291,6 +291,11 @@ RESOURCES: gold_delta, contacts_add/remove
 - Example: {"gold_delta": -50, "contacts_add": ["Old Marta, the fence"]}
 - Faction reputation goes through standing_changes (see below), not here — there is no separate reputation field.
 
+CONSEQUENCES (promises, enemies, long-term threats): open threads the fiction owes a follow-through, not permanent flavor text. Each character's "Consequences:" line lists what's currently open — read it before deciding whether to add another.
+- CREATE (consequences_add): when the fiction genuinely earns one — a promise made under real pressure, a rival who now has cause to move against them, a threat introduced that isn't resolved this same scene.
+- CALL BACK: when it serves the story, bring an open one back into play — the promise gets called in, the old enemy resurfaces, the threat escalates or finally arrives. An open thread that's never referenced again might as well not exist.
+- RESOLVE (consequences_remove): once a thread's fiction has actually played out — the promise kept or broken, the enemy defeated or reconciled, the threat passed or neutralized, or the situation has simply moved past it and it's no longer live — remove it, naming the description as written (or the closest match). Don't let something sit on the list once the story itself has moved on from it; a stale, no-longer-relevant consequence is worse than none.
+
 Make changes MATTER. Reference them in scene_text. Lost eye? Show how it affects vision. Equipment stolen? Show their reaction.
 </character_changes>`
 

@@ -109,6 +109,22 @@ describe('buildSystemPrompt — outcome_echo appears in the response template, n
   })
 })
 
+describe('buildSystemPrompt — consequences (promises/enemies/threats) get call-back-and-resolve guidance', () => {
+  // Debts and quests both had explicit "bring it back, then resolve it"
+  // instructions; promises/enemies/longTermThreats had none at all beyond
+  // a bare JSON field example, so they tended to only ever accumulate.
+  it('tells the model to call back an open consequence before it resolves it', () => {
+    const prompt = buildSystemPrompt(makeRequest([]))
+    expect(prompt).toMatch(/CALL BACK/i)
+  })
+
+  it('tells the model to resolve a consequence the story has moved past, not leave it stale', () => {
+    const prompt = buildSystemPrompt(makeRequest([]))
+    expect(prompt).toMatch(/consequences_remove/i)
+    expect(prompt).toMatch(/no longer relevant|no longer live|moved on/i)
+  })
+})
+
 describe('buildSystemPrompt — long-scene pacing pressure', () => {
   // A player reported: "I keep saying 'I comply' to move things along and
   // it's just more of the same." Root cause: the narrator only ever sees

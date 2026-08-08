@@ -112,8 +112,22 @@ const PACING_URGENT_THRESHOLD = 15
 function buildPacingSection(exchangeNumber: number): string {
   if (exchangeNumber < PACING_NUDGE_THRESHOLD) return ''
   const urgent = exchangeNumber >= PACING_URGENT_THRESHOLD
+  if (urgent) {
+    // A softer, conditional urgent tier ("if the player has been
+    // cooperating... that has to work now") shipped first and still let
+    // the model route around it — a scene reported stuck well past this
+    // threshold, still meeting compliance with fresh obstacles. Same
+    // failure mode already confirmed elsewhere in this prompt (soft
+    // "reuse real canon names" guidance under-complied until it became a
+    // hard, unconditional requirement) — the fix is the same shape here:
+    // remove the model's room to judge whether the player "really"
+    // earned resolution, and make it a rule instead of a suggestion.
+    return `<pacing>
+This scene has run ${exchangeNumber} exchanges without resolving — this is unusually long. This is a HARD REQUIREMENT, not a suggestion: end this exchange with the scene's central obstacle fully resolved — the player gets past it, defeats it, talks their way out of it, or it stops mattering. Introducing ANY new complication, delay, obstacle, or redirect this exchange is not permitted, regardless of your own read on whether the player has "really" earned it. Resolve this now — the situation moves forward, cleanly, this exchange.
+</pacing>`
+  }
   return `<pacing>
-This scene has run ${exchangeNumber} exchanges without resolving${urgent ? ' — this is unusually long' : ''}. If the player has been cooperating, de-escalating, or complying across recent exchanges, that has to actually work now: let the current thread genuinely resolve, or shift to something materially different — not another complication of the same kind. Meeting a player who keeps trying to move things along with an endless string of fresh obstacles is a failure of pacing, not tension.${urgent ? ' Resolve this now — the situation moves forward, cleanly, this exchange.' : ''}
+This scene has run ${exchangeNumber} exchanges without resolving. If the player has been cooperating, de-escalating, or complying across recent exchanges, that has to actually work now: let the current thread genuinely resolve, or shift to something materially different — not another complication of the same kind. Meeting a player who keeps trying to move things along with an endless string of fresh obstacles is a failure of pacing, not tension.
 </pacing>`
 }
 

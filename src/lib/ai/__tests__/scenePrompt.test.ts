@@ -159,6 +159,22 @@ describe('buildSystemPrompt — long-scene pacing pressure', () => {
     expect(prompt).toMatch(/unusually long/i)
     expect(prompt).toMatch(/Resolve this now/i)
   })
+
+  // A soft, conditional urgent tier ("if the player has really earned it,
+  // that has to work now") still let the model route around resolving —
+  // a real report of staying stuck well past this threshold. The fix
+  // mirrors the same soft-guidance-to-hard-requirement shape already
+  // proven necessary elsewhere in this file (stat_labels canon reuse).
+  it('makes the urgent tier an unconditional rule, not a judgment call', () => {
+    const prompt = buildSystemPrompt(makeRequestWithExchange(15))
+    expect(prompt).toMatch(/HARD REQUIREMENT/i)
+    expect(prompt).toMatch(/not permitted/i)
+    // The old urgent-tier wording gated resolution on "if the player has
+    // been cooperating" — a hedge the model could (and did) disagree
+    // with to justify one more complication. That conditional framing
+    // must be gone at this tier now, not just supplemented.
+    expect(prompt).not.toMatch(/If the player has been cooperating/i)
+  })
 })
 
 describe('buildSystemPrompt — storytelling rules allow a genuine resolution, not only new problems', () => {

@@ -131,6 +131,24 @@ This scene has run ${exchangeNumber} exchanges without resolving. If the player 
 </pacing>`
 }
 
+// A GM ending a scene before every player has acted (end-scene/route.ts's
+// forceResolve path) used to call resolveScene with nothing distinguishing
+// it from an ordinary exchange — the model had no signal this was final,
+// so it could (and did) leave the scene's own thread hanging, or the route's
+// error-swallowing meant no narration was written at all. This section is
+// the fix's other half: an unconditional instruction, not a suggestion,
+// following the exact hard-requirement shape already proven necessary
+// elsewhere in this file (stat_labels canon reuse, the urgent pacing tier).
+function buildSceneEndingSection(isSceneEnding: boolean, stakes?: string | null): string {
+  if (!isSceneEnding) return ''
+  const stakesLine = stakes
+    ? ` The stakes established for this scene: ${stakes} Resolve them one way or the other — do not leave them ambiguous.`
+    : ''
+  return `<scene_ending>
+This is the FINAL exchange of this scene — it ends after this response, regardless of how much was left unresolved. This is a HARD REQUIREMENT, not a suggestion: bring the scene's current situation to a real conclusion this exchange — the immediate obstacle is overcome, escaped, lost, or otherwise settled.${stakesLine} Introducing a new complication, cliffhanger, or open thread that requires another exchange in THIS scene is not permitted. A new thread may be planted for a FUTURE scene, but the scene in front of you must read as genuinely over, not paused.
+</scene_ending>`
+}
+
 const PLAYER_CHARACTER_CONTROL = `<player_character_control>
 🚨 CRITICAL: RESPECT PLAYER AGENCY 🚨
 
@@ -507,6 +525,7 @@ ${CRITICAL_INSTRUCTIONS}
 
 ${STORYTELLING_PRINCIPLES}
 ${buildPacingSection(request.current_exchange_number ?? 0)}
+${buildSceneEndingSection(request.is_scene_ending ?? false, request.scene_stakes)}
 
 ${PLAYER_CHARACTER_CONTROL}
 

@@ -99,8 +99,15 @@ export async function POST(
         const { resolveScene } = await import('@/lib/game/sceneResolver')
         const { runWorldTurnIfDue } = await import('@/lib/game/worldTurn')
 
-        // Resolve the scene to generate final AI response
-        await resolveScene(campaignId, sceneId)
+        // Resolve the scene to generate final AI response. forceResolve:true
+        // means this proceeds even if not every player has acted yet — an
+        // explicit "End Scene" is a deliberate GM/player call, not a bug —
+        // and isSceneEnding:true (see scenePrompt.ts's <scene_ending>) tells
+        // the model this exchange is definitively the scene's last, so it
+        // resolves the scene's current thread instead of leaving it hanging
+        // or (previously) silently flipping to RESOLVED with no narration
+        // at all when the un-forced resolveScene call threw below.
+        await resolveScene(campaignId, sceneId, true, true)
         console.log('✅ Final resolution complete')
 
         // World turn paced by in-game time — scene ending doesn't itself

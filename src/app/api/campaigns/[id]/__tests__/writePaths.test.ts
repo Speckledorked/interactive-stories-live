@@ -162,6 +162,20 @@ describe('POST /end-scene — any member may end it, and pays for it', () => {
     expect(resolveScene).toHaveBeenCalled()
   })
 
+  it('force-resolves and signals is_scene_ending, even if not everyone acted', async () => {
+    // The bug this pins: end-scene used to call resolveScene with no
+    // forceResolve flag, so ending before everyone acted threw, was
+    // swallowed by the route's own try/catch, and the scene silently
+    // flipped to RESOLVED with zero narration. forceResolve:true fixes
+    // that; isSceneEnding:true (the 4th arg) is the separate signal that
+    // makes the model actually wrap up the scene's thread instead of
+    // leaving it open, per scenePrompt.ts's <scene_ending> section.
+    authAs('PLAYER')
+    await endSceneRoute(post({ sceneId: 's1' }), params)
+
+    expect(resolveScene).toHaveBeenCalledWith('camp1', 's1', true, true)
+  })
+
   it('refuses a non-member', async () => {
     authAs(null)
     const res = await endSceneRoute(post({ sceneId: 's1' }), params)

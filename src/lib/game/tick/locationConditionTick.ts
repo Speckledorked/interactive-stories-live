@@ -19,10 +19,17 @@ export interface ConditionDriftDecision {
   nextConditionScore: number
 }
 
+export interface ConditionDriftExplanation extends ConditionDriftDecision {
+  /** Human-readable trace of which branch fired — #126, mirrors
+   * FactionGoalExplanation's reasoning shape so the admin "Why?" preview
+   * pattern is consistent across every entity type it covers. */
+  reasoning: string[]
+}
+
 /**
- * Pure decision function — no DB access, safe to unit test directly. Same
- * shape as decideWarProgress: a small deterministic delta, clamped at the
- * write site to the DB-enforced 0-100 range.
+ * Pure — the full condition-drift decision, WITH the reasoning trace.
+ * decideConditionDrift below is a thin wrapper over this; the two can
+ * never drift apart because there's only one implementation.
  *
  * seasonModifier is accepted but NOT wired up by tickLocationCondition
  * below — #118's seasonal-pressure decision was deliberately scoped to
@@ -31,26 +38,47 @@ export interface ConditionDriftDecision {
  * closed scope. The parameter exists so a future, explicitly-decided
  * integration doesn't need to change this function's signature again.
  */
+export function explainConditionDrift(
+  location: { conditionScore: number },
+  warPresent: boolean,
+  isContested: boolean,
+  seasonModifier: number = 0
+): ConditionDriftExplanation {
+  let delta: number
+  const reasoning: string[] = [`Current condition: ${location.conditionScore}/100.`]
+
+  if (warPresent) {
+    delta = -WAR_DAMAGE
+    reasoning.push(`An ongoing war is contesting this location — taking ${WAR_DAMAGE} war damage this turn.`)
+  } else if (isContested) {
+    delta = -CONTEST_STRAIN
+    reasoning.push(`Contested rule (no active war, but ownership is disputed) — ${CONTEST_STRAIN} points of strain this turn.`)
+  } else if (location.conditionScore < BASELINE_CONDITION) {
+    delta = PEACETIME_RECOVERY
+    reasoning.push(`At peace and below the ${BASELINE_CONDITION}-point baseline — recovering ${PEACETIME_RECOVERY} point this turn.`)
+  } else {
+    delta = 0
+    reasoning.push(`At peace and already at or above the ${BASELINE_CONDITION}-point baseline — holding steady, nothing left to recover.`)
+  }
+
+  if (seasonModifier !== 0) {
+    reasoning.push(`Season modifier: ${seasonModifier > 0 ? '+' : ''}${seasonModifier}.`)
+    delta += seasonModifier
+  }
+
+  const nextConditionScore = clamp(location.conditionScore + delta, 0, 100)
+  reasoning.push(`Projected next condition: ${nextConditionScore}/100.`)
+
+  return { nextConditionScore, reasoning }
+}
+
 export function decideConditionDrift(
   location: { conditionScore: number },
   warPresent: boolean,
   isContested: boolean,
   seasonModifier: number = 0
 ): ConditionDriftDecision {
-  let delta: number
-  if (warPresent) {
-    delta = -WAR_DAMAGE
-  } else if (isContested) {
-    delta = -CONTEST_STRAIN
-  } else if (location.conditionScore < BASELINE_CONDITION) {
-    delta = PEACETIME_RECOVERY
-  } else {
-    delta = 0
-  }
-
-  delta += seasonModifier
-
-  return { nextConditionScore: clamp(location.conditionScore + delta, 0, 100) }
+  return { nextConditionScore: explainConditionDrift(location, warPresent, isContested, seasonModifier).nextConditionScore }
 }
 
 export type ConditionTag = 'ABANDONED' | 'RUINED' | 'DAMAGED' | 'STABLE' | 'PROSPEROUS' | 'CONTESTED'

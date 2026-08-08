@@ -524,7 +524,7 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
       </section>
 
       <section className="space-y-3">
-        <SectionHeader as="h2" title="Imported Sources" />
+        <SectionHeader as="h2" title="Imported Sources" description="Everything imported so far, and its status — a source stays listed even after a failed import, so a retry doesn't lose track of it." />
         {loading && <p className="text-sm text-myth-ink-muted">Loading...</p>}
         {error && <p className="text-sm text-myth-danger">{error}</p>}
         {!loading && jobs.length === 0 && (

@@ -31,7 +31,19 @@ export interface FactionForClockAdvancement {
  * comments in schema.prisma), falling back to category-based pacing only
  * for a clock with no faction/NPC driver at all.
  */
-export function decideClockAdvancement(
+export interface ClockAdvancementExplanation {
+  advanceAmount: number
+  /** Human-readable trace of which driver branch fired — #126, same shape
+   * as FactionGoalExplanation/ConditionDriftExplanation. */
+  reasoning: string[]
+}
+
+/**
+ * Pure — the full clock-advancement decision, WITH the reasoning trace.
+ * decideClockAdvancement below is a thin wrapper over this; the two can
+ * never drift apart because there's only one implementation.
+ */
+export function explainClockAdvancement(
   clock: {
     id: string
     category: string | null
@@ -54,7 +66,7 @@ export function decideClockAdvancement(
   // probability of ticking this turn, never push a clock past its
   // existing one-tick-per-turn cap on its own.
   clockSpeedMultiplier: number = 1
-): number {
+): ClockAdvancementExplanation {
   const roll = (salt: string) => stableHash(`${clock.id}:${turnNumber}:${salt}`) % 100
 
   // A faction's own tracked ambition: paced by how strong the faction
@@ -64,9 +76,15 @@ export function decideClockAdvancement(
   // ticking on toward a resolution nobody is left to claim.
   if (clock.sourceFactionId) {
     const faction = factionById.get(clock.sourceFactionId)
-    if (!faction?.isActive) return 0
+    if (!faction?.isActive) {
+      return { advanceAmount: 0, reasoning: ['This is the tracked ambition of a faction that is no longer active — stalled dead, nobody left to advance it.'] }
+    }
     const strength = band((faction.resources + faction.military) / 2)
-    return strength === 'HIGH' ? 2 : strength === 'MEDIUM' ? 1 : 0
+    const advanceAmount = strength === 'HIGH' ? 2 : strength === 'MEDIUM' ? 1 : 0
+    return {
+      advanceAmount,
+      reasoning: [`This is the tracked ambition of a faction whose combined resources/military strength is ${strength} — advances ${advanceAmount} tick(s) this turn.`],
+    }
   }
 
   // A front informationally tied to a faction (not its own tracked
@@ -78,12 +96,21 @@ export function decideClockAdvancement(
     const faction = factionById.get(clock.relatedFactionId)
     const instability = faction?.isActive ? band(100 - faction.stability) : 'MEDIUM'
     const threshold = instability === 'HIGH' ? 65 : instability === 'MEDIUM' ? 40 : 20
-    return roll('related') < threshold ? 1 : 0
+    const advanceAmount = roll('related') < threshold ? 1 : 0
+    const instabilityNote = faction?.isActive
+      ? `its linked faction's instability is ${instability}`
+      : "its linked faction is inactive/unlinked, so instability defaults to MEDIUM"
+    return {
+      advanceAmount,
+      reasoning: [`This is a front tied to a faction (not its own ambition) — ${instabilityNote}, giving a ${threshold}% chance to advance this turn. ${advanceAmount > 0 ? 'It advanced.' : 'It did not advance.'}`],
+    }
   }
 
   // A joint NPC scheme: two committed conspirators make steady progress
   // every turn they're both still in it — no faction backing to modulate.
-  if (clock.participantNpcIds.length > 0) return 1
+  if (clock.participantNpcIds.length > 0) {
+    return { advanceAmount: 1, reasoning: ['This is a joint NPC scheme — committed conspirators make steady, guaranteed progress every turn, no faction backing to modulate it.'] }
+  }
 
   // No faction/NPC driver at all — a GM-authored clock. Category is the
   // primary signal (deterministic via stableHash, not Math.random), and
@@ -95,9 +122,39 @@ export function decideClockAdvancement(
   // 'urgent' clocks always tick every turn regardless of season — there's
   // no discretionary component left to modulate without breaking that
   // guarantee.
-  if (clock.category === 'urgent') return 1
-  if (clock.category === 'slow') return roll('category') < 20 * clockSpeedMultiplier ? 1 : Math.min(tensionBonus, 1)
-  return roll('category') < 40 * clockSpeedMultiplier ? 1 : Math.min(tensionBonus, 1)
+  if (clock.category === 'urgent') {
+    return { advanceAmount: 1, reasoning: ["This is an 'urgent' unattached clock — always advances every turn, regardless of season or tension."] }
+  }
+  const threshold = (clock.category === 'slow' ? 20 : 40) * clockSpeedMultiplier
+  const rolled = roll('category')
+  const advanceAmount = rolled < threshold ? 1 : Math.min(tensionBonus, 1)
+  return {
+    advanceAmount,
+    reasoning: [
+      `This is an unattached, category-paced clock ('${clock.category ?? 'default'}') — ${threshold.toFixed(0)}% roll threshold this turn (season-adjusted), tension bonus up to ${Math.min(tensionBonus, 1)}.`,
+      rolled < threshold
+        ? 'The category roll succeeded — it advances 1 tick.'
+        : tensionBonus > 0
+          ? `The category roll missed, but dramatic tension (${tension}) grants a fallback advance.`
+          : 'The category roll missed and tension is not high enough to grant a fallback advance — it holds this turn.',
+    ],
+  }
+}
+
+export function decideClockAdvancement(
+  clock: {
+    id: string
+    category: string | null
+    sourceFactionId: string | null
+    relatedFactionId: string | null
+    participantNpcIds: string[]
+  },
+  factionById: Map<string, FactionForClockAdvancement>,
+  turnNumber: number,
+  tension: number = TENSION_BASELINE,
+  clockSpeedMultiplier: number = 1
+): number {
+  return explainClockAdvancement(clock, factionById, turnNumber, tension, clockSpeedMultiplier).advanceAmount
 }
 
 /**

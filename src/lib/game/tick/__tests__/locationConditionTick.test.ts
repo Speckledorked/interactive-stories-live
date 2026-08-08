@@ -8,7 +8,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { prisma } from '@/lib/prisma'
-import { decideConditionDrift, deriveConditionTags, tickLocationCondition } from '../locationConditionTick'
+import { decideConditionDrift, deriveConditionTags, explainConditionDrift, tickLocationCondition } from '../locationConditionTick'
 import type { TickContext } from '../types'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
@@ -61,6 +61,56 @@ describe('decideConditionDrift (#109)', () => {
     const withDefault = decideConditionDrift({ conditionScore: 60 }, true, false)
     const explicitZero = decideConditionDrift({ conditionScore: 60 }, true, false, 0)
     expect(withDefault).toEqual(explicitZero)
+  })
+})
+
+describe('explainConditionDrift (#126) — decideConditionDrift is a thin wrapper over this', () => {
+  it('produces the same nextConditionScore as decideConditionDrift for every branch', () => {
+    const cases: Array<[{ conditionScore: number }, boolean, boolean, number?]> = [
+      [{ conditionScore: 60 }, true, false],
+      [{ conditionScore: 60 }, true, true],
+      [{ conditionScore: 60 }, false, true],
+      [{ conditionScore: 40 }, false, false],
+      [{ conditionScore: 60 }, false, false],
+      [{ conditionScore: 5 }, true, false],
+      [{ conditionScore: 99 }, false, false, 5],
+    ]
+    for (const [location, warPresent, isContested, seasonModifier] of cases) {
+      expect(explainConditionDrift(location, warPresent, isContested, seasonModifier).nextConditionScore)
+        .toBe(decideConditionDrift(location, warPresent, isContested, seasonModifier).nextConditionScore)
+    }
+  })
+
+  it('explains war damage', () => {
+    const { reasoning } = explainConditionDrift({ conditionScore: 60 }, true, false)
+    expect(reasoning.join(' ')).toMatch(/ongoing war/i)
+  })
+
+  it('explains contest strain when no war is active', () => {
+    const { reasoning } = explainConditionDrift({ conditionScore: 60 }, false, true)
+    expect(reasoning.join(' ')).toMatch(/contested rule/i)
+  })
+
+  it('explains peacetime recovery below baseline', () => {
+    const { reasoning } = explainConditionDrift({ conditionScore: 40 }, false, false)
+    expect(reasoning.join(' ')).toMatch(/recovering/i)
+  })
+
+  it('explains holding steady at or above baseline', () => {
+    const { reasoning } = explainConditionDrift({ conditionScore: 60 }, false, false)
+    expect(reasoning.join(' ')).toMatch(/holding steady/i)
+  })
+
+  it('mentions the season modifier only when non-zero', () => {
+    const withSeason = explainConditionDrift({ conditionScore: 60 }, false, false, -3)
+    expect(withSeason.reasoning.join(' ')).toMatch(/season modifier/i)
+    const withoutSeason = explainConditionDrift({ conditionScore: 60 }, false, false)
+    expect(withoutSeason.reasoning.join(' ')).not.toMatch(/season modifier/i)
+  })
+
+  it('always reports the projected next score in the trace', () => {
+    const { reasoning, nextConditionScore } = explainConditionDrift({ conditionScore: 60 }, true, false)
+    expect(reasoning.join(' ')).toContain(String(nextConditionScore))
   })
 })
 

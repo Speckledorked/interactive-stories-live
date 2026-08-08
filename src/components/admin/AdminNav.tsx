@@ -8,11 +8,12 @@ export type AdminTabKey =
   | 'overview'
   | 'npcs'
   | 'factions'
+  | 'wars'
+  | 'clocks'
   | 'locations'
   | 'lore'
   | 'map'
   | 'ai'
-  | 'clocks'
   | 'integrity'
   | 'members'
   | 'invites'
@@ -30,6 +31,12 @@ interface AdminNavGroup {
   items: AdminNavItem[]
 }
 
+// Grouped by what an admin is actually trying to do, not by history. World
+// holds every living simulation entity together (including Wars/Clocks,
+// which used to be split off into "Story Engine" alongside an unrelated
+// config screen and a diagnostics screen for no reason beyond history) —
+// see docs/ARCHITECTURE.md's admin-tooling Scorecard row for the full
+// before/after rationale.
 export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   { key: 'overview', label: 'Overview', items: [{ key: 'overview', label: 'Overview' }] },
   {
@@ -38,20 +45,14 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { key: 'npcs', label: 'NPCs' },
       { key: 'factions', label: 'Factions' },
+      { key: 'wars', label: 'Wars' },
+      { key: 'clocks', label: 'Clocks' },
       { key: 'locations', label: 'Locations' },
       { key: 'lore', label: 'Lore' },
       { key: 'map', label: 'Map' },
     ],
   },
-  {
-    key: 'story-engine',
-    label: 'Story Engine',
-    items: [
-      { key: 'ai', label: 'AI Settings' },
-      { key: 'clocks', label: 'Clocks' },
-      { key: 'integrity', label: 'World Integrity' },
-    ],
-  },
+  { key: 'configuration', label: 'Configuration', items: [{ key: 'ai', label: 'Configuration' }] },
   {
     key: 'players',
     label: 'Players',
@@ -61,7 +62,14 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     ],
   },
   { key: 'safety', label: 'Safety & Publishing', items: [{ key: 'safety', label: 'Safety & Publishing' }] },
-  { key: 'data', label: 'Data & Advanced', items: [{ key: 'data', label: 'Data & Advanced' }] },
+  {
+    key: 'diagnostics',
+    label: 'Diagnostics & Data',
+    items: [
+      { key: 'integrity', label: 'World Integrity' },
+      { key: 'data', label: 'Data & Advanced' },
+    ],
+  },
 ]
 
 function findLocation(activeKey: AdminTabKey) {

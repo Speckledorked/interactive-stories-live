@@ -19,6 +19,7 @@ import { PublicChroniclePanel } from '@/components/admin/PublicChroniclePanel'
 import { IntegrityPanel } from '@/components/admin/IntegrityPanel'
 import type { SetupChecklistItem } from '@/components/admin/SetupChecklist'
 import { FieldHelp } from '@/components/ui/field-help'
+import { SectionHeader } from '@/components/ui/section-header'
 
 interface Campaign {
   id: string
@@ -194,6 +195,17 @@ export default function AdminPage() {
   const [factionReasoningLoading, setFactionReasoningLoading] = useState<Record<string, boolean>>({})
   const [npcReasoning, setNpcReasoning] = useState<Record<string, any>>({})
   const [npcReasoningLoading, setNpcReasoningLoading] = useState<Record<string, boolean>>({})
+  // #126: same pattern, extended to locations and clocks — the two other
+  // entity types with a real decide/explain function but no admin preview
+  // yet. Wars are handled differently (see warsReasoning below): momentum
+  // is cheap to compute for every active war at once, so the new Wars tab
+  // fetches and shows all of them up front rather than per-entity clicks.
+  const [locationReasoning, setLocationReasoning] = useState<Record<string, any>>({})
+  const [locationReasoningLoading, setLocationReasoningLoading] = useState<Record<string, boolean>>({})
+  const [clockReasoning, setClockReasoning] = useState<Record<string, any>>({})
+  const [clockReasoningLoading, setClockReasoningLoading] = useState<Record<string, boolean>>({})
+  const [warsReasoning, setWarsReasoning] = useState<any[] | null>(null)
+  const [warsReasoningLoading, setWarsReasoningLoading] = useState(false)
   const [editingNpc, setEditingNpc] = useState<string | null>(null)
   const [editingFaction, setEditingFaction] = useState<string | null>(null)
   const [editingLocation, setEditingLocation] = useState<string | null>(null)
@@ -234,6 +246,9 @@ export default function AdminPage() {
     }
     if (activeTab === 'safety' && chronicleShare === null && !chronicleShareLoading) {
       fetchChronicleShare()
+    }
+    if (activeTab === 'wars' && warsReasoning === null && !warsReasoningLoading) {
+      fetchWarsReasoning()
     }
   }, [activeTab])
 
@@ -639,6 +654,57 @@ export default function AdminPage() {
     }
   }
 
+  const handlePreviewLocationReasoning = async (locationId: string) => {
+    setLocationReasoningLoading(prev => ({ ...prev, [locationId]: true }))
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/locations/${locationId}/reasoning`)
+      if (response.ok) {
+        const data = await response.json()
+        setLocationReasoning(prev => ({ ...prev, [locationId]: data }))
+      } else {
+        setError('Failed to preview location reasoning')
+      }
+    } catch (err) {
+      setError('Failed to preview location reasoning')
+    } finally {
+      setLocationReasoningLoading(prev => ({ ...prev, [locationId]: false }))
+    }
+  }
+
+  const handlePreviewClockReasoning = async (clockId: string) => {
+    setClockReasoningLoading(prev => ({ ...prev, [clockId]: true }))
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/clocks/${clockId}/reasoning`)
+      if (response.ok) {
+        const data = await response.json()
+        setClockReasoning(prev => ({ ...prev, [clockId]: data }))
+      } else {
+        setError('Failed to preview clock reasoning')
+      }
+    } catch (err) {
+      setError('Failed to preview clock reasoning')
+    } finally {
+      setClockReasoningLoading(prev => ({ ...prev, [clockId]: false }))
+    }
+  }
+
+  const fetchWarsReasoning = async () => {
+    setWarsReasoningLoading(true)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/wars/reasoning`)
+      if (response.ok) {
+        const data = await response.json()
+        setWarsReasoning(data.wars)
+      } else {
+        setError('Failed to load war reasoning')
+      }
+    } catch (err) {
+      setError('Failed to load war reasoning')
+    } finally {
+      setWarsReasoningLoading(false)
+    }
+  }
+
   const handleUpdateNPC = async (npc: NPC) => {
     setSaving(true)
     
@@ -1020,6 +1086,10 @@ export default function AdminPage() {
             {/* AI Settings Tab */}
             {activeTab === 'ai' && campaign && (
               <div className="space-y-4">
+                <SectionHeader
+                  title="Configuration"
+                  description="Campaign-wide settings that shape every scene the AI narrates — the founding lore it generates from, the voice it holds to, and how strictly player actions are moderated before reaching it."
+                />
                 <div>
                   <div className="flex items-center gap-1.5">
                     <label className="block text-sm font-medium text-myth-ink-muted">
@@ -1286,6 +1356,10 @@ export default function AdminPage() {
             {/* NPCs Tab */}
             {activeTab === 'npcs' && (
               <div className="space-y-4">
+                <SectionHeader
+                  title="NPCs"
+                  description="Non-player characters the world tick moves and grows on its own between scenes — goals, importance, and faction ties all shape what it does with them. Click 'Why?' on any NPC to see its actual next-tick decision, not a guess."
+                />
                 <button
                   onClick={() => setCreatingNpc(true)}
                   className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
@@ -1576,6 +1650,10 @@ export default function AdminPage() {
             {/* Factions Tab */}
             {activeTab === 'factions' && (
               <div className="space-y-4">
+                <SectionHeader
+                  title="Factions"
+                  description="Organizations that pursue their own goals turn over turn — reassessing strategy from their own resources/stability/military, drifting in disposition from their own history, and going to war with rivals when it serves them. Click 'Why?' on any faction to see the actual next reassessment, not a guess."
+                />
                 <button
                   onClick={() => setCreatingFaction(true)}
                   className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
@@ -1941,9 +2019,64 @@ export default function AdminPage() {
               </div>
             )}
 
+            {/* Wars Tab — #126: campaign-wide momentum reasoning. Unlike
+                Locations/Clocks this isn't a per-entity click: war momentum
+                is cheap to compute for every ESCALATING war at once, so the
+                one list call already returns the full reasoning trace and
+                every card shows it immediately, no button needed. */}
+            {activeTab === 'wars' && (
+              <div className="space-y-4">
+                <SectionHeader
+                  title="Wars"
+                  description="Every currently escalating war, and why its momentum is moving the way it is. Momentum runs from -100 (decisive defender win) to +100 (decisive attacker win) — a war resolves once either side crosses ±60, or as a stalemate after 8 turns with no such swing."
+                />
+                {warsReasoningLoading && warsReasoning === null && (
+                  <p className="text-sm text-myth-ink-faint italic">Loading…</p>
+                )}
+                {warsReasoning !== null && warsReasoning.length === 0 && (
+                  <p className="text-sm text-myth-ink-faint italic">No wars are currently escalating.</p>
+                )}
+                {warsReasoning !== null && warsReasoning.length > 0 && (
+                  <div className="space-y-4">
+                    {warsReasoning.map((war) => {
+                      const momentumPercent = ((war.currentMomentum + 100) / 200) * 100
+                      return (
+                        <div key={war.warId} className="rounded-lg border border-myth-border p-4">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <h3 className="font-semibold text-myth-ink">{war.name}</h3>
+                            <span className="text-xs text-myth-ink-faint">
+                              {war.currentMomentum} → {war.projectedMomentum}
+                            </span>
+                          </div>
+                          <p className="text-xs text-myth-ink-faint mt-1">
+                            {war.attackerName} (military {war.attackerMilitaryTotal}) vs {war.defenderName} (military {war.defenderMilitaryTotal})
+                          </p>
+                          <div className="mt-2 h-2 w-full rounded-full bg-myth-surface-sunken overflow-hidden">
+                            <div
+                              className="h-full bg-myth-accent transition-all"
+                              style={{ width: `${Math.max(0, Math.min(100, momentumPercent))}%` }}
+                            />
+                          </div>
+                          <div className="mt-3 text-sm">
+                            {war.reasoning.map((line: string, i: number) => (
+                              <p key={i} className="mt-1 text-myth-ink-muted">{line}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Locations Tab */}
             {activeTab === 'locations' && (
               <div className="space-y-4">
+                <SectionHeader
+                  title="Locations"
+                  description="Places in the world — the environment tick ages each one on its own: an ongoing siege damages it, disputed rule strains it, and peacetime slowly recovers it. Click 'Why?' on any location to see that math for real."
+                />
                 <button
                   onClick={() => setCreatingLocation(true)}
                   className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
@@ -2140,13 +2273,33 @@ export default function AdminPage() {
                               {location.ownerFactionId && ` · Controlled by ${factions.find(f => f.id === location.ownerFactionId)?.name || 'a faction'}`}
                             </p>
                           </div>
-                          <button
-                            onClick={() => setEditingLocation(location.id)}
-                            className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
-                          >
-                            Edit
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handlePreviewLocationReasoning(location.id)}
+                              disabled={locationReasoningLoading[location.id]}
+                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
+                            >
+                              {locationReasoningLoading[location.id] ? 'Thinking…' : 'Why?'}
+                            </button>
+                            <button
+                              onClick={() => setEditingLocation(location.id)}
+                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
+                            >
+                              Edit
+                            </button>
+                          </div>
                         </div>
+                        {locationReasoning[location.id] && (
+                          <div className="mt-3 rounded-md border border-myth-border bg-myth-surface-sunken p-3 text-sm">
+                            <p className="font-medium text-myth-ink">
+                              Condition: {locationReasoning[location.id].currentConditionScore} → {locationReasoning[location.id].projectedConditionScore}
+                              {' '}({locationReasoning[location.id].projectedTags.join(', ')})
+                            </p>
+                            {locationReasoning[location.id].reasoning.map((line: string, i: number) => (
+                              <p key={i} className="mt-1 text-myth-ink-muted">{line}</p>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2157,6 +2310,10 @@ export default function AdminPage() {
             {/* Clocks Tab */}
             {activeTab === 'clocks' && (
               <div className="space-y-4">
+                <SectionHeader
+                  title="Clocks"
+                  description="Countdowns the world tick advances on its own — ambitions, threats, and schemes moving toward a consequence whether or not anyone acts. A clock's pace comes from whatever it's actually tied to (a faction's own strength, a linked faction's instability, a joint NPC scheme) or, with no tie at all, its category and the campaign's current tension. Click 'Why?' on any clock for that math."
+                />
                 <button
                   onClick={() => setCreatingClock(true)}
                   className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
@@ -2315,6 +2472,24 @@ export default function AdminPage() {
                           {clock.isHidden ? 'Show' : 'Hide'}
                         </button>
                       </div>
+                      <button
+                        onClick={() => handlePreviewClockReasoning(clock.id)}
+                        disabled={clockReasoningLoading[clock.id]}
+                        className="mt-2 w-full rounded-md border border-myth-border px-3 py-1 text-sm text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
+                      >
+                        {clockReasoningLoading[clock.id] ? 'Thinking…' : 'Why?'}
+                      </button>
+                      {clockReasoning[clock.id] && (
+                        <div className="mt-2 rounded-md border border-myth-border bg-myth-surface-sunken p-3 text-sm">
+                          <p className="font-medium text-myth-ink">
+                            Next turn: {clock.currentTicks} → {clockReasoning[clock.id].projectedTicks}
+                            {' '}(+{clockReasoning[clock.id].projectedAdvance})
+                          </p>
+                          {clockReasoning[clock.id].reasoning.map((line: string, i: number) => (
+                            <p key={i} className="mt-1 text-myth-ink-muted">{line}</p>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2334,6 +2509,10 @@ export default function AdminPage() {
             {/* Map Tab — faction relationships (rival/ally) + territory */}
             {activeTab === 'map' && (
               <div className="space-y-6">
+                <SectionHeader
+                  title="Map"
+                  description="How the world's factions relate to each other, and who holds which locations — a bird's-eye view built from live faction/location data, not a drawn map."
+                />
                 <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
                   <h3 className="font-semibold text-myth-ink mb-1">Faction Relationships</h3>
                   <p className="text-xs text-myth-ink-faint mb-4">
@@ -2444,6 +2623,10 @@ export default function AdminPage() {
             {/* Invites Tab */}
             {activeTab === 'invites' && (
               <div className="space-y-4">
+                <SectionHeader
+                  title="Invites"
+                  description="Shareable join links for this campaign — set a use limit (or leave it unlimited) and share the link with whoever you want at the table."
+                />
                 <button
                   onClick={handleCreateInvite}
                   className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
@@ -2482,6 +2665,10 @@ export default function AdminPage() {
             {/* Members Tab */}
             {activeTab === 'members' && (
               <div className="space-y-4">
+                <SectionHeader
+                  title="Members"
+                  description="Everyone in this campaign. There is no human GM here — every member is a player, including whoever holds the admin role; admin controls campaign settings and moderation, not narration."
+                />
                 <div className="text-sm text-myth-ink-muted mb-4">
                   Total Members: {members.length}
                 </div>

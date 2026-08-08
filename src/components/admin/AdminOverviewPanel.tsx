@@ -34,14 +34,19 @@ export function AdminOverviewPanel({
   return (
     <div className="space-y-8">
       <section>
-        <SectionHeader eyebrow="Getting started" title="Setup" as="h2" />
+        <SectionHeader
+          eyebrow="Getting started"
+          title="Setup"
+          as="h2"
+          description="What's left before this campaign is genuinely ready to play — not just created."
+        />
         <div className="mt-3">
           <SetupChecklist items={checklistItems} />
         </div>
       </section>
 
       <section>
-        <SectionHeader title="Campaign Identity" as="h2" />
+        <SectionHeader title="Campaign Identity" as="h2" description="The basics every player sees — title, premise, and the fictional universe this campaign is set in." />
         <div className="mt-3 space-y-4 rounded-lg border border-myth-border bg-myth-surface p-5">
           <div>
             <label className="block text-sm font-medium text-myth-ink-muted">Campaign ID</label>
@@ -85,7 +90,7 @@ export function AdminOverviewPanel({
       </section>
 
       <section>
-        <SectionHeader title="World Summary" as="h2" />
+        <SectionHeader title="World Summary" as="h2" description="A live snapshot of what the simulation actually contains right now — NPCs, factions, and clocks — not a static list you maintain by hand." />
         <div className="mt-3">
           <WorldStateDashboard campaignId={campaignId} npcs={npcs} factions={factions} clocks={clocks} worldNotes={worldNotes} />
         </div>

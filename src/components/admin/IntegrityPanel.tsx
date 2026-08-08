@@ -93,7 +93,11 @@ function WorldTurnPacingCard({ worldMeta }: { worldMeta: WorldMetaPacing }) {
   const pacing = describePacing(worldMeta)
   return (
     <section>
-      <SectionHeader as="h2" title="World Turn Pacing" />
+      <SectionHeader
+        as="h2"
+        title="World Turn Pacing"
+        description="The world tick advances once a full in-game day has passed in the story, not on a real-world clock — this shows how close the campaign is to its next one."
+      />
       <div className="mt-3 space-y-3 rounded-lg border border-myth-border bg-myth-surface p-5">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-sm">
           <span className="text-myth-ink-muted">
@@ -154,7 +158,11 @@ export function IntegrityPanel({ campaignId, worldMeta }: { campaignId: string; 
       <div className="space-y-6">
         {worldMeta && <WorldTurnPacingCard worldMeta={worldMeta} />}
         <section>
-          <SectionHeader as="h2" title="World integrity" />
+          <SectionHeader
+            as="h2"
+            title="World integrity"
+            description="Catches broken references and other structural drift the simulation itself introduces — dangling ids, duplicate entities — and repairs them automatically. Nothing to see until the first world turn runs."
+          />
           <p className="mt-3 text-xs text-myth-ink-faint">
             Checked automatically at the end of every world turn — this campaign hasn&apos;t had one yet.
           </p>

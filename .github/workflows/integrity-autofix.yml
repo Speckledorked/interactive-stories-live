@@ -297,6 +297,7 @@ jobs:
           # and fixing needs, and nothing that could push or open a PR.
           # That boundary is enforced here, not left to the prompt alone.
           claude_args: |
+            --model claude-sonnet-5
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npx vitest run:*),Bash(npx tsc --noEmit),Bash(git add:*),Bash(git commit:*),Bash(git status),Bash(git diff:*)"
             --max-turns 30
           prompt: |
@@ -333,8 +334,12 @@ jobs:
                current code — do not proceed if it doesn't fail; that means
                it doesn't reproduce the bug.
             4. Write the smallest correct fix to the suspected source file(s).
-            5. Confirm the new test now passes, and confirm `npx vitest run`
-               (the full suite) still passes.
+            5. Confirm the new test now passes, and confirm the existing test
+               file(s) for the source file(s) you changed still pass (e.g.
+               `npx vitest run path/to/the/relevant.test.ts`). Do NOT run the
+               full suite yourself — a later step in this workflow already
+               re-runs it independently and does not trust your report of it,
+               so running it here only spends tokens on output nobody acts on.
             6. GROWTH STEP — only if the currently registered technique above is
                "suite-only": this checkKey's only proof, until now, has been
                "the tests still pass," which this codebase has already learned

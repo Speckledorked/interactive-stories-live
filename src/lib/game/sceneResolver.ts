@@ -69,7 +69,7 @@ function createTimeout(ms: number, message: string): Promise<never> {
   })
 }
 
-export async function resolveScene(campaignId: string, sceneId: string, forceResolve: boolean = false) {
+export async function resolveScene(campaignId: string, sceneId: string, forceResolve: boolean = false, isSceneEnding: boolean = false) {
   console.log('🎬 Starting scene resolution...')
   console.log(`Campaign: ${campaignId}`)
   console.log(`Scene: ${sceneId}`)
@@ -128,7 +128,7 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
   try {
     // Race between actual resolution and timeout
     const result = await Promise.race([
-      performResolution(campaignId, sceneId, scene, exchangeManager),
+      performResolution(campaignId, sceneId, scene, exchangeManager, isSceneEnding),
       createTimeout(RESOLUTION_TIMEOUT_MS, 'Scene resolution timed out after 150 seconds')
     ])
 
@@ -191,7 +191,8 @@ async function performResolution(
   campaignId: string,
   sceneId: string,
   scene: any,
-  exchangeManager: ExchangeManager
+  exchangeManager: ExchangeManager,
+  isSceneEnding: boolean = false
 ) {
   try {
     // 2.5. Broadcast resolving status via Pusher so UI updates immediately
@@ -246,7 +247,7 @@ async function performResolution(
 
     // 4. Build AI request from world state
     console.log('📊 Building AI request...')
-    const aiRequest = await buildSceneResolutionRequest(campaignId, sceneId)
+    const aiRequest = await buildSceneResolutionRequest(campaignId, sceneId, isSceneEnding)
 
     // 5. Call AI GM (Phase 15: with enhanced error handling and tracking)
     console.log('🤖 Calling AI GM...')
@@ -718,12 +719,24 @@ export async function createNewScene(campaignId: string, characterIds?: string[]
   console.log('🤖 Generating scene intro...')
   const sceneIntro = await generateNewSceneIntro(campaignId, characterIds)
 
+  // What's at risk in this scene (#stakes) — a separate, small AI call
+  // rather than folded into the intro's free-text output, so a failure or
+  // slow response here never risks contaminating the actual opening prose.
+  // Best-effort: a failed/null stakes generation just leaves the field
+  // unset, same as before this feature existed.
+  const { generateSceneStakes } = await import('@/lib/ai/sceneStakes')
+  const stakes = await generateSceneStakes(campaignId, sceneIntro).catch((error) => {
+    console.error('⚠️  Scene stakes generation failed (non-critical):', error)
+    return null
+  })
+
   // Create the scene
   const newScene = await prisma.scene.create({
     data: {
       campaignId,
       sceneNumber: nextSceneNumber,
       sceneIntroText: sceneIntro,
+      stakes,
       status: 'AWAITING_ACTIONS' as SceneStatus,
       participants: participants as any,
       waitingOnUsers: waitingOnUsers as any

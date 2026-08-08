@@ -47,6 +47,14 @@ vi.mock('@/lib/ai/worldState', () => ({
   generateNewSceneIntro: vi.fn(),
 }));
 
+// #stakes: createNewScene reaches this via a dynamic await import(...),
+// same as its existing generateNewSceneIntro call — mocked explicitly
+// (rather than relying on the real module's own no-API-key fail-open)
+// so createNewScene's behavior around a stakes value is actually pinned.
+vi.mock('@/lib/ai/sceneStakes', () => ({
+  generateSceneStakes: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('../stateUpdater', () => ({
   applyWorldUpdates: vi.fn(),
   summarizeWorldUpdates: vi.fn(() => 'test summary'),
@@ -130,6 +138,7 @@ import { AIVisualService } from '@/lib/ai/ai-visual-service';
 import { storeWorldStateChanges } from '../world-state-tracker';
 import { buildScenePrompt } from '../../ai/imageGeneration';
 import { enqueueSceneImageGeneration } from '../imageGenQueue';
+import { generateSceneStakes } from '@/lib/ai/sceneStakes';
 
 describe('Scene Resolver', () => {
   beforeEach(() => {
@@ -463,7 +472,10 @@ describe('Scene Resolver', () => {
 
       await resolveScene(mockCampaignId, mockSceneId);
 
-      expect(buildSceneResolutionRequest).toHaveBeenCalledWith(mockCampaignId, mockSceneId);
+      // isSceneEnding defaults to false and is threaded through to
+      // buildSceneResolutionRequest as its 3rd arg (see scenePrompt.ts's
+      // <scene_ending> section and end-scene/route.ts's forced-true call).
+      expect(buildSceneResolutionRequest).toHaveBeenCalledWith(mockCampaignId, mockSceneId, false);
       // Phase 15: callAIGM also takes campaignId/sceneId (for cost tracking
       // and the circuit breaker) and a debug-mode flag, not just the request.
       expect(callAIGM).toHaveBeenCalledWith(mockAIRequest, mockCampaignId, mockSceneId, { debugMode: false });
@@ -548,6 +560,34 @@ describe('Scene Resolver', () => {
         data: expect.objectContaining({
           participants: { characterIds, userIds: ['user-1', 'user-2'], scoped: true },
         }),
+      });
+    });
+
+    it('writes a generated stakes statement onto the new scene', async () => {
+      const mockSceneIntro = 'A new adventure begins...';
+      vi.mocked(prisma.scene.findFirst).mockResolvedValueOnce(null);
+      vi.mocked(prisma.scene.create).mockResolvedValueOnce({ id: 'scene-1', sceneNumber: 1 } as any);
+      vi.doMock('@/lib/ai/worldState', () => ({
+        generateNewSceneIntro: vi.fn().mockResolvedValue(mockSceneIntro),
+      }));
+      vi.mocked(generateSceneStakes).mockResolvedValueOnce('The village starves if the granary is lost.');
+
+      await createNewScene(mockCampaignId);
+
+      expect(prisma.scene.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ stakes: 'The village starves if the granary is lost.' }),
+      });
+    });
+
+    it('creates the scene with stakes: null when stakes generation fails/returns nothing', async () => {
+      vi.mocked(prisma.scene.findFirst).mockResolvedValueOnce(null);
+      vi.mocked(prisma.scene.create).mockResolvedValueOnce({ id: 'scene-1', sceneNumber: 1 } as any);
+      vi.mocked(generateSceneStakes).mockRejectedValueOnce(new Error('stakes generation failed'));
+
+      await expect(createNewScene(mockCampaignId)).resolves.toBeDefined();
+
+      expect(prisma.scene.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ stakes: null }),
       });
     });
   });

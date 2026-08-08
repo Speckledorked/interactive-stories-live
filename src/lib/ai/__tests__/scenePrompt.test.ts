@@ -177,6 +177,46 @@ describe('buildSystemPrompt — long-scene pacing pressure', () => {
   })
 })
 
+describe('buildSystemPrompt — scene ending signal (definitive end-scene)', () => {
+  function makeEndingRequest(isSceneEnding?: boolean, stakes?: string | null): AIGMRequest {
+    return {
+      campaign_universe: 'Test Universe',
+      ai_system_prompt: 'Be a good GM.',
+      is_scene_ending: isSceneEnding,
+      scene_stakes: stakes,
+    } as unknown as AIGMRequest
+  }
+
+  it('omits <scene_ending> when is_scene_ending is absent', () => {
+    const request = { campaign_universe: 'Test', ai_system_prompt: 'x' } as unknown as AIGMRequest
+    expect(buildSystemPrompt(request)).not.toContain('<scene_ending>')
+  })
+
+  it('omits <scene_ending> when is_scene_ending is explicitly false', () => {
+    const prompt = buildSystemPrompt(makeEndingRequest(false))
+    expect(prompt).not.toContain('<scene_ending>')
+  })
+
+  it('includes an unconditional hard-requirement instruction when is_scene_ending is true', () => {
+    const prompt = buildSystemPrompt(makeEndingRequest(true))
+    expect(prompt).toContain('<scene_ending>')
+    expect(prompt).toMatch(/FINAL exchange/i)
+    expect(prompt).toMatch(/HARD REQUIREMENT/i)
+    expect(prompt).toMatch(/not permitted/i)
+  })
+
+  it('references scene_stakes when present', () => {
+    const prompt = buildSystemPrompt(makeEndingRequest(true, 'The last bridge out of the city collapses if they fail.'))
+    expect(prompt).toContain('The last bridge out of the city collapses if they fail.')
+  })
+
+  it('does not reference stakes text when scene_stakes is absent', () => {
+    const prompt = buildSystemPrompt(makeEndingRequest(true, null))
+    const section = prompt.slice(prompt.indexOf('<scene_ending>'), prompt.indexOf('</scene_ending>'))
+    expect(section).not.toMatch(/stakes established/i)
+  })
+})
+
 describe('buildSystemPrompt — storytelling rules allow a genuine resolution, not only new problems', () => {
   it('no longer mandates a new problem/decision point as the only valid ending', () => {
     const prompt = buildSystemPrompt(makeRequest([]))

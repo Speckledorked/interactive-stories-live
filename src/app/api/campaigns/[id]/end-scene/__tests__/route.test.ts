@@ -114,7 +114,12 @@ describe('POST', () => {
     const response = await POST(req({ sceneId: 'scene1' }), { params: { id: 'camp1' } })
 
     expect(response.status).toBe(200)
-    expect(resolveScene).toHaveBeenCalledWith('camp1', 'scene1')
+    // forceResolve:true + isSceneEnding:true — ending explicitly always
+    // proceeds even with unsubmitted actions, and signals the model that
+    // this is the scene's definitive final exchange (see scenePrompt.ts's
+    // <scene_ending> section), instead of silently flipping to RESOLVED
+    // with no real narration if resolution would otherwise have thrown.
+    expect(resolveScene).toHaveBeenCalledWith('camp1', 'scene1', true, true)
     expect(runWorldTurnIfDue).toHaveBeenCalledWith('camp1')
   })
 

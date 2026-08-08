@@ -521,6 +521,16 @@ export interface AIGMRequest {
   // unusually long and keeps meeting cooperation with a fresh complication
   // instead of ever letting a thread resolve.
   current_exchange_number?: number
+  // What's at risk in this scene (Scene.stakes — generated once at scene
+  // creation, see sceneStakes.ts). Gives the model a concrete target to
+  // resolve against instead of an abstract "wrap it up," and is echoed in
+  // <scene_ending> below when this is the scene's definitive final exchange.
+  scene_stakes?: string | null
+  // Set when this exchange is the scene's definitive end (see
+  // resolveScene's isSceneEnding param and end-scene/route.ts) — not merely
+  // "pacing suggests wrapping up," but "this scene ends now regardless."
+  // Drives <scene_ending> in scenePrompt.ts.
+  is_scene_ending?: boolean
 }
 
 // Prompt-caching params for a scene-resolution call. Scoped per campaign,

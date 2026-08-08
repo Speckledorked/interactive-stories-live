@@ -1207,6 +1207,12 @@ export default function StoryPage() {
                       </div>
                     </div>
 
+                    {scene.stakes && (
+                      <p className="mb-4 text-xs font-medium uppercase tracking-wide text-myth-accent">
+                        At stake: <span className="normal-case text-myth-ink-muted">{scene.stakes}</span>
+                      </p>
+                    )}
+
                     {scene.isPaused && (
                       <div className="bg-myth-danger/10 border border-myth-danger/30 rounded-lg p-4 mb-4 flex items-center justify-between gap-4">
                         <div>

@@ -81,7 +81,8 @@ three weeks ago (Scene 12)."
  */
 export async function buildSceneResolutionRequest(
   campaignId: string,
-  sceneId: string
+  sceneId: string,
+  isSceneEnding: boolean = false
 ): Promise<AIGMRequest> {
   console.log('🎬 Building scene resolution request')
 
@@ -434,6 +435,8 @@ export async function buildSceneResolutionRequest(
     safety_veils: safetySettings?.veils ?? [],
     player_actions: playerActions,
     action_mechanics: actionMechanics,
-    current_exchange_number: scene.currentExchange ?? 0
+    current_exchange_number: scene.currentExchange ?? 0,
+    scene_stakes: scene.stakes,
+    is_scene_ending: isSceneEnding
   }
 }

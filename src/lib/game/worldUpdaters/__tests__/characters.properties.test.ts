@@ -101,6 +101,18 @@ describe('applyCharacterChanges — relationship key resolution (property)', () 
           for (const key of Object.keys(relationships)) {
             expect(validIds.has(key)).toBe(true)
           }
+          // Not just "some real id" — the reported name/garbage must resolve
+          // to the SPECIFIC NPC it named. A raw, unresolved entity_id fails
+          // this the same way it fails the "some real id" check above (the
+          // idShape === 'garbage' case never lands under target.id at all),
+          // which is exactly the recurring production violation this file
+          // exists to catch (checkKey character.relationships.keys.resolve,
+          // campaign cms40seuh0001ilf6nqree1ru — Tre Coleman's relationships
+          // map picked up orphaned keys from this same unresolved-entity_id
+          // shape).
+          if (idShape !== 'garbage') {
+            expect(relationships[target.id]).toBeDefined()
+          }
         }
       ),
       { numRuns: 200 }

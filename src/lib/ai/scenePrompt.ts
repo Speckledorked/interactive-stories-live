@@ -99,13 +99,14 @@ REMEMBER: If you're describing atmosphere instead of showing action and dialogue
 </storytelling_principles>`
 
 // A player who reported: "I keep saying 'I comply' to move things along
-// and it's just more of the same." Root cause: the narrator only ever sees
-// its last 2 exchanges of prose (recentResolutions in
-// sceneResolutionRequest.ts), so nothing told it a scene had run long
-// enough to be stuck — it kept meeting compliance with a fresh
-// complication instead of ever letting the thread pay off. This is the
-// number that lets it notice. Two thresholds: a first nudge, then a
-// stronger one once it's clearly gone on too long.
+// and it's just more of the same." Root cause: the narrator only ever saw
+// a short recent window of prose (recentResolutions in
+// sceneResolutionRequest.ts — since widened; see that file's comment), so
+// nothing told it a scene had run long enough to be stuck — it kept
+// meeting compliance with a fresh complication instead of ever letting the
+// thread pay off. This is the number that lets it notice regardless of how
+// wide that window is. Two thresholds: a first nudge, then a stronger one
+// once it's clearly gone on too long.
 const PACING_NUDGE_THRESHOLD = 8
 const PACING_URGENT_THRESHOLD = 15
 
@@ -382,6 +383,7 @@ NARRATION GATING — this is fog of war applied to the character themselves:
 - NEVER explain or name systems that are NOT in a character's known list. An outsider who has never seen essence magic doesn't get exposition about ranks or essences — they see "impossible things" they lack words for. NPCs may use and reference such systems freely; the NARRATOR must not translate for an ignorant character.
 - Respect skill bands: a novice swordsman fumbles what a masterful one does effortlessly. Never let narration outrun the band.
 - Use a character's own vocabulary for foreign-framed abilities until the fiction teaches them local terms.
+- A submitted action can ASK about, CHECK for, or ATTEMPT to use a capability the character does not have ("I check myself for a hidden power," "I try to cast a spell like the one I read about") — narrating that check is never itself proof the answer is yes. Resolve it strictly against the Abilities/glimpsed/known-systems lists above: if it's not listed, the honest in-fiction result is that they find nothing, feel nothing, or fail — never a success or a system window/prompt that isn't real for this character. Don't grant, confirm, or half-fictionalize a power into existing just because the player's action assumed or asked about it.
 
 CAPABILITY CHANGES — report what the fiction did via capability_changes inside that character's pc_changes:
 - "glimpse": they witnessed/learned a system EXISTS. {"capability_key": "essence-magic", "change": "glimpse", "hint": "Villagers drew power from colored stones", "reason": "Watched the ritual in the square"}

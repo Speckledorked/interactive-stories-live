@@ -454,16 +454,25 @@ export async function applyCharacterChanges(
       let anyRelationshipApplied = false
 
       for (const relChange of pcChange.changes.relationship_changes) {
-        // DELIBERATELY SEEDED BUG — see docs/ARCHITECTURE.md Priority List
-        // #1 (integrity-autofix.yml's first real manual run). Skips
-        // resolveEntityByNameOrId on purpose, writing the AI's raw
-        // entity_id straight into Character.relationships instead of a
-        // real NPC row's id. Every reader looks this map up by real NPC
-        // id, so this key is orphaned the moment it's written — exactly
-        // the checkKey 'character.relationships.keys.resolve' exists to
-        // catch. DO NOT MERGE THIS TO main as a real fix for anything;
-        // this is the test payload for the autofix pipeline itself.
-        const entityId = relChange.entity_id
+        // Resolve to a real NPC row before keying the map — it's a JSON
+        // object keyed by NPC id (schema:735) with no FK to enforce that,
+        // and every reader looks it up by real id (resolution.ts's roll
+        // lookup, socialTies.ts, questFailure.ts). Try entity_id first
+        // (right when the AI echoes a real id), then fall back to
+        // entity_name, since the AI doesn't consistently report the same
+        // shape scene to scene — see checkKey
+        // 'character.relationships.keys.resolve'.
+        const relResolution = resolveEntityByNameOrId(npcsForResolution, relChange.entity_id)
+        const resolved = relResolution.kind === 'found'
+          ? relResolution
+          : resolveEntityByNameOrId(npcsForResolution, relChange.entity_name)
+
+        if (resolved.kind !== 'found') {
+          console.warn(`  ⚠️ Relationship change for unresolvable NPC "${relChange.entity_name}" (id "${relChange.entity_id}") — skipping rather than writing an orphan key`)
+          continue
+        }
+
+        const entityId = resolved.entity.id
         const currentRel = currentRelationships[entityId] || {
           trust: 0,
           tension: 0,

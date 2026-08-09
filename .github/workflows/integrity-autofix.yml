@@ -149,8 +149,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          fix_open=$(gh pr list --label "integrity-autofix:${CHECK_KEY}" --state open --json number --jq 'length')
-          revert_open=$(gh pr list --label "integrity-autofix-revert:${CHECK_KEY}" --state open --json number --jq 'length')
+          fix_open=$(gh pr list --label "fix:${CHECK_KEY}" --state open --json number --jq 'length')
+          revert_open=$(gh pr list --label "rev:${CHECK_KEY}" --state open --json number --jq 'length')
           if [ "$fix_open" -gt 0 ] || [ "$revert_open" -gt 0 ]; then
             echo "already_open=true" >> "$GITHUB_OUTPUT"
           else
@@ -247,13 +247,13 @@ jobs:
           # harmless "already exists"). Let a genuine failure show in the
           # logs; still don't halt the step on the common "already exists"
           # case.
-          gh label create "integrity-autofix-revert:${CHECK_KEY}" \
+          gh label create "rev:${CHECK_KEY}" \
             --color "B60205" \
             --description "Opened by the Integrity Engine's autofix pipeline reverting a fix for this checkKey" \
             || echo "label create failed or already exists (see error above) — continuing"
           gh pr create \
             --title "Revert auto-fix for ${CHECK_KEY} — recurred after merge" \
-            --label "integrity-autofix-revert:${CHECK_KEY}" \
+            --label "rev:${CHECK_KEY}" \
             --body-file /tmp/pr_body.md
           gh pr merge --auto --squash
 
@@ -474,20 +474,28 @@ jobs:
           # it does not create one on the fly. Run #5 died here outright
           # ("could not add label ... not found") on the very first
           # checkKey this pipeline ever fixed, since nothing had ever
-          # created "integrity-autofix:<checkKey>" before. Create it
-          # (idempotently — `|| true` covers the label already existing
-          # on a later run for the same checkKey) immediately before the
-          # PR that needs it, rather than requiring every checkKey's label
-          # to be pre-provisioned by hand.
+          # created "fix:<checkKey>" before. Create it (idempotently —
+          # `|| true` covers the label already existing on a later run
+          # for the same checkKey) immediately before the PR that needs
+          # it, rather than requiring every checkKey's label to be
+          # pre-provisioned by hand.
           # Not `2>/dev/null || true` — see the matching comment in
           # revert-regression's push step for why that hid the real cause
-          # of run #9's failure here for a whole run cycle.
-          gh label create "integrity-autofix:${CHECK_KEY}" \
+          # of run #9's failure here for a whole run cycle. That
+          # visibility immediately paid off on run #11: the real error
+          # was "name is too long (maximum is 50 characters)" — the
+          # original "integrity-autofix:<checkKey>" prefix left only 31
+          # characters for the checkKey itself, and the longest
+          # registered checkKey (character.resources.reputation.keys.resolve,
+          # 43 chars) blew past it. "fix:"/"rev:" leave 46 characters of
+          # budget, comfortably covering every checkKey today with room
+          # for modest future growth — see checkKeys.ts for the closed set.
+          gh label create "fix:${CHECK_KEY}" \
             --color "5319E7" \
             --description "Opened by the Integrity Engine's autofix pipeline for this checkKey" \
             || echo "label create failed or already exists (see error above) — continuing"
           gh pr create \
             --title "Integrity auto-fix: ${CHECK_KEY}" \
-            --label "integrity-autofix:${CHECK_KEY}" \
+            --label "fix:${CHECK_KEY}" \
             --body-file /tmp/pr_body.md
           gh pr merge --auto --squash

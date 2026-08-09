@@ -74,6 +74,14 @@ permissions:
   contents: write
   pull-requests: write
   id-token: write
+  # Label CRUD (gh label create) needs this — pull-requests: write is
+  # enough to create/merge a PR and attach an EXISTING label, but not to
+  # define a new one; GitHub gates that under Issues even for a PR-only
+  # workflow. Run #9 (workflow_dispatch) got all the way through
+  # diagnosis, full-suite verification, and the oracle check, then failed
+  # on "could not add label ... not found" — gh label create had silently
+  # failed (its stderr was suppressed) on exactly this missing scope.
+  issues: write
 
 jobs:
   check-for-escalations:
@@ -233,10 +241,16 @@ jobs:
           } > /tmp/pr_body.md
           # Same fix as the diagnose-and-fix job's push step — gh pr create
           # --label requires the label to already exist.
+          # Not `2>/dev/null || true` — that's exactly what hid the real
+          # cause behind run #9's "could not add label ... not found" for
+          # a whole run cycle (a missing `issues: write` permission, not a
+          # harmless "already exists"). Let a genuine failure show in the
+          # logs; still don't halt the step on the common "already exists"
+          # case.
           gh label create "integrity-autofix-revert:${CHECK_KEY}" \
             --color "B60205" \
             --description "Opened by the Integrity Engine's autofix pipeline reverting a fix for this checkKey" \
-            2>/dev/null || true
+            || echo "label create failed or already exists (see error above) — continuing"
           gh pr create \
             --title "Revert auto-fix for ${CHECK_KEY} — recurred after merge" \
             --label "integrity-autofix-revert:${CHECK_KEY}" \
@@ -455,10 +469,13 @@ jobs:
           # on a later run for the same checkKey) immediately before the
           # PR that needs it, rather than requiring every checkKey's label
           # to be pre-provisioned by hand.
+          # Not `2>/dev/null || true` — see the matching comment in
+          # revert-regression's push step for why that hid the real cause
+          # of run #9's failure here for a whole run cycle.
           gh label create "integrity-autofix:${CHECK_KEY}" \
             --color "5319E7" \
             --description "Opened by the Integrity Engine's autofix pipeline for this checkKey" \
-            2>/dev/null || true
+            || echo "label create failed or already exists (see error above) — continuing"
           gh pr create \
             --title "Integrity auto-fix: ${CHECK_KEY}" \
             --label "integrity-autofix:${CHECK_KEY}" \

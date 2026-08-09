@@ -17,26 +17,33 @@ interface ActiveClocksPanelProps {
 export function ActiveClocksPanel({ clocks, campaignId }: ActiveClocksPanelProps) {
   const [selectedClock, setSelectedClock] = useState<any>(null)
 
-  if (!clocks || clocks.length === 0) return null
+  // A clock that reached maxTicks is done — its consequence has already
+  // fired (see Clock.resolvedAt's schema comment) or is about to on the
+  // next tick, and nothing ever advances it further. Filtered before the
+  // empty check below so a scene whose clocks are ALL complete shows no
+  // panel at all, instead of an empty "ACTIVE CLOCKS" header over nothing.
+  const visibleClocks = (clocks ?? []).filter(
+    (clock: any) => !clock.isHidden && clock.currentTicks < clock.maxTicks
+  )
+
+  if (visibleClocks.length === 0) return null
 
   return (
     <CollapsibleSidebarCard title="ACTIVE CLOCKS">
       <div className="space-y-2">
-        {clocks
-          .filter((clock: any) => !clock.isHidden)
-          .map((clock: any) => (
-            <button
-              key={clock.id}
-              onClick={() => setSelectedClock(clock)}
-              className="w-full text-left"
-            >
-              <CompactClock
-                name={clock.name}
-                current={clock.currentTicks}
-                max={clock.maxTicks}
-              />
-            </button>
-          ))}
+        {visibleClocks.map((clock: any) => (
+          <button
+            key={clock.id}
+            onClick={() => setSelectedClock(clock)}
+            className="w-full text-left"
+          >
+            <CompactClock
+              name={clock.name}
+              current={clock.currentTicks}
+              max={clock.maxTicks}
+            />
+          </button>
+        ))}
       </div>
 
       <EntityStubModal

@@ -4,7 +4,7 @@
 // `changelog.length > 0` display guard could never become true.
 
 import { describe, it, expect } from 'vitest'
-import { appendWikiChangelog, MAX_WIKI_CHANGELOG_ENTRIES } from '../wikiSync'
+import { appendWikiChangelog, MAX_WIKI_CHANGELOG_ENTRIES, humanizeArchetype } from '../wikiSync'
 
 describe('appendWikiChangelog (#90)', () => {
   it('starts a changelog from nothing', () => {
@@ -44,5 +44,16 @@ describe('appendWikiChangelog (#90)', () => {
   it('ignores malformed prior content rather than throwing', () => {
     expect(appendWikiChangelog('not an array', 1, 'a')).toEqual([{ turn: 1, change: 'a' }])
     expect(appendWikiChangelog([null, { nope: true }], 1, 'a')).toEqual([{ turn: 1, change: 'a' }])
+  })
+})
+
+describe('humanizeArchetype', () => {
+  it('turns a single-word enum value into title case', () => {
+    expect(humanizeArchetype('MILITARY')).toBe('Military')
+    expect(humanizeArchetype('GENERIC')).toBe('Generic')
+  })
+
+  it('turns a multi-word SCREAMING_SNAKE_CASE value into spaced title case', () => {
+    expect(humanizeArchetype('SECRET_SOCIETY')).toBe('Secret Society')
   })
 })

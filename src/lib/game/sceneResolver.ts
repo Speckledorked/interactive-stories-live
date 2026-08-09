@@ -1318,12 +1318,18 @@ async function updateWikiEntries(
 
     const progress = `${clock.currentTicks}/${clock.maxTicks}`
     const clockDesc = `${clock.description}\n\nProgress: ${progress}`
+    // Categorization: the wiki page groups each tab's list by tags[0].
+    // Set on the update path too — not just create — so a clock created
+    // before this existed still picks up its category on the very next
+    // sync, no backfill script needed.
+    const clockTags = clock.category ? [clock.category] : []
 
     if (existing) {
       await prisma.wikiEntry.update({
         where: { id: existing.id },
         data: {
           description: clockDesc,
+          tags: clockTags,
           lastSeenTurn: turnNumber,
           updatedAt: new Date()
         }
@@ -1336,7 +1342,7 @@ async function updateWikiEntries(
           name: clock.name,
           summary: clock.description || 'A countdown or progress tracker',
           description: clockDesc,
-          tags: [],
+          tags: clockTags,
           aliases: [],
           importance: 'major',
           lastSeenTurn: turnNumber,
@@ -1365,10 +1371,14 @@ async function updateWikiEntries(
       location.ownerFaction?.isDiscovered ? `Controlled by: ${location.ownerFaction.name}` : null,
     ].filter(Boolean).join('\n\n') || `${location.name} is a location in the world.`
 
+    // Categorization: set on update too so a location created before this
+    // existed still picks up its category tag on the next sync.
+    const locationTags = location.locationType ? [location.locationType] : []
+
     if (existing) {
       await prisma.wikiEntry.update({
         where: { id: existing.id },
-        data: { description: locDesc, lastSeenTurn: turnNumber, updatedAt: new Date() }
+        data: { description: locDesc, tags: locationTags, lastSeenTurn: turnNumber, updatedAt: new Date() }
       })
     } else {
       await prisma.wikiEntry.create({
@@ -1378,7 +1388,7 @@ async function updateWikiEntries(
           name: location.name,
           summary: location.description || `A location in the world`,
           description: locDesc,
-          tags: location.locationType ? [location.locationType] : [],
+          tags: locationTags,
           aliases: [],
           importance: 'normal',
           lastSeenTurn: turnNumber,
@@ -1406,12 +1416,18 @@ async function updateWikiEntries(
       `Status: ${statusLine}`,
       quest.progressLog ? `Progress:\n${quest.progressLog}` : null,
     ].filter(Boolean).join('\n\n')
+    // Categorization: set on update too — a quest's status is exactly the
+    // grouping the Quests page itself already uses, and it changes over
+    // the quest's life, so this needs to stay current on every sync, not
+    // just at creation.
+    const questTags = [quest.status.toLowerCase()]
 
     if (existing) {
       await prisma.wikiEntry.update({
         where: { id: existing.id },
         data: {
           description: questDesc,
+          tags: questTags,
           isActive: quest.status === 'ACTIVE',
           lastSeenTurn: turnNumber,
           updatedAt: new Date()
@@ -1425,7 +1441,7 @@ async function updateWikiEntries(
           name: quest.name,
           summary: quest.objective || quest.description,
           description: questDesc,
-          tags: [quest.status.toLowerCase()],
+          tags: questTags,
           aliases: [],
           importance: 'major',
           lastSeenTurn: turnNumber,
@@ -1453,7 +1469,7 @@ async function updateWikiEntries(
     if (existing) {
       await prisma.wikiEntry.update({
         where: { id: existing.id },
-        data: { description: itemDesc, lastSeenTurn: turnNumber, updatedAt: new Date() }
+        data: { description: itemDesc, tags: item.tags, lastSeenTurn: turnNumber, updatedAt: new Date() }
       })
     } else {
       await prisma.wikiEntry.create({

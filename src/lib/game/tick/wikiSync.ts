@@ -133,7 +133,25 @@ async function syncNpcWikiEntry(
     description,
     importance: wikiImportance,
     related,
+    // Categorization: the wiki page groups each tab's list by an entry's
+    // first tag — an NPC's most natural grouping is who they're with,
+    // which the affiliation link already computed above.
+    tags: [npc.faction ? npc.faction.name : 'Unaffiliated'],
   })
+}
+
+/**
+ * FactionArchetype is a closed, SCREAMING_SNAKE_CASE enum (schema.prisma) —
+ * this turns a value like "SECRET_SOCIETY" into "Secret Society" for
+ * display as a wiki category tag. Pure so the formatting rule is testable
+ * without a database.
+ */
+export function humanizeArchetype(archetype: string): string {
+  return archetype
+    .split('_')
+    .filter(Boolean)
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(' ')
 }
 
 async function syncFactionWikiEntry(
@@ -148,6 +166,7 @@ async function syncFactionWikiEntry(
     stability: number
     military: number
     goal: string
+    archetype: string
     territories: { name: string }[]
   }
 ): Promise<void> {
@@ -178,6 +197,7 @@ async function syncFactionWikiEntry(
     description,
     importance: wikiImportance,
     related,
+    tags: [humanizeArchetype(faction.archetype)],
   })
 }
 
@@ -196,6 +216,13 @@ async function upsertWikiEntry(input: {
   description: string
   importance: 'major' | 'normal'
   related: WikiRelatedEntry[]
+  // The wiki page groups each tab's entry list by tags[0] — this must be
+  // set on the UPDATE path too, not only at creation, or an entry that
+  // already existed before this categorization landed would never pick up
+  // a tag: nothing else ever re-creates it. Setting it on every sync is
+  // what makes existing entries fall into their category retroactively,
+  // the next time this same significant-change sync runs for them.
+  tags: string[]
 }): Promise<void> {
   const existing = await prisma.wikiEntry.findFirst({
     where: { campaignId: input.campaignId, entryType: input.entryType, name: input.name },
@@ -207,6 +234,7 @@ async function upsertWikiEntry(input: {
       data: {
         description: input.description,
         importance: input.importance,
+        tags: input.tags,
         lastSeenTurn: input.turnNumber,
         updatedAt: new Date(),
         changelog: appendWikiChangelog(existing.changelog, input.turnNumber, 'Details updated') as Prisma.InputJsonValue,
@@ -222,7 +250,7 @@ async function upsertWikiEntry(input: {
         name: input.name,
         summary: input.summary,
         description: input.description,
-        tags: [],
+        tags: input.tags,
         aliases: [],
         importance: input.importance,
         lastSeenTurn: input.turnNumber,

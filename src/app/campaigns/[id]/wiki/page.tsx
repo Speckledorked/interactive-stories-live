@@ -13,6 +13,7 @@ import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { SectionHeader } from '@/components/ui/section-header'
+import { groupWikiEntriesByCategory } from '@/lib/wikiCategoryGrouping'
 
 type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
 // RUMORS isn't a WikiEntryType — it's a separate feed (offscreen
@@ -129,6 +130,12 @@ export default function WikiPage() {
     entry.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     entry.summary.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  // Grouped for display — collapses to a single unlabeled group when every
+  // visible entry shares a category (or none do), so a small/uniform list
+  // doesn't grow a redundant one-item header.
+  const entryGroups = groupWikiEntriesByCategory(filteredEntries, selectedType)
+  const showCategoryHeaders = entryGroups.length > 1
 
   const filteredRumors = rumors.filter(rumor =>
     rumor.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -268,33 +275,44 @@ export default function WikiPage() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {filteredEntries.map((entry: any) => (
-                  <button
-                    key={entry.id}
-                    onClick={() => setSelectedEntry(entry)}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                      selectedEntry?.id === entry.id
-                        ? 'border-myth-accent bg-myth-accent/5'
-                        : 'border-myth-border hover:border-myth-border-strong hover:bg-myth-surface-sunken'
-                    }`}
-                  >
-                    <div className="mb-1.5 flex items-start justify-between">
-                      <h4 className="text-sm font-semibold text-myth-ink">{entry.name}</h4>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getImportanceColor(entry.importance)}`}>
-                        {entry.importance}
-                      </span>
-                    </div>
-                    <p className="line-clamp-2 text-xs leading-relaxed text-myth-ink-muted">{entry.summary}</p>
-                    {entry.lastSeenTurn && (
-                      <p className="mt-2 flex items-center gap-1 text-xs text-myth-ink-faint">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Last seen: Turn {entry.lastSeenTurn}
-                      </p>
+              <div className="space-y-5">
+                {entryGroups.map((group) => (
+                  <div key={group.label}>
+                    {showCategoryHeaders && (
+                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">
+                        {group.label} <span className="font-normal normal-case text-myth-ink-faint/70">({group.entries.length})</span>
+                      </h4>
                     )}
-                  </button>
+                    <div className="space-y-2">
+                      {group.entries.map((entry: any) => (
+                        <button
+                          key={entry.id}
+                          onClick={() => setSelectedEntry(entry)}
+                          className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                            selectedEntry?.id === entry.id
+                              ? 'border-myth-accent bg-myth-accent/5'
+                              : 'border-myth-border hover:border-myth-border-strong hover:bg-myth-surface-sunken'
+                          }`}
+                        >
+                          <div className="mb-1.5 flex items-start justify-between">
+                            <h4 className="text-sm font-semibold text-myth-ink">{entry.name}</h4>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getImportanceColor(entry.importance)}`}>
+                              {entry.importance}
+                            </span>
+                          </div>
+                          <p className="line-clamp-2 text-xs leading-relaxed text-myth-ink-muted">{entry.summary}</p>
+                          {entry.lastSeenTurn && (
+                            <p className="mt-2 flex items-center gap-1 text-xs text-myth-ink-faint">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Last seen: Turn {entry.lastSeenTurn}
+                            </p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

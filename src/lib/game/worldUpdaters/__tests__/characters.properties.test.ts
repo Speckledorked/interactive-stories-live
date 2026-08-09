@@ -18,6 +18,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import fc from 'fast-check'
 import { applyCharacterChanges, PcChange } from '../characters'
+import { clamp } from '../../tick/types'
 import type { Character } from '@prisma/client'
 
 vi.mock('../../debts', () => ({ applyDebtChanges: vi.fn(async () => []) }))
@@ -101,6 +102,79 @@ describe('applyCharacterChanges — relationship key resolution (property)', () 
           for (const key of Object.keys(relationships)) {
             expect(validIds.has(key)).toBe(true)
           }
+        }
+      ),
+      { numRuns: 200 }
+    )
+  })
+})
+
+// The production evidence for this checkKey wasn't a single bad write — it
+// was the SAME NPC accruing orphan keys across several turns (Tre Coleman,
+// turns 10/43/46/52), because the AI doesn't consistently echo the same
+// entity_id shape scene to scene: one turn it reports the real id, the next
+// it reports the name. A round trip across turns must converge on the one
+// real NPC id no matter which shape arrived when, with deltas accumulating
+// onto that single key — not fragmenting into a second, unreadable key the
+// moment the AI's phrasing changes.
+describe('applyCharacterChanges — relationship convergence across turns (property)', () => {
+  it('accumulates trust deltas for the same NPC onto a single key across turns, however entity_id is shaped turn to turn', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        npcRosterArb,
+        fc.array(
+          fc.record({
+            idShape: fc.constantFrom<'id' | 'name'>('id', 'name'),
+            trustDelta: fc.integer({ min: -20, max: 20 }),
+          }),
+          { minLength: 2, maxLength: 6 }
+        ),
+        async (roster, turns) => {
+          const target = roster[0]
+          let workingCharacter = character()
+          let expectedTrust = 0
+
+          for (const turn of turns) {
+            const entityId = turn.idShape === 'id' ? target.id : target.name
+            const tx = makeTx()
+            await applyCharacterChanges(
+              tx as any,
+              'camp1',
+              1,
+              [{
+                character_name_or_id: 'char1',
+                changes: {
+                  relationship_changes: [{
+                    entity_id: entityId,
+                    entity_name: target.name,
+                    trust_delta: turn.trustDelta,
+                    reason: 'convergence property test',
+                  }],
+                },
+              }] as PcChange[],
+              [workingCharacter],
+              roster,
+              noTheme,
+              true
+            )
+
+            expectedTrust = clamp(expectedTrust + turn.trustDelta, -100, 100)
+
+            const call = tx.character.update.mock.calls[0]
+            if (call) {
+              workingCharacter = { ...workingCharacter, relationships: (call[0] as any).data.relationships }
+            }
+          }
+
+          const relationships = (workingCharacter.relationships as any) ?? {}
+          const keys = Object.keys(relationships)
+
+          // Every turn named the same real NPC (by id or by name) — the
+          // fiction never introduced a second entity, so the map must never
+          // grow a second key for it.
+          expect(keys.length).toBe(1)
+          expect(keys[0]).toBe(target.id)
+          expect(relationships[target.id].trust).toBe(expectedTrust)
         }
       ),
       { numRuns: 200 }

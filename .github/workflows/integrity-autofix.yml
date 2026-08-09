@@ -299,7 +299,16 @@ jobs:
           claude_args: |
             --model claude-sonnet-5
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npx vitest run:*),Bash(npx tsc --noEmit),Bash(git add:*),Bash(git commit:*),Bash(git status),Bash(git diff:*)"
-            --max-turns 30
+            # Run #8 hit error_max_turns at the 30-turn cap before finishing
+            # (partly after losing a turn to a denied Bash call containing
+            # command substitution — a built-in Claude Code safety
+            # restriction, not something allowedTools controls). Every real
+            # run so far has needed close to or above 30 turns regardless of
+            # model (Opus: 26-34; Sonnet: 28, then this one ran out) — the
+            # cap has always been tight, not just unlucky this once. Raised
+            # for headroom; still bounded, so a genuinely stuck run still
+            # can't run away unbounded.
+            --max-turns 50
           prompt: |
             A recurring integrity violation was detected across production campaigns,
             characterized (src/lib/game/integrity/escalation.ts) as evidence of a code

@@ -515,8 +515,8 @@ export interface AIGMRequest {
   // can store receipts — not rendered into the prompt directly.
   action_mechanics?: import('@/lib/game/resolution').ActionMechanics[]
   // Which exchange of THIS scene this is (scene.currentExchange) — gates
-  // <pacing> in scenePrompt.ts. The model only ever sees its last 2
-  // exchanges of prose (see sceneResolutionRequest.ts's recentResolutions
+  // <pacing> in scenePrompt.ts. The model only ever sees a bounded recent
+  // window of prose (see sceneResolutionRequest.ts's recentResolutions
   // cap), so without this number it has no way to notice a scene has run
   // unusually long and keeps meeting cooperation with a fresh complication
   // instead of ever letting a thread resolve.

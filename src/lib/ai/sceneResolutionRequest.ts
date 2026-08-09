@@ -226,10 +226,23 @@ export async function buildSceneResolutionRequest(
   // This ensures the AI sees what already happened in the scene
   let sceneContext = scene.sceneIntroText
   if (scene.sceneResolutionText) {
-    // OPTIMIZATION: Only include the last 2 exchanges to prevent prompt bloat
+    // A fixed 2-exchange window used to sit here (comment: "OPTIMIZATION:
+    // only include the last 2 exchanges to prevent prompt bloat"). That was
+    // the actual root cause a player once reported ("I keep saying 'I
+    // comply' ... and it's just more of the same" — see scenePrompt.ts's
+    // PACING_NUDGE_THRESHOLD comment): with a scene's own earlier exchanges
+    // gone from the prompt after just 2 more happened, the narrator had no
+    // way to know it had already established a fact and would re-explain it
+    // in slightly different words. PACING_NUDGE_THRESHOLD mitigated the
+    // "endless fresh complication" symptom of that but never fixed the
+    // named cause. Widened to 6 now that #117's applyTokenBudget exists as
+    // a real safety net below (it halves current_scene_intro — keeping the
+    // END, i.e. the freshest exchanges — only if the assembled request
+    // actually goes over budget), so this fixed cap no longer has to guess
+    // at a safe number up front.
     // Split by the separator used when appending resolutions
     const allResolutions = scene.sceneResolutionText.split('\n\n---\n\n')
-    const recentResolutions = allResolutions.slice(-2) // Last 2 exchanges only
+    const recentResolutions = allResolutions.slice(-6)
 
     if (recentResolutions.length > 0) {
       sceneContext += '\n\n## What Has Happened Recently:\n\n' + recentResolutions.join('\n\n---\n\n')

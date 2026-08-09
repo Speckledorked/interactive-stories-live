@@ -454,16 +454,24 @@ export async function applyCharacterChanges(
       let anyRelationshipApplied = false
 
       for (const relChange of pcChange.changes.relationship_changes) {
-        // DELIBERATELY SEEDED BUG — see docs/ARCHITECTURE.md Priority List
-        // #1 (integrity-autofix.yml's first real manual run). Skips
-        // resolveEntityByNameOrId on purpose, writing the AI's raw
-        // entity_id straight into Character.relationships instead of a
-        // real NPC row's id. Every reader looks this map up by real NPC
-        // id, so this key is orphaned the moment it's written — exactly
-        // the checkKey 'character.relationships.keys.resolve' exists to
-        // catch. DO NOT MERGE THIS TO main as a real fix for anything;
-        // this is the test payload for the autofix pipeline itself.
-        const entityId = relChange.entity_id
+        // Resolve the AI-reported entity_id/entity_name against the real
+        // NPC roster before using it as a Character.relationships key —
+        // every reader looks this map up by real NPC id, so writing the
+        // AI's raw entity_id straight in orphans the key the moment an AI
+        // reports a name or a stale/garbage id instead of the real one
+        // (checkKey 'character.relationships.keys.resolve').
+        let npcResolution = resolveEntityByNameOrId(npcsForResolution, relChange.entity_id)
+        // The prompt's own example shows a placeholder id like "npc_123",
+        // so a reported entity_name that resolves for real is the routine
+        // fallback, not the exceptional case.
+        if (npcResolution.kind !== 'found') {
+          npcResolution = resolveEntityByNameOrId(npcsForResolution, relChange.entity_name)
+        }
+        if (npcResolution.kind !== 'found') {
+          console.warn(`  ⚠️ ${character.name} → unresolved relationship target "${relChange.entity_name}" (${relChange.entity_id}), skipping`)
+          continue
+        }
+        const entityId = npcResolution.entity.id
         const currentRel = currentRelationships[entityId] || {
           trust: 0,
           tension: 0,

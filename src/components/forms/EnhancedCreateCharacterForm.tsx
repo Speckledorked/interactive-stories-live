@@ -415,13 +415,13 @@ export default function EnhancedCreateCharacterForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="bg-wine-800/20 border border-wine-600/50 text-wine-400 p-4 rounded-md">
+        <div className="bg-myth-danger/10 border border-myth-danger/30 text-myth-danger p-4 rounded-md">
           {error}
         </div>
       )}
 
       {/* Tabs */}
-      <div className="border-b border-ember-900/30">
+      <div className="border-b border-myth-border">
         <nav className="flex space-x-4 overflow-x-auto">
           {tabs.map(tab => (
             <button
@@ -430,8 +430,8 @@ export default function EnhancedCreateCharacterForm({
               onClick={() => setActiveTab(tab.key)}
               className={`py-3 px-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap flex items-center gap-2 ${
                 activeTab === tab.key
-                  ? 'border-ember-400 text-ember-300'
-                  : 'border-transparent text-ember-300/60 hover:text-ember-200/80 hover:border-ember-900/40'
+                  ? 'border-myth-accent text-myth-accent'
+                  : 'border-transparent text-myth-ink-faint hover:text-myth-ink-muted hover:border-myth-border'
               }`}
             >
               <span>{tab.icon}</span>
@@ -448,10 +448,10 @@ export default function EnhancedCreateCharacterForm({
           <div className="space-y-4">
             {archetypes.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-ember-100 mb-1">
+                <label className="block text-sm font-medium text-myth-ink mb-1">
                   Choose an origin
                 </label>
-                <p className="text-xs text-ember-300/60 mb-2">
+                <p className="text-xs text-myth-ink-faint mb-2">
                   Ready-to-play entry points into this world — picking one fills in stats, gear, and a starting
                   connection you can still tweak on the later tabs. Or build from scratch.
                 </p>
@@ -463,14 +463,14 @@ export default function EnhancedCreateCharacterForm({
                       onClick={() => applyArchetype(archetype)}
                       className={`text-left rounded-lg p-4 border transition-colors ${
                         selectedArchetypeId === archetype.id
-                          ? 'bg-ember-900/30 border-ember-500/60'
-                          : 'bg-black/25 border-ember-900/30 hover:border-ember-700/50'
+                          ? 'bg-myth-accent/10 border-myth-accent'
+                          : 'bg-myth-surface-sunken border-myth-border hover:border-myth-border-strong'
                       }`}
                     >
-                      <div className="font-medium text-ember-200 mb-1">{archetype.name}</div>
-                      <p className="text-xs text-ember-300/60">{archetype.description}</p>
+                      <div className="font-medium text-myth-ink-muted mb-1">{archetype.name}</div>
+                      <p className="text-xs text-myth-ink-faint">{archetype.description}</p>
                       {archetype.startingTie?.description && (
-                        <p className="text-xs text-ember-400/50 mt-2 italic">Starts with: {archetype.startingTie.description}</p>
+                        <p className="text-xs text-myth-ink-faint mt-2 italic">Starts with: {archetype.startingTie.description}</p>
                       )}
                     </button>
                   ))}
@@ -479,20 +479,20 @@ export default function EnhancedCreateCharacterForm({
                     onClick={clearArchetype}
                     className={`text-left rounded-lg p-4 border border-dashed transition-colors ${
                       selectedArchetypeId === null
-                        ? 'bg-ember-900/20 border-ember-500/50'
-                        : 'border-ember-900/40 hover:border-ember-700/50'
+                        ? 'bg-myth-accent/10 border-myth-accent/50'
+                        : 'border-myth-border hover:border-myth-border-strong'
                     }`}
                   >
-                    <div className="font-medium text-ember-300/80 mb-1">Start from scratch</div>
-                    <p className="text-xs text-ember-300/50">Build every detail yourself.</p>
+                    <div className="font-medium text-myth-ink-muted mb-1">Start from scratch</div>
+                    <p className="text-xs text-myth-ink-faint">Build every detail yourself.</p>
                   </button>
                 </div>
               </div>
             )}
 
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-ember-100 mb-1">
-                Character Name <span className="text-wine-400">*</span>
+              <label htmlFor="name" className="block text-sm font-medium text-myth-ink mb-1">
+                Character Name <span className="text-myth-danger">*</span>
               </label>
               <input
                 type="text"
@@ -506,7 +506,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="pronouns" className="block text-sm font-medium text-ember-100 mb-1">
+              <label htmlFor="pronouns" className="block text-sm font-medium text-myth-ink mb-1">
                 Pronouns
               </label>
               <input
@@ -520,7 +520,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="appearance" className="block text-sm font-medium text-ember-100 mb-1">
+              <label htmlFor="appearance" className="block text-sm font-medium text-myth-ink mb-1">
                 Physical Appearance
               </label>
               <textarea
@@ -534,7 +534,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="description" className="block text-sm font-medium text-ember-100 mb-1">
+              <label htmlFor="description" className="block text-sm font-medium text-myth-ink mb-1">
                 General Description
               </label>
               <textarea
@@ -548,7 +548,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="currentLocation" className="block text-sm font-medium text-ember-100 mb-1">
+              <label htmlFor="currentLocation" className="block text-sm font-medium text-myth-ink mb-1">
                 Starting Location
               </label>
               <input
@@ -559,12 +559,12 @@ export default function EnhancedCreateCharacterForm({
                 className="input-field"
                 placeholder="Where does your character begin their journey?"
               />
-              <p className="text-xs text-ember-300/60 mt-1">This will be used to personalize the opening scene.</p>
+              <p className="text-xs text-myth-ink-faint mt-1">This will be used to personalize the opening scene.</p>
               {partyLocations.length === 1 && (
-                <p className="text-xs text-ember-400/50 mt-1">Your party is currently at: {partyLocations[0]}</p>
+                <p className="text-xs text-myth-ink-faint mt-1">Your party is currently at: {partyLocations[0]}</p>
               )}
               {partyLocations.length > 1 && (
-                <p className="text-xs text-ember-400/50 mt-1">
+                <p className="text-xs text-myth-ink-faint mt-1">
                   Your party isn't in one place right now — pick a location to match one of them, or somewhere new if your character is arriving separately: {partyLocations.join(', ')}
                 </p>
               )}
@@ -576,7 +576,7 @@ export default function EnhancedCreateCharacterForm({
         {activeTab === 'character' && (
           <div className="space-y-4">
             <div>
-              <label htmlFor="personality" className="block text-sm font-medium text-ember-100 mb-1">
+              <label htmlFor="personality" className="block text-sm font-medium text-myth-ink mb-1">
                 Personality Traits
               </label>
               <textarea
@@ -590,7 +590,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="originFamiliarity" className="block text-sm font-medium text-ember-100 mb-1">
+              <label htmlFor="originFamiliarity" className="block text-sm font-medium text-myth-ink mb-1">
                 How well do they know this world?
               </label>
               <select
@@ -603,13 +603,13 @@ export default function EnhancedCreateCharacterForm({
                 <option value="NEWCOMER">Newcomer — heard of the big things, hazy on details</option>
                 <option value="OUTSIDER">Outsider — a stranger to this world&apos;s ways entirely</option>
               </select>
-              <p className="text-xs text-ember-300 mt-1">
+              <p className="text-xs text-myth-ink-muted mt-1">
                 This shapes what appears on your character sheet. An outsider starts with a nearly blank sheet and discovers this world&apos;s powers, arts, and secrets through the story itself.
               </p>
             </div>
 
             <div>
-              <label htmlFor="backstory" className="block text-sm font-medium text-ember-100 mb-1">
+              <label htmlFor="backstory" className="block text-sm font-medium text-myth-ink mb-1">
                 Backstory
               </label>
               <textarea
@@ -621,8 +621,8 @@ export default function EnhancedCreateCharacterForm({
                 placeholder="What is your character's history? Where did they come from? What important events shaped who they are today?"
               />
               {selectedArchetype && selectedArchetype.backstoryPrompts.length > 0 && (
-                <div className="mt-2 text-xs text-ember-300/60 bg-black/20 rounded-md p-3 border border-ember-900/30">
-                  <span className="font-medium text-ember-300/80">Questions to spark your {selectedArchetype.name} backstory:</span>
+                <div className="mt-2 text-xs text-myth-ink-faint bg-myth-surface-sunken rounded-md p-3 border border-myth-border">
+                  <span className="font-medium text-myth-ink-faint">Questions to spark your {selectedArchetype.name} backstory:</span>
                   <ul className="list-disc list-inside mt-1 space-y-0.5">
                     {selectedArchetype.backstoryPrompts.map((prompt, idx) => (
                       <li key={idx}>{prompt}</li>
@@ -633,7 +633,7 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             <div>
-              <label htmlFor="goals" className="block text-sm font-medium text-ember-100 mb-1">
+              <label htmlFor="goals" className="block text-sm font-medium text-myth-ink mb-1">
                 Goals & Motivations
               </label>
               <textarea
@@ -652,19 +652,19 @@ export default function EnhancedCreateCharacterForm({
         {activeTab === 'stats' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-ember-100 mb-2">
+              <label className="block text-sm font-medium text-myth-ink mb-2">
                 Character Stats
               </label>
-              <p className="text-xs text-ember-300/60 mb-4">
+              <p className="text-xs text-myth-ink-faint mb-4">
                 Range: -1 (weak) to +2 (strong). Most stats start at 0 or +1.
               </p>
               <div className="space-y-3">
                 {Object.entries(formData.stats).map(([stat, value]) => {
                   const custom = statLabels?.[stat as keyof typeof PBTA_STATS]
                   return (
-                    <div key={stat} className="bg-black/25 rounded-md p-3 border border-ember-900/30">
+                    <div key={stat} className="bg-myth-surface-sunken rounded-md p-3 border border-myth-border">
                       <div className="flex items-center justify-between mb-1">
-                        <label htmlFor={stat} className={`text-sm font-medium text-white ${custom ? '' : 'capitalize'}`}>
+                        <label htmlFor={stat} className={`text-sm font-medium text-myth-ink ${custom ? '' : 'capitalize'}`}>
                           {custom?.label || stat}
                         </label>
                         <input
@@ -674,10 +674,10 @@ export default function EnhancedCreateCharacterForm({
                           max="2"
                           value={value}
                           onChange={(e) => handleStatChange(stat, parseInt(e.target.value) || 0)}
-                          className="w-16 text-center rounded-md bg-black/30 border-ember-900/40 text-white shadow-sm focus:border-ember-400 focus:ring-ember-500/40 sm:text-sm font-bold"
+                          className="w-16 text-center rounded-md bg-myth-surface-sunken border-myth-border text-myth-ink shadow-sm focus:border-myth-accent focus:ring-myth-accent/40 sm:text-sm font-bold"
                         />
                       </div>
-                      <p className="text-xs text-ember-300/60">
+                      <p className="text-xs text-myth-ink-faint">
                         {custom?.description || PBTA_STATS[stat as keyof typeof PBTA_STATS]}
                       </p>
                     </div>
@@ -686,8 +686,8 @@ export default function EnhancedCreateCharacterForm({
               </div>
             </div>
 
-            <div className="bg-ember-900/20 border border-ember-700/40 rounded-md p-4">
-              <p className="text-sm text-ember-300">
+            <div className="bg-myth-accent/10 border border-myth-border-strong rounded-md p-4">
+              <p className="text-sm text-myth-ink-muted">
                 💡 <strong>Tip:</strong> Special moves and perks are earned during gameplay through character advancement and story progression.
               </p>
             </div>
@@ -699,10 +699,10 @@ export default function EnhancedCreateCharacterForm({
           <div className="space-y-6">
             {/* Equipment Section */}
             <div>
-              <h3 className="text-lg font-medium text-ember-100 mb-4">Equipment</h3>
+              <h3 className="text-lg font-medium text-myth-ink mb-4">Equipment</h3>
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="weapon" className="block text-sm font-medium text-ember-100 mb-1">
+                  <label htmlFor="weapon" className="block text-sm font-medium text-myth-ink mb-1">
                     Primary Weapon
                   </label>
                   <input
@@ -716,7 +716,7 @@ export default function EnhancedCreateCharacterForm({
                 </div>
 
                 <div>
-                  <label htmlFor="armor" className="block text-sm font-medium text-ember-100 mb-1">
+                  <label htmlFor="armor" className="block text-sm font-medium text-myth-ink mb-1">
                     Armor / Protection
                   </label>
                   <input
@@ -730,7 +730,7 @@ export default function EnhancedCreateCharacterForm({
                 </div>
 
                 <div>
-                  <label htmlFor="misc" className="block text-sm font-medium text-ember-100 mb-1">
+                  <label htmlFor="misc" className="block text-sm font-medium text-myth-ink mb-1">
                     Accessory / Misc. Equipment
                   </label>
                   <input
@@ -746,15 +746,15 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             {/* Inventory Section */}
-            <div className="border-t border-ember-900/30 pt-6">
-              <h3 className="text-lg font-medium text-ember-100 mb-2">Starting Inventory</h3>
-              <p className="text-xs text-ember-300/60 mb-4">
+            <div className="border-t border-myth-border pt-6">
+              <h3 className="text-lg font-medium text-myth-ink mb-2">Starting Inventory</h3>
+              <p className="text-xs text-myth-ink-faint mb-4">
                 Add items your character starts with.
               </p>
 
               {/* Quick Add Buttons */}
               <div className="mb-4">
-                <p className="text-xs font-medium text-ember-200/80 mb-2">Quick Add Common Items:</p>
+                <p className="text-xs font-medium text-myth-ink-muted mb-2">Quick Add Common Items:</p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -797,18 +797,18 @@ export default function EnhancedCreateCharacterForm({
               {/* Current Items List */}
               {formData.inventory.items.length > 0 && (
                 <div className="mb-4 space-y-2">
-                  <p className="text-xs font-medium text-ember-200/80">Current Items:</p>
+                  <p className="text-xs font-medium text-myth-ink-muted">Current Items:</p>
                   {formData.inventory.items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between bg-black/25 p-2 rounded border border-ember-900/30">
+                    <div key={item.id} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <div>
-                        <span className="text-sm text-white">{item.name}</span>
+                        <span className="text-sm text-myth-ink">{item.name}</span>
                         {item.quantity > 1 && (
-                          <span className="text-xs text-ember-300/60 ml-2">x{item.quantity}</span>
+                          <span className="text-xs text-myth-ink-faint ml-2">x{item.quantity}</span>
                         )}
                         {item.tags.length > 0 && (
                           <div className="flex gap-1 mt-1">
                             {item.tags.map((tag, idx) => (
-                              <span key={idx} className="text-xs px-1.5 py-0.5 bg-black/30 text-ember-200/80 rounded">
+                              <span key={idx} className="text-xs px-1.5 py-0.5 bg-myth-surface border border-myth-border text-myth-ink-muted rounded">
                                 {tag}
                               </span>
                             ))}
@@ -818,7 +818,7 @@ export default function EnhancedCreateCharacterForm({
                       <button
                         type="button"
                         onClick={() => handleRemoveItem(item.id)}
-                        className="text-wine-400 hover:text-wine-300 text-sm"
+                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
                       </button>
@@ -828,8 +828,8 @@ export default function EnhancedCreateCharacterForm({
               )}
 
               {/* Custom Item Form */}
-              <div className="bg-black/25 p-4 rounded border border-ember-900/30 space-y-3">
-                <p className="text-sm font-medium text-ember-100">Add Custom Item:</p>
+              <div className="bg-myth-surface-sunken p-4 rounded border border-myth-border space-y-3">
+                <p className="text-sm font-medium text-myth-ink">Add Custom Item:</p>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="col-span-2">
                     <input
@@ -876,7 +876,7 @@ export default function EnhancedCreateCharacterForm({
         {activeTab === 'resources' && (
           <div className="space-y-6">
             <div>
-              <label htmlFor="gold" className="block text-sm font-medium text-ember-100 mb-1">
+              <label htmlFor="gold" className="block text-sm font-medium text-myth-ink mb-1">
                 Starting Gold / Currency
               </label>
               <input
@@ -887,24 +887,24 @@ export default function EnhancedCreateCharacterForm({
                 onChange={(e) => setFormData({ ...formData, resources: { ...formData.resources, gold: parseInt(e.target.value) || 0 } })}
                 className="input-field w-48"
               />
-              <p className="text-xs text-ember-300/60 mt-1">Starting wealth for your character.</p>
+              <p className="text-xs text-myth-ink-faint mt-1">Starting wealth for your character.</p>
             </div>
 
-            <div className="border-t border-ember-900/30 pt-6">
-              <h3 className="text-lg font-medium text-ember-100 mb-2">Contacts & Allies</h3>
-              <p className="text-xs text-ember-300/60 mb-4">
+            <div className="border-t border-myth-border pt-6">
+              <h3 className="text-lg font-medium text-myth-ink mb-2">Contacts & Allies</h3>
+              <p className="text-xs text-myth-ink-faint mb-4">
                 People your character knows and can call upon for help, information, or favors.
               </p>
 
               {formData.resources.contacts.length > 0 && (
                 <div className="mb-4 space-y-2">
                   {formData.resources.contacts.map((contact, index) => (
-                    <div key={index} className="flex items-center justify-between bg-black/25 p-2 rounded border border-ember-900/30">
-                      <span className="text-sm text-white">{contact}</span>
+                    <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
+                      <span className="text-sm text-myth-ink">{contact}</span>
                       <button
                         type="button"
                         onClick={() => removeContact(index)}
-                        className="text-wine-400 hover:text-wine-300 text-sm"
+                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
                       </button>
@@ -937,28 +937,28 @@ export default function EnhancedCreateCharacterForm({
         {/* Obligations & Rivals Tab */}
         {activeTab === 'consequences' && (
           <div className="space-y-6">
-            <div className="bg-ember-900/15 border border-ember-700/40 rounded-md p-4">
-              <p className="text-sm text-ember-300">
+            <div className="bg-myth-accent/10 border border-myth-border-strong rounded-md p-4">
+              <p className="text-sm text-myth-ink-muted">
                 ⚠️ <strong>Note:</strong> These elements create personal stakes and drama. The AI GM will incorporate them into your story to create compelling narrative tension.
               </p>
             </div>
 
             {/* Promises */}
             <div>
-              <h3 className="text-lg font-medium text-ember-100 mb-2">Promises Made</h3>
-              <p className="text-xs text-ember-300/60 mb-4">
+              <h3 className="text-lg font-medium text-myth-ink mb-2">Promises Made</h3>
+              <p className="text-xs text-myth-ink-faint mb-4">
                 Commitments your character has made that they must honor.
               </p>
 
               {formData.consequences.promises.length > 0 && (
                 <div className="mb-4 space-y-2">
                   {formData.consequences.promises.map((promise, index) => (
-                    <div key={index} className="flex items-center justify-between bg-black/25 p-2 rounded border border-ember-900/30">
-                      <span className="text-sm text-white">{promise}</span>
+                    <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
+                      <span className="text-sm text-myth-ink">{promise}</span>
                       <button
                         type="button"
                         onClick={() => removePromise(index)}
-                        className="text-wine-400 hover:text-wine-300 text-sm"
+                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
                       </button>
@@ -987,21 +987,21 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             {/* Debts */}
-            <div className="border-t border-ember-900/30 pt-6">
-              <h3 className="text-lg font-medium text-ember-100 mb-2">Debts Owed</h3>
-              <p className="text-xs text-ember-300/60 mb-4">
+            <div className="border-t border-myth-border pt-6">
+              <h3 className="text-lg font-medium text-myth-ink mb-2">Debts Owed</h3>
+              <p className="text-xs text-myth-ink-faint mb-4">
                 What does your character owe to others? Money, favors, life debts?
               </p>
 
               {formData.consequences.debts.length > 0 && (
                 <div className="mb-4 space-y-2">
                   {formData.consequences.debts.map((debt, index) => (
-                    <div key={index} className="flex items-center justify-between bg-black/25 p-2 rounded border border-ember-900/30">
-                      <span className="text-sm text-white">{debt}</span>
+                    <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
+                      <span className="text-sm text-myth-ink">{debt}</span>
                       <button
                         type="button"
                         onClick={() => removeDebt(index)}
-                        className="text-wine-400 hover:text-wine-300 text-sm"
+                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
                       </button>
@@ -1030,21 +1030,21 @@ export default function EnhancedCreateCharacterForm({
             </div>
 
             {/* Enemies */}
-            <div className="border-t border-ember-900/30 pt-6">
-              <h3 className="text-lg font-medium text-ember-100 mb-2">Enemies & Rivals</h3>
-              <p className="text-xs text-ember-300/60 mb-4">
+            <div className="border-t border-myth-border pt-6">
+              <h3 className="text-lg font-medium text-myth-ink mb-2">Enemies & Rivals</h3>
+              <p className="text-xs text-myth-ink-faint mb-4">
                 Who wants to see your character fail or suffer? Past conflicts that may resurface?
               </p>
 
               {formData.consequences.enemies.length > 0 && (
                 <div className="mb-4 space-y-2">
                   {formData.consequences.enemies.map((enemy, index) => (
-                    <div key={index} className="flex items-center justify-between bg-black/25 p-2 rounded border border-ember-900/30">
-                      <span className="text-sm text-white">{enemy}</span>
+                    <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
+                      <span className="text-sm text-myth-ink">{enemy}</span>
                       <button
                         type="button"
                         onClick={() => removeEnemy(index)}
-                        className="text-wine-400 hover:text-wine-300 text-sm"
+                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
                       </button>
@@ -1076,8 +1076,8 @@ export default function EnhancedCreateCharacterForm({
       </div>
 
       {/* Form Actions */}
-      <div className="flex justify-between items-center pt-6 border-t border-ember-900/30">
-        <div className="text-sm text-ember-300/60">
+      <div className="flex justify-between items-center pt-6 border-t border-myth-border">
+        <div className="text-sm text-myth-ink-faint">
           {activeTab !== 'basics' && (
             <button
               type="button"
@@ -1085,7 +1085,7 @@ export default function EnhancedCreateCharacterForm({
                 const currentIndex = tabs.findIndex(t => t.key === activeTab)
                 if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].key)
               }}
-              className="text-ember-300 hover:text-ember-200"
+              className="text-myth-ink-faint hover:text-myth-ink-muted"
             >
               ← Previous
             </button>

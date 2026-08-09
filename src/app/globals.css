@@ -224,19 +224,22 @@ body {
 /* Custom utility classes — tavern theme */
 @layer components {
   /* Buttons */
+  /* .btn-primary/.btn-secondary/.input-field below are the myth (light
+     parchment) tokens, not tavern — they're used exclusively by
+     EnhancedCreateCharacterForm.tsx, which renders inside myth-chrome
+     pages. Confirmed via grep before changing: no other component uses
+     these three classes, so this can't regress a still-tavern page. */
   .btn-primary {
-    @apply relative bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600
-           text-ember-100 font-semibold py-2.5 px-5 rounded-xl shadow-lg shadow-black/40
-           border border-ember-900/50
-           transition-all duration-200 hover:shadow-xl hover:scale-[1.02]
+    @apply relative bg-myth-accent hover:bg-myth-accent-hover
+           text-myth-accent-ink font-semibold py-2.5 px-5 rounded-xl shadow-sm
+           transition-all duration-200 hover:shadow-md
            active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
   }
 
   .btn-secondary {
-    @apply relative bg-black/30 hover:bg-black/40 text-ember-200 font-semibold py-2.5 px-5 rounded-xl
-           border border-ember-900/40 hover:border-ember-700/40 shadow-md
-           transition-all duration-200 hover:shadow-lg hover:scale-[1.02]
-           active:scale-[0.98];
+    @apply relative bg-myth-surface hover:bg-myth-surface-sunken text-myth-ink-muted font-semibold py-2.5 px-5 rounded-xl
+           border border-myth-border hover:border-myth-border-strong shadow-sm
+           transition-all duration-200 hover:shadow-md;
   }
 
   .btn-danger {
@@ -253,10 +256,10 @@ body {
 
   /* Input Fields */
   .input-field {
-    @apply w-full px-4 py-2.5 bg-black/30 backdrop-blur-sm border border-ember-900/40
-           rounded-xl text-ember-100 placeholder:text-ember-500/40
-           focus:ring-2 focus:ring-ember-500/40 focus:border-ember-600/60 focus:bg-black/40
-           outline-none transition-all duration-200 shadow-inner;
+    @apply w-full px-4 py-2.5 bg-myth-surface border border-myth-border
+           rounded-xl text-myth-ink placeholder:text-myth-ink-faint
+           focus:ring-2 focus:ring-myth-accent/40 focus:border-myth-accent
+           outline-none transition-all duration-200;
   }
 
   /* Cards */

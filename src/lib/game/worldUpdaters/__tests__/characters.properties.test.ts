@@ -63,13 +63,19 @@ describe('applyCharacterChanges — relationship key resolution (property)', () 
     await fc.assert(
       fc.asyncProperty(
         npcRosterArb,
-        fc.constantFrom<'id' | 'name' | 'garbage'>('id', 'name', 'garbage'),
+        fc.constantFrom<'id' | 'name' | 'name-with-whitespace' | 'garbage'>('id', 'name', 'name-with-whitespace', 'garbage'),
         fc.integer({ min: -50, max: 50 }),
         async (roster, idShape, trustDelta) => {
           const target = roster[0]
           const entityId =
             idShape === 'id' ? target.id
             : idShape === 'name' ? target.name
+            // resolveEntityByNameOrId normalizes case/whitespace before
+            // comparing names — this shape is currently the exact one that
+            // catches src/lib/game/worldUpdaters/characters.ts writing
+            // relChange.entity_id straight into Character.relationships
+            // instead of resolving it first (see the comment there).
+            : idShape === 'name-with-whitespace' ? `  ${target.name.toUpperCase()}  `
             : 'npc_123'
 
           const tx = makeTx()

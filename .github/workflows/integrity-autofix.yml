@@ -353,6 +353,16 @@ jobs:
                A test that only asserts against a worked example is NOT
                acceptable regardless of which technique is named — it must be
                the named technique specifically.
+               If a test of the named technique already exists and already
+               fails against the current bug, you do not need to invent a
+               second one — but you must still touch that file (e.g. add a
+               new case, strengthen an assertion, or add a comment noting
+               which existing case catches this) so your commit's diff
+               actually contains it. A later step in this workflow verifies
+               the fix mechanically from the diff, not from your report —
+               "an existing test already covers it" is invisible to that
+               check unless the file you're claiming proves your fix is
+               part of what you committed.
             3. Run the new test and confirm it actually fails against the
                current code — do not proceed if it doesn't fail; that means
                it doesn't reproduce the bug.

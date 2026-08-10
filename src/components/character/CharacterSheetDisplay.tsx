@@ -185,7 +185,7 @@ export default function CharacterSheetDisplay({
                 </div>
               )}
               <div className="rounded-lg border border-myth-border bg-myth-surface-sunken p-3">
-                <div className="mb-1 text-xs uppercase tracking-wide text-myth-ink-faint">Harm</div>
+                <div className="mb-1 text-xs uppercase tracking-wide text-myth-ink-faint">Health</div>
                 <div className={`text-lg font-bold ${character.harm >= 4 ? 'text-myth-danger' : character.harm >= 2 ? 'text-myth-warn' : 'text-myth-good'}`}>
                   {character.harm}/6
                 </div>
@@ -291,7 +291,7 @@ export default function CharacterSheetDisplay({
           <div className="grid gap-6 md:grid-cols-2">
             {/* Harm Tracker */}
             <Card>
-              <CardLabel>Harm</CardLabel>
+              <CardLabel>Health</CardLabel>
               <HarmTracker current={character.harm} max={6} />
             </Card>
 

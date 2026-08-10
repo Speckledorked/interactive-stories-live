@@ -89,7 +89,7 @@ export default function HelpPage() {
               </div>
               <p className="leading-relaxed text-myth-ink-muted">
                 Navigate to the Story tab to see the current scene. Submit actions for your character,
-                and the AI GM will resolve them narratively.
+                and MythOS will resolve them narratively.
               </p>
             </div>
           </div>
@@ -146,7 +146,7 @@ export default function HelpPage() {
                 <h3 className="font-bold text-myth-ink text-lg">Freeform Combat</h3>
               </div>
               <p className="text-sm leading-relaxed text-myth-ink-muted">
-                Combat is narrative by default. Describe your actions naturally, and the AI GM
+                Combat is narrative by default. Describe your actions naturally, and MythOS
                 will narrate the outcome. Everyone can act at the same time — no waiting your turn,
                 unless the table turns on optional turn order for a scene.
               </p>
@@ -162,7 +162,7 @@ export default function HelpPage() {
               </div>
               <p className="text-sm leading-relaxed text-myth-ink-muted">
                 Scenes can generate maps that visualize where everyone is. Positioning is
-                narrative — describe where your character moves in your action, and the AI GM
+                narrative — describe where your character moves in your action, and MythOS
                 takes it into account when resolving.
               </p>
             </div>

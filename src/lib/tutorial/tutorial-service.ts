@@ -82,11 +82,11 @@ export class TutorialService {
         contentBlocks: [
           {
             type: 'text',
-            content: 'The AI GM has created your first scene. Read the scene introduction to understand the situation.',
+            content: 'MythOS has created your first scene. Read the scene introduction to understand the situation.',
           },
           {
             type: 'tip',
-            content: 'Scenes are the core of gameplay. The AI GM presents situations, and you respond with actions.',
+            content: 'Scenes are the core of gameplay. MythOS presents situations, and you respond with actions.',
           },
         ],
         completionTrigger: 'scene_read',
@@ -126,7 +126,7 @@ export class TutorialService {
           },
           {
             type: 'tip',
-            content: 'The AI GM will tell you when a roll is needed and which stat to use.',
+            content: 'MythOS will tell you when a roll is needed and which stat to use.',
           },
         ],
         completionTrigger: 'dice_rolled',
@@ -134,14 +134,14 @@ export class TutorialService {
       {
         stepKey: 'scene_resolution',
         title: 'Scene Resolution',
-        description: 'See how the AI GM responds',
+        description: 'See how MythOS responds',
         category: 'basics',
         orderIndex: 6,
         prerequisites: ['submit_action'],
         contentBlocks: [
           {
             type: 'text',
-            content: 'The AI GM processes all player actions and creates a resolution that advances the story.',
+            content: 'MythOS processes all player actions and creates a resolution that advances the story.',
           },
           {
             type: 'tip',
@@ -269,7 +269,7 @@ export class TutorialService {
         contentBlocks: [
           {
             type: 'text',
-            content: 'Scenes can generate maps that visualize where everyone is. Positioning is narrative — describe where your character moves in your action, and the AI GM takes it into account.',
+            content: 'Scenes can generate maps that visualize where everyone is. Positioning is narrative — describe where your character moves in your action, and MythOS takes it into account.',
           },
         ],
         completionTrigger: 'zone_changed',

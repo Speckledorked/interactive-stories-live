@@ -196,7 +196,7 @@ export default function WikiPage() {
       />
 
       <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
-        <p className="mb-6 text-sm text-myth-ink-faint">A living knowledge base updated by the AI GM</p>
+        <p className="mb-6 text-sm text-myth-ink-faint">A living knowledge base updated by MythOS</p>
 
         {/* Search */}
         <div className="relative mb-6">

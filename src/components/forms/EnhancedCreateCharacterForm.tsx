@@ -939,7 +939,7 @@ export default function EnhancedCreateCharacterForm({
           <div className="space-y-6">
             <div className="bg-myth-accent/10 border border-myth-border-strong rounded-md p-4">
               <p className="text-sm text-myth-ink-muted">
-                ⚠️ <strong>Note:</strong> These elements create personal stakes and drama. The AI GM will incorporate them into your story to create compelling narrative tension.
+                ⚠️ <strong>Note:</strong> These elements create personal stakes and drama. MythOS will incorporate them into your story to create compelling narrative tension.
               </p>
             </div>
 

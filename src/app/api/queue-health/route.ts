@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     })),
     legend: {
       PENDING: 'queued, waiting for a worker (should start within seconds; this page just re-kicked any stale ones)',
-      RUNNING: 'the AI GM is working on it right now',
+      RUNNING: 'MythOS is working on it right now',
       COMPLETED: 'done — the scene should show the resolution',
       FAILED: 'gave up after retries — lastError says why',
     },

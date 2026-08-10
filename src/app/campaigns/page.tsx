@@ -381,7 +381,7 @@ function CreateCampaignModal({
           {step === 'template' && (
             <div className="space-y-3">
               <p className="mb-6 text-sm text-myth-ink-muted">
-                Templates pre-configure the AI Game Master, world factions, and starting content so you can start playing immediately.
+                Templates pre-configure MythOS, world factions, and starting content so you can start playing immediately.
               </p>
 
               {TEMPLATES.map((tpl) => (
@@ -529,7 +529,7 @@ function CreateCampaignModal({
 
                   <div>
                     <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">
-                      AI GM Instructions <span className="text-myth-danger">*</span>
+                      MythOS Instructions <span className="text-myth-danger">*</span>
                     </label>
                     <textarea
                       value={formData.aiSystemPrompt}
@@ -580,7 +580,7 @@ function CreateCampaignModal({
                         />
                       </div>
                       <div>
-                        <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">AI GM Instructions</label>
+                        <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">MythOS Instructions</label>
                         <textarea
                           value={formData.aiSystemPrompt}
                           onChange={(e) => setFormData({ ...formData, aiSystemPrompt: e.target.value })}

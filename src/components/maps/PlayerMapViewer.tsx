@@ -365,7 +365,7 @@ export function PlayerMapViewer({
         <MapPin className="w-16 h-16 mx-auto text-ember-400/50 mb-4" />
         <h3 className="text-lg font-semibold mb-2 text-ember-100">No Map Available</h3>
         <p className="text-ember-300/60">
-          The AI GM will generate a map when the scene begins.
+          MythOS will generate a map when the scene begins.
         </p>
       </Card>
     )

@@ -4,7 +4,7 @@
 
 Leave a city mid-crisis and come back a month later — it may have fallen,
 been saved by someone else, or quietly changed hands while you were gone.
-MythOS is an AI Game Master built on top of a real simulation that keeps
+MythOS is built on top of a real simulation that keeps
 running whether or not anyone's at the table: NPCs pursue their own goals,
 factions rise, fight, and collapse, seasons turn, and every consequence of
 what you did — a debt owed, a wound taken, a promise broken — is written

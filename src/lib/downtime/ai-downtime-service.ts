@@ -85,7 +85,7 @@ export class AIDrivenDowntimeService {
         ? inventory.map((i: any) => `${i.name}${i.quantity ? ` x${i.quantity}` : ''}`).join(', ')
         : 'Nothing notable'
 
-      const prompt = `As an AI Game Master, interpret this player's downtime activity request:
+      const prompt = `As MythOS, interpret this player's downtime activity request:
 
 Player Description: "${playerDescription}"
 
@@ -453,7 +453,7 @@ Return a JSON object:
       throw new Error('Event not found')
     }
 
-    const prompt = `As an AI Game Master, respond to the player's choice for this downtime event:
+    const prompt = `As MythOS, respond to the player's choice for this downtime event:
 
 Event: Day ${event.dayNumber}
 Description: ${event.eventText}
@@ -470,7 +470,7 @@ Generate a response that:
 4. Maintains narrative consistency
 5. Sets up potential future developments
 
-Respond in an engaging, narrative style as the AI Game Master. Keep it to 2-3 paragraphs.`
+Respond in an engaging, narrative style as MythOS. Keep it to 2-3 paragraphs.`
 
     try {
       const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
@@ -873,7 +873,7 @@ Based on the player's original intent and what happened during the activity, gen
         select: { sceneResolutionText: true },
       })
 
-      const prompt = `As an AI Game Master, suggest 5 downtime activities specific to this character. Not generic RPG filler — things that follow from who they are and what's actually happened in their story.
+      const prompt = `As MythOS, suggest 5 downtime activities specific to this character. Not generic RPG filler — things that follow from who they are and what's actually happened in their story.
 
 Character:
 - Name: ${character.name}

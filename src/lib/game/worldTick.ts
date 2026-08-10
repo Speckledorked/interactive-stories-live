@@ -28,6 +28,7 @@ import { tickWeather } from './tick/weatherTick'
 import { tickSeasonalPressure } from './tick/seasonTick'
 import { tickFactionRelationships } from './tick/relationshipTick'
 import { tickBeliefDrift } from './tick/beliefTick'
+import { tickNpcDisposition } from './tick/npcDispositionTick'
 import { tickFactions } from './tick/factionTick'
 import { tickFactionLeadership } from './tick/leadershipTick'
 import { tickWars } from './tick/warTick'
@@ -61,6 +62,20 @@ import { resolveTickCaps } from './tick/caps'
 // tickFactions's goal reassessment reads this turn's freshly-drifted
 // belief rather than stale data — same one-tick-lag shape as the
 // relationships/goal pair above, just for a different input.
+//
+// tickNpcDisposition runs right after tickBeliefDrift and before
+// tickFactions/tickFactionLeadership on purpose — same one-tick-lag shape
+// as belief drift, individual-NPC-scoped instead of faction-scoped: it
+// reads each major NPC's own WorldEvent history from the immediately
+// preceding turn (a consequence dealt to them, a personal goal completed,
+// their faction winning/losing a war or visibly abandoning them via a
+// wake ripple) and updates NPC.disposition. Running before its two
+// same-turn consumers — tickFactions' collapse-defection split (loyalty)
+// and tickFactionLeadership's succession scoring (ambition) — means both
+// read this turn's freshly-drifted disposition rather than stale data,
+// same as tickBeliefDrift feeding tickFactions' goal reassessment.
+// tickMigration (selfPreservation) runs much later in the pass and reads
+// the same freshly-drifted value regardless of placement here.
 //
 // tickFactionLeadership runs right after tickFactions on purpose too: if a
 // faction collapsed this turn and its members just defected to a rival (see
@@ -137,7 +152,7 @@ import { resolveTickCaps } from './tick/caps'
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not
 // last turn's. See its own file for what it does and doesn't repair.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickFactions, tickFactionLeadership, tickWars, tickTerritoryLoyalty, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickEconomy, tickIntegrity]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickNpcDisposition, tickFactions, tickFactionLeadership, tickWars, tickTerritoryLoyalty, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickEconomy, tickIntegrity]
 
 // Prisma's interactive-transaction default is 5s; this tick runs 10
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well

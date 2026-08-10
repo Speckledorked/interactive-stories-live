@@ -30,6 +30,7 @@
 
 import { TickContext, TickHandlerResult, WorldChange } from './types'
 import { AdjacencyEdge, shortestPath } from '../worldGraph'
+import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
 
 // RUINED/ABANDONED band boundary — the same bar
 // locationConditionTick.ts's SITE_CONDITION_PENALTY_THRESHOLD (resolution.ts)
@@ -47,6 +48,13 @@ const MAX_NPC_MIGRATIONS_PER_LOCATION = 3
 // tick, floored at 1 so a small population doesn't round down to nothing
 // forever.
 const POPULATION_FLIGHT_FRACTION = 0.1
+// NPC motivation model: below this selfPreservation, an NPC refuses to
+// flee at all — stubbornness, denial, or a bond to the place that
+// outweighs the danger — regardless of how many flight slots remain this
+// tick. Deliberately low relative to NEUTRAL_DISPOSITION's 50, so only an
+// NPC who has genuinely drifted toward recklessness is ever exempted, not
+// the ordinary case.
+const FLIGHT_STAY_THRESHOLD = 15
 
 export interface MigrationDecision {
   npcId: string
@@ -83,6 +91,12 @@ export interface MigratingNpcInput {
   name: string
   locationId: string | null
   isAlive: boolean
+  /** NPC motivation model — optional, falls back to NEUTRAL_DISPOSITION.selfPreservation (50) when absent. Higher flees sooner; below FLIGHT_STAY_THRESHOLD, an NPC never flees at all. */
+  selfPreservation?: number
+}
+
+function selfPreservationOf(npc: MigratingNpcInput): number {
+  return npc.selfPreservation ?? NEUTRAL_DISPOSITION.selfPreservation
 }
 
 /**
@@ -146,7 +160,14 @@ export function decideMigration(
     const destination = pickDestination(location.id, sortedDestinations, edges)
     if (!destination) continue
 
-    const residents = npcs.filter((npc) => npc.isAlive && npc.locationId === location.id)
+    // NPC motivation model: the most self-preserving residents flee first
+    // (taking the limited per-tick slots), and anyone below
+    // FLIGHT_STAY_THRESHOLD refuses to flee at all regardless of slots —
+    // deterministic tiebreak by id so the outcome never depends on query
+    // row order.
+    const residents = npcs
+      .filter((npc) => npc.isAlive && npc.locationId === location.id && selfPreservationOf(npc) >= FLIGHT_STAY_THRESHOLD)
+      .sort((a, b) => selfPreservationOf(b) - selfPreservationOf(a) || a.id.localeCompare(b.id))
     for (const npc of residents.slice(0, MAX_NPC_MIGRATIONS_PER_LOCATION)) {
       npcMoves.push({
         npcId: npc.id,
@@ -209,7 +230,7 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
         isAlive: true,
         locationId: { in: distressedLocations.map((l) => l.id) },
       },
-      select: { id: true, name: true, locationId: true, isAlive: true, importance: true },
+      select: { id: true, name: true, locationId: true, isAlive: true, importance: true, disposition: true },
     }),
     // #108: optional input to pickDestination — falls back to the
     // pre-#108 campaign-wide highest-condition pick when this is empty or
@@ -224,7 +245,13 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
   const { npcMoves, populationShifts } = decideMigration(
     distressedLocations,
     candidateDestinations,
-    npcs,
+    npcs.map((n) => ({
+      id: n.id,
+      name: n.name,
+      locationId: n.locationId,
+      isAlive: n.isAlive,
+      selfPreservation: parseDisposition(n.disposition)?.selfPreservation,
+    })),
     adjacencyRows as AdjacencyEdge[]
   )
 

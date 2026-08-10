@@ -17,6 +17,7 @@
 // them in importance. The player's leadership isn't a gap to fill.
 
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
+import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
 
 /** One living, affiliated NPC considered for promotion. */
 export interface SuccessionCandidate {
@@ -24,6 +25,8 @@ export interface SuccessionCandidate {
   name: string
   importance: number
   factionRole: 'LEADER' | 'MEMBER' | null
+  /** NPC motivation model — optional, falls back to NEUTRAL_DISPOSITION.ambition (50) when absent. Nudges who's favored among near-tied candidates; doesn't change computeSuccessionRoughness, which reflects objective contestedness, not secret ambition. */
+  ambition?: number
 }
 
 export interface SuccessionDecision {
@@ -129,8 +132,27 @@ export function decideSuccession(faction: {
   }
 }
 
+// NPC motivation model: a small nudge on top of raw importance — enough to
+// break a near-tie in a genuinely ambitious member's favor, never enough to
+// override a real importance gap. At the extremes (ambition 0 or 100) this
+// is worth +/-2 importance points; NEUTRAL_DISPOSITION's 50 contributes 0,
+// so an undrifted candidate's ranking is unchanged from before this model
+// existed.
+const AMBITION_SCORE_DIVISOR = 25
+
 /**
- * Most important first, then by name, then by id.
+ * How favorably this candidate's importance reads once their ambition is
+ * weighed in. Importance alone still dominates; ambition only ever nudges.
+ */
+function effectiveScore(candidate: SuccessionCandidate): number {
+  const importance = Number.isFinite(Number(candidate.importance)) ? Number(candidate.importance) : 0
+  const ambition = candidate.ambition ?? NEUTRAL_DISPOSITION.ambition
+  return importance + (ambition - 50) / AMBITION_SCORE_DIVISOR
+}
+
+/**
+ * Highest effective score first (importance, nudged by ambition — see
+ * effectiveScore), then by name, then by id.
  *
  * The name tiebreak is deliberate rather than jumping straight to id: it
  * makes the outcome explicable to a host reading the history ("the
@@ -138,9 +160,9 @@ export function decideSuccession(faction: {
  * cuid. Id is the final backstop so the order is total.
  */
 function compareCandidates(a: SuccessionCandidate, b: SuccessionCandidate): number {
-  const importanceA = Number.isFinite(Number(a.importance)) ? Number(a.importance) : 0
-  const importanceB = Number.isFinite(Number(b.importance)) ? Number(b.importance) : 0
-  if (importanceA !== importanceB) return importanceB - importanceA
+  const scoreA = effectiveScore(a)
+  const scoreB = effectiveScore(b)
+  if (scoreA !== scoreB) return scoreB - scoreA
   const byName = (a.name ?? '').localeCompare(b.name ?? '')
   if (byName !== 0) return byName
   return (a.id ?? '').localeCompare(b.id ?? '')
@@ -168,7 +190,20 @@ export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandl
   const changes: WorldChange[] = []
 
   for (const faction of factions) {
-    const decision = decideSuccession(faction)
+    const decision = decideSuccession({
+      ...faction,
+      // NPC motivation model: parsed here (not inside decideSuccession)
+      // to keep the same "parse at the DB boundary, pass plain numbers to
+      // the pure function" convention every other consumer of
+      // NPC.disposition already follows.
+      members: faction.members.map((m) => ({
+        id: m.id,
+        name: m.name,
+        importance: m.importance,
+        factionRole: m.factionRole,
+        ambition: parseDisposition(m.disposition)?.ambition,
+      })),
+    })
     if (!decision) continue
 
     // #103: recorded so tickWake (later in this same pass) can scale a

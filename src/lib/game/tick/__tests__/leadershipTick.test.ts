@@ -111,6 +111,45 @@ describe('decideSuccession', () => {
   })
 })
 
+describe('decideSuccession — ambition (NPC motivation model)', () => {
+  it('breaks a near-tie in the more ambitious candidate\'s favor', () => {
+    const decision = decideSuccession(faction([
+      member({ id: 'a', name: 'Bram', importance: 5, ambition: 50 }),
+      member({ id: 'b', name: 'Sera', importance: 5, ambition: 90 }),
+    ]))
+    expect(decision!.successorId).toBe('b')
+  })
+
+  it('never lets ambition override a real importance gap', () => {
+    const decision = decideSuccession(faction([
+      member({ id: 'a', name: 'Bram', importance: 9, ambition: 0 }),
+      member({ id: 'b', name: 'Sera', importance: 2, ambition: 100 }),
+    ]))
+    expect(decision!.successorId).toBe('a')
+  })
+
+  it('falls back to neutral ambition (50) when absent, unchanged from pre-model behavior', () => {
+    const withNeutral = decideSuccession(faction([
+      member({ id: 'a', name: 'Bram', importance: 4, ambition: 50 }),
+      member({ id: 'b', name: 'Sera', importance: 4 }),
+    ]))
+    // Both effectively at neutral — falls through to the name tiebreak.
+    expect(withNeutral!.successorId).toBe('a')
+  })
+
+  it('does not change successionRoughness, which reflects objective contestedness, not secret ambition', () => {
+    const withoutAmbition = decideSuccession(faction([
+      member({ id: 'a', name: 'Bram', importance: 5 }),
+      member({ id: 'b', name: 'Sera', importance: 5 }),
+    ], null, 90))!.successionRoughness
+    const withAmbition = decideSuccession(faction([
+      member({ id: 'a', name: 'Bram', importance: 5, ambition: 5 }),
+      member({ id: 'b', name: 'Sera', importance: 5, ambition: 95 }),
+    ], null, 90))!.successionRoughness
+    expect(withAmbition).toBe(withoutAmbition)
+  })
+})
+
 describe('successionRoughness (#112)', () => {
   it('is low for a lone obvious heir in an otherwise-stable faction', () => {
     const decision = decideSuccession(faction([

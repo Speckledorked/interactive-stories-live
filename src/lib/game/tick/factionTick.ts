@@ -20,6 +20,7 @@
 import type { Faction, FactionGoal } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, hasActiveRival, parseFactionRelationships } from './types'
 import { BeliefVector, parseBeliefVector } from './beliefTick'
+import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
 
 interface FactionDelta {
   resources: number
@@ -308,6 +309,45 @@ export function decideFactionFounding(collapsedFaction: {
   }
 }
 
+// NPC motivation model: at or above this loyalty, a member's attachment to
+// the faction they belonged to outweighs falling in with whoever absorbed
+// it — they stay independent instead of defecting. Below it, they follow
+// the absorber, matching the original unconditional behavior. Deliberately
+// above NEUTRAL_DISPOSITION's 50, so an ordinary, undrifted member still
+// defects by default — this only holds someone back once loyalty has
+// genuinely drifted high.
+const LOYALTY_STAY_THRESHOLD = 70
+
+export interface DefectionCandidate {
+  id: string
+  /** NPC motivation model — optional, falls back to NEUTRAL_DISPOSITION.loyalty (50) when absent. */
+  loyalty?: number
+}
+
+export interface DefectionDecision {
+  defectingIds: string[]
+  independentIds: string[]
+}
+
+/**
+ * Pure decision function — no DB access, safe to unit test directly. Who,
+ * among a collapsed faction's members, actually follows the rival that
+ * absorbed it vs. refuses and stays independent.
+ */
+export function decideDefection(members: DefectionCandidate[]): DefectionDecision {
+  const defectingIds: string[] = []
+  const independentIds: string[] = []
+  for (const member of members) {
+    const loyalty = member.loyalty ?? NEUTRAL_DISPOSITION.loyalty
+    if (loyalty >= LOYALTY_STAY_THRESHOLD) {
+      independentIds.push(member.id)
+    } else {
+      defectingIds.push(member.id)
+    }
+  }
+  return { defectingIds, independentIds }
+}
+
 export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult> {
   const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
@@ -379,6 +419,17 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
       let successorName: string | null = null
 
       if (absorber?.isActive) {
+        // NPC motivation model: not every member automatically defects to
+        // whoever absorbed their faction — loyalty (drifted per-NPC, see
+        // npcDispositionTick.ts) decides who follows and who refuses and
+        // goes independent instead. This read runs regardless of dryRun
+        // (it's just a read); only the writes below are gated.
+        const members = await ctx.db.nPC.findMany({
+          where: { factionId: faction.id },
+          select: { id: true, disposition: true },
+        })
+        const defection = decideDefection(members.map((m) => ({ id: m.id, loyalty: parseDisposition(m.disposition)?.loyalty })))
+
         if (!ctx.dryRun) {
           await ctx.db.faction.update({
             where: { id: absorber.id },
@@ -391,11 +442,20 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
           // Members defect to whoever absorbed their faction — demoted to
           // MEMBER regardless of prior role, since the absorbing faction
           // already has its own leadership; tickFactionLeadership will fill
-          // any resulting gap there if it somehow doesn't.
-          await ctx.db.nPC.updateMany({
-            where: { factionId: faction.id },
-            data: { factionId: absorber.id, factionRole: 'MEMBER' },
-          })
+          // any resulting gap there if it somehow doesn't. A member whose
+          // loyalty held (see decideDefection) stays independent instead.
+          if (defection.defectingIds.length > 0) {
+            await ctx.db.nPC.updateMany({
+              where: { id: { in: defection.defectingIds } },
+              data: { factionId: absorber.id, factionRole: 'MEMBER' },
+            })
+          }
+          if (defection.independentIds.length > 0) {
+            await ctx.db.nPC.updateMany({
+              where: { id: { in: defection.independentIds } },
+              data: { factionId: null, factionRole: null },
+            })
+          }
 
           // Territory follows the same fate as the members — the absorber
           // takes it all, and nothing stays contested against an owner that

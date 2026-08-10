@@ -918,6 +918,16 @@ model NPC {
   factionRole FactionRole?
   faction     Faction?     @relation("FactionMembers", fields: [factionId], references: [id], onDelete: SetNull)
 
+  // NPC motivation model: how this NPC's individual disposition has drifted
+  // based on what's actually happened TO them (and to their faction) —
+  // closed 3-axis schema (selfPreservation, loyalty, ambition, each 0-100),
+  // parsed via parseDisposition (tick/npcDispositionTick.ts) with the same
+  // validate-on-read/null-on-malformed convention as parseBeliefVector.
+  // Never exposed to the AI prompt — same boundary Faction.beliefVector
+  // already draws. Null until the first real drift event writes it;
+  // consumers fall back to a neutral (50/50/50) default when null.
+  disposition Json?
+
   // Phase 9: NPC society — individual-level relationships between major
   // NPCs, derived from faction affiliation (same faction = ALLY; rival/ally
   // factions per Faction.relationships = inherited). Shape mirrors

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decideFactionTick, decideFactionGoalReassessment, explainFactionGoalReassessment, decideFactionCollapse, decideFactionFounding, GOAL_COMMITMENT_TURNS } from '../factionTick'
+import { decideFactionTick, decideFactionGoalReassessment, explainFactionGoalReassessment, decideFactionCollapse, decideFactionFounding, decideDefection, GOAL_COMMITMENT_TURNS } from '../factionTick'
 import { decideAmbitionTick, decideAmbitionOutcome, decideAgendaContinuation, buildAgendaContinuationName, MAX_AGENDA_STAGES } from '../ambitionTick'
 import { NEUTRAL_BELIEF } from '../beliefTick'
 import { decideRelationshipTick } from '../relationshipTick'
@@ -246,6 +246,39 @@ describe('decideFactionFounding', () => {
     const chaotic = decideFactionFounding({ name: 'Thornburg Guild', resources: 100, military: 100, roughness: 1 })
     expect(chaotic.resources).toBeGreaterThan(0)
     expect(chaotic.military).toBeGreaterThan(0)
+  })
+})
+
+describe('decideDefection (NPC motivation model)', () => {
+  it('defects an ordinary, undrifted member (neutral loyalty falls below the stay threshold)', () => {
+    const result = decideDefection([{ id: 'a' }])
+    expect(result.defectingIds).toEqual(['a'])
+    expect(result.independentIds).toEqual([])
+  })
+
+  it('keeps a highly loyal member independent instead of defecting', () => {
+    const result = decideDefection([{ id: 'a', loyalty: 85 }])
+    expect(result.defectingIds).toEqual([])
+    expect(result.independentIds).toEqual(['a'])
+  })
+
+  it('splits a mixed roster correctly', () => {
+    const result = decideDefection([
+      { id: 'loyal', loyalty: 90 },
+      { id: 'ordinary' },
+      { id: 'disloyal', loyalty: 10 },
+    ])
+    expect(result.independentIds).toEqual(['loyal'])
+    expect(result.defectingIds.sort()).toEqual(['disloyal', 'ordinary'])
+  })
+
+  it('treats the threshold boundary as staying independent (>=)', () => {
+    const result = decideDefection([{ id: 'a', loyalty: 70 }])
+    expect(result.independentIds).toEqual(['a'])
+  })
+
+  it('handles an empty roster', () => {
+    expect(decideDefection([])).toEqual({ defectingIds: [], independentIds: [] })
   })
 })
 

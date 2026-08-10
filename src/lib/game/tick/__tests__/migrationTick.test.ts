@@ -164,6 +164,54 @@ describe('decideMigration (#110)', () => {
   })
 })
 
+describe('decideMigration — selfPreservation (NPC motivation model)', () => {
+  it('orders fleeing residents by selfPreservation descending', () => {
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 5, population: null }],
+      [{ id: 'capital', name: 'The Capital', conditionScore: 90, population: null }],
+      [
+        { id: 'cautious', name: 'Cautious', locationId: 'ruins', isAlive: true, selfPreservation: 90 },
+        { id: 'ordinary', name: 'Ordinary', locationId: 'ruins', isAlive: true },
+        { id: 'reckless', name: 'Reckless', locationId: 'ruins', isAlive: true, selfPreservation: 20 },
+      ]
+    )
+    expect(npcMoves.map((m) => m.npcId)).toEqual(['cautious', 'ordinary', 'reckless'])
+  })
+
+  it('orders strictly by selfPreservation descending once the cap is actually binding', () => {
+    const residents = [
+      { id: 'a', name: 'A', locationId: 'ruins', isAlive: true, selfPreservation: 40 },
+      { id: 'b', name: 'B', locationId: 'ruins', isAlive: true, selfPreservation: 95 },
+      { id: 'c', name: 'C', locationId: 'ruins', isAlive: true, selfPreservation: 70 },
+      { id: 'd', name: 'D', locationId: 'ruins', isAlive: true, selfPreservation: 60 },
+    ]
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 5, population: null }],
+      [{ id: 'capital', name: 'The Capital', conditionScore: 90, population: null }],
+      residents
+    )
+    expect(npcMoves.map((m) => m.npcId)).toEqual(['b', 'c', 'd']) // top 3 by selfPreservation, 'a' left behind by the cap
+  })
+
+  it('never flees an NPC whose selfPreservation has drifted below the stay-behind threshold', () => {
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 5, population: null }],
+      [{ id: 'capital', name: 'The Capital', conditionScore: 90, population: null }],
+      [{ id: 'stubborn', name: 'Stubborn', locationId: 'ruins', isAlive: true, selfPreservation: 5 }]
+    )
+    expect(npcMoves).toEqual([])
+  })
+
+  it('falls back to neutral selfPreservation (50) when absent, unchanged from pre-model behavior', () => {
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 5, population: null }],
+      [{ id: 'capital', name: 'The Capital', conditionScore: 90, population: null }],
+      [{ id: 'npc1', name: 'Aldric', locationId: 'ruins', isAlive: true }]
+    )
+    expect(npcMoves).toHaveLength(1)
+  })
+})
+
 describe('decideMigration — destination reachability (#108 follow-up)', () => {
   // #108's own audit finding: destination selection used to pick the
   // single highest-condition location campaign-wide, with no regard for

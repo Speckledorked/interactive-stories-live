@@ -1088,7 +1088,7 @@ export default function AdminPage() {
               <div className="space-y-4">
                 <SectionHeader
                   title="Configuration"
-                  description="Campaign-wide settings that shape every scene the AI narrates — the founding lore it generates from, the voice it holds to, and how strictly player actions are moderated before reaching it."
+                  description="Campaign-wide settings that shape every scene MythOS narrates — the founding lore it generates from, the voice it holds to, and how strictly player actions are moderated before reaching it."
                 />
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -1096,9 +1096,9 @@ export default function AdminPage() {
                       AI System Prompt
                     </label>
                     <FieldHelp
-                      what="Extra instructions layered into every AI-narrated scene — tone, style, house rules, anything you want the GM voice to consistently honor."
-                      whoItAffects="Every scene the AI narrates for this campaign, for all players."
-                      whenToUse="You want a consistent narrative voice or a standing rule the AI should never break."
+                      what="Extra instructions layered into every scene MythOS narrates — tone, style, house rules, anything you want its voice to consistently honor."
+                      whoItAffects="Every scene MythOS narrates for this campaign, for all players."
+                      whenToUse="You want a consistent narrative voice or a standing rule MythOS should never break."
                     />
                   </div>
                   <textarea
@@ -1133,7 +1133,7 @@ export default function AdminPage() {
                     Content Moderation
                   </label>
                   <p className="text-xs text-myth-ink-faint mb-1">
-                    Player actions are checked before reaching the AI. Standard allows ordinary
+                    Player actions are checked before reaching MythOS. Standard allows ordinary
                     combat and violence — expected content in this kind of game — while still
                     blocking genuinely severe content (sexual content involving minors, self-harm
                     instructions, credible threats). Strict blocks anything OpenAI's moderation
@@ -1420,7 +1420,7 @@ export default function AdminPage() {
                             <label className="block text-sm font-medium text-myth-ink-muted">Importance (1-5)</label>
                             <FieldHelp
                               what="How central this NPC is meant to be — higher importance NPCs are more likely to be woven into generated scenes and remembered by the simulation."
-                              whoItAffects="How often the AI reaches for this NPC when narrating and building context."
+                              whoItAffects="How often MythOS reaches for this NPC when narrating and building context."
                               whenToUse="Mark your major recurring cast higher than one-off background characters."
                             />
                           </div>
@@ -2384,7 +2384,7 @@ export default function AdminPage() {
                         <div className="flex items-center gap-1.5 mb-1">
                           <label className="block text-sm font-medium text-myth-ink-muted">Consequence (when filled)</label>
                           <FieldHelp
-                            what="What happens in the fiction once this clock fills all its segments — the AI reads this to narrate the payoff."
+                            what="What happens in the fiction once this clock fills all its segments — MythOS reads this to narrate the payoff."
                             whoItAffects="How the story responds automatically when the clock completes."
                             whenToUse="Any clock where reaching full should trigger a specific narrative beat."
                           />
@@ -2748,7 +2748,7 @@ export default function AdminPage() {
                   <div>
                     <h3 className="text-lg font-semibold text-myth-ink mb-1 font-display">Safety Settings</h3>
                     <p className="text-xs text-myth-ink-faint mb-3">
-                      Lines are enforced in every scene the AI narrates — never included, not even implied. Veils may happen off-page but are never described directly.
+                      Lines are enforced in every scene MythOS narrates — never included, not even implied. Veils may happen off-page but are never described directly.
                     </p>
                     <div className="rounded-lg border border-myth-border p-4 space-y-4">
                       <div className="grid sm:grid-cols-2 gap-3">

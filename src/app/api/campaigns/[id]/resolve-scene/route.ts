@@ -128,7 +128,7 @@ export async function POST(
       success: true,
       message: deduped
         ? 'Scene resolution already in progress'
-        : 'Scene resolution started — results will appear when the AI GM finishes',
+        : 'Scene resolution started — results will appear when MythOS finishes',
       jobId,
       sceneNumber: currentScene.sceneNumber
     }, { status: 202 })

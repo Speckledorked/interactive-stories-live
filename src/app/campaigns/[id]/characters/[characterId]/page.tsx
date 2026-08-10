@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
@@ -24,6 +24,13 @@ export default function CharacterPage() {
   const [error, setError] = useState('')
   const [downtimeActivities, setDowntimeActivities] = useState<any[]>([])
   const [downtimeSuggestions, setDowntimeSuggestions] = useState<string[]>([])
+  // #172: two `scene:resolved` events firing in quick succession (two
+  // exchanges resolving back-to-back) used to race — loadData() had no way
+  // to tell an in-flight call it had been superseded, so whichever fetch
+  // happened to settle last won, not necessarily the one triggered by the
+  // more recent event. Every setState below is gated on still being the
+  // most recently started load.
+  const loadRequestIdRef = useRef(0)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -52,6 +59,9 @@ export default function CharacterPage() {
   }, [campaignId])
 
   const loadData = async () => {
+    const requestId = ++loadRequestIdRef.current
+    const isStale = () => requestId !== loadRequestIdRef.current
+
     try {
       setLoading(true)
 
@@ -59,8 +69,10 @@ export default function CharacterPage() {
       const campaignResponse = await authenticatedFetch(
         `/api/campaigns/${campaignId}`
       )
+      if (isStale()) return
       if (campaignResponse.ok) {
         const campaignData = await campaignResponse.json()
+        if (isStale()) return
         setCampaign(campaignData)
         setLastCampaignId(campaignId)
       }
@@ -69,8 +81,10 @@ export default function CharacterPage() {
       const characterResponse = await authenticatedFetch(
         `/api/campaigns/${campaignId}/characters/${characterId}`
       )
+      if (isStale()) return
       if (characterResponse.ok) {
         const characterData = await characterResponse.json()
+        if (isStale()) return
         setCharacter(characterData)
       } else {
         setError('Character not found')
@@ -81,17 +95,19 @@ export default function CharacterPage() {
         authenticatedFetch(`/api/characters/${characterId}/dynamic-downtime`),
         authenticatedFetch(`/api/characters/${characterId}/dynamic-downtime/suggestions`).catch(() => null)
       ])
+      if (isStale()) return
       if (activitiesRes.ok) {
         setDowntimeActivities(await activitiesRes.json())
       }
       if (suggestionsRes?.ok) {
         const data = await suggestionsRes.json()
+        if (isStale()) return
         setDowntimeSuggestions(data.suggestions || [])
       }
     } catch (err) {
-      setError('Failed to load character')
+      if (!isStale()) setError('Failed to load character')
     } finally {
-      setLoading(false)
+      if (!isStale()) setLoading(false)
     }
   }
 

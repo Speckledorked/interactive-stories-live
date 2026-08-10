@@ -198,7 +198,7 @@ describe('applyCharacterChanges — harm and conditions', () => {
 
     const blob = tx.character.update.mock.calls[0][0].data.conditions
     expect(Object.keys(blob).sort()).toEqual(
-      ['conditions', 'deathSaves', 'permanentInjuries', 'restHours']
+      ['conditionHistory', 'conditions', 'deathSaves', 'permanentInjuries', 'restHours']
     )
   })
 
@@ -225,6 +225,20 @@ describe('applyCharacterChanges — harm and conditions', () => {
     ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.conditions.conditions).toEqual([])
+  })
+
+  it('records a removed condition in conditionHistory — the event survives even though current state no longer shows it (#173)', async () => {
+    const roster = [character({
+      conditions: { conditions: [{ id: 'c1', name: 'Restrained', category: 'Physical', description: 'x', mechanicalEffect: 'x', appliedAt: 1 }], permanentInjuries: [], deathSaves: 0, conditionHistory: [] },
+    })]
+    await applyCharacterChanges(tx as any, 'camp1', 5, [
+      { character_name_or_id: 'char1', changes: { conditions_remove: ['restrained'] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.conditions.conditions).toEqual([])
+    expect(data.conditions.conditionHistory).toEqual([
+      { name: 'Restrained', category: 'Physical', appliedAt: 1, resolvedAt: 5 }
+    ])
   })
 
   it('resolves Taken Out (harm hits 6 for the first time) via a server-side recovery roll, never left to the AI', async () => {

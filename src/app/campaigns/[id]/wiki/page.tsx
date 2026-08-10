@@ -3,7 +3,7 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
@@ -60,6 +60,11 @@ export default function WikiPage() {
   // the tab switch triggers a reload, and the entry can only be selected
   // once that reload lands.
   const [pendingEntryName, setPendingEntryName] = useState<string | null>(initialEntry)
+  // #172/#181: a tab switch and a `scene:resolved` live-update can both
+  // trigger loadEntries() close together — without a way to tell an
+  // in-flight call it's been superseded, whichever fetch settles last wins,
+  // which could show the wrong tab's entries after a fast tab switch.
+  const loadRequestIdRef = useRef(0)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -88,12 +93,16 @@ export default function WikiPage() {
   }, [campaignId, selectedType])
 
   const loadEntries = async () => {
+    const requestId = ++loadRequestIdRef.current
+    const isStale = () => requestId !== loadRequestIdRef.current
+
     setLoading(true)
     try {
       if (selectedType === 'RUMORS') {
         const response = await authenticatedFetch(`/api/campaigns/${campaignId}/rumors`)
         if (!response.ok) throw new Error('Failed to load rumors')
         const data = await response.json()
+        if (isStale()) return
         setRumors(data.rumors || [])
         setLastCampaignId(campaignId)
         return
@@ -105,6 +114,7 @@ export default function WikiPage() {
       if (!response.ok) throw new Error('Failed to load wiki entries')
 
       const data = await response.json()
+      if (isStale()) return
       const loaded = data.entries || []
       setEntries(loaded)
       if (pendingEntryName) {
@@ -120,9 +130,9 @@ export default function WikiPage() {
       }
       setLastCampaignId(campaignId)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load wiki')
+      if (!isStale()) setError(err instanceof Error ? err.message : 'Failed to load wiki')
     } finally {
-      setLoading(false)
+      if (!isStale()) setLoading(false)
     }
   }
 

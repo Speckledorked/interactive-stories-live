@@ -128,6 +128,9 @@ export default function CharacterSheetDisplay({
   // Parse conditions
   const conditions = character?.conditions as any || {}
   const conditionsList = conditions.conditions || []
+  // #173: the event ("was Restrained") is now tracked separately from
+  // current state ("is Restrained") — see conditionHistory in harm.ts.
+  const conditionHistoryList = conditions.conditionHistory || []
 
   // Knowledge-relative sheet (server ships bands + hints only, never raw
   // proficiency numbers — see the character GET route)
@@ -326,6 +329,26 @@ export default function CharacterSheetDisplay({
                       className="rounded-full border border-myth-danger/30 bg-myth-danger/10 px-3 py-1 text-xs font-medium text-myth-danger"
                     >
                       {typeof cond === 'string' ? cond : cond.name}
+                    </span>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* Resolved conditions — the historical record that a condition
+                applied and later cleared, kept distinct from the current
+                Conditions card above (#173). */}
+            {conditionHistoryList.length > 0 && (
+              <Card>
+                <CardLabel>Past Conditions</CardLabel>
+                <div className="flex flex-wrap gap-2">
+                  {conditionHistoryList.map((entry: any, idx: number) => (
+                    <span
+                      key={idx}
+                      className="rounded-full border border-myth-border bg-myth-surface-sunken px-3 py-1 text-xs font-medium text-myth-ink-faint"
+                      title={entry.resolvedAt ? `Resolved turn ${entry.resolvedAt}` : undefined}
+                    >
+                      {entry.name}
                     </span>
                   ))}
                 </div>

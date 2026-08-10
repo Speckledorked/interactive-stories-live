@@ -12,6 +12,8 @@ import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData } from '../q
 import { checkCorruptionGate, hasCorruptionGate } from '../corruptionGates'
 import { applyQuestFailureCost, type QuestFailureStatus } from '../questFailure'
 import { isUniqueConstraintViolation } from './uniqueConstraintGuard'
+import { sceneWorldChange } from './sceneWorldEvents'
+import type { WorldChange } from '../tick/types'
 
 type Db = Prisma.TransactionClient
 export type QuestChange = NonNullable<WorldUpdates['quest_changes']>[number]
@@ -21,8 +23,9 @@ export async function applyQuestChanges(
   campaignId: string,
   currentTurnNumber: number,
   questChanges: QuestChange[]
-): Promise<void> {
+): Promise<{ worldChanges: WorldChange[] }> {
   console.log(`🎯 Applying ${questChanges.length} quest change(s)`)
+  const worldChanges: WorldChange[] = []
 
   // Quest-giver rosters, fetched once per batch rather than per change —
   // the same discipline resolveEntityByNameOrId enforces for pc_changes.
@@ -164,6 +167,18 @@ export async function applyQuestChanges(
         }
       }
       if (Object.keys(updateData).length > 0) {
+        // #175: status is the narratively meaningful quest field — the
+        // others (description/objective/reward/progressLog/giver links)
+        // are mostly bookkeeping already visible through TimelineEvent or
+        // the quest's own progressLog.
+        if ('status' in updateData) {
+          worldChanges.push(sceneWorldChange(
+            campaignId, 'QUEST', existing.id, existing.name, 'status',
+            existing.status, updateData.status, 'Scene resolution',
+            (updateData.status === 'COMPLETED' || updateData.status === 'FAILED') ? 'MAJOR' : 'NORMAL'
+          ))
+        }
+
         await tx.quest.update({ where: { id: existing.id }, data: updateData })
         console.log(`  🎯 Updated quest: ${existing.name}${changes.status ? ` (${changes.status})` : ''}`)
       }
@@ -255,4 +270,6 @@ export async function applyQuestChanges(
       }
     }
   }
+
+  return { worldChanges }
 }

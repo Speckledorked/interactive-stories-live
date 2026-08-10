@@ -7,12 +7,15 @@ import type { WorldUpdates } from '@/lib/ai/schema'
 import { resolveEntityByNameOrId } from '../entityResolution'
 import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
 import { isUniqueConstraintViolation } from './uniqueConstraintGuard'
+import { sceneWorldChange } from './sceneWorldEvents'
+import type { WorldChange } from '../tick/types'
 
 type Db = Prisma.TransactionClient
 export type FactionChange = NonNullable<WorldUpdates['faction_changes']>[number]
 
 export interface FactionChangesResult {
   involvedFactionIds: string[]
+  worldChanges: WorldChange[]
 }
 
 const THREAT_LEVEL_MAP: Record<string, number> = {
@@ -34,6 +37,7 @@ export async function applyFactionChanges(
   console.log(`🏛️ Updating ${factionChanges.length} factions`)
 
   const involvedFactionIds = new Set<string>()
+  const worldChanges: WorldChange[] = []
 
   for (const factionChange of factionChanges) {
     const factionResolution = resolveEntityByNameOrId(factionsForResolution, factionChange.faction_name_or_id)
@@ -77,6 +81,24 @@ export async function applyFactionChanges(
       }
 
       if (Object.keys(updateData).length > 0) {
+        // #175: derived from the same updateData diff about to be
+        // persisted, not a hand-maintained parallel log. currentPlan/goal
+        // are the narratively meaningful fields; gmNotes/isDiscovered are
+        // deliberately skipped (verbose free text / not narratively
+        // interesting on their own).
+        if ('currentPlan' in updateData) {
+          worldChanges.push(sceneWorldChange(
+            campaignId, 'FACTION', faction.id, faction.name, 'currentPlan',
+            faction.currentPlan || '(none)', updateData.currentPlan, 'Scene resolution'
+          ))
+        }
+        if ('goal' in updateData) {
+          worldChanges.push(sceneWorldChange(
+            campaignId, 'FACTION', faction.id, faction.name, 'goal',
+            faction.goal, updateData.goal, 'Scene resolution'
+          ))
+        }
+
         await tx.faction.update({
           where: { id: faction.id },
           data: updateData
@@ -121,5 +143,5 @@ export async function applyFactionChanges(
     }
   }
 
-  return { involvedFactionIds: [...involvedFactionIds] }
+  return { involvedFactionIds: [...involvedFactionIds], worldChanges }
 }

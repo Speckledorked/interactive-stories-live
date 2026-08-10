@@ -24,20 +24,21 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 vi.mock('../worldUpdaters/timelineEvents', () => ({ applyTimelineEventChanges: vi.fn(async () => {}) }))
-vi.mock('../worldUpdaters/clocks', () => ({ applyClockChanges: vi.fn(async () => {}) }))
+vi.mock('../worldUpdaters/clocks', () => ({ applyClockChanges: vi.fn(async () => ({ worldChanges: [] })) }))
 vi.mock('../worldUpdaters/npcs', () => ({
-  applyNpcChanges: vi.fn(async () => ({ involvedNpcIds: ['npc-from-applier'] })),
+  applyNpcChanges: vi.fn(async () => ({ involvedNpcIds: ['npc-from-applier'], worldChanges: [] })),
 }))
 // Returns the corruption-gate refusals (#83) and any character_name_or_id
 // that never matched a real character; empty arrays are the normal case.
-vi.mock('../worldUpdaters/characters', () => ({ applyCharacterChanges: vi.fn(async () => ({ gateRefusals: [] as string[], unresolvedCharacterNames: [] as string[] })) }))
+vi.mock('../worldUpdaters/characters', () => ({ applyCharacterChanges: vi.fn(async () => ({ gateRefusals: [] as string[], unresolvedCharacterNames: [] as string[], worldChanges: [] })) }))
 vi.mock('../worldUpdaters/factions', () => ({
-  applyFactionChanges: vi.fn(async () => ({ involvedFactionIds: ['faction-from-applier'] })),
+  applyFactionChanges: vi.fn(async () => ({ involvedFactionIds: ['faction-from-applier'], worldChanges: [] })),
 }))
-vi.mock('../worldUpdaters/locations', () => ({ applyLocationChanges: vi.fn(async () => {}) }))
-vi.mock('../worldUpdaters/quests', () => ({ applyQuestChanges: vi.fn(async () => {}) }))
+vi.mock('../worldUpdaters/locations', () => ({ applyLocationChanges: vi.fn(async () => ({ worldChanges: [] })) }))
+vi.mock('../worldUpdaters/quests', () => ({ applyQuestChanges: vi.fn(async () => ({ worldChanges: [] })) }))
 vi.mock('../worldUpdaters/bargainOffers', () => ({ applyBargainOffers: vi.fn(async () => {}) }))
 vi.mock('../worldUpdaters/worldMetaNotes', () => ({ storeGmNotesForTurn: vi.fn(async () => {}) }))
+vi.mock('../tick/worldEventLog', () => ({ persistWorldEvents: vi.fn(async () => 0) }))
 
 import { applyWorldUpdates } from '../stateUpdater'
 import { applyTimelineEventChanges } from '../worldUpdaters/timelineEvents'
@@ -208,7 +209,7 @@ describe('applyWorldUpdates — corruption theme memoization', () => {
     ;(applyCharacterChanges as any).mockImplementation(async (...args: any[]) => {
       await args[6]() // getCorruptionTheme
       await args[6]()
-      return { gateRefusals: [], unresolvedCharacterNames: [] }
+      return { gateRefusals: [], unresolvedCharacterNames: [], worldChanges: [] }
     })
     ;(applyBargainOffers as any).mockImplementation(async (...args: any[]) => {
       await args[4]() // getCorruptionTheme
@@ -233,7 +234,7 @@ describe('applyWorldUpdates — corruption theme memoization', () => {
       await args[6]()
       await args[6]()
       await args[6]()
-      return { gateRefusals: [], unresolvedCharacterNames: [] }
+      return { gateRefusals: [], unresolvedCharacterNames: [], worldChanges: [] }
     })
 
     await applyWorldUpdates('camp1', response({ pc_changes: [{ character_name_or_id: 'Vera', changes: {} }] }), 1)
@@ -255,12 +256,13 @@ describe('applyWorldUpdates — results and failure', () => {
       involvedNpcIds: ['npc-from-applier'],
       involvedFactionIds: ['faction-from-applier'],
       unresolvedCharacterNames: [],
+      worldChanges: [],
     })
   })
 
   it('returns empty id lists when the relevant appliers never ran', async () => {
     const result = await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), 1)
-    expect(result).toEqual({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [] })
+    expect(result).toEqual({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] })
   })
 
   it('wraps and rethrows when an applier fails, so the caller sees a real failure', async () => {

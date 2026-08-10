@@ -13,6 +13,8 @@
 import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
+import { sceneWorldChange } from './sceneWorldEvents'
+import type { WorldChange } from '../tick/types'
 
 type Db = Prisma.TransactionClient
 export type LocationChange = NonNullable<WorldUpdates['location_changes']>[number]
@@ -22,8 +24,9 @@ export async function applyLocationChanges(
   campaignId: string,
   locationChanges: LocationChange[],
   sceneOrigin: boolean
-): Promise<void> {
+): Promise<{ worldChanges: WorldChange[] }> {
   console.log(`📍 Syncing ${locationChanges.length} location(s)`)
+  const worldChanges: WorldChange[] = []
 
   for (const locChange of locationChanges) {
     // Case-INSENSITIVE, matching resolveOrCreateLocationId below.
@@ -65,6 +68,16 @@ export async function applyLocationChanges(
         updateData.isDiscovered = true
       }
       if (Object.keys(updateData).length > 0) {
+        // #175: locationType is the compact, narratively meaningful field
+        // here — description/gmNotes are long free text, corruption
+        // gates/discovery aren't independently interesting.
+        if ('locationType' in updateData) {
+          worldChanges.push(sceneWorldChange(
+            campaignId, 'LOCATION', existing.id, existing.name, 'locationType',
+            existing.locationType || '(unknown)', updateData.locationType, 'Scene resolution'
+          ))
+        }
+
         await tx.location.update({
           where: { id: existing.id },
           data: updateData
@@ -99,6 +112,8 @@ export async function applyLocationChanges(
       console.warn(`  ❓ location_changes: "${locChange.name}" is unknown and carries no description or is_new — skipped rather than minting a row from a passing mention`)
     }
   }
+
+  return { worldChanges }
 }
 
 /**

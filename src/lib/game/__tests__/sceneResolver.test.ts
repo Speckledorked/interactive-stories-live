@@ -215,7 +215,7 @@ describe('Scene Resolver', () => {
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
-      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [] });
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
       // Maps are opt-in per campaign and default OFF (#9/#59); this test
       // asserts the generation path, so enable them for this campaign.
       vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: true } as any);
@@ -290,7 +290,7 @@ describe('Scene Resolver', () => {
         problems: ['Kess: engine rolled weakHit, narration reported miss'],
       };
       vi.mocked(callAIGM).mockResolvedValue({ ...mockAIResponse, _outcomeAdherence: adherence } as any);
-      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [] });
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
       vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false } as any);
 
       await resolveScene(mockCampaignId, mockSceneId);
@@ -305,7 +305,7 @@ describe('Scene Resolver', () => {
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
-      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [] });
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
       vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false } as any);
 
       const result = await resolveScene(mockCampaignId, mockSceneId);
@@ -323,7 +323,7 @@ describe('Scene Resolver', () => {
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
-      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [] });
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
       vi.mocked(prisma.campaign.findUnique).mockRejectedValue(new Error('db blip'));
 
       const result = await resolveScene(mockCampaignId, mockSceneId);
@@ -348,7 +348,7 @@ describe('Scene Resolver', () => {
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
-      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [] });
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
       vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: true } as any);
 
       const result = await resolveScene(mockCampaignId, mockSceneId);
@@ -367,7 +367,7 @@ describe('Scene Resolver', () => {
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
-      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [] });
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
       vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: false } as any);
 
       const result = await resolveScene(mockCampaignId, mockSceneId);
@@ -384,7 +384,7 @@ describe('Scene Resolver', () => {
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
-      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [] });
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
       vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: true } as any);
 
       const result = await resolveScene(mockCampaignId, mockSceneId);
@@ -400,7 +400,7 @@ describe('Scene Resolver', () => {
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
-      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [] });
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
       vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: true } as any);
       vi.mocked(enqueueSceneImageGeneration).mockRejectedValueOnce(new Error('worker kick failed'));
 
@@ -468,7 +468,7 @@ describe('Scene Resolver', () => {
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue(mockAIRequest as any);
       vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
-      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [] });
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
 
       await resolveScene(mockCampaignId, mockSceneId);
 

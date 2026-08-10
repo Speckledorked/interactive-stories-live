@@ -24,6 +24,8 @@ import { applyLocationChanges } from './worldUpdaters/locations'
 import { applyQuestChanges } from './worldUpdaters/quests'
 import { applyBargainOffers } from './worldUpdaters/bargainOffers'
 import { storeGmNotesForTurn } from './worldUpdaters/worldMetaNotes'
+import { persistWorldEvents } from './tick/worldEventLog'
+import type { WorldChange } from './tick/types'
 
 // Re-exported so existing importers (sceneResolver.ts) don't need to
 // change — the implementation lives in stubEnrichment.ts now, see there
@@ -45,6 +47,8 @@ export interface AppliedWorldUpdates {
   involvedFactionIds: string[]
   /** character_name_or_id values from pc_changes that never matched a real character — that whole entry was dropped. */
   unresolvedCharacterNames: string[]
+  /** #175: every WorldChange this scene resolution produced, already persisted to WorldEvent by the time this resolves. */
+  worldChanges: WorldChange[]
 }
 
 export async function applyWorldUpdates(
@@ -71,6 +75,11 @@ export async function applyWorldUpdates(
   let involvedNpcIds: string[] = []
   let involvedFactionIds: string[] = []
   let unresolvedCharacterNames: string[] = []
+  // #175: collected across every domain applier below, persisted to
+  // WorldEvent once the transaction commits (see persistWorldEvents' own
+  // doc comment — best-effort, outside the transaction, same as every
+  // other call site of this function).
+  const worldChanges: WorldChange[] = []
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -117,7 +126,8 @@ export async function applyWorldUpdates(
 
       // 2. Update clocks
       if (world_updates.clock_changes) {
-        await applyClockChanges(tx, world_updates.clock_changes, clocksForResolution)
+        const result = await applyClockChanges(tx, world_updates.clock_changes, clocksForResolution)
+        worldChanges.push(...result.worldChanges)
       }
 
       // 3. Update NPCs
@@ -126,6 +136,7 @@ export async function applyWorldUpdates(
           tx, campaignId, world_updates.npc_changes, npcsForResolution, charactersForResolution, sceneOrigin
         )
         involvedNpcIds = result.involvedNpcIds
+        worldChanges.push(...result.worldChanges)
       }
 
       // 4. Update player characters
@@ -141,6 +152,7 @@ export async function applyWorldUpdates(
           console.log(`  🌑 ${refusal}`)
         }
         unresolvedCharacterNames = result.unresolvedCharacterNames
+        worldChanges.push(...result.worldChanges)
       }
 
       // organic_advancement (stat_increases/new_perks/new_moves) is deliberately
@@ -156,17 +168,20 @@ export async function applyWorldUpdates(
           tx, campaignId, world_updates.faction_changes, factionsForResolution, sceneOrigin
         )
         involvedFactionIds = result.involvedFactionIds
+        worldChanges.push(...result.worldChanges)
       }
 
       // 7. Upsert locations
       if (world_updates.location_changes) {
-        await applyLocationChanges(tx, campaignId, world_updates.location_changes, sceneOrigin)
+        const result = await applyLocationChanges(tx, campaignId, world_updates.location_changes, sceneOrigin)
+        worldChanges.push(...result.worldChanges)
       }
 
       // 7a. Quest lifecycle: open/progress/close named undertakings from
       // the fiction. Matched by name (case-insensitive) like NPCs/factions.
       if (world_updates.quest_changes) {
-        await applyQuestChanges(tx, campaignId, currentTurnNumber, world_updates.quest_changes)
+        const result = await applyQuestChanges(tx, campaignId, currentTurnNumber, world_updates.quest_changes)
+        worldChanges.push(...result.worldChanges)
       }
 
       // 7a-bis. Corruption bargain offers: persist so the character's NEXT
@@ -185,7 +200,15 @@ export async function applyWorldUpdates(
 
     console.log('✅ All world updates applied successfully')
 
-    return { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames }
+    // #175: best-effort, outside the transaction — same placement
+    // worldTick.ts/consequences.ts already use for this exact call. A
+    // failure here must not undo (or block) the world updates that just
+    // committed; persistWorldEvents' own doc comment covers the tradeoff.
+    if (worldChanges.length > 0) {
+      await persistWorldEvents(campaignId, currentTurnNumber, worldChanges)
+    }
+
+    return { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames, worldChanges }
   } catch (error) {
     console.error('❌ Failed to apply world updates:', error)
     throw new Error(`Failed to apply world updates: ${error}`)

@@ -160,6 +160,10 @@ enum WorldEventTargetType {
   // #110: background population shifts (tick/migrationTick.ts) are their
   // own attributable entity type, distinct from conditionScore drift.
   LOCATION_POPULATION
+  // #175: a location's own descriptive fields (description, locationType,
+  // corruption gates, discovery) changing during scene resolution —
+  // distinct from the three tick-specific sub-concerns above.
+  LOCATION
 }
 
 //

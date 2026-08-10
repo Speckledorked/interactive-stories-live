@@ -17,6 +17,31 @@ import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/co
 import { buildOptimizedWorldSummary, buildWorldSummaryForAI } from './worldSummary'
 import { applyTokenBudget } from './tokenBudget'
 
+// Backstop: a real scene reported stuck at 60 exchanges despite
+// scenePrompt.ts's urgent <pacing> tier being a "HARD REQUIREMENT" for
+// every exchange since 15 — prose urging alone is not a guarantee the model
+// actually complies, no matter how forcefully worded. Past this ceiling,
+// force the same <scene_ending> treatment an explicit end-scene action
+// already gets (a different, more binary framing: "this exchange ends the
+// scene, period" rather than "resolve the central obstacle"), instead of
+// trusting one more round of the same pacing text to finally land. Well
+// above PACING_URGENT_THRESHOLD (15, scenePrompt.ts) so a scene gets a
+// real chance to close on its own first.
+export const SCENE_RUNAWAY_EXCHANGE_CEILING = 25
+
+/**
+ * Pure so the ceiling logic is testable without standing up this file's
+ * whole DB-heavy request-building pipeline. An explicit end-scene request
+ * always wins regardless of exchange count; otherwise, forces ending once
+ * a scene has run far enough that pacing text alone has clearly failed.
+ */
+export function deriveEffectiveSceneEnding(
+  isSceneEnding: boolean,
+  currentExchange: number | null
+): boolean {
+  return isSceneEnding || (currentExchange ?? 0) >= SCENE_RUNAWAY_EXCHANGE_CEILING
+}
+
 /**
  * Enhance system prompt with campaign memory instructions
  *
@@ -119,6 +144,8 @@ export async function buildSceneResolutionRequest(
   if (!scene) {
     throw new Error('Scene not found')
   }
+
+  const effectiveIsSceneEnding = deriveEffectiveSceneEnding(isSceneEnding, scene.currentExchange)
 
   // Split-party scoping: a scene the GM created for specific characters
   // (Character-Focused, or one half of a split party) carries that list
@@ -450,6 +477,6 @@ export async function buildSceneResolutionRequest(
     action_mechanics: actionMechanics,
     current_exchange_number: scene.currentExchange ?? 0,
     scene_stakes: scene.stakes,
-    is_scene_ending: isSceneEnding
+    is_scene_ending: effectiveIsSceneEnding
   }
 }

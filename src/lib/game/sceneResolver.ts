@@ -275,7 +275,7 @@ async function performResolution(
 
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')
-    const { involvedNpcIds, involvedFactionIds } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber)
+    const { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber)
 
     // 6.1. Enrich any stub NPCs/factions auto-created mid-scene (non-blocking, best-effort)
     enrichStubNPCs(campaignId, aiResponse.scene_text).catch(err =>
@@ -326,6 +326,23 @@ async function performResolution(
         entityName: m.characterName,
         details: formatRollReceipt(m),
         impact: m.outcome === 'miss' ? 'major' : m.outcome === 'weakHit' ? 'moderate' : 'minor'
+      })
+    }
+
+    // A pc_changes entry whose character_name_or_id never matched anyone on
+    // the roster gets its whole update (harm, conditions, knowledge,
+    // everything) silently dropped in applyCharacterChanges — this used to
+    // be a server-log-only console.warn. Surfacing it here means an admin
+    // (or a curious player) can actually see it happened, in the same panel
+    // that already shows roll receipts, instead of it only ever appearing
+    // in a log nobody reads.
+    for (const name of unresolvedCharacterNames) {
+      worldStateChanges.push({
+        category: 'character',
+        type: 'failed',
+        entityName: name,
+        details: `MythOS reported an update for "${name}" but couldn't match that name to a character in this campaign — the update was skipped entirely.`,
+        impact: 'major'
       })
     }
 

@@ -600,7 +600,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
     const roster = [character({ corruption: 4 })]
     tx.location.findUnique.mockResolvedValue({ minCorruption: null, maxCorruption: 2 })
 
-    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'The High Temple' } } as PcChange,
     ], roster, npcRoster, theme, true)
 
@@ -615,7 +615,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
     const roster = [character({ corruption: 0 })]
     tx.location.findUnique.mockResolvedValue({ minCorruption: 3, maxCorruption: null })
 
-    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'The Drowned Shrine' } } as PcChange,
     ], roster, npcRoster, theme, true)
 
@@ -626,7 +626,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
     const roster = [character({ corruption: 3 })]
     tx.location.findUnique.mockResolvedValue({ minCorruption: 3, maxCorruption: null })
 
-    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'The Drowned Shrine' } } as PcChange,
     ], roster, npcRoster, theme, true)
 
@@ -638,7 +638,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
     const roster = [character({ corruption: 5 })]
     tx.location.findUnique.mockResolvedValue({ minCorruption: null, maxCorruption: 0 })
 
-    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'The High Temple' } } as PcChange,
     ], roster, npcRoster, noTheme, true)
 
@@ -662,7 +662,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
     const roster = [character({ corruption: 5 })]
     tx.location.findUnique.mockRejectedValue(new Error('db down'))
 
-    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'Anywhere' } } as PcChange,
     ], roster, npcRoster, theme, true)
 
@@ -675,7 +675,7 @@ describe('applyCharacterChanges — corruption entry gate', () => {
     const roster = [character({ corruption: 5 })]
     tx.location.findUnique.mockResolvedValue(null)
 
-    const refusals = await applyCharacterChanges(tx as any, 'camp1', 3, [
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
       { character_name_or_id: 'char1', changes: { location: 'A Nameless Hollow' } } as PcChange,
     ], roster, npcRoster, theme, true)
 

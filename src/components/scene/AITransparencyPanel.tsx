@@ -10,7 +10,10 @@ export interface WorldStateChange {
   // 'roll' entries are the move-resolution receipts (see
   // lib/game/resolution.ts): the one place dice surface in the UI.
   category: 'character' | 'npc' | 'faction' | 'clock' | 'timeline' | 'relationship' | 'consequence' | 'roll'
-  type: 'added' | 'modified' | 'removed' | 'ticked' | 'rolled'
+  // 'failed' is honest about a reported change that never landed — e.g. a
+  // pc_changes entry whose character_name_or_id didn't match anyone on the
+  // roster — rather than mislabeling a no-op as 'modified'.
+  type: 'added' | 'modified' | 'removed' | 'ticked' | 'rolled' | 'failed'
   entityName: string
   details: string
   impact?: 'minor' | 'moderate' | 'major'
@@ -76,6 +79,7 @@ export default function AITransparencyPanel({
       case 'removed': return '➖'
       case 'ticked': return '⏱️'
       case 'rolled': return '🎲'
+      case 'failed': return '⚠️'
       default: return '•'
     }
   }

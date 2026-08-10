@@ -129,7 +129,7 @@ export async function applyCharacterChanges(
   npcsForResolution: Array<{ id: string; name: string }>,
   getCorruptionTheme: () => Promise<CorruptionTheme | null>,
   sceneOrigin: boolean
-): Promise<string[]> {
+): Promise<{ gateRefusals: string[]; unresolvedCharacterNames: string[] }> {
   console.log(`🦸 Updating ${pcChanges.length} characters`)
 
   // Refusals from corruption gates (#83) — returned rather than pushed into
@@ -137,17 +137,25 @@ export async function applyCharacterChanges(
   // being turned away from a door is not an injury and must not cause a
   // harm write.
   const gateRefusals: string[] = []
+  // A whole pc_changes entry (harm, conditions, knowledge, everything) gets
+  // silently dropped whenever character_name_or_id doesn't resolve — this
+  // used to be a console.warn only, invisible to anyone but a server log.
+  // Collected here so the caller can surface it somewhere a player/admin
+  // actually sees (see sceneResolver.ts's synthetic WorldStateChange).
+  const unresolvedCharacterNames: string[] = []
 
   for (const pcChange of pcChanges) {
     const pcResolution = resolveEntityByNameOrId(charactersForResolution, pcChange.character_name_or_id)
     const character = pcResolution.kind === 'found' ? pcResolution.entity : null
     if (pcResolution.kind === 'ambiguous') {
       console.warn(`  ⚠️ Ambiguous character name "${pcChange.character_name_or_id}" — matches ${pcResolution.candidates.map(c => c.name).join(', ')}, skipping rather than guessing`)
+      unresolvedCharacterNames.push(pcChange.character_name_or_id)
     }
 
     if (!character) {
       if (pcResolution.kind === 'not_found') {
         console.warn(`  ⚠️ Character not found: ${pcChange.character_name_or_id}`)
+        unresolvedCharacterNames.push(pcChange.character_name_or_id)
       }
       continue
     }
@@ -806,7 +814,7 @@ export async function applyCharacterChanges(
     }
   }
 
-  return gateRefusals
+  return { gateRefusals, unresolvedCharacterNames }
 }
 
 /**

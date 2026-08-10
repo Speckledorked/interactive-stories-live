@@ -40,6 +40,15 @@
   --myth-warn: 143 93 14;
   --myth-danger: 158 42 42;
   --myth-info: 45 90 130;
+
+  /* Decorative "world/lore" gold — wordmark, dividers, codex flourishes.
+     Deliberately separate from --myth-warn (which stays a semantic
+     caution color): this one carries no meaning, so reusing warn for it
+     would make a purely decorative flourish read as a warning state
+     elsewhere in the UI. Not intended for small body text — reserved for
+     display type, dividers, and chip/label accents. See
+     docs/design-system.md. */
+  --myth-gold: 150 108 32;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -62,6 +71,8 @@
     --myth-warn: 214 158 74;
     --myth-danger: 214 100 90;
     --myth-info: 122 165 199;
+
+    --myth-gold: 214 178 92;
   }
 }
 
@@ -82,6 +93,7 @@
   --myth-warn: 143 93 14;
   --myth-danger: 158 42 42;
   --myth-info: 45 90 130;
+  --myth-gold: 150 108 32;
 }
 
 [data-theme='dark'] {
@@ -101,6 +113,7 @@
   --myth-warn: 214 158 74;
   --myth-danger: 214 100 90;
   --myth-info: 122 165 199;
+  --myth-gold: 214 178 92;
 }
 
 /* ---------------------------------------------------------------------- *

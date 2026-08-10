@@ -1,26 +1,26 @@
 // src/app/campaigns/page.tsx
 // Campaign list — every session's entry point. Migrated onto the myth
-// design system (see docs/design-system.md): SectionHeader for the page
-// title, EmptyState for the zero-campaigns state, myth tokens throughout.
-// Campaign rows stay bordered (reference/list content per the
-// narrative-vs-reference convention — each row has real actions: open,
-// edit, delete).
+// design system (see docs/design-system.md): EmptyState for the
+// zero-campaigns state, myth tokens throughout. Each campaign renders as a
+// large chronicle card (CampaignChronicleCard) in a responsive grid — the
+// whole card is the "enter this world" interaction, with Edit/Delete as
+// quiet floating icon buttons rather than competing full-width buttons.
+// The cinematic header reuses the freshest campaign's own hero art as its
+// backdrop rather than any separate generated/stock asset.
 
 'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, ChevronRight, Users, BookOpen, Compass, Scroll } from 'lucide-react'
+import { Plus, ChevronRight, Scroll } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated, getLastCampaignId } from '@/lib/clientAuth'
 import { fontDisplay } from '@/lib/fonts'
-import { bannerIconFor, formatRelativeTime } from '@/lib/tavernUtils'
-import { pluralize } from '@/lib/format'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernButton, TavernCard } from '@/components/tavern/ui'
-import { SectionHeader } from '@/components/ui/section-header'
+import { TavernButton } from '@/components/tavern/ui'
 import { EmptyState } from '@/components/ui/empty-state'
+import { CampaignChronicleCard } from '@/components/campaigns/CampaignChronicleCard'
 
 interface Campaign {
   id: string
@@ -30,9 +30,12 @@ interface Campaign {
   userRole: 'ADMIN' | 'PLAYER'
   updatedAt: string
   createdAt: string
+  heroImageUrl: string | null
+  heroImageStatus: string | null
   _count: {
     characters: number
     scenes: number
+    memberships: number
   }
 }
 
@@ -90,16 +93,41 @@ export default function CampaignsPage() {
     }
   }
 
+  // Cinematic header backdrop: the most recently updated campaign that
+  // actually has ready hero art, not a separate generated/stock image —
+  // "your worlds" should feel like they're looking back at you.
+  const backdropUrl = campaigns.reduce<{ url: string; updatedAt: string } | null>((freshest, c) => {
+    if (c.heroImageStatus !== 'READY' || !c.heroImageUrl) return freshest
+    if (!freshest || new Date(c.updatedAt) > new Date(freshest.updatedAt)) {
+      return { url: c.heroImageUrl, updatedAt: c.updatedAt }
+    }
+    return freshest
+  }, null)?.url ?? null
+
   return (
     <TavernPage background="myth">
       <TavernHeader wordmark variant="myth" />
 
       {/* Content */}
-      <main className="max-w-2xl mx-auto px-4 pt-28 pb-28">
-        <SectionHeader
-          as="h2"
-          title="Your Campaigns"
-          action={
+      <main className="max-w-2xl lg:max-w-6xl mx-auto px-4 pt-28 pb-28">
+        {/* Cinematic header — the freshest world's own hero art bleeds in
+            from the edge instead of the title floating in empty space. */}
+        <div className="relative flex flex-col-reverse overflow-hidden rounded-lg border border-myth-border bg-myth-surface sm:flex-row">
+          {backdropUrl && (
+            <div className="relative h-40 sm:h-auto sm:w-2/5 lg:w-[45%]">
+              {/* eslint-disable-next-line @next/next/no-img-element -- no next/image remote-host config exists yet; matches CampaignHero.tsx's convention. */}
+              <img src={backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-myth-surface sm:bg-gradient-to-r sm:from-myth-surface sm:via-myth-surface/20 sm:to-transparent" />
+            </div>
+          )}
+          <div className="relative flex flex-1 flex-wrap items-start justify-between gap-4 px-6 py-8 sm:py-12">
+            <div>
+              <h1 className="font-display text-3xl font-semibold text-myth-ink sm:text-5xl">Your Campaigns</h1>
+              <div className="mt-3 h-px w-16 bg-myth-gold/50" />
+              <p className="mt-3 max-w-sm text-sm italic text-myth-ink-muted">
+                Every world you&rsquo;ve stepped into, remembered exactly as you left it.
+              </p>
+            </div>
             <button
               onClick={() => setShowCreateModal(true)}
               className="flex items-center gap-2 rounded-lg bg-myth-accent px-4 py-2.5 text-sm font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover"
@@ -107,8 +135,8 @@ export default function CampaignsPage() {
               <Plus className="w-4 h-4" />
               <span>New Campaign</span>
             </button>
-          }
-        />
+          </div>
+        </div>
 
         {error && (
           <div className="mt-6 rounded-lg border border-myth-danger/30 bg-myth-danger/10 px-4 py-3 text-sm text-myth-danger">
@@ -116,7 +144,7 @@ export default function CampaignsPage() {
           </div>
         )}
 
-        <div className="mt-6">
+        <div className="mt-8">
           {loading ? (
             <div className="flex justify-center py-16">
               <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-myth-accent" />
@@ -129,87 +157,36 @@ export default function CampaignsPage() {
               action={{ label: 'Create Your First Campaign', onClick: () => setShowCreateModal(true) }}
             />
           ) : (
-            <div className="space-y-4">
-              {campaigns.map((campaign) => {
-                const BannerIcon = bannerIconFor(campaign.id)
-                return (
-                  <TavernCard
-                    key={campaign.id}
-                    variant="myth"
-                    onClick={() => router.push(`/campaigns/${campaign.id}`)}
-                    className="group flex gap-4 p-4"
-                  >
-                    {/* Banner icon */}
-                    <div
-                      className="flex h-20 w-16 flex-shrink-0 items-center justify-center rounded-sm border border-myth-border bg-myth-surface-sunken"
-                      style={{ clipPath: 'polygon(0 0, 100% 0, 100% 85%, 50% 100%, 0 85%)' }}
-                    >
-                      <BannerIcon className="h-7 w-7 text-myth-ink-faint" />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-display text-lg font-semibold leading-snug text-myth-ink">
-                          {campaign.title}
-                        </h3>
-                        <ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-myth-ink-faint transition-transform group-hover:translate-x-0.5" />
-                      </div>
-
-                      <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-myth-ink-muted">
-                        {campaign.description || 'No description yet.'}
-                      </p>
-
-                      <div className="mt-3 flex items-center gap-4 text-xs text-myth-ink-faint">
-                        <span className="flex items-center gap-1.5">
-                          <Users className="h-3.5 w-3.5" />
-                          {campaign._count.characters} {pluralize(campaign._count.characters, 'Player')}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <BookOpen className="h-3.5 w-3.5" />
-                          {campaign._count.scenes} {pluralize(campaign._count.scenes, 'Session')}
-                        </span>
-                        <span>{formatRelativeTime(campaign.updatedAt)}</span>
-                      </div>
-
-                      {campaign.userRole === 'ADMIN' && (
-                        <div className="mt-3 flex gap-2 border-t border-myth-border pt-3">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              router.push(`/campaigns/${campaign.id}/admin?tab=settings`)
-                            }}
-                            className="rounded-md border border-myth-border px-3 py-1.5 text-xs text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeleteCampaign(campaign.id)
-                            }}
-                            disabled={deletingCampaignId === campaign.id}
-                            className="rounded-md border border-myth-danger/30 px-3 py-1.5 text-xs text-myth-danger transition-colors hover:border-myth-danger/50 disabled:opacity-50"
-                          >
-                            {deletingCampaignId === campaign.id ? 'Deleting…' : 'Delete'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </TavernCard>
-                )
-              })}
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {campaigns.map((campaign) => (
+                <CampaignChronicleCard
+                  key={campaign.id}
+                  id={campaign.id}
+                  title={campaign.title}
+                  description={campaign.description}
+                  userRole={campaign.userRole}
+                  updatedAt={campaign.updatedAt}
+                  heroImageUrl={campaign.heroImageUrl}
+                  heroImageStatus={campaign.heroImageStatus}
+                  playerCount={campaign._count.memberships}
+                  sessionCount={campaign._count.scenes}
+                  deleting={deletingCampaignId === campaign.id}
+                  onEnter={() => router.push(`/campaigns/${campaign.id}`)}
+                  onEdit={() => router.push(`/campaigns/${campaign.id}/admin?tab=settings`)}
+                  onDelete={() => handleDeleteCampaign(campaign.id)}
+                />
+              ))}
             </div>
           )}
         </div>
 
-        {/* Decorative quote banner */}
-        <div className="mt-8 flex items-center gap-4 rounded-lg border border-myth-border bg-myth-surface px-5 py-4">
-          <p className="flex-1 text-sm italic leading-relaxed text-myth-ink-muted">
+        {/* A line from the codex, styled like a manuscript pull-quote
+            rather than an incidental card. */}
+        <div className="mt-10 border-l-2 border-myth-gold/50 pl-5">
+          <p className="font-mono text-xs uppercase tracking-wider text-myth-gold">From the MythOS Codex</p>
+          <p className="mt-2 font-display text-lg italic leading-relaxed text-myth-ink-muted sm:text-xl">
             &ldquo;The greatest stories aren&rsquo;t written&hellip; They&rsquo;re lived.&rdquo;
           </p>
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-myth-border bg-myth-surface-sunken">
-            <Compass className="h-4 w-4 text-myth-ink-faint" />
-          </div>
         </div>
       </main>
 

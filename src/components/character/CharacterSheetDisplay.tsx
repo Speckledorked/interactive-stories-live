@@ -132,6 +132,11 @@ export default function CharacterSheetDisplay({
   // current state ("is Restrained") — see conditionHistory in harm.ts.
   const conditionHistoryList = conditions.conditionHistory || []
 
+  // Structured, permanent declarative knowledge (#173/#174) — distinct
+  // from capabilitySummary below (system existence + proficiency). See
+  // lib/game/knowledge.ts.
+  const knownConcepts = (character?.knownConcepts as any)?.concepts || []
+
   // Knowledge-relative sheet (server ships bands + hints only, never raw
   // proficiency numbers — see the character GET route)
   const capabilitySummary = character?.capabilitySummary as {
@@ -423,6 +428,26 @@ export default function CharacterSheetDisplay({
                     ))}
                   </div>
                 )}
+              </Card>
+            )}
+
+            {/* Known Facts — structured, permanent declarative knowledge
+                (#173/#174), distinct from Abilities & Knowledge above
+                (system existence + proficiency, not standalone facts). */}
+            {knownConcepts.length > 0 && (
+              <Card className="md:col-span-2">
+                <CardLabel>Known Facts</CardLabel>
+                <div className="flex flex-wrap gap-2">
+                  {knownConcepts.map((concept: any, idx: number) => (
+                    <span
+                      key={idx}
+                      className="rounded-full border border-myth-border bg-myth-surface-sunken px-3 py-1 text-xs font-medium text-myth-ink-muted"
+                      title={concept.source || undefined}
+                    >
+                      {concept.label}
+                    </span>
+                  ))}
+                </div>
               </Card>
             )}
 

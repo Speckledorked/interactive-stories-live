@@ -275,6 +275,52 @@ describe('applyCharacterChanges — harm and conditions', () => {
   })
 })
 
+describe('applyCharacterChanges — knowledge (#173/#174)', () => {
+  it('adds a new known concept', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 4, [
+      { character_name_or_id: 'char1', changes: { knowledge_add: [{ key: 'essences_exist', label: 'Essences exist' }] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.knownConcepts.concepts).toEqual([
+      { key: 'essences_exist', label: 'Essences exist', source: undefined, learnedAt: 4 }
+    ])
+  })
+
+  it('re-reporting the same key refreshes the label without duplicating the entry', async () => {
+    const roster = [character({
+      knownConcepts: { concepts: [{ key: 'baron', label: "Something's off about the baron", learnedAt: 2 }] },
+    })]
+    await applyCharacterChanges(tx as any, 'camp1', 7, [
+      { character_name_or_id: 'char1', changes: { knowledge_add: [{ key: 'baron', label: 'The baron is secretly a vampire' }] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.knownConcepts.concepts).toEqual([
+      { key: 'baron', label: 'The baron is secretly a vampire', source: undefined, learnedAt: 2 }
+    ])
+  })
+
+  it('removes a known concept by key', async () => {
+    const roster = [character({
+      knownConcepts: { concepts: [{ key: 'wrong_fact', label: 'Something untrue', learnedAt: 1 }] },
+    })]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { knowledge_remove: ['wrong_fact'] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.knownConcepts.concepts).toEqual([])
+  })
+
+  it('does not touch knownConcepts when nothing knowledge-related changed', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.knownConcepts).toBeUndefined()
+  })
+})
+
 describe('applyCharacterChanges — corruption', () => {
   it('does nothing when the campaign has no corruption theme', async () => {
     const roster = [character()]

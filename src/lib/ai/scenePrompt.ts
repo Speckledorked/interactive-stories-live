@@ -11,6 +11,7 @@
 
 import type { AIGMRequest } from './client'
 import { selectPrimaryOutcomeBand, type ActionMechanics } from '@/lib/game/resolution'
+import { parseHarmState, getHarmStatus } from '@/lib/game/harm'
 
 // ---------------------------------------------------------------------------
 // System prompt sections
@@ -250,6 +251,8 @@ You MUST respond with a JSON object matching this structure:
           "harm_healing": 0,
           "conditions_add": [{"name": "Bleeding", "category": "Physical", "description": "...", "mechanicalEffect": "..."}],
           "conditions_remove": ["Restrained"],
+          "knowledge_add": [{"key": "essences_exist", "label": "Essences exist and can be channeled", "source": "Old Marta's lesson"}],
+          "knowledge_remove": [],
           "location": "New location",
           "relationship_changes": [{"entity_id": "the NPC's real id from the NPCS list, or repeat their exact name if you don't have it", "entity_name": "Guard Captain", "trust_delta": 10, "reason": "Saved their life"}],
           "consequences_add": [{"type": "promise", "description": "Swore to return for the child"}, {"type": "debt", "description": "Vashti's people got them out of the district", "counterparty_name": "Vashti", "counterparty_type": "npc", "direction": "owed_by_character"}],
@@ -304,6 +307,20 @@ HARM SYSTEM:
 - Add conditions: Physical (Bleeding, Stunned), Emotional (Terrified), Special (Cursed)
 - A condition is not permanent unless the fiction says so — every condition you add, actively track for its own resolution. When the scene shows its cause going away (the wound gets bound, the ropes come off, the terror passes, the curse is lifted), call conditions_remove that same exchange. Don't wait to be asked, and don't leave a condition sitting on the sheet once its story reason is gone — a character who dried off is not still "Soaking Wet."
 - NPCs have the same 0-6 harm track for real physical harm (see NPC HARM under REGISTER NEW NPCs below) — but no conditions/death-saves/dying state; they're just fine, impaired, or taken out
+
+KNOWLEDGE: When a character actually confirms a fact this exchange — an NPC
+explains something, they read it, they witness it directly — call
+knowledge_add so the character's sheet remembers it. Do NOT rely on the
+character "just knowing" something on a later exchange because it appeared
+in scene_text once; if it matters whether they know it, record it. Give
+each fact a short, stable key (lowercase_with_underscores) — reporting the
+SAME key again later just refreshes the fact's wording, it doesn't create
+a duplicate, so don't invent a new key for a fact you've already recorded.
+This is for declarative facts ("the baron is corrupt," "essences exist"),
+never for capability-tree systems (glimpse/unlock via capability_changes
+already covers "this character now knows THIS SYSTEM exists and can use
+it") — don't report the same thing through both. knowledge_remove is rare:
+only when the fiction itself corrects a fact the character believed.
 
 MEDICAL TREATMENT: When someone (PC or NPC) tends a hurt character's
 wounds — bandaging, healing magic, a field medic, anything more deliberate
@@ -627,6 +644,23 @@ function buildCharactersSection(characters: WorldSummary['characters']): string 
     if (c.goals) parts.push(`Goals: ${c.goals}`)
     parts.push(`Stats: ${JSON.stringify(c.stats)}`)
 
+    // Current harm/conditions — previously present in the mapped data but
+    // never actually rendered anywhere in this prompt, so the narrator had
+    // no structural way to know a condition was still active except by
+    // re-reading its own recent prose (the same fragile pattern the Scene
+    // Progress Ledger replaced for scene continuity — see BUG-004/#173).
+    // Without this, "call conditions_remove once the cause is gone"
+    // (below in <mechanical_outcomes>) has nothing to check against once a
+    // condition scrolls out of the shrunk raw-prose window.
+    if (typeof c.harm === 'number' && c.harm > 0) {
+      const harmStatus = getHarmStatus(Math.min(6, Math.max(0, c.harm)) as 0 | 1 | 2 | 3 | 4 | 5 | 6)
+      parts.push(`Harm: ${c.harm}/6 (${harmStatus.status})`)
+    }
+    const activeConditions = parseHarmState(c.conditions).conditions
+    if (activeConditions.length > 0) {
+      parts.push(`Active conditions: ${activeConditions.map(cond => `${cond.name}${cond.description ? ` (${cond.description})` : ''}`).join('; ')}`)
+    }
+
     if (c.relationships && Object.keys(c.relationships).length > 0) {
       parts.push(`🔒 Hidden Relationships (use for NPC behavior): ${JSON.stringify(c.relationships)}`)
     }
@@ -646,6 +680,15 @@ function buildCharactersSection(characters: WorldSummary['characters']): string 
         parts.push(`Aware of but cannot do: ${cap.glimpsed.map(g => `${g.domain}${g.hint ? ` — ${g.hint}` : ''}`).join('; ')}`)
       }
       parts.push(`Systems this character knows exist: ${cap.knownDomains.length > 0 ? cap.knownDomains.join(', ') : 'NONE — they are ignorant of this world’s systems'}${c.origin_familiarity ? ` (origin: ${c.origin_familiarity.toLowerCase()})` : ''}`)
+    }
+
+    // Structured declarative knowledge (#173/#174) — distinct from
+    // capabilities above (system existence + proficiency). Confirmed facts
+    // this character actually knows, not RAG-retrieved context — narrate
+    // consistently with them (don't have them ask what essences are if
+    // this list says they already know).
+    if (c.known_concepts && c.known_concepts.length > 0) {
+      parts.push(`Knows: ${c.known_concepts.map(k => k.label).join('; ')}`)
     }
 
     // Debt economy: open favors are live dramatic material — see <debts>.

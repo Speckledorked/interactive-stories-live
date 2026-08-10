@@ -369,6 +369,17 @@ export interface AIGMRequest {
       location: string | null
       relationships?: CharacterRelationshipMap | null
       consequences?: CharacterConsequences | null
+      // Current mechanical state (harm.ts) — the raw Character.harm/
+      // conditions fields, passed through untyped-in-detail on purpose
+      // (this prompt only ever reads them via parseHarmState/getHarmStatus,
+      // never assumes a shape directly). Previously present in the mapped
+      // data but never actually rendered anywhere in the prompt — the
+      // narrator had no structural way to know a condition was still
+      // active except by re-reading its own recent prose, exactly the
+      // fragile pattern the Scene Progress Ledger replaced for scene
+      // continuity. See buildCharactersSection.
+      harm?: number | null
+      conditions?: unknown
       // Knowledge-relative sheet (see lib/game/capabilities.ts): what this
       // character knows exists and can do — qualitative bands only.
       origin_familiarity?: string
@@ -377,6 +388,9 @@ export interface AIGMRequest {
         glimpsed: Array<{ domain: string; hint: string | null }>
         knownDomains: string[]
       }
+      // Structured, permanent declarative knowledge (#173/#174) — distinct
+      // from capabilities above. See lib/game/knowledge.ts.
+      known_concepts?: Array<{ key: string; label: string; learnedAt: number; source?: string }>
       // Open favors, both directions (see lib/game/debts.ts).
       debts?: {
         owedByCharacter: Array<{ counterparty: string; description: string }>

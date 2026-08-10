@@ -249,6 +249,60 @@ describe('buildSystemPrompt — player action text is not treated as literal dia
   })
 })
 
+describe('buildUserPrompt — character harm/conditions/knowledge visibility (#173/#174)', () => {
+  // Character.harm/conditions were present in the mapped world_summary data
+  // but never actually rendered in buildCharactersSection — the narrator
+  // had no structural way to know a condition was still active except by
+  // re-reading its own recent prose. known_concepts is new: structured,
+  // permanent knowledge distinct from the capability tree.
+  function makeRequest(character: Record<string, unknown>): AIGMRequest {
+    return {
+      world_summary: {
+        turn_number: 1,
+        in_game_date: 'Day 1',
+        characters: [{ id: 'char-1', name: 'Kess', ...character }],
+        npcs: [], factions: [], clocks: [], recent_timeline_events: [],
+      },
+      current_scene_intro: 'The room is quiet.',
+      player_actions: [],
+    } as unknown as AIGMRequest
+  }
+
+  it('renders current harm status when a character is hurt', () => {
+    const prompt = buildUserPrompt(makeRequest({ harm: 4 }))
+    expect(prompt).toMatch(/Harm: 4\/6 \(Impaired\)/)
+  })
+
+  it('omits the harm line entirely when unhurt', () => {
+    const prompt = buildUserPrompt(makeRequest({ harm: 0 }))
+    expect(prompt).not.toMatch(/Harm:/)
+  })
+
+  it('renders active conditions by name', () => {
+    const prompt = buildUserPrompt(makeRequest({
+      conditions: { conditions: [{ id: 'c1', name: 'Restrained', category: 'Physical', description: 'Bound and unable to move' }] },
+    }))
+    expect(prompt).toMatch(/Active conditions: Restrained \(Bound and unable to move\)/)
+  })
+
+  it('omits the active-conditions line when there are none', () => {
+    const prompt = buildUserPrompt(makeRequest({ conditions: { conditions: [] } }))
+    expect(prompt).not.toMatch(/Active conditions:/)
+  })
+
+  it('renders known concepts distinctly from capabilities', () => {
+    const prompt = buildUserPrompt(makeRequest({
+      known_concepts: [{ key: 'essences_exist', label: 'Essences exist', learnedAt: 2 }],
+    }))
+    expect(prompt).toMatch(/Knows: Essences exist/)
+  })
+
+  it('omits the Knows line when nothing is known', () => {
+    const prompt = buildUserPrompt(makeRequest({ known_concepts: [] }))
+    expect(prompt).not.toMatch(/Knows:/)
+  })
+})
+
 describe('buildUserPrompt — player actions are not quote-wrapped like dialogue', () => {
   // Presenting the whole action as `Name: "text"` visually primed the
   // model to treat it as a spoken line, reinforcing the same bug the

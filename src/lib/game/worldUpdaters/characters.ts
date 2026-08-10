@@ -35,6 +35,7 @@ import {
   ResolvedCondition
 } from '../harm'
 import { resolveArmorValue, resolveConsumableHeal } from '../inventory'
+import { parseKnowledgeState, addKnownConcept, removeKnownConcept } from '../knowledge'
 import { applyCapabilityChanges } from '../capabilities'
 import { applyDebtChanges, debtChangeFromConsequence, DebtChange } from '../debts'
 import { applyStandingChanges } from '../standing'
@@ -206,6 +207,30 @@ export async function applyCharacterChanges(
     let conditionHistory: ResolvedCondition[] = harmState.conditionHistory
     let newIsAlive: boolean | undefined
     let harmMessages: string[] = []
+
+    // Structured, permanent knowledge (#173/#174) — separate column from
+    // harm/conditions, tracked independently so a knowledge-only exchange
+    // (an NPC explains something, nothing physically changes) still
+    // persists without needing a harm/condition message to piggyback on.
+    const knowledgeState = parseKnowledgeState(character.knownConcepts)
+    let knownConcepts = knowledgeState.concepts
+    let knowledgeChanged = false
+
+    if (pcChange.changes.knowledge_add && pcChange.changes.knowledge_add.length > 0) {
+      for (const concept of pcChange.changes.knowledge_add) {
+        knownConcepts = addKnownConcept(knownConcepts, concept, currentTurnNumber)
+      }
+      knowledgeChanged = true
+    }
+    if (pcChange.changes.knowledge_remove && pcChange.changes.knowledge_remove.length > 0) {
+      for (const key of pcChange.changes.knowledge_remove) {
+        knownConcepts = removeKnownConcept(knownConcepts, key)
+      }
+      knowledgeChanged = true
+    }
+    if (knowledgeChanged) {
+      updateData.knownConcepts = { concepts: knownConcepts }
+    }
 
     // Apply harm damage (armor mitigates incoming damage) — prefers a
     // structured armorValue on the matching inventory item over guessing

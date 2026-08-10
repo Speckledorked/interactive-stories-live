@@ -17,6 +17,7 @@
 import { capForPrompt } from './contextManager'
 import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
+import { parseKnowledgeState } from '@/lib/game/knowledge'
 import { inventoryValue, describeWealth } from '@/lib/game/itemValue'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
@@ -106,6 +107,10 @@ export function mapCharactersForPrompt(characters: any[]) {
     // raw proficiency numbers never reach a prompt (fog of war inward).
     origin_familiarity: c.originFamiliarity,
     capabilities: summarizeCapabilities(c.capabilities),
+    // Structured, permanent declarative knowledge (#173/#174) — distinct
+    // from capabilities above (system existence + proficiency). See
+    // lib/game/knowledge.ts.
+    known_concepts: parseKnowledgeState(c.knownConcepts).concepts,
     // Open favors, both directions — the AI's leverage currency, and now
     // a real roll modifier (see debtModifier in lib/game/debts.ts).
     debts: summarizeDebts(c.debts),

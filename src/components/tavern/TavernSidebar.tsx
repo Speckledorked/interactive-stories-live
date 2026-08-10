@@ -170,13 +170,13 @@ export function TavernSidebar({
 
   return (
     <aside className="fixed left-0 top-0 bottom-0 z-30 hidden w-64 flex-col border-r border-myth-border bg-myth-surface lg:flex">
-      <div className="flex flex-col items-center gap-3 border-b border-myth-border px-4 py-5">
+      <div className="flex flex-col items-center gap-3 border-b border-myth-gold/20 px-4 py-5">
         <div className="flex items-center gap-3">
-          <span className="text-xs tracking-widest text-myth-ink-faint">◈──</span>
-          <h1 className="font-display text-xl tracking-[0.15em] text-myth-ink">MythOS</h1>
-          <span className="text-xs tracking-widest text-myth-ink-faint">──◈</span>
+          <span className="text-xs tracking-widest text-myth-gold/50">◈──</span>
+          <h1 className="font-display text-xl tracking-[0.15em] text-myth-gold">MythOS</h1>
+          <span className="text-xs tracking-widest text-myth-gold/50">──◈</span>
         </div>
-        <p className="-mt-2 text-[11px] tracking-[0.2em] text-myth-ink-faint">THE WORLD REMEMBERS.</p>
+        <p className="-mt-2 text-[11px] tracking-[0.2em] text-myth-gold/60">THE WORLD REMEMBERS.</p>
       </div>
 
       <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">

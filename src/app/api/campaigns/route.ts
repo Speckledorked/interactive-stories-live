@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
             _count: {
               select: {
                 characters: true,
-                scenes: true
+                scenes: true,
+                memberships: true
               }
             }
           }

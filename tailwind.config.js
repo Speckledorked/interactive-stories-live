@@ -150,6 +150,8 @@ module.exports = {
         'myth-warn': 'rgb(var(--myth-warn) / <alpha-value>)',
         'myth-danger': 'rgb(var(--myth-danger) / <alpha-value>)',
         'myth-info': 'rgb(var(--myth-info) / <alpha-value>)',
+        // Decorative "world/lore" gold — never a semantic state color.
+        'myth-gold': 'rgb(var(--myth-gold) / <alpha-value>)',
       },
       fontFamily: {
         display: ['var(--font-display)', 'Georgia', 'serif'],

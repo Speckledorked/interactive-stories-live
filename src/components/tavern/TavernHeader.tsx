@@ -77,19 +77,19 @@ export function TavernHeader({
         {wordmark ? (
           <div className={myth ? 'flex flex-col items-center lg:hidden' : 'flex flex-col items-center'}>
             <div className="flex items-center gap-3">
-              <span className={myth ? 'text-myth-ink-faint text-xs tracking-widest' : 'text-ember-700/60 text-xs tracking-widest'}>◈──</span>
+              <span className={myth ? 'text-myth-gold/50 text-xs tracking-widest' : 'text-ember-700/60 text-xs tracking-widest'}>◈──</span>
               <h1
                 className={
                   myth
-                    ? 'font-display text-2xl tracking-[0.15em] text-myth-ink'
+                    ? 'font-display text-2xl tracking-[0.15em] text-myth-gold'
                     : `${displayFont.className} text-2xl tracking-[0.15em] bg-gradient-to-b from-ember-200 to-ember-500 bg-clip-text text-transparent`
                 }
               >
                 MythOS
               </h1>
-              <span className={myth ? 'text-myth-ink-faint text-xs tracking-widest' : 'text-ember-700/60 text-xs tracking-widest'}>──◈</span>
+              <span className={myth ? 'text-myth-gold/50 text-xs tracking-widest' : 'text-ember-700/60 text-xs tracking-widest'}>──◈</span>
             </div>
-            <p className={myth ? 'text-[11px] tracking-[0.2em] text-myth-ink-faint -mt-0.5' : 'text-[11px] tracking-[0.2em] text-ember-300/50 -mt-0.5'}>THE WORLD REMEMBERS.</p>
+            <p className={myth ? 'text-[11px] tracking-[0.2em] text-myth-gold/60 -mt-0.5' : 'text-[11px] tracking-[0.2em] text-ember-300/50 -mt-0.5'}>THE WORLD REMEMBERS.</p>
           </div>
         ) : (
           <h1

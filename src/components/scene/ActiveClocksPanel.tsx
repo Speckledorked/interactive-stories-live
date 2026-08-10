@@ -49,7 +49,7 @@ export function ActiveClocksPanel({ clocks, campaignId }: ActiveClocksPanelProps
       <EntityStubModal
         isOpen={!!selectedClock}
         onClose={() => setSelectedClock(null)}
-        eyebrow="Clock"
+        eyebrow="Thread"
         title={selectedClock?.name || ''}
         meta={selectedClock ? `${selectedClock.currentTicks}/${selectedClock.maxTicks} ticks` : undefined}
         body={

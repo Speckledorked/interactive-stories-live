@@ -2311,19 +2311,19 @@ export default function AdminPage() {
             {activeTab === 'clocks' && (
               <div className="space-y-4">
                 <SectionHeader
-                  title="Clocks"
-                  description="Countdowns the world tick advances on its own — ambitions, threats, and schemes moving toward a consequence whether or not anyone acts. A clock's pace comes from whatever it's actually tied to (a faction's own strength, a linked faction's instability, a joint NPC scheme) or, with no tie at all, its category and the campaign's current tension. Click 'Why?' on any clock for that math."
+                  title="Threads"
+                  description="Countdowns the world tick advances on its own — ambitions, threats, and schemes moving toward a consequence whether or not anyone acts. A thread's pace comes from whatever it's actually tied to (a faction's own strength, a linked faction's instability, a joint NPC scheme) or, with no tie at all, its category and the campaign's current tension. Click 'Why?' on any thread for that math."
                 />
                 <button
                   onClick={() => setCreatingClock(true)}
                   className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
-                  + Create Clock
+                  + Create Thread
                 </button>
 
                 {creatingClock && (
                   <div className="rounded-lg border border-myth-border p-4 bg-myth-surface-sunken">
-                    <h3 className="font-semibold text-myth-ink mb-3">Create New Clock</h3>
+                    <h3 className="font-semibold text-myth-ink mb-3">Create New Thread</h3>
                     <form
                       onSubmit={(e) => {
                         e.preventDefault()
@@ -2384,15 +2384,15 @@ export default function AdminPage() {
                         <div className="flex items-center gap-1.5 mb-1">
                           <label className="block text-sm font-medium text-myth-ink-muted">Consequence (when filled)</label>
                           <FieldHelp
-                            what="What happens in the fiction once this clock fills all its segments — MythOS reads this to narrate the payoff."
-                            whoItAffects="How the story responds automatically when the clock completes."
-                            whenToUse="Any clock where reaching full should trigger a specific narrative beat."
+                            what="What happens in the fiction once this thread fills all its segments — MythOS reads this to narrate the payoff."
+                            whoItAffects="How the story responds automatically when the thread completes."
+                            whenToUse="Any thread where reaching full should trigger a specific narrative beat."
                           />
                         </div>
                         <textarea
                           name="consequence"
                           rows={2}
-                          placeholder="What happens when this clock fills..."
+                          placeholder="What happens when this thread fills..."
                           className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
@@ -2415,8 +2415,8 @@ export default function AdminPage() {
                           Hide from players
                         </label>
                         <FieldHelp
-                          what="Hidden clocks tick and matter mechanically, but players never see them or their progress — only you do."
-                          whoItAffects="Whether this clock appears on the players' story/wiki views."
+                          what="Hidden threads tick and matter mechanically, but players never see them or their progress — only you do."
+                          whoItAffects="Whether this thread appears on the players' story/wiki views."
                           whenToUse="Tracking a secret threat or countdown players shouldn't see coming."
                         />
                       </div>

@@ -79,7 +79,7 @@ export const FANTASY_TEMPLATE: CampaignTemplate = {
   name: 'Fantasy Adventure',
   description: 'Classic fantasy adventure with dungeons, dragons, and magic',
   universe: 'High Fantasy',
-  systemPrompt: `You are the Game Master for a PbtA-style fantasy adventure.
+  systemPrompt: `You are the Game Master for a fantasy adventure.
 
 **Core Principles:**
 - Fiction first: The story drives the mechanics, not the other way around
@@ -93,7 +93,7 @@ export const FANTASY_TEMPLATE: CampaignTemplate = {
 - Monsters are threats with goals and motivations
 - Factions vie for power and influence
 
-**GM Moves:**
+**Narrative Techniques:**
 - Reveal an unwelcome truth
 - Show signs of approaching threat
 - Deal damage
@@ -198,7 +198,7 @@ export const MHA_UA_TEMPLATE: CampaignTemplate = {
 - U.A. High School trains the next generation
 - Villain activity is constant but controlled
 
-**GM Moves:**
+**Narrative Techniques:**
 - Escalate a villain's plan
 - Introduce a new quirk complication
 - Put civilians in danger
@@ -284,7 +284,7 @@ export const MOTW_TEMPLATE: CampaignTemplate = {
 - The mundane world is threatened: Protect ordinary people from supernatural horror
 - Monsters are varied: Each threat is unique
 
-**GM Moves:**
+**Narrative Techniques:**
 - Reveal a horrifying truth
 - Endanger innocent bystanders
 - Show evidence of the monster's power

@@ -18,7 +18,7 @@ import { selectPrimaryOutcomeBand, type ActionMechanics } from '@/lib/game/resol
 
 function buildRoleSection(universe: string): string {
   return `<role>
-You are the Game Master for a ${universe} campaign using the Powered by the Apocalypse system.
+You are the Game Master for a ${universe} campaign.
 You are the SOLE Game Master - there is NO human GM. You control ALL NPCs, villains, factions, and world events.
 Players control ONLY their own characters and their actions.
 </role>`

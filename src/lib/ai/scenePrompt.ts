@@ -98,21 +98,67 @@ GOOD EXAMPLE (ALWAYS DO THIS):
 REMEMBER: If you're describing atmosphere instead of showing action and dialogue, you're doing it WRONG.
 </storytelling_principles>`
 
+// The scene progress ledger (see prisma/schema.prisma's Scene.progressState
+// and worldUpdaters/sceneProgress.ts): an explicit record of what THIS
+// scene has already established and resolved, read back into the prompt
+// instead of the model re-deriving it from raw prose each exchange — the
+// actual root cause behind repeated descriptions and re-explained facts
+// (see STORYTELLING_PRINCIPLES's sibling pacing comment below for the
+// specific reported bug this whole mechanism exists to fix).
+function buildSceneProgressLedgerSection(ledger: AIGMRequest['scene_progress_ledger']): string {
+  const lines: string[] = []
+  if (ledger?.established_facts.length) {
+    lines.push(`Already established (do not re-describe or re-explain these — they're known, build on them): ${ledger.established_facts.join('; ')}`)
+  }
+  if (ledger?.resolved_beats.length) {
+    lines.push(`Already resolved this scene (do not revisit or redo these): ${ledger.resolved_beats.join('; ')}`)
+  }
+  if (ledger?.active_conflict) {
+    lines.push(`Current active conflict/tension: ${ledger.active_conflict}`)
+  }
+  if (ledger?.npc_intentions.length) {
+    lines.push(`NPC intentions in play: ${ledger.npc_intentions.map(n => `${n.npc} — ${n.intention}`).join('; ')}`)
+  }
+  const currentState = lines.length > 0 ? lines.join('\n') + '\n\n' : "Nothing recorded yet — this is the scene's first exchange, or nothing significant has happened yet.\n\n"
+  return `<scene_progress_ledger>
+${currentState}This ledger is the authoritative record of what THIS scene has already established/resolved — treat it as fact, not the raw recent-prose excerpt below, which exists only for tone and phrasing continuity. Update it via scene_progress in your response: new_established_facts/new_resolved_beats for anything new (short and atomic — "The bridge is out," not a paragraph), active_conflict when it genuinely changes (omit it if it hasn't changed — repeating the same value is not an update), npc_intentions for any NPC whose immediate goal this scene just changed. A quiet exchange with nothing new to report sends none of this — that's honest, not an error.
+</scene_progress_ledger>`
+}
+
 // A player who reported: "I keep saying 'I comply' to move things along
 // and it's just more of the same." Root cause: the narrator only ever saw
 // a short recent window of prose (recentResolutions in
-// sceneResolutionRequest.ts — since widened; see that file's comment), so
-// nothing told it a scene had run long enough to be stuck — it kept
-// meeting compliance with a fresh complication instead of ever letting the
-// thread pay off. This is the number that lets it notice regardless of how
-// wide that window is. Two thresholds: a first nudge, then a stronger one
-// once it's clearly gone on too long.
-const PACING_NUDGE_THRESHOLD = 8
-const PACING_URGENT_THRESHOLD = 15
+// sceneResolutionRequest.ts) with nothing telling it a scene had run long
+// enough to be stuck — it kept meeting compliance with a fresh
+// complication instead of ever letting the thread pay off.
+//
+// Originally gated on raw exchange count alone, which had two real
+// problems: a scene genuinely progressing (new beats resolving every
+// exchange) got the same pressure as one stuck in a loop, and — worse for
+// the reported symptom of SHORT stuck exchanges — nothing fired at all
+// before exchange 8 regardless of how stuck a scene already was.
+//
+// Now gated on STALL length (exchangesSinceProgress = current exchange -
+// Scene.progressState.lastProgressExchange, see worldUpdaters/
+// sceneProgress.ts) instead of raw count: a scene racking up real
+// progress every exchange never trips this no matter how long it runs,
+// while a genuinely stalled scene gets pressure earlier than the old
+// count-based floor ever could, because it's measuring the actual thing
+// that matters — no progress reported — not just elapsed exchanges.
+const PACING_NUDGE_THRESHOLD = 4
+const PACING_URGENT_THRESHOLD = 8
 
-function buildPacingSection(exchangeNumber: number): string {
-  if (exchangeNumber < PACING_NUDGE_THRESHOLD) return ''
-  const urgent = exchangeNumber >= PACING_URGENT_THRESHOLD
+function buildPacingSection(exchangeNumber: number, lastProgressExchange?: number): string {
+  // No ledger data yet (scene's first exchange, or one created before this
+  // existed) degrades gracefully to the original raw-count behavior —
+  // lastProgressExchange defaults to 0 server-side, so this is really only
+  // ever undefined for a request built before that default existed.
+  const exchangesSinceProgress = exchangeNumber - (lastProgressExchange ?? 0)
+  if (exchangesSinceProgress < PACING_NUDGE_THRESHOLD) return ''
+  const urgent = exchangesSinceProgress >= PACING_URGENT_THRESHOLD
+  const stallDescription = lastProgressExchange
+    ? `${exchangesSinceProgress} exchanges with no new resolved beat and no change to the active conflict (scene_progress — see below) since exchange ${lastProgressExchange}`
+    : `${exchangesSinceProgress} exchanges without resolving`
   if (urgent) {
     // A softer, conditional urgent tier ("if the player has been
     // cooperating... that has to work now") shipped first and still let
@@ -124,11 +170,11 @@ function buildPacingSection(exchangeNumber: number): string {
     // remove the model's room to judge whether the player "really"
     // earned resolution, and make it a rule instead of a suggestion.
     return `<pacing>
-This scene has run ${exchangeNumber} exchanges without resolving — this is unusually long. This is a HARD REQUIREMENT, not a suggestion: end this exchange with the scene's central obstacle fully resolved — the player gets past it, defeats it, talks their way out of it, or it stops mattering. Introducing ANY new complication, delay, obstacle, or redirect this exchange is not permitted, regardless of your own read on whether the player has "really" earned it. Resolve this now — the situation moves forward, cleanly, this exchange.
+This scene has gone ${stallDescription} — this is a real stall, not just a long scene. This is a HARD REQUIREMENT, not a suggestion: end this exchange with the scene's central obstacle fully resolved — the player gets past it, defeats it, talks their way out of it, or it stops mattering. Introducing ANY new complication, delay, obstacle, or redirect this exchange is not permitted, regardless of your own read on whether the player has "really" earned it. Resolve this now — the situation moves forward, cleanly, this exchange. Report the resolution via scene_progress's new_resolved_beats.
 </pacing>`
   }
   return `<pacing>
-This scene has run ${exchangeNumber} exchanges without resolving. If the player has been cooperating, de-escalating, or complying across recent exchanges, that has to actually work now: let the current thread genuinely resolve, or shift to something materially different — not another complication of the same kind. Meeting a player who keeps trying to move things along with an endless string of fresh obstacles is a failure of pacing, not tension.
+This scene has gone ${stallDescription}. If the player has been cooperating, de-escalating, or complying, that has to actually work now: let the current thread genuinely resolve, or shift to something materially different — not another complication of the same kind. Meeting a player who keeps trying to move things along with an endless string of fresh obstacles is a failure of pacing, not tension. Report real progress via scene_progress when it happens — that's what lifts this warning.
 </pacing>`
 }
 
@@ -241,6 +287,12 @@ You MUST respond with a JSON object matching this structure:
       {"character_id": "CHARACTER_NAME", "new_perks": [{"name": "Riposte", "description": "You counter, you don't just block. +1 when you strike back at an opponent who's just missed you.", "tags": ["combat"]}], "new_moves": [{"name": "Read the Room", "trigger": "When you enter a tense negotiation", "description": "You always get one honest tell from the room before anyone speaks."}]}
     ],
     "notes_for_gm": "..."
+  },
+  "scene_progress": {
+    "new_established_facts": ["The bridge is out"],
+    "new_resolved_beats": [{"text": "Persuaded the guard to let them through", "significant": false}],
+    "active_conflict": "Convincing the smuggler to talk before the patrol arrives",
+    "npc_intentions": [{"npc_name_or_id": "Guard Captain", "intention": "Stalling for reinforcements"}]
   }
 }
 </response_format>`
@@ -527,7 +579,8 @@ ${buildCampaignPrinciplesSection(request.ai_system_prompt)}
 ${CRITICAL_INSTRUCTIONS}
 
 ${STORYTELLING_PRINCIPLES}
-${buildPacingSection(request.current_exchange_number ?? 0)}
+${buildSceneProgressLedgerSection(request.scene_progress_ledger)}
+${buildPacingSection(request.current_exchange_number ?? 0, request.last_progress_exchange)}
 ${buildSceneEndingSection(request.is_scene_ending ?? false, request.scene_stakes)}
 
 ${PLAYER_CHARACTER_CONTROL}

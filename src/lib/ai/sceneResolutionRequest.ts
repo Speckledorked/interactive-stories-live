@@ -16,6 +16,7 @@ import { describeZone } from '@/lib/game/zones'
 import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
 import { buildOptimizedWorldSummary, buildWorldSummaryForAI } from './worldSummary'
 import { applyTokenBudget } from './tokenBudget'
+import { parseSceneProgressState } from '@/lib/game/worldUpdaters/sceneProgress'
 
 // Backstop: a real scene reported stuck at 60 exchanges despite
 // scenePrompt.ts's urgent <pacing> tier being a "HARD REQUIREMENT" for
@@ -260,21 +261,44 @@ export async function buildSceneResolutionRequest(
     // PACING_NUDGE_THRESHOLD comment): with a scene's own earlier exchanges
     // gone from the prompt after just 2 more happened, the narrator had no
     // way to know it had already established a fact and would re-explain it
-    // in slightly different words. PACING_NUDGE_THRESHOLD mitigated the
-    // "endless fresh complication" symptom of that but never fixed the
-    // named cause. Widened to 6 now that #117's applyTokenBudget exists as
-    // a real safety net below (it halves current_scene_intro — keeping the
-    // END, i.e. the freshest exchanges — only if the assembled request
-    // actually goes over budget), so this fixed cap no longer has to guess
-    // at a safe number up front.
+    // in slightly different words. Widened to 6 as a mitigation, which
+    // helped the symptom but — as documented at the time — never fixed the
+    // named cause: the model was still reconstructing "what's already
+    // established" purely by re-reading prose.
+    //
+    // Now narrowed back to 3: the scene progress ledger below
+    // (buildSceneProgressLedger, fed by Scene.progressState) is what
+    // actually carries "already established/resolved" forward explicitly,
+    // so raw prose no longer has to do that job by being wide enough to
+    // not scroll a fact out of view — it only needs to carry recent tone
+    // and phrasing for continuity of voice. Cheaper AND more reliable than
+    // the wider window, not a tradeoff between them.
     // Split by the separator used when appending resolutions
     const allResolutions = scene.sceneResolutionText.split('\n\n---\n\n')
-    const recentResolutions = allResolutions.slice(-6)
+    const recentResolutions = allResolutions.slice(-3)
 
     if (recentResolutions.length > 0) {
       sceneContext += '\n\n## What Has Happened Recently:\n\n' + recentResolutions.join('\n\n---\n\n')
     }
   }
+
+  // Scene progress ledger: explicit "already established/resolved" state,
+  // read back so the model stops re-deriving it from the (now-narrower)
+  // raw prose window above. See worldUpdaters/sceneProgress.ts.
+  const progressState = parseSceneProgressState(scene.progressState)
+  const hasProgressLedger =
+    progressState.establishedFacts.length > 0 ||
+    progressState.resolvedBeats.length > 0 ||
+    progressState.activeConflict !== null ||
+    Object.keys(progressState.npcIntentions).length > 0
+  const sceneProgressLedger = hasProgressLedger
+    ? {
+        established_facts: progressState.establishedFacts,
+        resolved_beats: progressState.resolvedBeats.map((b) => b.text),
+        active_conflict: progressState.activeConflict,
+        npc_intentions: Object.entries(progressState.npcIntentions).map(([npc, intention]) => ({ npc, intention })),
+      }
+    : undefined
 
   // RAG Memory Retrieval: Get relevant campaign history
   // OPTIMIZATION: Reuse entities already fetched in world summary to avoid duplicate queries
@@ -477,6 +501,8 @@ export async function buildSceneResolutionRequest(
     action_mechanics: actionMechanics,
     current_exchange_number: scene.currentExchange ?? 0,
     scene_stakes: scene.stakes,
-    is_scene_ending: effectiveIsSceneEnding
+    is_scene_ending: effectiveIsSceneEnding,
+    scene_progress_ledger: sceneProgressLedger,
+    last_progress_exchange: progressState.lastProgressExchange
   }
 }

@@ -6,6 +6,7 @@ import {
   AIGMResponseSchema,
   MinimalAIResponseSchema,
   TimePassageSchema,
+  SceneProgressSchema,
   WorldTurnResponseSchema,
   WorldTurnNarrativeOnlySchema,
   WorldUpdatesSchema,
@@ -13,6 +14,7 @@ import {
   type WorldTurnResponseValidated,
   type WorldUpdates,
   type TimePassage,
+  type SceneProgress,
 } from './schema'
 import type { AIGMResponse } from './client'
 import { prisma } from '@/lib/prisma'
@@ -27,8 +29,8 @@ import { prisma } from '@/lib/prisma'
 // levels actually produce now.
 export type ValidationResult =
   | { success: true; data: AIGMResponseValidated; level: 'full' }
-  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates>; time_passage?: TimePassage }; level: 'partial' }
-  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates>; time_passage?: TimePassage }; level: 'emergency'; template: string }
+  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates>; time_passage?: TimePassage; scene_progress?: SceneProgress }; level: 'partial' }
+  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates>; time_passage?: TimePassage; scene_progress?: SceneProgress }; level: 'emergency'; template: string }
   | { success: false; error: string; rawData?: any }
 
 /**
@@ -158,7 +160,13 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
         // say) while still having reported perfectly good time_passage —
         // that shouldn't cost the world-turn clock a bank it actually
         // earned. See extractValidTimePassage.
-        time_passage: extractValidTimePassage((rawResponse as any)?.time_passage)
+        time_passage: extractValidTimePassage((rawResponse as any)?.time_passage),
+        // Same reasoning again for scene_progress (#164 cluster): losing a
+        // beat/fact report to an unrelated schema failure elsewhere in the
+        // response would silently stall the ledger's continuity tracking
+        // the exact way an un-salvaged time_passage once stalled the
+        // world-turn clock. See extractValidSceneProgress.
+        scene_progress: extractValidSceneProgress((rawResponse as any)?.scene_progress)
       },
       level: 'partial'
     }
@@ -177,7 +185,8 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
       data: {
         scene_text: extractedText,
         world_updates: extractValidWorldUpdates((rawResponse as any)?.world_updates),
-        time_passage: extractValidTimePassage((rawResponse as any)?.time_passage)
+        time_passage: extractValidTimePassage((rawResponse as any)?.time_passage),
+        scene_progress: extractValidSceneProgress((rawResponse as any)?.scene_progress)
       },
       level: 'partial'
     }
@@ -195,7 +204,8 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
       // Still worth salvaging even here: the response was unusable as
       // prose, but if it happened to carry a valid time_passage, the
       // world-turn clock shouldn't stall just because the narration did.
-      time_passage: extractValidTimePassage((rawResponse as any)?.time_passage)
+      time_passage: extractValidTimePassage((rawResponse as any)?.time_passage),
+      scene_progress: extractValidSceneProgress((rawResponse as any)?.scene_progress)
     },
     level: 'emergency',
     template: 'default'
@@ -213,6 +223,20 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
  */
 export function extractValidTimePassage(rawTimePassage: unknown): TimePassage | undefined {
   const parsed = TimePassageSchema.safeParse(rawTimePassage)
+  return parsed.success ? parsed.data : undefined
+}
+
+/**
+ * Salvage a valid scene_progress independently of the rest of the
+ * response. Same reasoning as extractValidTimePassage: a response can fail
+ * full validation over a field that has nothing to do with the scene's
+ * progress ledger while still having reported perfectly good facts/beats —
+ * the degradation ladder shouldn't cost scene continuity tracking a report
+ * it actually earned just because something else in the same response was
+ * malformed.
+ */
+export function extractValidSceneProgress(rawSceneProgress: unknown): SceneProgress | undefined {
+  const parsed = SceneProgressSchema.safeParse(rawSceneProgress)
   return parsed.success ? parsed.data : undefined
 }
 

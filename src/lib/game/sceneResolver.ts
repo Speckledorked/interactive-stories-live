@@ -9,6 +9,7 @@ import { formatInGameDate, type GeneratedCalendar } from './calendar'
 import { resolveLegacyCalendar } from './calendarBackfill'
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
 import { applyWorldUpdates, summarizeWorldUpdates, enrichStubNPCs, enrichStubFactions } from './stateUpdater'
+import { applySceneProgress } from './worldUpdaters/sceneProgress'
 import { SceneStatus } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
 import { needsIntervention } from './campaignHealthBands'
@@ -276,6 +277,48 @@ async function performResolution(
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')
     const { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber)
+
+    // 6.05. Apply the scene progress ledger — what this exchange
+    // established/resolved, replacing re-derivation from raw prose (see
+    // prisma/schema.prisma's Scene.progressState comment). Not part of
+    // applyWorldUpdates's transaction: this is Scene-level bookkeeping, not
+    // an entity-state write, and (like wiki sync/image enqueue below) must
+    // never be able to fail the scene resolution itself.
+    try {
+      const { progressState, newSignificantBeats } = applySceneProgress(
+        scene.progressState,
+        aiResponse.scene_progress,
+        aiRequest.current_exchange_number ?? 0
+      )
+      await prisma.scene.update({
+        where: { id: sceneId },
+        data: { progressState: progressState as any }
+      })
+      // Significant beats become real history — the same story log/wiki
+      // surface any other notable timeline event reaches, not a new
+      // player-facing concept. isOffscreen: false because this happened in
+      // a scene the party was actually in, unlike a background tick event.
+      for (const beatText of newSignificantBeats) {
+        await prisma.timelineEvent.create({
+          data: {
+            campaignId,
+            turnNumber: currentTurn,
+            title: truncateWithEllipsis(beatText, 80),
+            summaryPublic: beatText,
+            summaryGM: beatText,
+            isOffscreen: false,
+            visibility: 'PUBLIC',
+            inGameDayNumber
+          }
+        })
+      }
+      if (newSignificantBeats.length > 0) {
+        console.log(`📜 ${newSignificantBeats.length} significant beat(s) recorded to the timeline`)
+      }
+      console.log('📒 Scene progress ledger updated')
+    } catch (progressError) {
+      console.error('⚠️  Scene progress ledger update failed (non-critical):', progressError)
+    }
 
     // 6.1. Enrich any stub NPCs/factions auto-created mid-scene (non-blocking, best-effort)
     enrichStubNPCs(campaignId, aiResponse.scene_text).catch(err =>

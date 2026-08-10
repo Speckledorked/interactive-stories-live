@@ -14,6 +14,7 @@ import { circuitBreakerManager } from './circuit-breaker'
 import { AICostTracker, estimateTokenCount, recordAICost } from './cost-tracker'
 import { AI_MODELS } from './models'
 import { AMBITION_CATEGORY_OPTIONS } from '@/lib/game/tick/ambitionTick'
+import type { SceneProgress } from './schema'
 
 // Re-exported for existing importers — buildSystemPrompt/buildUserPrompt now
 // live in scenePrompt.ts, broken into one function/constant per <tag>
@@ -47,6 +48,13 @@ export interface AIGMResponse {
     hours?: number // Hours elapsed (in addition to days)
     description?: string // Optional: describe the time passage (e.g., "Several hours later", "The next morning")
   }
+  // Scene progress ledger (see prisma/schema.prisma's Scene.progressState
+  // and lib/game/worldUpdaters/sceneProgress.ts) — what this exchange
+  // established/resolved, and the scene's current active conflict/NPC
+  // intentions. Applied by sceneResolver.ts alongside world_updates, not
+  // inside applyWorldUpdates's transaction — it's scene-level bookkeeping,
+  // not an entity-state write.
+  scene_progress?: SceneProgress
   world_updates: {
     new_timeline_events?: Array<{
       title: string
@@ -531,6 +539,26 @@ export interface AIGMRequest {
   // "pacing suggests wrapping up," but "this scene ends now regardless."
   // Drives <scene_ending> in scenePrompt.ts.
   is_scene_ending?: boolean
+  // The scene progress ledger, read back into the prompt (see
+  // prisma/schema.prisma's Scene.progressState and
+  // worldUpdaters/sceneProgress.ts) — an explicit, bounded record of
+  // what's already established/resolved/in-play, instead of the model
+  // re-deriving it from raw prose. Undefined for a scene's first exchange
+  // (nothing to report yet) or one created before this existed.
+  scene_progress_ledger?: {
+    established_facts: string[]
+    resolved_beats: string[]
+    active_conflict: string | null
+    npc_intentions: Array<{ npc: string; intention: string }>
+  }
+  // The exchange number scene_progress_ledger's state last actually
+  // changed (a new beat, or active_conflict genuinely updating) — see
+  // SceneProgressState.lastProgressExchange. buildPacingSection compares
+  // this against current_exchange_number to detect a real stall (no
+  // progress for N exchanges) instead of only ever reacting to raw
+  // exchange count, which gives zero pressure at all before exchange 8
+  // regardless of how stuck a scene already is.
+  last_progress_exchange?: number
 }
 
 // Prompt-caching params for a scene-resolution call. Scoped per campaign,

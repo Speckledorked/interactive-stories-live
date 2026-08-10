@@ -1597,6 +1597,28 @@ model Scene {
   // Phase 14: Consequence tracking per scene
   consequences Json? // { created?: string[], resolved?: string[], relationshipChanges?: object[] }
 
+  // Scene progress ledger: what's already been established/resolved in
+  // THIS scene, reported by the narrator each exchange and read back into
+  // the next prompt — replaces re-deriving "what's already happened" from
+  // re-reading raw prose (see lib/game/worldUpdaters/sceneProgress.ts and
+  // scenePrompt.ts's buildSceneProgressLedgerSection). Two shapes in
+  // one object, deliberately not conflated (see BUG-012's event/state
+  // distinction in the tracking issue):
+  //   establishedFacts / resolvedBeats — APPEND-ONLY LOGS (events), each
+  //     bounded (MAX_ESTABLISHED_FACTS / MAX_RESOLVED_BEATS in
+  //     sceneProgress.ts), oldest trimmed first.
+  //   activeConflict / npcIntentions — CURRENT VALUE (state), overwritten
+  //     wholesale each time the model reports a new one, never appended.
+  //   lastProgressExchange — the exchange number real progress last
+  //     happened (a new beat, or activeConflict actually changing) — the
+  //     stall-detection signal buildPacingSection uses instead of raw
+  //     exchange count.
+  // Shape: { establishedFacts: string[], resolvedBeats: [{exchange,text,
+  // significant}], activeConflict: string|null, npcIntentions: {[name]:
+  // string}, lastProgressExchange: number }. Null for scenes created
+  // before this existed or before their first exchange resolves.
+  progressState Json?
+
   // Phase 9: Turn tracking
   waitingOnUsers Json? // Array of user IDs who need to act
 

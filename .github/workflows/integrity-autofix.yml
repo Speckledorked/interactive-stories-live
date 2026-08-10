@@ -4,14 +4,29 @@
 # deliberate choice, not an oversight; read on for what replaces a human.
 #
 # NOT YET ENABLED FOR AUTOPILOT — read this before turning on the
-# `schedule` trigger below. This workflow is a real, working draft. Its
-# interface against anthropics/claude-code-action HAS been verified against
-# that project's own README/docs/usage.md/docs/configuration.md (current as
-# of this writing: v1, composite action, `prompt` + `anthropic_api_key` +
-# `claude_args` inputs, explicitly supports scheduled/automated runs with a
-# direct prompt and no human @mention, and has NO bash/git access by default
-# — the `--allowedTools` grant below is what it actually gets). One thing
-# still needs to happen before this can run for real:
+# `schedule` trigger below. VERIFIED, not just designed: fired manually
+# (workflow_dispatch) 12 times against a real, deliberately seeded bug
+# (character.relationships.keys.resolve — see docs/ARCHITECTURE.md's
+# Scorecard row for this pipeline and its Known Bugs entries), the last of
+# which diagnosed, drafted, verified, pushed, opened, and merged a real fix
+# (PR #153) with zero human involvement in the merge decision. Getting
+# there found and fixed 8 real defects in this workflow's own plumbing —
+# not the app bug it was diagnosing — each one documented in
+# docs/ARCHITECTURE.md's Known Bugs table rather than just fixed and
+# forgotten: a missing id-token: write permission, claude-code-action's
+# own OIDC exchange clobbering the checkout step's git credential, a
+# script-injection path from splicing campaign-derived evidence text
+# directly into a run: script via ${{ }} instead of env:, gh label create
+# needing issues: write (not covered by pull-requests: write), that same
+# label's prefix exceeding GitHub's 50-character label-name limit, a
+# --max-turns budget that was tight-to-insufficient on every real run, the
+# repository's own "Allow GitHub Actions to create and approve pull
+# requests" setting never having been enabled, and a prompt gap that let a
+# genuinely correct fix go unmerged for lack of diff-carried proof.
+#
+# What's left is a decision, not a defect: cadence (daily? less often?)
+# and comfort level, not correctness. Left commented out until that
+# decision is made on purpose, not because anything above is still broken.
 #
 #   Repo secrets this workflow reads and does not create:
 #     - PRODUCTION_DATABASE_URL_READONLY — read access to real campaign
@@ -63,9 +78,10 @@
 name: Integrity auto-fix
 
 on:
-  # Uncomment once secrets are set and this has been fired manually
-  # (workflow_dispatch, below) at least once against a real, deliberately
-  # seeded escalation.
+  # The manual-verification prerequisite this comment used to require is
+  # done — see the header above. Left commented out on purpose: uncomment
+  # when you've decided you actually want this running unattended, not as
+  # a leftover blocker.
   # schedule:
   #   - cron: '0 8 * * *'  # daily, offset from the app's own 06:00 UTC world-tick sweep (vercel.json)
   workflow_dispatch: {}

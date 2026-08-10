@@ -456,6 +456,33 @@ export const TimePassageSchema = z.object({
   message: 'time_passage must report at least one of days or hours — use 0 if truly no time passed (e.g. mid-conversation), never omit it',
 })
 
+// Scene progress ledger (see prisma/schema.prisma's Scene.progressState
+// comment and lib/game/worldUpdaters/sceneProgress.ts). Two shapes,
+// deliberately not conflated:
+//   new_established_facts / new_resolved_beats — EVENTS, appended to the
+//     scene's running log. Short and atomic on purpose: "The bridge is
+//     out," not a paragraph.
+//   active_conflict / npc_intentions — STATE, the CURRENT value, replaced
+//     wholesale each time (never appended) — omit active_conflict entirely
+//     when it hasn't changed since last exchange rather than repeating it.
+// All optional: a quiet exchange with nothing new to report sends none of
+// this, which is itself meaningful (see lastProgressExchange in the
+// applier — no progress reported is a real stall signal, not an error).
+export const SceneProgressSchema = z.object({
+  new_established_facts: z.array(z.string().max(SHORT_TEXT)).optional(),
+  new_resolved_beats: z.array(z.object({
+    text: z.string().max(MEDIUM_TEXT),
+    // Significant beats also become a real TimelineEvent (story log/wiki),
+    // same bar as any other notable moment — most beats aren't.
+    significant: z.boolean().optional()
+  })).optional(),
+  active_conflict: z.string().max(MEDIUM_TEXT).optional(),
+  npc_intentions: z.array(z.object({
+    npc_name_or_id: z.string().max(SHORT_TEXT),
+    intention: z.string().max(MEDIUM_TEXT)
+  })).optional()
+})
+
 // Full AI GM response schema
 export const AIGMResponseSchema = z.object({
   scene_text: z.string().min(50, "Scene text must be at least 50 characters"),
@@ -488,7 +515,10 @@ export const AIGMResponseSchema = z.object({
   // through the same reformat-and-retry loop as any other schema
   // violation (validation.ts) instead of resolving successfully.
   time_passage: TimePassageSchema,
-  world_updates: WorldUpdatesSchema
+  world_updates: WorldUpdatesSchema,
+  // Optional — see SceneProgressSchema's own comment for why "nothing
+  // reported" is meaningful rather than treated as a missing field.
+  scene_progress: SceneProgressSchema.optional()
 })
 
 // Minimal fallback schema - just scene text
@@ -558,6 +588,7 @@ export type AIGMResponseValidated = z.infer<typeof AIGMResponseSchema>
 export type MinimalAIResponse = z.infer<typeof MinimalAIResponseSchema>
 export type WorldUpdates = z.infer<typeof WorldUpdatesSchema>
 export type TimePassage = z.infer<typeof TimePassageSchema>
+export type SceneProgress = z.infer<typeof SceneProgressSchema>
 export type PCChanges = z.infer<typeof PCChangesSchema>
 export type RelationshipChange = z.infer<typeof RelationshipChangeSchema>
 export type OrganicAdvancement = z.infer<typeof OrganicAdvancementSchema>

@@ -127,9 +127,14 @@ describe('buildSystemPrompt — consequences (promises/enemies/threats) get call
 
 describe('buildSystemPrompt — long-scene pacing pressure', () => {
   // A player reported: "I keep saying 'I comply' to move things along and
-  // it's just more of the same." Root cause: the narrator only ever sees
-  // its last 2 exchanges of prose, so nothing told it a scene had run long
-  // enough to be stuck in a loop of manufactured complications.
+  // it's just more of the same." Root cause: pacing pressure used to be
+  // gated purely on raw exchange count, so nothing told the model a scene
+  // was actually STALLED versus just long. It's now gated on
+  // exchangesSinceProgress (current exchange minus
+  // Scene.progressState.lastProgressExchange, see worldUpdaters/
+  // sceneProgress.ts) — these requests never set last_progress_exchange,
+  // so it falls back to the original raw-count behavior (stall = exchange
+  // number - 0).
   function makeRequestWithExchange(exchangeNumber: number): AIGMRequest {
     return {
       campaign_universe: 'Test Universe',
@@ -149,14 +154,14 @@ describe('buildSystemPrompt — long-scene pacing pressure', () => {
   })
 
   it('nudges toward resolution once a scene crosses the first threshold', () => {
-    const prompt = buildSystemPrompt(makeRequestWithExchange(8))
+    const prompt = buildSystemPrompt(makeRequestWithExchange(5))
     expect(prompt).toContain('<pacing>')
     expect(prompt).toMatch(/let the current thread genuinely resolve/i)
   })
 
   it('escalates to an urgent resolve-now instruction well past the threshold', () => {
     const prompt = buildSystemPrompt(makeRequestWithExchange(15))
-    expect(prompt).toMatch(/unusually long/i)
+    expect(prompt).toMatch(/real stall, not just a long scene/i)
     expect(prompt).toMatch(/Resolve this now/i)
   })
 

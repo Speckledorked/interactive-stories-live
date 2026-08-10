@@ -117,8 +117,22 @@ export async function createSceneMemory(
   }
 
   try {
-    // Extract summary (first 3-4 sentences)
-    const summary = extractSummary(scene.sceneResolutionText);
+    // Prefer THIS exchange's newly-reported beats (scene_progress.
+    // new_resolved_beats — real, deliberately atomic statements of what
+    // just happened) over the old "first 3 sentences of raw prose"
+    // heuristic, which just as often grabbed scene-setting description as
+    // an actual plot beat. Deliberately the NEW beats only, not the whole
+    // accumulated Scene.progressState ledger — this function runs once per
+    // exchange, so summarizing the full running ledger every time would
+    // make each later exchange's memory re-list everything all over again.
+    // Falls back to the prose heuristic when nothing new was reported
+    // (created before this existed, or a genuinely quiet exchange).
+    const newBeats: string[] = (aiResponse?.scene_progress?.new_resolved_beats || [])
+      .map((b: any) => (typeof b?.text === 'string' ? b.text : null))
+      .filter((t: string | null): t is string => !!t);
+    const summary = newBeats.length > 0
+      ? newBeats.join('. ') + '.'
+      : extractSummary(scene.sceneResolutionText);
 
     // Determine importance based on scene type and stakes
     const importance = determineImportance(scene, aiResponse);

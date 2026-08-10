@@ -65,7 +65,7 @@ export function WorldChronicle({
         </Link>
         {' · '}
         <Link href={`/campaigns/${campaignId}/wiki?type=CLOCK`} className="hover:text-myth-ink hover:underline">
-          Clocks
+          Threads
         </Link>
         {' · '}
         <Link href={`/campaigns/${campaignId}/wiki`} className="hover:text-myth-ink hover:underline">

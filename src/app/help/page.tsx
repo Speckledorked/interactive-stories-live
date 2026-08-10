@@ -178,7 +178,7 @@ export default function HelpPage() {
               { icon: '🎲', title: 'Turn Order', desc: 'Play is simultaneous by default — everyone acts anytime. Any player can turn on an optional turn queue for a scene that wants it' },
               { icon: '📝', title: 'Notes', desc: 'Take private or shared notes to track NPCs, clues, and plot points' },
               { icon: '🗺️', title: 'Maps', desc: 'AI-generated tactical maps with zones and character tokens' },
-              { icon: '📚', title: 'Wiki', desc: 'Track NPCs, factions, and progress clocks automatically updated by MythOS' },
+              { icon: '📚', title: 'Wiki', desc: 'Track NPCs, factions, and progress threads automatically updated by MythOS' },
               { icon: '📜', title: 'Story Log', desc: 'Auto-generated chronicle of your adventure with highlights and timeline' },
               { icon: '📥', title: 'Export', desc: 'Download your campaign data — characters, scenes, factions, and more — as JSON' }
             ].map((feature, index) => (

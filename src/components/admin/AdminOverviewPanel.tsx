@@ -90,7 +90,7 @@ export function AdminOverviewPanel({
       </section>
 
       <section>
-        <SectionHeader title="World Summary" as="h2" description="A live snapshot of what the simulation actually contains right now — NPCs, factions, and clocks — not a static list you maintain by hand." />
+        <SectionHeader title="World Summary" as="h2" description="A live snapshot of what the simulation actually contains right now — NPCs, factions, and threads — not a static list you maintain by hand." />
         <div className="mt-3">
           <WorldStateDashboard campaignId={campaignId} npcs={npcs} factions={factions} clocks={clocks} worldNotes={worldNotes} />
         </div>

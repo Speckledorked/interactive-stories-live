@@ -146,7 +146,7 @@ export default function ClockProgress({
           onClick={onTick}
           className="w-full mt-4 px-4 py-2 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded-lg transition-colors font-medium text-sm"
         >
-          + Advance Clock
+          + Advance Thread
         </button>
       )}
 

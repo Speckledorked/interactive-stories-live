@@ -146,7 +146,7 @@ export default function WikiPage() {
     { key: 'NPC', label: 'NPCs', icon: '👤' },
     { key: 'FACTION', label: 'Factions', icon: '⚔️' },
     { key: 'LOCATION', label: 'Locations', icon: '🏛️' },
-    { key: 'CLOCK', label: 'Clocks', icon: '⏰' },
+    { key: 'CLOCK', label: 'Threads', icon: '⏰' },
     { key: 'ITEM', label: 'Items', icon: '🎒' },
     { key: 'QUEST', label: 'Quests', icon: '📜' },
     { key: 'RUMORS', label: 'Rumors', icon: '🗣️' },

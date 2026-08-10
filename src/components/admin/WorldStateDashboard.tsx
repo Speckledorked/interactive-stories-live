@@ -157,9 +157,9 @@ export default function WorldStateDashboard({
           )}
         </Panel>
 
-        <Panel icon={ClockIcon} title="Active Clocks" count={clocks.length}>
+        <Panel icon={ClockIcon} title="Active Threads" count={clocks.length}>
           {clocks.length === 0 ? (
-            <p className="text-sm italic text-myth-ink-faint">No active clocks</p>
+            <p className="text-sm italic text-myth-ink-faint">No active threads</p>
           ) : (
             clocks.map((clock) => <CompactClock key={clock.id} name={clock.name} current={clock.current} max={clock.max} />)
           )}
@@ -190,7 +190,7 @@ export default function WorldStateDashboard({
         </div>
         <div className={`rounded-lg border p-5 text-center ${criticalClocks > 0 ? 'border-myth-warn/40' : 'border-myth-border'}`}>
           <div className={`font-display text-3xl font-semibold ${criticalClocks > 0 ? 'text-myth-warn' : 'text-myth-ink'}`}>{criticalClocks}</div>
-          <div className="mt-1 text-xs text-myth-ink-faint">Critical Clocks</div>
+          <div className="mt-1 text-xs text-myth-ink-faint">Critical Threads</div>
         </div>
         <div className="rounded-lg border border-myth-border p-5 text-center">
           <div className="font-display text-3xl font-semibold text-myth-ink">{worldNotes.length}</div>

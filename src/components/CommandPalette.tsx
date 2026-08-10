@@ -82,10 +82,10 @@ export default function CommandPalette({
       cmds.push({
         id: 'nav-wiki',
         name: 'Open Wiki',
-        description: 'Browse NPCs, factions, and clocks',
+        description: 'Browse NPCs, factions, and threads',
         icon: '📚',
         action: () => router.push(`/campaigns/${campaignId}/wiki`),
-        keywords: ['wiki', 'npcs', 'factions', 'clocks'],
+        keywords: ['wiki', 'npcs', 'factions', 'clocks', 'threads'],
         category: 'navigation'
       })
 

@@ -46,7 +46,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { key: 'npcs', label: 'NPCs' },
       { key: 'factions', label: 'Factions' },
       { key: 'wars', label: 'Wars' },
-      { key: 'clocks', label: 'Clocks' },
+      { key: 'clocks', label: 'Threads' },
       { key: 'locations', label: 'Locations' },
       { key: 'lore', label: 'Lore' },
       { key: 'map', label: 'Map' },

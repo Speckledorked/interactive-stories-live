@@ -95,6 +95,11 @@ export default function AITransparencyPanel({
     }
   }
 
+  // Display label for a category — 'clock' shows as "thread" (see the
+  // Clocks->Threads rename); every other category already reads fine as
+  // its own raw key.
+  const getCategoryLabel = (category: string) => (category === 'clock' ? 'thread' : category)
+
   // Get impact badge — the one place per-change color legitimately
   // carries meaning (severity), on real semantic tokens.
   const getImpactBadge = (impact?: 'minor' | 'moderate' | 'major') => {
@@ -191,7 +196,7 @@ export default function AITransparencyPanel({
             >
               <span className="text-lg">{getCategoryIcon(category)}</span>
               <span className="text-sm font-medium uppercase tracking-wide text-myth-ink-muted">
-                {category}
+                {getCategoryLabel(category)}
               </span>
               <span className="text-xs text-myth-ink-faint">
                 ({categoryChanges.length})

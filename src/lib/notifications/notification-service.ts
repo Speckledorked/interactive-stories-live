@@ -292,7 +292,7 @@ export class NotificationService {
         
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #e5e7eb;">
         <p style="font-size: 12px; color: #6b7280;">
-          This notification was sent from your AI Game Master application. 
+          This notification was sent from your MythOS application.
           <a href="/settings/notifications">Update notification preferences</a>
         </p>
       </div>

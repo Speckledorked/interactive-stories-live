@@ -61,7 +61,7 @@ export class EmailService {
 
     try {
       const mailOptions = {
-        from: `"AI Game Master" <${process.env.SMTP_USER}>`,
+        from: `"MythOS" <${process.env.SMTP_USER}>`,
         to: params.to,
         subject: params.subject,
         html: params.html,
@@ -84,7 +84,7 @@ export class EmailService {
 
   // Send welcome email to new users
   static async sendWelcomeEmail(userEmail: string, userName: string) {
-    const subject = '🎮 Welcome to AI Game Master!';
+    const subject = '🎮 Welcome to MythOS!';
     const html = this.buildWelcomeEmailTemplate(userName);
 
     return await this.sendEmail({
@@ -178,14 +178,14 @@ export class EmailService {
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 20px;">
         <div style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #1e40af; margin: 0; font-size: 28px;">🎮 AI Game Master</h1>
+            <h1 style="color: #1e40af; margin: 0; font-size: 28px;">🎮 MythOS</h1>
             <p style="color: #64748b; margin: 10px 0 0 0;">Your AI-powered tabletop RPG experience</p>
           </div>
 
           <h2 style="color: #1e3a8a;">Welcome, ${userName}!</h2>
-          
+
           <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-            You've successfully joined the future of tabletop RPGs! Our AI Game Master is ready to create 
+            You've successfully joined the future of tabletop RPGs! MythOS is ready to create
             unlimited adventures, manage complex campaigns, and bring your stories to life.
           </p>
 
@@ -321,7 +321,7 @@ export class EmailService {
           <h1 style="color: #dc2626; margin: 0 0 20px 0; font-size: 24px;">🔒 Password Reset</h1>
           
           <p style="color: #374151; line-height: 1.6;">
-            You requested a password reset for your AI Game Master account. 
+            You requested a password reset for your MythOS account.
             Click the button below to create a new password:
           </p>
 

@@ -250,7 +250,7 @@ export default function NotificationSettings() {
     <div className="max-w-2xl mx-auto p-6 space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-myth-ink mb-2">Notification Settings</h1>
-        <p className="text-myth-ink-muted">Customize how you receive notifications from your AI Game Master.</p>
+        <p className="text-myth-ink-muted">Customize how you receive notifications from MythOS.</p>
       </div>
 
       {/* Email Notifications */}

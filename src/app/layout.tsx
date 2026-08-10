@@ -10,8 +10,8 @@ import { fontDisplay, fontSans, fontMono } from '@/lib/fonts'
 
 export const metadata: Metadata = {
   metadataBase: new URL(getAppUrl()),
-  title: 'MythOS - Automated Game Master',
-  description: 'The world remembers. Play tabletop RPGs with an AI Game Master.',
+  title: 'MythOS',
+  description: 'The world remembers. Play tabletop RPGs with MythOS.',
   openGraph: {
     title: 'MythOS',
     description: 'The world remembers.',

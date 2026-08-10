@@ -159,7 +159,7 @@ export default function CharacterSnapshotModal({
                 </div>
               )}
               <div className="text-xs">
-                <span className="text-myth-ink-faint">Harm: </span>
+                <span className="text-myth-ink-faint">Health: </span>
                 <span className={`font-semibold ${character.harm >= 4 ? 'text-myth-danger' : character.harm >= 2 ? 'text-myth-warn' : 'text-myth-good'}`}>
                   {character.harm}/6
                 </span>

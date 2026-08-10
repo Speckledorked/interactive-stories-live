@@ -131,7 +131,7 @@ export default function AITransparencyPanel({
       </div>
 
       <p className="text-sm text-myth-ink-muted mb-4">
-        The AI GM made the following changes to the world state during this scene:
+        MythOS made the following changes to the world state during this scene:
       </p>
 
       {adherence && (adherence.matched + adherence.mismatched + adherence.unreported + adherence.ambiguous) > 0 && (

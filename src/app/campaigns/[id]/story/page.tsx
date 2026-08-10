@@ -400,7 +400,7 @@ export default function StoryPage() {
     // Listen for scene resolution starting
     channel.bind('scene:resolving', (data: any) => {
       console.log('Scene resolving:', data)
-      setResolvingMessage(data.message || 'The AI GM is processing your actions...')
+      setResolvingMessage(data.message || 'MythOS is processing your actions...')
       setError('') // Clear any previous errors
       // Refresh to show RESOLVING status
       loadData()
@@ -421,7 +421,7 @@ export default function StoryPage() {
       setResolvingMessage('') // Clear resolving message
       const isTimeout = data.error?.includes('timeout') || data.errorType === 'TimeoutError'
       const message = isTimeout
-        ? `The AI GM took too long to respond. This can happen during high load. The scene is ready to try again.`
+        ? `MythOS took too long to respond. This can happen during high load. The scene is ready to try again.`
         : `Scene resolution encountered an issue: ${data.error}. The scene is ready to try again.`
       setError(message)
       loadData()

@@ -337,7 +337,7 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
         <SectionHeader
           as="h2"
           title="Import Lore"
-          description="Reference material the AI GM can draw on during play — a world bible, faction writeups, a wiki page, or an entire fan wiki. Wiki crawling only works for MediaWiki-based sites (Fandom, wiki.gg, Wikipedia, etc); give it any page URL on the wiki and it finds the rest itself."
+          description="Reference material MythOS can draw on during play — a world bible, faction writeups, a wiki page, or an entire fan wiki. Wiki crawling only works for MediaWiki-based sites (Fandom, wiki.gg, Wikipedia, etc); give it any page URL on the wiki and it finds the rest itself."
         />
         <div className="mt-3 rounded-lg border border-myth-border bg-myth-surface p-4">
         <div className="mb-3 flex gap-2">

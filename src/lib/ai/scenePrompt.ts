@@ -709,6 +709,22 @@ ${lore.map(l =>
 ` : ''
 }
 
+// A player who reported a scene stuck repeating the same exposition also
+// reported explicitly asking to "timeskip past all of this boring stuff" —
+// and the game kept narrating through it anyway for dozens more exchanges.
+// The model already sees this verbatim in action_text; the gap was that
+// nothing told it a request like this is binding, the same way a roll
+// outcome or a corruption surge is binding, rather than one more thing to
+// weigh against its own pacing judgment. Deliberately narrow to
+// unambiguous meta-pacing terms ("timeskip", "fast forward") that have no
+// plausible in-fiction reading — "skip past the guard" stays ordinary
+// prose, not a signal.
+const SKIP_REQUEST_PATTERN = /\btime[- ]?skip(?:ping)?\b|\bfast[- ]?forward(?:ing)?\b|\bjump ahead\b/i
+
+export function detectsSkipRequest(actionText: string): boolean {
+  return SKIP_REQUEST_PATTERN.test(actionText)
+}
+
 function buildPlayerActionsSection(playerActions: AIGMRequest['player_actions']): string {
   return playerActions.map(a => {
     // Not quote-wrapped like a dialogue line on purpose — see
@@ -723,6 +739,9 @@ function buildPlayerActionsSection(playerActions: AIGMRequest['player_actions'])
       if (a.mechanics.corruption_surge) {
         lines.push(`  → CORRUPTION SURGE: this character ACCEPTED the open bargain — the borrowed power visibly fueled this attempt. Narrate it working, and report corruption_change marks 1 for them (see <corruption>).`)
       }
+    }
+    if (detectsSkipRequest(a.action_text)) {
+      lines.push(`  → PLAYER REQUESTED A TIMESKIP (binding): honor it THIS exchange — compress or skip the intervening content in a sentence or two and move straight to what comes next. Do not narrate one more incremental step toward wrapping up; that is exactly what this request is asking you to stop doing.`)
     }
     return lines.join('\n')
   }).join('\n\n')

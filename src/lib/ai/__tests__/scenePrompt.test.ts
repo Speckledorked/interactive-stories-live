@@ -267,6 +267,48 @@ describe('buildUserPrompt — player actions are not quote-wrapped like dialogue
   })
 })
 
+describe('buildUserPrompt — player-requested timeskip is a binding directive', () => {
+  // A player reported explicitly asking to "timeskip past all of this
+  // boring stuff" and the game kept narrating through it anyway for dozens
+  // more exchanges. The model already sees the request verbatim in
+  // action_text; nothing told it that request is binding rather than one
+  // more thing to weigh against its own pacing judgment.
+  function makeActionRequest(actionText: string): AIGMRequest {
+    return {
+      world_summary: {
+        turn_number: 1,
+        in_game_date: 'Day 1',
+        characters: [], npcs: [], factions: [], clocks: [], recent_timeline_events: [],
+      },
+      current_scene_intro: 'The room is quiet.',
+      player_actions: [{ character_name: 'Kess', action_text: actionText }],
+    } as unknown as AIGMRequest
+  }
+
+  it('flags an explicit "timeskip" request as binding', () => {
+    const prompt = buildUserPrompt(makeActionRequest('I timeskip past all of this boring stuff'))
+    expect(prompt).toMatch(/PLAYER REQUESTED A TIMESKIP \(binding\)/)
+  })
+
+  it('flags "fast forward" and "jump ahead" phrasing too', () => {
+    expect(buildUserPrompt(makeActionRequest('Can we fast forward to the good part'))).toMatch(/PLAYER REQUESTED A TIMESKIP/)
+    expect(buildUserPrompt(makeActionRequest('I jump ahead to tomorrow'))).toMatch(/PLAYER REQUESTED A TIMESKIP/)
+  })
+
+  it('does not flag an ordinary action with no skip language', () => {
+    const prompt = buildUserPrompt(makeActionRequest('I draw my sword and attack'))
+    expect(prompt).not.toMatch(/PLAYER REQUESTED A TIMESKIP/)
+  })
+
+  it('does not false-positive on unrelated in-fiction use of "skip"', () => {
+    // "skip past the guard" reads as ordinary in-fiction movement, not a
+    // meta-pacing request — deliberately not matched (see scenePrompt.ts's
+    // SKIP_REQUEST_PATTERN comment on why this stays narrow).
+    const prompt = buildUserPrompt(makeActionRequest('I skip past the guard while he is distracted'))
+    expect(prompt).not.toMatch(/PLAYER REQUESTED A TIMESKIP/)
+  })
+})
+
 describe('buildUserPrompt — season in the world_state line (#118)', () => {
   function makeUserRequest(season?: string): AIGMRequest {
     return {

@@ -405,11 +405,13 @@ describe('parseHarmState — the one place Character.conditions is read', () => 
       permanentInjuries: [{ name: 'Bad Leg' }],
       deathSaves: 2,
       restHours: 13,
+      conditionHistory: [{ name: 'Restrained', category: 'Physical', appliedAt: 1, resolvedAt: 5 }],
     })).toEqual({
       conditions: [{ name: 'Bleeding' }],
       permanentInjuries: [{ name: 'Bad Leg' }],
       deathSaves: 2,
       restHours: 13,
+      conditionHistory: [{ name: 'Restrained', category: 'Physical', appliedAt: 1, resolvedAt: 5 }],
     })
   })
 

@@ -28,9 +28,11 @@ import {
   performHeroicSacrifice,
   isDying,
   parseHarmState,
+  appendConditionHistory,
   Condition,
   HarmLevel,
-  PermanentInjury
+  PermanentInjury,
+  ResolvedCondition
 } from '../harm'
 import { resolveArmorValue, resolveConsumableHeal } from '../inventory'
 import { applyCapabilityChanges } from '../capabilities'
@@ -201,6 +203,7 @@ export async function applyCharacterChanges(
     let currentConditions: Condition[] = harmState.conditions
     let permanentInjuries: PermanentInjury[] = harmState.permanentInjuries
     let deathSaves: number = harmState.deathSaves
+    let conditionHistory: ResolvedCondition[] = harmState.conditionHistory
     let newIsAlive: boolean | undefined
     let harmMessages: string[] = []
 
@@ -283,6 +286,12 @@ export async function applyCharacterChanges(
           const clearResult = clearCondition(currentConditions, conditionToRemove.id)
           currentConditions = clearResult.updatedConditions
           harmMessages.push(clearResult.message)
+          // #173/BUG-012: the event ("was Restrained") must survive even
+          // after current state stops saying so — clearCondition already
+          // hands back the removed record, this is what actually keeps it.
+          if (clearResult.clearedCondition) {
+            conditionHistory = appendConditionHistory(conditionHistory, clearResult.clearedCondition, currentTurnNumber)
+          }
         }
       }
     }
@@ -448,7 +457,8 @@ export async function applyCharacterChanges(
         ...harmState,
         conditions: currentConditions,
         permanentInjuries,
-        deathSaves
+        deathSaves,
+        conditionHistory
       }
       if (newIsAlive !== undefined) {
         updateData.isAlive = newIsAlive
@@ -678,7 +688,7 @@ export async function applyCharacterChanges(
               currentHarm = healResult.newHarm
               harmMessages.push(`${character.name} uses ${removedItem.name}: ${healResult.message}`)
               updateData.harm = currentHarm
-              updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves }
+              updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves, conditionHistory }
             }
           }
         }
@@ -699,7 +709,7 @@ export async function applyCharacterChanges(
                 currentHarm = healResult.newHarm
                 harmMessages.push(`${character.name} uses ${Math.abs(modify.quantity_delta)}x ${item.name}: ${healResult.message}`)
                 updateData.harm = currentHarm
-                updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves }
+                updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves, conditionHistory }
               }
             }
 

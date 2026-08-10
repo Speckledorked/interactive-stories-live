@@ -6,7 +6,7 @@
 // depends on their exact threshold behavior.
 
 import { describe, it, expect } from 'vitest'
-import { applyHarm, healHarm, canAct, Condition } from '../harm'
+import { applyHarm, healHarm, canAct, Condition, appendConditionHistory, MAX_CONDITION_HISTORY } from '../harm'
 
 describe('applyHarm', () => {
   it('adds damage minus armor reduction, floored at 0', () => {
@@ -99,5 +99,38 @@ describe('canAct', () => {
       rollModifier: -1,
     }
     expect(canAct(0, [stunned])).toBe(true)
+  })
+})
+
+describe('appendConditionHistory (#173/BUG-012)', () => {
+  const restrained: Condition = {
+    id: 'restrained_1',
+    name: 'Restrained',
+    category: 'Physical',
+    description: 'Bound and unable to move freely.',
+    appliedAt: 3,
+  }
+
+  it('records the event even after the condition is no longer current state', () => {
+    const history = appendConditionHistory([], restrained, 7)
+    expect(history).toEqual([{ name: 'Restrained', category: 'Physical', appliedAt: 3, resolvedAt: 7 }])
+  })
+
+  it('appends to existing history rather than replacing it', () => {
+    const first = appendConditionHistory([], restrained, 7)
+    const second = appendConditionHistory(first, { ...restrained, id: 'soaked_1', name: 'Soaking Wet', appliedAt: 8 }, 9)
+    expect(second).toHaveLength(2)
+    expect(second[0].name).toBe('Restrained')
+    expect(second[1].name).toBe('Soaking Wet')
+  })
+
+  it('is bounded, dropping the oldest entries', () => {
+    let history: ReturnType<typeof appendConditionHistory> = []
+    for (let turn = 1; turn <= MAX_CONDITION_HISTORY + 5; turn++) {
+      history = appendConditionHistory(history, { ...restrained, appliedAt: turn }, turn + 1)
+    }
+    expect(history).toHaveLength(MAX_CONDITION_HISTORY)
+    expect(history[history.length - 1].resolvedAt).toBe(MAX_CONDITION_HISTORY + 6)
+    expect(history[0].resolvedAt).toBe(7)
   })
 })

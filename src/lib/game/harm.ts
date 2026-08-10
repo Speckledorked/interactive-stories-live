@@ -69,6 +69,21 @@ export interface Condition {
 }
 
 /**
+ * A resolved condition — the EVENT half of BUG-004/BUG-012's event-vs-
+ * current-state distinction ("the character was restrained" persists even
+ * after "is currently restrained" becomes false). `clearCondition` already
+ * returned the removed record; nothing persisted it, so once a condition
+ * was cleared there was no record it had ever existed. See
+ * `appendConditionHistory` below — the only writer.
+ */
+export interface ResolvedCondition {
+  name: string
+  category: ConditionCategory
+  appliedAt?: number // Turn number when applied, if known
+  resolvedAt: number // Turn number when cleared
+}
+
+/**
  * The persisted contents of `Character.conditions`.
  *
  * This interface used to describe a shape nothing anywhere stored: it
@@ -90,6 +105,14 @@ export interface HarmState {
   permanentInjuries: PermanentInjury[]
   /** Carried in-game hours toward the next point of natural recovery. */
   restHours: number
+  /**
+   * Append-only log of resolved (cleared) conditions — see
+   * `ResolvedCondition`. Bounded like every other append-only field in
+   * this codebase (see `MAX_WIKI_CHANGELOG_ENTRIES`/`MAX_GM_NOTES_HISTORY`);
+   * oldest entries fall off rather than accumulating for the campaign's
+   * whole life.
+   */
+  conditionHistory: ResolvedCondition[]
 }
 
 /**
@@ -276,8 +299,30 @@ export function createDefaultHarmState(): HarmState {
     conditions: [],
     deathSaves: 0,
     permanentInjuries: [],
-    restHours: 0
+    restHours: 0,
+    conditionHistory: []
   }
+}
+
+export const MAX_CONDITION_HISTORY = 20
+
+/**
+ * Append a cleared condition to the resolved-condition log. Pure — the
+ * caller (worldUpdaters/characters.ts) persists the result alongside the
+ * rest of HarmState. Mirrors `appendWikiChangelog`'s bounded-array shape.
+ */
+export function appendConditionHistory(
+  existing: ResolvedCondition[],
+  cleared: Condition,
+  resolvedAtTurn: number
+): ResolvedCondition[] {
+  const entry: ResolvedCondition = {
+    name: cleared.name,
+    category: cleared.category,
+    appliedAt: cleared.appliedAt,
+    resolvedAt: resolvedAtTurn
+  }
+  return [...existing, entry].slice(-MAX_CONDITION_HISTORY)
 }
 
 /**
@@ -304,6 +349,9 @@ export function parseHarmState(value: unknown): HarmState {
   if (Array.isArray(raw.conditions)) state.conditions = raw.conditions as Condition[]
   if (Array.isArray(raw.permanentInjuries)) {
     state.permanentInjuries = raw.permanentInjuries as PermanentInjury[]
+  }
+  if (Array.isArray(raw.conditionHistory)) {
+    state.conditionHistory = raw.conditionHistory as ResolvedCondition[]
   }
 
   const deathSaves = Number(raw.deathSaves)

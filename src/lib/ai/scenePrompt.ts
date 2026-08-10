@@ -203,6 +203,7 @@ You MUST respond with a JSON object matching this structure:
           "harm_damage": 2,
           "harm_healing": 0,
           "conditions_add": [{"name": "Bleeding", "category": "Physical", "description": "...", "mechanicalEffect": "..."}],
+          "conditions_remove": ["Restrained"],
           "location": "New location",
           "relationship_changes": [{"entity_id": "the NPC's real id from the NPCS list, or repeat their exact name if you don't have it", "entity_name": "Guard Captain", "trust_delta": 10, "reason": "Saved their life"}],
           "consequences_add": [{"type": "promise", "description": "Swore to return for the child"}, {"type": "debt", "description": "Vashti's people got them out of the district", "counterparty_name": "Vashti", "counterparty_type": "npc", "direction": "owed_by_character"}],
@@ -210,7 +211,7 @@ You MUST respond with a JSON object matching this structure:
           "equipment_changes": {"weapon": {"action": "remove", "value": "Broken sword"}},
           "inventory_changes": {"items_add": [...], "items_remove": [...], "items_modify": [...]},
           "resource_changes": {"gold_delta": -50, "contacts_add": [...]},
-          "capability_changes": [{"capability_key": "swordplay", "change": "progress", "reason": "Survived a duel"}],
+          "capability_changes": [{"capability_key": "essence-magic", "change": "glimpse", "hint": "Villagers drew power from colored stones", "reason": "Watched the ritual in the square"}, {"capability_key": "swordplay", "change": "progress", "reason": "Survived a duel"}],
           "debt_changes": [{"counterparty_name": "Lord Kessler", "counterparty_type": "npc", "direction": "owed_by_character", "action": "incur", "description": "Smuggled the party out of the city", "reason": "A real favor with expectation of return"}],
           "standing_changes": [{"faction_name": "Thieves Guild", "delta": 1, "reason": "Returned their stolen ledger"}]
         }
@@ -249,7 +250,7 @@ HARM SYSTEM:
 - 6-segment harm track (0-6): 0-3 Fine | 4-5 Impaired (-1 to rolls) | 6 Taken Out
 - Apply harm_damage when hurt in combat/danger, harm_healing when resting/treated
 - Add conditions: Physical (Bleeding, Stunned), Emotional (Terrified), Special (Cursed)
-- Remove conditions when narratively appropriate
+- A condition is not permanent unless the fiction says so — every condition you add, actively track for its own resolution. When the scene shows its cause going away (the wound gets bound, the ropes come off, the terror passes, the curse is lifted), call conditions_remove that same exchange. Don't wait to be asked, and don't leave a condition sitting on the sheet once its story reason is gone — a character who dried off is not still "Soaking Wet."
 - NPCs have the same 0-6 harm track for real physical harm (see NPC HARM under REGISTER NEW NPCs below) — but no conditions/death-saves/dying state; they're just fine, impaired, or taken out
 
 MEDICAL TREATMENT: When someone (PC or NPC) tends a hurt character's

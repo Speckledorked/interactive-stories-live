@@ -43,6 +43,8 @@ export interface AppliedWorldUpdates {
   involvedNpcIds: string[]
   /** Faction IDs actually resolved/created while applying faction_changes. */
   involvedFactionIds: string[]
+  /** character_name_or_id values from pc_changes that never matched a real character — that whole entry was dropped. */
+  unresolvedCharacterNames: string[]
 }
 
 export async function applyWorldUpdates(
@@ -68,6 +70,7 @@ export async function applyWorldUpdates(
 
   let involvedNpcIds: string[] = []
   let involvedFactionIds: string[] = []
+  let unresolvedCharacterNames: string[] = []
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -127,16 +130,17 @@ export async function applyWorldUpdates(
 
       // 4. Update player characters
       if (world_updates.pc_changes) {
-        const gateRefusals = await applyCharacterChanges(
+        const result = await applyCharacterChanges(
           tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, npcsForResolution, getCorruptionTheme, sceneOrigin
         )
         // Corruption gates (#83) refusing a move is a real world event, not
         // a silent no-op — a character the narrator described walking into
         // a shrine did not actually go in, and the log is where that
         // divergence between prose and state is visible.
-        for (const refusal of gateRefusals) {
+        for (const refusal of result.gateRefusals) {
           console.log(`  🌑 ${refusal}`)
         }
+        unresolvedCharacterNames = result.unresolvedCharacterNames
       }
 
       // organic_advancement (stat_increases/new_perks/new_moves) is deliberately
@@ -181,7 +185,7 @@ export async function applyWorldUpdates(
 
     console.log('✅ All world updates applied successfully')
 
-    return { involvedNpcIds, involvedFactionIds }
+    return { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames }
   } catch (error) {
     console.error('❌ Failed to apply world updates:', error)
     throw new Error(`Failed to apply world updates: ${error}`)

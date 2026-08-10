@@ -152,13 +152,29 @@ export default function WikiPage() {
     { key: 'RUMORS', label: 'Rumors', icon: '🗣️' },
   ]
 
+  // #169: below the lg breakpoint the list and detail panes stack instead
+  // of sitting side by side, so selecting an entry used to leave its detail
+  // view below the rest of the (still-visible) list — the reader had to
+  // scroll past every other entry to reach the one they picked. Scrolling
+  // to top on selection is what makes the detail pane read as "opened",
+  // matching the list/detail push navigation pattern; only doing this
+  // below lg leaves the desktop split-pane (both panes always visible,
+  // nothing to "open") untouched.
+  const MOBILE_BREAKPOINT_PX = 1024 // Tailwind's `lg`
+  const selectEntry = (entry: any) => {
+    setSelectedEntry(entry)
+    if (typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT_PX) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
   // Follow a cross-reference. Same-tab links resolve immediately from the
   // already-loaded list; anything else switches tabs and defers selection
   // to the reload (see pendingEntryName).
   const followRelatedLink = (link: { id: string; type: WikiEntryType }) => {
     if (link.type === selectedType) {
       const target = entries.find(e => e.name.toLowerCase() === link.id.toLowerCase())
-      if (target) setSelectedEntry(target)
+      if (target) selectEntry(target)
       return
     }
     setPendingEntryName(link.id)
@@ -254,8 +270,11 @@ export default function WikiPage() {
         </div>
       ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Entry List — reference content: clicking a row selects it. */}
-        <div className="lg:col-span-1">
+        {/* Entry List — reference content: clicking a row selects it. Below
+            lg, hidden (not unmounted, so scroll position survives) once an
+            entry is selected — see #169 / selectEntry above — and always
+            visible at lg+ where it sits beside the detail pane. */}
+        <div className={`lg:col-span-1 ${selectedEntry ? 'hidden lg:block' : 'block'}`}>
           <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
             <h3 className="mb-3 text-sm font-bold text-myth-ink-faint">
               {tabs.find(t => t.key === selectedType)?.label} ({filteredEntries.length})
@@ -287,7 +306,7 @@ export default function WikiPage() {
                       {group.entries.map((entry: any) => (
                         <button
                           key={entry.id}
-                          onClick={() => setSelectedEntry(entry)}
+                          onClick={() => selectEntry(entry)}
                           className={`w-full text-left p-3 rounded-lg border transition-colors ${
                             selectedEntry?.id === entry.id
                               ? 'border-myth-accent bg-myth-accent/5'
@@ -319,10 +338,23 @@ export default function WikiPage() {
           </div>
         </div>
 
-        {/* Entry Detail — narrative content: lore prose, no card chrome. */}
-        <div className="lg:col-span-2">
+        {/* Entry Detail — narrative content: lore prose, no card chrome.
+            Below lg, hidden until an entry is selected (see #169); always
+            visible at lg+ where it shows the placeholder when nothing's
+            selected. */}
+        <div className={`lg:col-span-2 ${selectedEntry ? 'block' : 'hidden lg:block'}`}>
           {selectedEntry ? (
             <div>
+              <button
+                onClick={() => setSelectedEntry(null)}
+                className="mb-4 flex items-center gap-1 text-sm font-medium text-myth-ink-muted hover:text-myth-ink lg:hidden"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to {tabs.find(t => t.key === selectedType)?.label}
+              </button>
+
               <div className="mb-4 flex items-start justify-between">
                 <div>
                   <h2 className="font-display text-2xl font-semibold text-myth-ink">{selectedEntry.name}</h2>

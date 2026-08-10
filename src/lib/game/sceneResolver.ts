@@ -48,6 +48,14 @@ import { aggregateInventoryItems, describeAggregatedItem } from './itemRegistry'
 import { reportError } from '@/lib/monitoring'
 import { checkAndCreateMilestone } from './campaignMilestone'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import {
+  buildNpcWikiSummary,
+  buildFactionWikiSummary,
+  buildClockWikiSummary,
+  buildLocationWikiSummary,
+  buildQuestWikiSummary,
+  buildItemWikiSummary,
+} from '@/lib/wiki/entitySummaries'
 
 /**
  * Resolve a scene using the AI GM
@@ -1293,11 +1301,16 @@ async function updateWikiEntries(
       }
     })
 
+    const npcSummary = buildNpcWikiSummary(npc)
+
     if (existing) {
-      // Update last seen turn
+      // Refresh the concise current-status summary on every mention, even
+      // though the fuller description only regenerates via the tick's
+      // significant-change sync (wikiSync.ts) — see #167/#168.
       await prisma.wikiEntry.update({
         where: { id: existing.id },
         data: {
+          summary: npcSummary,
           lastSeenTurn: turnNumber,
           updatedAt: new Date()
         }
@@ -1309,7 +1322,7 @@ async function updateWikiEntries(
           campaignId,
           entryType: 'NPC',
           name: npc.name,
-          summary: npc.description || `A character in the story`,
+          summary: npcSummary,
           description: npc.description || `${npc.name} is a character encountered during the adventure.`,
           tags: [],
           aliases: [],
@@ -1331,10 +1344,13 @@ async function updateWikiEntries(
       }
     })
 
+    const factionSummary = buildFactionWikiSummary(faction)
+
     if (existing) {
       await prisma.wikiEntry.update({
         where: { id: existing.id },
         data: {
+          summary: factionSummary,
           lastSeenTurn: turnNumber,
           updatedAt: new Date()
         }
@@ -1349,7 +1365,7 @@ async function updateWikiEntries(
           campaignId,
           entryType: 'FACTION',
           name: faction.name,
-          summary: faction.description || `A faction in the campaign`,
+          summary: factionSummary,
           description: [baseDescription, territoryLine].filter(Boolean).join('\n\n'),
           tags: [],
           aliases: [],
@@ -1378,6 +1394,7 @@ async function updateWikiEntries(
 
     const progress = `${clock.currentTicks}/${clock.maxTicks}`
     const clockDesc = `${clock.description}\n\nProgress: ${progress}`
+    const clockSummary = buildClockWikiSummary(clock)
     // Categorization: the wiki page groups each tab's list by tags[0].
     // Set on the update path too — not just create — so a clock created
     // before this existed still picks up its category on the very next
@@ -1388,6 +1405,7 @@ async function updateWikiEntries(
       await prisma.wikiEntry.update({
         where: { id: existing.id },
         data: {
+          summary: clockSummary,
           description: clockDesc,
           tags: clockTags,
           lastSeenTurn: turnNumber,
@@ -1400,7 +1418,7 @@ async function updateWikiEntries(
           campaignId,
           entryType: 'CLOCK',
           name: clock.name,
-          summary: clock.description || 'A countdown or progress tracker',
+          summary: clockSummary,
           description: clockDesc,
           tags: clockTags,
           aliases: [],
@@ -1434,11 +1452,12 @@ async function updateWikiEntries(
     // Categorization: set on update too so a location created before this
     // existed still picks up its category tag on the next sync.
     const locationTags = location.locationType ? [location.locationType] : []
+    const locationSummary = buildLocationWikiSummary(location)
 
     if (existing) {
       await prisma.wikiEntry.update({
         where: { id: existing.id },
-        data: { description: locDesc, tags: locationTags, lastSeenTurn: turnNumber, updatedAt: new Date() }
+        data: { summary: locationSummary, description: locDesc, tags: locationTags, lastSeenTurn: turnNumber, updatedAt: new Date() }
       })
     } else {
       await prisma.wikiEntry.create({
@@ -1446,7 +1465,7 @@ async function updateWikiEntries(
           campaignId,
           entryType: 'LOCATION',
           name: location.name,
-          summary: location.description || `A location in the world`,
+          summary: locationSummary,
           description: locDesc,
           tags: locationTags,
           aliases: [],
@@ -1481,11 +1500,13 @@ async function updateWikiEntries(
     // the quest's life, so this needs to stay current on every sync, not
     // just at creation.
     const questTags = [quest.status.toLowerCase()]
+    const questSummary = buildQuestWikiSummary(quest)
 
     if (existing) {
       await prisma.wikiEntry.update({
         where: { id: existing.id },
         data: {
+          summary: questSummary,
           description: questDesc,
           tags: questTags,
           isActive: quest.status === 'ACTIVE',
@@ -1499,7 +1520,7 @@ async function updateWikiEntries(
           campaignId,
           entryType: 'QUEST',
           name: quest.name,
-          summary: quest.objective || quest.description,
+          summary: questSummary,
           description: questDesc,
           tags: questTags,
           aliases: [],
@@ -1525,11 +1546,12 @@ async function updateWikiEntries(
       where: { campaignId, entryType: 'ITEM', name: item.name }
     })
     const itemDesc = describeAggregatedItem(item)
+    const itemSummary = buildItemWikiSummary(itemDesc)
 
     if (existing) {
       await prisma.wikiEntry.update({
         where: { id: existing.id },
-        data: { description: itemDesc, tags: item.tags, lastSeenTurn: turnNumber, updatedAt: new Date() }
+        data: { summary: itemSummary, description: itemDesc, tags: item.tags, lastSeenTurn: turnNumber, updatedAt: new Date() }
       })
     } else {
       await prisma.wikiEntry.create({
@@ -1537,7 +1559,7 @@ async function updateWikiEntries(
           campaignId,
           entryType: 'ITEM',
           name: item.name,
-          summary: itemDesc.split('\n')[0],
+          summary: itemSummary,
           description: itemDesc,
           tags: item.tags,
           aliases: [],

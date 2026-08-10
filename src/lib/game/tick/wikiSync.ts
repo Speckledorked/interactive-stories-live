@@ -14,6 +14,7 @@ import type { Prisma, WikiEntryType } from '@prisma/client'
 import { WorldChange, parseFactionRelationships } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
 import { describeStat } from '@/lib/ai/qualitativeStats'
+import { buildNpcWikiSummary, buildFactionWikiSummary } from '@/lib/wiki/entitySummaries'
 
 /**
  * Regenerate WikiEntry summary/description for every NPC/Faction that had a
@@ -129,7 +130,7 @@ async function syncNpcWikiEntry(
     turnNumber,
     entryType: 'NPC',
     name: npc.name,
-    summary: npc.description || `A character in the story`,
+    summary: buildNpcWikiSummary(npc),
     description,
     importance: wikiImportance,
     related,
@@ -193,7 +194,7 @@ async function syncFactionWikiEntry(
     turnNumber,
     entryType: 'FACTION',
     name: faction.name,
-    summary: faction.description || `A faction in the campaign`,
+    summary: buildFactionWikiSummary(faction),
     description,
     importance: wikiImportance,
     related,
@@ -232,6 +233,7 @@ async function upsertWikiEntry(input: {
     await prisma.wikiEntry.update({
       where: { id: existing.id },
       data: {
+        summary: input.summary,
         description: input.description,
         importance: input.importance,
         tags: input.tags,

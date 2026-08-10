@@ -4,6 +4,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     location: { findMany: vi.fn(), update: vi.fn() },
     nPC: { findMany: vi.fn(), update: vi.fn() },
+    locationAdjacency: { findMany: vi.fn() },
   },
 }))
 
@@ -163,9 +164,71 @@ describe('decideMigration (#110)', () => {
   })
 })
 
+describe('decideMigration — destination reachability (#108 follow-up)', () => {
+  // #108's own audit finding: destination selection used to pick the
+  // single highest-condition location campaign-wide, with no regard for
+  // whether refugees could actually reach it — a location on the far,
+  // disconnected side of the map could "win" over a genuinely nearby one.
+  it('prefers a lower-condition but reachable destination over a higher-condition unreachable one', () => {
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 10, population: null }],
+      [
+        { id: 'far-capital', name: 'The Far Capital', conditionScore: 95, population: null },
+        { id: 'near-town', name: 'The Near Town', conditionScore: 55, population: null },
+      ],
+      [{ id: 'npc1', name: 'Aldric', locationId: 'ruins', isAlive: true }],
+      [{ locationAId: 'ruins', locationBId: 'near-town', distance: 1 }] // far-capital has no edge at all
+    )
+    expect(npcMoves[0].toLocationId).toBe('near-town')
+  })
+
+  it('picks the highest-condition destination among several reachable ones', () => {
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 10, population: null }],
+      [
+        { id: 'town', name: 'The Town', conditionScore: 55, population: null },
+        { id: 'capital', name: 'The Capital', conditionScore: 90, population: null },
+      ],
+      [{ id: 'npc1', name: 'Aldric', locationId: 'ruins', isAlive: true }],
+      [
+        { locationAId: 'ruins', locationBId: 'town', distance: 1 },
+        { locationAId: 'ruins', locationBId: 'capital', distance: 2 },
+      ]
+    )
+    expect(npcMoves[0].toLocationId).toBe('capital')
+  })
+
+  it('falls back to the campaign-wide highest-condition pick when no edges cover this campaign at all', () => {
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 10, population: null }],
+      [
+        { id: 'town', name: 'The Town', conditionScore: 60, population: null },
+        { id: 'capital', name: 'The Capital', conditionScore: 90, population: null },
+      ],
+      [{ id: 'npc1', name: 'Aldric', locationId: 'ruins', isAlive: true }],
+      []
+    )
+    expect(npcMoves[0].toLocationId).toBe('capital')
+  })
+
+  it('falls back to the campaign-wide pick when the graph exists but doesn\'t reach any candidate from this location', () => {
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 10, population: null }],
+      [{ id: 'capital', name: 'The Capital', conditionScore: 90, population: null }],
+      [{ id: 'npc1', name: 'Aldric', locationId: 'ruins', isAlive: true }],
+      // A real graph exists for this campaign, it just doesn't cover a
+      // path from ruins to capital (disconnected component) — still
+      // better to relocate refugees somewhere than strand them.
+      [{ locationAId: 'some-other-a', locationBId: 'some-other-b', distance: 1 }]
+    )
+    expect(npcMoves[0].toLocationId).toBe('capital')
+  })
+})
+
 describe('tickMigration (DB handler)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(prisma.locationAdjacency.findMany).mockResolvedValue([])
   })
 
   it('does nothing when no location is distressed', async () => {

@@ -17,8 +17,19 @@
 //
 // Runs after tickNpcs (see worldTick.ts's TICK_HANDLERS) so this reads
 // NPCs at their POST-commute location for this same turn, not last turn's.
+//
+// #108 follow-up (this codebase's own architecture audit): destination
+// selection originally picked the single highest-condition location
+// CAMPAIGN-WIDE, with no regard for whether refugees could actually reach
+// it — a location on the far, disconnected side of the map could "win"
+// over a genuinely nearby haven. Now prefers the highest-condition
+// REACHABLE destination via the real adjacency graph (worldGraph.ts),
+// falling back to the old campaign-wide pick when this campaign has no
+// graph data covering the source location — adjacency-AWARE, not
+// adjacency-DEPENDENT, same convention as every other #108 consumer.
 
 import { TickContext, TickHandlerResult, WorldChange } from './types'
+import { AdjacencyEdge, shortestPath } from '../worldGraph'
 
 // RUINED/ABANDONED band boundary — the same bar
 // locationConditionTick.ts's SITE_CONDITION_PENALTY_THRESHOLD (resolution.ts)
@@ -75,17 +86,41 @@ export interface MigratingNpcInput {
 }
 
 /**
+ * The highest-condition destination reachable from `locationId` via the
+ * real adjacency graph, or — when `edges` is empty or none of the
+ * candidates are reachable in it (no graph data covers this campaign or
+ * this location yet) — the highest-condition destination campaign-wide,
+ * exactly like before #108. `sortedDestinations` is already
+ * highest-condition-first, so both branches just take the first match.
+ */
+function pickDestination(
+  locationId: string,
+  sortedDestinations: DestinationLocationInput[],
+  edges: AdjacencyEdge[]
+): DestinationLocationInput | null {
+  const candidates = sortedDestinations.filter((d) => d.id !== locationId)
+  if (candidates.length === 0) return null
+  if (edges.length === 0) return candidates[0]
+
+  const reachable = candidates.filter((d) => shortestPath(edges, locationId, d.id) !== null)
+  return reachable.length > 0 ? reachable[0] : candidates[0]
+}
+
+/**
  * Pure decision function — no DB access, safe to unit test directly.
  *
  * `distressedLocations` and `candidateDestinations` are expected to already
  * be filtered to below/at-or-above the thresholds above (the DB handler
  * does this at query time); this function re-checks conditionScore anyway
- * so it stays correct if ever called with an unfiltered list.
+ * so it stays correct if ever called with an unfiltered list. `edges`
+ * defaults to empty (campaign-wide selection, pre-#108 behavior) for any
+ * caller that doesn't have graph data on hand.
  */
 export function decideMigration(
   distressedLocations: DistressedLocationInput[],
   candidateDestinations: DestinationLocationInput[],
-  npcs: MigratingNpcInput[]
+  npcs: MigratingNpcInput[],
+  edges: AdjacencyEdge[] = []
 ): { npcMoves: MigrationDecision[]; populationShifts: PopulationShiftDecision[] } {
   const npcMoves: MigrationDecision[] = []
 
@@ -108,7 +143,7 @@ export function decideMigration(
 
   for (const location of distressedLocations) {
     if (location.conditionScore >= DISTRESS_THRESHOLD) continue
-    const destination = sortedDestinations.find((d) => d.id !== location.id)
+    const destination = pickDestination(location.id, sortedDestinations, edges)
     if (!destination) continue
 
     const residents = npcs.filter((npc) => npc.isAlive && npc.locationId === location.id)
@@ -167,17 +202,31 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
   const candidateDestinations = locations.filter((l) => l.conditionScore >= VIABLE_THRESHOLD)
   if (candidateDestinations.length === 0) return { changes: [] }
 
-  const npcs = await ctx.db.nPC.findMany({
-    where: {
-      campaignId: ctx.campaignId,
-      isAlive: true,
-      locationId: { in: distressedLocations.map((l) => l.id) },
-    },
-    select: { id: true, name: true, locationId: true, isAlive: true, importance: true },
-  })
+  const [npcs, adjacencyRows] = await Promise.all([
+    ctx.db.nPC.findMany({
+      where: {
+        campaignId: ctx.campaignId,
+        isAlive: true,
+        locationId: { in: distressedLocations.map((l) => l.id) },
+      },
+      select: { id: true, name: true, locationId: true, isAlive: true, importance: true },
+    }),
+    // #108: optional input to pickDestination — falls back to the
+    // pre-#108 campaign-wide highest-condition pick when this is empty or
+    // doesn't cover a given distressed location.
+    ctx.db.locationAdjacency.findMany({
+      where: { campaignId: ctx.campaignId },
+      select: { locationAId: true, locationBId: true, distance: true },
+    }),
+  ])
   const importanceById = new Map(npcs.map((n) => [n.id, n.importance]))
 
-  const { npcMoves, populationShifts } = decideMigration(distressedLocations, candidateDestinations, npcs)
+  const { npcMoves, populationShifts } = decideMigration(
+    distressedLocations,
+    candidateDestinations,
+    npcs,
+    adjacencyRows as AdjacencyEdge[]
+  )
 
   const changes: WorldChange[] = []
 

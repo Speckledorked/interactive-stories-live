@@ -5,8 +5,8 @@
 // factionTick.ts's GOAL_DELTAS) — nothing about a faction's actual
 // territory affects its wealth. This adds a real, if deliberately simple,
 // mechanic: a location tagged with resourceSlots yields its owner a small
-// resource gain each tick, but ONLY while at least one SupplyRoute
-// touching it is unblockaded — owning a resource-rich location deep in
+// resource gain each tick, but ONLY while it has a working (unblockaded,
+// faction-connected) SupplyRoute — owning a resource-rich location deep in
 // contested territory doesn't help if nothing can move the goods out.
 //
 // Deliberately faction-resource-EXTRACTION only, per the decided scope —
@@ -14,13 +14,22 @@
 // standing decision against prices/haggling/a shopping system) and must
 // not be read as reopening that.
 //
-// Routes are flat and arbitrary on purpose: there's no real spatial/
-// adjacency data anywhere in this codebase yet (a future WorldGraph, #108,
-// would add that). decideExtraction below does NOT validate that a route
-// actually reaches "the faction's core" in any pathfinding sense — it only
-// checks that a route touches the resource location at all and isn't
-// blockaded. That's the pathing-logic refinement #108 unlocks later; the
-// schema (SupplyRoute rows) stays valid either way.
+// #108 follow-up (this codebase's own architecture audit): SupplyRoute
+// rows were never actually created anywhere — no world-updater, no admin
+// UI, no seed script ever calls supplyRoute.create. decideExtraction's
+// gate could never fire in a real campaign; the mechanic shipped inert.
+// This tick now DERIVES routes itself, the same way isBlockaded is
+// already synced here rather than written by warTick.ts: each unrouted
+// resource location gets connected to the nearest OTHER location the same
+// faction owns, using the real adjacency graph (worldGraph.ts) when one
+// exists for this campaign, falling back to an arbitrary-but-deterministic
+// other owned location when it doesn't — adjacency-AWARE, not
+// adjacency-DEPENDENT, matching every other #108 consumer's convention.
+// Also closes the gap the original comment named directly: decideExtraction
+// used to accept ANY unblockaded route touching the location regardless of
+// where its other end went; it now requires that end to be a location the
+// SAME faction currently owns — the "reaches the faction's core" check the
+// comment said #108 would eventually unlock.
 //
 // isBlockaded is kept in sync here, each tick, from whichever locations
 // are currently the contested prize of an ESCALATING war — the exact same
@@ -31,6 +40,7 @@
 // same-tick plumbing through warTick.ts.
 
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
+import { AdjacencyEdge, nearestLocation } from '../worldGraph'
 
 // Small, bounded per-slot gain — same rough scale as other tick deltas
 // (GOAL_DELTAS's ENRICH is +4/turn; a worked resource slot adds to that,
@@ -55,24 +65,85 @@ export interface ExtractionDecision {
   resourceGain: number
 }
 
+/** The other end of `route` relative to `locationId`, or null if `route`
+ * doesn't touch `locationId` at all. */
+function otherEndOf(route: SupplyRouteView, locationId: string): string | null {
+  if (route.fromLocationId === locationId) return route.toLocationId
+  if (route.toLocationId === locationId) return route.fromLocationId
+  return null
+}
+
+/**
+ * Any route (blockaded or not) connecting `locationId` to another location
+ * the SAME faction currently owns — "the infrastructure exists," independent
+ * of whether it's currently usable. This is what decideSupplyRouteCreation
+ * checks: a route under blockade needs the siege lifted, not a redundant
+ * second route built alongside it every tick until it does.
+ */
+function hasAnyConnection(
+  locationId: string,
+  ownerFactionId: string,
+  routes: SupplyRouteView[],
+  ownerByLocationId: Map<string, string | null>,
+  ownedLocationCount: number
+): boolean {
+  if (ownedLocationCount <= 1) return true
+  return routes.some((r) => {
+    const otherEnd = otherEndOf(r, locationId)
+    return otherEnd !== null && ownerByLocationId.get(otherEnd) === ownerFactionId
+  })
+}
+
+/**
+ * A location has a WORKING route when it's the sole location its faction
+ * owns (nothing to connect to — trivially self-sufficient) OR at least one
+ * UNBLOCKADED route touches it whose OTHER end is a location the SAME
+ * faction currently owns (per ownerByLocationId, so a route left over from
+ * a since-changed ownership stops counting the moment that changes, with
+ * no separate cleanup needed). This is the gate decideExtraction actually
+ * uses — hasAnyConnection above is deliberately looser, for deciding
+ * whether new infrastructure needs to be built at all.
+ */
+function hasWorkingRoute(
+  locationId: string,
+  ownerFactionId: string,
+  routes: SupplyRouteView[],
+  ownerByLocationId: Map<string, string | null>,
+  ownedLocationCount: number
+): boolean {
+  if (ownedLocationCount <= 1) return true
+  return routes.some((r) => {
+    if (r.isBlockaded) return false
+    const otherEnd = otherEndOf(r, locationId)
+    return otherEnd !== null && ownerByLocationId.get(otherEnd) === ownerFactionId
+  })
+}
+
+function countOwnedLocations(locations: ExtractionLocation[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const loc of locations) {
+    if (!loc.ownerFactionId) continue
+    counts.set(loc.ownerFactionId, (counts.get(loc.ownerFactionId) ?? 0) + 1)
+  }
+  return counts
+}
+
 /**
  * Pure — no DB access. A location yields its owner a resource gain only
- * when it has at least one resource slot, is actually owned, AND has at
- * least one unblockaded SupplyRoute touching it (as either endpoint — see
- * the module doc above on why the OTHER endpoint's ownership isn't
- * validated here).
+ * when it has at least one resource slot, is actually owned, AND has a
+ * working route (see hasWorkingRoute above).
  */
 export function decideExtraction(locations: ExtractionLocation[], routes: SupplyRouteView[]): ExtractionDecision[] {
   const decisions: ExtractionDecision[] = []
+  const ownerByLocationId = new Map(locations.map((l) => [l.locationId, l.ownerFactionId]))
+  const ownedCounts = countOwnedLocations(locations)
 
   for (const location of locations) {
     if (location.resourceSlots.length === 0) continue
     if (!location.ownerFactionId) continue
 
-    const hasWorkingRoute = routes.some(
-      (r) => !r.isBlockaded && (r.fromLocationId === location.locationId || r.toLocationId === location.locationId)
-    )
-    if (!hasWorkingRoute) continue
+    const ownedCount = ownedCounts.get(location.ownerFactionId) ?? 0
+    if (!hasWorkingRoute(location.locationId, location.ownerFactionId, routes, ownerByLocationId, ownedCount)) continue
 
     decisions.push({
       locationId: location.locationId,
@@ -84,6 +155,63 @@ export function decideExtraction(locations: ExtractionLocation[], routes: Supply
   return decisions
 }
 
+export interface SupplyRouteCreation {
+  fromLocationId: string
+  toLocationId: string
+  controllingFactionId: string
+}
+
+/**
+ * Pure — which new SupplyRoute rows need to exist so that resource
+ * locations with no infrastructure at all (per hasAnyConnection — a
+ * currently-blockaded route still counts as existing infrastructure, just
+ * temporarily unusable, and must NOT trigger building a redundant second
+ * route alongside it every tick until the siege lifts) get one: connects
+ * each such location to the nearest OTHER location its faction owns via
+ * the real adjacency graph, or — when this campaign has no graph data
+ * covering that location, or no path exists in it yet — an arbitrary but
+ * deterministic other owned location, so the mechanic never silently
+ * stalls on a campaign that hasn't had #108's graph backfilled.
+ */
+export function decideSupplyRouteCreation(
+  locations: ExtractionLocation[],
+  existingRoutes: SupplyRouteView[],
+  edges: AdjacencyEdge[]
+): SupplyRouteCreation[] {
+  const creations: SupplyRouteCreation[] = []
+  const ownerByLocationId = new Map(locations.map((l) => [l.locationId, l.ownerFactionId]))
+  const ownedCounts = countOwnedLocations(locations)
+
+  const ownedByFaction = new Map<string, string[]>()
+  for (const loc of locations) {
+    if (!loc.ownerFactionId) continue
+    if (!ownedByFaction.has(loc.ownerFactionId)) ownedByFaction.set(loc.ownerFactionId, [])
+    ownedByFaction.get(loc.ownerFactionId)!.push(loc.locationId)
+  }
+
+  for (const location of locations) {
+    if (location.resourceSlots.length === 0) continue
+    if (!location.ownerFactionId) continue
+
+    const ownedCount = ownedCounts.get(location.ownerFactionId) ?? 0
+    if (hasAnyConnection(location.locationId, location.ownerFactionId, existingRoutes, ownerByLocationId, ownedCount)) continue
+
+    const otherOwned = (ownedByFaction.get(location.ownerFactionId) ?? []).filter((id) => id !== location.locationId)
+    if (otherOwned.length === 0) continue
+
+    const nearest = nearestLocation(edges, location.locationId, otherOwned)
+    const targetId = nearest ? nearest.locationId : [...otherOwned].sort()[0]
+
+    creations.push({
+      fromLocationId: location.locationId,
+      toLocationId: targetId,
+      controllingFactionId: location.ownerFactionId,
+    })
+  }
+
+  return creations
+}
+
 export async function tickLogistics(ctx: TickContext): Promise<TickHandlerResult> {
   const locations = await ctx.db.location.findMany({
     where: { campaignId: ctx.campaignId },
@@ -91,10 +219,47 @@ export async function tickLogistics(ctx: TickContext): Promise<TickHandlerResult
   })
   if (locations.length === 0) return { changes: [] }
 
-  const routes = await ctx.db.supplyRoute.findMany({
-    where: { campaignId: ctx.campaignId },
-    select: { id: true, fromLocationId: true, toLocationId: true, isBlockaded: true },
-  })
+  const [routes, adjacencyRows] = await Promise.all([
+    ctx.db.supplyRoute.findMany({
+      where: { campaignId: ctx.campaignId },
+      select: { id: true, fromLocationId: true, toLocationId: true, isBlockaded: true },
+    }),
+    // #108: optional input to route creation below — falls back to an
+    // arbitrary-but-deterministic other owned location when this is empty
+    // or doesn't cover a given resource location, same convention as every
+    // other #108 consumer (territory.ts, npcTick.ts).
+    ctx.db.locationAdjacency.findMany({
+      where: { campaignId: ctx.campaignId },
+      select: { locationAId: true, locationBId: true, distance: true },
+    }),
+  ])
+
+  const extractionLocations = locations.map((l) => ({
+    locationId: l.id,
+    resourceSlots: l.resourceSlots,
+    ownerFactionId: l.ownerFactionId,
+  }))
+
+  const routeCreations = decideSupplyRouteCreation(extractionLocations, routes, adjacencyRows as AdjacencyEdge[])
+  for (const creation of routeCreations) {
+    if (!ctx.dryRun) {
+      const created = await ctx.db.supplyRoute.create({
+        data: {
+          campaignId: ctx.campaignId,
+          fromLocationId: creation.fromLocationId,
+          toLocationId: creation.toLocationId,
+          controllingFactionId: creation.controllingFactionId,
+        },
+        select: { id: true, fromLocationId: true, toLocationId: true, isBlockaded: true },
+      })
+      routes.push(created)
+    } else {
+      // No row to create in a dry run — reflect it in-memory only, so the
+      // preview still shows what extraction would look like once this
+      // route exists (isBlockaded defaults false, matching the schema).
+      routes.push({ id: `dry-run-${creation.fromLocationId}-${creation.toLocationId}`, ...creation, isBlockaded: false } as any)
+    }
+  }
 
   // Sync blockade state from wars currently sieging a location — same
   // war-presence signal tickLocationCondition (#109) already reads.
@@ -116,10 +281,7 @@ export async function tickLogistics(ctx: TickContext): Promise<TickHandlerResult
     route.isBlockaded = shouldBeBlockaded
   }
 
-  const decisions = decideExtraction(
-    locations.map((l) => ({ locationId: l.id, resourceSlots: l.resourceSlots, ownerFactionId: l.ownerFactionId })),
-    routes
-  )
+  const decisions = decideExtraction(extractionLocations, routes)
   if (decisions.length === 0) return { changes: [] }
 
   const gainByFaction = new Map<string, number>()

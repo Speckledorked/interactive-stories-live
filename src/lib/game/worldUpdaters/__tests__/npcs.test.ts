@@ -53,6 +53,21 @@ describe('applyNpcChanges — resolving and updating', () => {
     ], roster, [], true)
     expect(tx.nPC.update).not.toHaveBeenCalled()
   })
+
+  it('reports a WorldChange for a goal change (#175)', async () => {
+    const roster = [npc()]
+    const result = await applyNpcChanges(
+      tx as any, 'camp1',
+      [{ npc_name_or_id: 'Lord Kessler', changes: { goals: 'Seize the throne' } } as NpcChange],
+      roster, [], true
+    )
+    expect(result.worldChanges).toEqual([
+      expect.objectContaining({
+        campaignId: 'camp1', entityType: 'NPC', entityId: 'npc1', field: 'goals',
+        previousValue: '(none)', newValue: 'Seize the throne', origin: 'sceneResolution',
+      }),
+    ])
+  })
 })
 
 describe('applyNpcChanges — harm and weapon bonus', () => {
@@ -77,13 +92,18 @@ describe('applyNpcChanges — harm and weapon bonus', () => {
 
   it('marks the NPC dead once harm reaches 6', async () => {
     const roster = [npc({ harm: 5 })]
-    await applyNpcChanges(tx as any, 'camp1', [
+    const result = await applyNpcChanges(tx as any, 'camp1', [
       { npc_name_or_id: 'npc1', changes: { harm_damage: 3 } } as NpcChange,
     ], roster, [], true)
     expect(tx.nPC.update).toHaveBeenCalledWith({
       where: { id: 'npc1' },
       data: expect.objectContaining({ harm: 6, isAlive: false }),
     })
+    // #175: MAJOR importance for a death, distinct from a routine harm tick.
+    expect(result.worldChanges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'harm', previousValue: 5, newValue: 6 }),
+      expect.objectContaining({ field: 'isAlive', previousValue: 'alive', newValue: 'deceased', importance: 'MAJOR' }),
+    ]))
   })
 })
 

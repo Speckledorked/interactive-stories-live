@@ -65,6 +65,25 @@ describe('applyFactionChanges — resolving and updating', () => {
     await applyFactionChanges(tx as any, 'camp1', [{ faction_name_or_id: 'f1', changes: {} } as FactionChange], roster, false)
     expect(tx.faction.update).not.toHaveBeenCalled()
   })
+
+  it('reports a WorldChange for a plan change (#175)', async () => {
+    const roster = [faction()]
+    const result = await applyFactionChanges(tx as any, 'camp1', [
+      { faction_name_or_id: 'The Ashen Circle', changes: { current_plan: 'Buy the harbor guard.' } } as FactionChange,
+    ], roster, true)
+    expect(result.worldChanges).toEqual([
+      expect.objectContaining({
+        campaignId: 'camp1', entityType: 'FACTION', entityId: 'f1', field: 'currentPlan',
+        previousValue: '(none)', newValue: 'Buy the harbor guard.', origin: 'sceneResolution',
+      }),
+    ])
+  })
+
+  it('reports no WorldChange for a discovery-only update', async () => {
+    const roster = [faction({ isDiscovered: false })]
+    const result = await applyFactionChanges(tx as any, 'camp1', [{ faction_name_or_id: 'f1', changes: {} } as FactionChange], roster, true)
+    expect(result.worldChanges).toEqual([])
+  })
 })
 
 describe('applyFactionChanges — stub creation', () => {

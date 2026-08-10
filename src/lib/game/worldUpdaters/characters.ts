@@ -35,7 +35,10 @@ import {
   ResolvedCondition
 } from '../harm'
 import { resolveArmorValue, resolveConsumableHeal } from '../inventory'
+import { parseKnowledgeState, addKnownConcept, removeKnownConcept } from '../knowledge'
 import { applyCapabilityChanges } from '../capabilities'
+import { sceneWorldChange } from './sceneWorldEvents'
+import type { WorldChange } from '../tick/types'
 import { applyDebtChanges, debtChangeFromConsequence, DebtChange } from '../debts'
 import { applyStandingChanges } from '../standing'
 import { checkCorruptionGate, hasCorruptionGate, describeRefusal } from '../corruptionGates'
@@ -118,6 +121,98 @@ export function findConsequenceToRemove(
 }
 
 /**
+ * Derive one WorldChange per Character field a pcChange actually wrote,
+ * from the real persisted diff (`updateData`) rather than a hand-
+ * maintained parallel log — it can't drift out of sync with what's
+ * actually written, the exact class of bug this file's own Fix Log
+ * entries have caught before (field-name mismatches, dropped fields).
+ * See #175 — this is scene resolution's half of the unified WorldEvent
+ * stream tick/consequence changes already write through.
+ *
+ * Deliberately skips `locationId` (internal FK, redundant with
+ * `currentLocation`) and `relationships` (hidden from players by design —
+ * see its own schema comment; logging it here would risk surfacing it
+ * somewhere with no equivalent fog-of-war gate).
+ *
+ * One shared `reason` per pcChange rather than a bespoke one per field —
+ * the WorldEvent's job is to give SOME narrative context, not be scoped
+ * per sub-field; the full reason is always recoverable from the scene's
+ * own text.
+ */
+function buildCharacterWorldChanges(
+  campaignId: string,
+  character: Character,
+  updateData: Record<string, any>,
+  reason: string
+): WorldChange[] {
+  const changes: WorldChange[] = []
+  const push = (
+    field: string,
+    previousValue: string | number,
+    newValue: string | number,
+    importance: 'NORMAL' | 'MAJOR' = 'NORMAL'
+  ) => {
+    changes.push(sceneWorldChange(campaignId, 'CHARACTER', character.id, character.name, field, previousValue, newValue, reason, importance))
+  }
+
+  if ('currentLocation' in updateData) {
+    push('location', character.currentLocation || '(unknown)', updateData.currentLocation)
+  }
+  if ('harm' in updateData && (character.harm ?? 0) !== updateData.harm) {
+    push('harm', character.harm ?? 0, updateData.harm)
+  }
+  if ('conditions' in updateData) {
+    const priorNames = parseHarmState(character.conditions).conditions.map(c => c.name).join(', ') || '(none)'
+    const nextNames = (updateData.conditions?.conditions || []).map((c: Condition) => c.name).join(', ') || '(none)'
+    if (priorNames !== nextNames) push('conditions', priorNames, nextNames)
+  }
+  if ('isAlive' in updateData) {
+    push('isAlive', character.isAlive ? 'alive' : 'deceased', updateData.isAlive ? 'alive' : 'deceased', 'MAJOR')
+  }
+  if ('corruption' in updateData && (character.corruption ?? 0) !== updateData.corruption) {
+    push('corruption', character.corruption ?? 0, updateData.corruption)
+  }
+  if ('knownConcepts' in updateData) {
+    const priorCount = parseKnowledgeState(character.knownConcepts).concepts.length
+    const nextLabels = (updateData.knownConcepts?.concepts || []).map((c: any) => c.label).join('; ') || '(none)'
+    push('knownConcepts', `${priorCount} known`, nextLabels)
+  }
+  if ('consequences' in updateData) {
+    const summarize = (c: any) =>
+      `${(c?.promises || []).length} promises, ${(c?.enemies || []).length} enemies, ${(c?.longTermThreats || []).length} threats`
+    const prior = summarize(character.consequences)
+    const next = summarize(updateData.consequences)
+    if (prior !== next) push('consequences', prior, next)
+  }
+  if ('appearance' in updateData) {
+    push('appearance', character.appearance || '(none)', updateData.appearance)
+  }
+  if ('personality' in updateData) {
+    push('personality', character.personality || '(none)', updateData.personality)
+  }
+  if ('equipment' in updateData) {
+    const summarize = (e: any) => `weapon: ${e?.weapon || 'none'}, armor: ${e?.armor || 'none'}, misc: ${e?.misc || 'none'}`
+    const prior = summarize(character.equipment)
+    const next = summarize(updateData.equipment)
+    if (prior !== next) push('equipment', prior, next)
+  }
+  if ('inventory' in updateData) {
+    const count = (i: any) => (i?.items || []).length
+    const priorCount = count(character.inventory)
+    const nextCount = count(updateData.inventory)
+    if (priorCount !== nextCount) push('inventory', `${priorCount} items`, `${nextCount} items`)
+  }
+  if ('resources' in updateData) {
+    const summarize = (r: any) => `${r?.gold ?? 0} gold, ${(r?.contacts || []).length} contacts`
+    const prior = summarize(character.resources)
+    const next = summarize(updateData.resources)
+    if (prior !== next) push('resources', prior, next)
+  }
+
+  return changes
+}
+
+/**
  * Caller passes a memoized getter so the corruption-theme lookup — shared
  * with bargain_offers' handling — happens at most once per batch, and
  * only if actually needed.
@@ -131,7 +226,7 @@ export async function applyCharacterChanges(
   npcsForResolution: Array<{ id: string; name: string }>,
   getCorruptionTheme: () => Promise<CorruptionTheme | null>,
   sceneOrigin: boolean
-): Promise<{ gateRefusals: string[]; unresolvedCharacterNames: string[] }> {
+): Promise<{ gateRefusals: string[]; unresolvedCharacterNames: string[]; worldChanges: WorldChange[] }> {
   console.log(`🦸 Updating ${pcChanges.length} characters`)
 
   // Refusals from corruption gates (#83) — returned rather than pushed into
@@ -145,6 +240,9 @@ export async function applyCharacterChanges(
   // Collected here so the caller can surface it somewhere a player/admin
   // actually sees (see sceneResolver.ts's synthetic WorldStateChange).
   const unresolvedCharacterNames: string[] = []
+  // #175: the unified WorldEvent stream's scene-resolution half — see
+  // buildCharacterWorldChanges above.
+  const worldChanges: WorldChange[] = []
 
   for (const pcChange of pcChanges) {
     const pcResolution = resolveEntityByNameOrId(charactersForResolution, pcChange.character_name_or_id)
@@ -206,6 +304,30 @@ export async function applyCharacterChanges(
     let conditionHistory: ResolvedCondition[] = harmState.conditionHistory
     let newIsAlive: boolean | undefined
     let harmMessages: string[] = []
+
+    // Structured, permanent knowledge (#173/#174) — separate column from
+    // harm/conditions, tracked independently so a knowledge-only exchange
+    // (an NPC explains something, nothing physically changes) still
+    // persists without needing a harm/condition message to piggyback on.
+    const knowledgeState = parseKnowledgeState(character.knownConcepts)
+    let knownConcepts = knowledgeState.concepts
+    let knowledgeChanged = false
+
+    if (pcChange.changes.knowledge_add && pcChange.changes.knowledge_add.length > 0) {
+      for (const concept of pcChange.changes.knowledge_add) {
+        knownConcepts = addKnownConcept(knownConcepts, concept, currentTurnNumber)
+      }
+      knowledgeChanged = true
+    }
+    if (pcChange.changes.knowledge_remove && pcChange.changes.knowledge_remove.length > 0) {
+      for (const key of pcChange.changes.knowledge_remove) {
+        knownConcepts = removeKnownConcept(knownConcepts, key)
+      }
+      knowledgeChanged = true
+    }
+    if (knowledgeChanged) {
+      updateData.knownConcepts = { concepts: knownConcepts }
+    }
 
     // Apply harm damage (armor mitigates incoming damage) — prefers a
     // structured armorValue on the matching inventory item over guessing
@@ -815,6 +937,8 @@ export async function applyCharacterChanges(
     }
 
     if (Object.keys(updateData).length > 0) {
+      worldChanges.push(...buildCharacterWorldChanges(campaignId, character, updateData, harmMessages.join('; ') || 'Scene resolution'))
+
       await tx.character.update({
         where: { id: character.id },
         data: updateData
@@ -824,7 +948,7 @@ export async function applyCharacterChanges(
     }
   }
 
-  return { gateRefusals, unresolvedCharacterNames }
+  return { gateRefusals, unresolvedCharacterNames, worldChanges }
 }
 
 /**

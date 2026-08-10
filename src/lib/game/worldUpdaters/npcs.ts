@@ -9,12 +9,15 @@ import { applyHarm, healHarm, HarmLevel } from '../harm'
 import { resolveDamageBonus } from '../inventory'
 import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
 import { isUniqueConstraintViolation } from './uniqueConstraintGuard'
+import { sceneWorldChange } from './sceneWorldEvents'
+import type { WorldChange } from '../tick/types'
 
 type Db = Prisma.TransactionClient
 export type NpcChange = NonNullable<WorldUpdates['npc_changes']>[number]
 
 export interface NpcChangesResult {
   involvedNpcIds: string[]
+  worldChanges: WorldChange[]
 }
 
 /**
@@ -33,6 +36,7 @@ export async function applyNpcChanges(
   console.log(`👤 Updating ${npcChanges.length} NPCs`)
 
   const involvedNpcIds = new Set<string>()
+  const worldChanges: WorldChange[] = []
 
   for (const npcChange of npcChanges) {
     const npcResolution = resolveEntityByNameOrId(npcsForResolution, npcChange.npc_name_or_id)
@@ -123,6 +127,29 @@ export async function applyNpcChanges(
       if (npcChange.changes.max_corruption !== undefined) updateData.maxCorruption = npcChange.changes.max_corruption
 
       if (Object.keys(updateData).length > 0) {
+        // #175: derived from the same updateData diff about to be
+        // persisted. gmNotes/corruption-gate fields deliberately skipped
+        // (verbose free text / not narratively interesting on their own).
+        if ('goals' in updateData) {
+          worldChanges.push(sceneWorldChange(
+            campaignId, 'NPC', npc.id, npc.name, 'goals',
+            npc.goals || '(none)', updateData.goals, 'Scene resolution'
+          ))
+        }
+        if ('harm' in updateData && (npc.harm ?? 0) !== updateData.harm) {
+          worldChanges.push(sceneWorldChange(
+            campaignId, 'NPC', npc.id, npc.name, 'harm',
+            npc.harm ?? 0, updateData.harm, 'Scene resolution'
+          ))
+        }
+        if ('isAlive' in updateData) {
+          worldChanges.push(sceneWorldChange(
+            campaignId, 'NPC', npc.id, npc.name, 'isAlive',
+            npc.isAlive ? 'alive' : 'deceased', updateData.isAlive ? 'alive' : 'deceased', 'Scene resolution',
+            updateData.isAlive === false ? 'MAJOR' : 'NORMAL'
+          ))
+        }
+
         await tx.nPC.update({
           where: { id: npc.id },
           data: updateData
@@ -169,5 +196,5 @@ export async function applyNpcChanges(
     }
   }
 
-  return { involvedNpcIds: [...involvedNpcIds] }
+  return { involvedNpcIds: [...involvedNpcIds], worldChanges }
 }

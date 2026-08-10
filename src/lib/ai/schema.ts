@@ -93,6 +93,28 @@ export const ConditionSchema = z.object({
   }).optional()
 })
 
+// A declarative fact this character has now confirmed — distinct from the
+// capability tree (glimpse/unlock, which is about a SYSTEM's existence and
+// this character's proficiency in it) and from conditions (temporary
+// present-tense state). This is permanent knowledge: "the character knows
+// X," not "X happened." See #173/#174 — RAG retrieval alone couldn't
+// answer "does my character know this?" reliably; this is the structured
+// answer memory retrieval now only supports rather than stands in for.
+export const KnowledgeAddSchema = z.object({
+  // A stable, slug-like identifier so the SAME fact reported again in
+  // different words collapses into one entry instead of accumulating
+  // near-duplicates — e.g. "essences_exist", "baron_is_corrupt". Lowercase,
+  // words separated by underscores; the engine does not enforce the exact
+  // format, but a consistent key is what makes re-reporting the same fact
+  // safe rather than additive.
+  key: z.string().max(SHORT_TEXT),
+  // The human-readable fact, shown on the character sheet.
+  label: z.string().max(SHORT_TEXT),
+  // Where/how this was learned — an NPC's name, a document, an event.
+  // Optional flavor, not enforced.
+  source: z.string().max(SHORT_TEXT).optional()
+})
+
 // Equipment change schema
 export const EquipmentChangeSchema = z.object({
   action: z.enum(['add', 'remove', 'replace']),
@@ -179,6 +201,14 @@ export const PCChangesSchema = z.object({
     harm_healing: z.number().min(0).max(6).optional(),
     conditions_add: z.array(ConditionSchema).optional(),
     conditions_remove: z.array(z.string()).optional(),
+    // Structured, permanent knowledge — see KnowledgeAddSchema. Report a
+    // fact here the exchange the character actually confirms/learns it
+    // (an NPC tells them, they read it, they witness it directly) — not
+    // for things they merely overheard secondhand or haven't verified.
+    // knowledge_remove is rare: only for a fact that turns out to have
+    // been wrong and is now corrected in the fiction, by key.
+    knowledge_add: z.array(KnowledgeAddSchema).optional(),
+    knowledge_remove: z.array(z.string()).optional(),
     location: z.string().optional(),
     relationship_changes: z.array(RelationshipChangeSchema).optional(),
     consequences_add: z.array(ConsequenceAddSchema).optional(),

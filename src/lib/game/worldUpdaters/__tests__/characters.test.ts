@@ -275,6 +275,96 @@ describe('applyCharacterChanges — harm and conditions', () => {
   })
 })
 
+describe('applyCharacterChanges — knowledge (#173/#174)', () => {
+  it('adds a new known concept', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 4, [
+      { character_name_or_id: 'char1', changes: { knowledge_add: [{ key: 'essences_exist', label: 'Essences exist' }] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.knownConcepts.concepts).toEqual([
+      { key: 'essences_exist', label: 'Essences exist', source: undefined, learnedAt: 4 }
+    ])
+  })
+
+  it('re-reporting the same key refreshes the label without duplicating the entry', async () => {
+    const roster = [character({
+      knownConcepts: { concepts: [{ key: 'baron', label: "Something's off about the baron", learnedAt: 2 }] },
+    })]
+    await applyCharacterChanges(tx as any, 'camp1', 7, [
+      { character_name_or_id: 'char1', changes: { knowledge_add: [{ key: 'baron', label: 'The baron is secretly a vampire' }] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.knownConcepts.concepts).toEqual([
+      { key: 'baron', label: 'The baron is secretly a vampire', source: undefined, learnedAt: 2 }
+    ])
+  })
+
+  it('removes a known concept by key', async () => {
+    const roster = [character({
+      knownConcepts: { concepts: [{ key: 'wrong_fact', label: 'Something untrue', learnedAt: 1 }] },
+    })]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { knowledge_remove: ['wrong_fact'] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.knownConcepts.concepts).toEqual([])
+  })
+
+  it('does not touch knownConcepts when nothing knowledge-related changed', async () => {
+    const roster = [character()]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.knownConcepts).toBeUndefined()
+  })
+})
+
+describe('applyCharacterChanges — WorldChange emission (#175)', () => {
+  it('reports one WorldChange per changed field, derived from the real diff', async () => {
+    const roster = [character({ harm: 0 })]
+    const result = await applyCharacterChanges(tx as any, 'camp1', 4, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 3 } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    expect(result.worldChanges).toEqual([
+      expect.objectContaining({
+        campaignId: 'camp1', entityType: 'CHARACTER', entityId: 'char1', field: 'harm',
+        previousValue: 0, newValue: 3, origin: 'sceneResolution', significant: true,
+      }),
+    ])
+  })
+
+  it('reports isAlive at MAJOR importance', async () => {
+    const roster = [character({ harm: 6, isAlive: true, conditions: { conditions: [{ id: 'd1', name: 'Critically Dying', category: 'Physical', description: 'x', mechanicalEffect: 'Cannot act', appliedAt: 1 }], permanentInjuries: [], deathSaves: 2 } })]
+    const result = await applyCharacterChanges(tx as any, 'camp1', 5, [
+      { character_name_or_id: 'char1', changes: { death_save_result: 'failure' } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    expect(result.worldChanges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'isAlive', previousValue: 'alive', newValue: 'deceased', importance: 'MAJOR' }),
+    ]))
+  })
+
+  it('does not report Character.relationships — hidden from players by design', async () => {
+    const roster = [character()]
+    const result = await applyCharacterChanges(tx as any, 'camp1', 1, [
+      {
+        character_name_or_id: 'char1',
+        changes: { relationship_changes: [{ entity_id: 'npc1', entity_name: 'Lord Kessler', trust_delta: 10, reason: 'Saved their life' }] },
+      } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    expect(result.worldChanges.some(c => c.field === 'relationships')).toBe(false)
+  })
+
+  it('reports no WorldChanges when nothing on the character actually changed', async () => {
+    const roster = [character()]
+    const result = await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: {} } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    expect(result.worldChanges).toEqual([])
+  })
+})
+
 describe('applyCharacterChanges — corruption', () => {
   it('does nothing when the campaign has no corruption theme', async () => {
     const roster = [character()]

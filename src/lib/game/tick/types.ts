@@ -10,7 +10,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 
-export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'LOCATION_CONDITION' | 'LOCATION_POPULATION' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT'
+export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'LOCATION_CONDITION' | 'LOCATION_POPULATION' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT' | 'LOCATION'
 
 export interface WorldChange {
   entityType: TickEntityType
@@ -41,8 +41,16 @@ export interface WorldChange {
    * AI-decided mechanical follow-through (spawned clock, location
    * condition hit, faction stat nudge), distinguishing it from an
    * ordinary tick or ambition-resolution write to the same field.
+   * 'sceneResolution' changes (#175) come from the main per-exchange AI GM
+   * response path (stateUpdater.ts's domain appliers applying
+   * pc_changes/npc_changes/faction_changes/etc. directly) — the highest-
+   * frequency source of state change in the engine, and until now the only
+   * one with no WorldEvent record at all. Distinct from 'consequence',
+   * which is a separate, dedicated consequence-extraction AI pass over
+   * scene text (see consequences.ts) — both are player-caused, but from
+   * genuinely different pipelines.
    */
-  origin?: 'tick' | 'consequence' | 'integrity' | 'wake' | 'clockResolution'
+  origin?: 'tick' | 'consequence' | 'integrity' | 'wake' | 'clockResolution' | 'sceneResolution'
   /** Set only when origin is 'integrity' — the IntegrityCheck.key that
    * produced this repair, so escalation (integrity/escalation.ts) can tell
    * "this got repaired again" apart from "this field just changed again in

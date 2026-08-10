@@ -15,7 +15,9 @@ import type { WorldEventActorType, WorldEventTargetType } from '@prisma/client'
 import { WorldChange } from './types'
 
 function actorTypeFor(change: WorldChange): WorldEventActorType {
-  return change.origin === 'consequence' ? 'PLAYER' : 'SYSTEM'
+  // 'sceneResolution' (#175) is the main per-exchange AI GM path — every
+  // bit as player-caused as 'consequence', just a different pipeline.
+  return change.origin === 'consequence' || change.origin === 'sceneResolution' ? 'PLAYER' : 'SYSTEM'
 }
 
 function typeFor(change: WorldChange): string {

@@ -12,7 +12,7 @@ beforeEach(() => {
 })
 
 const clock = (over: Partial<Clock> = {}): Clock =>
-  ({ id: 'clock1', name: 'The Siege Tightens', currentTicks: 3, maxTicks: 6, ...over } as Clock)
+  ({ id: 'clock1', campaignId: 'camp1', name: 'The Siege Tightens', currentTicks: 3, maxTicks: 6, ...over } as Clock)
 
 describe('applyClockChanges', () => {
   it('advances ticks by the reported delta, resolving by exact id', async () => {
@@ -48,5 +48,22 @@ describe('applyClockChanges', () => {
     const roster = [clock({ id: 'c1', name: 'Manston Uprising' }), clock({ id: 'c2', name: 'Marlton Uprising' })]
     await applyClockChanges(tx as any, [{ clock_name_or_id: 'Marston Uprising', delta: 1 } as ClockChange], roster)
     expect(tx.clock.update).not.toHaveBeenCalled()
+  })
+
+  it('reports a WorldChange for an actual tick advance (#175)', async () => {
+    const roster = [clock()]
+    const result = await applyClockChanges(tx as any, [{ clock_name_or_id: 'clock1', delta: 2 } as ClockChange], roster)
+    expect(result.worldChanges).toEqual([
+      expect.objectContaining({
+        campaignId: 'camp1', entityType: 'CLOCK', entityId: 'clock1', field: 'currentTicks',
+        previousValue: 3, newValue: 5, origin: 'sceneResolution', significant: true,
+      }),
+    ])
+  })
+
+  it('reports no WorldChange when ticks are already clamped and nothing actually moves', async () => {
+    const roster = [clock({ currentTicks: 6, maxTicks: 6 })]
+    const result = await applyClockChanges(tx as any, [{ clock_name_or_id: 'clock1', delta: 10 } as ClockChange], roster)
+    expect(result.worldChanges).toEqual([])
   })
 })

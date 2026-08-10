@@ -5,6 +5,8 @@
 import { Prisma, Clock } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { resolveEntityByNameOrId } from '../entityResolution'
+import { sceneWorldChange } from './sceneWorldEvents'
+import type { WorldChange } from '../tick/types'
 
 type Db = Prisma.TransactionClient
 export type ClockChange = NonNullable<WorldUpdates['clock_changes']>[number]
@@ -13,8 +15,9 @@ export async function applyClockChanges(
   tx: Db,
   clockChanges: ClockChange[],
   clocksForResolution: Clock[]
-): Promise<void> {
+): Promise<{ worldChanges: WorldChange[] }> {
   console.log(`⏰ Updating ${clockChanges.length} clocks`)
+  const worldChanges: WorldChange[] = []
 
   for (const clockChange of clockChanges) {
     const resolution = resolveEntityByNameOrId(clocksForResolution, clockChange.clock_name_or_id)
@@ -35,8 +38,16 @@ export async function applyClockChanges(
       })
 
       console.log(`  ⏰ ${clock.name}: ${clock.currentTicks} → ${newTicks}`)
+      if (newTicks !== clock.currentTicks) {
+        worldChanges.push(sceneWorldChange(
+          clock.campaignId, 'CLOCK', clock.id, clock.name, 'currentTicks',
+          clock.currentTicks, newTicks, 'Scene resolution'
+        ))
+      }
     } else {
       console.warn(`  ⚠️ Clock not found: ${clockChange.clock_name_or_id}`)
     }
   }
+
+  return { worldChanges }
 }

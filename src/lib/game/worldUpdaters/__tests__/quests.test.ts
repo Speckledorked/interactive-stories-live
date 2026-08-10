@@ -84,7 +84,7 @@ describe('applyQuestChanges — new quest', () => {
 
     await expect(applyQuestChanges(tx as any, 'camp1', 3, [
       { name: 'Clear the Warrens', changes: { description: 'Rats.', status: 'ACTIVE' } } as QuestChange,
-    ])).resolves.toBeUndefined()
+    ])).resolves.toEqual({ worldChanges: [] })
 
     expect(applyQuestRewardGrant).not.toHaveBeenCalled()
   })
@@ -120,6 +120,27 @@ describe('applyQuestChanges — existing quest', () => {
       { name: 'Clear the Warrens', changes: { status: 'COMPLETED', reward_grant: { gold: 50 } } } as QuestChange,
     ])
     expect(applyQuestRewardGrant).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a MAJOR WorldChange for a status change to COMPLETED (#175)', async () => {
+    tx.quest.findFirst.mockResolvedValue({ ...existing, status: 'ACTIVE' })
+    const result = await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'Clear the Warrens', changes: { status: 'COMPLETED' } } as QuestChange,
+    ])
+    expect(result.worldChanges).toEqual([
+      expect.objectContaining({
+        campaignId: 'camp1', entityType: 'QUEST', entityId: 'q1', field: 'status',
+        previousValue: 'ACTIVE', newValue: 'COMPLETED', importance: 'MAJOR', origin: 'sceneResolution',
+      }),
+    ])
+  })
+
+  it('reports no WorldChange for a progress-append-only update', async () => {
+    tx.quest.findFirst.mockResolvedValue({ ...existing, progressLog: null })
+    const result = await applyQuestChanges(tx as any, 'camp1', 4, [
+      { name: 'Clear the Warrens', changes: { progress_append: 'Killed the nest queen.' } } as QuestChange,
+    ])
+    expect(result.worldChanges).toEqual([])
   })
 
   it('does NOT re-pay a reward grant on a repeated report of an already-completed quest', async () => {

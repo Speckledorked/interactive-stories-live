@@ -22,6 +22,10 @@ const MEMORY_TYPE_BY_ENTITY: Record<TickEntityType, 'WORLD_EVENT' | 'FACTION_EVE
   WAR: 'WORLD_EVENT',
   CHARACTER: 'WORLD_EVENT',
   DEBT: 'WORLD_EVENT',
+  // #175: scene-resolution location field changes — not currently routed
+  // through logSignificantChanges (only persistWorldEvents), but the
+  // exhaustive Record above still needs every TickEntityType covered.
+  LOCATION: 'LOCATION_EVENT',
 }
 
 function memoryTypeFor(change: WorldChange): 'WORLD_EVENT' | 'FACTION_EVENT' | 'LOCATION_EVENT' | 'NPC_INTERACTION' {

@@ -63,6 +63,25 @@ describe('applyLocationChanges', () => {
     await applyLocationChanges(tx as any, 'camp1', [{ name: 'The Docks' } as LocationChange], false)
     expect(tx.location.update).not.toHaveBeenCalled()
   })
+
+  it('reports a WorldChange when locationType is set for the first time (#175)', async () => {
+    tx.location.findFirst.mockResolvedValue({ id: 'loc1', name: 'The Docks', description: 'x', locationType: null, gmNotes: null, isDiscovered: true })
+    const result = await applyLocationChanges(tx as any, 'camp1', [
+      { name: 'The Docks', location_type: 'harbor' } as LocationChange,
+    ], true)
+    expect(result.worldChanges).toEqual([
+      expect.objectContaining({
+        campaignId: 'camp1', entityType: 'LOCATION', entityId: 'loc1', field: 'locationType',
+        previousValue: '(unknown)', newValue: 'harbor', origin: 'sceneResolution',
+      }),
+    ])
+  })
+
+  it('reports no WorldChange for a discovery-only reveal', async () => {
+    tx.location.findFirst.mockResolvedValue({ id: 'loc1', description: 'x', locationType: 'town', gmNotes: null, isDiscovered: false })
+    const result = await applyLocationChanges(tx as any, 'camp1', [{ name: 'The Docks' } as LocationChange], true)
+    expect(result.worldChanges).toEqual([])
+  })
 })
 
 describe('resolveOrCreateLocationId', () => {

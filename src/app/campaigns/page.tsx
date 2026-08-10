@@ -64,7 +64,14 @@ export default function CampaignsPage() {
       if (!response.ok) throw new Error('Failed to load campaigns')
 
       const data = await response.json()
-      setCampaigns(data.campaigns)
+      // Most-recently-played first — same ordering the cinematic header's
+      // backdrop pick relies on, so the featured art always corresponds to
+      // (or is the closest available stand-in for) the first card shown,
+      // rather than two independent sorts disagreeing with each other.
+      const sorted = [...data.campaigns].sort(
+        (a: Campaign, b: Campaign) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      )
+      setCampaigns(sorted)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load campaigns')
     } finally {
@@ -93,16 +100,13 @@ export default function CampaignsPage() {
     }
   }
 
-  // Cinematic header backdrop: the most recently updated campaign that
+  // Cinematic header backdrop: the closest-to-the-top campaign (campaigns
+  // is already sorted most-recently-played first, see loadCampaigns) that
   // actually has ready hero art, not a separate generated/stock image —
-  // "your worlds" should feel like they're looking back at you.
-  const backdropUrl = campaigns.reduce<{ url: string; updatedAt: string } | null>((freshest, c) => {
-    if (c.heroImageStatus !== 'READY' || !c.heroImageUrl) return freshest
-    if (!freshest || new Date(c.updatedAt) > new Date(freshest.updatedAt)) {
-      return { url: c.heroImageUrl, updatedAt: c.updatedAt }
-    }
-    return freshest
-  }, null)?.url ?? null
+  // "your worlds" should feel like they're looking back at you. Usually
+  // this is literally the first card; falls through to the next one down
+  // only when the freshest campaign has no art yet.
+  const backdropUrl = campaigns.find((c) => c.heroImageStatus === 'READY' && c.heroImageUrl)?.heroImageUrl ?? null
 
   return (
     <TavernPage background="myth">

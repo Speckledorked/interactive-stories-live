@@ -538,7 +538,7 @@ function CreateCampaignModal({
                       placeholder={`You are the Game Master for a [universe] campaign.\n\nCore Principles:\n- Fiction first\n- Be a fan of the characters\n...`}
                       required
                     />
-                    <p className="mt-1.5 text-xs text-myth-ink-faint">Tells the AI how to run your world — tone, rules, GM moves</p>
+                    <p className="mt-1.5 text-xs text-myth-ink-faint">Tells MythOS how to run your world — tone, rules, narrative techniques</p>
                   </div>
 
                   <div>

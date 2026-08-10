@@ -225,7 +225,7 @@ export function DynamicDowntimeManager({
             AI-Powered Downtime
           </h2>
           <p className="text-myth-ink-muted">
-            Describe any downtime activity - the AI will make it happen!
+            Describe any downtime activity - MythOS will make it happen!
           </p>
         </div>
 
@@ -256,7 +256,7 @@ export function DynamicDowntimeManager({
                 <Alert>
                   <Brain className="w-4 h-4" />
                   <AlertDescription>
-                    Describe any downtime activity in natural language. The AI will interpret your goals,
+                    Describe any downtime activity in natural language. MythOS will interpret your goals,
                     estimate time and costs, and create engaging events throughout the process.
                   </AlertDescription>
                 </Alert>
@@ -567,7 +567,7 @@ export function DynamicDowntimeManager({
           <Brain className="w-16 h-16 mx-auto text-myth-accent/60 mb-4" />
           <h3 className="text-lg font-semibold mb-2 text-myth-ink">No Activities Yet</h3>
           <p className="text-myth-ink-muted mb-6">
-            Describe any downtime activity you can imagine - the AI will make it happen!
+            Describe any downtime activity you can imagine - MythOS will make it happen!
             Whether it's learning new skills, starting a business, or investigating mysteries.
           </p>
           <Button onClick={() => setCreateModal(prev => ({ ...prev, isOpen: true }))}>

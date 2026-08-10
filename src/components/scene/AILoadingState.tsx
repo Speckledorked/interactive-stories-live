@@ -21,7 +21,7 @@ export default function AILoadingState({
 
   const messages = {
     scene: [
-      'The AI is crafting your scene...',
+      'MythOS is crafting your scene...',
       'Weaving narrative threads...',
       'Setting the stage...',
       'Creating dramatic tension...',
@@ -31,7 +31,7 @@ export default function AILoadingState({
       'The dice have spoken. Let\'s see what happens...',
       'NPCs are making their moves...',
       'Consequences rippling through the world...',
-      'The GM is narrating what unfolds...',
+      'MythOS is narrating what unfolds...',
       'Your actions have set things in motion...',
       'The story twists and turns...',
       'Villains respond to your interference...',

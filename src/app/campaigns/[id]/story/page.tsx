@@ -698,7 +698,7 @@ export default function StoryPage() {
         throw new Error(data.error || 'Failed to resolve scene')
       }
 
-      setSuccess('Resolution started — the GM is writing. Results will appear here shortly.')
+      setSuccess('Resolution started — MythOS is writing. Results will appear here shortly.')
       await loadData()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resolve scene')
@@ -1654,7 +1654,7 @@ export default function StoryPage() {
 
                       {resolvedScenes.length > 0 && (
                         <p className="text-xs text-myth-ink-faint text-center">
-                          The AI will generate a scene that continues naturally from where you left off
+                          MythOS will generate a scene that continues naturally from where you left off
                         </p>
                       )}
                     </>

@@ -67,7 +67,7 @@ export default function HelpPage() {
               </div>
               <p className="leading-relaxed text-myth-ink-muted">
                 Start by creating a campaign from the campaigns page. Choose a universe (Fantasy, Sci-Fi, Modern, etc.)
-                and the AI will generate a starting scenario.
+                and MythOS will generate a starting scenario.
               </p>
             </div>
 
@@ -107,7 +107,7 @@ export default function HelpPage() {
               </div>
               <p className="text-sm leading-relaxed text-myth-ink-muted">
                 Scenes are continuous until a player ends them — any player can start or end a scene.
-                Each round of actions is called an "exchange." Submit actions, and the AI resolves them
+                Each round of actions is called an "exchange." Submit actions, and MythOS resolves them
                 as a group to advance the story.
               </p>
             </div>
@@ -178,7 +178,7 @@ export default function HelpPage() {
               { icon: '🎲', title: 'Turn Order', desc: 'Play is simultaneous by default — everyone acts anytime. Any player can turn on an optional turn queue for a scene that wants it' },
               { icon: '📝', title: 'Notes', desc: 'Take private or shared notes to track NPCs, clues, and plot points' },
               { icon: '🗺️', title: 'Maps', desc: 'AI-generated tactical maps with zones and character tokens' },
-              { icon: '📚', title: 'Wiki', desc: 'Track NPCs, factions, and progress clocks automatically updated by the AI' },
+              { icon: '📚', title: 'Wiki', desc: 'Track NPCs, factions, and progress clocks automatically updated by MythOS' },
               { icon: '📜', title: 'Story Log', desc: 'Auto-generated chronicle of your adventure with highlights and timeline' },
               { icon: '📥', title: 'Export', desc: 'Download your campaign data — characters, scenes, factions, and more — as JSON' }
             ].map((feature, index) => (

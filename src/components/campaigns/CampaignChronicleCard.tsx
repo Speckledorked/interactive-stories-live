@@ -5,6 +5,13 @@
 // the primary click target. Falls back to the same deterministic banner
 // icon the old list row used when a campaign has no hero art yet (none
 // generated, still generating, or generation failed).
+//
+// Sizing deliberately mirrors CampaignHero.tsx's proven pattern: the text
+// block is normal flow and sets the card's actual height; the image is
+// absolutely positioned to fill whatever that resolves to. An earlier
+// version pinned a tall min-height and pushed the text to the bottom with
+// mt-auto — that let the image dominate the card with the text pushed
+// out of the visible area on narrow viewports. Let content drive height.
 
 'use client'
 
@@ -55,7 +62,7 @@ export function CampaignChronicleCard({
           onEnter()
         }
       }}
-      className="group relative flex min-h-[22rem] cursor-pointer flex-col overflow-hidden rounded-lg border border-myth-border bg-myth-surface-sunken transition-colors hover:border-myth-border-strong"
+      className="group relative cursor-pointer overflow-hidden rounded-lg border border-myth-border bg-myth-surface-sunken transition-colors hover:border-myth-border-strong"
     >
       {hasImage ? (
         <>
@@ -97,7 +104,7 @@ export function CampaignChronicleCard({
         </div>
       )}
 
-      <div className="relative mt-auto flex flex-col gap-2 p-5">
+      <div className="relative flex flex-col gap-2 px-5 py-8">
         <h3 className="font-display text-2xl font-semibold leading-tight text-myth-ink">{title}</h3>
         <p className="line-clamp-2 text-sm italic leading-relaxed text-myth-ink-muted">
           &ldquo;{description || 'A new world, waiting to be written.'}&rdquo;

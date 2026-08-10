@@ -110,17 +110,20 @@ export default function CampaignsPage() {
 
       {/* Content */}
       <main className="max-w-2xl lg:max-w-6xl mx-auto px-4 pt-28 pb-28">
-        {/* Cinematic header — the freshest world's own hero art bleeds in
-            from the edge instead of the title floating in empty space. */}
-        <div className="relative flex flex-col-reverse overflow-hidden rounded-lg border border-myth-border bg-myth-surface sm:flex-row">
+        {/* Cinematic header — the freshest world's own hero art fills the
+            box, text sits over it via gradient. Mirrors CampaignHero.tsx's
+            proven pattern exactly rather than a bespoke side-by-side
+            layout, so the text is always sized by content, never pushed
+            out of view by the art. */}
+        <div className="relative overflow-hidden rounded-lg border border-myth-border bg-myth-surface">
           {backdropUrl && (
-            <div className="relative h-40 sm:h-auto sm:w-2/5 lg:w-[45%]">
+            <>
               {/* eslint-disable-next-line @next/next/no-img-element -- no next/image remote-host config exists yet; matches CampaignHero.tsx's convention. */}
               <img src={backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-myth-surface sm:bg-gradient-to-r sm:from-myth-surface sm:via-myth-surface/20 sm:to-transparent" />
-            </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-myth-canvas via-myth-canvas/75 to-myth-canvas/20" />
+            </>
           )}
-          <div className="relative flex flex-1 flex-wrap items-start justify-between gap-4 px-6 py-8 sm:py-12">
+          <div className={`relative flex flex-wrap items-start justify-between gap-4 px-6 ${backdropUrl ? 'py-10 sm:py-14' : 'py-8'}`}>
             <div>
               <h1 className="font-display text-3xl font-semibold text-myth-ink sm:text-5xl">Your Campaigns</h1>
               <div className="mt-3 h-px w-16 bg-myth-gold/50" />

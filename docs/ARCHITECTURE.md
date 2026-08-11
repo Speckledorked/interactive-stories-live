@@ -284,6 +284,7 @@ this table.
 | Token-budget message pruning | 3 | A real token-budget pass (`applyTokenBudget`, `tokenBudget.ts`) sits on top of the existing fixed entity-count caps and per-string character clamps — not a replacement for them — trimming whole prompt *sections* in a decided priority order (world-summary macro detail first, recent-scene text second, character sheets protected longest and only trimmed down to the scene's actual participants) until the assembled request is back under a configured ceiling. Not a 4 — the token estimate is the same rough ~4-chars-per-token heuristic used for cost logging, not a real tokenizer count. |
 | Outcome-band → narration routing | 4 | The scene prompt's tone/pacing instructions are now derived from the actual worst roll outcome this exchange landed on (`selectPrimaryOutcomeBand` feeding `buildOutcomeBandSection` in `scenePrompt.ts`) rather than left for the model to infer from context alone — a mechanical signal routed into narration guidance, not a new AI judgment call. Not a 5 — only the single worst band across all rolled actions this exchange is used, not a per-character breakdown. |
 | Scene endings — a real narrative close, not a status flip | 4 | `Scene.stakes` (a dormant schema field, previously read once in `memoryRetrieval.ts` but never written anywhere) is now populated at scene creation by a small, separate, fail-open AI call (`generateSceneStakes`) grounded in the scene's own opening text, surfaced under the scene header in the story page UI, and echoed back to the model in `<scene_ending>` when a scene is force-ended so it has something concrete to resolve against rather than an abstract "wrap it up." See the matching Fix Log entry for the other half — the actual silent-no-narration ending bug. Not a 5 — stakes generation is one-shot at scene creation and never revised mid-scene if the situation shifts. |
+| Shareable session recaps | 3 | A resolved scene/arc from the Story Log can be shared as a social-media-sized card — `Share` on any `CampaignLog` entry copies a link to `/chronicle/[token]/recap/[logId]`, gated on the same chronicle-share token the full public chronicle already uses (deliberately not a separate share mechanism). The card itself is Next's `opengraph-image` file convention (`ImageResponse`, server-rendered, auto-wired into the page's meta tags — no manual OG tag plumbing) reading the campaign's hero image + the `CampaignLog` title/summary already shown in-app, not a re-derived summary. The chronicle-share GET route was relaxed from admin-only to any campaign member (POST/DELETE stayed admin-only) — reading the already-meant-to-be-public token isn't a privilege escalation, and a non-admin player should be able to share a recap too. Not a 4 — the card layout is fixed (no per-campaign theming beyond the hero image), and there's no analytics on whether a shared link was ever actually clicked. |
 | Campaign lobby "Word From the World" | 4 | The lobby overview tab's old stat-tile grid (`WorldSummaryPanel`, bare labeled counts) is replaced by a few sentences of generated in-world prose (`generateChronicleNarration`, `AI_MODELS.EFFICIENT`) synthesizing weather/faction posture/active conflicts/recent happenings — the design principle behind it: "a dashboard shows you data, a chronicle tells you a story about the same data." Regenerated once per world turn (`WorldMeta.chronicleNarration`/`chronicleNarrationTurn`) inside `runWorldTurn`, never live per page view; a progress bar under the prose shows in-game hours banked toward the next update (`hoursSinceWorldTurn`/`worldTurnHours`) rather than a real-world countdown, since the gate is in-game time accrued through play, not a wall-clock timer. Fog-of-war-safe: undiscovered factions/wars are filtered out of the input (`chronicleContext.ts`) before the prompt is ever built. Also adds a one-shot generated campaign hero banner image (`generateCampaignHeroImage`, reusing #96's OpenAI image-gen call shape but not its job-queue machinery — a one-time cosmetic generation doesn't need retry/recovery), now confirmed generating successfully against real production credentials (2026-08-07). Not a 5 — the specific fix for the earlier `FAILED` state was never pinned down, and scene illustration (#96), which shares the same image model, hasn't independently confirmed the same. |
 
 ## Fix Log
@@ -369,10 +370,6 @@ and API route test coverage rows.)*
 
 No code exists yet for any of these.
 
-- **Shareable session recaps** — package a resolved scene or short arc as a
-  social-media-sized card. Builds on the existing chronicle share link
-  (which is real and shipped); the card-generation feature itself has no
-  code yet.
 - **Platform admin dashboard** — a site-owner-only, metadata-only listing
   of users and the campaigns they've created. The design is decided
   (an env-var-gated allowlist, mirroring the existing cron-secret pattern,
@@ -398,12 +395,11 @@ No code exists yet for any of these.
   happened — revisit only if there's real appetite to author 2-3 mechanically
   distinct game feels, not as a first step on its own.
 - **Deliberately deferred, not overlooked**: native mobile app, voice/TTS,
-  a creator marketplace/UGC, VTT-style grid combat, 5e-style crunch/custom
-  rule import, and public API/developer access (decided against for now,
-  2026-08-02 — blocks monetization tiering until real demand justifies
-  revisiting it). Explicit calls to prioritize deeper world-simulation
-  work first — worth revisiting only if real cohort feedback contradicts
-  that call.
+  a creator marketplace/UGC, VTT-style grid combat, and public API/developer
+  access (decided against for now, 2026-08-02 — blocks monetization
+  tiering until real demand justifies revisiting it). Explicit calls to
+  prioritize deeper world-simulation work first — worth revisiting only if
+  real cohort feedback contradicts that call.
 
 ### In progress
 

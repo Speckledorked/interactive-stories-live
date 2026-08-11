@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronRight, BookOpen, MessageCircle } from 'lucide-react'
+import { ChevronRight, BookOpen, MessageCircle, Share2 } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import { displayFont } from '@/lib/tavernTheme'
 import { TavernPage } from '@/components/tavern/TavernPage'
@@ -60,6 +60,10 @@ export default function StoryLogPage() {
   const [error, setError] = useState('')
   const [regenerating, setRegenerating] = useState(false)
   const [regenerateResult, setRegenerateResult] = useState('')
+  // Shareable recap cards build on the existing chronicle share link — a
+  // recap can only be shared once the campaign has opted into public
+  // sharing at all (see PublicChroniclePanel/chronicle-share route).
+  const [chronicleShare, setChronicleShare] = useState<{ enabled: boolean; token: string | null } | null>(null)
 
   const [selectedDayNumber, setSelectedDayNumber] = useState<number | null>(null)
   const [selectedDayLabel, setSelectedDayLabel] = useState('')
@@ -95,6 +99,17 @@ export default function StoryLogPage() {
         setLogs((logsData.logs || []).slice().reverse()) // newest first
       } else {
         setError('Failed to load story log')
+      }
+
+      // Best-effort — a failure here just means the Share button falls
+      // back to its "not shareable yet" state, not a page-level error.
+      try {
+        const shareResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/chronicle-share`)
+        if (shareResponse.ok) {
+          setChronicleShare(await shareResponse.json())
+        }
+      } catch {
+        // Non-fatal — see comment above.
       }
     } catch (err) {
       setError('Failed to load story log')
@@ -241,7 +256,7 @@ export default function StoryLogPage() {
                 ) : (
                   <div className="space-y-4">
                     {dayDetail.logs.map((log) => (
-                      <LogEntryCard key={log.id} log={log} campaignId={campaignId} />
+                      <LogEntryCard key={log.id} log={log} campaignId={campaignId} chronicleShare={chronicleShare} />
                     ))}
                     {dayDetail.rumors.length > 0 && (
                       <div className={dayDetail.logs.length > 0 ? 'pt-4 border-t border-ember-900/30' : ''}>
@@ -275,7 +290,7 @@ export default function StoryLogPage() {
                 {showPreCalendar && (
                   <div className="space-y-4">
                     {preCalendarLogs.map((log) => (
-                      <LogEntryCard key={log.id} log={log} campaignId={campaignId} />
+                      <LogEntryCard key={log.id} log={log} campaignId={campaignId} chronicleShare={chronicleShare} />
                     ))}
                   </div>
                 )}
@@ -294,7 +309,33 @@ export default function StoryLogPage() {
 // (Turn badge, entryType tag, inGameDate/duration line, summary,
 // highlights, "View in Story" link) renders identically whether it's
 // reached via the calendar's day-detail panel or the pre-calendar bucket.
-function LogEntryCard({ log, campaignId }: { log: CampaignLogEntry; campaignId: string }) {
+function LogEntryCard({
+  log,
+  campaignId,
+  chronicleShare,
+}: {
+  log: CampaignLogEntry
+  campaignId: string
+  chronicleShare: { enabled: boolean; token: string | null } | null
+}) {
+  const [copied, setCopied] = useState(false)
+
+  // Builds on the existing chronicle share link rather than a separate
+  // share mechanism — a recap can only be copied once the campaign has
+  // opted into public sharing; clicking Share before that's on takes the
+  // admin straight to where it's enabled instead of failing silently.
+  const handleShare = (e: { preventDefault: () => void; stopPropagation: () => void }) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!chronicleShare?.enabled || !chronicleShare.token) {
+      window.location.href = `/campaigns/${campaignId}/admin?tab=safety`
+      return
+    }
+    navigator.clipboard.writeText(`${window.location.origin}/chronicle/${chronicleShare.token}/recap/${log.id}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <Link href={`/campaigns/${campaignId}/story`} className="block">
       <TavernCard className="p-5 group hover:border-ember-700/50 transition-colors cursor-pointer">
@@ -310,12 +351,21 @@ function LogEntryCard({ log, campaignId }: { log: CampaignLogEntry; campaignId: 
             )}
             <h3 className={`${displayFont.className} text-lg text-ember-100`}>{log.title}</h3>
           </div>
-          <div className="text-xs text-ember-400/40 whitespace-nowrap">
-            {new Date(log.createdAt).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })}
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={handleShare}
+              title={chronicleShare?.enabled ? 'Copy a shareable recap link' : 'Enable the public chronicle link to share a recap'}
+              className="rounded p-1.5 text-ember-400/50 transition-colors hover:bg-ember-900/30 hover:text-ember-300"
+            >
+              {copied ? <span className="text-xs text-success-400">Copied!</span> : <Share2 className="h-4 w-4" />}
+            </button>
+            <div className="text-xs text-ember-400/40 whitespace-nowrap">
+              {new Date(log.createdAt).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}
+            </div>
           </div>
         </div>
 

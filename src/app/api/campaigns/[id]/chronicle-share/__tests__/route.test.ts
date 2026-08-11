@@ -38,10 +38,19 @@ describe('GET', () => {
     expect(response.status).toBe(401)
   })
 
-  it('rejects a non-admin', async () => {
-    ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
+  it('rejects a non-member', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue(null)
     const response = await GET(req(), { params: { id: 'camp1' } })
     expect(response.status).toBe(403)
+  })
+
+  it('allows a non-admin member to read the state — any member should be able to share a recap, not just admins', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
+    db.campaign.findUnique.mockResolvedValue({ chronicleShareEnabled: true, chronicleShareToken: 'live-token' })
+    const response = await GET(req(), { params: { id: 'camp1' } })
+    const body = await response.json()
+    expect(response.status).toBe(200)
+    expect(body).toEqual({ enabled: true, token: 'live-token' })
   })
 
   it('returns 404 for a missing campaign', async () => {

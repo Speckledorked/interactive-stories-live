@@ -25,8 +25,17 @@ export async function GET(
     const user = await requireAuth(request)
     const campaignId = params.id
 
-    if (!(await requireAdmin(user.userId, campaignId))) {
-      return NextResponse.json({ error: 'Only admins can manage the chronicle share link' }, { status: 403 })
+    // Read-only, membership-gated rather than admin-gated (POST/DELETE stay
+    // admin-only below, correctly — only an admin should be able to turn
+    // this on/off). Knowing the current state and the token itself isn't a
+    // privilege escalation: once enabled, the token is deliberately meant
+    // to leave the campaign's membership entirely (that's the point of
+    // "public"), so a mere member reading it here is strictly less
+    // exposure than what already happens the moment it's actually shared —
+    // and any member should be able to share a recap card, not just admins.
+    const membership = await getCampaignMembership(user.userId, campaignId)
+    if (!membership) {
+      return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
     }
 
     const campaign = await prisma.campaign.findUnique({

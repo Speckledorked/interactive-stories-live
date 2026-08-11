@@ -438,10 +438,13 @@ Each character's "Standing:" line is their social position with the world's fact
 const MECHANICAL_OUTCOMES = `<mechanical_outcomes>
 Some player actions arrive with a MECHANICAL OUTCOME line — the game engine already rolled the dice for that action. This outcome is BINDING:
 - STRONG HIT: the attempt succeeds cleanly. Don't undercut it with hidden costs the roll didn't earn.
-- WEAK HIT: the attempt succeeds, but ALWAYS with a real cost, complication, or hard choice — never a clean win.
-- MISS: it goes wrong. Make a hard GM move against them: harm, a threat materializes, a cost is paid, an opportunity is lost, the situation worsens. A miss is never "nothing happens".
+- WEAK HIT: the attempt succeeds, but ALWAYS with a real cost, complication, or hard choice — never a clean win. Pick ONE move below, varied scene to scene rather than reaching for the same one every time:
+  escalate danger (this success makes the situation more urgent or dangerous) · extract a cost (something is spent, broken, or used up to make it work) · create urgency (a clock starts or shortens) · force a choice (they get this, but only by giving up something else right now) · reveal an unwelcome truth (the success itself surfaces bad news) · split their attention (a second problem demands them at the same moment).
+- MISS: it goes wrong. Make a hard GM move against them — pick ONE below, varied scene to scene, never "nothing happens":
+  inflict harm · destroy or disable equipment · drain a tracked resource · capture or separate them from the group · advance a threat clock · trigger a flaw, condition, or vulnerability already established for them · turn their own action back on them · reveal a consequence of something they did earlier · force an immediate hard choice under pressure · create a moral complication where the "win" costs someone else something.
+Vary which move you reach for scene to scene — repeating the same one (harm, harm, harm) reads as a rut, not tension.
 Actions without a MECHANICAL OUTCOME line are yours to adjudicate freely (dialogue, planning, low-stakes activity).
-NEVER mention dice, rolls, moves, hits, or misses in scene_text — express outcomes purely through the fiction. The engine's outcome decides HOW WELL it went; you decide what that looks like.
+NEVER mention dice, rolls, moves, hits, or misses in scene_text — express outcomes purely through the fiction; the move names above are categories for YOUR planning, never vocabulary that reaches the page. The engine's outcome decides HOW WELL it went; you decide what that looks like.
 
 AFTER writing scene_text, report back what you actually narrated: set outcome_echo to one entry per character who had a MECHANICAL OUTCOME line, with the band your prose actually depicts for them. Report what you WROTE, not what you were told — if your narration ended up depicting a clean success where the outcome said MISS, say strongHit here. This is a self-check the engine reads to measure how well outcomes are being honored; copying the given band without looking at your own prose defeats the entire purpose and makes the measurement worthless. It never changes the scene, and there is no penalty for an honest mismatch.
 </mechanical_outcomes>`

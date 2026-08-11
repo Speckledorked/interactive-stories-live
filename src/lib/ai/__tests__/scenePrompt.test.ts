@@ -22,6 +22,34 @@ function mechanic(outcome: ActionMechanics['outcome']): Partial<ActionMechanics>
   return { characterId: 'char-1', characterName: 'Kess', outcome }
 }
 
+describe('buildSystemPrompt — <mechanical_outcomes> GM move menu', () => {
+  // Weak hit / miss guidance used to be an abstract "real cost or
+  // complication" / "make a hard move" instruction with no concrete
+  // options — the model reliably defaulted to the same move (usually
+  // harm) every time. Named moves, always present regardless of whether
+  // a roll happened this exchange, give it real variety to draw from.
+  it('always includes the weak-hit and miss move menus', () => {
+    const prompt = buildSystemPrompt(makeRequest([]))
+    expect(prompt).toContain('<mechanical_outcomes>')
+    expect(prompt).toContain('escalate danger')
+    expect(prompt).toContain('extract a cost')
+    expect(prompt).toContain('inflict harm')
+    expect(prompt).toContain('advance a threat clock')
+    expect(prompt).toContain('moral complication')
+  })
+
+  it('explicitly instructs varying the move rather than repeating the same one', () => {
+    const prompt = buildSystemPrompt(makeRequest([]))
+    expect(prompt).toContain('Vary which move you reach for')
+  })
+
+  it('never lets the move vocabulary leak into scene_text guidance as permitted prose', () => {
+    const prompt = buildSystemPrompt(makeRequest([]))
+    const section = prompt.slice(prompt.indexOf('<mechanical_outcomes>'), prompt.indexOf('</mechanical_outcomes>'))
+    expect(section).toContain('NEVER mention dice, rolls, moves, hits, or misses in scene_text')
+  })
+})
+
 describe('buildSystemPrompt — outcome-band pacing (#115)', () => {
   it('omits the section entirely when no roll happened this exchange', () => {
     const prompt = buildSystemPrompt(makeRequest([]))

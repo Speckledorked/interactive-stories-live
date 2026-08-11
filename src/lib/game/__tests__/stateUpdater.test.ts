@@ -101,7 +101,7 @@ describe('applyWorldUpdates — delegation', () => {
     )
     expect(applyTimelineEventChanges).toHaveBeenCalledWith(tx, 'camp1', 42, [{ title: 'X' }], undefined)
     expect(applyCharacterChanges).toHaveBeenCalledWith(
-      tx, 'camp1', 42, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), true
+      tx, 'camp1', 42, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), true, []
     )
   })
 })
@@ -168,7 +168,7 @@ describe('applyWorldUpdates — sceneOrigin (fog of war) threading', () => {
     expect(applyFactionChanges).toHaveBeenCalledWith(tx, 'camp1', expect.anything(), expect.anything(), false)
     expect(applyLocationChanges).toHaveBeenCalledWith(tx, 'camp1', expect.anything(), false)
     expect(applyCharacterChanges).toHaveBeenCalledWith(
-      tx, 'camp1', 1, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), false
+      tx, 'camp1', 1, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), false, []
     )
   })
 

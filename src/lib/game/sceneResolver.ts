@@ -284,7 +284,7 @@ async function performResolution(
 
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')
-    const { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber)
+    const { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber, aiRequest.action_mechanics || [])
 
     // 6.05. Apply the scene progress ledger — what this exchange
     // established/resolved, replacing re-derivation from raw prose (see

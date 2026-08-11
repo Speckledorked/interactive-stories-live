@@ -401,6 +401,11 @@ export interface AIGMRequest {
       // Qualitative corruption state — only set when the campaign has a
       // corruption theme (see lib/game/corruption.ts). Never a raw number.
       corruption_status?: string
+      // True when accumulated stress (lib/game/stress.ts) plus available
+      // perk/move arc budget make a perk/move evolution offer eligible
+      // this scene — see advancement.ts's isEvolutionEligible. Never the
+      // raw stress number.
+      evolution_eligible?: boolean
     }>
     npcs: Array<{
       id: string

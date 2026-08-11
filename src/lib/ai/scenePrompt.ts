@@ -362,6 +362,7 @@ ORGANIC CHARACTER GROWTH:
 - Stats grow from -2 to +3 based on consistent use (keep total at +2, max one stat ≥ +2) — the engine detects this on its own from roll outcomes; you don't need to report it.
 - Perks (organic_advancement.new_perks) are small, specific bonuses earned from a repeated PATTERN in what THIS character has actually done — there is no fixed list, and you decide both when one's earned and what it is. Ground it in this campaign's setting and this character's own actions/backstory, never a generic reskin: a duelist who's fought a dozen blade-fights earns something bladed and specific ("Riposte: +1 when you counter an opponent who's just missed you"), not "+1 to combat"; a hacker in a cyberpunk campaign earns something about reading network traffic, not "keen eye." Two different characters who both fight a lot should end up with different perks if their fights actually played out differently. {"name": "Riposte", "description": "You counter, you don't just block. +1 when you strike back at an opponent who's just missed you.", "tags": ["combat"]} — don't invent an id; the engine derives one from name. Reserve for a genuine repeated pattern (roughly once every several sessions per character), not every scene.
 - New moves (organic_advancement.new_moves) are different: a RARE, one-time reward for a genuine narrative turning point, not routine competence — a mentor taught them a signature technique, they survived by exploiting one specific trait, a transformation left them permanently changed. Reserve for maybe once every several sessions per character. {"name": "Read the Room", "trigger": "When you enter a tense negotiation", "description": "You always get one honest tell from the room before anyone speaks."} — trigger names the situation it applies to, description says what it does. Don't invent an id; the engine derives one from name.
+- EVOLUTION under pressure: a character flagged "🔥 Under sustained pressure" in PLAYER CHARACTERS has been carrying real, repeated strain — if a genuine moment in this scene earns it, an EXISTING perk or move on their sheet may evolve rather than a brand-new one appearing unrelated to anything they already have. Report it through the same organic_advancement.new_perks/new_moves channel (there is no separate field), but frame the name/description as a visible transformation of what's already theirs — sharper, colder, hungrier, or its opposite: steadier, wiser, more controlled. Two directions, both legitimate: SPIRAL (the trait turns obsessive, rigid, or costly — "Protector" becomes "Blind Guardian," sacrificing judgment for reflex) or RESILIENCE (the trait turns refined or transcendent — "Protector" becomes "Shield of Many," protecting with wisdom instead of just instinct). Never invent this for a character not flagged eligible, and never force it — most flagged scenes should still pass without one; it needs a real earned moment, not a due date.
 - Growth driven by what characters DO, not player choices
 
 TIME PASSAGE:
@@ -706,6 +707,14 @@ function buildCharactersSection(characters: WorldSummary['characters']): string 
     // Corruption: qualitative stage only — see <corruption>.
     if (c.corruption_status) {
       parts.push(`Corruption: ${c.corruption_status}`)
+    }
+
+    // Stress-driven evolution eligibility (see the perks/moves guidance
+    // below) — a boolean only, never the underlying number. Absent for
+    // every other character; this is not a status the narration should
+    // ever hint at directly.
+    if (c.evolution_eligible) {
+      parts.push(`🔥 Under sustained pressure — an existing perk or move could evolve this scene (see organic_advancement guidance)`)
     }
 
     // Faction standing: qualitative social position — see <faction_standing>.

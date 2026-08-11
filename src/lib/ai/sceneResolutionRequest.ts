@@ -14,6 +14,7 @@ import { retrieveRelevantLore } from './loreRetrieval' // Imported lore RAG (see
 import { resolveActionMechanics } from '@/lib/game/resolution'
 import { describeZone } from '@/lib/game/zones'
 import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
+import { isEvolutionEligible } from '@/lib/game/advancement'
 import { buildOptimizedWorldSummary, buildWorldSummaryForAI } from './worldSummary'
 import { applyTokenBudget } from './tokenBudget'
 import { parseSceneProgressState } from '@/lib/game/worldUpdaters/sceneProgress'
@@ -474,6 +475,22 @@ export async function buildSceneResolutionRequest(
           required_marks: Math.max(1, n.tier),
         })),
       }
+    }
+  }
+
+  // Stress-driven evolution eligibility (lib/game/stress.ts +
+  // advancement.ts's isEvolutionEligible) — independent of corruption
+  // theme, so computed unconditionally. Never attaches the raw stress
+  // number itself, only the boolean the AI is allowed to act on.
+  const worldMeta = await prisma.worldMeta.findUnique({
+    where: { campaignId: campaign.id },
+    select: { currentTurnNumber: true },
+  })
+  const currentTurnNumber = worldMeta?.currentTurnNumber ?? 0
+  for (const summaryCharacter of worldSummaryWithMemories.characters as any[]) {
+    const raw = entities.characters.find((rc: any) => rc.id === summaryCharacter.id)
+    if (raw && isEvolutionEligible(raw.stress ?? 0, raw.advancementLog, currentTurnNumber)) {
+      summaryCharacter.evolution_eligible = true
     }
   }
 

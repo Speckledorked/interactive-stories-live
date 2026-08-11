@@ -385,6 +385,100 @@ describe('applyCharacterChanges — corruption', () => {
   })
 })
 
+describe('applyCharacterChanges — stress (NPC motivation model\'s PC counterpart)', () => {
+  it('raises stress on a miss reported by the engine\'s own action_mechanics, not an AI self-report', async () => {
+    const roster = [character({ stress: 0 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: {} } as PcChange,
+    ], roster, npcRoster, noTheme, true, [
+      { characterId: 'char1', outcome: 'miss' } as any,
+    ])
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.stress).toBe(1)
+  })
+
+  it('does not raise stress for a strongHit or weakHit', async () => {
+    const roster = [character({ stress: 3 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: {} } as PcChange,
+    ], roster, npcRoster, noTheme, true, [
+      { characterId: 'char1', outcome: 'strongHit' } as any,
+    ])
+    // No raise event fired, so this is a decay case (3 -> 2), not a no-op —
+    // confirms strongHit/weakHit never count as pressure on their own.
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.stress).toBe(2)
+  })
+
+  it('serious harm (>=2) raises stress double an ordinary event', async () => {
+    const roster = [character({ stress: 0 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 2 } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.stress).toBe(2)
+  })
+
+  it('a graze (harm 1) does not raise stress', async () => {
+    const roster = [character({ stress: 0, harm: 0 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.stress).toBeUndefined()
+  })
+
+  it('a costly consequence (enemy) raises stress; a promise does not', async () => {
+    const roster = [character({ stress: 0 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { consequences_add: [{ type: 'enemy', description: 'The captain remembers your face' }] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.stress).toBe(1)
+  })
+
+  it('a real applied corruption mark raises stress in the same exchange it lands', async () => {
+    const theme = vi.fn().mockResolvedValue({ name: 'The Hunger', stages: [] })
+    const roster = [character({ corruption: 0, stress: 0 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { corruption_change: { marks: 1, reason: 'Used the forbidden rite' } } } as PcChange,
+    ], roster, npcRoster, theme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.corruption).toBe(1)
+    expect(data.stress).toBe(1)
+  })
+
+  it('recovers (decays) on a quiet exchange with none of the raise signals', async () => {
+    const roster = [character({ stress: 4 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { location: 'The Docks' } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.stress).toBe(3)
+  })
+
+  it('never writes stress when it would be a no-op (already at floor, nothing to decay)', async () => {
+    const roster = [character({ stress: 0 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { location: 'The Docks' } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.stress).toBeUndefined()
+  })
+
+  it('stacks multiple raise signals in the same exchange', async () => {
+    const roster = [character({ stress: 0 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 3, consequences_add: [{ type: 'longTermThreat', description: 'They know where you sleep now' }] } } as PcChange,
+    ], roster, npcRoster, noTheme, true, [
+      { characterId: 'char1', outcome: 'miss' } as any,
+    ])
+    const data = tx.character.update.mock.calls[0][0].data
+    // MISS_TAKEN (1) + HARM_TAKEN (2) + CONSEQUENCE_COST (1) = 4
+    expect(data.stress).toBe(4)
+  })
+})
+
 describe('applyCharacterChanges — appearance, personality, equipment', () => {
   it('appends an appearance change rather than replacing when append is set', async () => {
     const roster = [character({ appearance: 'A long scar across one cheek.' })]

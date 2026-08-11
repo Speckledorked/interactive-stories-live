@@ -16,12 +16,15 @@ import {
   logStatIncrease,
   createAdvancementLog,
   formatAdvancementEntry,
+  isEvolutionEligible,
   MAX_PERKS_PER_ARC,
+  MAX_MOVES_PER_ARC,
   type StatUsage,
   type Move,
   type Perk,
 } from '../advancement'
 import { ARC_LENGTH_TURNS } from '../capabilities'
+import { STRESS_EVOLUTION_THRESHOLD } from '../stress'
 
 // Valid PbtA stat spread: sum = +2, at most one stat >= +2.
 const baseStats = { cool: 0, hard: 0, hot: 0, sharp: 0, weird: 2 }
@@ -255,6 +258,61 @@ describe('applyOrganicGrowth — per-arc grant budget', () => {
     expect(countGrantsInArc(log, 'perk_gained', 15)).toBe(1)
     expect(countGrantsInArc(log, 'move_learned', 15)).toBe(1)
     expect(countGrantsInArc(null, 'perk_gained', 15)).toBe(0)
+  })
+})
+
+describe('isEvolutionEligible', () => {
+  const emptyLog = { entries: [], totalStatIncreases: 0, totalPerksGained: 0, totalMovesLearned: 0 }
+
+  it('is false below the stress threshold, even with full budget', () => {
+    expect(isEvolutionEligible(STRESS_EVOLUTION_THRESHOLD - 1, emptyLog, 15)).toBe(false)
+  })
+
+  it('is true at or above the threshold with budget available', () => {
+    expect(isEvolutionEligible(STRESS_EVOLUTION_THRESHOLD, emptyLog, 15)).toBe(true)
+  })
+
+  it('is true with a null/undefined log (nothing granted yet, budget is untouched)', () => {
+    expect(isEvolutionEligible(STRESS_EVOLUTION_THRESHOLD, null, 15)).toBe(true)
+    expect(isEvolutionEligible(STRESS_EVOLUTION_THRESHOLD, undefined, 15)).toBe(true)
+  })
+
+  it('is false once BOTH perk and move budgets are exhausted this arc', () => {
+    const log = {
+      entries: [
+        { timestamp: '', turnNumber: 10, type: 'perk_gained' as const, details: { reason: '' } },
+        { timestamp: '', turnNumber: 10, type: 'move_learned' as const, details: { reason: '' } },
+      ],
+      totalStatIncreases: 0,
+      totalPerksGained: 1,
+      totalMovesLearned: 1,
+    }
+    expect(MAX_PERKS_PER_ARC).toBe(1)
+    expect(MAX_MOVES_PER_ARC).toBe(1)
+    expect(isEvolutionEligible(STRESS_EVOLUTION_THRESHOLD, log, 15)).toBe(false)
+  })
+
+  it('is still true when only ONE of the two channels is exhausted', () => {
+    const log = {
+      entries: [{ timestamp: '', turnNumber: 10, type: 'perk_gained' as const, details: { reason: '' } }],
+      totalStatIncreases: 0,
+      totalPerksGained: 1,
+      totalMovesLearned: 0,
+    }
+    expect(isEvolutionEligible(STRESS_EVOLUTION_THRESHOLD, log, 15)).toBe(true)
+  })
+
+  it('a grant outside the current arc window no longer blocks eligibility', () => {
+    const log = {
+      entries: [
+        { timestamp: '', turnNumber: 1, type: 'perk_gained' as const, details: { reason: '' } },
+        { timestamp: '', turnNumber: 1, type: 'move_learned' as const, details: { reason: '' } },
+      ],
+      totalStatIncreases: 0,
+      totalPerksGained: 1,
+      totalMovesLearned: 1,
+    }
+    expect(isEvolutionEligible(STRESS_EVOLUTION_THRESHOLD, log, 1 + ARC_LENGTH_TURNS)).toBe(true)
   })
 })
 

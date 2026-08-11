@@ -422,3 +422,57 @@ describe('buildUserPrompt — season in the world_state line (#118)', () => {
     expect(prompt).not.toContain('undefined')
   })
 })
+
+describe('buildUserPrompt — evolution_eligible (stress-driven perk/move evolution)', () => {
+  // The per-character line lives in PLAYER CHARACTERS, built by
+  // buildUserPrompt (buildCharactersSection) — not buildSystemPrompt, which
+  // only carries the always-present guidance explaining what the flag means.
+  function makeRequestWithCharacter(overrides: Record<string, unknown> = {}): AIGMRequest {
+    return {
+      world_summary: {
+        turn_number: 1,
+        in_game_date: 'Day 1',
+        characters: [{ id: 'char-1', name: 'Kess', ...overrides }],
+        npcs: [], factions: [], clocks: [], recent_timeline_events: [],
+      },
+      current_scene_intro: 'The market is quiet.',
+      player_actions: [],
+    } as unknown as AIGMRequest
+  }
+
+  // Matched on the continuation unique to the per-character line, not just
+  // "Under sustained pressure" — the always-present organic-growth guidance
+  // paragraph (system prompt) also quotes that same phrase when explaining
+  // what the flag means.
+  const PRESSURE_LINE = 'could evolve this scene (see organic_advancement guidance)'
+
+  it('shows the pressure signal for a character flagged eligible', () => {
+    const prompt = buildUserPrompt(makeRequestWithCharacter({ evolution_eligible: true }))
+    expect(prompt).toContain(PRESSURE_LINE)
+  })
+
+  it('never shows it for an ordinary, unflagged character', () => {
+    const prompt = buildUserPrompt(makeRequestWithCharacter())
+    expect(prompt).not.toContain(PRESSURE_LINE)
+  })
+
+  it('never shows it when explicitly false', () => {
+    const prompt = buildUserPrompt(makeRequestWithCharacter({ evolution_eligible: false }))
+    expect(prompt).not.toContain(PRESSURE_LINE)
+  })
+
+  it('never leaks a raw stress number into the prompt — only the boolean signal', () => {
+    const prompt = buildUserPrompt(makeRequestWithCharacter({ evolution_eligible: true }))
+    expect(prompt).not.toMatch(/[Ss]tress:\s*\d/)
+  })
+})
+
+describe('buildSystemPrompt — spiral/resilience evolution guidance', () => {
+  it('explains spiral/resilience evolution framing in the organic growth guidance, always present', () => {
+    const request = { campaign_universe: 'Test', ai_system_prompt: 'x' } as unknown as AIGMRequest
+    const prompt = buildSystemPrompt(request)
+    expect(prompt).toContain('SPIRAL')
+    expect(prompt).toContain('RESILIENCE')
+    expect(prompt).toContain('organic_advancement.new_perks/new_moves channel')
+  })
+})

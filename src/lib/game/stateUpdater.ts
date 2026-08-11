@@ -13,6 +13,7 @@
 import { Clock } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { AIGMResponse } from '@/lib/ai/client'
+import type { ActionMechanics } from './resolution'
 import { parseCorruptionTheme, CorruptionTheme } from './corruption'
 
 import { applyTimelineEventChanges } from './worldUpdaters/timelineEvents'
@@ -66,7 +67,13 @@ export async function applyWorldUpdates(
   // calendar.ts. Optional only because a caller that predates the
   // calendar migration has nothing sensible to pass; such rows just keep
   // inGameDayNumber null.
-  inGameDayNumber?: number
+  inGameDayNumber?: number,
+  // The engine's own pre-rolled per-character outcome for this exchange
+  // (resolution.ts), threaded through to applyCharacterChanges for
+  // Character.stress drift (see stress.ts). Defaults empty for callers
+  // with nothing to report — offscreen world-turn narration never touches
+  // pc_changes at all, so this is simply unused on that path.
+  actionMechanics: ActionMechanics[] = []
 ): Promise<AppliedWorldUpdates> {
   console.log('💾 Applying world updates to database...')
 
@@ -142,7 +149,7 @@ export async function applyWorldUpdates(
       // 4. Update player characters
       if (world_updates.pc_changes) {
         const result = await applyCharacterChanges(
-          tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, npcsForResolution, getCorruptionTheme, sceneOrigin
+          tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, npcsForResolution, getCorruptionTheme, sceneOrigin, actionMechanics
         )
         // Corruption gates (#83) refusing a move is a real world event, not
         // a silent no-op — a character the narrator described walking into

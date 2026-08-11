@@ -52,6 +52,8 @@ import {
   CONSUMED_CONDITION_NAME,
   CorruptionTheme
 } from '../corruption'
+import { classifyStressEvents, decideStressDrift, StressSignal } from '../stress'
+import type { ActionMechanics } from '../resolution'
 
 type Db = Prisma.TransactionClient
 export type PcChange = NonNullable<WorldUpdates['pc_changes']>[number]
@@ -225,9 +227,16 @@ export async function applyCharacterChanges(
   charactersForResolution: Character[],
   npcsForResolution: Array<{ id: string; name: string }>,
   getCorruptionTheme: () => Promise<CorruptionTheme | null>,
-  sceneOrigin: boolean
+  sceneOrigin: boolean,
+  // The engine's own pre-rolled outcome per character this exchange — used
+  // to drift Character.stress (see ../stress.ts). Never the AI's
+  // outcome_echo self-report. Empty for callers with no rolls to report
+  // (e.g. offscreen world-turn narration never touches pc_changes at all).
+  actionMechanics: ActionMechanics[] = []
 ): Promise<{ gateRefusals: string[]; unresolvedCharacterNames: string[]; worldChanges: WorldChange[] }> {
   console.log(`🦸 Updating ${pcChanges.length} characters`)
+
+  const outcomeByCharacterId = new Map(actionMechanics.map((m) => [m.characterId, m.outcome]))
 
   // Refusals from corruption gates (#83) — returned rather than pushed into
   // harmMessages, which doubles as the "write harm and conditions" trigger:
@@ -934,6 +943,27 @@ export async function applyCharacterChanges(
       for (const line of capabilityLog) {
         console.log(`  📖 ${character.name} — ${line}`)
       }
+    }
+
+    // Accumulated psychological pressure (see ../stress.ts) — classified
+    // from signals already computed above for OTHER reasons this same
+    // pass (the engine's own outcome for this character, applied harm, an
+    // applied corruption mark) plus what this exchange reported for
+    // consequences. Runs for every character with a pc_changes entry, not
+    // just ones with a raise event — a quiet exchange with none of the
+    // raise signals is exactly what lets stress recover. Deliberately
+    // never logged to worldChanges (buildCharacterWorldChanges has no
+    // 'stress' case): background drift, same as belief/disposition
+    // vectors, not a narrated history event.
+    const stressSignal: StressSignal = {
+      outcome: outcomeByCharacterId.get(character.id),
+      harmDamage: pcChange.changes.harm_damage,
+      consequenceTypesAdded: pcChange.changes.consequences_add?.map((c) => c.type),
+      gainedCorruptionMark: 'corruption' in updateData && (character.corruption ?? 0) !== updateData.corruption,
+    }
+    const nextStress = decideStressDrift(character.stress ?? 0, classifyStressEvents(stressSignal))
+    if (nextStress !== (character.stress ?? 0)) {
+      updateData.stress = nextStress
     }
 
     if (Object.keys(updateData).length > 0) {

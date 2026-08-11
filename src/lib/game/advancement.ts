@@ -5,6 +5,7 @@
 import { Character } from '@prisma/client'
 import { ARC_LENGTH_TURNS, slugifyCapabilityKey } from './capabilities'
 import { boundAdvancementEntries } from './textAppend'
+import { STRESS_EVOLUTION_THRESHOLD } from './stress'
 
 /**
  * Stat usage tracking structure. lastGrowthTurn gates re-proposing a +1 for
@@ -142,6 +143,31 @@ export function countGrantsInArc(
     if (typeof entry.turnNumber !== 'number') return false
     return currentTurn - entry.turnNumber < ARC_LENGTH_TURNS
   }).length
+}
+
+/**
+ * Whether this character's accumulated stress (see stress.ts) justifies
+ * telling the AI it MAY offer a perk/move evolution this scene — a
+ * transformation of something already on their sheet, framed as spiral
+ * (obsessive/costly) or resilience (refined/stronger), rather than an
+ * unrelated new bonus.
+ *
+ * Deliberately reuses the SAME perk/move arc budget every ordinary grant
+ * already respects (countGrantsInArc/MAX_PERKS_PER_ARC/MAX_MOVES_PER_ARC)
+ * rather than a second counter — an evolution IS a perk or move grant
+ * mechanically (see sceneResolutionRequest.ts/scenePrompt.ts), just
+ * narratively framed as change rather than addition. Eligible only when
+ * at least one of the two channels has room this arc.
+ */
+export function isEvolutionEligible(
+  stress: number,
+  log: AdvancementLog | null | undefined,
+  currentTurn: number
+): boolean {
+  if (stress < STRESS_EVOLUTION_THRESHOLD) return false
+  const perksUsed = countGrantsInArc(log, 'perk_gained', currentTurn)
+  const movesUsed = countGrantsInArc(log, 'move_learned', currentTurn)
+  return perksUsed < MAX_PERKS_PER_ARC || movesUsed < MAX_MOVES_PER_ARC
 }
 
 /** Why a proposed perk/move didn't land. */

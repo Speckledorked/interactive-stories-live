@@ -20,8 +20,18 @@ import { resolveOrCreateLocationId } from '../locations'
 
 const makeTx = () => ({
   character: { update: vi.fn(async (_args: any) => ({})) },
-  // Corruption entry gate (#83) looks the destination up by campaign+name.
-  location: { findUnique: vi.fn(async (): Promise<{ minCorruption: number | null; maxCorruption: number | null } | null> => null) },
+  // Corruption (#83) and condition (#206) entry gates look the destination
+  // up by campaign+name; conditionScore/isContested are optional in the
+  // mock type since most tests never set them (undefined derives to the
+  // top PROSPEROUS band, i.e. never blocks — see conditionGates.test.ts).
+  location: {
+    findUnique: vi.fn(async (): Promise<{
+      minCorruption: number | null
+      maxCorruption: number | null
+      conditionScore?: number
+      isContested?: boolean
+    } | null> => null),
+  },
   // StateMutation audit trail (#198) — real inside the same transaction.
   stateMutation: { create: vi.fn(async (_args: any) => ({})) },
 })
@@ -1129,6 +1139,109 @@ describe('applyCharacterChanges — corruption entry gate', () => {
     const data = tx.character.update.mock.calls[0]?.[0]?.data
     expect(data?.harm).toBeUndefined()
     expect(data?.conditions).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Condition entry gate (#206)
+// ---------------------------------------------------------------------------
+// Same boundary discipline as the corruption gate above, but keyed on the
+// destination's own conditionScore/isContested rather than a party's
+// corruption — and, unlike corruption, independent of any theme, so these
+// use noTheme throughout to pin that a RUINED/ABANDONED location refuses
+// entry regardless of whether the campaign even has a corruption theme.
+
+describe('applyCharacterChanges — condition entry gate', () => {
+  it('refuses a move into a RUINED location', async () => {
+    const roster = [character({ corruption: 0 })]
+    tx.location.findUnique.mockResolvedValue({ minCorruption: null, maxCorruption: null, conditionScore: 10, isContested: false })
+
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'The Shattered Keep' } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    expect(refusals).toHaveLength(1)
+    expect(refusals[0]).toContain('The Shattered Keep')
+    const data = tx.character.update.mock.calls[0]?.[0]?.data
+    expect(data?.currentLocation).toBeUndefined()
+  })
+
+  it('refuses a move into an ABANDONED location', async () => {
+    const roster = [character({ corruption: 0 })]
+    tx.location.findUnique.mockResolvedValue({ minCorruption: null, maxCorruption: null, conditionScore: 0, isContested: false })
+
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'The Sunken Hollow' } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    expect(refusals).toHaveLength(1)
+  })
+
+  it('applies with no corruption theme active — condition gating is theme-independent', async () => {
+    const roster = [character({ corruption: 0 })]
+    tx.location.findUnique.mockResolvedValue({ minCorruption: null, maxCorruption: null, conditionScore: 5, isContested: false })
+
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'A Ruin' } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    expect(refusals).toHaveLength(1)
+  })
+
+  it('allows a move into a DAMAGED (or better) location', async () => {
+    const roster = [character({ corruption: 0 })]
+    tx.location.findUnique.mockResolvedValue({ minCorruption: null, maxCorruption: null, conditionScore: 40, isContested: false })
+
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'The Old Quarter' } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    expect(refusals).toEqual([])
+    expect(tx.character.update.mock.calls[0][0].data.currentLocation).toBe('The Old Quarter')
+  })
+
+  it('never checks a gate when the change is not a move', async () => {
+    const roster = [character({ corruption: 0 })]
+    await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    expect(tx.location.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('allows the move when the location has no condition data (matches undiscovered-row default)', async () => {
+    const roster = [character({ corruption: 0 })]
+    tx.location.findUnique.mockResolvedValue({ minCorruption: null, maxCorruption: null })
+
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'Somewhere' } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    expect(refusals).toEqual([])
+  })
+
+  it('allows the move when the gate lookup fails', async () => {
+    const roster = [character({ corruption: 0 })]
+    tx.location.findUnique.mockRejectedValue(new Error('db down'))
+
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'Anywhere' } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    expect(refusals).toEqual([])
+  })
+
+  it('checks condition before corruption, so a RUINED gated location refuses on condition first', async () => {
+    const roster = [character({ corruption: 0 })]
+    const localTheme = vi.fn().mockResolvedValue({ name: 'the Rot', stages: ['marked'] })
+    tx.location.findUnique.mockResolvedValue({ minCorruption: 5, maxCorruption: null, conditionScore: 10, isContested: false })
+
+    const { gateRefusals: refusals } = await applyCharacterChanges(tx as any, 'camp1', 3, [
+      { character_name_or_id: 'char1', changes: { location: 'The Fallen Sanctum' } } as PcChange,
+    ], roster, npcRoster, localTheme, true)
+
+    expect(refusals).toHaveLength(1)
+    // The corruption theme lookup never had to run — condition refused first.
+    expect(localTheme).not.toHaveBeenCalled()
   })
 })
 

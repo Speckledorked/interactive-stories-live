@@ -44,6 +44,7 @@ import type { WorldChange } from '../tick/types'
 import { applyDebtChanges, debtChangeFromConsequence, DebtChange } from '../debts'
 import { applyStandingChanges } from '../standing'
 import { checkCorruptionGate, hasCorruptionGate, describeRefusal } from '../corruptionGates'
+import { checkConditionGate, describeConditionRefusal } from '../conditionGates'
 import { applyConditionTemplate, stabilizeCharacter } from '../harm'
 import { applyGrantBudget, rarityPoints } from '../itemValue'
 import { clampGoldDelta, applyGoldDelta } from '../economy'
@@ -1044,16 +1045,22 @@ export async function applyCharacterChanges(
 }
 
 /**
- * Corruption gate for a location a character is trying to MOVE INTO (#83).
+ * Corruption AND condition gate for a location a character is trying to
+ * MOVE INTO (#83, #206).
  *
  * Boundary-only by construction: this is called from the location-change
  * branch, so it can only ever refuse a move. Where a character already
- * stands is never re-checked — with irreversible marks, that would eject
- * someone through a door they could never re-enter.
+ * stands is never re-checked — with irreversible corruption marks, that
+ * would eject someone through a door they could never re-enter. Condition
+ * gating rides the same boundary for consistency, even though its own
+ * state (conditionScore) isn't irreversible the way marks are — a party
+ * that already stood in a location before it decayed is still never
+ * ejected, matching the "never retroactive" discipline this gate exists
+ * to enforce either way.
  *
- * Fails OPEN on every uncertainty — no theme, no such location yet, a
- * lookup error. A gate that accidentally refuses movement strands the
- * party; one that accidentally permits it costs a moment of flavor.
+ * Fails OPEN on every uncertainty — no such location yet, a lookup error,
+ * no corruption theme. A gate that accidentally refuses movement strands
+ * the party; one that accidentally permits it costs a moment of flavor.
  */
 async function checkLocationEntryGate(
   tx: Db,
@@ -1063,22 +1070,31 @@ async function checkLocationEntryGate(
   getCorruptionTheme: () => Promise<CorruptionTheme | null>
 ): Promise<{ allowed: boolean; message?: string }> {
   try {
-    const theme = await getCorruptionTheme()
-    if (!theme) return { allowed: true }
-
     const location = await tx.location.findUnique({
       where: { campaignId_name: { campaignId, name: locationName } },
-      select: { minCorruption: true, maxCorruption: true },
+      select: { minCorruption: true, maxCorruption: true, conditionScore: true, isContested: true },
     })
     // A location the fiction is inventing right now can't be gated — there
     // is no row yet to carry a gate.
-    if (!location || !hasCorruptionGate(location)) return { allowed: true }
+    if (!location) return { allowed: true }
+
+    // #206: condition gate first — universe-theme-independent (a collapsed
+    // bridge is a collapsed bridge in any setting), so it never needs
+    // getCorruptionTheme at all.
+    const conditionGate = checkConditionGate(location)
+    if (!conditionGate.allowed) {
+      return { allowed: false, message: describeConditionRefusal(conditionGate.refusal!) }
+    }
+
+    if (!hasCorruptionGate(location)) return { allowed: true }
+    const theme = await getCorruptionTheme()
+    if (!theme) return { allowed: true }
 
     const gate = checkCorruptionGate(location, corruption, true)
     if (gate.allowed) return { allowed: true }
     return { allowed: false, message: describeRefusal(gate.refusal!, theme.name) }
   } catch (error) {
-    console.error('Corruption entry gate check failed (allowing movement):', error)
+    console.error('Location entry gate check failed (allowing movement):', error)
     return { allowed: true }
   }
 }

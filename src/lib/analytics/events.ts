@@ -205,3 +205,49 @@ export async function getRetentionByCohortWeek(weeksBack = 8): Promise<CohortRet
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([weekKey, users]) => computeCohortRetention(new Date(weekKey), users, now.getTime()))
 }
+
+// ---------------------------------------------------------------------------
+// User/campaign listing (#99) — metadata-only, no schema change
+
+export interface UserCampaignListingEntry {
+  userId: string
+  email: string
+  name: string | null
+  createdAt: Date
+  campaigns: Array<{ id: string; title: string; createdAt: Date }>
+}
+
+const USER_CAMPAIGN_LISTING_LIMIT = 100
+
+/**
+ * A site-owner-only, metadata-only listing of users and the campaigns
+ * they've created. No new schema — there's no Campaign.creatorId, so
+ * "created" is read off the existing CampaignMembership.role === 'ADMIN'
+ * relation, the same signal admin-only campaign features already gate on
+ * everywhere else in this app. Most-recently-joined users first, capped
+ * so this stays a glance-able list rather than a full export.
+ */
+export async function getUserCampaignListing(): Promise<UserCampaignListingEntry[]> {
+  const users = await prisma.user.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: USER_CAMPAIGN_LISTING_LIMIT,
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      createdAt: true,
+      campaignMemberships: {
+        where: { role: 'ADMIN' },
+        select: { campaign: { select: { id: true, title: true, createdAt: true } } },
+      },
+    },
+  })
+
+  return users.map((u) => ({
+    userId: u.id,
+    email: u.email,
+    name: u.name,
+    createdAt: u.createdAt,
+    campaigns: u.campaignMemberships.map((m) => m.campaign),
+  }))
+}

@@ -13,6 +13,7 @@ vi.mock('@/lib/analytics/events', () => ({
   getFunnelCounts: vi.fn(),
   getSignupsByDay: vi.fn(),
   getRetentionByCohortWeek: vi.fn(),
+  getUserCampaignListing: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -23,7 +24,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { getUser } from '@/lib/auth'
 import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
-import { getFunnelCounts, getSignupsByDay, getRetentionByCohortWeek } from '@/lib/analytics/events'
+import { getFunnelCounts, getSignupsByDay, getRetentionByCohortWeek, getUserCampaignListing } from '@/lib/analytics/events'
 import { prisma } from '@/lib/prisma'
 import { GET } from '../route'
 
@@ -40,6 +41,7 @@ beforeEach(() => {
   ;(getFunnelCounts as any).mockResolvedValue({})
   ;(getSignupsByDay as any).mockResolvedValue([])
   ;(getRetentionByCohortWeek as any).mockResolvedValue([])
+  ;(getUserCampaignListing as any).mockResolvedValue([])
   db.resolutionJob.findMany.mockResolvedValue([])
   db.loreImportJob.findMany.mockResolvedValue([])
 })
@@ -59,14 +61,17 @@ describe('GET', () => {
     expect(getFunnelCounts).not.toHaveBeenCalled()
   })
 
-  it('returns funnel, signup, retention, and stuck-job data for a platform admin', async () => {
+  it('returns funnel, signup, retention, stuck-job, and user/campaign listing data for a platform admin', async () => {
     ;(getFunnelCounts as any).mockResolvedValue({ signups: 10 })
     db.resolutionJob.findMany.mockResolvedValue([{ id: 'j1' }])
+    ;(getUserCampaignListing as any).mockResolvedValue([{ userId: 'u2', email: 'p@example.com', name: null, createdAt: new Date(), campaigns: [] }])
     const response = await GET(req())
     const body = await response.json()
     expect(response.status).toBe(200)
     expect(body.funnel).toEqual({ signups: 10 })
     expect(body.stuckResolutionJobs).toEqual([{ id: 'j1' }])
+    expect(body.users).toHaveLength(1)
+    expect(body.users[0].email).toBe('p@example.com')
   })
 
   it('queries stuck jobs by the alerted-OR-abandoned-failure signature', async () => {

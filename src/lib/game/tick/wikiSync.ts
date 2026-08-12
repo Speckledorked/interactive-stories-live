@@ -4,17 +4,28 @@
 //
 // Triggered by the exact same "significant" flag already used to gate RAG
 // memory writes (see historyLog.ts) — no second threshold system. Whenever a
-// tick or a player-action consequence produces a significant NPC/FACTION
-// change, that entity's wiki entry is regenerated from current DB state.
-// Weather/location changes don't have an analogous requirement here (out of
-// scope for this pass) so LOCATION_WEATHER changes are ignored.
+// tick or a player-action consequence produces a significant NPC/FACTION/
+// LOCATION_CONDITION change, that entity's wiki entry is regenerated from
+// current DB state.
+//
+// LOCATION_WEATHER is deliberately still excluded, not an oversight: unlike
+// every other entityType here, weatherTick.ts marks EVERY weather change
+// significant: true, every turn, in every campaign — wiring that in would
+// mean a wiki resync (and a changelog entry) on every single tick, which is
+// churn, not signal, and isn't the kind of thing a "the world remembers"
+// chronicle should be capturing turn to turn. LOCATION_CONDITION is
+// different: locationConditionTick.ts only marks it significant on an
+// actual war-driven ravaging (peacetime recovery and mere contest strain
+// are routine, same tier as weather's own wobble), which is exactly the
+// bar every other entry in this file already uses.
 
 import { prisma } from '@/lib/prisma'
 import type { Prisma, WikiEntryType } from '@prisma/client'
 import { WorldChange, parseFactionRelationships } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
+import { deriveConditionTags } from './locationConditionTick'
 import { describeStat } from '@/lib/ai/qualitativeStats'
-import { buildNpcWikiSummary, buildFactionWikiSummary } from '@/lib/wiki/entitySummaries'
+import { buildNpcWikiSummary, buildFactionWikiSummary, buildLocationWikiSummary } from '@/lib/wiki/entitySummaries'
 
 /**
  * Regenerate WikiEntry summary/description for every NPC/Faction that had a
@@ -29,16 +40,28 @@ export async function syncWikiEntriesForChanges(
 ): Promise<number> {
   const significantEntityIds = new Set(
     changes
-      .filter((c) => c.significant && (c.entityType === 'NPC' || c.entityType === 'FACTION'))
+      .filter((c) => c.significant && (c.entityType === 'NPC' || c.entityType === 'FACTION' || c.entityType === 'LOCATION_CONDITION'))
       .map((c) => `${c.entityType}:${c.entityId}`)
   )
 
   let synced = 0
 
   for (const key of significantEntityIds) {
-    const [entityType, entityId] = key.split(':') as ['NPC' | 'FACTION', string]
+    const [entityType, entityId] = key.split(':') as ['NPC' | 'FACTION' | 'LOCATION_CONDITION', string]
 
-    if (entityType === 'NPC') {
+    if (entityType === 'LOCATION_CONDITION') {
+      const location = await prisma.location.findUnique({
+        where: { id: entityId },
+        include: { ownerFaction: { select: { name: true, isDiscovered: true } } },
+      })
+      // Fog of war: an undiscovered location gets no wiki entry, same as
+      // an undiscovered NPC/faction above.
+      if (!location || !location.isDiscovered) continue
+      await syncLocationWikiEntry(campaignId, turnNumber, {
+        ...location,
+        ownerFaction: location.ownerFaction?.isDiscovered ? { name: location.ownerFaction.name } : null,
+      })
+    } else if (entityType === 'NPC') {
       const npc = await prisma.nPC.findUnique({
         where: { id: entityId },
         // Fog of war applies to the links too: an undiscovered faction or
@@ -199,6 +222,57 @@ async function syncFactionWikiEntry(
     importance: wikiImportance,
     related,
     tags: [humanizeArchetype(faction.archetype)],
+  })
+}
+
+/**
+ * Only reached on a war-driven condition change (see this file's header
+ * comment) — the same real-history moment sceneResolver.ts's own
+ * every-scene Location sync doesn't reliably capture soon after it happens
+ * away from any player scene. Reflects the location's current condition
+ * band (RUINED/DAMAGED/STABLE/PROSPEROUS, plus CONTESTED) via
+ * deriveConditionTags — the same derivation the admin reasoning route and
+ * the integrity checks use, so the wiki can never show a tag the rest of
+ * the simulation disagrees with.
+ */
+async function syncLocationWikiEntry(
+  campaignId: string,
+  turnNumber: number,
+  location: {
+    name: string
+    description: string | null
+    locationType: string | null
+    conditionScore: number
+    isContested: boolean
+    ownerFaction?: { name: string } | null
+  }
+): Promise<void> {
+  const conditionTags = deriveConditionTags(location.conditionScore, location.isContested)
+  const conditionLine = `Condition: ${describeStat(location.conditionScore)} (${conditionTags.join(', ').toLowerCase()})`
+
+  const description = [
+    location.description,
+    location.locationType ? `Type: ${location.locationType}` : null,
+    // Fog of war: only name the controlling faction if that faction is
+    // itself discovered — territory shouldn't out a hidden faction's
+    // existence any more than the AI's own prompt is allowed to.
+    location.ownerFaction ? `Controlled by: ${location.ownerFaction.name}` : null,
+    conditionLine,
+  ].filter(Boolean).join('\n\n') || `${location.name} is a location in the world.`
+
+  await upsertWikiEntry({
+    campaignId,
+    turnNumber,
+    entryType: 'LOCATION',
+    name: location.name,
+    summary: buildLocationWikiSummary(location),
+    description,
+    // A location bad enough to trigger this sync at all (a war actively
+    // ravaging it) is wiki-major by construction — this function is only
+    // ever reached on that path, see the caller.
+    importance: 'major',
+    related: [],
+    tags: location.locationType ? [location.locationType] : [],
   })
 }
 

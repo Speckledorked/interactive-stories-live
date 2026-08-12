@@ -20,6 +20,7 @@ import { IntegrityPanel } from '@/components/admin/IntegrityPanel'
 import type { SetupChecklistItem } from '@/components/admin/SetupChecklist'
 import { FieldHelp } from '@/components/ui/field-help'
 import { SectionHeader } from '@/components/ui/section-header'
+import { parseCorruptionTheme } from '@/lib/game/corruption'
 
 interface Campaign {
   id: string
@@ -29,6 +30,7 @@ interface Campaign {
   aiSystemPrompt: string
   initialWorldSeed: string
   contentModerationLevel: string
+  corruptionTheme?: unknown
   scenes?: unknown[]
   worldMeta?: {
     currentTurnNumber: number
@@ -1165,6 +1167,23 @@ export default function AdminPage() {
                     universe&apos;s power-at-a-cost corruption theme — if its fiction has one. Only fills what&apos;s
                     missing; never replaces existing cards or an existing theme.
                   </p>
+                  {(() => {
+                    const theme = parseCorruptionTheme(campaign.corruptionTheme)
+                    return (
+                      <div className="mb-3 flex items-center gap-2 text-xs">
+                        <span className="font-mono uppercase tracking-wider text-myth-ink-faint">Corruption theme</span>
+                        {theme ? (
+                          <span className="rounded-full bg-myth-accent/10 px-2.5 py-0.5 font-medium text-myth-accent">
+                            {theme.name}
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-myth-surface-sunken px-2.5 py-0.5 text-myth-ink-faint">
+                            Not part of this universe
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
                   <button
                     onClick={handleGenerateWorldExtras}
                     disabled={generatingExtras}

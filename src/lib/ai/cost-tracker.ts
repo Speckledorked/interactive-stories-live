@@ -373,55 +373,6 @@ export class AICostTracker {
   }
 
   /**
-   * Get cost statistics for all campaigns (admin view)
-   */
-  static async getGlobalStatistics(): Promise<{
-    totalCost: number
-    totalTokens: number
-    totalRequests: number
-    averageCostPerCampaign: number
-    averageCostPerScene: number
-  }> {
-    try {
-      const allWorldMeta = await prisma.worldMeta.findMany({
-        select: { aiMetrics: true }
-      })
-
-      let totalCost = 0
-      let totalTokens = 0
-      let totalRequests = 0
-      let campaignCount = 0
-
-      for (const meta of allWorldMeta) {
-        if (meta.aiMetrics) {
-          const metrics = meta.aiMetrics as any
-          totalCost += metrics.totalCost || 0
-          totalTokens += metrics.tokensUsed || 0
-          totalRequests += metrics.totalRequests || 0
-          campaignCount++
-        }
-      }
-
-      return {
-        totalCost,
-        totalTokens,
-        totalRequests,
-        averageCostPerCampaign: campaignCount > 0 ? totalCost / campaignCount : 0,
-        averageCostPerScene: totalRequests > 0 ? totalCost / totalRequests : 0
-      }
-    } catch (error) {
-      console.error('Failed to get global AI statistics:', error)
-      return {
-        totalCost: 0,
-        totalTokens: 0,
-        totalRequests: 0,
-        averageCostPerCampaign: 0,
-        averageCostPerScene: 0
-      }
-    }
-  }
-
-  /**
    * Create empty metrics object
    */
   private createEmptyMetrics() {

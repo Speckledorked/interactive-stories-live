@@ -45,10 +45,12 @@ interface CampaignCostEntry {
   campaignId: string
   title: string
   totalCostDollars: number
+  totalPaidDollars: number
   requestCount: number
 }
 interface CampaignCostSummary {
   totalCostDollars: number
+  totalPaidDollars: number
   totalRequests: number
   topCampaigns: CampaignCostEntry[]
 }
@@ -306,18 +308,21 @@ export default function AnalyticsDashboardPage() {
             </section>
 
             {/* AI cost by campaign — every AI call already writes a real
-                AICostEntry row; this is the first place any of it is
-                actually surfaced, platform-wide (not scoped to admin-owned
-                campaigns like the table above — cost matters regardless of
-                who administers a campaign). */}
+                AICostEntry row (spent), and every scene-resolution billing
+                charge already writes a real Transaction (paid); this is the
+                first place either is actually surfaced, platform-wide (not
+                scoped to admin-owned campaigns like the table above — spend
+                and revenue matter regardless of who administers a
+                campaign). */}
             <section>
               <SectionHeader
                 as="h2"
                 title="AI Cost by Campaign"
-                description="Platform-wide AI spend, and the highest-cost campaigns."
+                description="What each campaign's AI usage actually cost us, vs. what's been billed and collected from players."
               />
-              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-2">
-                <StatTile label="Total AI spend" value={formatCost(data.campaignCosts.totalCostDollars)} />
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <StatTile label="Total spent" value={formatCost(data.campaignCosts.totalCostDollars)} sublabel="raw AI cost" />
+                <StatTile label="Total paid" value={formatCost(data.campaignCosts.totalPaidDollars)} sublabel="billed to players" />
                 <StatTile label="Total AI requests" value={data.campaignCosts.totalRequests} />
               </div>
               <div className="mt-3 overflow-x-auto rounded-lg border border-myth-border bg-myth-surface">
@@ -328,7 +333,8 @@ export default function AnalyticsDashboardPage() {
                     <thead>
                       <tr className="border-b border-myth-border text-left text-xs text-myth-ink-faint">
                         <th className="px-3 py-2 font-medium">Campaign</th>
-                        <th className="px-3 py-2 font-medium">Total cost</th>
+                        <th className="px-3 py-2 font-medium">Spent</th>
+                        <th className="px-3 py-2 font-medium">Paid</th>
                         <th className="px-3 py-2 font-medium">AI requests</th>
                       </tr>
                     </thead>
@@ -337,6 +343,7 @@ export default function AnalyticsDashboardPage() {
                         <tr key={c.campaignId} className="border-b border-myth-border last:border-0">
                           <td className="px-3 py-2 text-myth-ink">{c.title}</td>
                           <td className="px-3 py-2 text-myth-ink-muted">{formatCost(c.totalCostDollars)}</td>
+                          <td className="px-3 py-2 text-myth-ink-muted">{formatCost(c.totalPaidDollars)}</td>
                           <td className="px-3 py-2 text-myth-ink-faint">{c.requestCount}</td>
                         </tr>
                       ))}

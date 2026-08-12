@@ -402,7 +402,28 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
 
   const changes: WorldChange[] = []
 
-  for (const faction of factions) {
+  // #199: `factions` above is a single snapshot taken before this loop
+  // starts — but an earlier faction's collapse this same tick can write a
+  // real absorption transfer into a LATER faction's row (the `absorber`
+  // branch below). Without this, that later faction's own regular-tick
+  // write — still computed from its stale pre-loop snapshot — silently
+  // overwrote the transfer the instant its own turn came up, discarding it
+  // with no error. Tracking the cumulative resources/military delta already
+  // applied to each faction id this tick lets every faction's own turn
+  // start from its real current state, however far into the loop it runs,
+  // regardless of `dryRun` (so a preview stays accurate too).
+  const appliedDeltaThisTick = new Map<string, { resources: number; military: number }>()
+
+  for (const rawFaction of factions) {
+    const pendingDelta = appliedDeltaThisTick.get(rawFaction.id)
+    const faction = pendingDelta
+      ? {
+          ...rawFaction,
+          resources: clamp(rawFaction.resources + pendingDelta.resources, 0, 100),
+          military: clamp(rawFaction.military + pendingDelta.military, 0, 100),
+        }
+      : rawFaction
+
     const next = decideFactionTick(faction)
     const relationships = parseFactionRelationships(faction.relationships)
     const collapse = decideFactionCollapse(next)
@@ -465,6 +486,16 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
             data: { ownerFactionId: absorber.id, isContested: false },
           })
         }
+
+        // #199: record the transfer regardless of dryRun — if absorber.id
+        // hasn't had its own turn in this loop yet, this is what lets that
+        // turn start from the real post-absorption state instead of
+        // clobbering it (see the appliedDeltaThisTick declaration above).
+        const existingDelta = appliedDeltaThisTick.get(absorber.id) ?? { resources: 0, military: 0 }
+        appliedDeltaThisTick.set(absorber.id, {
+          resources: existingDelta.resources + collapse.transferResources,
+          military: existingDelta.military + collapse.transferMilitary,
+        })
       } else {
         // No rival to absorb it — a smaller successor rises from the
         // wreckage instead of the faction simply vanishing.

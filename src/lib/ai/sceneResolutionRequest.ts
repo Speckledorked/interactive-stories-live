@@ -291,13 +291,15 @@ export async function buildSceneResolutionRequest(
     progressState.establishedFacts.length > 0 ||
     progressState.resolvedBeats.length > 0 ||
     progressState.activeConflict !== null ||
-    Object.keys(progressState.npcIntentions).length > 0
+    Object.keys(progressState.npcIntentions).length > 0 ||
+    progressState.recentMoves.length > 0
   const sceneProgressLedger = hasProgressLedger
     ? {
         established_facts: progressState.establishedFacts,
         resolved_beats: progressState.resolvedBeats.map((b) => b.text),
         active_conflict: progressState.activeConflict,
         npc_intentions: Object.entries(progressState.npcIntentions).map(([npc, intention]) => ({ npc, intention })),
+        recent_moves: progressState.recentMoves,
       }
     : undefined
 

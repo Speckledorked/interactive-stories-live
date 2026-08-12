@@ -11,6 +11,7 @@
 
 import type { WorldStateChange } from '@/components/scene/AITransparencyPanel'
 import type { AdherenceResult } from './outcomeAdherence'
+import type { MoveVarietyResult } from './moveVariety'
 
 /**
  * Pull the world-state changes out of a scene's `consequences` blob.
@@ -36,4 +37,16 @@ export function extractOutcomeAdherence(consequences: unknown): AdherenceResult 
   const adherence = (consequences as any)?.outcomeAdherence
   if (!adherence || !Array.isArray(adherence.entries)) return null
   return adherence as AdherenceResult
+}
+
+/**
+ * Pull the move-variety result (#232) out of the same blob — did the
+ * narrator actually reach for a different move, or the same one every
+ * time? Same tolerate-anything-malformed shape as the two extractors
+ * above: a scene resolved before this field existed simply has none.
+ */
+export function extractMoveVariety(consequences: unknown): MoveVarietyResult | null {
+  const moveVariety = (consequences as any)?.moveVariety
+  if (!moveVariety || !Array.isArray(moveVariety.entries)) return null
+  return moveVariety as MoveVarietyResult
 }

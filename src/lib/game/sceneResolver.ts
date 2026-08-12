@@ -9,7 +9,8 @@ import { formatInGameDate, type GeneratedCalendar } from './calendar'
 import { resolveLegacyCalendar } from './calendarBackfill'
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
 import { applyWorldUpdates, summarizeWorldUpdates, enrichStubNPCs, enrichStubFactions } from './stateUpdater'
-import { applySceneProgress } from './worldUpdaters/sceneProgress'
+import { applySceneProgress, parseSceneProgressState } from './worldUpdaters/sceneProgress'
+import { checkMoveVariety } from './moveVariety'
 import { SceneStatus } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
 import { needsIntervention } from './campaignHealthBands'
@@ -292,11 +293,24 @@ async function performResolution(
     // applyWorldUpdates's transaction: this is Scene-level bookkeeping, not
     // an entity-state write, and (like wiki sync/image enqueue below) must
     // never be able to fail the scene resolution itself.
+    // #232: measured against the PRE-update recent-moves list (what the
+    // scene's history actually was going into this exchange), computed
+    // before applySceneProgress folds this exchange's own moves in —
+    // otherwise a move would always "repeat" against itself.
+    const moveVariety = checkMoveVariety(
+      (aiResponse as { outcome_echo?: Array<{ character_name_or_id?: string; outcome?: string; move_used?: string }> }).outcome_echo,
+      parseSceneProgressState(scene.progressState).recentMoves
+    )
+    const movesUsedThisExchange: string[] = moveVariety.entries
+      .map((e) => e.normalizedMove)
+      .filter((m): m is NonNullable<typeof m> => m !== null)
+
     try {
       const { progressState, newSignificantBeats } = applySceneProgress(
         scene.progressState,
         aiResponse.scene_progress,
-        aiRequest.current_exchange_number ?? 0
+        aiRequest.current_exchange_number ?? 0,
+        movesUsedThisExchange
       )
       await prisma.scene.update({
         where: { id: sceneId },
@@ -401,7 +415,7 @@ async function performResolution(
     // checkOutcomeAdherence call) already ran during callAIGM above and fed
     // a campaign-wide admin metric — this is what makes that same result
     // reach the player, in the same panel that already shows dice receipts.
-    await storeWorldStateChanges(sceneId, worldStateChanges, aiResponse._outcomeAdherence)
+    await storeWorldStateChanges(sceneId, worldStateChanges, aiResponse._outcomeAdherence, moveVariety)
     console.log(`✅ Tracked ${worldStateChanges.length} world state changes`)
 
     // 6.7. Create notifications for character progression

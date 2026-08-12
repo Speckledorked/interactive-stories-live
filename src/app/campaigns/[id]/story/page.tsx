@@ -13,8 +13,9 @@ import type { MapData } from '@/lib/maps/map-service'
 import AILoadingState from '@/components/scene/AILoadingState'
 import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
 import AITransparencyPanel, { type WorldStateChange } from '@/components/scene/AITransparencyPanel'
-import { extractWorldStateChanges, extractOutcomeAdherence } from '@/lib/game/worldStateChanges'
+import { extractWorldStateChanges, extractOutcomeAdherence, extractMoveVariety } from '@/lib/game/worldStateChanges'
 import type { AdherenceResult } from '@/lib/game/outcomeAdherence'
+import type { MoveVarietyResult } from '@/lib/game/moveVariety'
 import CharacterSnapshotModal from '@/components/character/CharacterSnapshotModal'
 import { useCommandPalette } from '@/contexts/CommandPaletteContext'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -127,6 +128,7 @@ export default function StoryPage() {
   const [generatingImageFor, setGeneratingImageFor] = useState<Record<string, boolean>>({})
   const [imageGenError, setImageGenError] = useState<Record<string, string>>({})
   const [sceneOutcomeAdherence, setSceneOutcomeAdherence] = useState<Record<string, AdherenceResult>>({})
+  const [sceneMoveVariety, setSceneMoveVariety] = useState<Record<string, MoveVarietyResult>>({})
   const [expandedTransparency, setExpandedTransparency] = useState<Record<string, boolean>>({})
   const [startingScene, setStartingScene] = useState(false)
   const [endingScene, setEndingScene] = useState(false)
@@ -252,6 +254,7 @@ export default function StoryPage() {
       // Load world state changes for scenes
       const changesMap: Record<string, WorldStateChange[]> = {}
       const adherenceMap: Record<string, AdherenceResult> = {}
+      const moveVarietyMap: Record<string, MoveVarietyResult> = {}
       for (const scene of sceneData.scenes || []) {
         // Shape lives in one place (world-state-tracker) rather than being
         // hand-read out of an untyped Json blob here.
@@ -263,9 +266,14 @@ export default function StoryPage() {
         if (adherence) {
           adherenceMap[scene.id] = adherence
         }
+        const moveVariety = extractMoveVariety(scene.consequences)
+        if (moveVariety) {
+          moveVarietyMap[scene.id] = moveVariety
+        }
       }
       setSceneWorldStateChanges(changesMap)
       setSceneOutcomeAdherence(adherenceMap)
+      setSceneMoveVariety(moveVarietyMap)
 
       // Get user's characters
       const userChars = campData.campaign?.characters?.filter(
@@ -1333,6 +1341,7 @@ export default function StoryPage() {
                             <AITransparencyPanel
                               changes={sceneWorldStateChanges[scene.id]}
                               adherence={sceneOutcomeAdherence[scene.id]}
+                              moveVariety={sceneMoveVariety[scene.id]}
                               sceneNumber={scene.sceneNumber}
                               isOpen={expandedTransparency[scene.id] !== false}
                               onClose={() => setExpandedTransparency(prev => ({ ...prev, [scene.id]: false }))}

@@ -240,7 +240,7 @@ You MUST respond with a JSON object matching this structure:
 {
   "scene_text": "Full narrated resolution (200-400 words MAX, mostly dialogue and action)...",
   "scene_summary": "One or two plain-prose sentences recapping what actually happened this scene — a real summary, not a shortened copy of scene_text.",
-  "outcome_echo": [{"character_name_or_id": "CHARACTER_NAME", "outcome": "weakHit"}],
+  "outcome_echo": [{"character_name_or_id": "CHARACTER_NAME", "outcome": "weakHit", "move_used": "extract a cost"}],
   "time_passage": {"days": 0, "hours": 2, "description": "..."},
   "world_updates": {
     "pc_changes": [
@@ -436,19 +436,31 @@ Each character's "Standing:" line is their social position with the world's fact
 - NEVER state standing levels or numbers in scene_text — express position purely through how the faction's people treat them.
 </faction_standing>`
 
-const MECHANICAL_OUTCOMES = `<mechanical_outcomes>
+// #232: the move menus below used to be pure prompt instruction with no
+// server-side signal at all — nothing captured which move the model
+// actually picked, so "vary which move you reach for" was trusted on
+// faith. Now a function of the scene's own recent-move history
+// (Scene.progressState.recentMoves, see worldUpdaters/sceneProgress.ts and
+// moveVariety.ts) so the nudge is grounded in what THIS scene has actually
+// used, not a generic instruction repeated identically every exchange.
+function buildMechanicalOutcomesSection(recentMoves: string[]): string {
+  const recentMovesLine = recentMoves.length > 0
+    ? `\nAlready used earlier in this scene, avoid repeating: ${recentMoves.join('; ')}.`
+    : ''
+  return `<mechanical_outcomes>
 Some player actions arrive with a MECHANICAL OUTCOME line — the game engine already rolled the dice for that action. This outcome is BINDING:
 - STRONG HIT: the attempt succeeds cleanly. Don't undercut it with hidden costs the roll didn't earn.
 - WEAK HIT: the attempt succeeds, but ALWAYS with a real cost, complication, or hard choice — never a clean win. Pick ONE move below, varied scene to scene rather than reaching for the same one every time:
   escalate danger (this success makes the situation more urgent or dangerous) · extract a cost (something is spent, broken, or used up to make it work) · create urgency (a clock starts or shortens) · force a choice (they get this, but only by giving up something else right now) · reveal an unwelcome truth (the success itself surfaces bad news) · split their attention (a second problem demands them at the same moment).
 - MISS: it goes wrong. Make a hard GM move against them — pick ONE below, varied scene to scene, never "nothing happens":
   inflict harm · destroy or disable equipment · drain a tracked resource · capture or separate them from the group · advance a threat clock · trigger a flaw, condition, or vulnerability already established for them · turn their own action back on them · reveal a consequence of something they did earlier · force an immediate hard choice under pressure · create a moral complication where the "win" costs someone else something.
-Vary which move you reach for scene to scene — repeating the same one (harm, harm, harm) reads as a rut, not tension.
+Vary which move you reach for scene to scene — repeating the same one (harm, harm, harm) reads as a rut, not tension.${recentMovesLine}
 Actions without a MECHANICAL OUTCOME line are yours to adjudicate freely (dialogue, planning, low-stakes activity).
 NEVER mention dice, rolls, moves, hits, or misses in scene_text — express outcomes purely through the fiction; the move names above are categories for YOUR planning, never vocabulary that reaches the page. The engine's outcome decides HOW WELL it went; you decide what that looks like.
 
-AFTER writing scene_text, report back what you actually narrated: set outcome_echo to one entry per character who had a MECHANICAL OUTCOME line, with the band your prose actually depicts for them. Report what you WROTE, not what you were told — if your narration ended up depicting a clean success where the outcome said MISS, say strongHit here. This is a self-check the engine reads to measure how well outcomes are being honored; copying the given band without looking at your own prose defeats the entire purpose and makes the measurement worthless. It never changes the scene, and there is no penalty for an honest mismatch.
+AFTER writing scene_text, report back what you actually narrated: set outcome_echo to one entry per character who had a MECHANICAL OUTCOME line, with the band your prose actually depicts for them. Report what you WROTE, not what you were told — if your narration ended up depicting a clean success where the outcome said MISS, say strongHit here. This is a self-check the engine reads to measure how well outcomes are being honored; copying the given band without looking at your own prose defeats the entire purpose and makes the measurement worthless. It never changes the scene, and there is no penalty for an honest mismatch. For a weakHit/miss entry, also set move_used to which move above you actually picked (the exact phrase, e.g. "extract a cost" or "inflict harm") — this is how variety actually gets measured instead of assumed; omit it for strongHit, which has no move to pick.
 </mechanical_outcomes>`
+}
 
 const CAPABILITIES_SECTION = `<capabilities>
 Each player character's sheet shows their KNOWLEDGE of this world's systems, not a fixed class. Their entry lists: Abilities (what they can do, with a skill band), "Aware of but cannot do" (glimpsed), and "Systems this character knows exist".
@@ -616,7 +628,7 @@ ${DEBTS_SECTION}
 
 ${FACTION_STANDING_SECTION}
 
-${MECHANICAL_OUTCOMES}
+${buildMechanicalOutcomesSection(request.scene_progress_ledger?.recent_moves ?? [])}
 ${buildOutcomeBandSection(selectPrimaryOutcomeBand(request.action_mechanics ?? []))}
 
 ${CAPABILITIES_SECTION}

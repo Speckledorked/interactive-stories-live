@@ -15,6 +15,7 @@
 // deliberately not conflated.
 
 import type { SceneProgress } from '@/lib/ai/schema'
+import { trackRecentMoves } from '@/lib/game/moveVariety'
 
 export interface SceneProgressState {
   establishedFacts: string[]
@@ -22,6 +23,10 @@ export interface SceneProgressState {
   activeConflict: string | null
   npcIntentions: Record<string, string>
   lastProgressExchange: number
+  // #232: WEAK HIT/MISS move phrases used earlier in this scene (see
+  // moveVariety.ts), most-recent-last, bounded by MAX_RECENT_MOVES — read
+  // back into the prompt as a soft "avoid repeating" nudge.
+  recentMoves: string[]
 }
 
 // Bounded the same way gm_notes_history already is (worldMetaNotes.ts's
@@ -38,6 +43,7 @@ export function createDefaultSceneProgressState(): SceneProgressState {
     activeConflict: null,
     npcIntentions: {},
     lastProgressExchange: 0,
+    recentMoves: [],
   }
 }
 
@@ -77,6 +83,9 @@ export function parseSceneProgressState(value: unknown): SceneProgressState {
   if (Number.isFinite(lastProgressExchange) && lastProgressExchange >= 0) {
     state.lastProgressExchange = lastProgressExchange
   }
+  if (Array.isArray(raw.recentMoves)) {
+    state.recentMoves = raw.recentMoves.filter((m): m is string => typeof m === 'string')
+  }
   return state
 }
 
@@ -109,11 +118,20 @@ function normalizeFact(fact: string): string {
 export function applySceneProgress(
   rawCurrentState: unknown,
   report: SceneProgress | undefined,
-  currentExchange: number
+  currentExchange: number,
+  // #232: move slugs (moveVariety.ts's normalizeMoveUsed output) actually
+  // used THIS exchange, derived by the caller from the response's
+  // outcome_echo — a sibling top-level field to scene_progress, not part
+  // of it, so it's threaded in separately rather than folded into `report`.
+  movesUsedThisExchange: string[] = []
 ): ApplySceneProgressResult {
   const state = parseSceneProgressState(rawCurrentState)
   const newSignificantBeats: string[] = []
   let madeProgress = false
+
+  if (movesUsedThisExchange.length > 0) {
+    state.recentMoves = trackRecentMoves(state.recentMoves, movesUsedThisExchange)
+  }
 
   if (report?.new_established_facts?.length) {
     const existingNormalized = new Set(state.establishedFacts.map(normalizeFact))

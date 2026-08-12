@@ -537,7 +537,18 @@ export const AIGMResponseSchema = z.object({
   // lib/game/outcomeAdherence.ts.
   outcome_echo: z.array(z.object({
     character_name_or_id: z.string().max(SHORT_TEXT),
-    outcome: z.enum(['strongHit', 'weakHit', 'miss'])
+    outcome: z.enum(['strongHit', 'weakHit', 'miss']),
+    // #232: which move from MECHANICAL_OUTCOMES's weakHit/miss menu was
+    // actually used, so variety can be measured instead of assumed. Free
+    // text, not an enum — an enum here would fail the whole outcome_echo
+    // entry (and trigger a repair-loop retry) on any phrasing drift,
+    // which is exactly the "constraint nobody measures is a request"
+    // problem this exists to close, just relocated to schema validation.
+    // moveVariety.ts's normalizeMoveUsed does the lenient classification
+    // instead, on read, the same way this whole field is measured, not
+    // enforced. Omitted entirely for strongHit (nothing to pick from a
+    // menu that doesn't apply).
+    move_used: z.string().max(SHORT_TEXT).optional(),
   })).optional(),
   // Required, not optional — see TimePassageSchema's own comment for why:
   // an absent time_passage silently banked zero hours with no validation

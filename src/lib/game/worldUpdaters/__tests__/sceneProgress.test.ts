@@ -34,8 +34,38 @@ describe('parseSceneProgressState', () => {
       activeConflict: 'Convincing the smuggler to talk',
       npcIntentions: { 'Guard Captain': 'Stalling for reinforcements' },
       lastProgressExchange: 2,
+      recentMoves: ['extract a cost', 'inflict harm'],
     }
     expect(parseSceneProgressState(state)).toEqual(state)
+  })
+})
+
+describe('applySceneProgress — recent moves (#232)', () => {
+  it('leaves recentMoves empty when nothing was reported this exchange', () => {
+    const result = applySceneProgress(null, undefined, 1)
+    expect(result.progressState.recentMoves).toEqual([])
+  })
+
+  it('appends moves used this exchange', () => {
+    const result = applySceneProgress(null, undefined, 1, ['inflict harm'])
+    expect(result.progressState.recentMoves).toEqual(['inflict harm'])
+  })
+
+  it('accumulates across exchanges and bounds at MAX_RECENT_MOVES', () => {
+    let state: unknown = null
+    for (let i = 0; i < 8; i++) {
+      const result = applySceneProgress(state, undefined, i, [`move ${i}`])
+      state = result.progressState
+    }
+    const finalState = state as { recentMoves: string[] }
+    expect(finalState.recentMoves).toHaveLength(5) // MAX_RECENT_MOVES
+    expect(finalState.recentMoves).toEqual(['move 3', 'move 4', 'move 5', 'move 6', 'move 7'])
+  })
+
+  it('does not touch recentMoves when no moves are passed this exchange', () => {
+    const existing = { ...createDefaultSceneProgressState(), recentMoves: ['extract a cost'] }
+    const result = applySceneProgress(existing, undefined, 3)
+    expect(result.progressState.recentMoves).toEqual(['extract a cost'])
   })
 })
 

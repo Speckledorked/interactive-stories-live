@@ -7,6 +7,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { extractWorldStateChanges } from '@/lib/game/worldStateChanges';
+import { sanitizeMoveOutcomes } from '@/lib/game/resolution';
 
 export interface ExportOptions {
   includeCharacters?: boolean;
@@ -376,7 +377,13 @@ export class CampaignExporter {
           trigger: move.trigger,
           description: move.description,
           rollType: move.rollType,
-          outcomes: move.outcomes,
+          // #201: outcomes comes straight from an untrusted export file — a
+          // corrupted or hand-edited export can plant a shape that isn't
+          // even an object, which resolution.ts's rolling path would then
+          // throw on. Sanitize on the way in so a bad row degrades to "no
+          // flavor for that band" rather than crashing dice mechanics for
+          // a whole exchange the first time this move comes up.
+          outcomes: sanitizeMoveOutcomes(move.outcomes),
           category: move.category,
           isActive: move.isActive,
         },

@@ -19,6 +19,7 @@ import {
   contestedPenalty,
   locationConditionPenalty,
   ActionMechanics,
+  sanitizeMoveOutcomes,
 } from '../resolution'
 
 // Deterministic RNG factory: yields the given values (0..1) in order.
@@ -443,6 +444,53 @@ describe('computeMechanics — per-campaign move flavor', () => {
       seq(0.5, 0.5)
     )
     expect(m!.moveName).toBe('Act Under Fire')
+    expect(m!.outcomeText).toBe('You do it, but there\'s a complication or cost.')
+  })
+})
+
+// #201: Move.outcomes is an untyped Json column and campaign-exporter.ts's
+// importMoves writes it straight from an untrusted export file — a
+// corrupted or hand-edited export can plant a row whose outcomes isn't
+// even an object. sanitizeMoveOutcomes is the boundary that keeps a
+// malformed row from throwing when resolution.ts indexes into it.
+describe('sanitizeMoveOutcomes (#201)', () => {
+  it('returns an empty object for null, a string, an array, or a number', () => {
+    expect(sanitizeMoveOutcomes(null)).toEqual({})
+    expect(sanitizeMoveOutcomes(undefined)).toEqual({})
+    expect(sanitizeMoveOutcomes('not an object')).toEqual({})
+    expect(sanitizeMoveOutcomes(['strongHit', 'weakHit', 'miss'])).toEqual({})
+    expect(sanitizeMoveOutcomes(42)).toEqual({})
+  })
+
+  it('keeps only string-valued bands, dropping the rest', () => {
+    expect(sanitizeMoveOutcomes({ strongHit: 'Clean win.', weakHit: 42, miss: null })).toEqual({
+      strongHit: 'Clean win.',
+    })
+  })
+
+  it('passes a well-formed outcomes object through unchanged', () => {
+    const outcomes = { strongHit: 'a', weakHit: 'b', miss: 'c' }
+    expect(sanitizeMoveOutcomes(outcomes)).toEqual(outcomes)
+  })
+
+  it('never throws when computeMechanics is fed a sanitized malformed row, and falls back to generic text', () => {
+    const sanitized = sanitizeMoveOutcomes(null)
+    expect(() => computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5),
+      { moveFlavor: { name: 'Corrupted Import', outcomes: sanitized } }
+    )).not.toThrow()
+
+    const m = computeMechanics(
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', capability_key: null, faction_name: null },
+      { id: 'a1' },
+      baseCharacter,
+      seq(0.5, 0.5),
+      { moveFlavor: { name: 'Corrupted Import', outcomes: sanitized } }
+    )
+    expect(m!.moveName).toBe('Corrupted Import')
     expect(m!.outcomeText).toBe('You do it, but there\'s a complication or cost.')
   })
 })

@@ -382,6 +382,23 @@ export interface MoveFlavorForRoll {
   }
 }
 
+// #201: Move.outcomes is an untyped Json column, and campaign-exporter.ts's
+// importMoves writes it straight from a campaign-export file with no
+// validation — a corrupted or hand-edited export can plant a row whose
+// outcomes isn't even an object (null, a string, an array...). Reused at
+// both the write boundary (importMoves) and the read boundary below, so a
+// malformed row degrades to "no flavor for that band" instead of throwing
+// and silently dropping dice mechanics for the whole exchange.
+export function sanitizeMoveOutcomes(raw: unknown): MoveFlavorForRoll['outcomes'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const o = raw as Record<string, unknown>
+  const outcomes: MoveFlavorForRoll['outcomes'] = {}
+  if (typeof o.strongHit === 'string') outcomes.strongHit = o.strongHit
+  if (typeof o.weakHit === 'string') outcomes.weakHit = o.weakHit
+  if (typeof o.miss === 'string') outcomes.miss = o.miss
+  return outcomes
+}
+
 /**
  * Roll one classified action. Pure given an injected RNG.
  * Returns null for no_roll classifications or unknown moves.
@@ -548,7 +565,7 @@ export function computeMechanics(
   // Flavor overrides display only, and only where it actually supplied text
   // for this band — a partially-flavored move (AI omitted one outcome)
   // still falls back to the generic band text rather than showing blank.
-  const outcomeText = moveFlavor?.outcomes[outcome] || move.outcomes[outcome] || ''
+  const outcomeText = moveFlavor?.outcomes?.[outcome] || move.outcomes[outcome] || ''
 
   return {
     actionId: action.id,
@@ -831,7 +848,7 @@ export async function resolveActionMechanics(
       else debtsByCharacter.set(row.characterId, [row])
     }
     const moveFlavorByKey = new Map(
-      moveFlavorRows.map(m => [m.baseMoveKey as string, { name: m.name, outcomes: m.outcomes as MoveFlavorForRoll['outcomes'] }])
+      moveFlavorRows.map(m => [m.baseMoveKey as string, { name: m.name, outcomes: sanitizeMoveOutcomes(m.outcomes) }])
     )
     const characters: CharacterForRoll[] = characterRows.map(c => {
       const perks = ((c.perks as any) || []) as Array<{ id: string; name: string; description: string }>

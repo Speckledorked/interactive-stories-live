@@ -134,6 +134,51 @@ describe('tickFactions stale-rival guard (audit fix)', () => {
   })
 })
 
+describe('tickFactions same-tick absorption (audit fix #199)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('does not let the absorbing faction\'s own regular-tick write clobber its same-tick absorption transfer', async () => {
+    // 'a' collapses this tick and is absorbed by 'b'. 'b' is processed
+    // AFTER 'a' in loop order (array order below), so this is exactly the
+    // stale-snapshot scenario #199 describes: without the fix, 'b's own
+    // regular-tick write (still computed from its pre-loop resources/
+    // military) overwrites the transfer that was just written to its row.
+    const a = makeFaction('a', { goal: 'EXPAND', resources: 30, stability: 10, military: 20, relationships: { b: { type: 'RIVAL', since: 1 } } })
+    const b = makeFaction('b', { goal: 'CONSOLIDATE', resources: 50, stability: 80, military: 50 })
+
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([a, b] as any) // capped active list, loop order a then b
+      .mockResolvedValueOnce([{ id: 'a' }, { id: 'b' }] as any) // active-ids roster
+
+    // Fresh read of the absorber at the moment 'a' collapses — its real
+    // current DB state, before 'b's own turn in the loop has run.
+    vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'b', isActive: true, resources: 50, military: 50 } as any)
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([] as any)
+
+    await tickFactions(baseCtx())
+
+    // a: EXPAND delta (resources -3, stability -1, military +2) -> next
+    // {resources: 27, stability: 9, military: 22}. stability 9 <= the
+    // collapse threshold (10), so it collapses. roughness = (10-9)/10 = 0.1;
+    // effectiveRate = 0.3 * (1 - 0.1*0.5) = 0.285.
+    // transferResources = round(27 * 0.285) = 8; transferMilitary = round(22 * 0.285) = 6.
+    const bWrites = vi.mocked(prisma.faction.update).mock.calls.filter((call) => (call[0] as any).where.id === 'b')
+    expect(bWrites.length).toBe(2) // the absorption transfer, then b's own regular-tick write
+
+    // The absorption transfer itself: 50+8, 50+6.
+    expect(bWrites[0][0] as any).toMatchObject({ data: { resources: 58, military: 56 } })
+
+    // b's own regular-tick write must start from the POST-absorption state
+    // (58/56), not the stale pre-loop snapshot (50/50) — CONSOLIDATE adds
+    // +1 resources, +0 military: final should be 59/56, never 51/50.
+    const finalWrite = bWrites[1][0] as any
+    expect(finalWrite.data.resources).toBe(59)
+    expect(finalWrite.data.military).toBe(56)
+  })
+})
+
 describe('tickFactionAmbitions war exclusion (audit fix)', () => {
   beforeEach(() => {
     vi.clearAllMocks()

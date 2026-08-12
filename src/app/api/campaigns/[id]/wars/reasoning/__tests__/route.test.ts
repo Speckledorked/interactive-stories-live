@@ -61,6 +61,12 @@ describe('GET /campaigns/[id]/wars/reasoning', () => {
     }))
   })
 
+  it('bounds the query with a take cap (#224) rather than fetching every escalating war unbounded', async () => {
+    db.war.findMany.mockResolvedValue([])
+    await GET(req(), { params: { id: 'camp1' } })
+    expect(db.war.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 100 }))
+  })
+
   it('computes momentum reasoning for each war from real participant military totals', async () => {
     db.war.findMany.mockResolvedValue([
       {

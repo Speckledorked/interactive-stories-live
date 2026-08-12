@@ -12,6 +12,14 @@ import { getUser } from '@/lib/auth'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { explainWarMomentum } from '@/lib/game/tick/warTick'
 
+// #224: a hard backstop, not a tuned precision cap — realistic campaign
+// scale (10-20 factions per the app's real tick caps) makes anywhere near
+// this many simultaneously ESCALATING wars implausible, but the query had
+// no bound at all before this. Generous on purpose, matching #221/#202's
+// "backstop, not a tight fit" convention for this session's other
+// unbounded-query fixes.
+const ESCALATING_WARS_ROW_CAP = 100
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -44,6 +52,7 @@ export async function GET(
         },
       },
       orderBy: { startedTurn: 'asc' },
+      take: ESCALATING_WARS_ROW_CAP,
     })
 
     const wars = escalatingWars.map((war) => {

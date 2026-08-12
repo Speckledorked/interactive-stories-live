@@ -25,7 +25,7 @@
 
 import { Prisma } from '@prisma/client'
 import { applyStandingChanges, StandingChange } from '@/lib/game/standing'
-import { clampGoldDelta } from '@/lib/game/economy'
+import { clampGoldDelta, applyGoldDelta } from '@/lib/game/economy'
 import { mergeGrantedItems, RewardGrantItem } from '@/lib/game/questRewards'
 import { applyGrantBudget } from '@/lib/game/itemValue'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
@@ -174,7 +174,7 @@ export async function applyDowntimeRewards(
   const resources = (character.resources as any) || { gold: 0, contacts: [] }
 
   if (rewards.gold > 0) {
-    resources.gold = Math.max(0, (resources.gold || 0) + rewards.gold)
+    resources.gold = applyGoldDelta(resources.gold, rewards.gold)
     updateData.resources = resources
     log.push(`${character.name} earned ${rewards.gold} gold from "${activityLabel}"`)
   }

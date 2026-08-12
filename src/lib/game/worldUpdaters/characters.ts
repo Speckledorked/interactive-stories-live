@@ -44,7 +44,7 @@ import { applyStandingChanges } from '../standing'
 import { checkCorruptionGate, hasCorruptionGate, describeRefusal } from '../corruptionGates'
 import { applyConditionTemplate, stabilizeCharacter } from '../harm'
 import { applyGrantBudget, rarityPoints } from '../itemValue'
-import { clampGoldDelta } from '../economy'
+import { clampGoldDelta, applyGoldDelta } from '../economy'
 import { appendBoundedProse, MAX_CHARACTER_DESCRIPTION_CHARS } from '../textAppend'
 import {
   applyCorruptionMarks,
@@ -923,7 +923,7 @@ export async function applyCharacterChanges(
       // ever touching the balance, same discipline standing/corruption use.
       if (resChange.gold_delta !== undefined) {
         const goldDelta = clampGoldDelta(resChange.gold_delta)
-        currentResources.gold = Math.max(0, (currentResources.gold || 0) + goldDelta)
+        currentResources.gold = applyGoldDelta(currentResources.gold, resChange.gold_delta)
         console.log(`  💰 ${character.name} ${goldDelta > 0 ? 'gained' : 'spent'} ${Math.abs(goldDelta)} gold (now ${currentResources.gold})`)
       }
 

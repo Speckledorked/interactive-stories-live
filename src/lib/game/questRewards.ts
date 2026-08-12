@@ -14,7 +14,7 @@
 
 import { Prisma } from '@prisma/client'
 import { applyStandingChanges, StandingChange } from './standing'
-import { clampGoldDelta } from './economy'
+import { clampGoldDelta, applyGoldDelta } from './economy'
 import { assessPayout, describeDefault } from './factionPayout'
 import { inventoryValue, applyGrantBudget } from './itemValue'
 
@@ -185,7 +185,7 @@ export async function applyQuestRewardGrant(
 
     if (hasGold && goldEach > 0) {
       const resources = (recipient.resources as any) || { gold: 0, contacts: [], reputation: {} }
-      resources.gold = Math.max(0, (resources.gold || 0) + goldEach)
+      resources.gold = applyGoldDelta(resources.gold, goldEach)
       updateData.resources = resources
       log.push(`${recipient.name} received ${goldEach} gold from completing "${questName}"`)
     }

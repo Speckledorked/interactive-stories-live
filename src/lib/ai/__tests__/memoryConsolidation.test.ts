@@ -8,7 +8,12 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 vi.mock('../memoryCreation', () => ({
-  createCampaignMemory: vi.fn().mockResolvedValue(undefined),
+  // #216: createCampaignMemory now returns whether the write succeeded,
+  // so consolidateOldMemories can skip deleting the source memories when
+  // it didn't. Defaults to true (the common case) so every existing test
+  // below that doesn't care about the failure path keeps behaving as it
+  // did before this return value existed.
+  createCampaignMemory: vi.fn().mockResolvedValue(true),
 }))
 
 import { prisma } from '@/lib/prisma'
@@ -85,6 +90,23 @@ describe('decideConsolidationBuckets (pure)', () => {
 
   it('returns an empty array for no eligible memories', () => {
     expect(decideConsolidationBuckets([])).toEqual([])
+  })
+
+  // #216: bucketSize is now a parameter (defaulting to the 10-turn MINOR
+  // width) so the MAJOR tier can group into much wider windows — rarer
+  // events need a wider window to ever reach MIN_BUCKET_SIZE_TO_CONSOLIDATE.
+  it('groups into a wider window when a larger bucketSize is passed', () => {
+    const rows = [
+      makeRow({ id: 'a', turnNumber: 1 }),
+      makeRow({ id: 'b', turnNumber: 25 }),
+      makeRow({ id: 'c', turnNumber: 49 }),
+    ]
+    // Default 10-turn width would split these into 3 separate (too-small)
+    // windows; a 50-turn width groups all 3 into one.
+    expect(decideConsolidationBuckets(rows)).toHaveLength(0)
+    const wide = decideConsolidationBuckets(rows, 50)
+    expect(wide).toHaveLength(1)
+    expect(wide[0]).toMatchObject({ startTurn: 1, endTurn: 50, maxTurn: 49 })
   })
 })
 
@@ -205,5 +227,80 @@ describe('consolidateOldMemories (DB wrapper)', () => {
     // The exempt memory 'a' must never appear among the deleted ids.
     const deletedIds = vi.mocked(prisma.$executeRaw).mock.calls[0][1] as string[]
     expect(deletedIds.sort()).toEqual(['b', 'c', 'd'])
+  })
+
+  // #216: MAJOR/CRITICAL memories used to be permanently exempt from
+  // consolidation, growing unbounded on a long campaign. These tests cover
+  // the second tier this fix adds — a much longer horizon (150 turns) and
+  // wider bucket (50 turns), run alongside (not instead of) the existing
+  // MINOR/NORMAL tier.
+  describe('MAJOR/CRITICAL tier (#216)', () => {
+    it('does not touch MAJOR/CRITICAL memories until well past the MINOR tier\'s horizon', async () => {
+      // currentTurn=25 is well past the MINOR tier's 20-turn horizon but
+      // nowhere near the MAJOR tier's 150-turn one — only one $queryRaw
+      // call should happen at all (MAJOR's cutoff is negative, so it
+      // short-circuits before ever querying).
+      vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([])
+      await consolidateOldMemories('campaign-1', 25)
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1)
+    })
+
+    it('consolidates old MAJOR/CRITICAL memories once the campaign is old enough, tagged with MAJOR importance', async () => {
+      const majorRows = [
+        makeRow({ id: 'a', turnNumber: 1, title: 'A faction fell' }),
+        makeRow({ id: 'b', turnNumber: 25 }),
+        makeRow({ id: 'c', turnNumber: 49 }),
+      ]
+      // First call: MINOR tier, nothing eligible. Second call: MAJOR tier.
+      vi.mocked(prisma.$queryRaw)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(majorRows)
+
+      const result = await consolidateOldMemories('campaign-1', 300)
+
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(2)
+      expect(result).toEqual({ bucketsConsolidated: 1, memoriesRemoved: 3 })
+
+      const call = vi.mocked(createCampaignMemory).mock.calls[0][0]
+      expect(call.importance).toBe('MAJOR') // not NORMAL, unlike the MINOR tier's summary
+      expect(call.title).toContain('major events')
+      expect(call.summary).toContain('A consequential stretch')
+    })
+
+    it('is independent of the MINOR tier — a MAJOR-tier query failure does not erase a successful MINOR-tier result', async () => {
+      const minorRows = [
+        makeRow({ id: 'a', turnNumber: 1 }),
+        makeRow({ id: 'b', turnNumber: 4 }),
+        makeRow({ id: 'c', turnNumber: 8 }),
+      ]
+      vi.mocked(prisma.$queryRaw)
+        .mockResolvedValueOnce(minorRows) // MINOR tier succeeds
+        .mockRejectedValueOnce(new Error('db down')) // MAJOR tier fails
+
+      const result = await consolidateOldMemories('campaign-1', 300)
+
+      // The MINOR tier's real, successful consolidation must still be
+      // reported — a failure in the OTHER tier must not zero it out.
+      expect(result).toEqual({ bucketsConsolidated: 1, memoriesRemoved: 3 })
+    })
+
+    it('does not delete the source memories when era-summary creation fails, and does not count that bucket', async () => {
+      // Found live-verifying this fix: createCampaignMemory fails open, so
+      // the original code (unconditional create-then-delete) would have
+      // silently deleted real memories whose replacement summary never
+      // actually got written on a transient embedding/DB failure.
+      const rows = [
+        makeRow({ id: 'a', turnNumber: 1 }),
+        makeRow({ id: 'b', turnNumber: 4 }),
+        makeRow({ id: 'c', turnNumber: 8 }),
+      ]
+      vi.mocked(prisma.$queryRaw).mockResolvedValueOnce(rows)
+      vi.mocked(createCampaignMemory).mockResolvedValueOnce(false)
+
+      const result = await consolidateOldMemories('campaign-1', 25)
+
+      expect(result).toEqual({ bucketsConsolidated: 0, memoriesRemoved: 0 })
+      expect(prisma.$executeRaw).not.toHaveBeenCalled()
+    })
   })
 })

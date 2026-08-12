@@ -2856,11 +2856,48 @@ model LoreEntry {
 
   tags String[] @default([])
 
+  // SHA-256 of `content`, scoped to (jobId, contentHash) rather than
+  // (campaignId, contentHash) deliberately: a genuinely separate later
+  // import of the same source material is allowed to create a fresh
+  // entry (that's a new job, a new intentional import), but a RETRY of
+  // the SAME job — recovered by stale-job sweeping, or re-fired by hand
+  // after a partial failure — must not re-insert chunks it already
+  // stored. storeLoreChunks (loreImportService.ts) upserts on this key
+  // instead of a bare INSERT, so a job that starts over from page 0
+  // after a mid-crawl failure resumes for free rather than duplicating
+  // every already-stored chunk.
+  contentHash String
+
   createdAt DateTime @default(now())
 
+  @@unique([jobId, contentHash])
   @@index([campaignId])
   @@index([jobId])
   @@map("lore_entries")
+}
+
+// Records which imported lore actually reached a scene's prompt, so "why
+// did this narration mention that fact" is a real query (join through
+// sceneId/loreEntryId) instead of a guess from reading the narration back
+// against the lore library by hand. Written best-effort right after
+// retrieveRelevantLore (loreRetrieval.ts) runs, from
+// buildSceneResolutionRequest — never allowed to block scene resolution if
+// the write fails, same as AIValidationFailure below. Loosely coupled by
+// design (no @relation, matching AIValidationFailure/AnalyticsEvent): a
+// citation for a scene or lore entry that's since been deleted still
+// counts as real history and must never fail on a constraint.
+model LoreCitation {
+  id          String   @id @default(cuid())
+  campaignId  String
+  sceneId     String
+  loreEntryId String
+  similarity  Float
+  createdAt   DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([sceneId])
+  @@index([loreEntryId])
+  @@map("lore_citations")
 }
 
 enum ReseedJobStatus {
@@ -3126,6 +3163,66 @@ model AIValidationFailure {
   @@index([campaignId])
   @@index([createdAt])
   @@map("ai_validation_failures")
+}
+
+// A different, finer-grained tier than AIValidationFailure above.
+// AIValidationFailure records the AI's whole JSON response failing Zod
+// schema validation (a STRUCTURAL failure — the response didn't parse).
+// StateMutation instead records what happens to an individual, structurally
+// VALID field-level change once it reaches business-rule validation — e.g.
+// worldUpdaters/characters.ts's relationship_changes handler resolving an
+// AI-reported entity_id/entity_name against the real NPC roster. Today
+// that kind of rejection is a console.warn only, gone the moment the log
+// scrolls; this is the persisted, queryable version. Written BEFORE the
+// validation gate decides anything, so a REJECTED row exists even when
+// nothing about the AI's proposal was ever applied.
+enum StateMutationResult {
+  ACCEPTED
+  REJECTED
+  REPAIRED
+}
+
+// Closed on purpose, even with one member today — see LoreCitation's own
+// note on the same discipline. Room to grow (a future deterministic tick
+// handler proposing a change through the same gate, say) without ever
+// becoming a free-text field no query can trust.
+enum StateMutationProposer {
+  AI_GM
+}
+
+model StateMutation {
+  id         String   @id @default(cuid())
+  campaignId String
+  sceneId    String?
+
+  proposedBy StateMutationProposer @default(AI_GM)
+  // Dot-path into the entity the change targets, e.g.
+  // "character.relationships.npc_abc123.trust".
+  field String
+
+  previousValue Json?
+  proposedValue Json?
+
+  result        StateMutationResult
+  // Set only when result = REPAIRED — the value actually written, when it
+  // differs from proposedValue (e.g. clamped, or resolved to a real id).
+  repairedValue Json?
+  // Human-readable reason a REJECTED/REPAIRED row exists — the same text
+  // that would otherwise only ever reach a console.warn.
+  reason        String?
+
+  // Loosely coupled on purpose (no @relation), matching
+  // AIValidationFailure/AnalyticsEvent/LoreCitation above: a mutation
+  // record for a scene or event that's since been deleted is still real
+  // history and must never fail on a constraint.
+  appliedEventId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([sceneId])
+  @@index([campaignId, result])
+  @@map("state_mutations")
 }
 
 //

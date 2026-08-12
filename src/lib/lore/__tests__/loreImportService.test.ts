@@ -4,7 +4,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     loreImportJob: { update: vi.fn().mockResolvedValue(undefined) },
-    $executeRaw: vi.fn().mockResolvedValue(undefined),
+    loreEntry: { findMany: vi.fn().mockResolvedValue([]) },
+    // Real inserts return the affected-row count; default to "a new row
+    // was actually inserted" so every existing test's stored-count math
+    // stays correct without each one needing to know about this.
+    $executeRaw: vi.fn().mockResolvedValue(1),
   },
 }))
 
@@ -365,5 +369,58 @@ describe('runLoreImport', () => {
   it('throws for an unknown source type', async () => {
     const job = makeJob({ sourceType: 'BOGUS' })
     await expect(runLoreImport(job as any)).rejects.toThrow('Unknown lore source type')
+  })
+
+  describe('idempotent resume', () => {
+    it('skips embedding and storing a chunk whose contentHash this job already has', async () => {
+      // Real sha256 of 'A short piece of lore.' — the same hash
+      // storeLoreChunks itself computes, standing in for "this exact
+      // chunk was already stored by an earlier attempt at this job".
+      const { createHash } = await import('crypto')
+      const hash = createHash('sha256').update('A short piece of lore.').digest('hex')
+      vi.mocked(prisma.loreEntry.findMany).mockResolvedValueOnce([{ contentHash: hash } as any])
+
+      const job = makeJob({ sourceType: 'PASTE', rawText: 'A short piece of lore.', sourceTitle: 'My Lore' })
+      await runLoreImport(job as any)
+
+      expect(embedBatchWithCostTracking).not.toHaveBeenCalled()
+      expect(prisma.$executeRaw).not.toHaveBeenCalled()
+      // Nothing new was actually stored on this resumed run.
+      expect(prisma.loreImportJob.update).toHaveBeenCalledWith({
+        where: { id: 'job-1' },
+        data: { pagesDone: 1, entriesCreated: { increment: 0 } },
+      })
+    })
+
+    it('does not skip a chunk whose hash only matches a DIFFERENT job', async () => {
+      // findMany is called scoped to this job's id — a hash stored under
+      // a different job must never suppress a genuinely new import.
+      vi.mocked(prisma.loreEntry.findMany).mockResolvedValueOnce([])
+
+      const job = makeJob({ sourceType: 'PASTE', rawText: 'Fresh content for this job.', sourceTitle: 'My Lore' })
+      await runLoreImport(job as any)
+
+      expect(prisma.loreEntry.findMany).toHaveBeenCalledWith({
+        where: { jobId: 'job-1' },
+        select: { contentHash: true },
+      })
+      expect(embedBatchWithCostTracking).toHaveBeenCalled()
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not increment entriesCreated for a row a concurrent insert already wrote (ON CONFLICT DO NOTHING)', async () => {
+      // Simulates the race the ON CONFLICT clause guards against: the
+      // pre-check found nothing, but the actual INSERT still hits the
+      // unique constraint and affects 0 rows.
+      vi.mocked(prisma.$executeRaw).mockResolvedValueOnce(0)
+
+      const job = makeJob({ sourceType: 'PASTE', rawText: 'Racy content.', sourceTitle: 'My Lore' })
+      await runLoreImport(job as any)
+
+      expect(prisma.loreImportJob.update).toHaveBeenCalledWith({
+        where: { id: 'job-1' },
+        data: { pagesDone: 1, entriesCreated: { increment: 0 } },
+      })
+    })
   })
 })

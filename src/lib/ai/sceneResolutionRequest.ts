@@ -10,7 +10,7 @@ import { AIGMRequest } from './client'
 import { ComplexExchangeResolver, NarrativeFlowManager } from '@/lib/game/complex-exchange-resolver' // Phase 16
 import { retrieveRelevantHistory, retrieveNpcHistory, buildSearchQuery } from './memoryRetrieval' // Campaign Memory RAG
 import { retrieveCrossEntityHistory, generateEntityPairs } from './crossEntityRecall'
-import { retrieveRelevantLore } from './loreRetrieval' // Imported lore RAG (see lib/lore/)
+import { retrieveRelevantLore, recordLoreCitations } from './loreRetrieval' // Imported lore RAG (see lib/lore/)
 import { resolveActionMechanics } from '@/lib/game/resolution'
 import { describeZone } from '@/lib/game/zones'
 import { parseCorruptionTheme, describeCorruptionForPrompt } from '@/lib/game/corruption'
@@ -358,6 +358,9 @@ export async function buildSceneResolutionRequest(
     relevantLore = await retrieveRelevantLore(campaignId, searchQuery, { maxEntries: 5, minSimilarity: 0.75 })
     if (relevantLore.length > 0) {
       console.log(`📚 Retrieved ${relevantLore.length} relevant lore entries`)
+      // Best-effort citation trail — never lets a write failure affect the
+      // request being built (see recordLoreCitations' own doc comment).
+      await recordLoreCitations(campaignId, sceneId, relevantLore)
     }
   } catch (loreError) {
     console.error('⚠️ Lore retrieval failed:', loreError instanceof Error ? loreError.message : String(loreError))

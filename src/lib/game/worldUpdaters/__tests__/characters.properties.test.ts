@@ -42,6 +42,7 @@ function makeTx() {
   return {
     character: { update: vi.fn(async (_args: any) => ({})) },
     location: { findUnique: vi.fn(async () => null) },
+    stateMutation: { create: vi.fn(async (_args: any) => ({})) },
   }
 }
 

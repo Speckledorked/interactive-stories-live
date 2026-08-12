@@ -22,6 +22,8 @@ const makeTx = () => ({
   character: { update: vi.fn(async (_args: any) => ({})) },
   // Corruption entry gate (#83) looks the destination up by campaign+name.
   location: { findUnique: vi.fn(async (): Promise<{ minCorruption: number | null; maxCorruption: number | null } | null> => null) },
+  // StateMutation audit trail (#198) — real inside the same transaction.
+  stateMutation: { create: vi.fn(async (_args: any) => ({})) },
 })
 
 let tx: ReturnType<typeof makeTx>
@@ -628,6 +630,85 @@ describe('applyCharacterChanges — resources and relationships', () => {
     // Nothing resolved, so there is nothing to write at all — not even an
     // unchanged relationships column.
     expect(tx.character.update).not.toHaveBeenCalled()
+  })
+
+  // #198 — every relationship_changes outcome gets a persisted StateMutation
+  // row, not just a console.warn that's gone the moment the log scrolls.
+  describe('StateMutation audit trail', () => {
+    it('records ACCEPTED when entity_id resolves exactly as reported', async () => {
+      const roster = [character()]
+      await applyCharacterChanges(tx as any, 'camp1', 1, [
+        { character_name_or_id: 'char1', changes: { relationship_changes: [{ entity_id: 'npc1', entity_name: 'Lord Kessler', trust_delta: 10, reason: 'x' }] } } as PcChange,
+      ], roster, npcRoster, noTheme, true)
+
+      expect(tx.stateMutation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          campaignId: 'camp1',
+          field: 'character.char1.relationships.npc1',
+          result: 'ACCEPTED',
+        }),
+      })
+    })
+
+    it('records REPAIRED when entity_id is a placeholder and resolution needed the entity_name fallback', async () => {
+      const roster = [character()]
+      await applyCharacterChanges(tx as any, 'camp1', 1, [
+        { character_name_or_id: 'char1', changes: { relationship_changes: [{ entity_id: 'npc_123', entity_name: 'Vashti', trust_delta: -5, reason: 'x' }] } } as PcChange,
+      ], roster, npcRoster, noTheme, true)
+
+      expect(tx.stateMutation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          field: 'character.char1.relationships.npc2',
+          result: 'REPAIRED',
+          repairedValue: { trust: -5, tension: 0, respect: 0, fear: 0 },
+        }),
+      })
+    })
+
+    it('records ACCEPTED (not REPAIRED) when entity_id itself contains a name that resolves without needing the fallback', async () => {
+      // entity_id holding a name string, resolved by the FIRST call's own
+      // name-matching, is a different (weaker) signal than "the entity_name
+      // fallback was actually needed" — this stays ACCEPTED under that
+      // narrower, code-structure-grounded REPAIRED definition.
+      const roster = [character()]
+      await applyCharacterChanges(tx as any, 'camp1', 1, [
+        { character_name_or_id: 'char1', changes: { relationship_changes: [{ entity_id: 'Lord Kessler', entity_name: 'Lord Kessler', trust_delta: 10, reason: 'x' }] } } as PcChange,
+      ], roster, npcRoster, noTheme, true)
+
+      expect(tx.stateMutation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          field: 'character.char1.relationships.npc1',
+          result: 'ACCEPTED',
+        }),
+      })
+    })
+
+    it('records REJECTED with a reason when the target NPC never resolves', async () => {
+      const roster = [character()]
+      await applyCharacterChanges(tx as any, 'camp1', 1, [
+        { character_name_or_id: 'char1', changes: { relationship_changes: [{ entity_id: 'ghost', entity_name: 'Someone Who Never Existed', trust_delta: 10, reason: 'x' }] } } as PcChange,
+      ], roster, npcRoster, noTheme, true)
+
+      expect(tx.stateMutation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          campaignId: 'camp1',
+          field: 'character.char1.relationships.ghost',
+          result: 'REJECTED',
+          reason: expect.stringContaining('Someone Who Never Existed'),
+        }),
+      })
+    })
+
+    it('never lets a StateMutation write failure affect the relationship change it describes', async () => {
+      tx.stateMutation.create.mockRejectedValueOnce(new Error('DB unavailable'))
+      const roster = [character()]
+      await expect(applyCharacterChanges(tx as any, 'camp1', 1, [
+        { character_name_or_id: 'char1', changes: { relationship_changes: [{ entity_id: 'npc1', entity_name: 'Lord Kessler', trust_delta: 10, reason: 'x' }] } } as PcChange,
+      ], roster, npcRoster, noTheme, true)).resolves.toBeDefined()
+
+      const data = tx.character.update.mock.calls[0][0].data
+      expect(data.relationships.npc1.trust).toBe(10)
+    })
   })
 })
 

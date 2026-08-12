@@ -54,6 +54,7 @@ import {
 } from '../corruption'
 import { classifyStressEvents, decideStressDrift, StressSignal } from '../stress'
 import type { ActionMechanics } from '../resolution'
+import { recordStateMutation } from '../stateMutation'
 
 type Db = Prisma.TransactionClient
 export type PcChange = NonNullable<WorldUpdates['pc_changes']>[number]
@@ -610,14 +611,27 @@ export async function applyCharacterChanges(
         // reports a name or a stale/garbage id instead of the real one
         // (checkKey 'character.relationships.keys.resolve').
         let npcResolution = resolveEntityByNameOrId(npcsForResolution, relChange.entity_id)
+        // Tracks which field actually resolved it, for the StateMutation
+        // audit trail below — a resolution that needed the entity_name
+        // fallback is a REPAIR (the reported entity_id alone wasn't
+        // enough), not a clean ACCEPT.
+        let resolvedViaNameFallback = false
         // The prompt's own example shows a placeholder id like "npc_123",
         // so a reported entity_name that resolves for real is the routine
         // fallback, not the exceptional case.
         if (npcResolution.kind !== 'found') {
           npcResolution = resolveEntityByNameOrId(npcsForResolution, relChange.entity_name)
+          resolvedViaNameFallback = true
         }
         if (npcResolution.kind !== 'found') {
           console.warn(`  ⚠️ ${character.name} → unresolved relationship target "${relChange.entity_name}" (${relChange.entity_id}), skipping`)
+          await recordStateMutation(tx, {
+            campaignId,
+            field: `character.${character.id}.relationships.${relChange.entity_id}`,
+            proposedValue: relChange,
+            result: 'REJECTED',
+            reason: `unresolved relationship target "${relChange.entity_name}" (${relChange.entity_id})`,
+          })
           continue
         }
         const entityId = npcResolution.entity.id
@@ -629,12 +643,25 @@ export async function applyCharacterChanges(
         }
 
         // Apply deltas and clamp between -100 and 100
-        currentRelationships[entityId] = {
+        const nextRel = {
           trust: relChange.trust_delta !== undefined ? clamp(currentRel.trust + relChange.trust_delta, -100, 100) : currentRel.trust,
           tension: relChange.tension_delta !== undefined ? clamp(currentRel.tension + relChange.tension_delta, -100, 100) : currentRel.tension,
           respect: relChange.respect_delta !== undefined ? clamp(currentRel.respect + relChange.respect_delta, -100, 100) : currentRel.respect,
           fear: relChange.fear_delta !== undefined ? clamp(currentRel.fear + relChange.fear_delta, -100, 100) : currentRel.fear
         }
+        currentRelationships[entityId] = nextRel
+
+        // ACCEPTED vs REPAIRED: needing the entity_name fallback means the
+        // reported entity_id alone didn't resolve — the change still
+        // landed, but not exactly as proposed.
+        await recordStateMutation(tx, {
+          campaignId,
+          field: `character.${character.id}.relationships.${entityId}`,
+          previousValue: currentRel,
+          proposedValue: relChange,
+          repairedValue: resolvedViaNameFallback ? nextRel : undefined,
+          result: resolvedViaNameFallback ? 'REPAIRED' : 'ACCEPTED',
+        })
 
         anyRelationshipApplied = true
         console.log(`  🤝 ${character.name} → ${relChange.entity_name}: ${relChange.reason}`)

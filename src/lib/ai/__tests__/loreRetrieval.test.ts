@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $queryRaw: vi.fn(),
+    loreCitation: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
   },
 }))
 
@@ -12,7 +13,7 @@ vi.mock('../embeddingService', () => ({
 
 import { prisma } from '@/lib/prisma'
 import { embedWithCostTracking } from '../embeddingService'
-import { retrieveRelevantLore } from '../loreRetrieval'
+import { retrieveRelevantLore, recordLoreCitations } from '../loreRetrieval'
 
 const db = prisma as any
 
@@ -71,5 +72,33 @@ describe('retrieveRelevantLore', () => {
     db.$queryRaw.mockRejectedValue(new Error('pgvector unavailable'))
     const result = await retrieveRelevantLore('camp1', 'query')
     expect(result).toEqual([])
+  })
+})
+
+describe('recordLoreCitations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('writes one citation row per retrieved entry, carrying campaign/scene/entry ids and similarity', async () => {
+    const entries = [makeEntry({ id: 'a', similarity: 0.91 }), makeEntry({ id: 'b', similarity: 0.77 })]
+    await recordLoreCitations('camp1', 'scene1', entries as any)
+
+    expect(db.loreCitation.createMany).toHaveBeenCalledWith({
+      data: [
+        { campaignId: 'camp1', sceneId: 'scene1', loreEntryId: 'a', similarity: 0.91 },
+        { campaignId: 'camp1', sceneId: 'scene1', loreEntryId: 'b', similarity: 0.77 },
+      ],
+    })
+  })
+
+  it('does nothing when there are no entries to cite', async () => {
+    await recordLoreCitations('camp1', 'scene1', [])
+    expect(db.loreCitation.createMany).not.toHaveBeenCalled()
+  })
+
+  it('never throws when the write itself fails — a citation-write failure must not affect scene resolution', async () => {
+    db.loreCitation.createMany.mockRejectedValue(new Error('DB unavailable'))
+    await expect(recordLoreCitations('camp1', 'scene1', [makeEntry()] as any)).resolves.toBeUndefined()
   })
 })

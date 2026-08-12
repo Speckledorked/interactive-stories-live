@@ -43,7 +43,7 @@ beforeEach(() => {
   ;(getSignupsByDay as any).mockResolvedValue([])
   ;(getRetentionByCohortWeek as any).mockResolvedValue([])
   ;(getUserCampaignListing as any).mockResolvedValue([])
-  ;(getCampaignCostSummary as any).mockResolvedValue({ totalCostDollars: 0, totalRequests: 0, topCampaigns: [] })
+  ;(getCampaignCostSummary as any).mockResolvedValue({ totalCostDollars: 0, totalPaidDollars: 0, totalRequests: 0, topCampaigns: [] })
   db.resolutionJob.findMany.mockResolvedValue([])
   db.loreImportJob.findMany.mockResolvedValue([])
 })
@@ -69,8 +69,9 @@ describe('GET', () => {
     ;(getUserCampaignListing as any).mockResolvedValue([{ userId: 'u2', email: 'p@example.com', name: null, createdAt: new Date(), campaigns: [] }])
     ;(getCampaignCostSummary as any).mockResolvedValue({
       totalCostDollars: 12.5,
+      totalPaidDollars: 75,
       totalRequests: 400,
-      topCampaigns: [{ campaignId: 'c1', title: 'Silver Lining', totalCostDollars: 8.25, requestCount: 250 }],
+      topCampaigns: [{ campaignId: 'c1', title: 'Silver Lining', totalCostDollars: 8.25, totalPaidDollars: 50, requestCount: 250 }],
     })
     const response = await GET(req())
     const body = await response.json()
@@ -80,8 +81,10 @@ describe('GET', () => {
     expect(body.users).toHaveLength(1)
     expect(body.users[0].email).toBe('p@example.com')
     expect(body.campaignCosts.totalCostDollars).toBe(12.5)
+    expect(body.campaignCosts.totalPaidDollars).toBe(75)
     expect(body.campaignCosts.topCampaigns).toHaveLength(1)
     expect(body.campaignCosts.topCampaigns[0].title).toBe('Silver Lining')
+    expect(body.campaignCosts.topCampaigns[0].totalPaidDollars).toBe(50)
   })
 
   it('queries stuck jobs by the alerted-OR-abandoned-failure signature', async () => {

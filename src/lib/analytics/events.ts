@@ -261,33 +261,58 @@ export interface CampaignCostEntry {
   campaignId: string
   title: string
   totalCostDollars: number
+  totalPaidDollars: number
   requestCount: number
 }
 
 export interface CampaignCostSummary {
   totalCostDollars: number
+  totalPaidDollars: number
   totalRequests: number
   topCampaigns: CampaignCostEntry[]
 }
 
 const CAMPAIGN_COST_TOP_N = 20
 
+interface CampaignPaidRow {
+  campaignId: string
+  paidDollars: number
+}
+
 /**
- * Platform-wide AI spend, plus the highest-cost campaigns. One groupBy over
- * every AICostEntry row (not scoped to admin-owned campaigns the way
- * getUserCampaignListing is — cost matters regardless of who administers a
- * campaign), summed in micros then converted once. Total/requests reflect
- * every campaign; topCampaigns is capped to keep this glance-able.
+ * Platform-wide AI spend ("cost") vs. what's actually been billed and
+ * collected from players ("paid"), plus the highest-cost campaigns. Two
+ * independent sources, not one: AICostEntry is our real expense (raw AI
+ * call cost); Transaction is real revenue — scene-resolution billing
+ * (resolutionBilling.ts's chargeForSceneResolution) deducts a metered,
+ * marked-up charge from each participant's balance and records it as a
+ * DEBIT Transaction. Transaction has no campaignId column (it's per-user,
+ * not per-campaign) — chargeForSceneResolution stashes campaignId in
+ * metadata instead, so paid totals need a raw JSON-path groupBy that
+ * Prisma's query builder can't express. Neither total scopes to
+ * admin-owned campaigns the way getUserCampaignListing does — cost and
+ * revenue matter regardless of who administers a campaign.
  */
 export async function getCampaignCostSummary(): Promise<CampaignCostSummary> {
-  const grouped = await prisma.aICostEntry.groupBy({
-    by: ['campaignId'],
-    _sum: { costMicros: true },
-    _count: { _all: true },
-  })
+  const [grouped, paidRows] = await Promise.all([
+    prisma.aICostEntry.groupBy({
+      by: ['campaignId'],
+      _sum: { costMicros: true },
+      _count: { _all: true },
+    }),
+    prisma.$queryRaw<CampaignPaidRow[]>`
+      SELECT metadata->>'campaignId' AS "campaignId", (SUM(-amount)::numeric / 100)::float8 AS "paidDollars"
+      FROM transactions
+      WHERE type = 'DEBIT' AND metadata->>'campaignId' IS NOT NULL
+      GROUP BY metadata->>'campaignId'
+    `,
+  ])
+
+  const paidDollarsByCampaign = new Map(paidRows.map((r) => [r.campaignId, r.paidDollars]))
 
   const totalCostMicros = grouped.reduce((sum, g) => sum + (g._sum.costMicros ?? 0), 0)
   const totalRequests = grouped.reduce((sum, g) => sum + g._count._all, 0)
+  const totalPaidDollars = paidRows.reduce((sum, r) => sum + r.paidDollars, 0)
 
   const top = [...grouped]
     .sort((a, b) => (b._sum.costMicros ?? 0) - (a._sum.costMicros ?? 0))
@@ -301,11 +326,13 @@ export async function getCampaignCostSummary(): Promise<CampaignCostSummary> {
 
   return {
     totalCostDollars: totalCostMicros / 1_000_000,
+    totalPaidDollars,
     totalRequests,
     topCampaigns: top.map((g) => ({
       campaignId: g.campaignId,
       title: titleById.get(g.campaignId) ?? '(deleted campaign)',
       totalCostDollars: (g._sum.costMicros ?? 0) / 1_000_000,
+      totalPaidDollars: paidDollarsByCampaign.get(g.campaignId) ?? 0,
       requestCount: g._count._all,
     })),
   }

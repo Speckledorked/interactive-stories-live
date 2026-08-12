@@ -208,28 +208,42 @@ export async function advanceClocks(campaignId: string) {
   const tension = await refreshCampaignTension(campaignId, turnNumber, clocks)
 
   const advancedClocks: any[] = []
+  const clockUpdates: Array<{ clock: (typeof clocks)[number]; newTicks: number }> = []
 
   for (const clock of clocks) {
     const advanceAmount = decideClockAdvancement(clock, factionById, turnNumber, tension, clockSpeedMultiplier)
 
     if (advanceAmount > 0) {
       const newTicks = Math.min(clock.currentTicks + advanceAmount, clock.maxTicks)
-
-      await prisma.clock.update({
-        where: { id: clock.id },
-        data: { currentTicks: newTicks }
-      })
-
-      console.log(`  ⏰ ${clock.name}: ${clock.currentTicks} → ${newTicks}`)
-
-      advancedClocks.push({
-        id: clock.id,
-        name: clock.name,
-        oldTicks: clock.currentTicks,
-        newTicks,
-        category: clock.category
-      })
+      clockUpdates.push({ clock, newTicks })
     }
+  }
+
+  // #229: every clock write for this turn commits together or not at all.
+  // advanceClocks runs after runWorldTick's own $transaction has already
+  // committed (see worldTurn.ts), so this is deliberately a separate
+  // transaction, not an extension of that one — but a mid-loop failure
+  // used to leave some clocks advanced and others not, with the rest of
+  // this turn's world state already durable. Wrapping just the writes
+  // (not the pure decision loop above) closes that partial-failure window
+  // for clock advancement itself.
+  if (clockUpdates.length > 0) {
+    await prisma.$transaction(
+      clockUpdates.map(({ clock, newTicks }) =>
+        prisma.clock.update({ where: { id: clock.id }, data: { currentTicks: newTicks } })
+      )
+    )
+  }
+
+  for (const { clock, newTicks } of clockUpdates) {
+    console.log(`  ⏰ ${clock.name}: ${clock.currentTicks} → ${newTicks}`)
+    advancedClocks.push({
+      id: clock.id,
+      name: clock.name,
+      oldTicks: clock.currentTicks,
+      newTicks,
+      category: clock.category
+    })
   }
 
   console.log(`  Advanced ${advancedClocks.length} clock(s)`)

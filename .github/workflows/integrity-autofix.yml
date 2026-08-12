@@ -86,6 +86,23 @@ on:
   #   - cron: '0 8 * * *'  # daily, offset from the app's own 06:00 UTC world-tick sweep (vercel.json)
   workflow_dispatch: {}
 
+# #226: the triage job's dedup check (gh pr list --label "fix:${CHECK_KEY}")
+# runs early, but PR creation only happens after the ~30-50-turn
+# diagnose-and-fix step completes — two workflow_dispatch runs started close
+# together would both read "no open PR" during triage and both proceed to
+# open competing fix PRs, each eligible to auto-merge with zero human review.
+# Keyed on the whole workflow rather than per-checkKey (the checkKey isn't
+# known until check-for-escalations runs, and top-level `concurrency:` is
+# evaluated before any job output exists) — acceptable per the issue's own
+# suggested alternative, since this workflow is `workflow_dispatch`-only
+# today and runs are expected to be rare and sequential regardless of
+# checkKey. cancel-in-progress: false so an overlapping run QUEUES behind
+# whatever's already diagnosing/fixing, rather than cancelling it mid-flight
+# and leaving an orphaned branch or a half-open PR.
+concurrency:
+  group: integrity-autofix
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write

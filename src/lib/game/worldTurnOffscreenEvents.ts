@@ -9,7 +9,7 @@ import { callAIForWorldTurn } from '@/lib/ai/client'
 import { buildWorldSummaryForAI } from '@/lib/ai/worldState'
 import { applyWorldUpdates } from './stateUpdater'
 import { createCampaignMemory } from '@/lib/ai/memoryCreation'
-import { EventVisibility } from '@prisma/client'
+import { EventVisibility, FactionGoal } from '@prisma/client'
 import { PendingAmbition } from './tick/types'
 import { AMBITION_CATEGORY_OPTIONS } from './tick/ambitionTick'
 
@@ -89,6 +89,15 @@ export async function generateOffscreenEvents(
           gmNotes: pending.targetFactionName ? `Ambition type: ${flavor} (targeting ${pending.targetFactionName})` : `Ambition type: ${flavor}`,
           sourceFactionId: pending.factionId,
           targetFactionId: pending.targetFactionId,
+          // #227: snapshot the goal this ambition is actually pursuing, so
+          // a same-tick belief-drift change to Faction.goal later can't
+          // change how this clock resolves — see Clock.goal's schema doc.
+          // pending.goal is always sourced from a real Faction.goal value
+          // (see tickFactionAmbitions in ambitionTick.ts) — this cast just
+          // recovers the enum type PendingAmbition's plain-string field
+          // (kept generic to avoid importing @prisma/client into tick/
+          // types.ts) erased.
+          goal: pending.goal as FactionGoal,
         },
       })
 

@@ -1578,6 +1578,18 @@ model Clock {
   // grouping key.
   agendaId String?
 
+  // #227: the FactionGoal this ambition clock was actually spawned to
+  // pursue, snapshotted once at creation (tickFactionAmbitions / a
+  // continuation in resolveCompletedAmbitions) and never updated again.
+  // Only ever set on ambition clocks (sourceFactionId != null). Exists
+  // because Faction.goal can drift (see beliefTick.ts) in the same tick an
+  // ambition completes — reading faction.goal fresh at resolution time
+  // would flavor/categorize the outcome and any continuation for whatever
+  // the faction believes NOW, not what this clock was actually pursuing.
+  // Null on clocks created before this field existed; resolution code
+  // falls back to faction.goal in that case.
+  goal FactionGoal?
+
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@index([campaignId])

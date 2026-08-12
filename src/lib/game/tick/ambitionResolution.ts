@@ -6,6 +6,7 @@
 // before offscreen event generation, so the world summary the AI sees
 // already reflects the real outcome.
 
+import { FactionGoal } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { WorldChange, clamp, findRivalIds } from './types'
 import { decideAmbitionOutcome, decideAgendaContinuation, buildAgendaContinuationName, AMBITION_SHAPES } from './ambitionTick'
@@ -33,11 +34,20 @@ export async function resolveCompletedAmbitions(
       ? await prisma.faction.findUnique({ where: { id: clock.targetFactionId } })
       : null
 
+    // #227: resolve using the goal this clock was actually spawned to
+    // pursue, not faction.goal read fresh here — belief drift (tickBeliefDrift
+    // -> tickFactions, both earlier in this same tick's runWorldTick pass)
+    // may already have overridden faction.goal by the time this runs, which
+    // would otherwise flavor/categorize a completed EXPAND campaign as if it
+    // were the faction's new ENRICH goal. Falls back to faction.goal for
+    // clocks created before Clock.goal existed.
+    const ambitionGoal: FactionGoal = clock.goal ?? faction.goal
+
     const outcome = decideAmbitionOutcome({
       factionId: faction.id,
       clockId: clock.id,
       factionName: faction.name,
-      goal: faction.goal,
+      goal: ambitionGoal,
       resources: faction.resources,
       military: faction.military,
       targetFactionName: target?.isActive ? target.name : undefined,
@@ -109,7 +119,7 @@ export async function resolveCompletedAmbitions(
     // A successful EXPAND redraws the actual map: conquer contested rival
     // land, settle unowned land, or contest a rival holding — in that
     // escalation order (see territory.ts for why conquest takes two wins).
-    if (outcome.success && faction.goal === 'EXPAND') {
+    if (outcome.success && ambitionGoal === 'EXPAND') {
       const [locations, rivalIds, adjacencyRows, homeLocation] = await Promise.all([
         prisma.location.findMany({
           where: { campaignId },
@@ -171,14 +181,17 @@ export async function resolveCompletedAmbitions(
       }
     }
 
-    // #104: multi-stage ambitions — a successful ambition can spawn a new
-    // clock continuing the same agenda instead of resolving cleanly, gated
-    // on the faction's own drifted belief still supporting more of the
-    // same (see decideAgendaContinuation). DEFEND/CONSOLIDATE never reach
-    // here at all (only ambition-sourced clocks are in
-    // completedAmbitionClocks), so this only ever fires for the three
-    // goals that spawn ambitions in the first place.
-    if (faction.goal === 'ENRICH' || faction.goal === 'EXPAND' || faction.goal === 'DESTABILIZE_RIVAL') {
+    // #104/#227: multi-stage ambitions — a successful ambition can spawn a
+    // new clock continuing the same agenda instead of resolving cleanly,
+    // gated on the faction's own drifted belief still supporting more of
+    // the same (see decideAgendaContinuation). Uses ambitionGoal (the goal
+    // THIS agenda is actually pursuing), not faction.goal — a same-tick
+    // belief-drift override of faction.goal must not silently end an
+    // agenda whose own goal never changed, nor continue it under a
+    // different goal's mechanical shape/flavor than the one it started
+    // with. Legacy clocks with no stored goal fall back to faction.goal,
+    // same as ambitionGoal's own fallback above.
+    if (ambitionGoal === 'ENRICH' || ambitionGoal === 'EXPAND' || ambitionGoal === 'DESTABILIZE_RIVAL') {
       const rootAgendaId = clock.agendaId ?? clock.id
       const priorStageCount = await prisma.clock.count({
         where: { OR: [{ id: rootAgendaId }, { agendaId: rootAgendaId }] },
@@ -186,15 +199,15 @@ export async function resolveCompletedAmbitions(
       const belief = parseBeliefVector(faction.beliefVector)
       const continues = decideAgendaContinuation({
         outcomeSuccess: outcome.success,
-        goal: faction.goal,
+        goal: ambitionGoal,
         belief,
         priorStageCount,
       })
 
       if (continues) {
         const stageNumber = priorStageCount + 1
-        const { name, flavor } = buildAgendaContinuationName(faction.name, faction.archetype, faction.goal, stageNumber)
-        const shape = AMBITION_SHAPES[faction.goal]!
+        const { name, flavor } = buildAgendaContinuationName(faction.name, faction.archetype, ambitionGoal, stageNumber)
+        const shape = AMBITION_SHAPES[ambitionGoal]!
 
         await prisma.clock.create({
           data: {
@@ -211,6 +224,11 @@ export async function resolveCompletedAmbitions(
             sourceFactionId: faction.id,
             targetFactionId: clock.targetFactionId,
             agendaId: rootAgendaId,
+            // #227: propagate the agenda's own goal forward, not
+            // faction.goal — every stage of one continuing agenda stays
+            // pinned to the goal it started with, immune to belief drift
+            // changing the faction's current headline goal mid-chain.
+            goal: ambitionGoal,
           },
         })
 

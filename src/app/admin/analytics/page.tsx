@@ -34,6 +34,13 @@ interface StuckJob {
   sceneId?: string
   sourceType?: string
 }
+interface UserCampaignListingEntry {
+  userId: string
+  email: string
+  name: string | null
+  createdAt: string
+  campaigns: Array<{ id: string; title: string; createdAt: string }>
+}
 interface AnalyticsData {
   funnel: {
     signups: number
@@ -46,6 +53,7 @@ interface AnalyticsData {
   retention: CohortRetention[]
   stuckResolutionJobs: StuckJob[]
   stuckLoreJobs: StuckJob[]
+  users: UserCampaignListingEntry[]
 }
 
 function StatTile({ label, value, sublabel }: { label: string; value: string | number; sublabel?: string }) {
@@ -232,6 +240,52 @@ export default function AnalyticsDashboardPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </section>
+
+            {/* Users & campaigns (#99) — metadata only: who's here, and what
+                they've created. "Created" is read off ADMIN campaign
+                membership, since there's no separate creator field. */}
+            <section>
+              <SectionHeader
+                as="h2"
+                title="Users & Campaigns"
+                description={`Most recently joined ${data.users.length} user${data.users.length === 1 ? '' : 's'}, and the campaigns each one administers.`}
+              />
+              <div className="mt-3 overflow-x-auto rounded-lg border border-myth-border bg-myth-surface">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead>
+                    <tr className="border-b border-myth-border text-left text-xs text-myth-ink-faint">
+                      <th className="px-3 py-2 font-medium">User</th>
+                      <th className="px-3 py-2 font-medium">Joined</th>
+                      <th className="px-3 py-2 font-medium">Campaigns</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.users.map((u) => (
+                      <tr key={u.userId} className="border-b border-myth-border last:border-0 align-top">
+                        <td className="px-3 py-2">
+                          <p className="text-myth-ink">{u.name || u.email}</p>
+                          {u.name && <p className="text-xs text-myth-ink-faint">{u.email}</p>}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-myth-ink-faint whitespace-nowrap">
+                          {new Date(u.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-3 py-2">
+                          {u.campaigns.length === 0 ? (
+                            <span className="text-xs text-myth-ink-faint">none</span>
+                          ) : (
+                            <ul className="space-y-0.5">
+                              {u.campaigns.map((c) => (
+                                <li key={c.id} className="text-xs text-myth-ink-muted">{c.title}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </section>
           </div>

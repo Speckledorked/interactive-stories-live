@@ -23,7 +23,12 @@ const makeTx = () => ({
     create: vi.fn(async () => ({})),
   },
   // Quest-giver rosters (#75), loaded lazily and at most once per batch.
-  nPC: { findMany: vi.fn(async (): Promise<Array<{ id: string; name: string }>> => []) },
+  // findUnique is the #206 condition-acquisition-gate lookup — only
+  // consulted when a quest change resolves a giver NPC id.
+  nPC: {
+    findMany: vi.fn(async (): Promise<Array<{ id: string; name: string }>> => []),
+    findUnique: vi.fn(async (): Promise<{ location: { conditionScore: number; isContested: boolean } | null } | null> => null),
+  },
   faction: { findMany: vi.fn(async (): Promise<Array<{ id: string; name: string }>> => []) },
   // Corruption acquisition gate (#83) context.
   campaign: { findUnique: vi.fn(async (): Promise<{ corruptionTheme: unknown } | null> => ({ corruptionTheme: { name: 'the Rot' } })) },
@@ -408,6 +413,120 @@ describe('applyQuestChanges — corruption acquisition gate', () => {
       { name: 'The Ledger Job', changes: { min_corruption: 2, max_corruption: 5 } } as QuestChange,
     ])
     expect(tx.quest.update.mock.calls[0][0].data).toMatchObject({ minCorruption: 2, maxCorruption: 5 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Condition acquisition gate (#206)
+// ---------------------------------------------------------------------------
+// Same ACQUISITION-only boundary as the corruption gate above, but keyed on
+// the resolved giver NPC's own location's condition instead of the quest's
+// own min/maxCorruption fields.
+
+describe('applyQuestChanges — condition acquisition gate', () => {
+  // Ungated on corruption (min/maxCorruption both null) so only the
+  // condition half of questAcquisitionAllowed is under test here.
+  const ungated = (over: Record<string, unknown> = {}) => ({
+    id: 'q1', name: 'The Ledger Job', status: 'AVAILABLE', progressLog: null,
+    objectiveKey: 'the-ledger-job', minCorruption: null, maxCorruption: null,
+    givenByNpcId: null, givenByFactionId: null, ...over,
+  })
+
+  it('refuses a quest whose giver stands in a RUINED location', async () => {
+    tx.quest.findFirst.mockResolvedValue(ungated({ givenByNpcId: 'npc1' }))
+    tx.nPC.findUnique.mockResolvedValue({ location: { conditionScore: 10, isContested: false } })
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.nPC.findUnique).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      select: { location: { select: { conditionScore: true, isContested: true } } },
+    })
+    const data = tx.quest.update.mock.calls[0]?.[0]?.data
+    expect(data?.status).toBeUndefined()
+  })
+
+  it('refuses a quest whose giver stands in an ABANDONED location', async () => {
+    tx.quest.findFirst.mockResolvedValue(ungated({ givenByNpcId: 'npc1' }))
+    tx.nPC.findUnique.mockResolvedValue({ location: { conditionScore: 0, isContested: false } })
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.update.mock.calls[0]?.[0]?.data?.status).toBeUndefined()
+  })
+
+  it('allows a quest whose giver stands in a STABLE (or better) location', async () => {
+    tx.quest.findFirst.mockResolvedValue(ungated({ givenByNpcId: 'npc1' }))
+    tx.nPC.findUnique.mockResolvedValue({ location: { conditionScore: 60, isContested: false } })
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.updateMany.mock.calls[0][0].data.status).toBe('ACTIVE')
+  })
+
+  it('never checks a location for a faction-given or unresolved quest', async () => {
+    tx.quest.findFirst.mockResolvedValue(ungated({ givenByFactionId: 'f1' }))
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.nPC.findUnique).not.toHaveBeenCalled()
+    expect(tx.quest.updateMany.mock.calls[0][0].data.status).toBe('ACTIVE')
+  })
+
+  it('allows the quest when the giver has no location resolved yet', async () => {
+    tx.quest.findFirst.mockResolvedValue(ungated({ givenByNpcId: 'npc1' }))
+    tx.nPC.findUnique.mockResolvedValue({ location: null })
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.updateMany.mock.calls[0][0].data.status).toBe('ACTIVE')
+  })
+
+  it('allows the quest when the condition lookup fails (fails open)', async () => {
+    tx.quest.findFirst.mockResolvedValue(ungated({ givenByNpcId: 'npc1' }))
+    tx.nPC.findUnique.mockRejectedValue(new Error('db down'))
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.updateMany.mock.calls[0][0].data.status).toBe('ACTIVE')
+  })
+
+  it('prefers a giver re-resolved in this same batch over the stale row', async () => {
+    // The quest change reports a NEW given_by this turn — the freshly
+    // resolved NPC's location should gate, not whatever the row said before.
+    tx.quest.findFirst.mockResolvedValue(ungated({ givenByNpcId: 'old-npc' }))
+    tx.nPC.findMany.mockResolvedValue([{ id: 'new-npc', name: 'Bram the Fence' }])
+    tx.nPC.findUnique.mockResolvedValue({ location: { conditionScore: 5, isContested: false } })
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE', given_by: 'Bram the Fence' } } as QuestChange,
+    ])
+
+    expect(tx.nPC.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'new-npc' } }))
+    expect(tx.quest.update.mock.calls[0]?.[0]?.data?.status).toBeUndefined()
+  })
+
+  it('never revokes an already-active quest even if the giver location has since decayed', async () => {
+    tx.quest.findFirst.mockResolvedValue(ungated({ status: 'ACTIVE', givenByNpcId: 'npc1' }))
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'The Ledger Job', changes: { progress_append: 'Found the ledger.' } } as QuestChange,
+    ])
+
+    expect(tx.nPC.findUnique).not.toHaveBeenCalled()
+    expect(tx.quest.update).toHaveBeenCalled()
   })
 })
 

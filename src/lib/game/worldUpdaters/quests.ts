@@ -10,6 +10,7 @@ import { applyQuestRewardGrant } from '../questRewards'
 import { appendBounded, QUEST_PROGRESS_BOUNDS } from '../textAppend'
 import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData } from '../quests'
 import { checkCorruptionGate, hasCorruptionGate } from '../corruptionGates'
+import { checkConditionGate } from '../conditionGates'
 import { applyQuestFailureCost, type QuestFailureStatus } from '../questFailure'
 import { isUniqueConstraintViolation } from './uniqueConstraintGuard'
 import { sceneWorldChange } from './sceneWorldEvents'
@@ -93,15 +94,43 @@ export async function applyQuestChanges(
    *
    * Fails open on any error: refusing a quest the fiction just handed over
    * silently loses a thread, while permitting one costs a beat of flavor.
+   *
+   * #206: also refuses acquisition when the resolved giver NPC is
+   * physically standing in a RUINED/ABANDONED location — a quest-giver
+   * with no settlement left behind them has no infrastructure to
+   * commission work with. Independent of the corruption gate below (a
+   * quest can fail either, or both); checked first purely so a single
+   * `reason` string can describe whichever actually fired. A
+   * faction-given or unresolved giver has no location to check against,
+   * so this half is a no-op for those — only an NPC giver's location is
+   * ever consulted.
    */
-  const questAcquisitionAllowed = async (quest: { minCorruption?: number | null; maxCorruption?: number | null }) => {
-    if (!hasCorruptionGate(quest)) return true
+  const questAcquisitionAllowed = async (
+    quest: { minCorruption?: number | null; maxCorruption?: number | null },
+    giverNpcId: string | null
+  ): Promise<{ allowed: boolean; reason?: string }> => {
+    if (giverNpcId) {
+      try {
+        const giver = await tx.nPC.findUnique({
+          where: { id: giverNpcId },
+          select: { location: { select: { conditionScore: true, isContested: true } } },
+        })
+        if (giver?.location && !checkConditionGate(giver.location).allowed) {
+          return { allowed: false, reason: 'condition gate — the giver\'s location is wrecked' }
+        }
+      } catch (error) {
+        console.error('Condition quest gate check failed (allowing):', error)
+      }
+    }
+
+    if (!hasCorruptionGate(quest)) return { allowed: true }
     try {
       const ctx = await getGateContext()
-      return checkCorruptionGate(quest, ctx.partyCorruption, ctx.hasTheme).allowed
+      const gate = checkCorruptionGate(quest, ctx.partyCorruption, ctx.hasTheme)
+      return gate.allowed ? { allowed: true } : { allowed: false, reason: 'corruption gate' }
     } catch (error) {
       console.error('Corruption quest gate check failed (allowing):', error)
-      return true
+      return { allowed: true }
     }
   }
 
@@ -159,8 +188,15 @@ export async function applyQuestChanges(
       if (changes.status && changes.status !== existing.status) {
         // Acquisition gate: only a transition INTO active is checked.
         const becomingActive = changes.status === 'ACTIVE' && existing.status !== 'ACTIVE'
-        if (becomingActive && !(await questAcquisitionAllowed(existing))) {
-          console.log(`  🌑 "${existing.name}" refused to this party — corruption gate`)
+        // The giver may have just been (re-)resolved above in this same
+        // pass — prefer that over the stale row, same pattern the reward/
+        // failure-cost lookups below already use.
+        const giverNpcId = (updateData.givenByNpcId as string | null | undefined) ?? existing.givenByNpcId
+        const acquisition = becomingActive
+          ? await questAcquisitionAllowed(existing, giverNpcId)
+          : { allowed: true }
+        if (becomingActive && !acquisition.allowed) {
+          console.log(`  🌑 "${existing.name}" refused to this party — ${acquisition.reason}`)
         } else {
           updateData.status = changes.status
           if (changes.status !== 'ACTIVE') updateData.resolvedAt = new Date()

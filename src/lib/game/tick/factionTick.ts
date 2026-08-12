@@ -109,6 +109,13 @@ export const GOAL_COMMITMENT_TURNS = 3
 // additional weighted input" rather than a dominant override at neutral.
 const BELIEF_OVERRIDE_THRESHOLD = 80
 
+// #207: how many concurrently-unresolved ActiveWake rows it takes before a
+// faction is treated as still reeling, not just having recently lost one
+// member — a single ordinary-member wake is already a normal cost of doing
+// business (see wakeTick.ts's own goal-progress penalty), so the bar is
+// "more than one," not "any."
+const WAKE_CRISIS_THRESHOLD = 2
+
 export interface FactionGoalExplanation {
   goal: FactionGoal
   /** Human-readable trace of which check fired, in evaluation order — the
@@ -141,6 +148,11 @@ export function explainFactionGoalReassessment(faction: {
    * faction with no drift history yet is untouched by any of the override
    * branches below, identical to pre-#104 behavior. */
   beliefVector?: BeliefVector | null
+  /** #207: how many of this faction's ActiveWake rows are still unresolved
+   * (recent leader deaths, absorbed collapses it's still reeling from) —
+   * see tick/wakeTick.ts. Undefined/0 is untouched by the check below,
+   * identical to pre-#207 behavior. */
+  activeWakeCount?: number
 }): FactionGoalExplanation {
   const stabilityBand = band(faction.stability)
   const resourcesBand = band(faction.resources)
@@ -155,6 +167,16 @@ export function explainFactionGoalReassessment(faction: {
   // of real change that should always be able to redirect it.
   if (stabilityBand === 'LOW') {
     reasoning.push('Stability has cratered — internal cohesion takes priority over any ambition.')
+    return { goal: 'DEFEND', reasoning }
+  }
+
+  // #207: carrying multiple unresolved wakes is a real, ongoing crisis
+  // signal — same tier and same reasoning as the stability-LOW check above
+  // (checked before the goal-commitment lock, so a faction genuinely
+  // reeling from recent losses can redirect immediately rather than
+  // waiting out an old commitment).
+  if (Number(faction.activeWakeCount) >= WAKE_CRISIS_THRESHOLD) {
+    reasoning.push(`Carrying ${faction.activeWakeCount} unresolved wake(s) (${WAKE_CRISIS_THRESHOLD}+ — still reeling from recent losses) — internal recovery takes priority over any ambition.`)
     return { goal: 'DEFEND', reasoning }
   }
 
@@ -227,6 +249,13 @@ const ABSORPTION_TRANSFER_RATE = 0.3
 // transfers at least this fraction of the base rate — a rougher collapse
 // scatters more of what's left, but never scatters everything.
 const ROUGHNESS_RATE_FLOOR = 0.5
+// #207: flat addition to a collapse's own stability-derived roughness when
+// the faction was already carrying WAKE_CRISIS_THRESHOLD+ unresolved
+// wakes — deliberately additive, not a separate multiplier, so a collapse
+// that was already maximally chaotic on stability alone (roughness 1)
+// doesn't need this to do anything (clamp keeps it at 1), and a merely
+// borderline collapse gets pushed meaningfully rougher rather than barely.
+const WAKE_CRISIS_ROUGHNESS_BUMP = 0.25
 
 export interface FactionCollapseDecision {
   collapses: boolean
@@ -257,11 +286,21 @@ export function decideFactionCollapse(faction: {
   stability: number
   resources: number
   military: number
+  /** #207: how many of this faction's ActiveWake rows are still unresolved
+   * — a faction hitting the collapse threshold while already carrying
+   * WAKE_CRISIS_THRESHOLD+ unresolved wakes is plausibly mid-crisis, not a
+   * coincidence, so this collapse scatters more of what's left rather than
+   * being independently smooth. Undefined/0 is untouched, identical to
+   * pre-#207 behavior. */
+  activeWakeCount?: number
 }): FactionCollapseDecision {
   if (faction.stability > COLLAPSE_STABILITY_THRESHOLD) {
     return { collapses: false, transferResources: 0, transferMilitary: 0, roughness: 0 }
   }
-  const roughness = computeCollapseRoughness(faction.stability)
+  const baseRoughness = computeCollapseRoughness(faction.stability)
+  const roughness = Number(faction.activeWakeCount) >= WAKE_CRISIS_THRESHOLD
+    ? clamp(baseRoughness + WAKE_CRISIS_ROUGHNESS_BUMP, 0, 1)
+    : baseRoughness
   const effectiveRate = ABSORPTION_TRANSFER_RATE * (1 - roughness * (1 - ROUGHNESS_RATE_FLOOR))
   return {
     collapses: true,
@@ -426,7 +465,14 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
 
     const next = decideFactionTick(faction)
     const relationships = parseFactionRelationships(faction.relationships)
-    const collapse = decideFactionCollapse(next)
+    // #207: previously nothing anywhere counted a faction's currently-
+    // unresolved wakes for any purpose — read once per faction here so both
+    // decideFactionCollapse (roughness) and decideFactionGoalReassessment
+    // (goal override) below can react to it.
+    const activeWakeCount = await ctx.db.activeWake.count({
+      where: { affectedFactionId: faction.id, resolvedAt: null },
+    })
+    const collapse = decideFactionCollapse({ ...next, activeWakeCount })
 
     if (collapse.collapses) {
       // #103: recorded before anything else so tickWake (later in this same
@@ -579,6 +625,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
           hasRival: factionHasRival,
           turnsOnCurrentGoal: turnsOnGoalByFaction.get(faction.id),
           beliefVector: parseBeliefVector(faction.beliefVector),
+          activeWakeCount,
         })
 
     if (!ctx.dryRun) {

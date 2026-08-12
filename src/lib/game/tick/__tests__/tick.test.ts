@@ -163,6 +163,36 @@ describe('explainFactionGoalReassessment (#94)', () => {
     const { reasoning } = explainFactionGoalReassessment({ resources: 50, stability: 50, military: 50, goal: 'CONSOLIDATE', hasRival: false })
     expect(reasoning[0]).toMatch(/stability is/i)
   })
+
+  // #207: carrying multiple unresolved wakes was previously read by
+  // nothing — a faction with recent leader deaths/absorbed collapses
+  // behaved identically to one with none.
+  it('overrides to DEFEND when carrying 2+ unresolved wakes, even with strong stats that would otherwise EXPAND', () => {
+    const strong = { resources: 90, stability: 50, military: 90, goal: 'CONSOLIDATE' as const, hasRival: false }
+    // Without a wake crisis, this strong-stats faction would EXPAND.
+    expect(decideFactionGoalReassessment(strong)).toBe('EXPAND')
+    expect(decideFactionGoalReassessment({ ...strong, activeWakeCount: 2 })).toBe('DEFEND')
+  })
+
+  it('does not override on a single wake — the bar is more than one', () => {
+    const strong = { resources: 90, stability: 50, military: 90, goal: 'CONSOLIDATE' as const, hasRival: false }
+    expect(decideFactionGoalReassessment({ ...strong, activeWakeCount: 1 })).toBe('EXPAND')
+  })
+
+  it('explains a wake-crisis DEFEND override by naming the wake count', () => {
+    const { reasoning } = explainFactionGoalReassessment({ resources: 90, stability: 50, military: 90, goal: 'CONSOLIDATE', hasRival: false, activeWakeCount: 3 })
+    expect(reasoning.some((line) => line.includes('3') && /wake/i.test(line))).toBe(true)
+  })
+
+  it('the wake-crisis override takes priority over the goal-commitment lock, same tier as stability-LOW', () => {
+    // Freshly committed to CONSOLIDATE (0 turns held) would normally hold
+    // the course per the commitment lock — but a real crisis (wakes, same
+    // as stability) still redirects it.
+    const result = decideFactionGoalReassessment({
+      resources: 90, stability: 50, military: 90, goal: 'CONSOLIDATE', hasRival: false, turnsOnCurrentGoal: 0, activeWakeCount: 2,
+    })
+    expect(result).toBe('DEFEND')
+  })
 })
 
 describe('decideFactionCollapse', () => {
@@ -201,6 +231,31 @@ describe('decideFactionCollapse', () => {
     const deep = decideFactionCollapse({ stability: 0, resources: 100, military: 100 })
     expect(deep.transferResources).toBeLessThan(shallow.transferResources)
     expect(deep.transferMilitary).toBeLessThan(shallow.transferMilitary)
+  })
+
+  // #207: a faction already carrying multiple unresolved wakes when it
+  // hits the collapse threshold is plausibly mid-crisis, not a
+  // coincidence — its collapse should scatter more of what's left.
+  it('a wake crisis bumps roughness (and so lowers the transfer) even on an otherwise-smooth collapse', () => {
+    const smooth = decideFactionCollapse({ stability: 10, resources: 100, military: 100 })
+    const smoothWithWakes = decideFactionCollapse({ stability: 10, resources: 100, military: 100, activeWakeCount: 2 })
+    expect(smooth.roughness).toBeCloseTo(0, 5)
+    expect(smoothWithWakes.roughness).toBeCloseTo(0.25, 5)
+    expect(smoothWithWakes.transferResources).toBeLessThan(smooth.transferResources)
+    expect(smoothWithWakes.transferMilitary).toBeLessThan(smooth.transferMilitary)
+  })
+
+  it('does not bump roughness on a single wake — the bar is more than one', () => {
+    const result = decideFactionCollapse({ stability: 10, resources: 100, military: 100, activeWakeCount: 1 })
+    expect(result.roughness).toBeCloseTo(0, 5)
+  })
+
+  it('clamps the wake-crisis bump rather than pushing roughness past 1', () => {
+    const total = decideFactionCollapse({ stability: 0, resources: 100, military: 100 })
+    const totalWithWakes = decideFactionCollapse({ stability: 0, resources: 100, military: 100, activeWakeCount: 2 })
+    expect(total.roughness).toBe(1)
+    expect(totalWithWakes.roughness).toBe(1)
+    expect(totalWithWakes.transferResources).toBe(total.transferResources)
   })
 
   it('never scatters everything even at total chaos (roughness 1)', () => {

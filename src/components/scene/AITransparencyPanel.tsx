@@ -5,6 +5,7 @@
 
 import { useState } from 'react'
 import type { AdherenceResult } from '@/lib/game/outcomeAdherence'
+import type { MoveVarietyResult } from '@/lib/game/moveVariety'
 
 export interface WorldStateChange {
   // 'roll' entries are the move-resolution receipts (see
@@ -27,6 +28,12 @@ interface AITransparencyPanelProps {
   // player, in the same panel that already shows the roll receipts it's
   // checking against. Absent on scenes resolved before this field existed.
   adherence?: AdherenceResult
+  // #232: which move (from MECHANICAL_OUTCOMES's weakHit/miss menus) the
+  // narrator actually reported using each exchange, and whether it
+  // repeated one already used earlier this scene — same "measurement,
+  // never enforcement" posture as adherence above. Absent on scenes
+  // resolved before this field existed.
+  moveVariety?: MoveVarietyResult
   sceneNumber?: number
   isOpen?: boolean
   onClose?: () => void
@@ -35,6 +42,7 @@ interface AITransparencyPanelProps {
 export default function AITransparencyPanel({
   changes,
   adherence,
+  moveVariety,
   sceneNumber,
   isOpen = true,
   onClose
@@ -53,8 +61,10 @@ export default function AITransparencyPanel({
   const [adherenceExpanded, setAdherenceExpanded] = useState(false)
 
   const hasAdherenceProblems = !!adherence && (adherence.mismatched > 0 || adherence.unreported > 0 || adherence.ambiguous > 0)
+  const hasMoveRepeats = !!moveVariety && moveVariety.repeated > 0
+  const [moveVarietyExpanded, setMoveVarietyExpanded] = useState(false)
 
-  if (!isOpen || (changes.length === 0 && !adherence)) {
+  if (!isOpen || (changes.length === 0 && !adherence && !moveVariety)) {
     return null
   }
 
@@ -191,6 +201,49 @@ export default function AITransparencyPanel({
         </div>
       )}
 
+      {moveVariety && (moveVariety.reported + moveVariety.unreported) > 0 && (
+        <div
+          className={`rounded-lg border mb-3 overflow-hidden ${
+            hasMoveRepeats
+              ? 'bg-myth-warn/10 border-myth-warn/30'
+              : 'bg-myth-good/10 border-myth-good/30'
+          }`}
+        >
+          <button
+            onClick={() => setMoveVarietyExpanded(prev => !prev)}
+            className="w-full p-3 flex items-center justify-between hover:bg-myth-surface-sunken transition-colors"
+            disabled={!hasMoveRepeats}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{hasMoveRepeats ? '🔁' : '✓'}</span>
+              <span className="font-medium text-myth-ink text-sm">
+                {hasMoveRepeats
+                  ? `Repeated a move already used this scene (${moveVariety.repeated}/${moveVariety.reported + moveVariety.unreported})`
+                  : `Varied its moves this scene (${moveVariety.reported} tracked)`}
+              </span>
+            </div>
+            {hasMoveRepeats && (
+              <span className="text-myth-ink-faint">{moveVarietyExpanded ? '▼' : '▶'}</span>
+            )}
+          </button>
+
+          {hasMoveRepeats && moveVarietyExpanded && (
+            <div className="p-3 pt-0 space-y-2">
+              {moveVariety.entries
+                .filter(e => e.repeatsRecent)
+                .map((entry, idx) => (
+                  <div key={idx} className="bg-myth-surface-sunken rounded-lg p-3 border border-myth-border">
+                    <div className="font-medium text-myth-ink text-sm mb-1">{entry.characterName}</div>
+                    <p className="text-sm text-myth-ink-muted">
+                      Reached for &ldquo;{entry.normalizedMove}&rdquo; again — already used earlier this scene.
+                    </p>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div>
         {Object.entries(groupedChanges).map(([category, categoryChanges]) => (
           <div key={category}>
@@ -237,7 +290,7 @@ export default function AITransparencyPanel({
         ))}
       </div>
 
-      {changes.length === 0 && !adherence && (
+      {changes.length === 0 && !adherence && !moveVariety && (
         <div className="text-center py-8 text-myth-ink-faint">
           <div className="text-4xl mb-2">✨</div>
           <p className="text-sm">No world state changes this scene</p>

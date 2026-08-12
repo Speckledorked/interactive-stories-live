@@ -295,7 +295,14 @@ describe('Scene Resolver', () => {
 
       await resolveScene(mockCampaignId, mockSceneId);
 
-      expect(storeWorldStateChanges).toHaveBeenCalledWith(mockSceneId, expect.any(Array), adherence);
+      expect(storeWorldStateChanges).toHaveBeenCalledWith(
+        mockSceneId,
+        expect.any(Array),
+        adherence,
+        // #232: moveVariety — no outcome_echo on mockAIResponse, so the
+        // measurement is empty rather than absent.
+        { entries: [], reported: 0, unreported: 0, repeated: 0 }
+      );
     });
 
     it('does not generate a map when the campaign has map generation off (the default)', async () => {

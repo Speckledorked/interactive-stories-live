@@ -569,6 +569,12 @@ export interface AIGMRequest {
     resolved_beats: string[]
     active_conflict: string | null
     npc_intentions: Array<{ npc: string; intention: string }>
+    // #232: moves already used earlier in this scene (WEAK HIT/MISS menu
+    // phrases, most-recent-last, bounded — see moveVariety.ts's
+    // MAX_RECENT_MOVES), read back into buildMechanicalOutcomesSection as
+    // a soft "avoid repeating" nudge instead of a generic instruction
+    // repeated identically every exchange.
+    recent_moves: string[]
   }
   // The exchange number scene_progress_ledger's state last actually
   // changed (a new beat, or active_conflict genuinely updating) — see

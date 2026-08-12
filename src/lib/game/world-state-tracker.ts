@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import type { WorldStateChange } from '@/components/scene/AITransparencyPanel'
 import { NotificationService } from '@/lib/notifications/notification-service'
 import type { AdherenceResult } from './outcomeAdherence'
+import type { MoveVarietyResult } from './moveVariety'
 
 interface WorldStateSnapshot {
   npcs: Record<string, any>
@@ -260,16 +261,17 @@ export async function detectWorldStateChanges(
 /**
  * Store world state changes in the scene for display.
  *
- * outcomeAdherence (#91) is a sibling key in the same untyped `consequences`
- * blob, not a new DB column — it shares the exact same lifecycle as
- * worldStateChanges (one snapshot per resolution, overwritten wholesale on
- * the next one), so a new migration would only add ceremony without
- * changing that behavior.
+ * outcomeAdherence (#91) and moveVariety (#232) are sibling keys in the
+ * same untyped `consequences` blob, not new DB columns — both share the
+ * exact same lifecycle as worldStateChanges (one snapshot per resolution,
+ * overwritten wholesale on the next one), so a new migration would only
+ * add ceremony without changing that behavior.
  */
 export async function storeWorldStateChanges(
   sceneId: string,
   changes: WorldStateChange[],
-  outcomeAdherence?: AdherenceResult
+  outcomeAdherence?: AdherenceResult,
+  moveVariety?: MoveVarietyResult
 ): Promise<void> {
   // Store in scene consequences field
   await prisma.scene.update({
@@ -277,7 +279,8 @@ export async function storeWorldStateChanges(
     data: {
       consequences: {
         worldStateChanges: changes,
-        ...(outcomeAdherence ? { outcomeAdherence } : {})
+        ...(outcomeAdherence ? { outcomeAdherence } : {}),
+        ...(moveVariety ? { moveVariety } : {})
       } as any
     }
   })

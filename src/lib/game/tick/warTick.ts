@@ -460,14 +460,29 @@ async function resolveWarProgress(
     // paid every turn — losing a war costs more than fighting one. Applies
     // to every faction on the losing side, not just the primary — a
     // coalition shares the cost of losing too.
+    //
+    // #218: `influence` moves alongside stability here too — it's the one
+    // tracked stat war outcomes never touched, despite standing.ts's own
+    // doc comment naming exactly this scenario ("LOW influence, e.g. bled
+    // dry by a lost war") as the reason effectiveStandingModifier caps
+    // harder for a low-influence faction. A decisive win also raises a
+    // faction's regional standing, not just its loot — smaller than the
+    // loser's hit, since winning a war doesn't cost the loser's full loss.
+    // A stalemate moves neither; nobody's regional standing shifted.
     if (!ctx.dryRun) {
       if (resolution.outcome === 'attacker') {
         for (const p of defenderSide) {
-          await ctx.db.faction.update({ where: { id: p.factionId }, data: { stability: clamp(p.faction.stability - 10, 0, 100) } })
+          await ctx.db.faction.update({ where: { id: p.factionId }, data: { stability: clamp(p.faction.stability - 10, 0, 100), influence: clamp(p.faction.influence - 8, 0, 100) } })
+        }
+        for (const p of attackerSide) {
+          await ctx.db.faction.update({ where: { id: p.factionId }, data: { influence: clamp(p.faction.influence + 4, 0, 100) } })
         }
       } else if (resolution.outcome === 'defender') {
         for (const p of attackerSide) {
-          await ctx.db.faction.update({ where: { id: p.factionId }, data: { stability: clamp(p.faction.stability - 10, 0, 100) } })
+          await ctx.db.faction.update({ where: { id: p.factionId }, data: { stability: clamp(p.faction.stability - 10, 0, 100), influence: clamp(p.faction.influence - 8, 0, 100) } })
+        }
+        for (const p of defenderSide) {
+          await ctx.db.faction.update({ where: { id: p.factionId }, data: { influence: clamp(p.faction.influence + 4, 0, 100) } })
         }
       }
     }

@@ -272,6 +272,33 @@ export async function applyCharacterChanges(
 
     const updateData: any = {}
 
+    // #213: a dead character cannot take more harm, heal, gain/lose
+    // conditions, be treated, rest, make a death save, sacrifice
+    // themselves again, or gain a corruption mark — each of those checks
+    // below is individually gated on character.isAlive rather than
+    // skipping the whole pcChange, since non-physical changes (location,
+    // knowledge, relationships, inventory, resources) are still legitimate
+    // for a deceased character (their gear can still be looted, the party
+    // can still learn something about them). Warned once here, matching
+    // the "Ambiguous character name" warning above, so a dropped physical
+    // change against a dead character isn't silently invisible.
+    if (!character.isAlive) {
+      const c = pcChange.changes
+      const attemptedPhysicalChange =
+        (c.harm_damage && c.harm_damage > 0) ||
+        (c.harm_healing && c.harm_healing > 0) ||
+        (c.conditions_add && c.conditions_add.length > 0) ||
+        (c.conditions_remove && c.conditions_remove.length > 0) ||
+        c.medical_attention ||
+        c.rest_quality ||
+        c.death_save_result ||
+        c.heroic_sacrifice ||
+        c.corruption_change
+      if (attemptedPhysicalChange) {
+        console.warn(`  ⚠️ ${character.name} is deceased — skipping harm/condition/corruption changes reported against them`)
+      }
+    }
+
     // Update location. Also resolves/creates the matching Location row and
     // links it via locationId — the same auto-register-on-movement
     // behavior a separate later pass used to do, now done inline since we
@@ -342,7 +369,7 @@ export async function applyCharacterChanges(
     // Apply harm damage (armor mitigates incoming damage) — prefers a
     // structured armorValue on the matching inventory item over guessing
     // from the equipped name string (see resolveArmorValue).
-    if (pcChange.changes.harm_damage && pcChange.changes.harm_damage > 0) {
+    if (character.isAlive && pcChange.changes.harm_damage && pcChange.changes.harm_damage > 0) {
       const armorName = (character.equipment as any)?.armor || ''
       const armorReduction = resolveArmorValue(character.inventory as any, armorName)
       const harmResult = applyHarm(
@@ -361,7 +388,7 @@ export async function applyCharacterChanges(
     }
 
     // Apply harm healing
-    if (pcChange.changes.harm_healing && pcChange.changes.harm_healing > 0) {
+    if (character.isAlive && pcChange.changes.harm_healing && pcChange.changes.harm_healing > 0) {
       const healResult = healHarm(
         currentHarm as HarmLevel,
         pcChange.changes.harm_healing
@@ -371,7 +398,7 @@ export async function applyCharacterChanges(
     }
 
     // Add conditions
-    if (pcChange.changes.conditions_add && pcChange.changes.conditions_add.length > 0) {
+    if (character.isAlive && pcChange.changes.conditions_add && pcChange.changes.conditions_add.length > 0) {
       for (const rawCondition of pcChange.changes.conditions_add) {
         // Fill the enforced fields in from the stock catalogue where the
         // report left them out (COMMON_CONDITIONS). Without this the
@@ -406,7 +433,7 @@ export async function applyCharacterChanges(
     }
 
     // Remove conditions
-    if (pcChange.changes.conditions_remove && pcChange.changes.conditions_remove.length > 0) {
+    if (character.isAlive && pcChange.changes.conditions_remove && pcChange.changes.conditions_remove.length > 0) {
       for (const conditionIdOrName of pcChange.changes.conditions_remove) {
         // Try to find by ID first, then by name
         const conditionToRemove = currentConditions.find(c =>
@@ -481,7 +508,7 @@ export async function applyCharacterChanges(
     // applyMedicalAttention itself refuses to touch someone still at
     // harm 6 (unconscious/dying) — they need to be stabilized via a
     // death save first, same as the harm.ts module's own design.
-    if (pcChange.changes.medical_attention) {
+    if (character.isAlive && pcChange.changes.medical_attention) {
       const { skill, has_supplies } = pcChange.changes.medical_attention
       const treatment = applyMedicalAttention(currentHarm as HarmLevel, skill, has_supplies)
       currentHarm = treatment.newHarm
@@ -501,7 +528,7 @@ export async function applyCharacterChanges(
     // Conditions are passed so bleeding blocks it: the slow calendar path
     // (accrueNaturalRecovery) already refuses to mend an open wound, and a
     // narrated night's sleep must not become the way around that rule.
-    if (pcChange.changes.rest_quality) {
+    if (character.isAlive && pcChange.changes.rest_quality) {
       const rested = applyRest(
         currentHarm as HarmLevel,
         pcChange.changes.rest_quality,
@@ -513,7 +540,7 @@ export async function applyCharacterChanges(
 
     // Already critically dying: apply whatever the AI narrated this turn.
     const wasDying = isDying(currentHarm as HarmLevel, currentConditions)
-    if (wasDying && pcChange.changes.death_save_result) {
+    if (character.isAlive && wasDying && pcChange.changes.death_save_result) {
       const save = makeDeathSave(deathSaves, pcChange.changes.death_save_result === 'success')
       deathSaves = save.newDeathSaves
       harmMessages.push(save.message)
@@ -540,7 +567,7 @@ export async function applyCharacterChanges(
       }
     }
 
-    if (pcChange.changes.heroic_sacrifice) {
+    if (character.isAlive && pcChange.changes.heroic_sacrifice) {
       const { circumstances, effect } = pcChange.changes.heroic_sacrifice
       const sacrifice = performHeroicSacrifice(character.id, character.name, circumstances, effect, currentTurnNumber)
       newIsAlive = false
@@ -559,7 +586,7 @@ export async function applyCharacterChanges(
     // corruption theme (a universe without one ignores the field
     // entirely). Clamped to one mark per scene, never decreases;
     // reaching the cap adds the Consumed condition (see corruption.ts).
-    if (pcChange.changes.corruption_change) {
+    if (character.isAlive && pcChange.changes.corruption_change) {
       const corruptionTheme = await getCorruptionTheme()
       if (corruptionTheme) {
         const marks = Number(pcChange.changes.corruption_change.marks) || 0
@@ -841,7 +868,7 @@ export async function applyCharacterChanges(
             // remember via harm_healing. See resolveConsumableHeal's
             // doc comment in lib/game/inventory.ts.
             const healAmount = resolveConsumableHeal(removedItem)
-            if (healAmount > 0) {
+            if (healAmount > 0 && character.isAlive) {
               const healResult = healHarm(currentHarm as HarmLevel, healAmount)
               currentHarm = healResult.newHarm
               harmMessages.push(`${character.name} uses ${removedItem.name}: ${healResult.message}`)
@@ -862,7 +889,7 @@ export async function applyCharacterChanges(
             // potions from a stack at once), before quantity drops below.
             if (modify.quantity_delta < 0) {
               const healAmount = resolveConsumableHeal(item, Math.abs(modify.quantity_delta))
-              if (healAmount > 0) {
+              if (healAmount > 0 && character.isAlive) {
                 const healResult = healHarm(currentHarm as HarmLevel, healAmount)
                 currentHarm = healResult.newHarm
                 harmMessages.push(`${character.name} uses ${Math.abs(modify.quantity_delta)}x ${item.name}: ${healResult.message}`)

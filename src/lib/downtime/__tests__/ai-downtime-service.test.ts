@@ -9,6 +9,7 @@ const {
   findUniqueMock, findFirstMock, updateMock, activityCreateMock,
   worldMetaFindUniqueMock, questCreateMock, applyDebtChangesMock,
   activityFindManyMock, activityUpdateMock, questFindUniqueMock,
+  activityFindFirstMock,
 } = vi.hoisted(() => ({
   findUniqueMock: vi.fn(),
   findFirstMock: vi.fn(),
@@ -20,13 +21,15 @@ const {
   activityFindManyMock: vi.fn(),
   activityUpdateMock: vi.fn(),
   questFindUniqueMock: vi.fn(),
+  // #211: createDynamicActivity's single-active-downtime pre-check.
+  activityFindFirstMock: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     character: { findUnique: findUniqueMock, update: updateMock },
     scene: { findFirst: findFirstMock },
-    downtimeActivity: { create: activityCreateMock, findMany: activityFindManyMock, update: activityUpdateMock },
+    downtimeActivity: { create: activityCreateMock, findMany: activityFindManyMock, update: activityUpdateMock, findFirst: activityFindFirstMock },
     worldMeta: { findUnique: worldMetaFindUniqueMock },
     quest: { create: questCreateMock, findUnique: questFindUniqueMock },
   },
@@ -130,6 +133,9 @@ describe('getPersonalizedSuggestions', () => {
 describe('createDynamicActivity — gold cost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // #211: no pre-existing ACTIVE activity, so the single-active-downtime
+    // guard lets these tests through to the behavior they actually cover.
+    activityFindFirstMock.mockResolvedValue(null)
     activityCreateMock.mockResolvedValue({ id: 'activity1' })
     // generateInitialEvents is a full AI-call pipeline unrelated to what
     // this suite covers (gold charging) — treated as a black box, same
@@ -287,6 +293,87 @@ describe('createDynamicActivity — gold cost', () => {
     expect(activityCreateMock).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ linkedQuestId: 'quest1' }),
     }))
+  })
+})
+
+describe('createDynamicActivity — single-active-downtime guard (#211)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    activityCreateMock.mockResolvedValue({ id: 'activity1' })
+    vi.spyOn(AIDrivenDowntimeService as any, 'generateInitialEvents').mockResolvedValue(undefined)
+  })
+
+  function stubInterpretation() {
+    return vi.spyOn(AIDrivenDowntimeService, 'interpretDowntimeActivity').mockResolvedValue({
+      success: true,
+      interpretation: {
+        summary: 'Train at the local guild',
+        estimatedDuration: 3,
+        costs: {},
+        requirements: [],
+        skillsInvolved: [],
+        riskLevel: 'low',
+        potentialOutcomes: [],
+        potentialComplications: [],
+        isViable: true,
+        aiNotes: '',
+      },
+    } as any)
+  }
+
+  it('rejects a new activity when one is already ACTIVE for this character, without spending the AI interpretation call', async () => {
+    activityFindFirstMock.mockResolvedValue({ id: 'existing-activity', summary: 'Already brewing potions' })
+    const interpretSpy = stubInterpretation()
+
+    await expect(
+      AIDrivenDowntimeService.createDynamicActivity('char1', 'I also want to forge a sword')
+    ).rejects.toThrow('Already brewing potions')
+
+    expect(interpretSpy).not.toHaveBeenCalled()
+    expect(activityCreateMock).not.toHaveBeenCalled()
+  })
+
+  it('checks for an existing activity scoped to this exact character', async () => {
+    activityFindFirstMock.mockResolvedValue(null)
+    stubInterpretation()
+    findUniqueMock.mockResolvedValue({ resources: {} })
+
+    await AIDrivenDowntimeService.createDynamicActivity('char1', 'I train with the guild')
+
+    expect(activityFindFirstMock).toHaveBeenCalledWith({
+      where: { characterId: 'char1', status: 'ACTIVE' },
+      select: { id: true, summary: true },
+    })
+    expect(activityCreateMock).toHaveBeenCalled()
+  })
+
+  it('allows creating a new activity once no ACTIVE one exists for this character', async () => {
+    activityFindFirstMock.mockResolvedValue(null)
+    stubInterpretation()
+    findUniqueMock.mockResolvedValue({ resources: {} })
+
+    const activity = await AIDrivenDowntimeService.createDynamicActivity('char1', 'I train with the guild')
+
+    expect(activity).toEqual({ id: 'activity1' })
+    expect(activityCreateMock).toHaveBeenCalled()
+  })
+
+  it('surfaces a clear error rather than a raw constraint error when the DB-level race backstop fires', async () => {
+    // The rare window between the pre-check above and the create call
+    // itself — a real Prisma unique-constraint violation from the partial
+    // unique index (see the migration), not a mocked "already exists"
+    // pre-check result.
+    activityFindFirstMock.mockResolvedValue(null)
+    stubInterpretation()
+    findUniqueMock.mockResolvedValue({ resources: {} })
+    const { Prisma } = await import('@prisma/client')
+    activityCreateMock.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'x' })
+    )
+
+    await expect(
+      AIDrivenDowntimeService.createDynamicActivity('char1', 'I train with the guild')
+    ).rejects.toThrow('already have an active downtime activity')
   })
 })
 

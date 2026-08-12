@@ -27,6 +27,7 @@ import { Prisma } from '@prisma/client'
 import { applyStandingChanges, StandingChange } from '@/lib/game/standing'
 import { clampGoldDelta } from '@/lib/game/economy'
 import { mergeGrantedItems, RewardGrantItem } from '@/lib/game/questRewards'
+import { applyGrantBudget } from '@/lib/game/itemValue'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 
 type Db = Prisma.TransactionClient
@@ -142,7 +143,14 @@ export async function applyDowntimeRewards(
   campaignId: string,
   characterId: string,
   activityLabel: string,
-  rewards: ParsedDowntimeRewards
+  rewards: ParsedDowntimeRewards,
+  // #211: required to run item grants through the same per-arc rarity
+  // budget quest rewards enforce (applyGrantBudget) — without it, downtime
+  // completions were the one reward path with no cap on item quality/
+  // quantity per arc. Optional only so a caller with genuinely no turn
+  // context (shouldn't happen via the real call site) degrades to
+  // ungated grants rather than throwing.
+  currentTurn?: number
 ): Promise<string[]> {
   const log: string[] = []
   const hasAnything =
@@ -179,8 +187,23 @@ export async function applyDowntimeRewards(
   }
 
   if (rewards.items.length > 0) {
-    updateData.inventory = mergeGrantedItems(character.inventory as any, rewards.items)
-    log.push(`${character.name} acquired ${rewards.items.map(i => i.name).join(', ')} from "${activityLabel}"`)
+    // Per-arc rarity budget (#44/#47/#211), same as questRewards.ts's
+    // applyQuestRewardGrant — a downtime completion is no longer a way to
+    // grant items outside the cap every other reward path enforces.
+    let toGrant = rewards.items
+    if (typeof currentTurn === 'number') {
+      const existing = ((character.inventory as any)?.items || []) as Array<{ rarity?: string | null; grantedTurn?: number | null }>
+      const budget = applyGrantBudget(existing, toGrant, currentTurn)
+      for (const skippedItem of budget.skipped) {
+        log.push(`${skippedItem.name} was earned but is beyond what ${character.name} has earned this arc`)
+      }
+      toGrant = budget.granted.map(item => ({ ...item, grantedTurn: currentTurn }))
+    }
+
+    if (toGrant.length > 0) {
+      updateData.inventory = mergeGrantedItems(character.inventory as any, toGrant)
+      log.push(`${character.name} acquired ${toGrant.map(i => i.name).join(', ')} from "${activityLabel}"`)
+    }
   }
 
   if (Object.keys(updateData).length > 0) {

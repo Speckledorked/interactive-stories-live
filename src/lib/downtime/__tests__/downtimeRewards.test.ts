@@ -183,4 +183,58 @@ describe('applyDowntimeRewards', () => {
     expect(log.join(' ')).toContain('300 gold')
     expect(log.join(' ')).toContain('Silvered Dagger')
   })
+
+  // #211: downtime rewards used to call mergeGrantedItems directly, never
+  // through applyGrantBudget — the per-arc rarity cap quest rewards
+  // already enforce. A player could stack unlimited concurrent trivial
+  // downtime activities, each granting unbudgeted items.
+  it('skips an item grant that would exceed the per-arc rarity budget when currentTurn is provided', async () => {
+    // A legendary item already spends the entire 8-point arc budget on its
+    // own (see MAX_RARITY_POINTS_PER_ARC/rarityPoints in itemValue.ts).
+    const db = makeDb({
+      id: 'ch1', name: 'Vera', resources: { gold: 0 },
+      inventory: { items: [{ id: 'old-sword', name: 'Old Sword', quantity: 1, rarity: 'legendary', grantedTurn: 5 }] },
+      isAlive: true,
+    })
+    const log = await applyDowntimeRewards(db as any, 'camp1', 'ch1', 'Smithing', {
+      ...empty,
+      items: [{ id: 'new-trinket', name: 'New Trinket', quantity: 1, rarity: 'common' }],
+    }, 5)
+
+    expect(log.join(' ')).toContain('beyond what Vera has earned this arc')
+    expect(db.character.update).not.toHaveBeenCalled()
+  })
+
+  it('grants an item that fits within the per-arc rarity budget when currentTurn is provided', async () => {
+    const db = makeDb({
+      id: 'ch1', name: 'Vera', resources: { gold: 0 }, inventory: { items: [] }, isAlive: true,
+    })
+    const log = await applyDowntimeRewards(db as any, 'camp1', 'ch1', 'Smithing', {
+      ...empty,
+      items: [{ id: 'new-trinket', name: 'New Trinket', quantity: 1, rarity: 'common' }],
+    }, 5)
+
+    expect(log.join(' ')).toContain('New Trinket')
+    const data = (db.character.update.mock.calls as any[])[0][0].data
+    expect(data.inventory.items.some((i: any) => i.id === 'new-trinket')).toBe(true)
+    // The stored item is stamped with the turn it was actually granted,
+    // matching questRewards.ts's own convention.
+    expect(data.inventory.items.find((i: any) => i.id === 'new-trinket').grantedTurn).toBe(5)
+  })
+
+  it('grants items with no budget check at all when currentTurn is omitted (backward-compatible fallback)', async () => {
+    const db = makeDb({
+      id: 'ch1', name: 'Vera', resources: { gold: 0 },
+      inventory: { items: [{ id: 'old-sword', name: 'Old Sword', quantity: 1, rarity: 'legendary', grantedTurn: 5 }] },
+      isAlive: true,
+    })
+    const log = await applyDowntimeRewards(db as any, 'camp1', 'ch1', 'Smithing', {
+      ...empty,
+      items: [{ id: 'new-trinket', name: 'New Trinket', quantity: 1, rarity: 'common' }],
+    })
+
+    expect(log.join(' ')).toContain('New Trinket')
+    const data = (db.character.update.mock.calls as any[])[0][0].data
+    expect(data.inventory.items.some((i: any) => i.id === 'new-trinket')).toBe(true)
+  })
 })

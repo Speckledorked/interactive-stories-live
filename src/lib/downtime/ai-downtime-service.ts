@@ -9,6 +9,7 @@ import { parseDowntimeRewards, applyDowntimeRewards } from './downtimeRewards'
 import { applyCapabilityChanges, CapabilityChange } from '@/lib/game/capabilities'
 import { applyDebtChanges } from '@/lib/game/debts'
 import { decideDowntimeDayEvent, decideDowntimeOutcomeCategory, describeOutcomeConstraint, DowntimeEventOutcome } from './downtimeEventOutcome'
+import { isUniqueConstraintViolation } from '@/lib/game/worldUpdaters/uniqueConstraintGuard'
 
 // What a downtime activity actually costs — not always gold. The AI picks
 // whichever of these genuinely fit the described activity (any subset, or
@@ -187,6 +188,20 @@ If the request seems impossible, suggest a viable alternative.`
     playerDescription: string,
     campaignContext?: any
   ) {
+    // #211: at most one ACTIVE downtime activity per character — without
+    // this, a player could stack unlimited concurrent activities, each
+    // independently completing and granting its own rewards. Checked before
+    // the AI interpretation call so a rejection doesn't spend it needlessly.
+    // A real partial unique index (see the migration) backstops the race
+    // between two concurrent requests both passing this check.
+    const existingActive = await prisma.downtimeActivity.findFirst({
+      where: { characterId, status: 'ACTIVE' },
+      select: { id: true, summary: true },
+    })
+    if (existingActive) {
+      throw new Error(`You already have an active downtime activity in progress: "${existingActive.summary}". Finish or advance it before starting another.`)
+    }
+
     const interpretationResult = await this.interpretDowntimeActivity(
       characterId,
       playerDescription,
@@ -207,26 +222,39 @@ If the request seems impossible, suggest a viable alternative.`
     // obligations, not resources that run out.
     const { extraRequirements, linkedQuestId } = await this.chargeDowntimeCosts(characterId, costs, interpretation.summary)
 
-    // Create the activity using the correct schema fields
-    const activity = await prisma.downtimeActivity.create({
-      data: {
-        characterId,
-        summary: interpretation.summary,
-        description: playerDescription, // Store original player intent
-        estimatedDays: interpretation.estimatedDuration,
-        currentDay: 0,
-        costs: costs as any,
-        requirements: [...interpretation.requirements, ...extraRequirements],
-        skillsInvolved: interpretation.skillsInvolved,
-        riskLevel: interpretation.riskLevel,
-        linkedQuestId,
-        outcomes: {
-          potentialOutcomes: interpretation.potentialOutcomes,
-          aiInterpretation: interpretation
-        },
-        status: 'ACTIVE'
+    // Create the activity using the correct schema fields. The DB-level
+    // partial unique index (see migration) is the backstop for a race
+    // between two concurrent requests both passing the pre-check above —
+    // narrow, but the costs above are already charged by the time this
+    // runs, so a caught violation here surfaces a clear message rather
+    // than a raw constraint error, even though it can't un-charge them.
+    let activity
+    try {
+      activity = await prisma.downtimeActivity.create({
+        data: {
+          characterId,
+          summary: interpretation.summary,
+          description: playerDescription, // Store original player intent
+          estimatedDays: interpretation.estimatedDuration,
+          currentDay: 0,
+          costs: costs as any,
+          requirements: [...interpretation.requirements, ...extraRequirements],
+          skillsInvolved: interpretation.skillsInvolved,
+          riskLevel: interpretation.riskLevel,
+          linkedQuestId,
+          outcomes: {
+            potentialOutcomes: interpretation.potentialOutcomes,
+            aiInterpretation: interpretation
+          },
+          status: 'ACTIVE'
+        }
+      })
+    } catch (error) {
+      if (isUniqueConstraintViolation(error)) {
+        throw new Error('Another activity was started for this character at the same moment — you already have an active downtime activity in progress.')
       }
-    })
+      throw error
+    }
 
     // Generate initial events for the activity
     await this.generateInitialEvents(activity.id, interpretation)
@@ -787,8 +815,16 @@ Based on the player's original intent and what happened during the activity, gen
       try {
         if (owner) {
           const rewards = parseDowntimeRewards(outcomes)
+          // #211: the arc-rarity item budget (applyGrantBudget) needs the
+          // current turn to know what's already been granted this arc —
+          // without it, item grants here would silently skip the budget
+          // check entirely (see applyDowntimeRewards's own fallback).
+          const worldMeta = await prisma.worldMeta.findUnique({
+            where: { campaignId: owner.campaignId },
+            select: { currentTurnNumber: true },
+          })
           const rewardLog = await prisma.$transaction(async (tx) =>
-            applyDowntimeRewards(tx, owner.campaignId, activity.characterId, activity.summary || 'downtime activity', rewards)
+            applyDowntimeRewards(tx, owner.campaignId, activity.characterId, activity.summary || 'downtime activity', rewards, worldMeta?.currentTurnNumber)
           )
           for (const line of rewardLog) console.log(`  🎁 ${line}`)
         }

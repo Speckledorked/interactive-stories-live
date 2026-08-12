@@ -726,13 +726,29 @@ Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fi
  * receipts, and return the mechanics for prompt-building. Any failure
  * returns [] — the scene resolves freeform rather than blocking play.
  */
+// #200: resolveActionMechanics used to fail open to a bare `[]` on every
+// path — a scene with no pending actions, a scene whose classifier call
+// failed (missing OPENAI_API_KEY, an OpenAI outage, a malformed response),
+// and a genuine DB error all produced the exact same empty array, with no
+// way for the caller to tell "nothing needed rolling" apart from "the dice
+// engine silently didn't run." For a product whose entire mechanical
+// promise is "every risky action gets a real server-side roll," that
+// second case needs to be visible, not indistinguishable from the first.
+export interface ActionMechanicsResult {
+  mechanics: ActionMechanics[]
+  // True only when pendingActions was non-empty but no mechanics came
+  // back anyway — i.e. the dice engine was supposed to run and didn't.
+  // False when there were simply no pending actions to roll.
+  classificationUnavailable: boolean
+}
+
 export async function resolveActionMechanics(
   campaignId: string,
   sceneId: string,
   pendingActions: Array<{ id: string; characterId: string; userId: string; actionText: string }>,
   rng: Rng = Math.random
-): Promise<ActionMechanics[]> {
-  if (pendingActions.length === 0) return []
+): Promise<ActionMechanicsResult> {
+  if (pendingActions.length === 0) return { mechanics: [], classificationUnavailable: false }
 
   try {
     const [characterRows, factionRows, npcRows, locationRows, moveFlavorRows, campaignRow, debtRows] = await Promise.all([
@@ -879,7 +895,7 @@ export async function resolveActionMechanics(
       campaignId,
       sceneId
     )
-    if (classifications.length === 0) return []
+    if (classifications.length === 0) return { mechanics: [], classificationUnavailable: true }
 
     const mechanics: ActionMechanics[] = []
     for (const classification of classifications) {
@@ -1087,10 +1103,10 @@ export async function resolveActionMechanics(
       })
     }
 
-    return mechanics
+    return { mechanics, classificationUnavailable: false }
   } catch (error) {
     console.error('Action mechanics failed (failing open — freeform resolution):', error)
-    return []
+    return { mechanics: [], classificationUnavailable: true }
   }
 }
 

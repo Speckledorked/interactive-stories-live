@@ -411,6 +411,26 @@ async function performResolution(
       })
     }
 
+    // #200: the dice engine (resolveActionMechanics, via
+    // sceneResolutionRequest.ts) failed open to freeform narration this
+    // exchange — missing OPENAI_API_KEY, an OpenAI outage, or an
+    // unexpected error. That used to be indistinguishable from "nothing
+    // needed rolling" (both produced an empty action_mechanics array) and
+    // surfaced nowhere but a server log. Same prominent, non-collapsed
+    // mechanism as unresolvedCharacterNames above — this is exactly the
+    // kind of "something silently didn't happen" case that mechanism
+    // exists for, not the collapsed-by-default measurement-only panels
+    // (adherence/moveVariety) below.
+    if ((aiRequest as { _mechanicsUnavailable?: boolean })._mechanicsUnavailable) {
+      worldStateChanges.push({
+        category: 'consequence',
+        type: 'failed',
+        entityName: 'Dice Mechanics',
+        details: 'The dice engine was unavailable this exchange (an API issue) — every action resolved as freeform narration instead of a real roll.',
+        impact: 'major'
+      })
+    }
+
     // #91: the server-side outcome-adherence check (client.ts's
     // checkOutcomeAdherence call) already ran during callAIGM above and fed
     // a campaign-wide admin metric — this is what makes that same result

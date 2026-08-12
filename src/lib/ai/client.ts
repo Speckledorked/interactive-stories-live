@@ -584,6 +584,16 @@ export interface AIGMRequest {
   // exchange count, which gives zero pressure at all before exchange 8
   // regardless of how stuck a scene already is.
   last_progress_exchange?: number
+  // #200: an internal, never-AI-facing signal (same "underscore-prefixed,
+  // ignored by the prompt builder" convention as the AI response's own
+  // _outcomeAdherence) — true when this exchange had pending actions but
+  // the dice engine failed to produce mechanics for any of them (missing
+  // OPENAI_API_KEY, an OpenAI outage, or an unexpected error in
+  // resolveActionMechanics). The scene still resolves freeform either
+  // way; this is what lets the caller persist a visible "mechanics were
+  // unavailable this exchange" signal instead of the failure being
+  // indistinguishable from "nothing needed rolling."
+  _mechanicsUnavailable?: boolean
 }
 
 // Prompt-caching params for a scene-resolution call. Scoped per campaign,

@@ -80,9 +80,10 @@ describe('resolveActionMechanics — receipts', () => {
       { action_index: 1, move_name: 'Act Under Fire', stat_key: 'cool' },
     ]))
 
-    const mechanics = await resolveActionMechanics('camp1', 'scene1', actions, () => 0.5)
+    const { mechanics, classificationUnavailable } = await resolveActionMechanics('camp1', 'scene1', actions, () => 0.5)
 
     expect(mechanics).toHaveLength(2)
+    expect(classificationUnavailable).toBe(false)
     expect(prisma.diceRoll.create).toHaveBeenCalledTimes(2)
   })
 
@@ -139,30 +140,47 @@ describe('resolveActionMechanics — receipts', () => {
     expect(data.rollResult).toMatchObject({ stat: 'cool', outcome: expect.any(String) })
   })
 
-  it('writes nothing at all when every action is no_roll', async () => {
+  it('writes nothing at all when every action is no_roll — this is NOT classificationUnavailable', async () => {
+    // #200: no_roll is a real, successful classification (nothing was
+    // risked), distinct from the classifier failing outright — the two
+    // must not collapse into the same signal.
     openaiFetch.mockResolvedValue(classifierReturning([
       { action_index: 0, move_name: 'no_roll', stat_key: 'cool' },
     ]))
 
-    const mechanics = await resolveActionMechanics('camp1', 'scene1', [actions[0]], () => 0.5)
+    const { mechanics, classificationUnavailable } = await resolveActionMechanics('camp1', 'scene1', [actions[0]], () => 0.5)
 
     expect(mechanics).toEqual([])
+    expect(classificationUnavailable).toBe(false)
     expect(prisma.diceRoll.create).not.toHaveBeenCalled()
     expect(prisma.playerAction.update).not.toHaveBeenCalled()
   })
 
-  it('resolves freeform rather than throwing when the classifier fails', async () => {
+  it('resolves freeform rather than throwing when the classifier fails, and flags classificationUnavailable (#200)', async () => {
     // Fail-open is the documented contract for this whole path: a bad
-    // classifier call must cost the mechanics, never the turn.
+    // classifier call must cost the mechanics, never the turn — but it
+    // must be VISIBLE that this happened, not indistinguishable from
+    // "nothing needed rolling."
     openaiFetch.mockRejectedValue(new Error('upstream down'))
 
     await expect(resolveActionMechanics('camp1', 'scene1', actions, () => 0.5))
-      .resolves.toEqual([])
+      .resolves.toEqual({ mechanics: [], classificationUnavailable: true })
     expect(prisma.diceRoll.create).not.toHaveBeenCalled()
   })
 
-  it('is a no-op for an empty action list, without touching the database', async () => {
-    expect(await resolveActionMechanics('camp1', 'scene1', [], () => 0.5)).toEqual([])
+  it('flags classificationUnavailable specifically when OPENAI_API_KEY is missing (#200)', async () => {
+    delete process.env.OPENAI_API_KEY
+
+    const result = await resolveActionMechanics('camp1', 'scene1', actions, () => 0.5)
+
+    expect(result).toEqual({ mechanics: [], classificationUnavailable: true })
+    expect(openaiFetch).not.toHaveBeenCalled()
+    expect(prisma.diceRoll.create).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op for an empty action list, without touching the database, and is NOT classificationUnavailable', async () => {
+    expect(await resolveActionMechanics('camp1', 'scene1', [], () => 0.5))
+      .toEqual({ mechanics: [], classificationUnavailable: false })
     expect(prisma.character.findMany).not.toHaveBeenCalled()
   })
 

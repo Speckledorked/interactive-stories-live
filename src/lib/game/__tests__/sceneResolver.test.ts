@@ -135,7 +135,7 @@ import { callAIGM } from '@/lib/ai/client';
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState';
 import { applyWorldUpdates } from '../stateUpdater';
 import { AIVisualService } from '@/lib/ai/ai-visual-service';
-import { storeWorldStateChanges } from '../world-state-tracker';
+import { storeWorldStateChanges, detectWorldStateChanges } from '../world-state-tracker';
 import { buildScenePrompt } from '../../ai/imageGeneration';
 import { enqueueSceneImageGeneration } from '../imageGenQueue';
 import { generateSceneStakes } from '@/lib/ai/sceneStakes';
@@ -302,6 +302,51 @@ describe('Scene Resolver', () => {
         // #232: moveVariety — no outcome_echo on mockAIResponse, so the
         // measurement is empty rather than absent.
         { entries: [], reported: 0, unreported: 0, repeated: 0 }
+      );
+    });
+
+    // #200: the dice engine failing open (missing OPENAI_API_KEY, an
+    // OpenAI outage) used to be indistinguishable from "nothing needed
+    // rolling" — this confirms it now surfaces as a real, visible
+    // worldStateChanges entry instead of only a server log line.
+    it('surfaces a visible worldStateChanges entry when the AI request flags _mechanicsUnavailable', async () => {
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue({ _mechanicsUnavailable: true } as any);
+      vi.mocked(callAIGM).mockResolvedValue({ ...mockAIResponse } as any);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
+      vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false } as any);
+      // Fresh array per test: the file-level mock resolves to one shared []
+      // literal, so pushing into it here (as this test's own assertion
+      // relies on) would otherwise leak into every later test in this file.
+      vi.mocked(detectWorldStateChanges).mockResolvedValueOnce([]);
+
+      await resolveScene(mockCampaignId, mockSceneId);
+
+      const changes = vi.mocked(storeWorldStateChanges).mock.calls[0][1];
+      expect(changes).toContainEqual(
+        expect.objectContaining({ category: 'consequence', type: 'failed', entityName: 'Dice Mechanics' })
+      );
+    });
+
+    it('does not add a worldStateChanges entry when mechanics resolved normally', async () => {
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue({ _mechanicsUnavailable: false } as any);
+      vi.mocked(detectWorldStateChanges).mockResolvedValueOnce([]);
+      vi.mocked(callAIGM).mockResolvedValue({ ...mockAIResponse } as any);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
+      vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: false } as any);
+
+      await resolveScene(mockCampaignId, mockSceneId);
+
+      const changes = vi.mocked(storeWorldStateChanges).mock.calls[0][1];
+      expect(changes).not.toContainEqual(
+        expect.objectContaining({ entityName: 'Dice Mechanics' })
       );
     });
 

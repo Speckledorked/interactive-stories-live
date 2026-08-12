@@ -150,15 +150,18 @@ export interface ActionMechanics {
   outcomeText: string // the move's band text — what this outcome MEANS
 }
 
-export type Rng = () => number
+// #213: Rng/rollD6 now live in ./rng so harm.ts and worldUpdaters/characters.ts
+// can use the same injectable RNG without importing this file (which itself
+// imports from harm.ts) and creating a cycle. Re-exported here so every
+// existing `from './resolution'` import keeps working unchanged.
+export type { Rng } from './rng'
+export { rollD6 } from './rng'
+import type { Rng } from './rng'
+import { rollD6 } from './rng'
 
 // ---------------------------------------------------------------------------
 // Pure mechanics
 // ---------------------------------------------------------------------------
-
-export function rollD6(rng: Rng): number {
-  return Math.floor(rng() * 6) + 1
-}
 
 export const PBTA_STAT_KEYS = ['cool', 'hard', 'hot', 'sharp', 'weird'] as const
 

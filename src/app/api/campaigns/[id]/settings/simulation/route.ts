@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
-import { DEFAULT_FACTION_CAP, DEFAULT_NPC_CAP } from '@/lib/game/tick/caps'
+import { DEFAULT_FACTION_CAP, DEFAULT_NPC_CAP, MAX_FACTION_CAP, MAX_NPC_CAP } from '@/lib/game/tick/caps'
 import { DEFAULT_WORLD_TURN_HOURS } from '@/lib/game/tick/pacing'
 import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
 
@@ -80,6 +80,24 @@ export async function PATCH(
           )
         }
       }
+    }
+
+    // #203: factionCap/npcCap specifically (not worldTurnHours, which has
+    // no relationship to it) feed every handler's per-tick roster size —
+    // raising them far enough risks the real world tick blowing past
+    // TICK_TRANSACTION_TIMEOUT_MS, aborting the whole turn. See caps.ts's
+    // MAX_FACTION_CAP/MAX_NPC_CAP comment for how that ceiling was chosen.
+    if (body.factionCap != null && body.factionCap > MAX_FACTION_CAP) {
+      return NextResponse.json(
+        { error: `factionCap must be ${MAX_FACTION_CAP} or less` },
+        { status: 400 }
+      )
+    }
+    if (body.npcCap != null && body.npcCap > MAX_NPC_CAP) {
+      return NextResponse.json(
+        { error: `npcCap must be ${MAX_NPC_CAP} or less` },
+        { status: 400 }
+      )
     }
 
     // Battle-map generation lives on Campaign, not WorldMeta, but belongs

@@ -163,6 +163,13 @@ const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFac
 // past what that default budgets for. 20s leaves real headroom under the
 // cron sweep's per-invocation budget while still failing fast if a handler
 // is genuinely stuck rather than hanging the whole sweep.
+//
+// #203: this is a FLAT constant — it does not scale with factionCap/npcCap
+// (tick/caps.ts), which are admin-settable per campaign. That's exactly why
+// caps.ts's MAX_FACTION_CAP/MAX_NPC_CAP exist: the settings route enforces
+// them so a raised cap can never grow the per-tick roster far enough to put
+// real pressure on this fixed timeout, rather than this file silently
+// depending on caps.ts staying small forever.
 const TICK_TRANSACTION_TIMEOUT_MS = 20_000
 
 /**

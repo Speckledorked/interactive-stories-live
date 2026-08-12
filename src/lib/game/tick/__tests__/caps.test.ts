@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { resolveTickCaps, DEFAULT_FACTION_CAP, DEFAULT_NPC_CAP } from '../caps'
+import { resolveTickCaps, DEFAULT_FACTION_CAP, DEFAULT_NPC_CAP, MAX_FACTION_CAP, MAX_NPC_CAP } from '../caps'
+
+// #203: the max caps exist so the admin-settable settings route (see
+// settings/simulation/route.ts) has something principled to enforce — the
+// real gate is tested there, this just pins the relationship to the
+// defaults so it can't silently drift to something smaller than a default
+// (which would make the "default" itself unreachable) or absurdly large.
+describe('MAX_FACTION_CAP / MAX_NPC_CAP', () => {
+  it('are a real multiple of, and strictly above, their defaults', () => {
+    expect(MAX_FACTION_CAP).toBeGreaterThan(DEFAULT_FACTION_CAP)
+    expect(MAX_NPC_CAP).toBeGreaterThan(DEFAULT_NPC_CAP)
+    expect(MAX_FACTION_CAP % DEFAULT_FACTION_CAP).toBe(0)
+    expect(MAX_NPC_CAP % DEFAULT_NPC_CAP).toBe(0)
+  })
+})
 
 describe('resolveTickCaps', () => {
   it('falls back to defaults when worldMeta is null', () => {

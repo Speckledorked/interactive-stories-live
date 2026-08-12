@@ -21,6 +21,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { GET, PATCH } from '../route'
+import { MAX_FACTION_CAP, MAX_NPC_CAP } from '@/lib/game/tick/caps'
 
 const db = prisma as any
 
@@ -124,5 +125,54 @@ describe('PATCH', () => {
 
     expect(db.campaign.update).not.toHaveBeenCalled()
     expect(db.campaign.findUnique).toHaveBeenCalled()
+  })
+
+  // #203: factionCap/npcCap feed every tick handler's per-turn roster size,
+  // and the real (non-dry-run) tick wraps every handler in one transaction
+  // with a flat timeout that does NOT scale with these caps — an
+  // unbounded admin-settable cap could eventually blow that budget.
+  describe('factionCap/npcCap upper bound (#203)', () => {
+    it('rejects a factionCap above MAX_FACTION_CAP', async () => {
+      const response = await PATCH(patchRequest({ factionCap: MAX_FACTION_CAP + 1 }), { params: { id: 'camp1' } })
+      expect(response.status).toBe(400)
+      expect(db.worldMeta.update).not.toHaveBeenCalled()
+    })
+
+    it('rejects an npcCap above MAX_NPC_CAP', async () => {
+      const response = await PATCH(patchRequest({ npcCap: MAX_NPC_CAP + 1 }), { params: { id: 'camp1' } })
+      expect(response.status).toBe(400)
+      expect(db.worldMeta.update).not.toHaveBeenCalled()
+    })
+
+    it('accepts a factionCap/npcCap exactly at the max', async () => {
+      db.worldMeta.update.mockResolvedValue({ factionCap: MAX_FACTION_CAP, npcCap: MAX_NPC_CAP, worldTurnHours: null })
+      db.campaign.findUnique.mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: false })
+
+      const response = await PATCH(
+        patchRequest({ factionCap: MAX_FACTION_CAP, npcCap: MAX_NPC_CAP }),
+        { params: { id: 'camp1' } }
+      )
+
+      expect(response.status).toBe(200)
+      expect(db.worldMeta.update).toHaveBeenCalled()
+    })
+
+    it('does not clamp worldTurnHours, which has no relationship to the tick timeout', async () => {
+      db.worldMeta.update.mockResolvedValue({ factionCap: null, npcCap: null, worldTurnHours: 999 })
+      db.campaign.findUnique.mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: false })
+
+      const response = await PATCH(patchRequest({ worldTurnHours: 999 }), { params: { id: 'camp1' } })
+
+      expect(response.status).toBe(200)
+    })
+
+    it('allows clearing a cap back to null regardless of the max', async () => {
+      db.worldMeta.update.mockResolvedValue({ factionCap: null, npcCap: null, worldTurnHours: null })
+      db.campaign.findUnique.mockResolvedValue({ mapGenerationEnabled: false, sceneImageGenerationEnabled: false })
+
+      const response = await PATCH(patchRequest({ factionCap: null, npcCap: null }), { params: { id: 'camp1' } })
+
+      expect(response.status).toBe(200)
+    })
   })
 })

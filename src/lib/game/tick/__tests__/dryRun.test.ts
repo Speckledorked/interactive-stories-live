@@ -7,6 +7,8 @@ vi.mock('@/lib/prisma', () => ({
     location: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     faction: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
     nPC: { updateMany: vi.fn(), findMany: vi.fn() },
+    // #207: tickFactions reads each faction's unresolved-wake count.
+    activeWake: { count: vi.fn(async () => 0) },
   },
 }))
 

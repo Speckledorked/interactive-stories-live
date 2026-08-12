@@ -8,6 +8,8 @@ vi.mock('@/lib/prisma', () => ({
     warParticipant: { findMany: vi.fn() },
     // #79: tickFactions reads goal-change history for commitment.
     worldEvent: { findMany: vi.fn(async () => []) },
+    // #207: tickFactions reads each faction's unresolved-wake count.
+    activeWake: { count: vi.fn(async () => 0) },
   },
 }))
 
@@ -176,6 +178,39 @@ describe('tickFactions same-tick absorption (audit fix #199)', () => {
     const finalWrite = bWrites[1][0] as any
     expect(finalWrite.data.resources).toBe(59)
     expect(finalWrite.data.military).toBe(56)
+  })
+})
+
+describe('tickFactions active-wake mechanical consumer (audit fix #207)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('queries each faction\'s own unresolved-wake count, scoped correctly', async () => {
+    const a = makeFaction('a', { stability: 50, resources: 90, military: 90 })
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([a] as any)
+      .mockResolvedValueOnce([{ id: 'a' }] as any)
+    vi.mocked(prisma.activeWake.count).mockResolvedValueOnce(0)
+
+    await tickFactions(baseCtx())
+
+    expect(prisma.activeWake.count).toHaveBeenCalledWith({
+      where: { affectedFactionId: 'a', resolvedAt: null },
+    })
+  })
+
+  it('redirects a strong faction to DEFEND when its own count crosses the wake-crisis threshold', async () => {
+    const a = makeFaction('a', { goal: 'CONSOLIDATE', stability: 50, resources: 90, military: 90 })
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([a] as any)
+      .mockResolvedValueOnce([{ id: 'a' }] as any)
+    vi.mocked(prisma.activeWake.count).mockResolvedValueOnce(2)
+
+    await tickFactions(baseCtx())
+
+    const write = vi.mocked(prisma.faction.update).mock.calls.find((call) => (call[0] as any).where.id === 'a')
+    expect((write![0] as any).data.goal).toBe('DEFEND')
   })
 })
 

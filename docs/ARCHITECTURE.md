@@ -47,7 +47,12 @@ plain terms, and [`SETUP.md`](../SETUP.md) for installation.
   goals, contest and conquer territory, and sustained conflicts escalate
   into multi-turn wars that can grow into coalitions. A player character can
   lead a faction outright — set its strategic goal in-fiction and watch it
-  keep ticking autonomously between sessions.
+  keep ticking autonomously between sessions. The tick itself
+  (`runWorldTick`) never calls AI; a separate step in the same world turn
+  (`generateOffscreenEvents` in `worldTurnOffscreenEvents.ts`) narrates what
+  the tick just decided, so "the simulation is AI-free" and "offscreen
+  drama gets AI narration" are both true at once — they're two different
+  layers.
 - **Debt & standing economy** — player choices create real, mechanically
   binding consequences: a faction losing a war in an offscreen tick changes
   what a player can roll next session. This is the most differentiated

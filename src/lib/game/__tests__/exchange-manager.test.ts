@@ -12,12 +12,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     scene: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-    playerAction: { update: vi.fn(), updateMany: vi.fn() },
+    playerAction: { update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
   },
 }))
 
 import { prisma } from '@/lib/prisma'
-import { ExchangeManager } from '../exchange-manager'
+import { ExchangeManager, ActionPriority } from '../exchange-manager'
 
 const db = prisma as any
 
@@ -109,6 +109,41 @@ describe('canResolveExchange', () => {
     const canResolve = await new ExchangeManager('camp1', 'scene1').canResolveExchange()
 
     expect(canResolve).toBe(true)
+  })
+})
+
+describe('getActionsByPriority (#219)', () => {
+  it('orders by actionPriority, then createdAt, then id — never bare actionPriority alone', async () => {
+    db.scene.findUnique.mockResolvedValue({ currentExchange: 2 })
+    db.playerAction.findMany.mockResolvedValue([])
+
+    await new ExchangeManager('camp1', 'scene1').getActionsByPriority()
+
+    expect(db.playerAction.findMany).toHaveBeenCalledWith({
+      where: { sceneId: 'scene1', exchangeNumber: 2, status: 'pending' },
+      include: { character: true, user: true },
+      orderBy: [
+        { actionPriority: 'asc' },
+        { createdAt: 'asc' },
+        { id: 'asc' },
+      ],
+    })
+  })
+
+  it('groups the (already DB-ordered) actions by priority, preserving relative order within a group', async () => {
+    db.scene.findUnique.mockResolvedValue({ currentExchange: 0 })
+    db.playerAction.findMany.mockResolvedValue([
+      { id: 'a1', actionPriority: ActionPriority.SOCIAL },
+      { id: 'a2', actionPriority: ActionPriority.IMMEDIATE_COMBAT },
+      { id: 'a3', actionPriority: ActionPriority.SOCIAL },
+      { id: 'a4', actionPriority: null },
+    ])
+
+    const grouped = await new ExchangeManager('camp1', 'scene1').getActionsByPriority()
+
+    expect(grouped[ActionPriority.IMMEDIATE_COMBAT].map((a: any) => a.id)).toEqual(['a2'])
+    expect(grouped[ActionPriority.SOCIAL].map((a: any) => a.id)).toEqual(['a1', 'a3'])
+    expect(grouped[ActionPriority.OTHER].map((a: any) => a.id)).toEqual(['a4'])
   })
 })
 

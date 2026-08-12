@@ -333,9 +333,18 @@ export class ExchangeManager {
         character: true,
         user: true
       },
-      orderBy: {
-        actionPriority: 'asc'
-      }
+      // #219: actionPriority alone gives Postgres no ordering guarantee
+      // among rows that tie on it — compareActionsByOutcome
+      // (complex-exchange-resolver.ts) is a genuinely deterministic stable
+      // sort, but only given a deterministic INPUT order. createdAt (real
+      // submission order) breaks the common case; id is a final, always-
+      // unique tiebreak for the rare case two actions share a createdAt
+      // timestamp, so the full ordering can never be ambiguous.
+      orderBy: [
+        { actionPriority: 'asc' },
+        { createdAt: 'asc' },
+        { id: 'asc' }
+      ]
     })
 
     // Group by priority

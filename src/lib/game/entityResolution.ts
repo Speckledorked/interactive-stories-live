@@ -96,8 +96,13 @@ export function resolveEntityByNameOrId<T extends ResolvableEntity>(
   const normalizedInput = normalizeEntityName(nameOrId)
   if (!normalizedInput) return { kind: 'not_found' }
 
-  const byExactName = candidates.find(c => normalizeEntityName(c.name) === normalizedInput)
-  if (byExactName) return { kind: 'found', entity: byExactName }
+  // #215: duplicate same-named rows are a real, confirmed-possible state
+  // (see integrity/checks/duplicateNames.ts) — this must never silently
+  // pick whichever one Prisma happens to return first. Same ambiguity
+  // handling as the fuzzy path below.
+  const exactNameMatches = candidates.filter(c => normalizeEntityName(c.name) === normalizedInput)
+  if (exactNameMatches.length === 1) return { kind: 'found', entity: exactNameMatches[0] }
+  if (exactNameMatches.length > 1) return { kind: 'ambiguous', candidates: exactNameMatches }
 
   const fuzzyMatches = candidates.filter(c => isConfidentFuzzyMatch(nameOrId, c.name))
   if (fuzzyMatches.length === 1) return { kind: 'found', entity: fuzzyMatches[0] }

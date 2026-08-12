@@ -103,4 +103,39 @@ describe('resolveEntityByNameOrId', () => {
   it('returns not_found for an empty/blank name', () => {
     expect(resolveEntityByNameOrId(roster, '   ').kind).toBe('not_found')
   })
+
+  it('#215: reports ambiguous rather than silently picking the first row when two entities share an exact name', () => {
+    // A real, confirmed-possible state (see integrity/checks/duplicateNames.ts)
+    // — two same-named NPC rows in one campaign. The old `.find()`-based
+    // exact-name branch would silently return whichever came first.
+    const duplicateRoster = [
+      { id: 'npc_1', name: 'Bob' },
+      { id: 'npc_2', name: 'Captain Reyes' },
+      { id: 'npc_3', name: 'Bob' },
+    ]
+    const result = resolveEntityByNameOrId(duplicateRoster, 'Bob')
+    expect(result.kind).toBe('ambiguous')
+    if (result.kind === 'ambiguous') {
+      expect(result.candidates).toHaveLength(2)
+      expect(result.candidates.map(c => c.id).sort()).toEqual(['npc_1', 'npc_3'])
+    }
+  })
+
+  it('#215: an exact id match still wins even when the roster also has duplicate names', () => {
+    const duplicateRoster = [
+      { id: 'npc_1', name: 'Bob' },
+      { id: 'npc_3', name: 'Bob' },
+    ]
+    const result = resolveEntityByNameOrId(duplicateRoster, 'npc_3')
+    expect(result).toEqual({ kind: 'found', entity: duplicateRoster[1] })
+  })
+
+  it('#215: exact-name ambiguity is case/whitespace-insensitive, same as the single-match path', () => {
+    const duplicateRoster = [
+      { id: 'npc_1', name: 'Bob' },
+      { id: 'npc_2', name: '  bob  ' },
+    ]
+    const result = resolveEntityByNameOrId(duplicateRoster, 'BOB')
+    expect(result.kind).toBe('ambiguous')
+  })
 })

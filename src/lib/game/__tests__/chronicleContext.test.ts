@@ -76,9 +76,9 @@ describe('buildChronicleNarrationInput', () => {
     )
   })
 
-  it('resolves weather via a character\'s locationId join when present', async () => {
+  it('resolves weather via a character\'s locationId join when present and discovered', async () => {
     db.character.findMany.mockResolvedValue([
-      { locationId: 'loc1', currentLocation: 'Greenstone', location: { name: 'Greenstone', weather: 'RAIN', weatherSeverity: 3 } },
+      { locationId: 'loc1', currentLocation: 'Greenstone', location: { name: 'Greenstone', weather: 'RAIN', weatherSeverity: 3, isDiscovered: true } },
     ])
     const result = await buildChronicleNarrationInput('camp1')
     expect(result?.weather).toEqual({ locationName: 'Greenstone', condition: 'RAIN', severity: 3 })
@@ -88,6 +88,37 @@ describe('buildChronicleNarrationInput', () => {
     db.character.findMany.mockResolvedValue([{ locationId: null, currentLocation: null, location: null }])
     const result = await buildChronicleNarrationInput('camp1')
     expect(result?.weather).toBeNull()
+  })
+
+  // #233: buildChronicleNarrationInput correctly filters factions/wars to
+  // isDiscovered but had no equivalent check on the character's location —
+  // an undiscovered location's weather could leak into lobby flavor text.
+  it('never leaks weather from an undiscovered location (fog of war, #233)', async () => {
+    db.character.findMany.mockResolvedValue([
+      { locationId: 'loc1', currentLocation: 'The Hidden Vale', location: { name: 'The Hidden Vale', weather: 'FOG', weatherSeverity: 5, isDiscovered: false } },
+    ])
+    const result = await buildChronicleNarrationInput('camp1')
+    expect(result?.weather).toBeNull()
+  })
+
+  it('selects isDiscovered on the location join so the fog-of-war check above can actually run', async () => {
+    await buildChronicleNarrationInput('camp1')
+    expect(db.character.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          location: { select: expect.objectContaining({ isDiscovered: true }) },
+        }),
+      })
+    )
+  })
+
+  it('skips an undiscovered location and still finds weather from a later discovered one', async () => {
+    db.character.findMany.mockResolvedValue([
+      { locationId: 'loc1', currentLocation: 'The Hidden Vale', location: { name: 'The Hidden Vale', weather: 'FOG', weatherSeverity: 5, isDiscovered: false } },
+      { locationId: 'loc2', currentLocation: 'Greenstone', location: { name: 'Greenstone', weather: 'RAIN', weatherSeverity: 3, isDiscovered: true } },
+    ])
+    const result = await buildChronicleNarrationInput('camp1')
+    expect(result?.weather).toEqual({ locationName: 'Greenstone', condition: 'RAIN', severity: 3 })
   })
 
   it('never throws when every sub-query comes back empty', async () => {

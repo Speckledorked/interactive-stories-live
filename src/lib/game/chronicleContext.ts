@@ -34,7 +34,12 @@ export async function buildChronicleNarrationInput(campaignId: string): Promise<
       select: {
         locationId: true,
         currentLocation: true,
-        location: { select: { name: true, weather: true, weatherSeverity: true } },
+        // #233: isDiscovered included so the read below can drop an
+        // undiscovered location's weather rather than leaking it — same
+        // fog-of-war boundary the faction/war queries above already
+        // enforce, and the one worldSummary.ts enforces via a plain
+        // `isDiscovered: true` where clause on its own location query.
+        location: { select: { name: true, weather: true, weatherSeverity: true, isDiscovered: true } },
       },
     }),
     // Faction activity: highest-threat, discovered, active factions only —
@@ -77,7 +82,7 @@ export async function buildChronicleNarrationInput(campaignId: string): Promise<
     }),
   ])
 
-  const withLocation = characters.find(c => c.location) ?? null
+  const withLocation = characters.find(c => c.location?.isDiscovered) ?? null
   const weather = withLocation?.location
     ? {
         locationName: withLocation.location.name,

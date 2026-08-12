@@ -2315,6 +2315,13 @@ model DowntimeActivity {
 
   @@index([characterId])
   @@index([status])
+  // #211: a real partial unique index enforcing at most one ACTIVE activity
+  // per character — created by hand-written migration SQL (Prisma's
+  // @@unique has no WHERE clause), matching this schema's existing
+  // NPC/Faction/Quest-name uniqueness precedent. The application-level
+  // check in createDynamicActivity (ai-downtime-service.ts) is the primary
+  // gate; this is the concurrency backstop for the race between two
+  // concurrent requests both passing that check.
   @@map("downtime_activities")
 }
 

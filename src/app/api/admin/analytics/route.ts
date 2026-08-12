@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUser } from '@/lib/auth'
 import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
 import { prisma } from '@/lib/prisma'
-import { getFunnelCounts, getSignupsByDay, getRetentionByCohortWeek, getUserCampaignListing } from '@/lib/analytics/events'
+import { getFunnelCounts, getSignupsByDay, getRetentionByCohortWeek, getUserCampaignListing, getCampaignCostSummary } from '@/lib/analytics/events'
 
 export async function GET(request: NextRequest) {
   const user = await getUser(request)
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
-  const [funnel, signupsByDay, retention, stuckResolutionJobs, stuckLoreJobs, users] = await Promise.all([
+  const [funnel, signupsByDay, retention, stuckResolutionJobs, stuckLoreJobs, users, campaignCosts] = await Promise.all([
     getFunnelCounts(),
     getSignupsByDay(30),
     getRetentionByCohortWeek(8),
@@ -36,7 +36,8 @@ export async function GET(request: NextRequest) {
       take: 20,
     }),
     getUserCampaignListing(),
+    getCampaignCostSummary(),
   ])
 
-  return NextResponse.json({ funnel, signupsByDay, retention, stuckResolutionJobs, stuckLoreJobs, users })
+  return NextResponse.json({ funnel, signupsByDay, retention, stuckResolutionJobs, stuckLoreJobs, users, campaignCosts })
 }

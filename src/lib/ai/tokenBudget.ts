@@ -34,6 +34,11 @@ import type { AIGMRequest } from './client'
 // entities) that the fixed entity-count caps alone don't protect against.
 export const DEFAULT_TOKEN_BUDGET = 12000
 
+// #231: below this many characters, a halved current_scene_intro reads as
+// noise rather than continuity — roughly enough for one short sentence of
+// "what just happened," matching the tier's own stated purpose.
+const MIN_SCENE_INTRO_CHARS = 300
+
 export interface TokenBudgetInput {
   worldSummary: AIGMRequest['world_summary']
   currentSceneIntro: string
@@ -144,9 +149,20 @@ export function applyTokenBudget(
   // exchange from re-narrating a beat that just happened. The original
   // scene-intro framing is comparatively cheap to lose once several
   // exchanges have piled up; what just happened is not.
+  // #231: halving has no floor of its own — on a pathologically small
+  // budget the result could shrink to a near-empty, incoherent fragment
+  // ("...t") rather than degrading gracefully. Below MIN_SCENE_INTRO_CHARS,
+  // a fragment that short isn't "less continuity," it's noise — drop the
+  // scene intro entirely instead of handing the model something unreadable.
   if (currentSceneIntro.length > 0) {
-    currentSceneIntro = truncateFromStart(currentSceneIntro, Math.ceil(currentSceneIntro.length / 2))
-    stepsApplied.push('current_scene_intro')
+    const halvedLength = Math.ceil(currentSceneIntro.length / 2)
+    if (halvedLength < MIN_SCENE_INTRO_CHARS) {
+      currentSceneIntro = ''
+      stepsApplied.push('current_scene_intro_dropped')
+    } else {
+      currentSceneIntro = truncateFromStart(currentSceneIntro, halvedLength)
+      stepsApplied.push('current_scene_intro')
+    }
   }
   if (underBudget()) {
     return { worldSummary, currentSceneIntro, stepsApplied }

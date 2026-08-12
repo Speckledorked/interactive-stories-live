@@ -98,6 +98,30 @@ describe('applyTokenBudget', () => {
     expect(result.currentSceneIntro.length).toBeLessThan(currentSceneIntro.length)
   })
 
+  // #231: halving alone has no floor — on a pathological over-budget
+  // request it could shrink current_scene_intro to a near-empty,
+  // incoherent fragment rather than degrading gracefully.
+  it('drops current_scene_intro entirely rather than halving it into a near-empty fragment', () => {
+    const worldSummary = makeWorldSummary()
+    // Short enough that halving (ceil(400/2) = 200) would land under the
+    // 300-char floor — this must drop to '' rather than truncate to 200.
+    const currentSceneIntro = bigText(400)
+    const bare = estimate(worldSummary, '')
+    const result = applyTokenBudget({ worldSummary, currentSceneIntro, participantCharacterIds: null }, bare + 10)
+    expect(result.stepsApplied).toEqual(['current_scene_intro_dropped'])
+    expect(result.currentSceneIntro).toBe('')
+  })
+
+  it('still halves (not drops) when the result would land at or above the floor', () => {
+    const worldSummary = makeWorldSummary()
+    // Halving (ceil(4000/2) = 2000) comfortably clears the 300-char floor.
+    const currentSceneIntro = bigText(4000)
+    const bare = estimate(worldSummary, '')
+    const result = applyTokenBudget({ worldSummary, currentSceneIntro, participantCharacterIds: null }, bare + 100)
+    expect(result.stepsApplied).toEqual(['current_scene_intro'])
+    expect(result.currentSceneIntro.length).toBe(2003) // 2000 + '...' prefix
+  })
+
   it('narrows characters to only the current scene\'s participants as the last, most-protected tier', () => {
     const worldSummary = makeWorldSummary({
       characters: [makeCharacter('c1', 'Alice'), makeCharacter('c2', 'Bob'), makeCharacter('c3', 'Carol')],

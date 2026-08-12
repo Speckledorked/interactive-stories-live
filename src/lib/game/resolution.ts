@@ -785,12 +785,26 @@ export async function resolveActionMechanics(
       // Every OUTSTANDING debt held by an acting character. Fetched once
       // per exchange and matched in memory, rather than a query per action
       // — same discipline the faction/NPC rosters above follow.
+      //
+      // #221: no `take` limit here used to mean unbounded row growth on a
+      // debt-heavy campaign, even though debtModifier's OUTPUT is always
+      // safely clamped to +-2. This bound is a genuine backstop, not a
+      // tuned precision cap: debtsWithCounterparty needs a specific
+      // counterparty's full debt count (not just "some debts exist") to
+      // compute owedTo/owedBy correctly, so a small cap risked silently
+      // dropping a real counterparty's rows. 300 is sized to never
+      // realistically fire for the acting party in one exchange while
+      // still closing the unbounded-growth pattern; orderBy keeps the
+      // truncation (if it ever happens) deterministic and favor the most
+      // recently incurred debts.
       prisma.debt.findMany({
         where: {
           characterId: { in: Array.from(new Set(pendingActions.map(a => a.characterId))) },
           status: 'OUTSTANDING',
         },
         select: { characterId: true, direction: true, counterpartyName: true, counterpartyId: true },
+        orderBy: { createdAt: 'desc' },
+        take: 300,
       }),
     ])
     const hasCorruptionTheme = Boolean(campaignRow?.corruptionTheme)

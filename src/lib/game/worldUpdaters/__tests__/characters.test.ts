@@ -55,6 +55,11 @@ const character = (over: Partial<Character> = {}): Character =>
     relationships: null, consequences: null,
     appearance: null, personality: null, resources: null,
     corruption: 0,
+    // #213: harm/condition/corruption processing is gated on isAlive —
+    // every existing test here already implicitly assumed a living
+    // character, so this default preserves that instead of silently
+    // breaking every fixture that doesn't explicitly set it.
+    isAlive: true,
     ...over,
   } as Character)
 
@@ -274,6 +279,108 @@ describe('applyCharacterChanges — harm and conditions', () => {
     ], roster, npcRoster, noTheme, true)
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.isAlive).toBe(false)
+  })
+})
+
+describe('applyCharacterChanges — dead characters cannot be physically mutated (#213)', () => {
+  const deadRoster = () => [character({ isAlive: false, harm: 3 })]
+
+  it('ignores harm_damage reported against a dead character', async () => {
+    // Below stress.ts's SERIOUS_HARM_THRESHOLD (2) so the separate,
+    // un-gated stress-drift signal (which reads the raw reported
+    // harm_damage, not whether it was actually applied) doesn't itself
+    // trigger an update — this test is isolated to the harm-gating path.
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 1 } } as PcChange,
+    ], deadRoster(), npcRoster, noTheme, true)
+    expect(tx.character.update).not.toHaveBeenCalled()
+  })
+
+  it('ignores harm_healing reported against a dead character', async () => {
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_healing: 2 } } as PcChange,
+    ], deadRoster(), npcRoster, noTheme, true)
+    expect(tx.character.update).not.toHaveBeenCalled()
+  })
+
+  it('ignores conditions_add/conditions_remove reported against a dead character', async () => {
+    const roster = [character({
+      isAlive: false,
+      conditions: { conditions: [{ id: 'b1', name: 'Bleeding', category: 'Physical', description: 'x', harmPerScene: 1 }] },
+    })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      {
+        character_name_or_id: 'char1',
+        changes: { conditions_add: [{ name: 'Enraged' }], conditions_remove: ['Bleeding'] },
+      } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    expect(tx.character.update).not.toHaveBeenCalled()
+  })
+
+  it('ignores medical_attention and rest_quality reported against a dead character', async () => {
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      {
+        character_name_or_id: 'char1',
+        changes: { medical_attention: { skill: 'trained', has_supplies: true }, rest_quality: 'excellent' },
+      } as PcChange,
+    ], deadRoster(), npcRoster, noTheme, true)
+    expect(tx.character.update).not.toHaveBeenCalled()
+  })
+
+  it('ignores a death_save_result reported against an already-dead character', async () => {
+    const roster = [character({
+      isAlive: false,
+      harm: 6,
+      conditions: { conditions: [{ id: 'd1', name: 'Critically Dying', category: 'Physical', description: 'x', mechanicalEffect: 'Cannot act', appliedAt: 1 }], permanentInjuries: [], deathSaves: 0 },
+    })]
+    await applyCharacterChanges(tx as any, 'camp1', 2, [
+      { character_name_or_id: 'char1', changes: { death_save_result: 'success' } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    expect(tx.character.update).not.toHaveBeenCalled()
+  })
+
+  it('ignores heroic_sacrifice reported against an already-dead character', async () => {
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { heroic_sacrifice: { circumstances: 'x', effect: 'y' } } } as PcChange,
+    ], deadRoster(), npcRoster, noTheme, true)
+    expect(tx.character.update).not.toHaveBeenCalled()
+  })
+
+  it('ignores corruption_change reported against a dead character, even with an active corruption theme', async () => {
+    const theme = vi.fn().mockResolvedValue({ name: 'The Hollowing', description: 'x', stages: ['a', 'b', 'c', 'd', 'e'], bargainGuidance: 'x' })
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { corruption_change: { marks: 1, reason: 'a dark bargain' } } } as PcChange,
+    ], deadRoster(), npcRoster, theme, true)
+    expect(tx.character.update).not.toHaveBeenCalled()
+  })
+
+  it('does not let a consumed healing item heal a dead character', async () => {
+    const roster = [character({
+      isAlive: false,
+      harm: 5,
+      inventory: { items: [{ id: 'p1', name: 'Healing Potion', quantity: 1, effect: { kind: 'heal', amount: 2, description: 'Mends wounds.' } }] },
+    })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { inventory_changes: { items_remove: ['p1'] } } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    // The item is still removed (loot/consumption isn't gated), but harm
+    // must stay untouched — a corpse cannot be healed by a potion used on it.
+    expect(data.inventory.items).toEqual([])
+    expect(data.harm).toBeUndefined()
+  })
+
+  it('still processes non-physical changes (location, knowledge, relationships, inventory) for a dead character', async () => {
+    const roster = [character({ isAlive: false })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { knowledge_add: [{ key: 'fact', label: 'A fact' }] } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.knownConcepts.concepts).toEqual([
+      { key: 'fact', label: 'A fact', source: undefined, learnedAt: 1 }
+    ])
+    // No harm/condition write was ever triggered for this dead character.
+    expect(data.harm).toBeUndefined()
   })
 })
 

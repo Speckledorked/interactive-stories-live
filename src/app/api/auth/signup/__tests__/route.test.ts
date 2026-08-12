@@ -27,10 +27,17 @@ vi.mock('@/lib/notifications/email-service', () => ({
 vi.mock('@/lib/payment/service', () => ({
   addFunds: vi.fn().mockResolvedValue({ success: true, newBalance: 100 }),
 }))
+vi.mock('@/lib/rateLimit', () => ({
+  SIGNUP_LIMIT: { bucket: 'signup', limit: 5, windowSeconds: 3600 },
+  checkRateLimit: vi.fn(),
+  rateLimitExceededResponse: vi.fn(),
+  getClientIp: vi.fn(() => '127.0.0.1'),
+}))
 
 import { prisma } from '@/lib/prisma'
 import { addFunds } from '@/lib/payment/service'
 import { recordEvent } from '@/lib/analytics/events'
+import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { POST } from '../route'
 
 const db = prisma as any
@@ -46,6 +53,7 @@ function makeRequest(body: unknown) {
 beforeEach(() => {
   vi.clearAllMocks()
   ;(addFunds as any).mockResolvedValue({ success: true, newBalance: 100 })
+  ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
 })
 
 describe('POST /api/auth/signup', () => {
@@ -96,5 +104,15 @@ describe('POST /api/auth/signup', () => {
     const response = await POST(makeRequest({ email: 'new@example.com', password: 'hunter2' }))
 
     expect(response.status).toBe(201)
+  })
+
+  it('is rate limited by IP (#210)', async () => {
+    ;(checkRateLimit as any).mockResolvedValue({ allowed: false, retryAfterSeconds: 42 })
+    ;(rateLimitExceededResponse as any).mockReturnValue(new Response(null, { status: 429 }))
+
+    const response = await POST(makeRequest({ email: 'new@example.com', password: 'hunter2' }))
+
+    expect(response.status).toBe(429)
+    expect(db.user.create).not.toHaveBeenCalled()
   })
 })

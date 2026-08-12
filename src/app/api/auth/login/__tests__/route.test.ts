@@ -12,10 +12,17 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/password', () => ({ verifyPassword: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ createToken: vi.fn() }))
+vi.mock('@/lib/rateLimit', () => ({
+  LOGIN_LIMIT: { bucket: 'login', limit: 10, windowSeconds: 300 },
+  checkRateLimit: vi.fn(),
+  rateLimitExceededResponse: vi.fn(),
+  getClientIp: vi.fn(() => '127.0.0.1'),
+}))
 
 import { prisma } from '@/lib/prisma'
 import { verifyPassword } from '@/lib/password'
 import { createToken } from '@/lib/auth'
+import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { POST } from '../route'
 
 const db = prisma as any
@@ -31,6 +38,7 @@ function loginRequest(body: unknown) {
 beforeEach(() => {
   vi.clearAllMocks()
   ;(createToken as any).mockReturnValue('fake-jwt-token')
+  ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
 })
 
 describe('POST /api/auth/login', () => {
@@ -82,5 +90,15 @@ describe('POST /api/auth/login', () => {
     db.user.findUnique.mockRejectedValue(new Error('db down'))
     const response = await POST(loginRequest({ email: 'a@b.com', password: 'hunter2' }))
     expect(response.status).toBe(500)
+  })
+
+  it('is rate limited by IP+email before touching the DB (#210)', async () => {
+    ;(checkRateLimit as any).mockResolvedValue({ allowed: false, retryAfterSeconds: 42 })
+    ;(rateLimitExceededResponse as any).mockReturnValue(new Response(null, { status: 429 }))
+
+    const response = await POST(loginRequest({ email: 'a@b.com', password: 'hunter2' }))
+
+    expect(response.status).toBe(429)
+    expect(db.user.findUnique).not.toHaveBeenCalled()
   })
 })

@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { verifyPassword } from '@/lib/password'
 import { createToken } from '@/lib/auth'
 import { LoginRequest, AuthResponse, ErrorResponse } from '@/types/api'
+import { checkRateLimit, rateLimitExceededResponse, getClientIp, LOGIN_LIMIT } from '@/lib/rateLimit'
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,6 +21,16 @@ export async function POST(request: NextRequest) {
         { error: 'Email and password are required' },
         { status: 400 }
       )
+    }
+
+    // #210: brute force protection, keyed by IP+email so a real attacker
+    // rotating through many emails from one IP is still limited per pair,
+    // without globally rate-limiting an entire shared IP (NAT, office,
+    // school) off of every account at once.
+    const rateLimitKey = `${getClientIp(request)}:${email.toLowerCase()}`
+    const rateLimit = await checkRateLimit(rateLimitKey, LOGIN_LIMIT.bucket, LOGIN_LIMIT.limit, LOGIN_LIMIT.windowSeconds)
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
     }
 
     // Find user

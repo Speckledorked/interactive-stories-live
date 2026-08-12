@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { EmailService } from '@/lib/notifications/email-service'
+import { checkRateLimit, rateLimitExceededResponse, PASSWORD_RESET_REQUEST_LIMIT } from '@/lib/rateLimit'
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000 // 1 hour
 
@@ -13,6 +14,22 @@ export async function POST(request: NextRequest) {
     const { email } = await request.json()
     if (!email || typeof email !== 'string') {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+    }
+
+    // #210: keyed by the target email, not the caller's IP — the abuse
+    // this protects against (email-bombing one inbox, or using send
+    // volume to enumerate accounts) targets a specific address regardless
+    // of how many IPs the caller has. Checked AFTER validating email is a
+    // real string but BEFORE the identical-response-either-way lookup
+    // below, so a rate-limited request never reaches the DB or email send.
+    const rateLimit = await checkRateLimit(
+      email.toLowerCase(),
+      PASSWORD_RESET_REQUEST_LIMIT.bucket,
+      PASSWORD_RESET_REQUEST_LIMIT.limit,
+      PASSWORD_RESET_REQUEST_LIMIT.windowSeconds
+    )
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
     }
 
     const user = await prisma.user.findUnique({ where: { email } })

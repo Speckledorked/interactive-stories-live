@@ -12,9 +12,15 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/notifications/email-service', () => ({
   EmailService: { sendPasswordResetEmail: vi.fn() },
 }))
+vi.mock('@/lib/rateLimit', () => ({
+  PASSWORD_RESET_REQUEST_LIMIT: { bucket: 'password-reset-request', limit: 3, windowSeconds: 3600 },
+  checkRateLimit: vi.fn(),
+  rateLimitExceededResponse: vi.fn(),
+}))
 
 import { prisma } from '@/lib/prisma'
 import { EmailService } from '@/lib/notifications/email-service'
+import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { POST } from '../route'
 
 const db = prisma as any
@@ -30,6 +36,7 @@ function req(body: unknown) {
 beforeEach(() => {
   vi.clearAllMocks()
   ;(EmailService.sendPasswordResetEmail as any).mockResolvedValue(undefined)
+  ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
 })
 
 describe('POST /api/auth/request-password-reset', () => {
@@ -78,5 +85,15 @@ describe('POST /api/auth/request-password-reset', () => {
     db.user.findUnique.mockRejectedValue(new Error('db down'))
     const response = await POST(req({ email: 'a@b.com' }))
     expect(response.status).toBe(500)
+  })
+
+  it('is rate limited by the target email before touching the DB (#210)', async () => {
+    ;(checkRateLimit as any).mockResolvedValue({ allowed: false, retryAfterSeconds: 42 })
+    ;(rateLimitExceededResponse as any).mockReturnValue(new Response(null, { status: 429 }))
+
+    const response = await POST(req({ email: 'a@b.com' }))
+
+    expect(response.status).toBe(429)
+    expect(db.user.findUnique).not.toHaveBeenCalled()
   })
 })

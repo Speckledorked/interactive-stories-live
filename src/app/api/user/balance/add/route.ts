@@ -9,6 +9,7 @@ import { ErrorResponse } from '@/types/api'
 import { MINIMUM_ADD_AMOUNT, formatCurrency } from '@/lib/payment/service'
 import { getAppUrl } from '@/lib/appUrl'
 import { handleRouteErrorWithDetails } from '@/lib/api/errors'
+import { checkRateLimit, rateLimitExceededResponse, BALANCE_CHECKOUT_LIMIT } from '@/lib/rateLimit'
 
 interface AddFundsRequest {
   amountInCents: number
@@ -22,6 +23,14 @@ interface AddFundsResponse {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
+
+    // #210: caps how many Stripe checkout sessions one account can spin up
+    // — cheap to abuse otherwise (each call hits the real Stripe API).
+    const rateLimit = await checkRateLimit(user.userId, BALANCE_CHECKOUT_LIMIT.bucket, BALANCE_CHECKOUT_LIMIT.limit, BALANCE_CHECKOUT_LIMIT.windowSeconds)
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
+    }
+
     const body: AddFundsRequest = await request.json()
 
     // Validate amount

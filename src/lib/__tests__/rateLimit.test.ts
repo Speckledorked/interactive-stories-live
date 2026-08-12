@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -7,7 +8,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { prisma } from '@/lib/prisma'
-import { checkRateLimit, computeWindowStart } from '../rateLimit'
+import { checkRateLimit, computeWindowStart, getClientIp } from '../rateLimit'
 
 describe('computeWindowStart (pure)', () => {
   it('floors to the containing window', () => {
@@ -67,5 +68,27 @@ describe('checkRateLimit', () => {
     vi.mocked(prisma.rateLimitCounter.upsert).mockRejectedValueOnce(new Error('db down'))
     const result = await checkRateLimit('user-1', 'ai-action', 10, 60)
     expect(result.allowed).toBe(true)
+  })
+})
+
+describe('getClientIp (#210)', () => {
+  function req(headers: Record<string, string> = {}) {
+    return new NextRequest('http://localhost/api/auth/login', { headers })
+  }
+
+  it('reads the first entry of x-forwarded-for', () => {
+    expect(getClientIp(req({ 'x-forwarded-for': '1.2.3.4, 5.6.7.8' }))).toBe('1.2.3.4')
+  })
+
+  it('trims whitespace around the first entry', () => {
+    expect(getClientIp(req({ 'x-forwarded-for': '  1.2.3.4  , 5.6.7.8' }))).toBe('1.2.3.4')
+  })
+
+  it('falls back to x-real-ip when x-forwarded-for is absent', () => {
+    expect(getClientIp(req({ 'x-real-ip': '9.8.7.6' }))).toBe('9.8.7.6')
+  })
+
+  it('falls back to a shared "unknown" bucket when neither header is present', () => {
+    expect(getClientIp(req())).toBe('unknown')
   })
 })

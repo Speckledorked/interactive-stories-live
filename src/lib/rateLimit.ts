@@ -8,7 +8,7 @@
 // counter only one lambda can see limits nothing. One upsert per checked
 // request is the whole cost, and only the handful of AI routes pay it.
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 /** Pure: the start of the fixed window containing `nowMs`. */
@@ -39,22 +39,65 @@ export const LORE_IMPORT_LIMIT = { bucket: 'lore-import', limit: 5, windowSecond
 // no reason for it to share gameplay's budget in either direction.
 export const SESSION_REVOKE_LIMIT = { bucket: 'session-revoke', limit: 5, windowSeconds: 300 } as const
 
+// #210: the pre-auth surface (login, signup, password reset, email
+// verification) has no userId to key on yet — every bucket below is keyed
+// by IP (getClientIp) instead, or by email where the target of abuse is a
+// specific account rather than the caller (see each route for which).
+// Stricter than the gameplay buckets above on purpose: these are the exact
+// routes a real attacker targets first (brute force, spam signups, email
+// bombing, token guessing), not a script hammering an API a paying player
+// already has to be logged into.
+export const LOGIN_LIMIT = { bucket: 'login', limit: 10, windowSeconds: 300 } as const
+export const SIGNUP_LIMIT = { bucket: 'signup', limit: 5, windowSeconds: 3600 } as const
+export const PASSWORD_RESET_REQUEST_LIMIT = { bucket: 'password-reset-request', limit: 3, windowSeconds: 3600 } as const
+export const RESET_PASSWORD_LIMIT = { bucket: 'reset-password', limit: 10, windowSeconds: 3600 } as const
+export const VERIFY_EMAIL_LIMIT = { bucket: 'verify-email', limit: 10, windowSeconds: 3600 } as const
+export const BALANCE_CHECKOUT_LIMIT = { bucket: 'balance-checkout', limit: 10, windowSeconds: 3600 } as const
+
 const PRUNE_RETENTION_MS = 60 * 60 * 1000 // keep at most an hour of windows
 
+/**
+ * Best-effort client IP for pre-auth rate limiting. Vercel (and most
+ * proxies) set x-forwarded-for; x-real-ip is a common fallback. Falls back
+ * to a single shared 'unknown' bucket when neither header is present
+ * (local dev, or a proxy that strips them) — safe because checkRateLimit's
+ * failure mode is already "fail open," so a shared bucket here just means
+ * local dev traffic can rate-limit itself, never that the limiter blocks
+ * something it shouldn't.
+ */
+export function getClientIp(request: NextRequest): string {
+  const forwardedFor = request.headers.get('x-forwarded-for')
+  if (forwardedFor) {
+    // The header is a comma-separated list (client, then each proxy hop) —
+    // the first entry is the original client.
+    const first = forwardedFor.split(',')[0]?.trim()
+    if (first) return first
+  }
+  const realIp = request.headers.get('x-real-ip')
+  if (realIp) return realIp.trim()
+  return 'unknown'
+}
+
+/**
+ * `key` is an opaque rate-limit identity — an authenticated userId for the
+ * gameplay buckets above, or (for the pre-auth buckets) a client IP or
+ * email address. checkRateLimit itself doesn't care which; it only ever
+ * combines it with `bucket` into one counter key.
+ */
 export async function checkRateLimit(
-  userId: string,
+  key: string,
   bucket: string,
   limit: number,
   windowSeconds: number
 ): Promise<RateLimitResult> {
-  const key = `${userId}:${bucket}`
+  const counterKey = `${key}:${bucket}`
   const now = Date.now()
   const windowStart = computeWindowStart(now, windowSeconds)
 
   try {
     const counter = await prisma.rateLimitCounter.upsert({
-      where: { key_windowStart: { key, windowStart } },
-      create: { key, windowStart },
+      where: { key_windowStart: { key: counterKey, windowStart } },
+      create: { key: counterKey, windowStart },
       update: { count: { increment: 1 } },
     })
 

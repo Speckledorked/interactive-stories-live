@@ -10,9 +10,15 @@ vi.mock('@/lib/stripe', () => ({
   stripe: { checkout: { sessions: { create: vi.fn() } } },
 }))
 vi.mock('@/lib/appUrl', () => ({ getAppUrl: vi.fn().mockReturnValue('https://mythos.example') }))
+vi.mock('@/lib/rateLimit', () => ({
+  BALANCE_CHECKOUT_LIMIT: { bucket: 'balance-checkout', limit: 10, windowSeconds: 3600 },
+  checkRateLimit: vi.fn(),
+  rateLimitExceededResponse: vi.fn(),
+}))
 
 import { requireAuth } from '@/lib/auth'
 import { stripe } from '@/lib/stripe'
+import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { POST } from '../route'
 
 function req(body: unknown) {
@@ -26,6 +32,7 @@ function req(body: unknown) {
 beforeEach(() => {
   vi.clearAllMocks()
   ;(requireAuth as any).mockResolvedValue({ userId: 'user1', email: 'user1@example.com' })
+  ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
 })
 
 describe('POST', () => {
@@ -100,5 +107,15 @@ describe('POST', () => {
     expect(response.status).toBe(500)
     const body = await response.json()
     expect(body.details).toBe('card declined')
+  })
+
+  it('is rate limited by the authenticated user before creating a Stripe session (#210)', async () => {
+    ;(checkRateLimit as any).mockResolvedValue({ allowed: false, retryAfterSeconds: 42 })
+    ;(rateLimitExceededResponse as any).mockReturnValue(new Response(null, { status: 429 }))
+
+    const response = await POST(req({ amountInCents: 2000 }))
+
+    expect(response.status).toBe(429)
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled()
   })
 })

@@ -10,8 +10,14 @@ import { NextRequest } from 'next/server'
 vi.mock('@/lib/prisma', () => ({
   prisma: { user: { findFirst: vi.fn(), update: vi.fn() } },
 }))
+vi.mock('@/lib/rateLimit', () => ({
+  VERIFY_EMAIL_LIMIT: { bucket: 'verify-email', limit: 10, windowSeconds: 3600 },
+  checkRateLimit: vi.fn(),
+  getClientIp: vi.fn(() => '127.0.0.1'),
+}))
 
 import { prisma } from '@/lib/prisma'
+import { checkRateLimit } from '@/lib/rateLimit'
 import { GET } from '../route'
 
 const db = prisma as any
@@ -29,6 +35,7 @@ function redirectLocation(response: Response): URL {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
 })
 
 describe('GET /api/auth/verify-email', () => {
@@ -69,5 +76,15 @@ describe('GET /api/auth/verify-email', () => {
     const response = await GET(req('some-token'))
     const location = redirectLocation(response)
     expect(location.searchParams.get('verified')).toBe('0')
+  })
+
+  it('redirects to /login?verified=0 when rate limited, without touching the DB (#210)', async () => {
+    ;(checkRateLimit as any).mockResolvedValue({ allowed: false, retryAfterSeconds: 42 })
+
+    const response = await GET(req('good-token'))
+    const location = redirectLocation(response)
+
+    expect(location.searchParams.get('verified')).toBe('0')
+    expect(db.user.findFirst).not.toHaveBeenCalled()
   })
 })

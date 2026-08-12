@@ -149,11 +149,11 @@ export async function applyQuestChanges(
       if (progressLine) {
         updateData.progressLog = appendBounded(existing.progressLog, progressLine, QUEST_PROGRESS_BOUNDS)
       }
-      const justCompleted = changes.status === 'COMPLETED' && existing.status !== 'COMPLETED'
+      let justCompleted = changes.status === 'COMPLETED' && existing.status !== 'COMPLETED'
       // Same once-only shape as justCompleted, and for the same reason: a
       // repeated report of an already-failed quest must not charge the
       // party twice for one broken promise.
-      const justFailed =
+      let justFailed =
         (changes.status === 'FAILED' || changes.status === 'ABANDONED') &&
         existing.status !== changes.status
       if (changes.status && changes.status !== existing.status) {
@@ -179,8 +179,36 @@ export async function applyQuestChanges(
           ))
         }
 
-        await tx.quest.update({ where: { id: existing.id }, data: updateData })
-        console.log(`  🎯 Updated quest: ${existing.name}${changes.status ? ` (${changes.status})` : ''}`)
+        if ('status' in updateData) {
+          // #212: a check-then-act race — existing.status was read at the
+          // top of this iteration, before any write. Two scene resolutions
+          // racing on the same quest (a retried request, rapid double-
+          // submit) could each read the pre-transition status, each decide
+          // justCompleted/justFailed below, and each independently grant
+          // rewards or charge a failure cost — double-granting. Guarding
+          // the write on the exact status just read (instead of a plain
+          // update) closes the window: only whichever transaction actually
+          // wins the race sees a nonzero affected-row count, so only it
+          // proceeds to the reward/failure-cost side effects below. If the
+          // status changed underneath this transaction, the whole write
+          // (status and any bundled description/progress fields alike) is
+          // skipped rather than partially applied against a row that has
+          // already moved past what this transaction read.
+          const result = await tx.quest.updateMany({
+            where: { id: existing.id, status: existing.status },
+            data: updateData,
+          })
+          if (result.count === 0) {
+            console.warn(`  ⚠️ quest "${existing.name}": status changed underneath this update (raced with another resolution) — skipping this write`)
+            justCompleted = false
+            justFailed = false
+          } else {
+            console.log(`  🎯 Updated quest: ${existing.name}${changes.status ? ` (${changes.status})` : ''}`)
+          }
+        } else {
+          await tx.quest.update({ where: { id: existing.id }, data: updateData })
+          console.log(`  🎯 Updated quest: ${existing.name}`)
+        }
       }
       // Deterministic reward payout: only fires the first time this
       // quest transitions to COMPLETED, never on a repeated report of an

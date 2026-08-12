@@ -15,6 +15,11 @@ const makeTx = () => ({
   quest: {
     findFirst: vi.fn(),
     update: vi.fn(async (_args: any) => ({})),
+    // #212: status-bearing writes go through updateMany, guarded on the
+    // exact status read earlier — defaults to a successful (count: 1)
+    // write so every existing test's happy path is unaffected; the race
+    // itself is exercised by mocking count: 0 explicitly.
+    updateMany: vi.fn(async (_args: any) => ({ count: 1 })),
     create: vi.fn(async () => ({})),
   },
   // Quest-giver rosters (#75), loaded lazily and at most once per batch.
@@ -151,12 +156,61 @@ describe('applyQuestChanges — existing quest', () => {
     expect(applyQuestRewardGrant).not.toHaveBeenCalled()
   })
 
+  it('#212: guards the status write on the exact status just read, not a blind update', async () => {
+    tx.quest.findFirst.mockResolvedValue({ ...existing, status: 'ACTIVE' })
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'Clear the Warrens', changes: { status: 'COMPLETED' } } as QuestChange,
+    ])
+    expect(tx.quest.updateMany).toHaveBeenCalledWith({
+      where: { id: 'q1', status: 'ACTIVE' },
+      data: expect.objectContaining({ status: 'COMPLETED' }),
+    })
+    expect(tx.quest.update).not.toHaveBeenCalled()
+  })
+
+  it('#212: does not double-grant a reward when a racing transaction already completed the quest first', async () => {
+    // Simulates the real race: this transaction read the quest as ACTIVE
+    // (existing.status below), but by the time it tries to write, another
+    // transaction already flipped it to COMPLETED — the guarded updateMany
+    // affects zero rows.
+    tx.quest.findFirst.mockResolvedValue({ ...existing, status: 'ACTIVE' })
+    tx.quest.updateMany.mockResolvedValueOnce({ count: 0 })
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'Clear the Warrens', changes: { status: 'COMPLETED', reward_grant: { gold: 50 } } } as QuestChange,
+    ])
+
+    expect(applyQuestRewardGrant).not.toHaveBeenCalled()
+  })
+
+  it('#212: does not double-charge a failure cost when a racing transaction already failed the quest first', async () => {
+    tx.quest.findFirst.mockResolvedValue({ ...existing, status: 'ACTIVE' })
+    tx.quest.updateMany.mockResolvedValueOnce({ count: 0 })
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'Clear the Warrens', changes: { status: 'FAILED' } } as QuestChange,
+    ])
+
+    expect(applyQuestFailureCost).not.toHaveBeenCalled()
+  })
+
+  it('#212: still grants the reward normally when the guarded write actually wins the race', async () => {
+    tx.quest.findFirst.mockResolvedValue({ ...existing, status: 'ACTIVE' })
+    tx.quest.updateMany.mockResolvedValueOnce({ count: 1 })
+
+    await applyQuestChanges(tx as any, 'camp1', 5, [
+      { name: 'Clear the Warrens', changes: { status: 'COMPLETED', reward_grant: { gold: 50 } } } as QuestChange,
+    ])
+
+    expect(applyQuestRewardGrant).toHaveBeenCalledTimes(1)
+  })
+
   it('sets resolvedAt when status moves to a non-ACTIVE terminal state', async () => {
     tx.quest.findFirst.mockResolvedValue({ ...existing, status: 'ACTIVE' })
     await applyQuestChanges(tx as any, 'camp1', 7, [
       { name: 'Clear the Warrens', changes: { status: 'FAILED' } } as QuestChange,
     ])
-    const call = tx.quest.update.mock.calls[0][0]
+    const call = tx.quest.updateMany.mock.calls[0][0]
     expect(call.data.status).toBe('FAILED')
     expect(call.data.resolvedAt).toBeInstanceOf(Date)
   })
@@ -287,7 +341,7 @@ describe('applyQuestChanges — corruption acquisition gate', () => {
       { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
     ])
 
-    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('ACTIVE')
+    expect(tx.quest.updateMany.mock.calls[0][0].data.status).toBe('ACTIVE')
   })
 
   it('never revokes a quest already underway', async () => {
@@ -312,7 +366,7 @@ describe('applyQuestChanges — corruption acquisition gate', () => {
       { name: 'The Ledger Job', changes: { status: 'COMPLETED' } } as QuestChange,
     ])
 
-    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('COMPLETED')
+    expect(tx.quest.updateMany.mock.calls[0][0].data.status).toBe('COMPLETED')
   })
 
   it('never gates a campaign with no corruption theme', async () => {
@@ -324,7 +378,7 @@ describe('applyQuestChanges — corruption acquisition gate', () => {
       { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
     ])
 
-    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('ACTIVE')
+    expect(tx.quest.updateMany.mock.calls[0][0].data.status).toBe('ACTIVE')
   })
 
   it('never looks up gate context for an ungated quest', async () => {
@@ -345,7 +399,7 @@ describe('applyQuestChanges — corruption acquisition gate', () => {
       { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
     ])
 
-    expect(tx.quest.update.mock.calls[0][0].data.status).toBe('ACTIVE')
+    expect(tx.quest.updateMany.mock.calls[0][0].data.status).toBe('ACTIVE')
   })
 
   it('persists gates the fiction reports, including lifting one', async () => {

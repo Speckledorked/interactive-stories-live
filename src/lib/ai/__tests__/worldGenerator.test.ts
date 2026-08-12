@@ -143,6 +143,37 @@ describe('generateWorldFromTemplate', () => {
     expect(await generateWorldFromTemplate('pbta-fantasy', 'Title', '')).toBeNull()
   })
 
+  it('drops a faction entry with no real name instead of coercing it into a fake "Unknown Faction" (#217)', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({
+      world_seed: 'seed',
+      factions: [
+        { name: 'The Iron Company', description: 'x', goals: 'y', current_plan: 'z' },
+        { description: 'no name at all — malformed, should be dropped' },
+        { name: '', description: 'empty name — also malformed, should be dropped' },
+        { name: '   ', description: 'whitespace-only name — also malformed, should be dropped' },
+      ],
+    }))
+
+    const result = await generateWorldFromTemplate('pbta-fantasy', 'Title', '')
+
+    expect(result?.factions).toHaveLength(1)
+    expect(result?.factions[0].name).toBe('The Iron Company')
+  })
+
+  it('still coerces malformed numeric/flavor fields on an otherwise-valid faction rather than dropping it', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({
+      world_seed: 'seed',
+      factions: [{ name: 'The Iron Company', threat_level: 'not-a-number', resources: 9999 }],
+    }))
+
+    const result = await generateWorldFromTemplate('pbta-fantasy', 'Title', '')
+
+    expect(result?.factions).toHaveLength(1)
+    expect(result?.factions[0]).toMatchObject({ name: 'The Iron Company', threatLevel: 2, resources: 90 })
+  })
+
   it('still generates factions/capabilities/stat labels when the GM already wrote a world seed', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
     const fetchSpy = mockCompletion({

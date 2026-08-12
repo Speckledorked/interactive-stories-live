@@ -248,15 +248,34 @@ Rules:
       return null
     }
 
-    const factions: GeneratedFaction[] = raw.factions.map((f: any) => ({
-      name: String(f.name || 'Unknown Faction'),
-      description: String(f.description || ''),
-      goals: String(f.goals || ''),
-      currentPlan: String(f.current_plan || ''),
-      threatLevel: Math.max(1, Math.min(5, Number(f.threat_level) || 2)),
-      resources: Math.max(10, Math.min(90, Number(f.resources) || 50)),
-      influence: Math.max(10, Math.min(90, Number(f.influence) || 50)),
-    }))
+    // #217: a faction with no real name isn't "Unknown Faction" — it's a
+    // malformed entry that shouldn't become permanent world state at all.
+    // This one call site (unlike worldGraphGenerator.ts's edge validation
+    // or consequenceExtraction.ts's per-entry checks, both of which already
+    // reject rather than fabricate) used to coerce a missing name straight
+    // into a fake default, so a malformed faction entry silently became a
+    // real, permanently-created "Unknown Faction" row. The other fields
+    // stay coerced-with-a-safe-default — description/goals/currentPlan are
+    // flavor text (an empty string costs nothing) and the three numeric
+    // stats are already clamped into a safe range regardless of input — so
+    // only the identity field (name) is treated as reject-worthy, matching
+    // the "reject on type/identity, coerce on flavor/numeric" line the
+    // other 4 call sites named in #217 already draw correctly.
+    const factions: GeneratedFaction[] = (raw.factions as any[])
+      .filter((f) => {
+        const hasName = typeof f?.name === 'string' && f.name.trim().length > 0
+        if (!hasName) console.warn('⚠️ Skipping malformed generated faction (no name):', f)
+        return hasName
+      })
+      .map((f: any) => ({
+        name: String(f.name).trim(),
+        description: String(f.description || ''),
+        goals: String(f.goals || ''),
+        currentPlan: String(f.current_plan || ''),
+        threatLevel: Math.max(1, Math.min(5, Number(f.threat_level) || 2)),
+        resources: Math.max(10, Math.min(90, Number(f.resources) || 50)),
+        influence: Math.max(10, Math.min(90, Number(f.influence) || 50)),
+      }))
 
     // Capability scaffold is optional — an older-style response without it
     // still produces a valid world (nodes then get created organically

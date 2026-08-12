@@ -53,10 +53,28 @@ export function decideTerritoryLoyaltyPush(
 }
 
 export async function tickTerritoryLoyalty(ctx: TickContext): Promise<TickHandlerResult> {
-  const contestedLocations = await ctx.db.location.findMany({
+  const allContestedLocations = await ctx.db.location.findMany({
     where: { campaignId: ctx.campaignId, isContested: true, ownerFactionId: { not: null } },
     select: { id: true, name: true, ownerFactionId: true, loyaltyArc: { select: { id: true, value: true, startedTurn: true } } },
   })
+  if (allContestedLocations.length === 0) return { changes: [] }
+
+  // #228: a location that's the live contestedLocationId of a still-
+  // ESCALATING war stays isContested: true for the war's whole duration —
+  // wars own resolution for a location they're actively contesting, so
+  // this loyalty Arc must not also resolve (and potentially flip) its
+  // ownership out from under the still-open war. Checked fresh each tick,
+  // after tickWars has already run this turn (see TICK_HANDLERS ordering
+  // in worldTick.ts), so a war that resolved this same turn correctly
+  // frees its location up for loyalty resolution the same pass rather than
+  // lagging a full extra turn — same pattern tickLocationCondition (#109)
+  // already uses for the identical "is this location at war" question.
+  const warsContestingLocations = await ctx.db.war.findMany({
+    where: { campaignId: ctx.campaignId, status: 'ESCALATING', contestedLocationId: { not: null } },
+    select: { contestedLocationId: true },
+  })
+  const locationIdsAtWar = new Set(warsContestingLocations.map((w) => w.contestedLocationId))
+  const contestedLocations = allContestedLocations.filter((l) => !locationIdsAtWar.has(l.id))
   if (contestedLocations.length === 0) return { changes: [] }
 
   const ownerIds = [...new Set(contestedLocations.map((l) => l.ownerFactionId!))]

@@ -251,3 +251,62 @@ export async function getUserCampaignListing(): Promise<UserCampaignListingEntry
     campaigns: u.campaignMemberships.map((m) => m.campaign),
   }))
 }
+
+// ---------------------------------------------------------------------------
+// AI cost by campaign — every AI call already writes a real AICostEntry row
+// (see recordAICost/AICostTracker in lib/ai/cost-tracker.ts); nothing had
+// ever aggregated it for a glance view before this.
+
+export interface CampaignCostEntry {
+  campaignId: string
+  title: string
+  totalCostDollars: number
+  requestCount: number
+}
+
+export interface CampaignCostSummary {
+  totalCostDollars: number
+  totalRequests: number
+  topCampaigns: CampaignCostEntry[]
+}
+
+const CAMPAIGN_COST_TOP_N = 20
+
+/**
+ * Platform-wide AI spend, plus the highest-cost campaigns. One groupBy over
+ * every AICostEntry row (not scoped to admin-owned campaigns the way
+ * getUserCampaignListing is — cost matters regardless of who administers a
+ * campaign), summed in micros then converted once. Total/requests reflect
+ * every campaign; topCampaigns is capped to keep this glance-able.
+ */
+export async function getCampaignCostSummary(): Promise<CampaignCostSummary> {
+  const grouped = await prisma.aICostEntry.groupBy({
+    by: ['campaignId'],
+    _sum: { costMicros: true },
+    _count: { _all: true },
+  })
+
+  const totalCostMicros = grouped.reduce((sum, g) => sum + (g._sum.costMicros ?? 0), 0)
+  const totalRequests = grouped.reduce((sum, g) => sum + g._count._all, 0)
+
+  const top = [...grouped]
+    .sort((a, b) => (b._sum.costMicros ?? 0) - (a._sum.costMicros ?? 0))
+    .slice(0, CAMPAIGN_COST_TOP_N)
+
+  const campaigns = await prisma.campaign.findMany({
+    where: { id: { in: top.map((g) => g.campaignId) } },
+    select: { id: true, title: true },
+  })
+  const titleById = new Map(campaigns.map((c) => [c.id, c.title]))
+
+  return {
+    totalCostDollars: totalCostMicros / 1_000_000,
+    totalRequests,
+    topCampaigns: top.map((g) => ({
+      campaignId: g.campaignId,
+      title: titleById.get(g.campaignId) ?? '(deleted campaign)',
+      totalCostDollars: (g._sum.costMicros ?? 0) / 1_000_000,
+      requestCount: g._count._all,
+    })),
+  }
+}

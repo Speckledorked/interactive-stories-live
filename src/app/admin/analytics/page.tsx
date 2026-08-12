@@ -41,6 +41,17 @@ interface UserCampaignListingEntry {
   createdAt: string
   campaigns: Array<{ id: string; title: string; createdAt: string }>
 }
+interface CampaignCostEntry {
+  campaignId: string
+  title: string
+  totalCostDollars: number
+  requestCount: number
+}
+interface CampaignCostSummary {
+  totalCostDollars: number
+  totalRequests: number
+  topCampaigns: CampaignCostEntry[]
+}
 interface AnalyticsData {
   funnel: {
     signups: number
@@ -54,6 +65,7 @@ interface AnalyticsData {
   stuckResolutionJobs: StuckJob[]
   stuckLoreJobs: StuckJob[]
   users: UserCampaignListingEntry[]
+  campaignCosts: CampaignCostSummary
 }
 
 function StatTile({ label, value, sublabel }: { label: string; value: string | number; sublabel?: string }) {
@@ -69,6 +81,10 @@ function StatTile({ label, value, sublabel }: { label: string; value: string | n
 function pct(numerator: number, denominator: number): string {
   if (denominator === 0) return '—'
   return `${Math.round((numerator / denominator) * 100)}%`
+}
+
+function formatCost(dollars: number): string {
+  return `$${dollars.toFixed(dollars < 10 ? 4 : 2)}`
 }
 
 function RetentionCell({ metric, cohortSize }: { metric: CohortMetric; cohortSize: number }) {
@@ -286,6 +302,47 @@ export default function AnalyticsDashboardPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </section>
+
+            {/* AI cost by campaign — every AI call already writes a real
+                AICostEntry row; this is the first place any of it is
+                actually surfaced, platform-wide (not scoped to admin-owned
+                campaigns like the table above — cost matters regardless of
+                who administers a campaign). */}
+            <section>
+              <SectionHeader
+                as="h2"
+                title="AI Cost by Campaign"
+                description="Platform-wide AI spend, and the highest-cost campaigns."
+              />
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-2">
+                <StatTile label="Total AI spend" value={formatCost(data.campaignCosts.totalCostDollars)} />
+                <StatTile label="Total AI requests" value={data.campaignCosts.totalRequests} />
+              </div>
+              <div className="mt-3 overflow-x-auto rounded-lg border border-myth-border bg-myth-surface">
+                {data.campaignCosts.topCampaigns.length === 0 ? (
+                  <p className="p-4 text-sm text-myth-ink-faint">No AI cost recorded yet.</p>
+                ) : (
+                  <table className="w-full min-w-[420px] text-sm">
+                    <thead>
+                      <tr className="border-b border-myth-border text-left text-xs text-myth-ink-faint">
+                        <th className="px-3 py-2 font-medium">Campaign</th>
+                        <th className="px-3 py-2 font-medium">Total cost</th>
+                        <th className="px-3 py-2 font-medium">AI requests</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.campaignCosts.topCampaigns.map((c) => (
+                        <tr key={c.campaignId} className="border-b border-myth-border last:border-0">
+                          <td className="px-3 py-2 text-myth-ink">{c.title}</td>
+                          <td className="px-3 py-2 text-myth-ink-muted">{formatCost(c.totalCostDollars)}</td>
+                          <td className="px-3 py-2 text-myth-ink-faint">{c.requestCount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </section>
           </div>

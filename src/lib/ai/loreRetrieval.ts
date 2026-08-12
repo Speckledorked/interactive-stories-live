@@ -80,3 +80,32 @@ export async function retrieveRelevantLore(
     return [];
   }
 }
+
+/**
+ * Persist which retrieved lore entries actually reached a scene's prompt,
+ * so "why did this narration mention that fact" is a real join
+ * (Scene -> LoreCitation -> LoreEntry) instead of a guess. Best-effort and
+ * fire-and-forget by design — a citation-write failure must never affect
+ * scene resolution, which has already succeeded or failed by the time this
+ * runs. Call right after retrieveRelevantLore returns.
+ */
+export async function recordLoreCitations(
+  campaignId: string,
+  sceneId: string,
+  entries: RetrievedLoreEntry[]
+): Promise<void> {
+  if (entries.length === 0) return;
+
+  try {
+    await prisma.loreCitation.createMany({
+      data: entries.map((entry) => ({
+        campaignId,
+        sceneId,
+        loreEntryId: entry.id,
+        similarity: entry.similarity,
+      })),
+    });
+  } catch (error) {
+    console.error('Error recording lore citations:', error);
+  }
+}

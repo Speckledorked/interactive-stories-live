@@ -8,6 +8,7 @@
 // Pure orchestration lives here; retry/status-transition bookkeeping lives
 // in loreQueue.ts (mirrors resolutionQueue.ts's job lifecycle).
 
+import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import type { LoreImportJob } from '@prisma/client'
 import { embedBatchWithCostTracking, embedWithCostTracking } from '@/lib/ai/embeddingService'
@@ -205,10 +206,24 @@ function pageUrl(wikiBaseUrl: string, title: string): string {
 // WIKI_EXTRACT_BATCH_SIZE's existing group size for consistency.
 const EMBED_BATCH_SIZE = 20
 
+function chunkContentHash(content: string): string {
+  return createHash('sha256').update(content).digest('hex')
+}
+
 /**
- * Embed and insert each chunk as its own LoreEntry row. Uses raw SQL for
- * the vector column (Prisma has no native vector type — see
- * memoryCreation.ts for the same pattern). A batch failing to embed
+ * Embed and insert each chunk as its own LoreEntry row, resuming for free
+ * on a retried job instead of re-embedding and re-inserting chunks it
+ * already stored. Each chunk's contentHash is checked against what this
+ * SAME job (not the whole campaign — see LoreEntry.contentHash's own doc
+ * comment) already has BEFORE it's sent to the embedding API at all, so a
+ * job that restarts from page 0 after a mid-crawl failure skips both the
+ * embedding cost and the write for everything already done, not just the
+ * write. The @@unique([jobId, contentHash]) constraint (ON CONFLICT DO
+ * NOTHING below) is a defensive backstop against a race between two
+ * concurrent workers on the same job, not the primary de-dup mechanism.
+ *
+ * Uses raw SQL for the vector column (Prisma has no native vector type —
+ * see memoryCreation.ts for the same pattern). A batch failing to embed
  * degrades to one-at-a-time for just that batch rather than losing every
  * chunk in it; a chunk that still fails there is logged and skipped — so
  * a flaky embedding call on page 80 of 150 doesn't lose everything
@@ -222,15 +237,28 @@ async function storeLoreChunks(
 ): Promise<number> {
   let stored = 0
 
-  for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
-    const batch = chunks.slice(i, i + EMBED_BATCH_SIZE)
+  const existing = await prisma.loreEntry.findMany({
+    where: { jobId },
+    select: { contentHash: true },
+  })
+  const alreadyStored = new Set(existing.map(e => e.contentHash))
+
+  const withHash = chunks.map(chunk => ({ chunk, hash: chunkContentHash(chunk.content) }))
+  const toStore = withHash.filter(c => !alreadyStored.has(c.hash))
+  const skipped = withHash.length - toStore.length
+  if (skipped > 0) {
+    console.log(`⏭️  Skipping ${skipped} already-stored chunk(s) for job ${jobId} (resumed)`)
+  }
+
+  for (let i = 0; i < toStore.length; i += EMBED_BATCH_SIZE) {
+    const batch = toStore.slice(i, i + EMBED_BATCH_SIZE)
     let vectors: (string | null)[]
     try {
-      vectors = await embedBatchWithCostTracking(campaignId, batch.map(c => c.content), 'lore_import_embedding')
+      vectors = await embedBatchWithCostTracking(campaignId, batch.map(c => c.chunk.content), 'lore_import_embedding')
     } catch (error) {
       console.error(`Batch embed failed for ${batch.length} lore chunk(s) — falling back to one-at-a-time:`, error)
       vectors = await Promise.all(
-        batch.map(async chunk => {
+        batch.map(async ({ chunk }) => {
           try {
             return await embedWithCostTracking(campaignId, chunk.content, 'lore_import_embedding')
           } catch (chunkError) {
@@ -244,11 +272,11 @@ async function storeLoreChunks(
     for (let j = 0; j < batch.length; j++) {
       const embeddingString = vectors[j]
       if (!embeddingString) continue
-      const chunk = batch[j]
+      const { chunk, hash } = batch[j]
       try {
-        await prisma.$executeRaw`
+        const inserted = await prisma.$executeRaw`
           INSERT INTO lore_entries (
-            id, "campaignId", "jobId", title, "sourceUrl", content, embedding, tags, "createdAt"
+            id, "campaignId", "jobId", title, "sourceUrl", content, embedding, tags, "contentHash", "createdAt"
           ) VALUES (
             gen_random_uuid(),
             ${campaignId},
@@ -258,10 +286,12 @@ async function storeLoreChunks(
             ${chunk.content},
             ${embeddingString}::vector,
             ARRAY[]::text[],
+            ${hash},
             NOW()
           )
+          ON CONFLICT ("jobId", "contentHash") DO NOTHING
         `
-        stored++
+        if (inserted > 0) stored++
       } catch (error) {
         console.error(`Failed to store lore chunk "${chunk.title}":`, error)
       }

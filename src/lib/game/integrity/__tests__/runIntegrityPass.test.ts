@@ -168,4 +168,37 @@ describe('runIntegrityPass — blast-radius caps', () => {
     // counter is real and per-entity, not that it trips here.
     expect(MAX_REPAIRS_PER_ENTITY).toBeGreaterThanOrEqual(2)
   })
+
+  // #225: repair order used to be pure INTEGRITY_CHECKS registration order
+  // (referential-integrity checks run before faction.leadership.
+  // exactlyOneLivingLeader in checkRegistry.ts) — so when referential-
+  // integrity violations ALONE already exceeded MAX_REPAIRS_PER_PASS, the
+  // leaderless-faction repair never even got attempted, purely because of
+  // array position. checkSeverity.ts's ranking fixes this: the leadership
+  // repair is now checked first regardless of how many lower-severity
+  // referential violations exist in the same pass.
+  it('gives the leaderless-faction repair a shot at the budget even when referential-integrity violations alone exceed the cap', async () => {
+    const characters = Array.from({ length: MAX_REPAIRS_PER_PASS + 1 }, (_, i) => ({
+      id: `char${i}`, name: `Char ${i}`, relationships: { 'npc_ghost': { trust: 1 } }, resources: null,
+    }))
+    db.character.findMany.mockResolvedValue(characters)
+    db.faction.findMany.mockResolvedValue([
+      { id: 'f1', name: 'The Ashen Court', isActive: true, leaderCharacterId: null },
+    ])
+    db.nPC.findMany.mockResolvedValue([
+      { id: 'npc1', name: 'Vashti', isAlive: true, factionId: 'f1', factionRole: null, importance: 1, socialTies: null },
+    ])
+
+    const { report } = await runIntegrityPass(db as any, 'camp1', 5)
+
+    // Referential violations alone (MAX_REPAIRS_PER_PASS + 1) already
+    // exceed the cap — the old, registration-order behavior would have
+    // spent the entire budget on them before faction.leadership.
+    // exactlyOneLivingLeader (registered after referentialIntegrity in
+    // checkRegistry.ts) ever got a turn.
+    expect(report.violationsFound).toBe(MAX_REPAIRS_PER_PASS + 2)
+    expect(report.repairsApplied).toBe(MAX_REPAIRS_PER_PASS)
+    expect(db.nPC.update).toHaveBeenCalledWith({ where: { id: 'npc1' }, data: { factionRole: 'LEADER' } })
+    expect(report.unrepaired.some((v) => v.checkKey === 'faction.leadership.exactlyOneLivingLeader')).toBe(false)
+  })
 })

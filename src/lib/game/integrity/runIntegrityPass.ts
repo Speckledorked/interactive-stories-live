@@ -11,6 +11,7 @@ import { INTEGRITY_CHECKS, INTEGRITY_REPAIRS } from './checkRegistry'
 import { loadIntegritySnapshot } from './snapshot'
 import { applyRepairWrite } from './applyRepairWrite'
 import { MAX_REPAIRS_PER_ENTITY, MAX_REPAIRS_PER_PASS } from './caps'
+import { severityOf } from './checkSeverity'
 import { detectEscalations, IntegrityEventRecord, loadRecentIntegrityEvents } from './escalation'
 import { IntegrityReport, IntegritySnapshot, Violation, repairToWorldChange } from './types'
 
@@ -115,7 +116,16 @@ async function applyRepairs(
   const repairCountByEntity = new Map<string, number>()
   let repairsApplied = 0
 
-  for (const violation of violations) {
+  // #225: repair order used to be pure INTEGRITY_CHECKS registration
+  // order (an implementation detail of checkRegistry.ts), so a pass with
+  // more repairable violations than MAX_REPAIRS_PER_PASS allowed rationed
+  // the budget by array position rather than actual severity. A stable
+  // sort here (Array#sort is guaranteed stable since ES2019) preserves
+  // relative order within a severity tier while giving the more severe
+  // tier first crack at the cap.
+  const bySeverity = [...violations].sort((a, b) => severityOf(a.checkKey) - severityOf(b.checkKey))
+
+  for (const violation of bySeverity) {
     const repairFn = INTEGRITY_REPAIRS[violation.checkKey]
     if (!repairFn) {
       // No entry means detect-only by design (duplicate names, a clock tied

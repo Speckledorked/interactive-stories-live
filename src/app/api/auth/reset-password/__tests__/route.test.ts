@@ -11,9 +11,16 @@ vi.mock('@/lib/prisma', () => ({
   prisma: { user: { findFirst: vi.fn(), update: vi.fn() } },
 }))
 vi.mock('@/lib/password', () => ({ hashPassword: vi.fn() }))
+vi.mock('@/lib/rateLimit', () => ({
+  RESET_PASSWORD_LIMIT: { bucket: 'reset-password', limit: 10, windowSeconds: 3600 },
+  checkRateLimit: vi.fn(),
+  rateLimitExceededResponse: vi.fn(),
+  getClientIp: vi.fn(() => '127.0.0.1'),
+}))
 
 import { prisma } from '@/lib/prisma'
 import { hashPassword } from '@/lib/password'
+import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { POST } from '../route'
 
 const db = prisma as any
@@ -29,6 +36,7 @@ function req(body: unknown) {
 beforeEach(() => {
   vi.clearAllMocks()
   ;(hashPassword as any).mockResolvedValue('new-hashed-password')
+  ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
 })
 
 describe('POST /api/auth/reset-password', () => {
@@ -81,5 +89,15 @@ describe('POST /api/auth/reset-password', () => {
     db.user.findFirst.mockRejectedValue(new Error('db down'))
     const response = await POST(req({ token: 'tok', password: 'longenough' }))
     expect(response.status).toBe(500)
+  })
+
+  it('is rate limited by IP before looking up the token (#210)', async () => {
+    ;(checkRateLimit as any).mockResolvedValue({ allowed: false, retryAfterSeconds: 42 })
+    ;(rateLimitExceededResponse as any).mockReturnValue(new Response(null, { status: 429 }))
+
+    const response = await POST(req({ token: 'good-token', password: 'longenough' }))
+
+    expect(response.status).toBe(429)
+    expect(db.user.findFirst).not.toHaveBeenCalled()
   })
 })

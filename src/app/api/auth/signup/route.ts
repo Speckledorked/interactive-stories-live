@@ -9,6 +9,7 @@ import { createToken } from '@/lib/auth'
 import { SignupRequest, AuthResponse, ErrorResponse } from '@/types/api'
 import { recordEvent } from '@/lib/analytics/events'
 import { addFunds } from '@/lib/payment/service'
+import { checkRateLimit, rateLimitExceededResponse, getClientIp, SIGNUP_LIMIT } from '@/lib/rateLimit'
 
 // One-time welcome credit so a new signup can actually play a scene
 // without funding a balance first — without this, balance defaults to 0
@@ -26,6 +27,12 @@ export async function POST(request: NextRequest) {
         { error: 'Email and password are required' },
         { status: 400 }
       )
+    }
+
+    // #210: spam account creation protection, per IP.
+    const rateLimit = await checkRateLimit(getClientIp(request), SIGNUP_LIMIT.bucket, SIGNUP_LIMIT.limit, SIGNUP_LIMIT.windowSeconds)
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
     }
 
     // Check if user already exists

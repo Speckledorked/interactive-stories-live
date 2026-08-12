@@ -83,7 +83,9 @@ export async function buildOptimizedWorldSummary(
         // can do — the prompt gates narration on this per character.
         capabilities: { include: { capability: true } },
         // Debt economy: open favors are leverage the AI should play with.
-        debts: { where: { status: 'OUTSTANDING' } },
+        // #221: bounded and ordered most-recent-first — a debt-heavy
+        // campaign was an unbounded prompt-growth risk with no cap at all.
+        debts: { where: { status: 'OUTSTANDING' }, orderBy: { createdAt: 'desc' }, take: 20 },
         // Faction standing: social position, shown qualitatively.
         factionStandings: {
           include: { faction: { select: { name: true, isActive: true, isDiscovered: true } } }
@@ -302,8 +304,8 @@ export async function buildWorldSummaryForAI(
         user: { select: { email: true } },
         // Knowledge-relative sheet — see the optimized builder above.
         capabilities: { include: { capability: true } },
-        // Debt economy — see the optimized builder above.
-        debts: { where: { status: 'OUTSTANDING' } },
+        // Debt economy — see the optimized builder above. #221: same bound.
+        debts: { where: { status: 'OUTSTANDING' }, orderBy: { createdAt: 'desc' }, take: 20 },
         // Faction standing — see the optimized builder above.
         factionStandings: {
           include: { faction: { select: { name: true, isActive: true, isDiscovered: true } } }

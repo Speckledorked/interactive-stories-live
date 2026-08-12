@@ -86,6 +86,23 @@ describe('resolveActionMechanics — receipts', () => {
     expect(prisma.diceRoll.create).toHaveBeenCalledTimes(2)
   })
 
+  // #221: the debt query had no `take` limit — unbounded row growth on a
+  // debt-heavy campaign, even though debtModifier's output stays clamped.
+  it('bounds and orders the outstanding-debt query rather than fetching every row', async () => {
+    openaiFetch.mockResolvedValue(classifierReturning([
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool' },
+      { action_index: 1, move_name: 'Act Under Fire', stat_key: 'cool' },
+    ]))
+
+    await resolveActionMechanics('camp1', 'scene1', actions, () => 0.5)
+
+    expect(prisma.debt.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'OUTSTANDING' }),
+      orderBy: { createdAt: 'desc' },
+      take: 300,
+    }))
+  })
+
   it('links each action to its OWN roll, not to some other action’s', async () => {
     // The whole point of rollMade, and the reason a per-action link has to
     // be captured rather than inferred after a bulk insert.

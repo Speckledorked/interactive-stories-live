@@ -2,6 +2,8 @@
 // Harm and Conditions System
 // Implements a 6-segment harm track and condition management
 
+import type { Rng } from './rng'
+
 /**
  * Harm Track States
  * 0-3: Fine (no mechanical penalties)
@@ -787,12 +789,17 @@ export interface RecoveryRollResult {
  * @param rollResult - Result of the recovery roll (typically 2d6 + modifiers)
  * @param circumstances - Description of how they were taken out
  * @param turnNumber - Current turn number
+ * @param rng - #213: injectable RNG for the permanent-injury pick below,
+ *   same seam resolution.ts's dice engine uses. Defaults to Math.random so
+ *   every existing caller behaves identically; tests can inject a
+ *   deterministic one instead of globally mocking Math.random.
  * @returns Recovery outcome and any permanent injuries
  */
 export function performRecoveryRoll(
   rollResult: number,
   circumstances: string,
-  turnNumber: number
+  turnNumber: number,
+  rng: Rng = Math.random
 ): RecoveryRollResult {
   // 10+: Stabilized with no lasting effects
   if (rollResult >= 10) {
@@ -807,7 +814,7 @@ export function performRecoveryRoll(
   if (rollResult >= 7) {
     // Choose a random permanent injury
     const injuryKeys = Object.keys(PERMANENT_INJURIES)
-    const randomKey = injuryKeys[Math.floor(Math.random() * injuryKeys.length)]
+    const randomKey = injuryKeys[Math.floor(rng() * injuryKeys.length)]
     const injuryTemplate = PERMANENT_INJURIES[randomKey as keyof typeof PERMANENT_INJURIES]
 
     const injury: PermanentInjury = {

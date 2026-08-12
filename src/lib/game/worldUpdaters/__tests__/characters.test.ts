@@ -48,6 +48,15 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+// #213: deterministic RNG factory, same convention resolution.test.ts's
+// dice-engine tests already use — yields the given 0..1 values in order,
+// then repeats. Lets the Taken-Out recovery-roll tests below inject an
+// exact sequence instead of globally mocking Math.random.
+const seq = (...values: number[]) => {
+  let i = 0
+  return () => values[i++ % values.length]
+}
+
 const character = (over: Partial<Character> = {}): Character =>
   ({
     id: 'char1', name: 'Jason', harm: 0, conditions: null,
@@ -249,14 +258,53 @@ describe('applyCharacterChanges — harm and conditions', () => {
   })
 
   it('resolves Taken Out (harm hits 6 for the first time) via a server-side recovery roll, never left to the AI', async () => {
-    // Force both d6 dice to 6 -> roll 12 -> "stabilized" outcome (>=10), no secondary randomness.
-    vi.spyOn(Math, 'random').mockReturnValue(0.99)
+    // #213: the roll used to be untestable without globally mocking
+    // Math.random (characters.test.ts used to do exactly that here) — it
+    // now takes the same injectable Rng resolution.ts's dice engine uses.
+    // Force both d6 dice to 6 -> roll 12 -> "stabilized" outcome (>=10).
     const roster = [character({ harm: 3 })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { harm_damage: 3 } } as PcChange, // 3 -> 6, crosses the Taken Out threshold
-    ], roster, npcRoster, noTheme, true)
+    ], roster, npcRoster, noTheme, true, [], seq(0.99))
     const data = tx.character.update.mock.calls[0][0].data
     // performRecoveryRoll's >=10 branch reduces harm back down to 4.
+    expect(data.harm).toBe(4)
+  })
+
+  it('a lower recovery roll (7-9) lands the permanent-injury branch, itself picked via the same injected rng', async () => {
+    // Two d6 rolls of 0 -> 1+1=2, too low for the injury branch — need a
+    // roll in [7,9]. rng() values: dice1=0.5->4, dice2=0.166->2 -> 6, still
+    // short. Use 0.5,0.5 -> 4+4=8 (in the 7-9 band), then a THIRD rng() call
+    // picks which permanent injury from PERMANENT_INJURIES — 0 always picks
+    // the same (first) key deterministically, proving the pick is no longer
+    // an untestable raw Math.random() call.
+    const roster = [character({ harm: 3 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 3 } } as PcChange,
+    ], roster, npcRoster, noTheme, true, [], seq(0.5, 0.5, 0))
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.harm).toBe(5)
+    expect(data.conditions.permanentInjuries).toHaveLength(1)
+
+    // Same dice, different injury-pick rng value -> a different injury,
+    // proving the pick genuinely reads from the injected sequence rather
+    // than always taking the same branch regardless of the value passed.
+    const roster2 = [character({ harm: 3 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 3 } } as PcChange,
+    ], roster2, npcRoster, noTheme, true, [], seq(0.5, 0.5, 0.99))
+    const data2 = tx.character.update.mock.calls[1][0].data
+    expect(data2.conditions.permanentInjuries[0].id).not.toBe(data.conditions.permanentInjuries[0].id)
+  })
+
+  it('defaults to Math.random when no rng is injected, preserving real-caller behavior unchanged', async () => {
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.99)
+    const roster = [character({ harm: 3 })]
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { harm_damage: 3 } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+    expect(randomSpy).toHaveBeenCalled()
+    const data = tx.character.update.mock.calls[0][0].data
     expect(data.harm).toBe(4)
   })
 

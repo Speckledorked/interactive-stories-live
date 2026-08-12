@@ -16,6 +16,8 @@ import type { WorldUpdates } from '@/lib/ai/schema'
 import { resolveEntityByNameOrId } from '../entityResolution'
 import { resolveOrCreateLocationId } from './locations'
 import { clamp } from '../tick/types'
+import type { Rng } from '../rng'
+import { rollD6 } from '../rng'
 import {
   applyHarm,
   healHarm,
@@ -233,7 +235,13 @@ export async function applyCharacterChanges(
   // to drift Character.stress (see ../stress.ts). Never the AI's
   // outcome_echo self-report. Empty for callers with no rolls to report
   // (e.g. offscreen world-turn narration never touches pc_changes at all).
-  actionMechanics: ActionMechanics[] = []
+  actionMechanics: ActionMechanics[] = [],
+  // #213: the Taken-Out recovery roll used raw Math.random() inline instead
+  // of the same injectable Rng the dice engine (resolution.ts) uses —
+  // untestable without globally mocking Math.random. Defaults to
+  // Math.random so every real caller (stateUpdater.ts) is unaffected;
+  // tests can inject a deterministic sequence instead.
+  rng: Rng = Math.random
 ): Promise<{ gateRefusals: string[]; unresolvedCharacterNames: string[]; worldChanges: WorldChange[] }> {
   console.log(`🦸 Updating ${pcChanges.length} characters`)
 
@@ -460,8 +468,8 @@ export async function applyCharacterChanges(
     // behind the screen — stabilized, a lasting injury, captured, or
     // critical. Not something the AI decides.
     if (previousHarm < 6 && currentHarm === 6) {
-      const roll = (Math.floor(Math.random() * 6) + 1) + (Math.floor(Math.random() * 6) + 1)
-      const recovery = performRecoveryRoll(roll, harmMessages.join('; ') || 'Taken Out', currentTurnNumber)
+      const roll = rollD6(rng) + rollD6(rng)
+      const recovery = performRecoveryRoll(roll, harmMessages.join('; ') || 'Taken Out', currentTurnNumber, rng)
       currentHarm = recovery.newHarm
 
       // The generic "Taken Out" condition from applyHarm's auto-add is

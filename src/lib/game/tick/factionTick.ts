@@ -101,6 +101,18 @@ export function decideFactionTick(faction: {
  */
 export const GOAL_COMMITMENT_TURNS = 3
 
+// #202: the goal-history lookback below only ever needs to know whether a
+// faction's most recent goal change happened within the GOAL_COMMITMENT_TURNS
+// window — anything older already means "free to reconsider" whether or not
+// it's visible. This is a generous multiple of that window (not a tight
+// fit), so normal play never loses real commitment behavior; it exists to
+// keep the query bounded regardless of campaign age, not to trim it close.
+export const GOAL_HISTORY_LOOKBACK_TURNS = GOAL_COMMITMENT_TURNS * 10
+// Backstop against a pathological single-window burst (e.g. a campaign
+// with an unusually high admin-configured factionCap) — see #221's debt
+// query for the same "generous backstop, not a precision cap" convention.
+const GOAL_HISTORY_ROW_BACKSTOP = 500
+
 // #104: how strongly a belief axis has to have drifted from NEUTRAL_BELIEF
 // (50) before it's allowed to redirect goal choice on its own. Deliberately
 // high — a faction has to have drifted substantially (many repeated events;
@@ -410,9 +422,14 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
   const turnsOnGoalByFaction = new Map<string, number>()
   try {
     const goalChangeEvents = await ctx.db.worldEvent.findMany({
-      where: { campaignId: ctx.campaignId, type: 'faction.goal' },
+      where: {
+        campaignId: ctx.campaignId,
+        type: 'faction.goal',
+        turnNumber: { gte: ctx.turnNumber - GOAL_HISTORY_LOOKBACK_TURNS },
+      },
       select: { targetId: true, turnNumber: true },
       orderBy: { turnNumber: 'desc' },
+      take: GOAL_HISTORY_ROW_BACKSTOP,
     })
     for (const event of goalChangeEvents ?? []) {
       // Ordered newest-first, so the first entry per faction is its latest

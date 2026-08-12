@@ -214,6 +214,29 @@ describe('tickFactions active-wake mechanical consumer (audit fix #207)', () => 
   })
 })
 
+describe('tickFactions goal-history lookback is bounded (audit fix #202)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('bounds the goal-change history query by recency and row count rather than fetching the whole campaign history', async () => {
+    const a = makeFaction('a')
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([a] as any)
+      .mockResolvedValueOnce([{ id: 'a' }] as any)
+
+    await tickFactions(baseCtx({ turnNumber: 100 }))
+
+    const call = vi.mocked(prisma.worldEvent.findMany).mock.calls.find(
+      (c) => (c[0] as any)?.where?.type === 'faction.goal'
+    )
+    expect(call).toBeTruthy()
+    const args = call![0] as any
+    expect(args.where.turnNumber).toEqual({ gte: 100 - 30 }) // GOAL_COMMITMENT_TURNS (3) * 10
+    expect(args.take).toBe(500)
+  })
+})
+
 describe('tickFactionAmbitions war exclusion (audit fix)', () => {
   beforeEach(() => {
     vi.clearAllMocks()

@@ -24,6 +24,9 @@ function makeFaction(id: string, overrides: Record<string, any> = {}) {
     resources: 50,
     stability: 50,
     military: 50,
+    // #218: matches the schema default so war-outcome influence deltas
+    // (see the tests below) start from a known, non-NaN baseline.
+    influence: 50,
     isActive: true,
     relationships: {},
     ...overrides,
@@ -152,6 +155,111 @@ describe('tickWars coalitions', () => {
       (c) => (c[0] as any).where.id === 'att-a' && 'stability' in (c[0] as any).data
     )
     expect(winnerStabilityUpdate).toBeFalsy()
+  })
+
+  // #218: influence was never written by any tick or consequence path,
+  // leaving effectiveStandingModifier's "LOW influence, e.g. bled dry by a
+  // lost war" scenario aspirational — a decisive war outcome is now the
+  // one place it actually moves.
+  it('moves influence alongside stability on a decisive attacker win: loser -8, winner +4', async () => {
+    const attackerA = makeFaction('att-a', { military: 90, stability: 50, influence: 50 })
+    const defender = makeFaction('def-a', { military: 10, stability: 50, influence: 50 })
+
+    const war = {
+      id: 'war-1',
+      campaignId: 'campaign-1',
+      name: 'Test War',
+      attackerFactionId: 'att-a',
+      defenderFactionId: 'def-a',
+      contestedLocationId: null,
+      momentum: 55,
+      startedTurn: 1,
+      attacker: attackerA,
+      defender,
+      participants: [
+        makeParticipant('war-1', 'att-a', 'ATTACKER', attackerA),
+        makeParticipant('war-1', 'def-a', 'DEFENDER', defender),
+      ],
+    }
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
+
+    await tickWars(baseCtx({ turnNumber: 2 }))
+
+    const loserInfluenceUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => (c[0] as any).where.id === 'def-a' && 'influence' in (c[0] as any).data
+    )
+    const winnerInfluenceUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => (c[0] as any).where.id === 'att-a' && 'influence' in (c[0] as any).data
+    )
+    expect((loserInfluenceUpdate![0] as any).data.influence).toBe(42) // 50 - 8
+    expect((winnerInfluenceUpdate![0] as any).data.influence).toBe(54) // 50 + 4
+  })
+
+  it('clamps a losing side\'s influence hit at 0 and a winner\'s gain at 100', async () => {
+    const attackerA = makeFaction('att-a', { military: 90, stability: 50, influence: 99 })
+    const defender = makeFaction('def-a', { military: 10, stability: 50, influence: 3 })
+
+    const war = {
+      id: 'war-1',
+      campaignId: 'campaign-1',
+      name: 'Test War',
+      attackerFactionId: 'att-a',
+      defenderFactionId: 'def-a',
+      contestedLocationId: null,
+      momentum: 55,
+      startedTurn: 1,
+      attacker: attackerA,
+      defender,
+      participants: [
+        makeParticipant('war-1', 'att-a', 'ATTACKER', attackerA),
+        makeParticipant('war-1', 'def-a', 'DEFENDER', defender),
+      ],
+    }
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
+
+    await tickWars(baseCtx({ turnNumber: 2 }))
+
+    const loserInfluenceUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => (c[0] as any).where.id === 'def-a' && 'influence' in (c[0] as any).data
+    )
+    const winnerInfluenceUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => (c[0] as any).where.id === 'att-a' && 'influence' in (c[0] as any).data
+    )
+    expect((loserInfluenceUpdate![0] as any).data.influence).toBe(0)
+    expect((winnerInfluenceUpdate![0] as any).data.influence).toBe(100)
+  })
+
+  it('does not move influence on a stalemate', async () => {
+    const attackerA = makeFaction('att-a', { military: 50, stability: 50, influence: 50 })
+    const defender = makeFaction('def-a', { military: 50, stability: 50, influence: 50 })
+
+    const war = {
+      id: 'war-1',
+      campaignId: 'campaign-1',
+      name: 'Test War',
+      attackerFactionId: 'att-a',
+      defenderFactionId: 'def-a',
+      contestedLocationId: null,
+      momentum: 0,
+      // Long enough elapsed that decideWarResolution times out to a stalemate
+      // regardless of the tick's variance term.
+      startedTurn: -50,
+      attacker: attackerA,
+      defender,
+      participants: [
+        makeParticipant('war-1', 'att-a', 'ATTACKER', attackerA),
+        makeParticipant('war-1', 'def-a', 'DEFENDER', defender),
+      ],
+    }
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
+
+    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+
+    expect(result.changes.some((c) => c.field === 'warResolved' && c.newValue === 'stalemate')).toBe(true)
+    const anyInfluenceUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
+      (c) => 'influence' in (c[0] as any).data
+    )
+    expect(anyInfluenceUpdate).toBeFalsy()
   })
 
   it('applies the flat -10 stability hit to the losing (attacker) side on a decisive defender win', async () => {

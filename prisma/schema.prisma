@@ -805,6 +805,18 @@ model Character {
   perks          Json? // [{ id, name, description, tags? }]
   advancementLog Json? // { entries: [], totalStatIncreases, totalPerksGained, totalMovesLearned }
 
+  // #214: optimistic-concurrency guard for applyOrganicCharacterGrowth
+  // (sceneResolver.ts) — that write reads this character once, computes the
+  // whole statUsage/stats/perks/moves/advancementLog update from that
+  // snapshot, and writes it back OUTSIDE the pc_changes transaction with no
+  // lock. Two overlapping scene resolutions for the same character used to
+  // both read the same stale advancementLog, both see arc budget available,
+  // and the second write would silently clobber the first. The write now
+  // goes through updateMany guarded on (id, advancementVersion) + an atomic
+  // increment — only the transaction that still finds the version it read
+  // wins; the loser's growth for that call is skipped, not double-applied.
+  advancementVersion Int @default(0)
+
   // Inventory and equipment
   inventory Json? // { items: [{ id, name, quantity?, tags? }], slots?: number }
   equipment Json? // { weapon?: {...}, armor?: {...}, misc?: [...] }

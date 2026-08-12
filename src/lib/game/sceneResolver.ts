@@ -932,7 +932,7 @@ export async function canUserResolveScene(
  * 1. AI-suggested organic_advancement from the response
  * 2. System-computed growth based on action patterns
  */
-async function applyOrganicCharacterGrowth(
+export async function applyOrganicCharacterGrowth(
   campaignId: string,
   sceneId: string,
   aiResponse: any
@@ -1088,27 +1088,48 @@ async function applyOrganicCharacterGrowth(
         )
       }
 
-      // Update character in database
-      await prisma.character.update({
-        where: { id: characterId },
+      // #214: this write reads `character` from a snapshot taken earlier
+      // (via the scene's playerActions include, at the top of this
+      // function) and runs outside the pc_changes transaction, with no
+      // lock. Two overlapping scene resolutions for the same character
+      // could both compute their growth off the same stale advancementLog,
+      // both see arc budget available, and the second blind write would
+      // clobber the first — exceeding MAX_PERKS_PER_ARC/MAX_MOVES_PER_ARC
+      // or losing a grant entirely. Guarding on the exact advancementVersion
+      // this call read (with an atomic increment) means only the write that
+      // still finds that version wins; the loser's growth for this call is
+      // skipped rather than silently overwriting or double-granting.
+      const result = await prisma.character.updateMany({
+        where: { id: characterId, advancementVersion: character.advancementVersion },
         data: {
           statUsage: updatedStatUsage,
           stats: applied.updatedStats,
           perks: applied.updatedPerks as any,
           moves: applied.updatedMoves as any,
-          advancementLog: advancementLog as any
+          advancementLog: advancementLog as any,
+          advancementVersion: { increment: 1 }
         }
       })
 
-      console.log(`  ✅ Applied growth to ${character.name}`)
+      if (result.count === 0) {
+        console.warn(`  ⚠️ ${character.name}: advancement state changed underneath this write (raced with another resolution) — skipping this growth application`)
+      } else {
+        console.log(`  ✅ Applied growth to ${character.name}`)
+      }
     } else {
-      // Just update stat usage
-      await prisma.character.update({
-        where: { id: characterId },
+      // Just update stat usage — same guard, for the same reason: a blind
+      // update here could otherwise silently drop another concurrent
+      // resolution's statUsage tracking.
+      const result = await prisma.character.updateMany({
+        where: { id: characterId, advancementVersion: character.advancementVersion },
         data: {
-          statUsage: updatedStatUsage
+          statUsage: updatedStatUsage,
+          advancementVersion: { increment: 1 }
         }
       })
+      if (result.count === 0) {
+        console.warn(`  ⚠️ ${character.name}: advancement state changed underneath this write (raced with another resolution) — skipping stat usage update`)
+      }
     }
   }
 }

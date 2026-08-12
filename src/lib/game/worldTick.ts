@@ -108,7 +108,11 @@ import { resolveTickCaps } from './tick/caps'
 // tickLocationCondition's own war-presence check sees, rather than lagging
 // a full extra turn. This is the second real consumer of the generic Arc
 // primitive (game/arc.ts) — the first being War.momentum itself, refactored
-// in warTick.ts to delegate to the exact same push/resolve math.
+// in warTick.ts to delegate to the exact same push/resolve math. #228: it
+// also excludes any location that's the live contestedLocationId of a
+// still-ESCALATING war — wars own resolution for a location they're
+// actively contesting, so this handler must never also flip its ownership
+// out from under a war that hasn't resolved yet.
 //
 // tickLocationCondition runs right after tickWars on purpose (#109): it
 // checks whether a location is currently the contested prize of an

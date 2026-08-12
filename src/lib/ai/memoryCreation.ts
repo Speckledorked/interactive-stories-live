@@ -32,9 +32,16 @@ export interface MemoryData {
 /**
  * Create a campaign memory with semantic embedding
  *
+ * Returns whether the write actually happened. Never throws — every
+ * existing caller here already treated this as fire-and-forget (`await`ed
+ * with the return value ignored), and that stays true; the return value
+ * exists so a caller that DOES need to know (memoryConsolidation.ts's
+ * create-then-delete loop, #216) can check it without this function's
+ * own fail-open contract changing for anyone else.
+ *
  * @param data - Memory data to store
  */
-export async function createCampaignMemory(data: MemoryData): Promise<void> {
+export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
   try {
     // Generate embedding for the summary
     const embeddingString = await embedWithCostTracking(data.campaignId, data.summary, 'memory_embedding');
@@ -85,10 +92,12 @@ export async function createCampaignMemory(data: MemoryData): Promise<void> {
     `;
 
     console.log(`✓ Created memory: ${data.title} (${data.importance})`);
+    return true;
   } catch (error) {
     console.error('Error creating campaign memory:', error);
     // Don't throw - we don't want memory creation to block scene resolution
     console.error('Failed to create memory, continuing without it');
+    return false;
   }
 }
 

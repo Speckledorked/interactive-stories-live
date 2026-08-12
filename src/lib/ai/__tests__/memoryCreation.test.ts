@@ -50,15 +50,23 @@ describe('createCampaignMemory (baseline)', () => {
     expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
   })
 
-  it('does not throw when embedding generation fails', async () => {
+  // #216: the return value now signals success/failure (memoryConsolidation.ts's
+  // create-then-delete loop needs to know before it deletes anything) —
+  // previously a bare Promise<void>, so every caller here still just
+  // `await`s it, but this file pins the actual contract.
+  it('resolves true on a successful write', async () => {
+    await expect(createCampaignMemory(makeMemoryData())).resolves.toBe(true)
+  })
+
+  it('does not throw when embedding generation fails, and resolves false', async () => {
     vi.mocked(embedWithCostTracking).mockRejectedValueOnce(new Error('embedding service down'))
-    await expect(createCampaignMemory(makeMemoryData())).resolves.toBeUndefined()
+    await expect(createCampaignMemory(makeMemoryData())).resolves.toBe(false)
     expect(prisma.$executeRaw).not.toHaveBeenCalled()
   })
 
-  it('does not throw when the DB write fails', async () => {
+  it('does not throw when the DB write fails, and resolves false', async () => {
     vi.mocked(prisma.$executeRaw).mockRejectedValueOnce(new Error('db down'))
-    await expect(createCampaignMemory(makeMemoryData())).resolves.toBeUndefined()
+    await expect(createCampaignMemory(makeMemoryData())).resolves.toBe(false)
   })
 })
 

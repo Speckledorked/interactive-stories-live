@@ -86,7 +86,9 @@ describe('POST', () => {
   it('is blocked in production', async () => {
     vi.stubEnv('NODE_ENV', 'production')
     const response = await POST(postRequest({}))
+    const body = await response.json()
     expect(response.status).toBe(403)
+    expect(body.error).toBe('Not allowed in production')
     expect(NotificationService.createNotification).not.toHaveBeenCalled()
   })
 

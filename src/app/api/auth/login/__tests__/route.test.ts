@@ -44,7 +44,9 @@ beforeEach(() => {
 describe('POST /api/auth/login', () => {
   it('rejects a request missing email or password', async () => {
     const response = await POST(loginRequest({ email: 'a@b.com' }))
+    const body = await response.json()
     expect(response.status).toBe(400)
+    expect(body.error).toBe('Email and password are required')
     expect(db.user.findUnique).not.toHaveBeenCalled()
   })
 
@@ -65,11 +67,20 @@ describe('POST /api/auth/login', () => {
     expect(verifyPassword).not.toHaveBeenCalled()
   })
 
-  it('rejects an incorrect password', async () => {
+  // #249 (adversarial audit): a status-only assertion here would pass
+  // even if the wrong-password path started returning a different error
+  // string than the no-account/OAuth-only paths do — exactly the kind of
+  // same-status-wrong-body regression that would silently reintroduce
+  // account enumeration (an attacker could tell "this email exists but
+  // the password is wrong" from "no account with this email" by the
+  // message alone, even with an identical 401 status on both).
+  it('rejects an incorrect password with the same generic message the other 401 paths use, not a distinguishing one', async () => {
     db.user.findUnique.mockResolvedValue({ id: 'u1', email: 'a@b.com', password: 'hashed' })
     ;(verifyPassword as any).mockResolvedValue(false)
     const response = await POST(loginRequest({ email: 'a@b.com', password: 'wrong' }))
+    const body = await response.json()
     expect(response.status).toBe(401)
+    expect(body.error).toBe('Invalid email or password')
     expect(createToken).not.toHaveBeenCalled()
   })
 
@@ -86,10 +97,12 @@ describe('POST /api/auth/login', () => {
     expect(createToken).toHaveBeenCalledWith({ userId: 'u1', email: 'a@b.com', tokenVersion: 3 })
   })
 
-  it('returns 500 on an unexpected error', async () => {
-    db.user.findUnique.mockRejectedValue(new Error('db down'))
+  it('returns 500 with a generic message on an unexpected error, never the raw error text', async () => {
+    db.user.findUnique.mockRejectedValue(new Error('db down: connection string exposed at 10.0.0.5'))
     const response = await POST(loginRequest({ email: 'a@b.com', password: 'hunter2' }))
+    const body = await response.json()
     expect(response.status).toBe(500)
+    expect(body.error).toBe('Internal server error')
   })
 
   it('is rate limited by IP+email before touching the DB (#210)', async () => {

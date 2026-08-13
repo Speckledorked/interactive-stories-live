@@ -216,6 +216,42 @@ describe('decideSupplyRouteCreation (#108 follow-up)', () => {
     const result = decideSupplyRouteCreation(locations, routes, [])
     expect(result).toEqual([{ fromLocationId: 'loc1', toLocationId: 'loc2', controllingFactionId: 'f1' }])
   })
+
+  // #246 (adversarial audit re-pass): two resource locations that are each
+  // other's nearest neighbor, both starting with no route at all, used to
+  // each independently decide to connect to the other — two SupplyRoute
+  // rows for the same pair created in one tick, since hasAnyConnection only
+  // ever checks the routes that existed BEFORE this pass, not a decision
+  // this same pass already made for the other end.
+  it('creates only one route, not two, when two resource locations are mutually each other\'s nearest neighbor', () => {
+    const locations = [
+      { locationId: 'A', resourceSlots: ['ore'], ownerFactionId: 'f1' },
+      { locationId: 'B', resourceSlots: ['ore'], ownerFactionId: 'f1' },
+    ]
+    const edges = [{ locationAId: 'A', locationBId: 'B', distance: 1 }]
+    const result = decideSupplyRouteCreation(locations, [], edges)
+    expect(result).toEqual([{ fromLocationId: 'A', toLocationId: 'B', controllingFactionId: 'f1' }])
+  })
+
+  it('the same mutual-neighbor case still resolves correctly with three resource locations all needing routes', () => {
+    const locations = [
+      { locationId: 'A', resourceSlots: ['ore'], ownerFactionId: 'f1' },
+      { locationId: 'B', resourceSlots: ['ore'], ownerFactionId: 'f1' },
+      { locationId: 'C', resourceSlots: ['ore'], ownerFactionId: 'f1' },
+    ]
+    // A-B are mutual nearest; C's only edge is to A.
+    const edges = [
+      { locationAId: 'A', locationBId: 'B', distance: 1 },
+      { locationAId: 'A', locationBId: 'C', distance: 5 },
+    ]
+    const result = decideSupplyRouteCreation(locations, [], edges)
+    // A<->B forms one route (mutual-neighbor dedup); C still gets its own,
+    // since it was never marked connected by anyone else's decision.
+    expect(result).toEqual([
+      { fromLocationId: 'A', toLocationId: 'B', controllingFactionId: 'f1' },
+      { fromLocationId: 'C', toLocationId: 'A', controllingFactionId: 'f1' },
+    ])
+  })
 })
 
 describe('tickLogistics (DB handler)', () => {

@@ -247,9 +247,37 @@ export async function runWorldTick(
 
   // All three consumers fan out from the same changes array — the event-bus
   // shape, at the current scale, without a literal pub/sub mechanism.
-  await persistWorldEvents(campaignId, turnNumber, changes)
-  const historyEntriesCreated = await logSignificantChanges(campaignId, turnNumber, changes)
-  await syncWikiEntriesForChanges(campaignId, turnNumber, changes)
+  //
+  // #236 (adversarial audit): this tick's own simulation-state transaction
+  // has already committed by the time any of these three run — they are
+  // documented (persistWorldEvents' own header comment) as best-effort,
+  // non-critical history/memory/wiki bookkeeping, not something a failure
+  // in one should be able to take the others (or the rest of this world
+  // turn — advanceClocks, offscreen narration, chronicle generation, all
+  // called from runWorldTurn right after this function returns) down
+  // with. persistWorldEvents already caught its own failures internally;
+  // logSignificantChanges and syncWikiEntriesForChanges are now hardened
+  // the same way at their own call sites (see their file headers), but
+  // this wraps all three independently anyway as the actual backstop for
+  // the "best-effort" claim — an unexpected error in any one is logged
+  // and does not prevent the next from running or propagate up to abort
+  // the rest of the turn.
+  let historyEntriesCreated = 0
+  try {
+    await persistWorldEvents(campaignId, turnNumber, changes)
+  } catch (error) {
+    console.error('⚠️ persistWorldEvents threw unexpectedly (non-critical, continuing):', error)
+  }
+  try {
+    historyEntriesCreated = await logSignificantChanges(campaignId, turnNumber, changes)
+  } catch (error) {
+    console.error('⚠️ logSignificantChanges threw unexpectedly (non-critical, continuing):', error)
+  }
+  try {
+    await syncWikiEntriesForChanges(campaignId, turnNumber, changes)
+  } catch (error) {
+    console.error('⚠️ syncWikiEntriesForChanges threw unexpectedly (non-critical, continuing):', error)
+  }
 
   return {
     campaignId,

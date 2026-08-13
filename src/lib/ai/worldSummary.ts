@@ -240,7 +240,17 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
     // urgent — kept preferentially if there's an excess.
     clocks: mapClocksForPrompt(clocks),
 
-    quests: mapQuestsForPrompt(activeQuests),
+    // #244 (adversarial audit): this builder used to be the one place
+    // MAX_QUESTS_IN_PROMPT wasn't applied — buildWorldSummaryForAI below
+    // capped quests, this one didn't, so which builder ran for a given
+    // request (sceneResolutionRequest.ts picks by scene count) decided
+    // whether a large active-quest list was actually bounded. Worse, this
+    // is the builder used once a campaign has 10+ scenes — exactly where
+    // an unbounded quest list is most likely to have grown large. Same
+    // capForPrompt(..., createdAt) "keep the most recent" priority as the
+    // sibling builder, so a capped result looks the same regardless of
+    // which builder produced it.
+    quests: mapQuestsForPrompt(capForPrompt(activeQuests, MAX_QUESTS_IN_PROMPT, q => q.createdAt.getTime())),
 
     // World Sim Phase 5: sustained conflicts — only ones where both sides
     // are discovered; the party can't hear about a war between two

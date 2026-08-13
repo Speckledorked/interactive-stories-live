@@ -1,9 +1,15 @@
-# CI: typecheck + tests, and a rehearsal of the deploy's database step.
-# Tests are fully mocked (no database needed) — see src/**/__tests__.
-# One exception: warTick.faultInjection.test.ts uses a real Postgres
-# connection, but only when RUN_DB_TESTS=1 is set — unset here, so it
-# no-ops in this job exactly like every other test file. Run it locally
-# against the dev DB when touching game/integrity/ or warTick.ts.
+# CI: typecheck + tests, a rehearsal of the deploy's database step, and
+# the real-Postgres fault-injection suite.
+# The `check` job's tests are fully mocked (no database needed) — see
+# src/**/__tests__. A handful of *.liveDb.test.ts / *.faultInjection.test.ts
+# files use a real Postgres connection instead, but only when RUN_DB_TESTS=1
+# is set — unset in `check`, so they no-op there exactly like every other
+# test file would with no database. The `db-tests` job below is what
+# actually runs them: an adversarial audit (2026-08-13) found this repo's
+# own CI never ran them at all by default, so the deepest correctness
+# proof for the systems they cover (see each file's own header) was opt-in
+# and, in practice, easy to never run. Run any of them locally against the
+# dev DB too when touching what they cover.
 name: CI
 
 on:
@@ -120,3 +126,54 @@ jobs:
       # it fails here, on the PR, instead of at 2am against production.
       - name: Apply the full migration history, as the deploy would
         run: npx prisma migrate deploy
+
+  # Runs the *.liveDb.test.ts / *.faultInjection.test.ts files the `check`
+  # job's RUN_DB_TESTS-less `npx vitest run` always skips (see that job's
+  # header comment) — warTick.faultInjection, logisticsTick.liveDb,
+  # npcDispositionTick.liveDb, characters.stress.liveDb as of this writing;
+  # any future file gated the same way picks this job up automatically,
+  # nothing here needs updating per-file. Same pgvector service + migration
+  # setup as schema-deploy, since these tests write real rows through the
+  # real schema, not a mock.
+  db-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dbtests
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dbtests
+      RUN_DB_TESTS: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Enable pgvector
+        run: psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Real-database tests
+        run: npx vitest run

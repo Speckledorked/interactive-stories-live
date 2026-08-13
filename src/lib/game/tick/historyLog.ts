@@ -43,6 +43,16 @@ function memoryTypeFor(change: WorldChange): 'WORLD_EVENT' | 'FACTION_EVENT' | '
  * Non-significant changes (routine numeric nudges, unchanged plan text,
  * etc.) are intentionally skipped by callers before reaching here — this
  * function assumes everything it's given is worth recording.
+ *
+ * #236 (adversarial audit): the returned count used to be
+ * `significant.length` unconditionally — every candidate counted as
+ * "logged" regardless of whether `createCampaignMemory` actually
+ * succeeded. That function already fails open internally (a swallowed
+ * embedding-call failure returns `false` rather than throwing), so this
+ * never crashed, but the count itself was silently wrong whenever an
+ * embedding call failed — `historyEntriesCreated` (surfaced in
+ * `worldTurn.ts`'s turn summary) overclaimed how much of the tick's
+ * history actually made it into memory. Now counts real successes only.
  */
 export async function logSignificantChanges(
   campaignId: string,
@@ -50,9 +60,10 @@ export async function logSignificantChanges(
   changes: WorldChange[]
 ): Promise<number> {
   const significant = changes.filter((c) => c.significant)
+  let created = 0
 
   for (const change of significant) {
-    await createCampaignMemory({
+    const ok = await createCampaignMemory({
       campaignId,
       memoryType: memoryTypeFor(change),
       sourceId: change.entityId,
@@ -67,7 +78,8 @@ export async function logSignificantChanges(
       importance: change.importance,
       tags: [change.origin === 'consequence' ? 'player_consequence' : 'world_tick', change.entityType.toLowerCase()],
     })
+    if (ok) created++
   }
 
-  return significant.length
+  return created
 }

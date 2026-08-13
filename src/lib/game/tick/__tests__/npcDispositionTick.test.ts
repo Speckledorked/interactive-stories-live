@@ -47,58 +47,77 @@ describe('decideDispositionDrift (NPC motivation model)', () => {
     expect(decideDispositionDrift(NEUTRAL_DISPOSITION, [])).toEqual(NEUTRAL_DISPOSITION)
   })
 
-  it('being endangered raises selfPreservation only', () => {
+  // #253 (adversarial audit): decideDispositionDrift is a closed
+  // event-kind switch with a fixed, deterministic DRIFT_AMOUNT (4) per
+  // event — every one of these can assert the exact resulting value, not
+  // just its direction, the same precision the rest of this tick-decider
+  // family (factionTick/warTick/beliefTick) already holds itself to. A
+  // regression that nudged by the wrong magnitude (e.g. 2 instead of 4)
+  // would pass every toBeGreaterThan/toBeLessThan check below unchanged.
+
+  it('being endangered raises selfPreservation only, by exactly one event\'s worth', () => {
     const next = decideDispositionDrift(NEUTRAL_DISPOSITION, [{ kind: 'ENDANGERED' }])
-    expect(next.selfPreservation).toBeGreaterThan(NEUTRAL_DISPOSITION.selfPreservation)
-    expect(next.loyalty).toBe(NEUTRAL_DISPOSITION.loyalty)
-    expect(next.ambition).toBe(NEUTRAL_DISPOSITION.ambition)
+    expect(next).toEqual({ ...NEUTRAL_DISPOSITION, selfPreservation: NEUTRAL_DISPOSITION.selfPreservation + 4 })
   })
 
-  it('being protected lowers selfPreservation and raises loyalty', () => {
+  it('being protected lowers selfPreservation and raises loyalty, each by exactly one event\'s worth', () => {
     const next = decideDispositionDrift(NEUTRAL_DISPOSITION, [{ kind: 'PROTECTED' }])
-    expect(next.selfPreservation).toBeLessThan(NEUTRAL_DISPOSITION.selfPreservation)
-    expect(next.loyalty).toBeGreaterThan(NEUTRAL_DISPOSITION.loyalty)
-    expect(next.ambition).toBe(NEUTRAL_DISPOSITION.ambition)
+    expect(next).toEqual({
+      ...NEUTRAL_DISPOSITION,
+      selfPreservation: NEUTRAL_DISPOSITION.selfPreservation - 4,
+      loyalty: NEUTRAL_DISPOSITION.loyalty + 4,
+    })
   })
 
-  it('the faction winning raises both loyalty and ambition', () => {
+  it('the faction winning raises both loyalty and ambition, each by exactly one event\'s worth', () => {
     const next = decideDispositionDrift(NEUTRAL_DISPOSITION, [{ kind: 'FACTION_WON' }])
-    expect(next.loyalty).toBeGreaterThan(NEUTRAL_DISPOSITION.loyalty)
-    expect(next.ambition).toBeGreaterThan(NEUTRAL_DISPOSITION.ambition)
-    expect(next.selfPreservation).toBe(NEUTRAL_DISPOSITION.selfPreservation)
+    expect(next).toEqual({
+      ...NEUTRAL_DISPOSITION,
+      loyalty: NEUTRAL_DISPOSITION.loyalty + 4,
+      ambition: NEUTRAL_DISPOSITION.ambition + 4,
+    })
   })
 
-  it('the faction losing lowers loyalty and raises selfPreservation', () => {
+  it('the faction losing lowers loyalty and raises selfPreservation, each by exactly one event\'s worth', () => {
     const next = decideDispositionDrift(NEUTRAL_DISPOSITION, [{ kind: 'FACTION_LOST' }])
-    expect(next.loyalty).toBeLessThan(NEUTRAL_DISPOSITION.loyalty)
-    expect(next.selfPreservation).toBeGreaterThan(NEUTRAL_DISPOSITION.selfPreservation)
-    expect(next.ambition).toBe(NEUTRAL_DISPOSITION.ambition)
+    expect(next).toEqual({
+      ...NEUTRAL_DISPOSITION,
+      loyalty: NEUTRAL_DISPOSITION.loyalty - 4,
+      selfPreservation: NEUTRAL_DISPOSITION.selfPreservation + 4,
+    })
   })
 
-  it('a wake ripple abandoning them lowers loyalty only', () => {
+  it('a wake ripple abandoning them lowers loyalty only, by exactly one event\'s worth', () => {
     const next = decideDispositionDrift(NEUTRAL_DISPOSITION, [{ kind: 'FACTION_ABANDONED_THEM' }])
-    expect(next.loyalty).toBeLessThan(NEUTRAL_DISPOSITION.loyalty)
-    expect(next.selfPreservation).toBe(NEUTRAL_DISPOSITION.selfPreservation)
-    expect(next.ambition).toBe(NEUTRAL_DISPOSITION.ambition)
+    expect(next).toEqual({ ...NEUTRAL_DISPOSITION, loyalty: NEUTRAL_DISPOSITION.loyalty - 4 })
   })
 
-  it('a personally achieved goal raises ambition only', () => {
+  it('a personally achieved goal raises ambition only, by exactly one event\'s worth', () => {
     const next = decideDispositionDrift(NEUTRAL_DISPOSITION, [{ kind: 'GOAL_ACHIEVED' }])
-    expect(next.ambition).toBeGreaterThan(NEUTRAL_DISPOSITION.ambition)
-    expect(next.selfPreservation).toBe(NEUTRAL_DISPOSITION.selfPreservation)
-    expect(next.loyalty).toBe(NEUTRAL_DISPOSITION.loyalty)
+    expect(next).toEqual({ ...NEUTRAL_DISPOSITION, ambition: NEUTRAL_DISPOSITION.ambition + 4 })
   })
 
-  it('folds multiple events in the same batch, each independently clamped', () => {
+  it('folds multiple events in the same batch, each axis summing its own events independently', () => {
     const next = decideDispositionDrift(NEUTRAL_DISPOSITION, [{ kind: 'FACTION_WON' }, { kind: 'FACTION_WON' }, { kind: 'GOAL_ACHIEVED' }])
-    expect(next.ambition).toBeGreaterThan(NEUTRAL_DISPOSITION.ambition + 4) // more than a single event's worth
-    expect(next.loyalty).toBeGreaterThan(NEUTRAL_DISPOSITION.loyalty)
+    // ambition: +4 (1st FACTION_WON) +4 (2nd FACTION_WON) +4 (GOAL_ACHIEVED) = +12
+    // loyalty: +4 (1st FACTION_WON) +4 (2nd FACTION_WON) = +8
+    expect(next).toEqual({
+      ...NEUTRAL_DISPOSITION,
+      ambition: NEUTRAL_DISPOSITION.ambition + 12,
+      loyalty: NEUTRAL_DISPOSITION.loyalty + 8,
+    })
   })
 
-  it('never exceeds 0-100 no matter how many events pile up', () => {
+  it('clamps at exactly 100, not beyond, no matter how many events pile up', () => {
     const manyEndangered = Array.from({ length: 50 }, () => ({ kind: 'ENDANGERED' as const }))
     const next = decideDispositionDrift(NEUTRAL_DISPOSITION, manyEndangered)
-    expect(next.selfPreservation).toBeLessThanOrEqual(100)
+    expect(next.selfPreservation).toBe(100)
+  })
+
+  it('clamps at exactly 0, not below, no matter how many events pile up', () => {
+    const manyAbandoned = Array.from({ length: 50 }, () => ({ kind: 'FACTION_ABANDONED_THEM' as const }))
+    const next = decideDispositionDrift(NEUTRAL_DISPOSITION, manyAbandoned)
+    expect(next.loyalty).toBe(0)
   })
 })
 

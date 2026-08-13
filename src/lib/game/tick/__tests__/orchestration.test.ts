@@ -318,6 +318,46 @@ describe('runWorldTick — the fan-out to all three consumers', () => {
   })
 })
 
+// #236 (adversarial audit): these three post-commit consumers are
+// documented as best-effort — a failure in one must not prevent the
+// others from running, and must not propagate up to abort the rest of
+// the world turn (advanceClocks, offscreen narration, chronicle
+// generation, all called right after runWorldTick returns). Before this
+// fix, an unexpected throw from any of the three propagated straight out
+// of runWorldTick uncaught.
+describe('runWorldTick — post-commit consumer resilience', () => {
+  it('still calls history and wiki sync when persistWorldEvents throws unexpectedly', async () => {
+    persistWorldEvents.mockRejectedValueOnce(new Error('db down'))
+    const result = await runWorldTick('camp1', 7)
+    expect(logSignificantChanges).toHaveBeenCalledTimes(1)
+    expect(syncWikiEntriesForChanges).toHaveBeenCalledTimes(1)
+    expect(result.campaignId).toBe('camp1')
+  })
+
+  it('still calls wiki sync and reports zero history when logSignificantChanges throws unexpectedly', async () => {
+    logSignificantChanges.mockRejectedValueOnce(new Error('embedding service down'))
+    const result = await runWorldTick('camp1', 7)
+    expect(syncWikiEntriesForChanges).toHaveBeenCalledTimes(1)
+    expect(result.historyEntriesCreated).toBe(0)
+  })
+
+  it('does not throw when syncWikiEntriesForChanges fails unexpectedly, and still reports the real history count', async () => {
+    syncWikiEntriesForChanges.mockRejectedValueOnce(new Error('db down'))
+    const result = await runWorldTick('camp1', 7)
+    expect(result.historyEntriesCreated).toBe(3)
+  })
+
+  it('a failure in one consumer does not prevent a later call from behaving normally', async () => {
+    persistWorldEvents.mockRejectedValueOnce(new Error('transient'))
+    await runWorldTick('camp1', 7)
+    persistWorldEvents.mockClear()
+
+    const result = await runWorldTick('camp1', 8)
+    expect(persistWorldEvents).toHaveBeenCalledTimes(1)
+    expect(result.historyEntriesCreated).toBe(3)
+  })
+})
+
 describe('runWorldTick — dry run', () => {
   it('still runs every handler, so the preview reflects real decisions', async () => {
     await runWorldTick('camp1', 7, { dryRun: true })

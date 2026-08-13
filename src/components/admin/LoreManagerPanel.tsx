@@ -22,6 +22,7 @@ interface LoreJob {
   status: JobStatus
   lastError: string | null
   pagesFound: number
+  pagesAvailable: number
   pagesDone: number
   entriesCreated: number
   excludeCategories: string[]
@@ -561,6 +562,15 @@ function LoreJobRow({ job, onDelete }: { job: LoreJob; onDelete: () => void }) {
           <p className="mt-1 text-xs text-myth-ink-muted">
             {job.entriesCreated} {job.entriesCreated === 1 ? 'entry' : 'entries'} imported
             {job.pagesFound > 1 ? ` from ${job.pagesFound} pages` : ''}
+          </p>
+        )}
+        {/* #243: pagesAvailable > pagesFound means WIKI_MAX_PAGES actually
+            truncated this crawl — surface that instead of leaving a large
+            wiki's dropped content completely silent. */}
+        {job.status === 'COMPLETED' && job.pagesAvailable > job.pagesFound && (
+          <p className="mt-1 text-xs text-myth-warn">
+            This wiki had {job.pagesAvailable} pages — only the {job.pagesFound} most
+            substantial were imported (per-campaign lore limit). The rest were skipped.
           </p>
         )}
         {job.status === 'FAILED' && job.lastError && (

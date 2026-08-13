@@ -2870,6 +2870,14 @@ model LoreImportJob {
   pagesFound     Int @default(0)
   pagesDone      Int @default(0)
   entriesCreated Int @default(0)
+  // #243 (adversarial audit): the wiki's real candidate-page count before
+  // the hard WIKI_MAX_PAGES cut (loreImportService.ts) truncated it down
+  // to pagesFound. A large wiki previously lost content on import with no
+  // signal anywhere that anything had been dropped — this is what lets
+  // the admin UI show "Imported 400 of 612 pages" instead of just "400."
+  // 0 for PASTE/URL sources (never truncated) and for a WIKI job that
+  // predates this field.
+  pagesAvailable Int @default(0)
 
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt

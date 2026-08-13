@@ -47,6 +47,7 @@ export async function GET(
         status: true,
         lastError: true,
         pagesFound: true,
+        pagesAvailable: true,
         pagesDone: true,
         entriesCreated: true,
         excludeCategories: true,

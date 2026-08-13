@@ -169,7 +169,15 @@ async function importWiki(job: LoreImportJob): Promise<void> {
   }
   const pages = ranked.slice(0, WIKI_MAX_PAGES)
 
-  await prisma.loreImportJob.update({ where: { id: job.id }, data: { pagesFound: pages.length } })
+  // #243: pagesAvailable is the real candidate count BEFORE the
+  // WIKI_MAX_PAGES cut — equal to pagesFound whenever nothing was
+  // actually truncated, and strictly greater when it was. The admin UI
+  // uses the gap between the two to surface "Imported 400 of 612 pages"
+  // instead of leaving a large wiki's truncation completely silent.
+  await prisma.loreImportJob.update({
+    where: { id: job.id },
+    data: { pagesFound: pages.length, pagesAvailable: ranked.length },
+  })
 
   for (let i = 0; i < pages.length; i += WIKI_EXTRACT_BATCH_SIZE) {
     const batch = pages.slice(i, i + WIKI_EXTRACT_BATCH_SIZE)

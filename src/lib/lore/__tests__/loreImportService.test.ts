@@ -215,7 +215,7 @@ describe('runLoreImport', () => {
 
       expect(prisma.loreImportJob.update).toHaveBeenCalledWith({
         where: { id: 'job-1' },
-        data: { pagesFound: 2 },
+        data: { pagesFound: 2, pagesAvailable: 2 },
       })
       expect(prisma.$executeRaw).toHaveBeenCalledTimes(2)
       expect(prisma.loreImportJob.update).toHaveBeenCalledWith({
@@ -280,7 +280,26 @@ describe('runLoreImport', () => {
       expect(rankPagesByLength).toHaveBeenCalledWith('https://example.com/api.php', candidates)
       expect(prisma.loreImportJob.update).toHaveBeenCalledWith({
         where: { id: 'job-1' },
-        data: { pagesFound: 2 },
+        data: { pagesFound: 2, pagesAvailable: 2 },
+      })
+    })
+
+    // #243 (adversarial audit): a large wiki used to lose content past
+    // WIKI_MAX_PAGES with no signal anywhere that anything was dropped.
+    // pagesAvailable is what lets the admin UI show "N of M pages."
+    it('records pagesAvailable as the real pre-truncation candidate count when WIKI_MAX_PAGES actually cuts the crawl short', async () => {
+      vi.mocked(detectApiBase).mockResolvedValue('https://example.com/api.php')
+      const bigCandidateList = Array.from({ length: WIKI_MAX_PAGES + 50 }, (_, i) => ({ pageId: i, title: `Page ${i}` }))
+      vi.mocked(listAllPages).mockResolvedValue(bigCandidateList)
+      vi.mocked(rankPagesByLength).mockResolvedValue(bigCandidateList)
+      vi.mocked(fetchExtracts).mockResolvedValue(new Map())
+
+      const job = makeJob({ sourceType: 'WIKI', sourceUrl: 'https://example.com' })
+      await runLoreImport(job as any)
+
+      expect(prisma.loreImportJob.update).toHaveBeenCalledWith({
+        where: { id: 'job-1' },
+        data: { pagesFound: WIKI_MAX_PAGES, pagesAvailable: WIKI_MAX_PAGES + 50 },
       })
     })
 
@@ -314,7 +333,7 @@ describe('runLoreImport', () => {
         expect(rankedCandidates.map((p: any) => p.title)).toEqual(['Essence Magic'])
         expect(prisma.loreImportJob.update).toHaveBeenCalledWith({
           where: { id: 'job-1' },
-          data: { pagesFound: 1 },
+          data: { pagesFound: 1, pagesAvailable: 1 },
         })
       })
 

@@ -3,14 +3,15 @@
 // entry, gated on the same chronicle share token/enabled flag the full
 // chronicle uses. Covers: a disabled/nonexistent share 404s, a log from a
 // DIFFERENT campaign never resolves even with a valid token (the token only
-// proves you may read one campaign), and the response never includes
-// campaign-internal identifiers.
+// proves you may read one campaign), the response never includes
+// campaign-internal identifiers, and (#264) a successful load increments
+// recapViewCount — the smallest real signal of whether sharing is used.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { campaign: { findUnique: vi.fn() }, campaignLog: { findUnique: vi.fn() } },
+  prisma: { campaign: { findUnique: vi.fn() }, campaignLog: { findUnique: vi.fn(), update: vi.fn() } },
 }))
 
 import { prisma } from '@/lib/prisma'
@@ -63,6 +64,7 @@ describe('GET', () => {
       id: 'log1', campaignId: 'camp1', title: 'The Siege Breaks', summary: 'They held the gate.',
       highlights: ['Kess fell', 'The gate held'], entryType: 'scene', inGameDate: 'Day 12', turnNumber: 5,
     })
+    db.campaignLog.update.mockResolvedValue({})
     const response = await GET(req('live-token', 'log1'), { params: { token: 'live-token', logId: 'log1' } })
     const body = await response.json()
     expect(response.status).toBe(200)
@@ -75,6 +77,27 @@ describe('GET', () => {
     })
     expect(JSON.stringify(body)).not.toContain('chronicleShareToken')
     expect(JSON.stringify(body)).not.toContain('camp1')
+  })
+
+  it('increments recapViewCount for the loaded log on a successful load (#264)', async () => {
+    db.campaign.findUnique.mockResolvedValue({ id: 'camp1', title: 'T', universe: null, heroImageUrl: null, chronicleShareEnabled: true })
+    db.campaignLog.findUnique.mockResolvedValue({
+      id: 'log1', campaignId: 'camp1', title: 'The Siege Breaks', summary: 's',
+      highlights: [], entryType: 'scene', inGameDate: null, turnNumber: 5,
+    })
+    db.campaignLog.update.mockResolvedValue({})
+    await GET(req('live-token', 'log1'), { params: { token: 'live-token', logId: 'log1' } })
+    expect(db.campaignLog.update).toHaveBeenCalledWith({
+      where: { id: 'log1' },
+      data: { recapViewCount: { increment: 1 } },
+    })
+  })
+
+  it('does not increment recapViewCount when the log 404s', async () => {
+    db.campaign.findUnique.mockResolvedValue({ id: 'camp1', title: 'T', universe: null, heroImageUrl: null, chronicleShareEnabled: true })
+    db.campaignLog.findUnique.mockResolvedValue(null)
+    await GET(req('live-token', 'missing'), { params: { token: 'live-token', logId: 'missing' } })
+    expect(db.campaignLog.update).not.toHaveBeenCalled()
   })
 
   it('returns 500 on an unexpected error', async () => {

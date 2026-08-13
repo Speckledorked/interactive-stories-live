@@ -2680,6 +2680,12 @@ model CampaignLog {
   // comment for why an exact historical reconstruction isn't attempted).
   inGameDayNumber Int?
 
+  // #264: smallest real signal of whether shareable recaps are used at all.
+  // Incremented once per successful load of the public recap page
+  // (GET /api/public/chronicle/[token]/recap/[logId]) — not when a share
+  // link is merely copied/generated.
+  recapViewCount Int @default(0)
+
   createdAt DateTime @default(now())
 
   @@index([campaignId, turnNumber])

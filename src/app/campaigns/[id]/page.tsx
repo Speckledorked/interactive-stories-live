@@ -67,6 +67,12 @@ export default function CampaignLobbyPage() {
   const [creatingMap, setCreatingMap] = useState(false)
   const [campaignLogs, setCampaignLogs] = useState<any[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
+  const [logsHasMore, setLogsHasMore] = useState(false)
+  const [loadingEarlierLogs, setLoadingEarlierLogs] = useState(false)
+  // Campaign-wide scene count from the server (#234) — the milestone
+  // progress bar needs the real total, not just however many entries
+  // happen to be loaded into campaignLogs at the moment.
+  const [logsSceneCount, setLogsSceneCount] = useState(0)
   const [regeneratingLogs, setRegeneratingLogs] = useState(false)
   const [regenerateLogsResult, setRegenerateLogsResult] = useState('')
   const [showInviteModal, setShowInviteModal] = useState(false)
@@ -210,11 +216,37 @@ export default function CampaignLobbyPage() {
       if (response.ok) {
         const data = await response.json()
         setCampaignLogs(data.logs || [])
+        setLogsHasMore(!!data.hasMore)
+        setLogsSceneCount(data.sceneCount || 0)
       }
     } catch (err) {
       console.error('Failed to load campaign logs:', err)
     } finally {
       setLogsLoading(false)
+    }
+  }
+
+  // #234: fetches the page of Story Log entries just older than whatever's
+  // currently loaded (cursor = the oldest loaded entry's id) and prepends
+  // them — the log renders oldest-first, so "earlier" entries belong above
+  // what's already on screen.
+  const loadEarlierLogs = async () => {
+    const oldestLoaded = campaignLogs[0]
+    if (!oldestLoaded || loadingEarlierLogs) return
+    setLoadingEarlierLogs(true)
+    try {
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/logs?before=${encodeURIComponent(oldestLoaded.id)}`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        setCampaignLogs(prev => [...(data.logs || []), ...prev])
+        setLogsHasMore(!!data.hasMore)
+      }
+    } catch (err) {
+      console.error('Failed to load earlier campaign logs:', err)
+    } finally {
+      setLoadingEarlierLogs(false)
     }
   }
 
@@ -461,10 +493,15 @@ export default function CampaignLobbyPage() {
                     entry + notifies the party every N scenes. Only counts
                     entryType 'scene' rows, so a milestone entry itself
                     (entryType 'milestone') doesn't inflate the count it's
-                    measured against. */}
+                    measured against.
+                    #234: sourced from logsSceneCount (a real campaign-wide
+                    count from the server), not campaignLogs.filter(...).length
+                    — campaignLogs is now just whatever page(s) happen to be
+                    loaded, which would silently undercount once pagination
+                    made "all logs are always loaded" no longer true. */}
                 {(() => {
                   const MILESTONE_INTERVAL = 20
-                  const sceneCount = campaignLogs.filter((l: any) => l.entryType === 'scene').length
+                  const sceneCount = logsSceneCount
                   const nextMilestone = Math.ceil((sceneCount + 1) / MILESTONE_INTERVAL) * MILESTONE_INTERVAL
                   const cycleProgress = (sceneCount % MILESTONE_INTERVAL) / MILESTONE_INTERVAL * 100
                   return (
@@ -488,6 +525,22 @@ export default function CampaignLobbyPage() {
                     </div>
                   )
                 })()}
+
+                {/* #234: only the most recent page of entries loads by
+                    default — this pulls in the next-older page, prepended
+                    above whatever's already showing, matching the log's
+                    own oldest-first reading order. */}
+                {logsHasMore && (
+                  <div className="mb-4 flex justify-center">
+                    <button
+                      onClick={loadEarlierLogs}
+                      disabled={loadingEarlierLogs}
+                      className="rounded border border-myth-border px-3 py-1.5 text-xs text-myth-ink-muted transition-colors hover:border-myth-border-strong disabled:opacity-50"
+                    >
+                      {loadingEarlierLogs ? 'Loading…' : 'Load earlier entries'}
+                    </button>
+                  </div>
+                )}
 
                 {/* Log Entries — flowing/divided, not individually boxed: this
                     is narrative content meant to be read, not a list of

@@ -6,7 +6,10 @@
 // depends on their exact threshold behavior.
 
 import { describe, it, expect } from 'vitest'
-import { applyHarm, healHarm, canAct, Condition, appendConditionHistory, MAX_CONDITION_HISTORY } from '../harm'
+import {
+  applyHarm, healHarm, canAct, Condition, appendConditionHistory, MAX_CONDITION_HISTORY,
+  makeDeathSave, performRecoveryRoll, PERMANENT_INJURIES,
+} from '../harm'
 
 describe('applyHarm', () => {
   it('adds damage minus armor reduction, floored at 0', () => {
@@ -132,5 +135,132 @@ describe('appendConditionHistory (#173/BUG-012)', () => {
     expect(history).toHaveLength(MAX_CONDITION_HISTORY)
     expect(history[history.length - 1].resolvedAt).toBe(MAX_CONDITION_HISTORY + 6)
     expect(history[0].resolvedAt).toBe(7)
+  })
+})
+
+// #245 (adversarial audit): makeDeathSave and performRecoveryRoll — the
+// riskiest transitions in the character harm/death state machine — used
+// to have no dedicated unit test file, only indirect coverage via
+// worldUpdaters/__tests__/characters.test.ts integration assertions. That
+// meant a regression in either function's own branch logic could only be
+// caught by an integration test asserting an unrelated end-to-end value,
+// not pinpointed to the function that actually broke.
+
+describe('makeDeathSave', () => {
+  it('a success at 1 remaining save stabilizes the character', () => {
+    const result = makeDeathSave(1, true)
+    expect(result).toEqual({
+      newDeathSaves: 0,
+      status: 'stable',
+      message: 'Death save succeeded! Character stabilizes.',
+    })
+  })
+
+  it('a success with saves still remaining stays dying, one save closer to stable', () => {
+    const result = makeDeathSave(2, true)
+    expect(result.newDeathSaves).toBe(1)
+    expect(result.status).toBe('dying')
+  })
+
+  it('never lets a success push the count below zero', () => {
+    const result = makeDeathSave(0, true)
+    expect(result.newDeathSaves).toBe(0)
+    expect(result.status).toBe('stable')
+  })
+
+  it('a failure short of the death threshold stays dying', () => {
+    const result = makeDeathSave(1, false)
+    expect(result.newDeathSaves).toBe(2)
+    expect(result.status).toBe('dying')
+  })
+
+  it('the third failure kills the character', () => {
+    const result = makeDeathSave(2, false)
+    expect(result).toEqual({
+      newDeathSaves: 3,
+      status: 'dead',
+      message: 'Death save failed. Character dies.',
+    })
+  })
+
+  it('a failure starting already at the threshold stays dead, not a throw or a higher count', () => {
+    const result = makeDeathSave(3, false)
+    expect(result.status).toBe('dead')
+    expect(result.newDeathSaves).toBe(4)
+  })
+})
+
+describe('performRecoveryRoll', () => {
+  const rngAlways = (value: number) => () => value
+
+  it('10+ stabilizes with no lasting effect, harm reduced to 4', () => {
+    const result = performRecoveryRoll(10, 'fell from the ramparts', 5)
+    expect(result).toEqual({
+      outcome: 'stabilized',
+      message: 'You pull through remarkably well. Reduce harm to 4.',
+      newHarm: 4,
+    })
+  })
+
+  it('a much higher roll still lands in the same 10+ band', () => {
+    const result = performRecoveryRoll(15, 'fell from the ramparts', 5)
+    expect(result.outcome).toBe('stabilized')
+    expect(result.newHarm).toBe(4)
+  })
+
+  it('7-9 stabilizes with a permanent injury, harm reduced to 5', () => {
+    const result = performRecoveryRoll(8, 'gored by the beast', 5, rngAlways(0))
+    expect(result.outcome).toBe('permanent_injury')
+    expect(result.newHarm).toBe(5)
+    expect(result.permanentInjury).toBeDefined()
+    expect(result.permanentInjury!.circumstances).toBe('gored by the beast')
+    expect(result.permanentInjury!.acquiredAt).toBe(5)
+  })
+
+  it('the injectable RNG genuinely selects which permanent injury is picked', () => {
+    const injuryKeys = Object.keys(PERMANENT_INJURIES)
+    const first = performRecoveryRoll(7, 'x', 1, rngAlways(0))
+    const last = performRecoveryRoll(7, 'x', 1, rngAlways(0.999))
+    expect(first.permanentInjury!.name).toBe(PERMANENT_INJURIES[injuryKeys[0] as keyof typeof PERMANENT_INJURIES].name)
+    expect(last.permanentInjury!.name).toBe(
+      PERMANENT_INJURIES[injuryKeys[injuryKeys.length - 1] as keyof typeof PERMANENT_INJURIES].name
+    )
+    expect(first.permanentInjury!.name).not.toBe(last.permanentInjury!.name)
+  })
+
+  it('defaults to Math.random when no rng is injected, still returning a valid injury', () => {
+    const result = performRecoveryRoll(7, 'x', 1)
+    const injuryKeys = Object.keys(PERMANENT_INJURIES)
+    const validNames = injuryKeys.map((k) => PERMANENT_INJURIES[k as keyof typeof PERMANENT_INJURIES].name)
+    expect(validNames).toContain(result.permanentInjury!.name)
+  })
+
+  it('4-6 results in capture, harm reduced to 6', () => {
+    const result = performRecoveryRoll(5, 'overwhelmed by the mob', 3)
+    expect(result).toEqual({
+      outcome: 'captured',
+      message: 'You fall unconscious. What happens next is up to your enemies...',
+      newHarm: 6,
+    })
+  })
+
+  it('1-3 leaves the character dying, one more chance needed', () => {
+    const result = performRecoveryRoll(2, 'left for dead', 3)
+    expect(result).toEqual({
+      outcome: 'dead',
+      message: 'You are dying. Someone must intervene immediately or you will die.',
+      newHarm: 6,
+    })
+  })
+
+  it('a non-positive roll still lands in the 1-3 band rather than throwing', () => {
+    const result = performRecoveryRoll(-4, 'left for dead', 3)
+    expect(result.outcome).toBe('dead')
+  })
+
+  it('exact band boundaries: 9 is still an injury, not stabilized; 6 is still captured, not an injury; 3 is still dying, not captured', () => {
+    expect(performRecoveryRoll(9, 'x', 1, rngAlways(0)).outcome).toBe('permanent_injury')
+    expect(performRecoveryRoll(6, 'x', 1).outcome).toBe('captured')
+    expect(performRecoveryRoll(3, 'x', 1).outcome).toBe('dead')
   })
 })

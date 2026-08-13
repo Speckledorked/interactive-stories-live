@@ -823,8 +823,21 @@ Based on the player's original intent and what happened during the activity, gen
             where: { campaignId: owner.campaignId },
             select: { currentTurnNumber: true },
           })
+          // #261: this activity's only possible in-fiction payer — the
+          // faction that gave the quest costs.requiresQuest spawned, when
+          // one was spawned and it resolved to a real faction giver. Most
+          // activities have no linkedQuestId at all, in which case this
+          // stays null and gold pays out exactly as it always did.
+          let payerFactionId: string | null = null
+          if (activity.linkedQuestId) {
+            const linkedQuest = await prisma.quest.findUnique({
+              where: { id: activity.linkedQuestId },
+              select: { givenByFactionId: true },
+            })
+            payerFactionId = linkedQuest?.givenByFactionId ?? null
+          }
           const rewardLog = await prisma.$transaction(async (tx) =>
-            applyDowntimeRewards(tx, owner.campaignId, activity.characterId, activity.summary || 'downtime activity', rewards, worldMeta?.currentTurnNumber)
+            applyDowntimeRewards(tx, owner.campaignId, activity.characterId, activity.summary || 'downtime activity', rewards, worldMeta?.currentTurnNumber, payerFactionId)
           )
           for (const line of rewardLog) console.log(`  🎁 ${line}`)
         }

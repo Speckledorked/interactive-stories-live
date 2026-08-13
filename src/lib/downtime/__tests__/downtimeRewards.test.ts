@@ -113,9 +113,16 @@ describe('parseDowntimeRewards', () => {
 })
 
 describe('applyDowntimeRewards', () => {
-  const makeDb = (character: any = { id: 'ch1', name: 'Vera', resources: { gold: 10 }, inventory: null, isAlive: true }) => ({
+  const makeDb = (
+    character: any = { id: 'ch1', name: 'Vera', resources: { gold: 10 }, inventory: null, isAlive: true },
+    faction: any = null
+  ) => ({
     character: {
       findUnique: vi.fn(async () => character),
+      update: vi.fn(async () => ({})),
+    },
+    faction: {
+      findUnique: vi.fn(async () => faction),
       update: vi.fn(async () => ({})),
     },
   })
@@ -137,6 +144,42 @@ describe('applyDowntimeRewards', () => {
     await applyDowntimeRewards(db as any, 'camp1', 'ch1', 'Smithing', { ...empty, gold: 300 })
     const data = (db.character.update.mock.calls as any[])[0][0].data
     expect(data.resources.gold).toBe(310)
+  })
+
+  // #261: when a downtime activity has a real resolved payer (its
+  // linkedQuestId's quest-giver faction), gold routes through the same
+  // assessPayout TRANSFER model quest rewards already use — parity with
+  // the affordability check quest rewards enforce.
+  it('pays gold in full and debits a healthy payer faction when a payerFactionId is given', async () => {
+    const db = makeDb(undefined, { id: 'f1', name: 'The Blacksmiths\' Guild', resources: 80 })
+    const log = await applyDowntimeRewards(db as any, 'camp1', 'ch1', 'Smithing', { ...empty, gold: 300 }, undefined, 'f1')
+    const data = (db.character.update.mock.calls as any[])[0][0].data
+    expect(data.resources.gold).toBe(310)
+    expect(db.faction.update).toHaveBeenCalledWith({ where: { id: 'f1' }, data: { resources: 77 } })
+    expect(log.join(' ')).not.toContain('could only raise')
+  })
+
+  it('partially pays and logs a default when the payer faction cannot afford the full reward', async () => {
+    const db = makeDb(undefined, { id: 'f1', name: 'The Broke Cartel', resources: 1 })
+    const log = await applyDowntimeRewards(db as any, 'camp1', 'ch1', 'Smithing', { ...empty, gold: 300 }, undefined, 'f1')
+    const data = (db.character.update.mock.calls as any[])[0][0].data
+    expect(data.resources.gold).toBe(10 + 100) // faction could only raise 1 point = 100 gold
+    expect(log.join(' ')).toContain('The Broke Cartel could only raise 100 of the 300 promised')
+  })
+
+  it('pays gold in full from nowhere when payerFactionId is given but resolves to no faction', async () => {
+    const db = makeDb(undefined, null)
+    await applyDowntimeRewards(db as any, 'camp1', 'ch1', 'Smithing', { ...empty, gold: 300 }, undefined, 'missing-faction')
+    const data = (db.character.update.mock.calls as any[])[0][0].data
+    expect(data.resources.gold).toBe(310)
+    expect(db.faction.update).not.toHaveBeenCalled()
+  })
+
+  it('never touches the faction table when no payerFactionId is given (the common case)', async () => {
+    const db = makeDb()
+    await applyDowntimeRewards(db as any, 'camp1', 'ch1', 'Smithing', { ...empty, gold: 300 })
+    expect(db.faction.findUnique).not.toHaveBeenCalled()
+    expect(db.faction.update).not.toHaveBeenCalled()
   })
 
   it('merges contacts without duplicating existing ones', async () => {

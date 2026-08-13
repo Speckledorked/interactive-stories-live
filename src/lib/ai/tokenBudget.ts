@@ -32,6 +32,23 @@ import type { AIGMRequest } from './client'
 // today's typical campaign never hits it, while still bounding the
 // pathological case (a large, long-running campaign with many discovered
 // entities) that the fixed entity-count caps alone don't protect against.
+//
+// #230: this single budget is applied ONCE, upstream of callAIGM, and the
+// resulting request is reused byte-identical for both AI_MODELS.FLAGSHIP
+// and its AI_MODELS.EFFICIENT fallback (client.ts's attemptAIGM) — there is
+// no separate, smaller budget for the fallback attempt. That's safe only
+// because the two models share a context window: gpt-5.4-mini is the
+// "mini" variant WITHIN the gpt-5.4 generation (models.ts), and every
+// OpenAI model family to date (gpt-4/gpt-4-mini, gpt-4.1/gpt-4.1-mini,
+// o1/o1-mini, ...) ships its mini variant with the SAME context window as
+// its flagship — the mini tier trades latency/cost, not context length.
+// 12000 tokens is also tiny relative to any GPT-4/5-class context window
+// (all six-figure-plus), so there is no realistic scenario where EFFICIENT
+// would reject a request FLAGSHIP accepted purely on size. This is reasoned
+// from OpenAI's consistent naming/family convention, not a number pulled
+// from a live API call (no OPENAI_API_KEY was available while confirming
+// this) — worth a real check against OpenAI's current model documentation
+// before leaning on it for anything more safety-critical than prompt sizing.
 export const DEFAULT_TOKEN_BUDGET = 12000
 
 // #231: below this many characters, a halved current_scene_intro reads as

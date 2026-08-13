@@ -189,9 +189,23 @@ export function decideSupplyRouteCreation(
     ownedByFaction.get(loc.ownerFactionId)!.push(loc.locationId)
   }
 
+  // #246 (adversarial audit re-pass): same-tick consistency. hasAnyConnection
+  // above only ever checks existingRoutes — the routes that existed BEFORE
+  // this pass started — so without this, two resource locations owned by
+  // the same faction that are each other's nearest neighbor, both starting
+  // with no route at all, would each independently decide "I have no
+  // connection, connect me to the nearest other owned location" and both
+  // pick each other: two SupplyRoute rows for the same pair, created in the
+  // same tick. Tracking which locations a creation decided earlier in THIS
+  // pass already connects — and skipping a location once it's in this set —
+  // closes that, the same "don't let an earlier decision in this pass go
+  // unseen by a later one" shape factionTick.ts's #199 fix already uses.
+  const connectedThisPass = new Set<string>()
+
   for (const location of locations) {
     if (location.resourceSlots.length === 0) continue
     if (!location.ownerFactionId) continue
+    if (connectedThisPass.has(location.locationId)) continue
 
     const ownedCount = ownedCounts.get(location.ownerFactionId) ?? 0
     if (hasAnyConnection(location.locationId, location.ownerFactionId, existingRoutes, ownerByLocationId, ownedCount)) continue
@@ -207,6 +221,8 @@ export function decideSupplyRouteCreation(
       toLocationId: targetId,
       controllingFactionId: location.ownerFactionId,
     })
+    connectedThisPass.add(location.locationId)
+    connectedThisPass.add(targetId)
   }
 
   return creations

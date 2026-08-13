@@ -382,10 +382,10 @@ function CreateCampaignModal({
                         <span className="rounded-full bg-myth-surface-sunken px-2 py-0.5 text-xs text-myth-ink-faint">{tpl.universe}</span>
                       </div>
                       <p className="mb-3 text-sm text-myth-ink-muted">{tpl.description}</p>
-                      <div className="flex items-center gap-3 text-xs text-myth-ink-faint">
-                        <span>{tpl.factionCount} factions</span>
-                        <span>·</span>
-                        <div className="flex gap-1.5">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-myth-ink-faint">
+                        <span className="whitespace-nowrap">{tpl.factionCount} factions</span>
+                        <span className="hidden sm:inline">·</span>
+                        <div className="flex flex-wrap gap-1.5">
                           {tpl.tags.map(tag => (
                             <span key={tag} className="rounded-full bg-myth-surface-sunken px-2 py-0.5">{tag}</span>
                           ))}

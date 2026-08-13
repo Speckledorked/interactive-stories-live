@@ -235,15 +235,32 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
     const newLenderResources = clamp(lender.resources - decision.amount, 0, 100)
 
     if (!ctx.dryRun) {
-      await ctx.db.factionDebt.create({
-        data: {
-          campaignId: ctx.campaignId,
-          creditorFactionId: lender.id,
-          debtorFactionId: broke.id,
-          amount: decision.amount,
-          turnCreated: ctx.turnNumber,
-        },
-      })
+      // #238 (adversarial audit): the findFirst check above and this
+      // create used to be the only guard against a debtor getting a
+      // second OUTSTANDING FactionDebt — no DB-level constraint backed it.
+      // A real partial unique index now does (see the migration and
+      // schema.prisma's FactionDebt comment). Since this loop is already
+      // sequential within the tick's own transaction, this violation isn't
+      // reachable in practice today — but an uncaught P2002 here would
+      // abort the ENTIRE world-tick transaction (Postgres fails the whole
+      // transaction on any unhandled statement error, not just this loan),
+      // which is a strictly worse outcome than the bug the constraint
+      // exists to prevent. Same swallow-and-skip pattern this file already
+      // uses for the ActiveWake creation above.
+      try {
+        await ctx.db.factionDebt.create({
+          data: {
+            campaignId: ctx.campaignId,
+            creditorFactionId: lender.id,
+            debtorFactionId: broke.id,
+            amount: decision.amount,
+            turnCreated: ctx.turnNumber,
+          },
+        })
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) throw error
+        continue
+      }
       await ctx.db.faction.update({ where: { id: lender.id }, data: { resources: newLenderResources } })
       await ctx.db.faction.update({ where: { id: broke.id }, data: { resources: newBrokeResources } })
     }

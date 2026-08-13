@@ -1,0 +1,13 @@
+-- #238 (adversarial audit): at most one OUTSTANDING FactionDebt per debtor
+-- faction. Backstops the application-level findFirst-then-create check in
+-- decideLoanExtension's caller (economyTick.ts's tickEconomy handler)
+-- against two concurrent writers both passing that check before either
+-- commits. A real partial unique index (Prisma's @@unique has no WHERE
+-- clause), same hand-written-migration approach the downtime-activity
+-- single-ACTIVE constraint (#211) already used.
+--
+-- Scoped to debtorFactionId alone, not the (creditorFactionId,
+-- debtorFactionId) pair — matching the application-level check's own
+-- scope and docs/ARCHITECTURE.md's already-corrected description of the
+-- rule ("per-debtor (any creditor), not per debtor-creditor pair").
+CREATE UNIQUE INDEX "FactionDebt_debtorFactionId_outstanding_key" ON "FactionDebt" ("debtorFactionId") WHERE status = 'OUTSTANDING';

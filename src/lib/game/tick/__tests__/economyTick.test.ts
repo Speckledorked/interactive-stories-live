@@ -198,6 +198,44 @@ describe('tickEconomy (DB handler)', () => {
     expect(result.changes[0]).toMatchObject({ entityId: 'broke1', field: 'resources' })
   })
 
+  it('#238: swallows a P2002 from the DB-level single-outstanding-debt backstop instead of aborting the whole tick', async () => {
+    // The rare window this backstops: the findFirst check above (mocked
+    // null here, "no existing debt") and the create below it are two
+    // separate statements — the new partial unique index (see the
+    // migration) is what actually enforces the invariant if they ever
+    // race. An uncaught P2002 here would abort runWorldTick's entire
+    // transaction, not just this one loan, so this must be caught.
+    const { Prisma } = await import('@prisma/client')
+    vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([
+        { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+      ] as any)
+      .mockResolvedValueOnce([{ id: 'ally1', name: 'Wealthy Co', resources: 90 }] as any)
+    vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
+    vi.mocked(prisma.factionDebt.create).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'x' })
+    )
+
+    const result = await tickEconomy(baseCtx())
+
+    expect(prisma.faction.update).not.toHaveBeenCalled()
+    expect(result.changes).toEqual([])
+  })
+
+  it('re-throws a non-constraint error from the FactionDebt create rather than silently swallowing it', async () => {
+    vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([
+        { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+      ] as any)
+      .mockResolvedValueOnce([{ id: 'ally1', name: 'Wealthy Co', resources: 90 }] as any)
+    vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
+    vi.mocked(prisma.factionDebt.create).mockRejectedValueOnce(new Error('connection reset'))
+
+    await expect(tickEconomy(baseCtx())).rejects.toThrow('connection reset')
+  })
+
   it('does not originate a second loan while one is already outstanding', async () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([

@@ -1218,6 +1218,15 @@ model FactionDebt {
   @@index([campaignId])
   @@index([creditorFactionId])
   @@index([debtorFactionId, status])
+  // #238 (adversarial audit): a real partial unique index enforcing at
+  // most one OUTSTANDING debt per debtor faction — created by hand-written
+  // migration SQL (Prisma's @@unique has no WHERE clause), same
+  // NPC/Faction/Quest-name and downtime-activity (#211) precedent
+  // elsewhere in this schema. The application-level findFirst-then-create
+  // check in economyTick.ts is the primary gate; this is the concurrency
+  // backstop. Scoped to debtorFactionId alone, matching that check's own
+  // scope — "at most one outstanding debt" is per-debtor here, not
+  // per-(creditor, debtor) pair.
 }
 
 enum FactionDebtStatus {

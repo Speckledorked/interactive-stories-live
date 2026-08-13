@@ -257,6 +257,12 @@ Two concrete consequences:
   4s and 5s, as a standing invitation for the next adversarial read to
   find something — because so far, it always has.
 
+This is enforced mechanically, not just stated here and trusted to be
+followed: `scripts/check-scorecard-audit-trail.ts` runs in CI on every push
+to `main` and fails the build if any row's score increased without a
+matching entry in the **Scorecard Audit Log** below. See that section for
+the exact rule and entry format.
+
 | System | Score | Status |
 |---|:-:|---|
 | Server-rolled dice/outcome engine | 4 | `computeMechanics` (`src/lib/game/resolution.ts`) is genuinely pure, RNG-injected, and unit-tested with real edge cases — stacked-modifier totals including a fully-negative case, both dice extremes, and the exact outcome-band boundaries (`resolution.goldenVectors.test.ts`). `resolveActionMechanics`, named alongside it above, is the orchestrator around it and is NOT itself pure (real Prisma reads/writes, a live network call) — the two shouldn't be described as one "pure" unit. The silent-degrade gap this row used to name (#200 — a classifier failure, whether from a missing `OPENAI_API_KEY`, an OpenAI outage, or a genuine error, produced the exact same bare `[]` as the legitimate "nothing needed rolling" case, with no player-facing signal either way) is fixed: `resolveActionMechanics` now returns `{ mechanics, classificationUnavailable }`, `classificationUnavailable` is true only when classification itself genuinely failed (never on a real "no roll needed" outcome), and the flag threads through as `_mechanicsUnavailable` on `AIGMRequest` to a prominent, visible-by-default `worldStateChanges` entry — a player now sees when a roll silently didn't happen instead of it reading as ordinary freeform narration. |
@@ -318,6 +324,39 @@ Two concrete consequences:
 | Scene endings — a real narrative close, not a status flip | 4 | `Scene.stakes` (a dormant schema field, previously read once in `memoryRetrieval.ts` but never written anywhere) is now populated at scene creation by a small, separate, fail-open AI call (`generateSceneStakes`) grounded in the scene's own opening text, surfaced under the scene header in the story page UI, and echoed back to the model in `<scene_ending>` when a scene is force-ended so it has something concrete to resolve against rather than an abstract "wrap it up." See the matching Fix Log entry for the other half — the actual silent-no-narration ending bug. Not a 5 — stakes generation is one-shot at scene creation and never revised mid-scene if the situation shifts. |
 | Shareable session recaps | 3 | A resolved scene/arc from the Story Log can be shared as a social-media-sized card — `Share` on any `CampaignLog` entry copies a link to `/chronicle/[token]/recap/[logId]`, gated on the same chronicle-share token the full public chronicle already uses (deliberately not a separate share mechanism). The card itself is Next's `opengraph-image` file convention (`ImageResponse`, server-rendered, auto-wired into the page's meta tags — no manual OG tag plumbing) reading the campaign's hero image + the `CampaignLog` title/summary already shown in-app, not a re-derived summary. The chronicle-share GET route was relaxed from admin-only to any campaign member (POST/DELETE stayed admin-only) — reading the already-meant-to-be-public token isn't a privilege escalation, and a non-admin player should be able to share a recap too. Not a 4 — the card layout is fixed (no per-campaign theming beyond the hero image), and there's no analytics on whether a shared link was ever actually clicked. |
 | Campaign lobby "Word From the World" | 4 | The lobby overview tab's old stat-tile grid (`WorldSummaryPanel`, bare labeled counts) is replaced by a few sentences of generated in-world prose (`generateChronicleNarration`, `AI_MODELS.EFFICIENT`) synthesizing weather/faction posture/active conflicts/recent happenings — the design principle behind it: "a dashboard shows you data, a chronicle tells you a story about the same data." Regenerated once per world turn (`WorldMeta.chronicleNarration`/`chronicleNarrationTurn`) inside `runWorldTurn`, never live per page view; a progress bar under the prose shows in-game hours banked toward the next update (`hoursSinceWorldTurn`/`worldTurnHours`) rather than a real-world countdown, since the gate is in-game time accrued through play, not a wall-clock timer. Fog-of-war-safe: undiscovered factions/wars are filtered out of the input (`chronicleContext.ts`) before the prompt is ever built. Also adds a one-shot generated campaign hero banner image (`generateCampaignHeroImage`, reusing #96's OpenAI image-gen call shape but not its job-queue machinery — a one-time cosmetic generation doesn't need retry/recovery), now confirmed generating successfully against real production credentials (2026-08-07). Not a 5 — the specific fix for the earlier `FAILED` state was never pinned down, and scene illustration (#96) hasn't independently confirmed the same. The fog-of-war gap this row used to name (#233 — the weather signal read a character's current location with no `isDiscovered` check at all, unlike `worldSummary.ts`'s equivalent query) is fixed: `buildChronicleNarrationInput`'s character query now selects `isDiscovered` on the location relation and only takes a character's location as the weather source when it's actually discovered, closing the one real (if low-probability) inconsistency the "fog-of-war-safe" claim had. |
+
+## Scorecard Audit Log
+
+**Rule: a Scorecard row's score may only increase in the same commit that
+adds a new entry below for that exact system, recording a completed
+adversarial pass — one whose explicit goal was finding defects, not
+confirming a fix already made — that found zero new defects.** Fixing a
+row's own previously-named gap justifies describing that fix accurately
+in the row's own text; it does not by itself justify moving the number.
+If a pass finds defects, list them here, fix them, and the score still
+does not move — a later, separate entry recording a *clean* pass is what
+unlocks the increase, not the fix itself.
+
+This is not optional or advisory: `scripts/check-scorecard-audit-trail.ts`
+parses this log and the Scorecard table on every push to `main`
+(`.github/workflows/ci.yml`) and fails CI if a score went up with no
+matching entry here. Decreasing a score never needs an entry — only
+increases are gated. A brand-new row (a system with no prior score to
+compare against) is also never gated by this.
+
+Entry format — both the heading shape and the literal phrase
+`0 new defects found` are required; the checker looks for both verbatim:
+
+```
+### YYYY-MM-DD — <exact System name, copied verbatim from its Scorecard row>
+Pass type: adversarial audit
+What was checked: <what was actually read/exercised, specifically>
+Result: 0 new defects found
+```
+
+No entries yet — this log starts empty as of the audit that added this
+section. The first entry written against a row is what earns that row the
+right to move up again.
 
 ## Fix Log
 

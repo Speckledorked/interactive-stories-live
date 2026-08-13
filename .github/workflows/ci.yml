@@ -34,6 +34,33 @@ jobs:
       - name: Tests
         run: npx vitest run
 
+  # Enforces docs/ARCHITECTURE.md's Scorecard Audit Log rule: a Scorecard
+  # row's score can't go up without a matching Audit Log entry recording
+  # a clean adversarial pass. See that section's own header for why — a
+  # real user caught this doc self-grading its own work up with no
+  # outside check, repeatedly, and this is the mechanical version of the
+  # fix, not just a norm stated in prose and trusted to hold.
+  scorecard-audit-trail:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Needs at least the previous commit to diff scores against
+          # (HEAD^1) — a --no-ff merge commit's first parent is exactly
+          # main's tip before this push, which is the right baseline.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check Scorecard score increases have an audit trail
+        run: npx tsx scripts/check-scorecard-audit-trail.ts
+
   # Rehearse the schema half of the deploy.
   #
   # This job exists because of a real outage: a `@@unique` added to Quest

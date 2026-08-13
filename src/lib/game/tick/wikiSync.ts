@@ -32,6 +32,19 @@ import { buildNpcWikiSummary, buildFactionWikiSummary, buildLocationWikiSummary 
  * significant change in this batch. Follows the same deterministic-template
  * pattern already used for Clock/Location wiki sync in sceneResolver.ts —
  * no extra AI call, just a refresh from current field values.
+ *
+ * #236 (adversarial audit): this used to have no per-entity error
+ * isolation at all — a transient DB error on any ONE entity's sync (a
+ * dropped connection, a constraint violation) threw straight out of the
+ * whole function, which `worldTick.ts` awaits with nothing catching it.
+ * That meant a single bad wiki sync could abort the rest of that world
+ * turn's processing (clock advancement, offscreen narration, chronicle
+ * generation never run) even though the tick's own simulation-state
+ * transaction had already committed cleanly — exactly the kind of
+ * partial, inconsistent result this function's own "best-effort, no
+ * extra AI call" framing was never meant to risk. Each entity's sync is
+ * now independently caught: one failure is logged and skipped, the rest
+ * of the batch still runs.
  */
 export async function syncWikiEntriesForChanges(
   campaignId: string,
@@ -49,51 +62,55 @@ export async function syncWikiEntriesForChanges(
   for (const key of significantEntityIds) {
     const [entityType, entityId] = key.split(':') as ['NPC' | 'FACTION' | 'LOCATION_CONDITION', string]
 
-    if (entityType === 'LOCATION_CONDITION') {
-      const location = await prisma.location.findUnique({
-        where: { id: entityId },
-        include: { ownerFaction: { select: { name: true, isDiscovered: true } } },
-      })
-      // Fog of war: an undiscovered location gets no wiki entry, same as
-      // an undiscovered NPC/faction above.
-      if (!location || !location.isDiscovered) continue
-      await syncLocationWikiEntry(campaignId, turnNumber, {
-        ...location,
-        ownerFaction: location.ownerFaction?.isDiscovered ? { name: location.ownerFaction.name } : null,
-      })
-    } else if (entityType === 'NPC') {
-      const npc = await prisma.nPC.findUnique({
-        where: { id: entityId },
-        // Fog of war applies to the links too: an undiscovered faction or
-        // location must not be named on a page every member can read.
-        include: {
-          faction: { select: { name: true, isDiscovered: true } },
-          location: { select: { name: true, isDiscovered: true } },
-        },
-      })
-      // Fog of war: an undiscovered NPC gets no wiki entry — the wiki is
-      // readable by every campaign member, not just admins.
-      if (!npc || !npc.isDiscovered) continue
-      const socialLine = await describeSocialTies(npc.socialTies)
-      await syncNpcWikiEntry(
-        campaignId,
-        turnNumber,
-        {
-          ...npc,
-          faction: npc.faction?.isDiscovered ? { name: npc.faction.name } : null,
-          location: npc.location?.isDiscovered ? { name: npc.location.name } : null,
-        },
-        socialLine
-      )
-    } else {
-      const faction = await prisma.faction.findUnique({
-        where: { id: entityId },
-        include: { territories: { where: { isDiscovered: true } } },
-      })
-      if (!faction || !faction.isDiscovered) continue
-      await syncFactionWikiEntry(campaignId, turnNumber, faction)
+    try {
+      if (entityType === 'LOCATION_CONDITION') {
+        const location = await prisma.location.findUnique({
+          where: { id: entityId },
+          include: { ownerFaction: { select: { name: true, isDiscovered: true } } },
+        })
+        // Fog of war: an undiscovered location gets no wiki entry, same as
+        // an undiscovered NPC/faction above.
+        if (!location || !location.isDiscovered) continue
+        await syncLocationWikiEntry(campaignId, turnNumber, {
+          ...location,
+          ownerFaction: location.ownerFaction?.isDiscovered ? { name: location.ownerFaction.name } : null,
+        })
+      } else if (entityType === 'NPC') {
+        const npc = await prisma.nPC.findUnique({
+          where: { id: entityId },
+          // Fog of war applies to the links too: an undiscovered faction or
+          // location must not be named on a page every member can read.
+          include: {
+            faction: { select: { name: true, isDiscovered: true } },
+            location: { select: { name: true, isDiscovered: true } },
+          },
+        })
+        // Fog of war: an undiscovered NPC gets no wiki entry — the wiki is
+        // readable by every campaign member, not just admins.
+        if (!npc || !npc.isDiscovered) continue
+        const socialLine = await describeSocialTies(npc.socialTies)
+        await syncNpcWikiEntry(
+          campaignId,
+          turnNumber,
+          {
+            ...npc,
+            faction: npc.faction?.isDiscovered ? { name: npc.faction.name } : null,
+            location: npc.location?.isDiscovered ? { name: npc.location.name } : null,
+          },
+          socialLine
+        )
+      } else {
+        const faction = await prisma.faction.findUnique({
+          where: { id: entityId },
+          include: { territories: { where: { isDiscovered: true } } },
+        })
+        if (!faction || !faction.isDiscovered) continue
+        await syncFactionWikiEntry(campaignId, turnNumber, faction)
+      }
+      synced++
+    } catch (error) {
+      console.error(`⚠️ Failed to sync wiki entry for ${key} (non-critical, continuing):`, error)
     }
-    synced++
   }
 
   return synced

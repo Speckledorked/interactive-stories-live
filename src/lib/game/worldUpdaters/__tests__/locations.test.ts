@@ -6,7 +6,7 @@ import { applyLocationChanges, resolveOrCreateLocationId, LocationChange } from 
 // confident-fuzzy -> ambiguous resolver, instead of a per-call findFirst.
 const makeTx = () => ({
   location: {
-    findMany: vi.fn(async () => []),
+    findMany: vi.fn(),
     update: vi.fn(async (_args: any) => ({})),
     create: vi.fn(async ({ data }: any) => ({ id: 'new-loc', ...data })),
   },

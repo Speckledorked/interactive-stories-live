@@ -26,9 +26,10 @@ function typeFor(change: WorldChange): string {
 
 /**
  * Persist a batch of WorldChanges as WorldEvent rows. Best-effort — a
- * failure here shouldn't take down tick processing or scene resolution,
- * since the memory/wiki writes (the parts players actually see) already ran
- * independently of this.
+ * failure here shouldn't take down tick processing or scene resolution.
+ * Called sequentially before the memory/wiki writes (worldTick.ts), each
+ * of which is independently caught at its own call site (#236) so a
+ * failure in any one of the three doesn't prevent the others from running.
  */
 export async function persistWorldEvents(
   campaignId: string,

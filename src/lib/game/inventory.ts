@@ -55,6 +55,19 @@ export interface InventoryItem {
  * inventing what "full" should even do (reject the pickup and contradict
  * the AI's narration? auto-drop something? surface a choice to the
  * player?), which is a product decision, not a wiring fix.
+ *
+ * #222: revisited and reconfirmed as a deliberate decision, not an
+ * oversight — there is still no cap on total item COUNT (as opposed to
+ * itemValue.ts's MAX_RARITY_POINTS_PER_ARC, which throttles rarity
+ * *points* for grant paths routed through applyGrantBudget, and only
+ * those paths). Same scope call as "no merchant/trading layer" elsewhere
+ * in this codebase: inventory here is narrative set-dressing tracked on
+ * the character sheet, not a resource-management game with finite
+ * capacity to defend. An unbounded item list only grows the JSON blob on
+ * a very long-running campaign's Character row — a slow, cosmetic
+ * concern, not an exploit surface (the actual exploitable path, farming
+ * unlimited VALUE, was #211's fix). Revisit only if this campaign type
+ * ever needs a real inventory-management mechanic, not preemptively.
  */
 export interface CharacterInventory {
   items: InventoryItem[]

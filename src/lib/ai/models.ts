@@ -14,6 +14,13 @@ export const AI_MODELS = {
   // Structured extraction / background tasks where a smaller, cheaper model
   // is appropriate: map layout extraction, consequence extraction, offscreen
   // event generation, stub NPC/faction enrichment, world generation.
+  //
+  // #230: also serves as client.ts's fallback model when FLAGSHIP hard-
+  // fails — the SAME (already token-budgeted) request is reused for that
+  // fallback attempt with no separate, smaller budget, which only works
+  // because the "mini" tier within a model generation shares the
+  // flagship's context window (every OpenAI family to date has), not a
+  // shrunken one. See tokenBudget.ts's DEFAULT_TOKEN_BUDGET comment.
   EFFICIENT: 'gpt-5.4-mini',
   // #96: scene illustration. Image generation is branded separately from
   // the chat-completion lineup above (OpenAI's own naming, not this file's

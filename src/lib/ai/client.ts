@@ -893,6 +893,11 @@ async function attemptAIGM(
  * chained further: a fallback failure surfaces to the caller exactly like
  * today's single-model failure did.
  *
+ * #230: `request` is reused byte-identical across both attempts — no
+ * model-aware re-trimming happens here, on purpose. See
+ * tokenBudget.ts's DEFAULT_TOKEN_BUDGET comment for why that's safe (same-
+ * generation mini variants share their flagship's context window).
+ *
  * @param request - The formatted request for the AI GM
  * @param campaignId - Campaign ID for tracking
  * @param sceneId - Scene ID for cost tracking

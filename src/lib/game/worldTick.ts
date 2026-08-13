@@ -47,6 +47,7 @@ import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { TickContext, TickHandler, WorldChange, WorldTickResult, PendingAmbition } from './tick/types'
 import { resolveTickCaps } from './tick/caps'
+import { deriveSeason, GeneratedCalendar } from './calendar'
 
 // tickFactionRelationships runs BEFORE tickFactions on purpose: it reads
 // each faction's goal as of the end of the previous turn and writes this
@@ -190,9 +191,21 @@ export async function runWorldTick(
   const dryRun = options.dryRun ?? false
   const worldMeta = await prisma.worldMeta.findUnique({
     where: { campaignId },
-    select: { factionCap: true, npcCap: true },
+    select: {
+      factionCap: true,
+      npcCap: true,
+      // #263: resolved once here so tickWeather can bias its transition
+      // pick toward the season — see TickContext.season's own comment for
+      // why tickSeasonalPressure's separate calendarConfig read is left
+      // independent rather than refactored onto this.
+      totalElapsedGameHours: true,
+      campaign: { select: { calendarConfig: true } },
+    },
   })
   const { factionCap, npcCap } = resolveTickCaps(worldMeta)
+  const season = worldMeta
+    ? deriveSeason(worldMeta.totalElapsedGameHours, (worldMeta.campaign?.calendarConfig as unknown as GeneratedCalendar) || null)
+    : undefined
 
   const changes: WorldChange[] = []
   const pendingAmbitions: PendingAmbition[] = []
@@ -210,6 +223,7 @@ export async function runWorldTick(
       // on TickContext for why.
       collapseRoughnessByFactionId: new Map(),
       successionRoughnessByFactionId: new Map(),
+      season,
     }
     for (const handler of TICK_HANDLERS) {
       const result = await handler(ctx)

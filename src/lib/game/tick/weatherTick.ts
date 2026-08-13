@@ -8,6 +8,7 @@
 
 import type { Location, WeatherCondition } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, clamp, stableHash } from './types'
+import type { Season } from '../calendar'
 
 // Weather tends to persist or drift to a neighboring condition rather than
 // jumping wildly (e.g. CLEAR never jumps straight to SNOW).
@@ -22,6 +23,46 @@ const TRANSITIONS: Record<WeatherCondition, WeatherCondition[]> = {
 
 const SEVERE_CONDITIONS: WeatherCondition[] = ['STORM', 'SNOW']
 
+// #263: seasonal pressure's third mechanical knob (the first two,
+// faction resource regen and unattached-clock speed, live in
+// seasonTick.ts). A fixed, closed table, same shape as SEASON_MODIFIERS —
+// deliberately a WEIGHT bias on conditions TRANSITIONS already allows from
+// the current condition, never a new condition it doesn't: winter/summer
+// don't get to make CLEAR jump straight to SNOW, they just make an
+// already-reachable SNOW/CLEAR more likely to be the roll that lands.
+// Conditions absent from a season's list (e.g. spring has none) are
+// unbiased — plain TRANSITIONS odds, exactly the pre-#263 behavior.
+const SEASON_FAVORED_CONDITIONS: Record<Season, WeatherCondition[]> = {
+  spring: [],
+  summer: ['CLEAR'],
+  autumn: ['CLOUDY', 'RAIN'],
+  winter: ['SNOW', 'STORM'],
+}
+// How many extra copies of a favored-and-already-reachable condition to
+// append to the weighted pick — small enough that an unfavored condition
+// already in TRANSITIONS can still come up, not a guarantee.
+const SEASON_BIAS_WEIGHT = 2
+
+/**
+ * Pure. `base` is TRANSITIONS[currentCondition] — this only ever appends
+ * extra copies of a condition already present in `base`, so a season bias
+ * can shift the odds among a location's already-legal next conditions but
+ * can never introduce a condition the plain (season-blind) transition
+ * table wouldn't have allowed from here.
+ */
+export function seasonBiasedOptions(base: WeatherCondition[], season: Season | undefined): WeatherCondition[] {
+  if (!season) return base
+  const favored = SEASON_FAVORED_CONDITIONS[season]
+  if (favored.length === 0) return base
+  const extra: WeatherCondition[] = []
+  for (const condition of favored) {
+    if (base.includes(condition)) {
+      for (let i = 0; i < SEASON_BIAS_WEIGHT; i++) extra.push(condition)
+    }
+  }
+  return extra.length > 0 ? [...base, ...extra] : base
+}
+
 export interface WeatherTickDecision {
   nextCondition: WeatherCondition
   nextSeverity: number
@@ -32,9 +73,10 @@ export function decideNextWeather(
   locationId: string,
   turnNumber: number,
   currentCondition: WeatherCondition,
-  currentSeverity: number
+  currentSeverity: number,
+  season?: Season
 ): WeatherTickDecision {
-  const options = TRANSITIONS[currentCondition]
+  const options = seasonBiasedOptions(TRANSITIONS[currentCondition], season)
   const conditionRoll = stableHash(`${locationId}:${turnNumber}:condition`)
   const nextCondition = options[conditionRoll % options.length]
 
@@ -57,7 +99,8 @@ export async function tickWeather(ctx: TickContext): Promise<TickHandlerResult> 
       location.id,
       ctx.turnNumber,
       location.weather,
-      location.weatherSeverity
+      location.weatherSeverity,
+      ctx.season
     )
 
     const conditionChanged = decision.nextCondition !== location.weather

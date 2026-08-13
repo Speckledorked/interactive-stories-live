@@ -72,6 +72,19 @@ export interface PopulationShiftDecision {
   newPopulation: number
 }
 
+// #262: the actual per-tick flow (source -> destination, how many),
+// captured at the point of decision rather than reconstructed from the
+// net PopulationShiftDecision totals above — a destination absorbing
+// refugees from two different distressed sources in the same tick would
+// otherwise be indistinguishable from one source sending twice as many.
+export interface PopulationFlightDecision {
+  fromLocationId: string
+  fromLocationName: string
+  toLocationId: string
+  toLocationName: string
+  count: number
+}
+
 export interface DistressedLocationInput {
   id: string
   name: string
@@ -135,11 +148,12 @@ export function decideMigration(
   candidateDestinations: DestinationLocationInput[],
   npcs: MigratingNpcInput[],
   edges: AdjacencyEdge[] = []
-): { npcMoves: MigrationDecision[]; populationShifts: PopulationShiftDecision[] } {
+): { npcMoves: MigrationDecision[]; populationShifts: PopulationShiftDecision[]; populationFlights: PopulationFlightDecision[] } {
   const npcMoves: MigrationDecision[] = []
+  const populationFlights: PopulationFlightDecision[] = []
 
   if (candidateDestinations.length === 0) {
-    return { npcMoves, populationShifts: [] }
+    return { npcMoves, populationShifts: [], populationFlights: [] }
   }
 
   // Highest-condition destination wins, deterministically — ties broken by
@@ -187,6 +201,13 @@ export function decideMigration(
       if (destPopulation !== undefined) {
         workingPopulation.set(destination.id, destPopulation + fleeing)
       }
+      populationFlights.push({
+        fromLocationId: location.id,
+        fromLocationName: location.name,
+        toLocationId: destination.id,
+        toLocationName: destination.name,
+        count: fleeing,
+      })
     }
   }
 
@@ -208,7 +229,7 @@ export function decideMigration(
     }
   }
 
-  return { npcMoves, populationShifts }
+  return { npcMoves, populationShifts, populationFlights }
 }
 
 export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult> {
@@ -242,7 +263,7 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
   ])
   const importanceById = new Map(npcs.map((n) => [n.id, n.importance]))
 
-  const { npcMoves, populationShifts } = decideMigration(
+  const { npcMoves, populationShifts, populationFlights } = decideMigration(
     distressedLocations,
     candidateDestinations,
     npcs.map((n) => ({
@@ -303,6 +324,23 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
       // not worth a history/RAG entry on its own.
       significant: false,
       importance: 'NORMAL',
+    })
+  }
+
+  // #262: a bounded, per-tick record of where a location's population
+  // actually came from — the LOCATION_POPULATION changes above only carry
+  // a net previous/new total per location, not the source.
+  if (!ctx.dryRun && populationFlights.length > 0) {
+    await ctx.db.populationFlightEvent.createMany({
+      data: populationFlights.map((flight) => ({
+        campaignId: ctx.campaignId,
+        turnNumber: ctx.turnNumber,
+        fromLocationId: flight.fromLocationId,
+        fromLocationName: flight.fromLocationName,
+        toLocationId: flight.toLocationId,
+        toLocationName: flight.toLocationName,
+        count: flight.count,
+      })),
     })
   }
 

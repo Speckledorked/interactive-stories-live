@@ -9,6 +9,7 @@
 // ones to campaign history.
 
 import type { Prisma, PrismaClient } from '@prisma/client'
+import type { Season } from '../calendar'
 
 export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'LOCATION_CONDITION' | 'LOCATION_POPULATION' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT' | 'LOCATION'
 
@@ -94,6 +95,18 @@ export interface TickContext {
    */
   collapseRoughnessByFactionId?: Map<string, number>
   successionRoughnessByFactionId?: Map<string, number>
+  /**
+   * #263: resolved once in worldTick.ts via the same `deriveSeason`
+   * function tickSeasonalPressure calls independently for its own two
+   * knobs (resourceRegenDelta/clockSpeedMultiplier — that handler's own
+   * calendarConfig read is left as-is, not refactored onto this field, to
+   * avoid touching its already-tested query shape for this change).
+   * tickWeather reads this to bias its transition pick toward the season.
+   * Optional so every existing test's literal TickContext fixture keeps
+   * compiling unchanged; undefined behaves exactly like the pre-#263
+   * season-blind pick.
+   */
+  season?: Season
 }
 
 /**

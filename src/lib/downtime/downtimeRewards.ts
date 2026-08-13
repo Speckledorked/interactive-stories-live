@@ -29,6 +29,7 @@ import { clampGoldDelta, applyGoldDelta } from '@/lib/game/economy'
 import { mergeGrantedItems, RewardGrantItem } from '@/lib/game/questRewards'
 import { applyGrantBudget } from '@/lib/game/itemValue'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
+import { assessPayout, describeDefault } from '@/lib/game/factionPayout'
 
 type Db = Prisma.TransactionClient
 
@@ -150,7 +151,17 @@ export async function applyDowntimeRewards(
   // quantity per arc. Optional only so a caller with genuinely no turn
   // context (shouldn't happen via the real call site) degrades to
   // ungated grants rather than throwing.
-  currentTurn?: number
+  currentTurn?: number,
+  // #261: a downtime activity has no explicit in-fiction payer of its
+  // own, unlike a quest's paid_by_faction/resolved giver — UNLESS it was
+  // spawned via costs.requiresQuest (DowntimeActivity.linkedQuestId),
+  // in which case the linked Quest's own resolved givenByFactionId is a
+  // real payer the caller can resolve and pass here. Absent (the common
+  // case: most downtime activities aren't quest-gated), gold pays out in
+  // full from nowhere — exactly the pre-existing behavior, and the same
+  // degradation questRewards.ts's resolvePayingFaction uses when no payer
+  // resolves.
+  payerFactionId?: string | null
 ): Promise<string[]> {
   const log: string[] = []
   const hasAnything =
@@ -174,9 +185,37 @@ export async function applyDowntimeRewards(
   const resources = (character.resources as any) || { gold: 0, contacts: [] }
 
   if (rewards.gold > 0) {
-    resources.gold = applyGoldDelta(resources.gold, rewards.gold)
-    updateData.resources = resources
-    log.push(`${character.name} earned ${rewards.gold} gold from "${activityLabel}"`)
+    // #261: same TRANSFER model quest rewards use — a payer with genuine
+    // resources to lose, not gold appearing from nowhere — but ONLY when
+    // this activity actually has one (a linked, quest-giver-resolved
+    // faction). No payer resolves for most activities, and that's not a
+    // bug: matches resolvePayingFaction's own "paid in full, no payer"
+    // degradation in questRewards.ts.
+    let goldPaid = rewards.gold
+    if (payerFactionId) {
+      const payer = await db.faction.findUnique({
+        where: { id: payerFactionId },
+        select: { id: true, name: true, resources: true },
+      })
+      if (payer) {
+        const assessment = assessPayout(rewards.gold, payer.resources)
+        goldPaid = assessment.paid
+        if (assessment.resourceCost > 0) {
+          await db.faction.update({
+            where: { id: payer.id },
+            data: { resources: Math.max(0, payer.resources - assessment.resourceCost) },
+          })
+        }
+        if (assessment.defaulted) {
+          log.push(describeDefault(payer.name, assessment))
+        }
+      }
+    }
+    if (goldPaid > 0) {
+      resources.gold = applyGoldDelta(resources.gold, goldPaid)
+      updateData.resources = resources
+      log.push(`${character.name} earned ${goldPaid} gold from "${activityLabel}"`)
+    }
   }
 
   if (rewards.contacts.length > 0) {

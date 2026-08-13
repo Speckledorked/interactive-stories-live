@@ -68,6 +68,7 @@ interface AnalyticsData {
   stuckLoreJobs: StuckJob[]
   users: UserCampaignListingEntry[]
   campaignCosts: CampaignCostSummary
+  aiCostByDay: Array<{ date: string; costDollars: number }>
 }
 
 function StatTile({ label, value, sublabel }: { label: string; value: string | number; sublabel?: string }) {
@@ -128,6 +129,7 @@ export default function AnalyticsDashboardPage() {
   }
 
   const maxDaily = data ? Math.max(1, ...data.signupsByDay.map(d => d.count)) : 1
+  const maxDailyCost = data ? Math.max(0.01, ...data.aiCostByDay.map(d => d.costDollars)) : 0.01
 
   return (
     <TavernPage background="myth">
@@ -325,6 +327,28 @@ export default function AnalyticsDashboardPage() {
                 <StatTile label="Total paid" value={formatCost(data.campaignCosts.totalPaidDollars)} sublabel="billed to players" />
                 <StatTile label="Total AI requests" value={data.campaignCosts.totalRequests} />
               </div>
+
+              {/* Daily spend trend (#260) — the flat list below answers
+                  "who's expensive"; this answers "is spend trending up",
+                  platform-wide across all campaigns, same 30-day window
+                  as the signups chart above. */}
+              <div className="mt-3 rounded-lg border border-myth-border bg-myth-surface p-4">
+                <p className="mb-2 text-xs uppercase tracking-wide text-myth-ink-faint">Daily AI spend (last 30 days)</p>
+                <div className="flex h-24 items-end gap-0.5">
+                  {data.aiCostByDay.map(d => (
+                    <div
+                      key={d.date}
+                      className="min-h-[2px] flex-1 rounded-t bg-myth-accent/50 transition-colors hover:bg-myth-accent"
+                      style={{ height: `${(d.costDollars / maxDailyCost) * 100}%` }}
+                      title={`${d.date}: ${formatCost(d.costDollars)}`}
+                    />
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-myth-ink-faint">
+                  {formatCost(data.aiCostByDay.reduce((sum, d) => sum + d.costDollars, 0))} over this window · hover a bar for the day
+                </p>
+              </div>
+
               <div className="mt-3 overflow-x-auto rounded-lg border border-myth-border bg-myth-surface">
                 {data.campaignCosts.topCampaigns.length === 0 ? (
                   <p className="p-4 text-sm text-myth-ink-faint">No AI cost recorded yet.</p>

@@ -358,6 +358,38 @@ describe('runWorldTick — post-commit consumer resilience', () => {
   })
 })
 
+describe('runWorldTick — ctx.season wiring (#263)', () => {
+  it('resolves season from worldMeta.totalElapsedGameHours and passes it to every handler via ctx', async () => {
+    // 200 days in, no calendarConfig -> falls back to DEFAULT_CALENDAR.
+    // Exact season value isn't the point here (calendar.test.ts already
+    // covers deriveSeason's own math) - the point is ctx.season is
+    // populated at all and consistent across handlers, not left undefined.
+    ;(prisma.worldMeta.findUnique as any).mockResolvedValue({
+      factionCap: 12, npcCap: 30, totalElapsedGameHours: 200 * 24, campaign: { calendarConfig: null },
+    })
+    const { tickWeather } = await import('../weatherTick')
+    const { tickSeasonalPressure } = await import('../seasonTick')
+
+    await runWorldTick('camp1', 7)
+
+    const weatherCtx = (tickWeather as any).mock.calls[0][0]
+    const seasonCtx = (tickSeasonalPressure as any).mock.calls[0][0]
+    expect(weatherCtx.season).toBeDefined()
+    expect(['spring', 'summer', 'autumn', 'winter']).toContain(weatherCtx.season)
+    // Same ctx reference threaded through every handler in the pass.
+    expect(seasonCtx.season).toBe(weatherCtx.season)
+  })
+
+  it('does not crash and leaves season resolvable even when worldMeta has no calendar fields at all', async () => {
+    ;(prisma.worldMeta.findUnique as any).mockResolvedValue({ factionCap: 12, npcCap: 30 })
+    const { tickWeather } = await import('../weatherTick')
+
+    await expect(runWorldTick('camp1', 7)).resolves.toBeDefined()
+    const weatherCtx = (tickWeather as any).mock.calls[0][0]
+    expect(['spring', 'summer', 'autumn', 'winter']).toContain(weatherCtx.season)
+  })
+})
+
 describe('runWorldTick — dry run', () => {
   it('still runs every handler, so the preview reflects real decisions', async () => {
     await runWorldTick('camp1', 7, { dryRun: true })

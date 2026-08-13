@@ -51,6 +51,15 @@ export async function GET(
       return NextResponse.json({ error: 'This recap is not available' }, { status: 404 })
     }
 
+    // #264: smallest real signal of whether shareable recaps are used at
+    // all — counts an actual page load, not a share-link copy/generation.
+    // Awaited (not fire-and-forget) since serverless functions can be
+    // frozen the instant the response is sent.
+    await prisma.campaignLog.update({
+      where: { id: log.id },
+      data: { recapViewCount: { increment: 1 } },
+    })
+
     return NextResponse.json({
       campaign: {
         title: campaign.title,

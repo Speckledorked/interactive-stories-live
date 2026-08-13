@@ -9,7 +9,8 @@ const {
   findUniqueMock, findFirstMock, updateMock, activityCreateMock,
   worldMetaFindUniqueMock, questCreateMock, applyDebtChangesMock,
   activityFindManyMock, activityUpdateMock, questFindUniqueMock,
-  activityFindFirstMock,
+  activityFindFirstMock, activityFindUniqueMock,
+  applyDowntimeRewardsMock, parseDowntimeRewardsMock,
 } = vi.hoisted(() => ({
   findUniqueMock: vi.fn(),
   findFirstMock: vi.fn(),
@@ -23,16 +24,31 @@ const {
   questFindUniqueMock: vi.fn(),
   // #211: createDynamicActivity's single-active-downtime pre-check.
   activityFindFirstMock: vi.fn(),
+  // #261: generateDynamicOutcomes's own single-activity lookup, distinct
+  // from the findMany used by the day-advancement scan above.
+  activityFindUniqueMock: vi.fn(),
+  applyDowntimeRewardsMock: vi.fn().mockResolvedValue([]),
+  parseDowntimeRewardsMock: vi.fn().mockReturnValue({ gold: 0, items: [], standingChanges: [], contacts: [], skipped: [] }),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     character: { findUnique: findUniqueMock, update: updateMock },
     scene: { findFirst: findFirstMock },
-    downtimeActivity: { create: activityCreateMock, findMany: activityFindManyMock, update: activityUpdateMock, findFirst: activityFindFirstMock },
+    downtimeActivity: { create: activityCreateMock, findMany: activityFindManyMock, update: activityUpdateMock, findFirst: activityFindFirstMock, findUnique: activityFindUniqueMock },
     worldMeta: { findUnique: worldMetaFindUniqueMock },
     quest: { create: questCreateMock, findUnique: questFindUniqueMock },
+    $transaction: vi.fn(async (fn: any) => fn({})),
   },
+}))
+
+// #261: isolates the payer-resolution wiring under test (does
+// generateDynamicOutcomes correctly resolve linkedQuestId ->
+// givenByFactionId and pass it through?) from the reward-application
+// math itself, which downtimeRewards.test.ts already covers directly.
+vi.mock('../downtimeRewards', () => ({
+  applyDowntimeRewards: applyDowntimeRewardsMock,
+  parseDowntimeRewards: parseDowntimeRewardsMock,
 }))
 
 vi.mock('@/lib/game/capabilities', () => ({
@@ -464,5 +480,83 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
       where: { id: 'activity1' },
       data: { currentDay: 3, status: 'COMPLETED', completedAt: expect.any(Date) },
     })
+  })
+})
+
+// #261: a downtime activity has no in-fiction payer of its own — UNLESS
+// it was spawned via costs.requiresQuest (linkedQuestId), in which case
+// the linked quest's own resolved giver faction is a real payer.
+// generateDynamicOutcomes resolves that payer and passes it through to
+// applyDowntimeRewards; the reward-application/affordability math itself
+// is covered directly in downtimeRewards.test.ts.
+describe('generateDynamicOutcomes — downtime reward payer resolution (#261)', () => {
+  function baseActivityRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'activity1',
+      characterId: 'char1',
+      summary: 'Commission a masterwork blade',
+      description: 'Commission a masterwork blade',
+      estimatedDays: 3,
+      currentDay: 3,
+      linkedQuestId: null,
+      events: [],
+      ...overrides,
+    }
+  }
+
+  beforeEach(() => {
+    // Both: clearAllMocks resets call history (restoreAllMocks alone does
+    // not, for a plain vi.fn()); restoreAllMocks undoes an earlier describe
+    // block's vi.spyOn(...).mockResolvedValue() over generateDynamicOutcomes
+    // itself, which clearAllMocks alone would leave in place — without it,
+    // these tests would call that stub, not the real method under test.
+    vi.clearAllMocks()
+    vi.restoreAllMocks()
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    worldMetaFindUniqueMock.mockResolvedValue({ currentTurnNumber: 12 })
+    activityUpdateMock.mockResolvedValue({})
+    findUniqueMock.mockResolvedValue({ campaignId: 'camp1' }) // owner (character) lookup
+    vi.stubGlobal('fetch', mockCompletion({ narrative: 'Done', materialRewards: { goldGained: 100 } }))
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  })
+
+  it('resolves the linked quest\'s giver faction and passes it as payerFactionId', async () => {
+    activityFindUniqueMock.mockResolvedValue(baseActivityRow({ linkedQuestId: 'quest1' }))
+    questFindUniqueMock.mockResolvedValue({ givenByFactionId: 'faction1' })
+
+    await AIDrivenDowntimeService.generateDynamicOutcomes('activity1', 'Commission a blade', {})
+
+    expect(questFindUniqueMock).toHaveBeenCalledWith({ where: { id: 'quest1' }, select: { givenByFactionId: true } })
+    expect(applyDowntimeRewardsMock).toHaveBeenCalledWith(
+      expect.anything(), 'camp1', 'char1', 'Commission a masterwork blade',
+      expect.anything(), 12, 'faction1'
+    )
+  })
+
+  it('passes null payerFactionId when the activity has no linked quest', async () => {
+    activityFindUniqueMock.mockResolvedValue(baseActivityRow({ linkedQuestId: null }))
+
+    await AIDrivenDowntimeService.generateDynamicOutcomes('activity1', 'Commission a blade', {})
+
+    expect(questFindUniqueMock).not.toHaveBeenCalled()
+    expect(applyDowntimeRewardsMock).toHaveBeenCalledWith(
+      expect.anything(), 'camp1', 'char1', 'Commission a masterwork blade',
+      expect.anything(), 12, null
+    )
+  })
+
+  it('passes null payerFactionId when the linked quest never resolved a giver faction', async () => {
+    activityFindUniqueMock.mockResolvedValue(baseActivityRow({ linkedQuestId: 'quest1' }))
+    questFindUniqueMock.mockResolvedValue({ givenByFactionId: null })
+
+    await AIDrivenDowntimeService.generateDynamicOutcomes('activity1', 'Commission a blade', {})
+
+    expect(applyDowntimeRewardsMock).toHaveBeenCalledWith(
+      expect.anything(), 'camp1', 'char1', 'Commission a masterwork blade',
+      expect.anything(), 12, null
+    )
   })
 })

@@ -5,6 +5,7 @@ vi.mock('@/lib/prisma', () => ({
     location: { findMany: vi.fn(), update: vi.fn() },
     nPC: { findMany: vi.fn(), update: vi.fn() },
     locationAdjacency: { findMany: vi.fn() },
+    populationFlightEvent: { createMany: vi.fn() },
   },
 }))
 
@@ -111,6 +112,37 @@ describe('decideMigration (#110)', () => {
     )
   })
 
+  it('records a populationFlights entry naming the actual source and destination (#262)', () => {
+    const { populationFlights } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 10, population: 1000 }],
+      [{ id: 'capital', name: 'The Capital', conditionScore: 90, population: 500 }],
+      []
+    )
+    expect(populationFlights).toEqual([
+      { fromLocationId: 'ruins', fromLocationName: 'The Ruins', toLocationId: 'capital', toLocationName: 'The Capital', count: 100 },
+    ])
+  })
+
+  it('records a separate populationFlights entry per source when two sources feed the same destination (#262)', () => {
+    const { populationFlights } = decideMigration(
+      [
+        { id: 'ruins-a', name: 'Ruins A', conditionScore: 10, population: 1000 },
+        { id: 'ruins-b', name: 'Ruins B', conditionScore: 5, population: 2000 },
+      ],
+      [{ id: 'capital', name: 'The Capital', conditionScore: 90, population: 500 }],
+      []
+    )
+    expect(populationFlights).toEqual(
+      expect.arrayContaining([
+        { fromLocationId: 'ruins-a', fromLocationName: 'Ruins A', toLocationId: 'capital', toLocationName: 'The Capital', count: 100 },
+        { fromLocationId: 'ruins-b', fromLocationName: 'Ruins B', toLocationId: 'capital', toLocationName: 'The Capital', count: 200 },
+      ])
+    )
+    // Distinguishable from the net populationShifts total (which would
+    // otherwise look identical to one source sending 300 by itself).
+    expect(populationFlights).toHaveLength(2)
+  })
+
   it('floors the fleeing population at 1 rather than rounding a small population to 0', () => {
     const { populationShifts } = decideMigration(
       [{ id: 'ruins', name: 'The Ruins', conditionScore: 10, population: 3 }],
@@ -146,7 +178,7 @@ describe('decideMigration (#110)', () => {
       [],
       [{ id: 'npc1', name: 'Aldric', locationId: 'ruins', isAlive: true }]
     )
-    expect(result).toEqual({ npcMoves: [], populationShifts: [] })
+    expect(result).toEqual({ npcMoves: [], populationShifts: [], populationFlights: [] })
   })
 
   it('accumulates population inflow correctly when two distressed locations feed the same destination', () => {
@@ -377,7 +409,44 @@ describe('tickMigration (DB handler)', () => {
 
     expect(prisma.nPC.update).not.toHaveBeenCalled()
     expect(prisma.location.update).not.toHaveBeenCalled()
+    expect(prisma.populationFlightEvent.createMany).not.toHaveBeenCalled()
     expect(result.changes.length).toBeGreaterThan(0)
+  })
+
+  it('records a PopulationFlightEvent row for the flight (#262)', async () => {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
+      { id: 'ruins', name: 'The Ruins', conditionScore: 10, population: 100 },
+      { id: 'capital', name: 'The Capital', conditionScore: 90, population: 500 },
+    ] as any)
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([])
+
+    await tickMigration(baseCtx({ turnNumber: 7 }))
+
+    expect(prisma.populationFlightEvent.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          campaignId: 'campaign-1',
+          turnNumber: 7,
+          fromLocationId: 'ruins',
+          fromLocationName: 'The Ruins',
+          toLocationId: 'capital',
+          toLocationName: 'The Capital',
+          count: 10,
+        },
+      ],
+    })
+  })
+
+  it('does not call createMany when nothing actually flees (no tracked population)', async () => {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
+      { id: 'ruins', name: 'The Ruins', conditionScore: 10, population: null },
+      { id: 'capital', name: 'The Capital', conditionScore: 90, population: null },
+    ] as any)
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([])
+
+    await tickMigration(baseCtx())
+
+    expect(prisma.populationFlightEvent.createMany).not.toHaveBeenCalled()
   })
 
   it('only queries NPCs at distressed locations, not the whole campaign roster', async () => {

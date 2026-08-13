@@ -6,7 +6,7 @@ import { decideRelationshipTick } from '../relationshipTick'
 import { decideTerritoryClaim } from '../territory'
 import { decideWarDeclaration, decideWarProgress, decideWarResolution, decideWarJoiner, explainWarMomentum } from '../warTick'
 import { decideNpcTick, deriveTimeOfDay } from '../npcTick'
-import { decideNextWeather } from '../weatherTick'
+import { decideNextWeather, seasonBiasedOptions } from '../weatherTick'
 
 describe('decideFactionTick', () => {
   it('is deterministic for the same input', () => {
@@ -946,5 +946,64 @@ describe('decideNextWeather', () => {
     const high = decideNextWeather('loc-1', 1, 'CLEAR', 5)
     expect(low.nextSeverity).toBeGreaterThanOrEqual(1)
     expect(high.nextSeverity).toBeLessThanOrEqual(5)
+  })
+
+  // #263: seasonal pressure's third mechanical knob.
+  it('an omitted season behaves identically to the pre-#263 season-blind pick', () => {
+    for (let turn = 0; turn < 20; turn++) {
+      const withoutSeason = decideNextWeather('loc-1', turn, 'CLOUDY', 2)
+      const withUndefinedSeason = decideNextWeather('loc-1', turn, 'CLOUDY', 2, undefined)
+      expect(withUndefinedSeason).toEqual(withoutSeason)
+    }
+  })
+
+  it('still only transitions to conditions reachable from the current one, even with a season bias applied', () => {
+    for (const season of ['spring', 'summer', 'autumn', 'winter'] as const) {
+      for (let turn = 0; turn < 30; turn++) {
+        const result = decideNextWeather('loc-1', turn, 'CLEAR', 1, season)
+        expect(['CLEAR', 'CLOUDY']).toContain(result.nextCondition)
+      }
+    }
+  })
+
+  it('winter genuinely shifts a RAIN location toward STORM more often than the season-blind pick does', () => {
+    let stormsWithoutSeason = 0
+    let stormsWithWinter = 0
+    for (let turn = 0; turn < 300; turn++) {
+      if (decideNextWeather('loc-1', turn, 'RAIN', 3).nextCondition === 'STORM') stormsWithoutSeason++
+      if (decideNextWeather('loc-1', turn, 'RAIN', 3, 'winter').nextCondition === 'STORM') stormsWithWinter++
+    }
+    expect(stormsWithWinter).toBeGreaterThan(stormsWithoutSeason)
+  })
+})
+
+describe('seasonBiasedOptions (#263)', () => {
+  it('returns the base list unchanged when no season is given', () => {
+    expect(seasonBiasedOptions(['CLEAR', 'CLOUDY'], undefined)).toEqual(['CLEAR', 'CLOUDY'])
+  })
+
+  it('returns the base list unchanged for a season with no favored conditions (spring)', () => {
+    expect(seasonBiasedOptions(['CLEAR', 'CLOUDY'], 'spring')).toEqual(['CLEAR', 'CLOUDY'])
+  })
+
+  it('appends extra copies of a favored condition already present in the base list', () => {
+    const result = seasonBiasedOptions(['RAIN', 'CLOUDY', 'STORM'], 'winter')
+    expect(result.filter((c) => c === 'STORM').length).toBeGreaterThan(1)
+    // Never drops or reorders the original entries.
+    expect(result.slice(0, 3)).toEqual(['RAIN', 'CLOUDY', 'STORM'])
+  })
+
+  it('never introduces a condition that was not already in the base list', () => {
+    // CLEAR's own transitions never include SNOW/STORM — winter must not
+    // sneak them in just because they're winter-favored elsewhere.
+    const base: ('CLEAR' | 'CLOUDY')[] = ['CLEAR', 'CLEAR', 'CLOUDY']
+    const result = seasonBiasedOptions(base, 'winter')
+    expect(new Set(result)).toEqual(new Set(base))
+  })
+
+  it('is a no-op when none of the season-favored conditions are reachable from here', () => {
+    // summer favors CLEAR; neither STORM's nor RAIN's own TRANSITIONS
+    // entries include CLEAR, so this synthetic base has nothing to bias.
+    expect(seasonBiasedOptions(['STORM', 'RAIN'], 'summer')).toEqual(['STORM', 'RAIN'])
   })
 })

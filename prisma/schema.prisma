@@ -382,6 +382,7 @@ model Campaign {
 
   // World Sim: persisted event stream
   worldEvents WorldEvent[]
+  populationFlightEvents PopulationFlightEvent[]
 
   // World Sim Phase 5: sustained multi-turn conflicts between factions.
   wars War[]
@@ -2680,6 +2681,12 @@ model CampaignLog {
   // comment for why an exact historical reconstruction isn't attempted).
   inGameDayNumber Int?
 
+  // #264: smallest real signal of whether shareable recaps are used at all.
+  // Incremented once per successful load of the public recap page
+  // (GET /api/public/chronicle/[token]/recap/[logId]) — not when a share
+  // link is merely copied/generated.
+  recapViewCount Int @default(0)
+
   createdAt DateTime @default(now())
 
   @@index([campaignId, turnNumber])
@@ -3059,6 +3066,35 @@ model WorldEvent {
   @@index([campaignId, targetType, targetId])
   @@index([campaignId, type])
   @@map("world_events")
+}
+
+// #262: decideMigration's background-population flight fraction (distinct
+// from the same function's NAMED-NPC flight path, which moves real NPC
+// rows) only ever wrote the resulting LOCATION_POPULATION WorldEvent above
+// — previousValue/newValue on ONE location, no record of where the people
+// came from. Deliberately NOT per-person identity (this repo's stated
+// design: population is "a single number" for background flavor, not a
+// simulated individual) — just enough of a bounded event record, same
+// shape/spirit as WorldEvent, to let future narration/simulation reference
+// where a location's current population actually came from.
+model PopulationFlightEvent {
+  id         String   @id @default(cuid())
+  campaignId String
+  turnNumber Int
+  createdAt  DateTime @default(now())
+
+  fromLocationId   String
+  fromLocationName String
+  toLocationId     String
+  toLocationName   String
+  count            Int // people who fled this tick — always positive
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, turnNumber])
+  @@index([campaignId, fromLocationId])
+  @@index([campaignId, toLocationId])
+  @@map("population_flight_events")
 }
 
 //

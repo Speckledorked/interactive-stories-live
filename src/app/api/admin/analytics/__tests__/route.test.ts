@@ -15,6 +15,7 @@ vi.mock('@/lib/analytics/events', () => ({
   getRetentionByCohortWeek: vi.fn(),
   getUserCampaignListing: vi.fn(),
   getCampaignCostSummary: vi.fn(),
+  getAICostByDay: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -25,7 +26,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { getUser } from '@/lib/auth'
 import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
-import { getFunnelCounts, getSignupsByDay, getRetentionByCohortWeek, getUserCampaignListing, getCampaignCostSummary } from '@/lib/analytics/events'
+import { getFunnelCounts, getSignupsByDay, getRetentionByCohortWeek, getUserCampaignListing, getCampaignCostSummary, getAICostByDay } from '@/lib/analytics/events'
 import { prisma } from '@/lib/prisma'
 import { GET } from '../route'
 
@@ -44,6 +45,7 @@ beforeEach(() => {
   ;(getRetentionByCohortWeek as any).mockResolvedValue([])
   ;(getUserCampaignListing as any).mockResolvedValue([])
   ;(getCampaignCostSummary as any).mockResolvedValue({ totalCostDollars: 0, totalPaidDollars: 0, totalRequests: 0, topCampaigns: [] })
+  ;(getAICostByDay as any).mockResolvedValue([])
   db.resolutionJob.findMany.mockResolvedValue([])
   db.loreImportJob.findMany.mockResolvedValue([])
 })
@@ -73,6 +75,7 @@ describe('GET', () => {
       totalRequests: 400,
       topCampaigns: [{ campaignId: 'c1', title: 'Silver Lining', totalCostDollars: 8.25, totalPaidDollars: 50, requestCount: 250 }],
     })
+    ;(getAICostByDay as any).mockResolvedValue([{ date: '2026-08-12', costDollars: 3.5 }, { date: '2026-08-13', costDollars: 9 }])
     const response = await GET(req())
     const body = await response.json()
     expect(response.status).toBe(200)
@@ -85,6 +88,7 @@ describe('GET', () => {
     expect(body.campaignCosts.topCampaigns).toHaveLength(1)
     expect(body.campaignCosts.topCampaigns[0].title).toBe('Silver Lining')
     expect(body.campaignCosts.topCampaigns[0].totalPaidDollars).toBe(50)
+    expect(body.aiCostByDay).toEqual([{ date: '2026-08-12', costDollars: 3.5 }, { date: '2026-08-13', costDollars: 9 }])
   })
 
   it('queries stuck jobs by the alerted-OR-abandoned-failure signature', async () => {

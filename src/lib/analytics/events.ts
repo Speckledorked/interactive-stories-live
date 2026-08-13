@@ -337,3 +337,38 @@ export async function getCampaignCostSummary(): Promise<CampaignCostSummary> {
     })),
   }
 }
+
+export interface DailyCost {
+  date: string // YYYY-MM-DD (UTC)
+  costDollars: number
+}
+
+interface DailyCostRow {
+  date: string
+  costMicros: bigint | number
+}
+
+/**
+ * #260: the flat topCampaigns list above answers "who's expensive" but
+ * not "is spend trending up" — this buckets the same AICostEntry rows by
+ * UTC day, platform-wide (not per-campaign — the dashboard already scopes
+ * cost/revenue platform-wide elsewhere, see getCampaignCostSummary),
+ * zero-filled for silent days like getSignupsByDay.
+ */
+export async function getAICostByDay(days = 30): Promise<DailyCost[]> {
+  const since = new Date(Date.now() - days * 86400_000)
+  const rows = await prisma.$queryRaw<DailyCostRow[]>`
+    SELECT to_char("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+           SUM("costMicros") AS "costMicros"
+    FROM "AICostEntry"
+    WHERE "createdAt" >= ${since}
+    GROUP BY date
+  `
+  const byDay = new Map(rows.map((r) => [r.date, Number(r.costMicros) / 1_000_000]))
+  const result: DailyCost[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400_000).toISOString().slice(0, 10)
+    result.push({ date: d, costDollars: byDay.get(d) ?? 0 })
+  }
+  return result
+}

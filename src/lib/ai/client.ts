@@ -391,6 +391,13 @@ export interface AIGMRequest {
       // Structured, permanent declarative knowledge (#173/#174) — distinct
       // from capabilities above. See lib/game/knowledge.ts.
       known_concepts?: Array<{ key: string; label: string; learnedAt: number; source?: string }>
+      // Information Latency (#101) — THIS character's own knowledge of
+      // significant world events, linked back to real WorldEvent rows
+      // (unlike known_concepts, which is free-text and AI-declared).
+      // Witnessed = present when it happened, ground truth. Told = heard
+      // secondhand, rumor-grade. See lib/game/eventWitness.ts.
+      witnessed_events?: string[]
+      told_events?: string[]
       // Open favors, both directions (see lib/game/debts.ts).
       debts?: {
         owedByCharacter: Array<{ counterparty: string; description: string }>

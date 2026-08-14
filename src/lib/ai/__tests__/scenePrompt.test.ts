@@ -329,6 +329,30 @@ describe('buildUserPrompt — character harm/conditions/knowledge visibility (#1
     const prompt = buildUserPrompt(makeRequest({ known_concepts: [] }))
     expect(prompt).not.toMatch(/Knows:/)
   })
+
+  // Information Latency (#101) — distinct from known_concepts above: this
+  // is THIS character's own record of significant world events, graded by
+  // how they learned about it.
+  it('renders witnessed events distinctly from told (rumor-grade) ones', () => {
+    const prompt = buildUserPrompt(makeRequest({
+      witnessed_events: ['The bridge collapsed'],
+      told_events: ['The baron fled the city'],
+    }))
+    expect(prompt).toMatch(/Witnessed: The bridge collapsed/)
+    expect(prompt).toMatch(/Heard secondhand \(rumor-grade, may be inaccurate\): The baron fled the city/)
+  })
+
+  it('omits both lines when there is nothing witnessed or told', () => {
+    const prompt = buildUserPrompt(makeRequest({ witnessed_events: [], told_events: [] }))
+    expect(prompt).not.toMatch(/Witnessed:/)
+    expect(prompt).not.toMatch(/Heard secondhand/)
+  })
+
+  it('renders only the Witnessed line when there are no told events', () => {
+    const prompt = buildUserPrompt(makeRequest({ witnessed_events: ['Saw the fire'], told_events: [] }))
+    expect(prompt).toMatch(/Witnessed: Saw the fire/)
+    expect(prompt).not.toMatch(/Heard secondhand/)
+  })
 })
 
 describe('buildUserPrompt — player actions are not quote-wrapped like dialogue', () => {

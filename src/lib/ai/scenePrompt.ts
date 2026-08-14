@@ -707,6 +707,18 @@ function buildCharactersSection(characters: WorldSummary['characters']): string 
       parts.push(`Knows: ${c.known_concepts.map(k => k.label).join('; ')}`)
     }
 
+    // Information Latency (#101) — THIS character's own knowledge of
+    // significant world events, distinct from known_concepts above.
+    // Witnessed is ground truth (they were there); told is secondhand —
+    // narrate it as something this character HEARD, not something they
+    // can vouch for the accuracy of.
+    if (c.witnessed_events && c.witnessed_events.length > 0) {
+      parts.push(`Witnessed: ${c.witnessed_events.join('; ')}`)
+    }
+    if (c.told_events && c.told_events.length > 0) {
+      parts.push(`Heard secondhand (rumor-grade, may be inaccurate): ${c.told_events.join('; ')}`)
+    }
+
     // Debt economy: open favors are live dramatic material — see <debts>.
     if (c.debts && (c.debts.owedByCharacter.length > 0 || c.debts.owedToCharacter.length > 0)) {
       const debtLines = [

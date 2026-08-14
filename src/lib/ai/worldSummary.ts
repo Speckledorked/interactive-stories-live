@@ -34,6 +34,20 @@ import { groupEventWitnessesForPrompt, GroupedWitness } from '@/lib/game/eventWi
 // itself, since MAX_WITNESSED/TOLD_EVENTS_IN_PROMPT caps the actual output.
 const RECENT_WITNESS_WINDOW_TURNS = 300
 
+// #297/#326: both builders used to fetch EVERY NPC/faction for the campaign
+// before either relevance-filtering or capForPrompt ever ran — a query-cost
+// bound only, not a correctness one (capForPrompt/the relevance filter below
+// still do the actual selection over whatever this returns). Ordered by the
+// same signal each builder already sorts by downstream (importance/
+// threatLevel) so a generous-but-real cap can never silently drop the most
+// relevant rows first. Comfortably above MAX_NPC_CAP/MAX_FACTION_CAP (the
+// tick's own per-turn consideration caps, 100/50) — same "deliberately
+// conservative, not a measured ceiling" reasoning as caps.ts — so this only
+// ever engages for a campaign whose total roster has grown pathologically
+// large, never for one within the simulation's normal design envelope.
+const NPC_QUERY_BACKSTOP = 500
+const FACTION_QUERY_BACKSTOP = 200
+
 /**
  * Shared between both builders below. Scoped to `characterIds` only — a
  * non-participant character's witness rows never leak into a split-party
@@ -166,8 +180,8 @@ export async function buildOptimizedWorldSummary(
         }
       }
     }),
-    prisma.nPC.findMany({ where: { campaignId } }),
-    prisma.faction.findMany({ where: { campaignId } }),
+    prisma.nPC.findMany({ where: { campaignId }, orderBy: { importance: 'desc' }, take: NPC_QUERY_BACKSTOP }),
+    prisma.faction.findMany({ where: { campaignId }, orderBy: { threatLevel: 'desc' }, take: FACTION_QUERY_BACKSTOP }),
     prisma.location.findMany({ where: { campaignId, isDiscovered: true } }),
     prisma.clock.findMany({
       where: { campaignId, isHidden: false }
@@ -409,8 +423,8 @@ export async function buildWorldSummaryForAI(
         }
       }
     }),
-    prisma.nPC.findMany({ where: { campaignId } }),
-    prisma.faction.findMany({ where: { campaignId } }),
+    prisma.nPC.findMany({ where: { campaignId }, orderBy: { importance: 'desc' }, take: NPC_QUERY_BACKSTOP }),
+    prisma.faction.findMany({ where: { campaignId }, orderBy: { threatLevel: 'desc' }, take: FACTION_QUERY_BACKSTOP }),
     prisma.location.findMany({ where: { campaignId, isDiscovered: true } }),
     prisma.clock.findMany({
       where: { campaignId, isHidden: false } // Only visible clocks for players

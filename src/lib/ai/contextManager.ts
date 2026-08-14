@@ -11,6 +11,13 @@
 import { PrismaClient, Scene, MemoryImportance } from '@prisma/client';
 import { truncateWithEllipsis } from '@/lib/format';
 
+// #297/#326: query-cost backstops for buildOptimizedContext's all-history
+// reads (allScenes/timeline below) — generous enough to never affect a
+// campaign within any realistic play-length, only a pathologically
+// long-running one.
+const SCENE_QUERY_BACKSTOP = 500;
+const TIMELINE_QUERY_BACKSTOP = 1000;
+
 export interface CompressedEvent {
   sceneNumber: number;
   title: string;
@@ -51,6 +58,15 @@ export async function generateCampaignSummary(
   campaignId: string
 ): Promise<CampaignSummary> {
   const [scenes, worldMeta, timeline, characters] = await Promise.all([
+    // #297/#326: used to have no take — every resolved scene in the
+    // campaign's history, fetched just to count them (totalScenes, only
+    // ever compared against the <10/<30 phase thresholds below, unaffected
+    // by capping well above 30) and feed extractImportantMoments (whose own
+    // sort/slice logic doesn't depend on input order — see
+    // buildOptimizedContext's identical fix above). Bounded the same way;
+    // desc order is arbitrary here (nothing downstream depends on it) but
+    // matters for WHICH scenes take:N keeps once a campaign exceeds the
+    // backstop — the most recent ones, not the oldest.
     prisma.scene.findMany({
       where: {
         campaignId,
@@ -59,7 +75,8 @@ export async function generateCampaignSummary(
           { sceneResolutionText: { not: null } }
         ]
       },
-      orderBy: { sceneNumber: 'asc' }
+      orderBy: { sceneNumber: 'desc' },
+      take: SCENE_QUERY_BACKSTOP,
     }),
     prisma.worldMeta.findUnique({ where: { campaignId } }),
     // Fog of war: currently only used as a per-scene "was there a public
@@ -261,8 +278,18 @@ export async function buildOptimizedContext(
     take: 3 // Last 3 resolved scenes
   });
 
-  // Get all scenes that have been narrated at least once
-  const allScenes = await prisma.scene.findMany({
+  // Get all scenes that have been narrated at least once. #297/#326: used to
+  // have no take at all — every resolved scene in the campaign's history,
+  // fetched just to classify importance and keep the top 5 (see
+  // extractImportantMoments below). Bounded to the most recent
+  // SCENE_QUERY_BACKSTOP (desc order, re-sorted to asc after fetch since
+  // nothing downstream depends on DB order) — a query-cost bound only, not
+  // a correctness one: extractImportantMoments's own sort/slice logic is
+  // unaffected by input order, and a "most important moments" pass over a
+  // campaign's most recent several hundred scenes is the case that
+  // actually matters; scene 1 of a 2000-scene campaign competing for a
+  // top-5 slot is not.
+  const allScenes = (await prisma.scene.findMany({
     where: {
       campaignId,
       OR: [
@@ -270,13 +297,18 @@ export async function buildOptimizedContext(
         { sceneResolutionText: { not: null } }
       ]
     },
-    orderBy: { sceneNumber: 'asc' }
-  });
+    orderBy: { sceneNumber: 'desc' },
+    take: SCENE_QUERY_BACKSTOP,
+  })).reverse();
 
-  // Fog of war: same defense-in-depth filter as generateCampaignSummary above.
+  // Fog of war: same defense-in-depth filter as generateCampaignSummary
+  // above. #297/#326: bounded the same way as allScenes, for the same
+  // reason — timeline is only ever consulted for the turnNumbers the
+  // (now-bounded) allScenes slice actually covers.
   const timeline = await prisma.timelineEvent.findMany({
     where: { campaignId, visibility: { in: ['PUBLIC', 'MIXED'] } },
-    orderBy: { turnNumber: 'desc' }
+    orderBy: { turnNumber: 'desc' },
+    take: TIMELINE_QUERY_BACKSTOP,
   });
 
   // Reuse the importance already computed at scene-resolution time — see

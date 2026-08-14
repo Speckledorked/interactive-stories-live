@@ -15,7 +15,7 @@ vi.mock('@/lib/notifications/notification-service', () => ({
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    friendRequest: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
+    friendRequest: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     friendship: { findFirst: vi.fn() },
     user: { findMany: vi.fn(), findUnique: vi.fn() },
   },
@@ -24,6 +24,7 @@ vi.mock('@/lib/prisma', () => ({
 import { getUser } from '@/lib/auth'
 import { notificationService } from '@/lib/notifications/notification-service'
 import { prisma } from '@/lib/prisma'
+import { uniqueConstraintError } from '@/lib/game/worldUpdaters/__tests__/testPrismaErrors'
 import { GET, POST } from '../route'
 
 const db = prisma as any
@@ -118,5 +119,31 @@ describe('POST', () => {
     expect(response.status).toBe(200)
     expect(body.friendRequest).toEqual({ id: 'r1', senderId: 'u1', receiverId: 'u2' })
     expect(notificationService.sendFriendRequest).toHaveBeenCalledWith('u2', 'u1', 'U1')
+  })
+
+  // #307: a stale REJECTED/ACCEPTED row for this exact direction (one that
+  // predates the reject/unfriend delete fix, or slipped through some other
+  // path) used to surface as an opaque 500 on create — reactivated to
+  // PENDING instead.
+  it('#307: reactivates a stale non-pending row instead of surfacing a 500', async () => {
+    db.friendRequest.create.mockRejectedValue(uniqueConstraintError('senderId_receiverId'))
+    db.friendRequest.update.mockResolvedValue({ id: 'r1', senderId: 'u1', receiverId: 'u2', status: 'PENDING' })
+
+    const response = await POST(postRequest({ receiverId: 'u2', message: 'hi again' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(db.friendRequest.update).toHaveBeenCalledWith({
+      where: { senderId_receiverId: { senderId: 'u1', receiverId: 'u2' } },
+      data: { status: 'PENDING', message: 'hi again', respondedAt: null },
+    })
+    expect(body.friendRequest).toEqual({ id: 'r1', senderId: 'u1', receiverId: 'u2', status: 'PENDING' })
+  })
+
+  it('#307: a non-unique-constraint create error still propagates as a 500', async () => {
+    db.friendRequest.create.mockRejectedValue(new Error('connection reset'))
+    const response = await POST(postRequest({ receiverId: 'u2' }))
+    expect(response.status).toBe(500)
+    expect(db.friendRequest.update).not.toHaveBeenCalled()
   })
 })

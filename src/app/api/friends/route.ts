@@ -84,6 +84,21 @@ export async function DELETE(request: NextRequest) {
       },
     })
 
+    // #307: the FriendRequest that originally led to this friendship is
+    // left behind ACCEPTED forever otherwise — @@unique([senderId,
+    // receiverId]) has no status scoping, so that stale row would
+    // permanently block either side from ever sending the other a fresh
+    // request post-unfriend. Both directions, since either could have been
+    // the original sender.
+    await prisma.friendRequest.deleteMany({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: friendId },
+          { senderId: friendId, receiverId: userId },
+        ],
+      },
+    })
+
     return NextResponse.json({ message: 'Friend removed successfully' })
   } catch (error) {
     console.error('Remove friend error:', error)

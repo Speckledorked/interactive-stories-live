@@ -620,18 +620,33 @@ Respond in an engaging, narrative style as MythOS. Keep it to 2-3 paragraphs.`
         activity.currentDay + days,
         activity.estimatedDays
       )
+      const willComplete = newCurrentDay >= activity.estimatedDays
 
-      // Update progress
-      await prisma.downtimeActivity.update({
-        where: { id: activity.id },
-        data: {
-          currentDay: newCurrentDay,
-          ...(newCurrentDay >= activity.estimatedDays ? {
-            status: 'COMPLETED',
-            completedAt: new Date()
-          } : {})
+      // #304: two concurrent PUT /dynamic-downtime calls for the same
+      // final-day activity (double-click, client retry, two open tabs)
+      // could both read this activity as ACTIVE, both flip it to
+      // COMPLETED, and both independently run generateDynamicOutcomes'
+      // reward application below. Guarded the same way Quest completion
+      // (#212), advancementVersion bumps (#214), and clock batches (#229)
+      // already do: an updateMany scoped to the status this call actually
+      // read, with the affected-row count deciding whether this call
+      // "won" the race to complete it.
+      let wonCompletionRace = true
+      if (willComplete) {
+        const result = await prisma.downtimeActivity.updateMany({
+          where: { id: activity.id, status: 'ACTIVE' },
+          data: { currentDay: newCurrentDay, status: 'COMPLETED', completedAt: new Date() },
+        })
+        wonCompletionRace = result.count > 0
+        if (!wonCompletionRace) {
+          console.warn(`  ⚠️ downtime activity "${activity.summary}": already completed by a concurrent request — skipping duplicate reward application`)
         }
-      })
+      } else {
+        await prisma.downtimeActivity.update({
+          where: { id: activity.id },
+          data: { currentDay: newCurrentDay },
+        })
+      }
 
       // Process each day that advanced
       for (let day = activity.currentDay + 1; day <= newCurrentDay; day++) {
@@ -661,8 +676,9 @@ Respond in an engaging, narrative style as MythOS. Keep it to 2-3 paragraphs.`
         }
       }
 
-      // Generate completion outcomes if activity is finished
-      if (newCurrentDay >= activity.estimatedDays) {
+      // Generate completion outcomes if activity is finished — and this
+      // call actually won the race to complete it (#304).
+      if (willComplete && wonCompletionRace) {
         const aiInterpretation = (activity.outcomes as any)?.aiInterpretation || {}
         const outcomes = await this.generateDynamicOutcomes(
           activity.id,

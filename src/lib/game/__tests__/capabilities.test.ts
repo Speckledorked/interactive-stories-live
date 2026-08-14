@@ -22,6 +22,7 @@ import {
   SKILLED_MIN,
   MASTERFUL_MIN,
 } from '../capabilities'
+import { uniqueConstraintError } from '../worldUpdaters/__tests__/testPrismaErrors'
 
 describe('proficiencyBand', () => {
   it('maps thresholds to bands', () => {
@@ -266,6 +267,36 @@ describe('applyCapabilityChanges (writer)', () => {
     expect(log).toContain('Glimpsed: Blood Runes')
     // second change resolved no node and wasn't is_new → skipped silently
     expect(db.campaignCapability.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('#279: a concurrent create collision reuses the other scene\'s node instead of throwing', async () => {
+    db.campaignCapability.findFirst.mockResolvedValueOnce(null) // initial resolve: nothing yet
+    db.campaignCapability.create.mockRejectedValueOnce(uniqueConstraintError('campaignId_key'))
+    db.campaignCapability.findFirst.mockResolvedValueOnce({ id: 'winner-node', name: 'Blood Runes' }) // re-fetch after collision
+    db.characterCapability.findUnique.mockResolvedValue(null)
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'blood-runes', change: 'glimpse', is_new: true, name: 'Blood Runes', domain: 'Forbidden Arts', reason: 'saw the cultist' },
+    ], 7)
+
+    expect(db.campaignCapability.create).toHaveBeenCalledTimes(1)
+    expect(db.campaignCapability.findFirst).toHaveBeenCalledTimes(2)
+    // No "New capability discovered" line — the OTHER concurrent scene gets
+    // credit for that log line; this call just glimpses onto the winner's node.
+    expect(log).not.toContain('New capability discovered in this world: Blood Runes')
+    expect(log).toContain('Glimpsed: Blood Runes')
+    expect(db.characterCapability.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ capabilityId: 'winner-node' }) })
+    )
+  })
+
+  it('#279: a non-unique-constraint error from create still propagates', async () => {
+    db.campaignCapability.findFirst.mockResolvedValueOnce(null)
+    db.campaignCapability.create.mockRejectedValueOnce(new Error('connection reset'))
+
+    await expect(applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'blood-runes', change: 'glimpse', is_new: true, name: 'Blood Runes', domain: 'Forbidden Arts', reason: 'saw the cultist' },
+    ], 7)).rejects.toThrow('connection reset')
   })
 
   it('shadow gate: an under-marked unlock downgrades to a glimpse', async () => {

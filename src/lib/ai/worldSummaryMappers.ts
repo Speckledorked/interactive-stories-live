@@ -140,7 +140,7 @@ export function mapCharactersForPrompt(characters: any[], witnessByCharacterId?:
  * is already capForPrompt'd by the caller (which also logs its length
  * against the uncapped roster), so this is the field shape only.
  */
-export function mapNpcsForPrompt(discoveredNpcs: any[], discoveredNpcNameById: Map<string, string>) {
+export function mapNpcsForPrompt(discoveredNpcs: any[], discoveredNpcNameById: Map<string, string>, npcWitnessByNpcId?: Map<string, GroupedWitness>) {
   return discoveredNpcs.map(n => ({
     id: n.id,
     name: n.name,
@@ -157,7 +157,12 @@ export function mapNpcsForPrompt(discoveredNpcs: any[], discoveredNpcNameById: M
     social_ties: describeNpcSocialTies(n.socialTies, discoveredNpcNameById),
     // PbtA GM-facing flavor (threat archetype, drives, custom moves) —
     // only present for NPCs where it's actually set (see npcFlavorFields).
-    ...npcFlavorFields(n)
+    ...npcFlavorFields(n),
+    // #101: this NPC's own TOLD knowledge of significant WorldEvents — no
+    // witnessed_events for NPCs (they never get WITNESSED, see
+    // EventWitness's schema comment). Defaulted to [] the same way
+    // mapCharactersForPrompt defaults told_events, never undefined.
+    told_events: npcWitnessByNpcId?.get(n.id)?.told ?? [],
   }))
 }
 

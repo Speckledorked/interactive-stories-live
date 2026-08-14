@@ -18,11 +18,26 @@
 export const MAX_WITNESSED_EVENTS_IN_PROMPT = 6
 export const MAX_TOLD_EVENTS_IN_PROMPT = 4
 
+// Misinformation: a short qualifying clause baked onto a distorted TOLD
+// line, keyed by EventWitnessDistortion (informationTick.ts's
+// decideDistortion). Never applied to WITNESSED — ground truth, never
+// distorted. Kept terse to match the existing "(rumor-grade, may be
+// inaccurate)" register scenePrompt.ts already wraps every TOLD line in.
+const DISTORTION_SUFFIXES: Record<string, string> = {
+  EXAGGERATED: ' (this account sounds exaggerated)',
+  MINIMIZED: ' (this account sounds downplayed)',
+  GARBLED_DETAIL: ' (the details in this account seem garbled)',
+  ATTRIBUTED_WRONG: ' (this account may have the wrong party involved)',
+}
+
 export interface WitnessRow {
   characterId: string
   grade: 'WITNESSED' | 'TOLD'
   turnNumber: number
   reason: string
+  /** Only meaningful when grade is TOLD — WITNESSED is always false/null. */
+  distorted?: boolean
+  distortionFlavor?: string | null
 }
 
 export interface GroupedWitness {
@@ -55,7 +70,10 @@ export function groupEventWitnessesForPrompt(rows: WitnessRow[]): Map<string, Gr
     const byRecency = (a: WitnessRow, b: WitnessRow) => b.turnNumber - a.turnNumber
     result.set(characterId, {
       witnessed: [...witnessed].sort(byRecency).slice(0, MAX_WITNESSED_EVENTS_IN_PROMPT).map((r) => r.reason),
-      told: [...told].sort(byRecency).slice(0, MAX_TOLD_EVENTS_IN_PROMPT).map((r) => r.reason),
+      told: [...told].sort(byRecency).slice(0, MAX_TOLD_EVENTS_IN_PROMPT).map((r) => {
+        const suffix = r.distorted && r.distortionFlavor ? DISTORTION_SUFFIXES[r.distortionFlavor] ?? '' : ''
+        return `${r.reason}${suffix}`
+      }),
     })
   }
   return result

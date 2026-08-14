@@ -20,6 +20,40 @@ import {
   mapQuestsForPrompt,
   mapWarsForPrompt,
 } from './worldSummaryMappers'
+import { groupEventWitnessesForPrompt, GroupedWitness } from '@/lib/game/eventWitness'
+
+// Information Latency (#101) — a query-cost bound only, not a correctness
+// one (the per-character MAX_WITNESSED/TOLD caps in eventWitness.ts do the
+// actual trimming): keeps this from being an unbounded range scan in a
+// very long campaign. Comfortably larger than tickInformation's own
+// PROPAGATION_WINDOW_TURNS (30) so a TOLD row is never queried out of the
+// prompt sooner than it could still be a fresh-enough rumor to mention.
+const RECENT_WITNESS_WINDOW_TURNS = 60
+
+/**
+ * Shared between both builders below. Scoped to `characterIds` only — a
+ * non-participant character's witness rows never leak into a split-party
+ * scene's prompt, same fog-of-war discipline as everything else here.
+ */
+async function fetchWitnessMap(
+  campaignId: string,
+  characterIds: string[],
+  currentTurnNumber: number
+): Promise<Map<string, GroupedWitness>> {
+  if (characterIds.length === 0) return new Map()
+  const rows = await prisma.eventWitness.findMany({
+    where: {
+      campaignId,
+      characterId: { in: characterIds },
+      turnNumber: { gte: currentTurnNumber - RECENT_WITNESS_WINDOW_TURNS },
+    },
+    orderBy: { turnNumber: 'desc' },
+    select: { characterId: true, grade: true, turnNumber: true, worldEvent: { select: { reason: true } } },
+  })
+  return groupEventWitnessesForPrompt(rows.map((r) => ({
+    characterId: r.characterId, grade: r.grade, turnNumber: r.turnNumber, reason: r.worldEvent.reason,
+  })))
+}
 
 /**
  * Scene-participant scoping (split-party support): a scene the GM created
@@ -126,6 +160,12 @@ export async function buildOptimizedWorldSummary(
   // touches worldSummary, never entities).
   const promptCharacters = scopeCharactersToParticipants(characters, participantCharacterIds)
 
+  // Information Latency (#101) — each character's own knowledge of
+  // significant WorldEvents, scoped to just this builder's promptCharacters.
+  const witnessByCharacterId = await fetchWitnessMap(
+    campaignId, promptCharacters.map(c => c.id), worldMeta.currentTurnNumber
+  )
+
   // Extract character locations for filtering — scoped to this scene's
   // characters, so an NPC only "nearby" a sibling scene's location isn't
   // pulled into this one's context.
@@ -218,7 +258,7 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
     // Include campaign summary in a special field (we'll handle this in the prompt)
     _campaignSummary: campaignSummaryText,
 
-    characters: mapCharactersForPrompt(promptCharacters),
+    characters: mapCharactersForPrompt(promptCharacters, witnessByCharacterId),
 
     // Only relevant, discovered NPCs — fog of war: relevance alone isn't
     // enough, the party has to have actually encountered them.
@@ -376,6 +416,12 @@ export async function buildWorldSummaryForAI(
   // characters list.
   const promptCharacters = scopeCharactersToParticipants(characters, participantCharacterIds)
 
+  // Information Latency (#101) — see the sibling builder above for the
+  // full reasoning; same helper, same scoping.
+  const witnessByCharacterId = await fetchWitnessMap(
+    campaignId, promptCharacters.map(c => c.id), worldMeta.currentTurnNumber
+  )
+
   // Format everything for the AI
   const worldSummary = {
     turn_number: worldMeta.currentTurnNumber,
@@ -394,7 +440,7 @@ export async function buildWorldSummaryForAI(
       campaign.calendarConfig ? (campaign.calendarConfig as unknown as GeneratedCalendar) : null
     )),
 
-    characters: mapCharactersForPrompt(promptCharacters),
+    characters: mapCharactersForPrompt(promptCharacters, witnessByCharacterId),
 
     npcs: mapNpcsForPrompt(discoveredNpcs, discoveredNpcNameById),
 

@@ -22,6 +22,7 @@ import { inventoryValue, describeWealth } from '@/lib/game/itemValue'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
 import { parseFactionRelationships } from '@/lib/game/tick/types'
+import type { GroupedWitness } from '@/lib/game/eventWitness'
 
 // Depth-hardening #37 (see README): hard per-category caps on the live
 // world-state payload, applied via capForPrompt — a backstop against
@@ -77,7 +78,7 @@ function lastProgressBeat(progressLog: string | null): string | null {
   return lines.length > 0 ? lines[lines.length - 1] : null
 }
 
-export function mapCharactersForPrompt(characters: any[]) {
+export function mapCharactersForPrompt(characters: any[], witnessByCharacterId?: Map<string, GroupedWitness>) {
   return characters.map(c => ({
     id: c.id,
     name: c.name,
@@ -120,7 +121,16 @@ export function mapCharactersForPrompt(characters: any[]) {
     // out of trouble without handing them a price list.
     carried_wealth: describeWealth(inventoryValue(((c.inventory as any)?.items) || [])),
     // Social position with discovered active factions, qualitatively.
-    standings: summarizeStandings(c.factionStandings)
+    standings: summarizeStandings(c.factionStandings),
+    // Information Latency (#101): this character's OWN knowledge of
+    // significant WorldEvents — distinct from known_concepts above, which
+    // is AI-declared free-text fact-knowledge with no link back to a real
+    // event. WITNESSED (present when it happened) vs. TOLD (heard
+    // secondhand, rumor-grade) — see eventWitness.ts. Both default empty
+    // when the caller has no witness data to hand (e.g. a builder that
+    // hasn't been updated to query it), never undefined.
+    witnessed_events: witnessByCharacterId?.get(c.id)?.witnessed ?? [],
+    told_events: witnessByCharacterId?.get(c.id)?.told ?? [],
   }))
 }
 

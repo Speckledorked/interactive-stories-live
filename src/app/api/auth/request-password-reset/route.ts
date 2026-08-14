@@ -6,15 +6,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { EmailService } from '@/lib/notifications/email-service'
 import { checkRateLimit, rateLimitExceededResponse, PASSWORD_RESET_REQUEST_LIMIT } from '@/lib/rateLimit'
+import { normalizeEmail } from '@/lib/auth/normalizeEmail'
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000 // 1 hour
 
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json()
-    if (!email || typeof email !== 'string') {
+    const body = await request.json()
+    if (!body.email || typeof body.email !== 'string') {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     }
+    // #302: the rate-limit key already lowercased its own copy, but the
+    // lookup below used the raw casing — a case-variant of a real,
+    // now-normalized-at-signup account would silently find nothing here
+    // even though the account exists. Normalized once, used for both.
+    const email = normalizeEmail(body.email)
 
     // #210: keyed by the target email, not the caller's IP — the abuse
     // this protects against (email-bombing one inbox, or using send
@@ -23,7 +29,7 @@ export async function POST(request: NextRequest) {
     // real string but BEFORE the identical-response-either-way lookup
     // below, so a rate-limited request never reaches the DB or email send.
     const rateLimit = await checkRateLimit(
-      email.toLowerCase(),
+      email,
       PASSWORD_RESET_REQUEST_LIMIT.bucket,
       PASSWORD_RESET_REQUEST_LIMIT.limit,
       PASSWORD_RESET_REQUEST_LIMIT.windowSeconds

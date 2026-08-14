@@ -96,4 +96,17 @@ describe('POST /api/auth/request-password-reset', () => {
     expect(response.status).toBe(429)
     expect(db.user.findUnique).not.toHaveBeenCalled()
   })
+
+  // #302: the rate-limit key used to lowercase its own copy while the DB
+  // lookup used the raw casing — a case-variant of a real (now
+  // normalized-at-signup) account would silently find nothing.
+  it('#302: normalizes email to lowercase before the lookup', async () => {
+    db.user.findUnique.mockResolvedValue({ id: 'u1', email: 'a@b.com' })
+    db.user.update.mockResolvedValue({ id: 'u1' })
+
+    const response = await POST(req({ email: 'A@B.com' }))
+
+    expect(response.status).toBe(200)
+    expect(db.user.findUnique).toHaveBeenCalledWith({ where: { email: 'a@b.com' } })
+  })
 })

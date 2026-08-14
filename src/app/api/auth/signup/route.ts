@@ -10,6 +10,8 @@ import { SignupRequest, AuthResponse, ErrorResponse } from '@/types/api'
 import { recordEvent } from '@/lib/analytics/events'
 import { addFunds } from '@/lib/payment/service'
 import { checkRateLimit, rateLimitExceededResponse, getClientIp, SIGNUP_LIMIT } from '@/lib/rateLimit'
+import { normalizeEmail } from '@/lib/auth/normalizeEmail'
+import { isUniqueConstraintViolation } from '@/lib/game/worldUpdaters/uniqueConstraintGuard'
 
 // One-time welcome credit so a new signup can actually play a scene
 // without funding a balance first — without this, balance defaults to 0
@@ -19,15 +21,23 @@ const WELCOME_CREDIT_CENTS = 100
 export async function POST(request: NextRequest) {
   try {
     const body: SignupRequest = await request.json()
-    const { email, password } = body
+    const { password } = body
 
     // Validate input
-    if (!email || !password) {
+    if (!body.email || !password) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Email and password are required' },
         { status: 400 }
       )
     }
+
+    // #302: normalized once here and used for every subsequent read/write
+    // in this route — a case-variant of an existing email (or of a
+    // PLATFORM_ADMIN_EMAILS entry, which isPlatformAdminEmail already
+    // lowercases on its own side) must land on the exact same row/collide
+    // with the exact same unique-constraint value, not create a distinct
+    // account.
+    const email = normalizeEmail(body.email)
 
     // #210: spam account creation protection, per IP.
     const rateLimit = await checkRateLimit(getClientIp(request), SIGNUP_LIMIT.bucket, SIGNUP_LIMIT.limit, SIGNUP_LIMIT.windowSeconds)
@@ -51,13 +61,27 @@ export async function POST(request: NextRequest) {
     const passwordHash = await hashPassword(password)
 
     const emailVerifyToken = crypto.randomUUID()
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: passwordHash, // store hashed password in `password` column
-        emailVerifyToken,
-      },
-    })
+    let user
+    try {
+      user = await prisma.user.create({
+        data: {
+          email,
+          password: passwordHash, // store hashed password in `password` column
+          emailVerifyToken,
+        },
+      })
+    } catch (error) {
+      // The findUnique above just confirmed no matching row exists yet, so
+      // this should never actually collide — but two concurrent signups
+      // for the same (now-normalized) email is a genuine, if rare, race.
+      // Surfaced as the same clean 409 the pre-check above returns,
+      // instead of falling through to a generic 500.
+      if (!isUniqueConstraintViolation(error)) throw error
+      return NextResponse.json<ErrorResponse>(
+        { error: 'User already exists with this email' },
+        { status: 409 }
+      )
+    }
 
     // Best-effort verification email — signup must not fail because SMTP
     // did. Unverified accounts still work (soft verification); the flag

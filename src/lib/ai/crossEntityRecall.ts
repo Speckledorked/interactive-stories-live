@@ -96,6 +96,15 @@ export async function retrieveCrossEntityHistory(
           OR ${entityIdB} = ANY("involvedFactionIds")
           OR ${entityIdB} = ANY("involvedCharacterIds")
         )
+        -- #285/#327: same independent fog-of-war guard as
+        -- memoryRetrieval.ts. Either id might be an NPC, faction, or
+        -- character — a character id simply won't match either table
+        -- below, so NOT EXISTS passes it through harmlessly; an NPC/faction
+        -- id only passes when actually discovered.
+        AND NOT EXISTS (SELECT 1 FROM "NPC" WHERE "NPC"."id" = ${entityIdA} AND "NPC"."isDiscovered" = false)
+        AND NOT EXISTS (SELECT 1 FROM "Faction" WHERE "Faction"."id" = ${entityIdA} AND "Faction"."isDiscovered" = false)
+        AND NOT EXISTS (SELECT 1 FROM "NPC" WHERE "NPC"."id" = ${entityIdB} AND "NPC"."isDiscovered" = false)
+        AND NOT EXISTS (SELECT 1 FROM "Faction" WHERE "Faction"."id" = ${entityIdB} AND "Faction"."isDiscovered" = false)
       ORDER BY "turnNumber" DESC
       LIMIT ${limit}
     `;

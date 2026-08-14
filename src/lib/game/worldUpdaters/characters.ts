@@ -1020,7 +1020,12 @@ export async function applyCharacterChanges(
     // vectors, not a narrated history event.
     const stressSignal: StressSignal = {
       outcome: outcomeByCharacterId.get(character.id),
-      harmDamage: pcChange.changes.harm_damage,
+      // #322/#327: gated on isAlive the same way the harm APPLICATION
+      // above (line ~381) is — harm_damage the engine refuses to apply to
+      // a dead character's harm track (see that guard) shouldn't still
+      // drift their stress upward via this second, independent read of
+      // the same raw AI-reported field.
+      harmDamage: character.isAlive ? pcChange.changes.harm_damage : undefined,
       consequenceTypesAdded: pcChange.changes.consequences_add?.map((c) => c.type),
       gainedCorruptionMark: 'corruption' in updateData && (character.corruption ?? 0) !== updateData.corruption,
     }

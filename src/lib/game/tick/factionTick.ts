@@ -508,8 +508,14 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
         // npcDispositionTick.ts) decides who follows and who refuses and
         // goes independent instead. This read runs regardless of dryRun
         // (it's just a read); only the writes below are gated.
+        // #321/#327: isAlive missing here, unlike every sibling roster
+        // query in this tick pipeline (leadershipTick.ts, npcDispositionTick.ts,
+        // migrationTick.ts, npcSocietyTick.ts, wakeTick.ts, informationTick.ts) —
+        // without it, a dead NPC still nominally attached to the collapsing
+        // faction gets reassigned below based on a frozen, no-longer-updating
+        // disposition value from the moment of death.
         const members = await ctx.db.nPC.findMany({
-          where: { factionId: faction.id },
+          where: { factionId: faction.id, isAlive: true },
           select: { id: true, disposition: true },
         })
         const defection = decideDefection(members.map((m) => ({ id: m.id, loyalty: parseDisposition(m.disposition)?.loyalty })))

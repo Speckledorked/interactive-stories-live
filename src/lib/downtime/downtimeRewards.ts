@@ -180,6 +180,15 @@ export async function applyDowntimeRewards(
     console.warn(`  ❓ downtime rewards for "${activityLabel}": character ${characterId} not found — skipped`)
     return log
   }
+  // #312/#327: isAlive was selected above but never checked — a character
+  // who died between starting the activity and it completing shouldn't
+  // have rewards applied to their sheet. advanceDynamicDowntime now checks
+  // this earlier too; kept here as well since this function's own guard
+  // shouldn't depend on every future caller having already checked.
+  if (!character.isAlive) {
+    console.warn(`  ☠️ downtime rewards for "${activityLabel}": character ${characterId} is no longer alive — skipped`)
+    return log
+  }
 
   const updateData: Record<string, unknown> = {}
   const resources = (character.resources as any) || { gold: 0, contacts: [] }

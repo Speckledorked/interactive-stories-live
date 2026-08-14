@@ -57,6 +57,15 @@ export interface WorldChange {
    * "this got repaired again" apart from "this field just changed again in
    * ordinary play". */
   checkKey?: string
+  /**
+   * #101 v1.1: where this change actually happened, captured at write time
+   * (e.g. an NPC's or a war's contested location) — used by
+   * tick/informationTick.ts to compute an accurate TOLD-propagation delay
+   * instead of approximating from the target entity's CURRENT location,
+   * which drifts once the entity moves. Omitted for change types with no
+   * single natural location (FACTION-non-war, QUEST, CHARACTER, DEBT).
+   */
+  originLocationId?: string | null
 }
 
 export interface TickContext {

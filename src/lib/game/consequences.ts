@@ -85,6 +85,7 @@ export function applyNpcConsequence(npc: NPC, consequence: ExtractedConsequence)
       entityType: 'NPC', entityId: npc.id, entityName: npc.name, campaignId: npc.campaignId,
       field: 'goals', previousValue: npc.goals || '(none)', newValue: consequence.updatedGoal,
       reason: consequence.reason, significant: true, importance, origin: 'consequence',
+      originLocationId: npc.locationId,
     })
   }
 
@@ -94,6 +95,7 @@ export function applyNpcConsequence(npc: NPC, consequence: ExtractedConsequence)
       entityType: 'NPC', entityId: npc.id, entityName: npc.name, campaignId: npc.campaignId,
       field: 'relationship', previousValue: npc.relationship || '(none)', newValue: consequence.updatedRelationship,
       reason: consequence.reason, significant: true, importance, origin: 'consequence',
+      originLocationId: npc.locationId,
     })
   }
 
@@ -104,6 +106,7 @@ export function applyNpcConsequence(npc: NPC, consequence: ExtractedConsequence)
       field: 'importance', previousValue: npc.importance, newValue: MAJOR_IMPORTANCE_THRESHOLD,
       reason: `${npc.name} became a major NPC after being ${consequence.action.toLowerCase()} by the party: ${consequence.reason}`,
       significant: true, importance: 'MAJOR', origin: 'consequence',
+      originLocationId: npc.locationId,
     })
   }
 
@@ -116,6 +119,7 @@ export function applyNpcConsequence(npc: NPC, consequence: ExtractedConsequence)
       entityType: 'NPC', entityId: npc.id, entityName: npc.name, campaignId: npc.campaignId,
       field: 'consequence', previousValue: '(none)', newValue: consequence.action,
       reason: consequence.reason, significant: true, importance, origin: 'consequence',
+      originLocationId: npc.locationId,
     })
   }
 

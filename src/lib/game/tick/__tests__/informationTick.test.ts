@@ -12,14 +12,17 @@ vi.mock('@/lib/prisma', () => ({
     worldEvent: { findMany: vi.fn() },
     character: { findMany: vi.fn() },
     eventWitness: { findMany: vi.fn(), createMany: vi.fn() },
-    nPC: { findMany: vi.fn() },
-    war: { findMany: vi.fn() },
     locationAdjacency: { findMany: vi.fn() },
   },
 }))
 
 import { prisma } from '@/lib/prisma'
-import { decideInformationSpread, tickInformation, PROPAGATION_WINDOW_TURNS } from '../informationTick'
+import {
+  decideInformationSpread,
+  tickInformation,
+  computePropagationWindow,
+  MIN_PROPAGATION_WINDOW_TURNS,
+} from '../informationTick'
 import type { TickContext } from '../types'
 
 const db = prisma as any
@@ -97,12 +100,38 @@ describe('decideInformationSpread (#101)', () => {
   })
 })
 
+describe('computePropagationWindow (#101 v1.1)', () => {
+  it('returns the floor + safety margin for an empty graph', () => {
+    expect(computePropagationWindow([])).toBe(MIN_PROPAGATION_WINDOW_TURNS + 5)
+  })
+
+  it('grows with the graph diameter beyond the floor', () => {
+    // A 12-hop line (13 locations): diameter 12 -> base 1+12=13, above the
+    // floor of 10, so the window tracks the diameter instead of the floor.
+    const edges = Array.from({ length: 12 }, (_, i) => ({
+      locationAId: `loc-${i}`,
+      locationBId: `loc-${i + 1}`,
+      distance: 1,
+    }))
+    expect(computePropagationWindow(edges)).toBe(1 + 12 + 5)
+  })
+
+  it('falls back to a fixed generous window above the location-count cap, without computing a diameter', () => {
+    // 51 locations (50 edges in a line) exceeds MAX_LOCATIONS_FOR_DIAMETER
+    // (50) -- falls back rather than paying the O(V^2) diameter cost.
+    const edges = Array.from({ length: 50 }, (_, i) => ({
+      locationAId: `loc-${i}`,
+      locationBId: `loc-${i + 1}`,
+      distance: 1,
+    }))
+    expect(computePropagationWindow(edges)).toBe(60)
+  })
+})
+
 describe('tickInformation (DB handler)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     db.eventWitness.findMany.mockResolvedValue([])
-    db.nPC.findMany.mockResolvedValue([])
-    db.war.findMany.mockResolvedValue([])
     db.locationAdjacency.findMany.mockResolvedValue([])
   })
 
@@ -116,7 +145,9 @@ describe('tickInformation (DB handler)', () => {
     expect(db.eventWitness.createMany).not.toHaveBeenCalled()
   })
 
-  it('bounds the WorldEvent query to the propagation window and to significant events', async () => {
+  it('bounds the WorldEvent query to a graph-diameter-derived propagation window, and to significant events', async () => {
+    const edges = [{ locationAId: 'loc-a', locationBId: 'loc-b', distance: 1 }]
+    db.locationAdjacency.findMany.mockResolvedValue(edges)
     db.worldEvent.findMany.mockResolvedValue([])
 
     await tickInformation(baseCtx({ turnNumber: 50 }))
@@ -125,7 +156,7 @@ describe('tickInformation (DB handler)', () => {
       where: expect.objectContaining({
         campaignId: 'campaign-1',
         significant: true,
-        turnNumber: { gte: 50 - PROPAGATION_WINDOW_TURNS },
+        turnNumber: { gte: 50 - computePropagationWindow(edges) },
       }),
     }))
   })
@@ -142,12 +173,11 @@ describe('tickInformation (DB handler)', () => {
     expect(db.eventWitness.createMany).not.toHaveBeenCalled()
   })
 
-  it('resolves an NPC-targeted event\'s origin from the NPC\'s current location', async () => {
+  it('resolves an NPC-targeted event\'s origin from the WorldEvent.originLocationId column captured at write time', async () => {
     db.worldEvent.findMany.mockResolvedValue([
-      { id: 'e1', turnNumber: 10, targetType: 'NPC', targetId: 'npc-1' },
+      { id: 'e1', turnNumber: 10, targetType: 'NPC', targetId: 'npc-1', originLocationId: 'loc-a' },
     ])
     db.character.findMany.mockResolvedValue([{ id: 'c1', locationId: 'loc-b' }])
-    db.nPC.findMany.mockResolvedValue([{ id: 'npc-1', locationId: 'loc-a' }])
     db.locationAdjacency.findMany.mockResolvedValue([{ locationAId: 'loc-a', locationBId: 'loc-b', distance: 1 }])
 
     await tickInformation(baseCtx({ turnNumber: 12 })) // age 2, delay 1+1=2 -> fires
@@ -158,12 +188,11 @@ describe('tickInformation (DB handler)', () => {
     })
   })
 
-  it('resolves a WAR-targeted event\'s origin from the war\'s contested location', async () => {
+  it('resolves a FACTION-targeted war-outcome event\'s origin from the WorldEvent.originLocationId column (the war\'s contested location, captured at write time)', async () => {
     db.worldEvent.findMany.mockResolvedValue([
-      { id: 'e1', turnNumber: 10, targetType: 'WAR', targetId: 'war-1' },
+      { id: 'e1', turnNumber: 10, targetType: 'FACTION', targetId: 'faction-1', originLocationId: 'loc-a' },
     ])
     db.character.findMany.mockResolvedValue([{ id: 'c1', locationId: 'loc-b' }])
-    db.war.findMany.mockResolvedValue([{ id: 'war-1', contestedLocationId: 'loc-a' }])
     db.locationAdjacency.findMany.mockResolvedValue([{ locationAId: 'loc-a', locationBId: 'loc-b', distance: 1 }])
 
     await tickInformation(baseCtx({ turnNumber: 12 }))
@@ -174,9 +203,9 @@ describe('tickInformation (DB handler)', () => {
     })
   })
 
-  it('treats a FACTION-targeted event as having no location signal (flat fallback for everyone)', async () => {
+  it('treats a FACTION-targeted event with no originLocationId as having no location signal (flat fallback for everyone)', async () => {
     db.worldEvent.findMany.mockResolvedValue([
-      { id: 'e1', turnNumber: 10, targetType: 'FACTION', targetId: 'faction-1' },
+      { id: 'e1', turnNumber: 10, targetType: 'FACTION', targetId: 'faction-1', originLocationId: null },
     ])
     db.character.findMany.mockResolvedValue([{ id: 'c1', locationId: 'loc-b' }])
 

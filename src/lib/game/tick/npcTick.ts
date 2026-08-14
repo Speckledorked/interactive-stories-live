@@ -252,6 +252,7 @@ function buildNpcChanges(campaignId: string, npc: NPC, decision: NpcTickDecision
       reason: `${npc.name} moved into the "${decision.phase}" phase of pursuing: ${npc.goals || 'an unstated goal'}`,
       significant: true,
       importance: npc.importance >= 5 ? 'MAJOR' : 'NORMAL',
+      originLocationId: npc.locationId,
     })
   }
 
@@ -267,6 +268,7 @@ function buildNpcChanges(campaignId: string, npc: NPC, decision: NpcTickDecision
       reason: `${npc.name} moved from ${npc.currentLocation || 'an unknown location'} to ${decision.nextLocation} following their ${decision.timeOfDay} schedule`,
       significant: true,
       importance: npc.importance >= 5 ? 'MAJOR' : 'NORMAL',
+      originLocationId: npc.locationId,
     })
   }
 
@@ -285,6 +287,7 @@ function buildNpcChanges(campaignId: string, npc: NPC, decision: NpcTickDecision
       reason: `${npc.name} has achieved their goal: ${npc.goals || 'an unstated goal'}`,
       significant: true,
       importance: 'MAJOR',
+      originLocationId: npc.locationId,
     })
   }
 

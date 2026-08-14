@@ -66,6 +66,7 @@ export async function persistWorldEvents(
         significant: change.significant,
         importance: change.importance,
         checkKey: change.checkKey ?? null,
+        originLocationId: change.originLocationId ?? null,
       })),
       select: { id: true, significant: true },
     })

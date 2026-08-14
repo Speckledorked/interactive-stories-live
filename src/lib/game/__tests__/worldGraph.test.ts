@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shortestPath, nearestLocation, directNeighborsOf } from '../worldGraph'
+import { shortestPath, nearestLocation, directNeighborsOf, graphDiameter } from '../worldGraph'
 
 describe('directNeighborsOf (#108)', () => {
   it('finds neighbors regardless of which side a location was stored on', () => {
@@ -195,5 +195,45 @@ describe('nearestLocation (#108)', () => {
     const edges = [{ locationAId: 'home', locationBId: 'reachable', distance: 3 }]
     const result = nearestLocation(edges, 'home', ['unreachable', 'reachable'])
     expect(result?.locationId).toBe('reachable')
+  })
+})
+
+describe('graphDiameter (#101 v1.1)', () => {
+  it('returns 0 for an empty graph', () => {
+    expect(graphDiameter([])).toBe(0)
+  })
+
+  it('returns the raw distance for a single edge', () => {
+    expect(graphDiameter([{ locationAId: 'a', locationBId: 'b', distance: 4 }])).toBe(4)
+  })
+
+  it('computes the diameter of a 3-node line as the end-to-end distance, not just one hop', () => {
+    const edges = [
+      { locationAId: 'a', locationBId: 'b', distance: 1 },
+      { locationAId: 'b', locationBId: 'c', distance: 1 },
+    ]
+    expect(graphDiameter(edges)).toBe(2)
+  })
+
+  it('is unaffected by disconnected components — only reachable pairs count', () => {
+    const edges = [
+      { locationAId: 'a', locationBId: 'b', distance: 1 },
+      { locationAId: 'x', locationBId: 'y', distance: 100 },
+    ]
+    // The disconnected pair (a/b vs x/y) is never reachable, so it can't
+    // inflate the diameter — the true max is the largest single component's.
+    expect(graphDiameter(edges)).toBe(100)
+  })
+
+  it('finds the diameter across a branching graph, not just the first path explored', () => {
+    // hub connects to three spokes at varying distances; the diameter is
+    // between the two farthest spokes, not hub-to-any-single-spoke.
+    const edges = [
+      { locationAId: 'hub', locationBId: 'near', distance: 1 },
+      { locationAId: 'hub', locationBId: 'mid', distance: 3 },
+      { locationAId: 'hub', locationBId: 'far', distance: 5 },
+    ]
+    // Farthest pair is mid<->far: 3 + 5 = 8, bigger than near<->far (1+5=6).
+    expect(graphDiameter(edges)).toBe(8)
   })
 })

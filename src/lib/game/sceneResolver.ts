@@ -11,7 +11,7 @@ import { buildSceneResolutionRequest } from '@/lib/ai/worldState'
 import { applyWorldUpdates, summarizeWorldUpdates, enrichStubNPCs, enrichStubFactions } from './stateUpdater'
 import { applySceneProgress, parseSceneProgressState } from './worldUpdaters/sceneProgress'
 import { checkMoveVariety } from './moveVariety'
-import { SceneStatus } from '@prisma/client'
+import { SceneStatus, type PlayerAction } from '@prisma/client'
 import { CampaignHealthMonitor } from './campaign-health'
 import { needsIntervention } from './campaignHealthBands'
 import { ExchangeManager } from './exchange-manager' // Phase 16
@@ -285,14 +285,27 @@ async function performResolution(
 
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')
-    // #101: aiRequest.world_summary.characters is already the real,
-    // scene-participant-scoped roster (scopeCharactersToParticipants,
-    // built into every AI request) — reused here as the WITNESSED roster
-    // rather than threading a second, separate participant list through.
-    // Optional-chained/defaulted like action_mechanics on the same line:
-    // defensive, not just test-mock friendliness — a malformed or partial
-    // AI request should degrade to "nobody witnessed this," never throw.
-    const witnessCharacterIds = aiRequest.world_summary?.characters?.map(c => c.id) || []
+    // #101 v1.1: aiRequest.world_summary.characters is the scene-participant-
+    // scoped roster (scopeCharactersToParticipants), but Scene.participants
+    // is an append-only union (actionSubmission.ts's submitPlayerAction only
+    // ever adds to it) — so on its own it over-attributes WITNESSED to
+    // characters who acted once early in a long scene and have been idle
+    // ever since. Narrow further to characters who acted recently: a
+    // character counts as "recently present" if they acted within the last
+    // RECENT_PRESENCE_EXCHANGE_WINDOW exchanges (current inclusive). A
+    // null/legacy exchangeNumber fails CLOSED (treated as turn 0, never
+    // "current") — the same `?? 0` idiom exchange-manager.ts already uses
+    // for this field, and the safer direction given this is exactly an
+    // over-attribution bug.
+    const RECENT_PRESENCE_EXCHANGE_WINDOW = 3 // current exchange + 2 prior
+    const recentlyActiveCharacterIds = new Set(
+      scene.playerActions
+        .filter((a: PlayerAction) => (a.exchangeNumber ?? 0) >= scene.currentExchange - RECENT_PRESENCE_EXCHANGE_WINDOW + 1)
+        .map((a: PlayerAction) => a.characterId)
+    )
+    const witnessCharacterIds = (aiRequest.world_summary?.characters || [])
+      .map(c => c.id)
+      .filter(id => recentlyActiveCharacterIds.has(id))
     const { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber, aiRequest.action_mechanics || [], witnessCharacterIds)
 
     // 6.05. Apply the scene progress ledger — what this exchange

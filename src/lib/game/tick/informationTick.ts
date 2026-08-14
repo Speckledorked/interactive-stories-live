@@ -24,9 +24,9 @@
 // history; the underlying event already became that when it was
 // created. Returns { changes: [] } for the same reason.
 
-import { TickContext, TickHandlerResult } from './types'
+import { TickContext, TickHandlerResult, stableHash } from './types'
 import { AdjacencyEdge, graphDiameter, shortestPath } from '../worldGraph'
-import type { WorldEventTargetType } from '@prisma/client'
+import type { WorldEventTargetType, EventWitnessDistortion } from '@prisma/client'
 
 const BASE_PROPAGATION_DELAY_TURNS = 1
 const TURNS_PER_DISTANCE_UNIT = 1
@@ -81,39 +81,54 @@ export interface InformationSpreadCharacterInput {
   locationId: string | null
 }
 
+// NPCs never get WITNESSED (see EventWitness's schema comment) — only ever
+// fed into this handler's TOLD path, otherwise identical to a Character
+// input.
+export interface InformationSpreadNpcInput {
+  npcId: string
+  locationId: string | null
+}
+
+// A decision carries exactly one of characterId/npcId, mirroring
+// EventWitness's own "exactly one of" shape.
 export interface InformationSpreadDecision {
   worldEventId: string
-  characterId: string
+  characterId?: string
+  npcId?: string
 }
 
 function propagationDelay(
   originLocationId: string | null,
-  characterLocationId: string | null,
+  witnessLocationId: string | null,
   edges: AdjacencyEdge[]
 ): number {
-  if (!originLocationId || !characterLocationId) return FLAT_FALLBACK_DELAY_TURNS
-  const result = shortestPath(edges, originLocationId, characterLocationId)
+  if (!originLocationId || !witnessLocationId) return FLAT_FALLBACK_DELAY_TURNS
+  const result = shortestPath(edges, originLocationId, witnessLocationId)
   if (!result) return FLAT_FALLBACK_DELAY_TURNS
   return BASE_PROPAGATION_DELAY_TURNS + result.distance * TURNS_PER_DISTANCE_UNIT
 }
 
 /**
  * Pure — no DB access, safe to unit test directly. `coveredPairs` is every
- * `${worldEventId}:${characterId}` pair that already has ANY EventWitness
- * row (WITNESSED or TOLD) — never re-decided. This is also why a TOLD
- * decision can never downgrade an existing WITNESSED row: the caller's
- * own `skipDuplicates: true` insert is a second, redundant layer of the
- * same guarantee, but this filter is what keeps the decision from even
- * being computed in the first place.
+ * `${worldEventId}:${characterId}` (or `${worldEventId}:npc:${npcId}` for
+ * an NPC) pair that already has ANY EventWitness row (WITNESSED or TOLD)
+ * — never re-decided. This is also why a TOLD decision can never downgrade
+ * an existing WITNESSED row: the caller's own `skipDuplicates: true`
+ * insert is a second, redundant layer of the same guarantee, but this
+ * filter is what keeps the decision from even being computed in the first
+ * place. The `npc:` prefix on NPC keys is load-bearing, not decorative —
+ * without it, a Character cuid and an NPC cuid could theoretically collide
+ * as bare strings and silently cross-cover each other's coverage.
  */
 export function decideInformationSpread(input: {
   currentTurn: number
   events: InformationSpreadEventInput[]
   characters: InformationSpreadCharacterInput[]
+  npcs?: InformationSpreadNpcInput[]
   coveredPairs: Set<string>
   edges: AdjacencyEdge[]
 }): InformationSpreadDecision[] {
-  const { currentTurn, events, characters, coveredPairs, edges } = input
+  const { currentTurn, events, characters, npcs = [], coveredPairs, edges } = input
   const decisions: InformationSpreadDecision[] = []
 
   for (const event of events) {
@@ -126,9 +141,52 @@ export function decideInformationSpread(input: {
         decisions.push({ worldEventId: event.worldEventId, characterId: character.characterId })
       }
     }
+    for (const npc of npcs) {
+      const pairKey = `${event.worldEventId}:npc:${npc.npcId}`
+      if (coveredPairs.has(pairKey)) continue
+      const delay = propagationDelay(event.originLocationId, npc.locationId, edges)
+      if (age >= delay) {
+        decisions.push({ worldEventId: event.worldEventId, npcId: npc.npcId })
+      }
+    }
   }
 
   return decisions
+}
+
+// Misinformation: only ever rolled for a TOLD decision (WITNESSED is
+// ground truth, never distorted — the caller must never invoke this for a
+// WITNESSED write). Longer propagation delay implies more retellings
+// happened along the way, so it's used as a cheap proxy for "how many
+// hops" without literally simulating chained retellings turn by turn —
+// real scope creep for a v1, and the delay this handler already computes
+// from real graph distance IS the natural "how many hops" signal, not a
+// second one invented just for this.
+const DISTORTION_FLAVORS: EventWitnessDistortion[] = ['EXAGGERATED', 'MINIMIZED', 'GARBLED_DETAIL', 'ATTRIBUTED_WRONG']
+const SHORT_DELAY_THRESHOLD_TURNS = 3
+const SHORT_DELAY_DISTORTION_PCT = 15
+const LONG_DELAY_DISTORTION_PCT = 45
+
+/**
+ * Pure — deterministic stableHash "roll" (this codebase's established
+ * convention for every tick decision, e.g. decideArcDelta/decideWarResolution
+ * — never Math.random()). `witnessKey` must be the SAME discriminated key
+ * decideInformationSpread produces (`characterId` or `npc:${npcId}`) so a
+ * Character and an NPC witnessing the same event never accidentally share
+ * a roll. Tuned starting thresholds (15%/45%), not derived from anything
+ * else in the codebase — adjust to taste via the two constants above.
+ */
+export function decideDistortion(
+  worldEventId: string,
+  witnessKey: string,
+  turnNumber: number,
+  delay: number
+): { distorted: boolean; flavor: EventWitnessDistortion | null } {
+  const threshold = delay <= SHORT_DELAY_THRESHOLD_TURNS ? SHORT_DELAY_DISTORTION_PCT : LONG_DELAY_DISTORTION_PCT
+  const roll = stableHash(`${worldEventId}:${witnessKey}:${turnNumber}:distortion`) % 100
+  if (roll >= threshold) return { distorted: false, flavor: null }
+  const flavorIdx = stableHash(`${worldEventId}:${witnessKey}:${turnNumber}:flavor`) % DISTORTION_FLAVORS.length
+  return { distorted: true, flavor: DISTORTION_FLAVORS[flavorIdx] }
 }
 
 // Resolves where a WorldEvent "happened" for propagation purposes.
@@ -164,17 +222,28 @@ export async function tickInformation(ctx: TickContext): Promise<TickHandlerResu
   })
   if (events.length === 0) return { changes: [] }
 
-  const characters = await ctx.db.character.findMany({
-    where: { campaignId: ctx.campaignId, isAlive: true },
-    select: { id: true, locationId: true },
-  })
-  if (characters.length === 0) return { changes: [] }
+  const [characters, npcs] = await Promise.all([
+    ctx.db.character.findMany({
+      where: { campaignId: ctx.campaignId, isAlive: true },
+      select: { id: true, locationId: true },
+    }),
+    ctx.db.nPC.findMany({
+      where: { campaignId: ctx.campaignId, isAlive: true },
+      select: { id: true, locationId: true },
+    }),
+  ])
+  // Bug fixed alongside the NPC addition: this used to early-return on
+  // characters.length === 0 alone, which would have silently skipped NPC
+  // propagation too in a tick with zero living Characters.
+  if (characters.length === 0 && npcs.length === 0) return { changes: [] }
 
   const existingWitnesses = await ctx.db.eventWitness.findMany({
     where: { worldEventId: { in: events.map((e) => e.id) } },
-    select: { worldEventId: true, characterId: true },
+    select: { worldEventId: true, characterId: true, npcId: true },
   })
-  const coveredPairs = new Set(existingWitnesses.map((w) => `${w.worldEventId}:${w.characterId}`))
+  const coveredPairs = new Set(
+    existingWitnesses.map((w) => (w.npcId ? `${w.worldEventId}:npc:${w.npcId}` : `${w.worldEventId}:${w.characterId}`))
+  )
 
   const eventInputs: InformationSpreadEventInput[] = events.map((event) => {
     const originLocationId = LOCATION_TARGET_TYPES.includes(event.targetType)
@@ -187,19 +256,34 @@ export async function tickInformation(ctx: TickContext): Promise<TickHandlerResu
     currentTurn: ctx.turnNumber,
     events: eventInputs,
     characters: characters.map((c) => ({ characterId: c.id, locationId: c.locationId })),
+    npcs: npcs.map((n) => ({ npcId: n.id, locationId: n.locationId })),
     coveredPairs,
     edges,
   })
 
   if (!ctx.dryRun && decisions.length > 0) {
+    const eventById = new Map(eventInputs.map((e) => [e.worldEventId, e]))
+    const locationById = new Map<string, string | null>([
+      ...characters.map((c) => [c.id, c.locationId] as const),
+      ...npcs.map((n) => [n.id, n.locationId] as const),
+    ])
     await ctx.db.eventWitness.createMany({
-      data: decisions.map((d) => ({
-        campaignId: ctx.campaignId,
-        worldEventId: d.worldEventId,
-        characterId: d.characterId,
-        grade: 'TOLD' as const,
-        turnNumber: ctx.turnNumber,
-      })),
+      data: decisions.map((d) => {
+        const witnessId = d.npcId ?? d.characterId!
+        const witnessKey = d.npcId ? `npc:${d.npcId}` : d.characterId!
+        const event = eventById.get(d.worldEventId)!
+        const delay = propagationDelay(event.originLocationId, locationById.get(witnessId) ?? null, edges)
+        const { distorted, flavor } = decideDistortion(d.worldEventId, witnessKey, ctx.turnNumber, delay)
+        return {
+          campaignId: ctx.campaignId,
+          worldEventId: d.worldEventId,
+          ...(d.npcId ? { npcId: d.npcId } : { characterId: d.characterId }),
+          grade: 'TOLD' as const,
+          turnNumber: ctx.turnNumber,
+          distorted,
+          distortionFlavor: flavor,
+        }
+      }),
       skipDuplicates: true,
     })
   }

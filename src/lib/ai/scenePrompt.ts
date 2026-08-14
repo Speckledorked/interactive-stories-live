@@ -764,7 +764,13 @@ function buildNpcsSection(npcs: WorldSummary['npcs'], factions: WorldSummary['fa
     const threatPart = n.threat ? ` | Threat: ${n.threat}` : ''
     const impulsesPart = n.impulses && n.impulses.length > 0 ? ` | Impulses: ${n.impulses.join(', ')}` : ''
     const movesPart = n.moves && n.moves.length > 0 ? ` | Moves: ${n.moves.join(', ')}` : ''
-    return `• ${n.name} - ${n.relationship || 'Neutral'} | Goals: ${n.goals || 'Unknown'} | Importance: ${n.importance}/5${factionPart}${threatPart}${impulsesPart}${movesPart}`
+    // #101: this NPC's own secondhand (possibly distorted) knowledge — one
+    // line only, most-recent-first (see groupEventWitnessesForPrompt), to
+    // fit this section's deliberate one-line-per-NPC format; the fuller
+    // Witnessed:/Heard secondhand: multi-line block is Character-only (see
+    // buildCharactersSection).
+    const toldPart = n.told_events && n.told_events.length > 0 ? ` | Heard: ${n.told_events[0]}` : ''
+    return `• ${n.name} - ${n.relationship || 'Neutral'} | Goals: ${n.goals || 'Unknown'} | Importance: ${n.importance}/5${factionPart}${threatPart}${impulsesPart}${movesPart}${toldPart}`
   }).join('\n')
 }
 

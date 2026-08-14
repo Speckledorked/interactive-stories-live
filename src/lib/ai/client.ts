@@ -431,6 +431,10 @@ export interface AIGMRequest {
       threat?: string
       impulses?: string[]
       moves?: string[]
+      // #101: this NPC's own TOLD (secondhand, possibly distorted)
+      // knowledge of significant WorldEvents — no witnessed_events for
+      // NPCs, see lib/game/eventWitness.ts.
+      told_events?: string[]
     }>
     factions: Array<{
       id: string

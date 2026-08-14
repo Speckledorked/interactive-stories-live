@@ -177,6 +177,22 @@ enum EventWitnessGrade {
   TOLD
 }
 
+// Misinformation: only ever set on TOLD rows — WITNESSED means present
+// when it happened, ground truth, never distorted. Whether a specific
+// witness's own account of an event is wrong, and how. Deliberately a
+// small fixed set of narrative flavors, not free text — see
+// decideDistortion's own doc comment (informationTick.ts) for why: this
+// stays a deterministic tick "roll" (stableHash, no AI call) that the
+// already-running AI GM turns into prose at narration time, the same way
+// the existing Witnessed:/Heard secondhand: prompt lines are framing
+// instructions rather than pre-baked text.
+enum EventWitnessDistortion {
+  EXAGGERATED
+  MINIMIZED
+  GARBLED_DETAIL
+  ATTRIBUTED_WRONG
+}
+
 //
 // USER & MEMBERSHIP
 //
@@ -964,6 +980,11 @@ model NPC {
 
   // Phase 8: Communication
   notes PlayerNote[] @relation("NPCNotes")
+
+  // #101: this NPC's own record of which significant WorldEvents it
+  // actually knows about (TOLD only — see EventWitness's own comment for
+  // why NPCs never get WITNESSED in this pass).
+  eventWitnesses EventWitness[]
 
   // World Sim Phase 4: this NPC's affiliation with a faction, if any — gives
   // a faction actual subjects instead of just abstract stats. A LEADER's
@@ -3106,8 +3127,25 @@ model EventWitness {
   id           String            @id @default(cuid())
   campaignId   String
   worldEventId String
-  characterId  String
-  grade        EventWitnessGrade
+  // Exactly one of characterId/npcId is set — an app-level invariant, not
+  // DB-enforced, matching this schema's own existing precedent for the
+  // identical shape (PlayerNote.characterId/npcId, Quest.givenByNpcId/
+  // givenByFactionId — neither is a DB CHECK either). Kept as two nullable
+  // FKs rather than a generic entityType+entityId pointer specifically to
+  // preserve real cascade-delete and per-kind DB-level uniqueness.
+  characterId String?
+  npcId       String?
+  grade       EventWitnessGrade
+
+  // Misinformation: only ever set on TOLD rows (WITNESSED = ground truth,
+  // never distorted — enforced by the caller, decideDistortion is never
+  // invoked for a WITNESSED write). Never mirrors into WorldEvent.reason —
+  // see worldEventLog.ts's own doc comment and this system's three
+  // independent ground-truth readers (the AI prompt via this table's own
+  // join, historyLog.ts's RAG/CampaignMemory embeddings, and the admin
+  // dashboard), none of which should ever see a distorted version.
+  distorted        Boolean                 @default(false)
+  distortionFlavor EventWitnessDistortion?
 
   // Denormalized: WorldEvent.turnNumber when grade is WITNESSED (learned
   // the instant it happened), or the tick turn tickInformation actually
@@ -3122,14 +3160,22 @@ model EventWitness {
 
   campaign   Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   worldEvent WorldEvent @relation(fields: [worldEventId], references: [id], onDelete: Cascade)
-  character  Character  @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  character  Character? @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  npc        NPC?       @relation(fields: [npcId], references: [id], onDelete: Cascade)
 
-  // One record per (event, character) — what makes every insert
+  // One record per (event, character-or-npc) — what makes every insert
   // skipDuplicates-safe, and what guarantees a later TOLD pass can never
   // downgrade an existing WITNESSED row: the insert is simply skipped,
-  // never an update.
+  // never an update. Two separate unique indexes (not one compound
+  // [worldEventId, characterId, npcId]) because Postgres treats every NULL
+  // as distinct in a unique index by default — a compound index wouldn't
+  // actually dedupe NPC-only rows (characterId always NULL there) against
+  // each other, but two single-column-scoped indexes each dedupe correctly
+  // within their own kind.
   @@unique([worldEventId, characterId])
+  @@unique([worldEventId, npcId])
   @@index([campaignId, characterId, turnNumber])
+  @@index([campaignId, npcId, turnNumber])
   @@index([worldEventId])
   @@map("event_witnesses")
 }

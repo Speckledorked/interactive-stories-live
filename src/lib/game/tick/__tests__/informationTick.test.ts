@@ -11,6 +11,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     worldEvent: { findMany: vi.fn() },
     character: { findMany: vi.fn() },
+    nPC: { findMany: vi.fn() },
     eventWitness: { findMany: vi.fn(), createMany: vi.fn() },
     locationAdjacency: { findMany: vi.fn() },
   },
@@ -19,6 +20,7 @@ vi.mock('@/lib/prisma', () => ({
 import { prisma } from '@/lib/prisma'
 import {
   decideInformationSpread,
+  decideDistortion,
   tickInformation,
   computePropagationWindow,
   MIN_PROPAGATION_WINDOW_TURNS,
@@ -98,6 +100,92 @@ describe('decideInformationSpread (#101)', () => {
       { worldEventId: 'e1', characterId: 'far' },
     ]))
   })
+
+  it('produces NPC decisions independently of character decisions for the same event', () => {
+    const event = { worldEventId: 'e1', turnNumber: 10, originLocationId: 'a' }
+    const character = { characterId: 'c1', locationId: 'unreachable' } // flat fallback 3, doesn't fire yet at age 2
+    const npc = { npcId: 'n1', locationId: 'b' } // distance 1 -> delay 2, fires at age 2
+
+    expect(decideInformationSpread({
+      currentTurn: 12, events: [event], characters: [character], npcs: [npc], coveredPairs: new Set(), edges,
+    })).toEqual([{ worldEventId: 'e1', npcId: 'n1' }])
+  })
+
+  it('never re-decides an NPC pair already covered, using the npc:-prefixed key', () => {
+    const event = { worldEventId: 'e1', turnNumber: 10, originLocationId: 'a' }
+    const npc = { npcId: 'n1', locationId: 'b' }
+
+    expect(decideInformationSpread({
+      currentTurn: 100, events: [event], characters: [], npcs: [npc], coveredPairs: new Set(['e1:npc:n1']), edges,
+    })).toEqual([])
+  })
+
+  it('defaults npcs to an empty list when omitted (existing character-only callers unaffected)', () => {
+    const event = { worldEventId: 'e1', turnNumber: 10, originLocationId: 'a' }
+    const character = { characterId: 'c1', locationId: 'b' }
+
+    expect(decideInformationSpread({
+      currentTurn: 12, events: [event], characters: [character], coveredPairs: new Set(), edges,
+    })).toEqual([{ worldEventId: 'e1', characterId: 'c1' }])
+  })
+})
+
+describe('decideDistortion (#101 misinformation)', () => {
+  it('is deterministic: same inputs always produce the same output', () => {
+    const a = decideDistortion('e1', 'c1', 20, 5)
+    const b = decideDistortion('e1', 'c1', 20, 5)
+    expect(a).toEqual(b)
+  })
+
+  it('produces different distortion outcomes for a short vs. a long delay on the same event/witness/turn', () => {
+    // Not a strict guarantee for every hash value, but with a fixed
+    // worldEventId/witnessKey/turnNumber, only the delay-driven threshold
+    // differs between these two calls — this pins the short-delay-vs-long-
+    // delay threshold split is actually wired to the delay argument, not
+    // ignored. A handful of representative ids below empirically cross the
+    // boundary; if this ever flakes, it means the threshold logic itself
+    // changed, which is exactly what this test exists to catch.
+    let sawDifference = false
+    for (let i = 0; i < 50; i++) {
+      const key = `witness-${i}`
+      const short = decideDistortion('e1', key, 20, 3)
+      const long = decideDistortion('e1', key, 20, 10)
+      if (short.distorted !== long.distorted) {
+        sawDifference = true
+        break
+      }
+    }
+    expect(sawDifference).toBe(true)
+  })
+
+  it('never returns a flavor when not distorted, and always returns one of the 4 flavors when distorted', () => {
+    const flavors = ['EXAGGERATED', 'MINIMIZED', 'GARBLED_DETAIL', 'ATTRIBUTED_WRONG']
+    for (let i = 0; i < 30; i++) {
+      const result = decideDistortion('e1', `witness-${i}`, 20, 10)
+      if (result.distorted) {
+        expect(flavors).toContain(result.flavor)
+      } else {
+        expect(result.flavor).toBeNull()
+      }
+    }
+  })
+
+  it('a Character and an NPC that share an underlying id do not always roll identically (witnessKey is actually used, not ignored)', () => {
+    // decideInformationSpread always calls this with 'npc:<id>' for NPCs,
+    // never the bare id — proves the prefix genuinely changes the hash
+    // input rather than being dropped somewhere before it reaches stableHash.
+    let sawDifference = false
+    for (let i = 0; i < 50; i++) {
+      const id = `shared-id-${i}`
+      const character = decideDistortion('e1', id, 20, 10)
+      const npc = decideDistortion('e1', `npc:${id}`, 20, 10)
+      if (character.distorted !== npc.distorted || character.flavor !== npc.flavor) {
+        sawDifference = true
+        break
+      }
+    }
+    expect(sawDifference).toBe(true)
+  })
 })
 
 describe('computePropagationWindow (#101 v1.1)', () => {
@@ -133,6 +221,7 @@ describe('tickInformation (DB handler)', () => {
     vi.clearAllMocks()
     db.eventWitness.findMany.mockResolvedValue([])
     db.locationAdjacency.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([])
   })
 
   it('does nothing when there are no significant events in the propagation window', async () => {
@@ -161,16 +250,50 @@ describe('tickInformation (DB handler)', () => {
     }))
   })
 
-  it('does nothing when there are no living characters', async () => {
+  it('does nothing when there are no living characters AND no living NPCs', async () => {
     db.worldEvent.findMany.mockResolvedValue([
       { id: 'e1', turnNumber: 10, targetType: 'LOCATION', targetId: 'loc-1' },
     ])
     db.character.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([])
 
     const result = await tickInformation(baseCtx())
 
     expect(result.changes).toEqual([])
     expect(db.eventWitness.createMany).not.toHaveBeenCalled()
+  })
+
+  it('still propagates to NPCs when there are zero living characters (regression: the old early-return checked characters.length alone)', async () => {
+    db.worldEvent.findMany.mockResolvedValue([
+      { id: 'e1', turnNumber: 10, targetType: 'LOCATION', targetId: 'loc-a' },
+    ])
+    db.character.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([{ id: 'n1', locationId: 'loc-a' }])
+
+    await tickInformation(baseCtx({ turnNumber: 13 }))
+
+    expect(db.eventWitness.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({ npcId: 'n1', grade: 'TOLD' })],
+    }))
+    expect(db.eventWitness.createMany.mock.calls[0][0].data[0]).not.toHaveProperty('characterId')
+  })
+
+  it('writes an NPC TOLD row with npcId set and no characterId', async () => {
+    db.worldEvent.findMany.mockResolvedValue([
+      { id: 'e1', turnNumber: 10, targetType: 'LOCATION', targetId: 'loc-a' },
+    ])
+    db.character.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([{ id: 'n1', locationId: 'loc-a' }])
+
+    await tickInformation(baseCtx({ turnNumber: 13 }))
+
+    expect(db.eventWitness.createMany).toHaveBeenCalledTimes(1)
+    const data = db.eventWitness.createMany.mock.calls[0][0].data
+    expect(data).toHaveLength(1)
+    expect(data[0].npcId).toBe('n1')
+    expect(data[0].characterId).toBeUndefined()
+    expect(data[0].grade).toBe('TOLD')
+    expect(typeof data[0].distorted).toBe('boolean')
   })
 
   it('resolves an NPC-targeted event\'s origin from the WorldEvent.originLocationId column captured at write time', async () => {
@@ -183,7 +306,7 @@ describe('tickInformation (DB handler)', () => {
     await tickInformation(baseCtx({ turnNumber: 12 })) // age 2, delay 1+1=2 -> fires
 
     expect(db.eventWitness.createMany).toHaveBeenCalledWith({
-      data: [{ campaignId: 'campaign-1', worldEventId: 'e1', characterId: 'c1', grade: 'TOLD', turnNumber: 12 }],
+      data: [expect.objectContaining({ campaignId: 'campaign-1', worldEventId: 'e1', characterId: 'c1', grade: 'TOLD', turnNumber: 12 })],
       skipDuplicates: true,
     })
   })
@@ -198,7 +321,7 @@ describe('tickInformation (DB handler)', () => {
     await tickInformation(baseCtx({ turnNumber: 12 }))
 
     expect(db.eventWitness.createMany).toHaveBeenCalledWith({
-      data: [{ campaignId: 'campaign-1', worldEventId: 'e1', characterId: 'c1', grade: 'TOLD', turnNumber: 12 }],
+      data: [expect.objectContaining({ campaignId: 'campaign-1', worldEventId: 'e1', characterId: 'c1', grade: 'TOLD', turnNumber: 12 })],
       skipDuplicates: true,
     })
   })
@@ -216,7 +339,7 @@ describe('tickInformation (DB handler)', () => {
     // age 3 at turn 13 fires
     await tickInformation(baseCtx({ turnNumber: 13 }))
     expect(db.eventWitness.createMany).toHaveBeenCalledWith({
-      data: [{ campaignId: 'campaign-1', worldEventId: 'e1', characterId: 'c1', grade: 'TOLD', turnNumber: 13 }],
+      data: [expect.objectContaining({ campaignId: 'campaign-1', worldEventId: 'e1', characterId: 'c1', grade: 'TOLD', turnNumber: 13 })],
       skipDuplicates: true,
     })
   })

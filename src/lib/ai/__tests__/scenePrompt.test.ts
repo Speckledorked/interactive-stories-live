@@ -355,6 +355,43 @@ describe('buildUserPrompt — character harm/conditions/knowledge visibility (#1
   })
 })
 
+describe('buildUserPrompt — NPC told_events (#101 misinformation)', () => {
+  function makeNpcRequest(npc: Record<string, unknown>): AIGMRequest {
+    return {
+      world_summary: {
+        turn_number: 1,
+        in_game_date: 'Day 1',
+        characters: [],
+        npcs: [{ id: 'npc-1', name: 'Old Harl', relationship: 'Neutral', goals: 'Survive', importance: 5, ...npc }],
+        factions: [], clocks: [], recent_timeline_events: [],
+      },
+      current_scene_intro: 'The room is quiet.',
+      player_actions: [],
+    } as unknown as AIGMRequest
+  }
+
+  it('appends a Heard: clause with the most recent told event only', () => {
+    const prompt = buildUserPrompt(makeNpcRequest({ told_events: ['The baron fled the city', 'older rumor'] }))
+    expect(prompt).toMatch(/Heard: The baron fled the city/)
+    expect(prompt).not.toMatch(/older rumor/)
+  })
+
+  it('omits the Heard: clause when the NPC has no told events', () => {
+    const prompt = buildUserPrompt(makeNpcRequest({ told_events: [] }))
+    expect(prompt).not.toMatch(/Heard:/)
+  })
+
+  it('omits the Heard: clause when told_events is absent entirely', () => {
+    const prompt = buildUserPrompt(makeNpcRequest({}))
+    expect(prompt).not.toMatch(/Heard:/)
+  })
+
+  it('carries a distortion suffix through into the rendered line, same as the Character path', () => {
+    const prompt = buildUserPrompt(makeNpcRequest({ told_events: ['The mine collapsed (this account sounds exaggerated)'] }))
+    expect(prompt).toMatch(/Heard: The mine collapsed \(this account sounds exaggerated\)/)
+  })
+})
+
 describe('buildUserPrompt — player actions are not quote-wrapped like dialogue', () => {
   // Presenting the whole action as `Name: "text"` visually primed the
   // model to treat it as a spoken line, reinforcing the same bug the

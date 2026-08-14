@@ -52,10 +52,46 @@ async function fetchWitnessMap(
       turnNumber: { gte: currentTurnNumber - RECENT_WITNESS_WINDOW_TURNS },
     },
     orderBy: { turnNumber: 'desc' },
-    select: { characterId: true, grade: true, turnNumber: true, worldEvent: { select: { reason: true } } },
+    select: {
+      characterId: true, grade: true, turnNumber: true, distorted: true, distortionFlavor: true,
+      worldEvent: { select: { reason: true } },
+    },
   })
   return groupEventWitnessesForPrompt(rows.map((r) => ({
-    characterId: r.characterId, grade: r.grade, turnNumber: r.turnNumber, reason: r.worldEvent.reason,
+    characterId: r.characterId!, grade: r.grade, turnNumber: r.turnNumber, reason: r.worldEvent.reason,
+    distorted: r.distorted, distortionFlavor: r.distortionFlavor,
+  })))
+}
+
+/**
+ * NPC counterpart of fetchWitnessMap — NPCs only ever get TOLD rows (see
+ * EventWitness's schema comment: no NPC-WITNESSED in this pass), but
+ * groupEventWitnessesForPrompt is grade-agnostic, so it's reused as-is
+ * rather than duplicated. `npcId` is aliased into the shared function's
+ * `characterId`-named field — that field is genuinely id-shape-agnostic
+ * (just a grouping key), not worth a rename for a second, smaller caller.
+ */
+async function fetchNpcWitnessMap(
+  campaignId: string,
+  npcIds: string[],
+  currentTurnNumber: number
+): Promise<Map<string, GroupedWitness>> {
+  if (npcIds.length === 0) return new Map()
+  const rows = await prisma.eventWitness.findMany({
+    where: {
+      campaignId,
+      npcId: { in: npcIds },
+      turnNumber: { gte: currentTurnNumber - RECENT_WITNESS_WINDOW_TURNS },
+    },
+    orderBy: { turnNumber: 'desc' },
+    select: {
+      npcId: true, grade: true, turnNumber: true, distorted: true, distortionFlavor: true,
+      worldEvent: { select: { reason: true } },
+    },
+  })
+  return groupEventWitnessesForPrompt(rows.map((r) => ({
+    characterId: r.npcId!, grade: r.grade, turnNumber: r.turnNumber, reason: r.worldEvent.reason,
+    distorted: r.distorted, distortionFlavor: r.distortionFlavor,
   })))
 }
 
@@ -222,6 +258,13 @@ export async function buildOptimizedWorldSummary(
   const discoveredFactionIds = new Set(allFactions.filter(f => f.isDiscovered).map(f => f.id))
   const discoveredFactions = capForPrompt(relevantFactions.filter(f => f.isDiscovered), MAX_FACTIONS_IN_PROMPT, f => f.threatLevel)
 
+  // Misinformation: each of THIS builder's already-selected NPCs' own TOLD
+  // knowledge — scoped to discoveredNpcs (the same relevance-filtered, capped
+  // list that's about to be mapped into the prompt), not the full roster.
+  const npcWitnessByNpcId = await fetchNpcWitnessMap(
+    campaignId, discoveredNpcs.map(n => n.id), worldMeta.currentTurnNumber
+  )
+
   console.log(`🔍 Filtered entities: ${discoveredNpcs.length}/${allNpcs.length} NPCs, ${discoveredFactions.length}/${allFactions.length} factions`)
 
   // Build compressed timeline from optimized context
@@ -266,7 +309,7 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
 
     // Only relevant, discovered NPCs — fog of war: relevance alone isn't
     // enough, the party has to have actually encountered them.
-    npcs: mapNpcsForPrompt(discoveredNpcs, discoveredNpcNameById),
+    npcs: mapNpcsForPrompt(discoveredNpcs, discoveredNpcNameById, npcWitnessByNpcId),
 
     // Only relevant, discovered factions. Numeric stats are deliberately
     // qualitative here, not exact — the deterministic tick needs the real
@@ -425,6 +468,9 @@ export async function buildWorldSummaryForAI(
   const witnessByCharacterId = await fetchWitnessMap(
     campaignId, promptCharacters.map(c => c.id), worldMeta.currentTurnNumber
   )
+  const npcWitnessByNpcId = await fetchNpcWitnessMap(
+    campaignId, discoveredNpcs.map(n => n.id), worldMeta.currentTurnNumber
+  )
 
   // Format everything for the AI
   const worldSummary = {
@@ -446,7 +492,7 @@ export async function buildWorldSummaryForAI(
 
     characters: mapCharactersForPrompt(promptCharacters, witnessByCharacterId),
 
-    npcs: mapNpcsForPrompt(discoveredNpcs, discoveredNpcNameById),
+    npcs: mapNpcsForPrompt(discoveredNpcs, discoveredNpcNameById, npcWitnessByNpcId),
 
     // Numeric stats are deliberately qualitative here, not exact — see
     // qualitativeStats.ts. The deterministic tick reads real numbers

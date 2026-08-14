@@ -26,6 +26,7 @@ describeIfDb('tickInformation — real database (#101)', () => {
   let originLocationId: string
   let farLocationId: string
   let characterId: string
+  let npcId: string
   let worldEventId: string
 
   beforeAll(async () => {
@@ -62,6 +63,11 @@ describeIfDb('tickInformation — real database (#101)', () => {
     })
     characterId = character.id
 
+    const npc = await prisma.nPC.create({
+      data: { campaignId, name: 'Old Harl', locationId: farLocationId, isAlive: true },
+    })
+    npcId = npc.id
+
     const event = await prisma.worldEvent.create({
       data: {
         campaignId, turnNumber: 5, type: 'location.condition', origin: 'tick', actorType: 'SYSTEM',
@@ -79,7 +85,7 @@ describeIfDb('tickInformation — real database (#101)', () => {
     await prisma.$disconnect()
   })
 
-  it('writes a real TOLD EventWitness row once the graph-derived delay has elapsed', async () => {
+  it('writes a real TOLD EventWitness row for both a Character and an NPC once the graph-derived delay has elapsed', async () => {
     expect(await prisma.eventWitness.count({ where: { campaignId } })).toBe(0)
 
     // distance 1 -> delay = 1 (base) + 1 = 2. Turn 6 (age 1) is too early.
@@ -92,10 +98,13 @@ describeIfDb('tickInformation — real database (#101)', () => {
     await tickInformation(onTime)
 
     const witnesses = await prisma.eventWitness.findMany({ where: { campaignId } })
-    expect(witnesses).toHaveLength(1)
-    expect(witnesses[0]).toMatchObject({
-      worldEventId, characterId, grade: 'TOLD', turnNumber: 7,
-    })
+    expect(witnesses).toHaveLength(2)
+    expect(witnesses).toContainEqual(expect.objectContaining({
+      worldEventId, characterId, npcId: null, grade: 'TOLD', turnNumber: 7,
+    }))
+    expect(witnesses).toContainEqual(expect.objectContaining({
+      worldEventId, npcId, characterId: null, grade: 'TOLD', turnNumber: 7,
+    }))
   })
 
   it('is idempotent: running it again does not create a duplicate row', async () => {

@@ -71,3 +71,46 @@ describe('groupEventWitnessesForPrompt', () => {
     expect(result.get('c1')).toEqual({ witnessed: [], told: ['a rumor'] })
   })
 })
+
+describe('groupEventWitnessesForPrompt — misinformation (#101)', () => {
+  it('bakes a qualifying suffix onto a distorted TOLD line', () => {
+    const result = groupEventWitnessesForPrompt([
+      row({ grade: 'TOLD', reason: 'the fortress fell', distorted: true, distortionFlavor: 'EXAGGERATED' }),
+    ])
+    expect(result.get('c1')?.told).toEqual(['the fortress fell (this account sounds exaggerated)'])
+  })
+
+  it('one suffix per flavor', () => {
+    const flavors: Array<[string, string]> = [
+      ['EXAGGERATED', 'sounds exaggerated'],
+      ['MINIMIZED', 'sounds downplayed'],
+      ['GARBLED_DETAIL', 'seem garbled'],
+      ['ATTRIBUTED_WRONG', 'wrong party'],
+    ]
+    for (const [flavor, expectedSubstring] of flavors) {
+      const result = groupEventWitnessesForPrompt([
+        row({ grade: 'TOLD', reason: 'something happened', distorted: true, distortionFlavor: flavor }),
+      ])
+      expect(result.get('c1')?.told[0]).toContain(expectedSubstring)
+    }
+  })
+
+  it('leaves an undistorted TOLD line untouched (no trailing suffix)', () => {
+    const result = groupEventWitnessesForPrompt([
+      row({ grade: 'TOLD', reason: 'the fortress fell', distorted: false, distortionFlavor: null }),
+    ])
+    expect(result.get('c1')?.told).toEqual(['the fortress fell'])
+  })
+
+  it('never applies a suffix to a WITNESSED line, even if distorted were somehow set', () => {
+    const result = groupEventWitnessesForPrompt([
+      row({ grade: 'WITNESSED', reason: 'saw it firsthand', distorted: true, distortionFlavor: 'EXAGGERATED' }),
+    ])
+    expect(result.get('c1')?.witnessed).toEqual(['saw it firsthand'])
+  })
+
+  it('treats a row with no distorted/distortionFlavor fields at all the same as undistorted (backward-compatible with pre-migration callers)', () => {
+    const result = groupEventWitnessesForPrompt([row({ grade: 'TOLD', reason: 'plain rumor' })])
+    expect(result.get('c1')?.told).toEqual(['plain rumor'])
+  })
+})

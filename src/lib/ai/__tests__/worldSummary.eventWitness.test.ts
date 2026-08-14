@@ -62,6 +62,14 @@ function character(id: string, name: string) {
   }
 }
 
+function npc(id: string, name: string) {
+  return {
+    id, campaignId: 'camp1', name, description: null, goals: null, relationship: null,
+    importance: 5, factionId: null, factionRole: null, socialTies: null, isDiscovered: true,
+    currentLocation: null, locationId: null, gmNotes: null, threat: null, impulses: [], moves: [],
+  }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   db.worldMeta.findUnique.mockResolvedValue(baseWorldMeta())
@@ -137,5 +145,47 @@ describe('buildWorldSummaryForAI — event witness scoping (#101)', () => {
     const kess: any = worldSummary.characters.find((c: any) => c.id === 'c1')
     expect(kess.witnessed_events).toEqual(['Saw the fire'])
     expect(kess.told_events).toEqual([])
+  })
+})
+
+describe('buildOptimizedWorldSummary — NPC event witness scoping (#101 misinformation)', () => {
+  it('scopes the eventWitness query to only the selected NPCs\' ids, using npcId not characterId', async () => {
+    db.character.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([npc('n1', 'Old Harl')])
+
+    await buildOptimizedWorldSummary('camp1', 20, null)
+
+    expect(db.eventWitness.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        campaignId: 'camp1',
+        npcId: { in: ['n1'] },
+        turnNumber: { gte: expect.any(Number) },
+      }),
+    }))
+  })
+
+  it('attaches told_events (and never witnessed_events) to the right NPC, with a distortion suffix baked in', async () => {
+    db.character.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([npc('n1', 'Old Harl')])
+    db.eventWitness.findMany.mockResolvedValue([
+      { npcId: 'n1', grade: 'TOLD', turnNumber: 48, distorted: true, distortionFlavor: 'EXAGGERATED', worldEvent: { reason: 'The baron fled' } },
+    ])
+
+    const { worldSummary } = await buildOptimizedWorldSummary('camp1', 20, null)
+
+    const harl: any = worldSummary.npcs.find((n: any) => n.id === 'n1')
+    expect(harl.told_events).toEqual(['The baron fled (this account sounds exaggerated)'])
+    expect(harl.witnessed_events).toBeUndefined()
+  })
+
+  it('never queries eventWitness for npcId when there are no discovered NPCs', async () => {
+    db.character.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([])
+
+    await buildOptimizedWorldSummary('camp1', 20, null)
+
+    expect(db.eventWitness.findMany).not.toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ npcId: expect.anything() }),
+    }))
   })
 })

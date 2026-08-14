@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 const {
   findUniqueMock, findFirstMock, updateMock, activityCreateMock,
   worldMetaFindUniqueMock, questCreateMock, applyDebtChangesMock,
-  activityFindManyMock, activityUpdateMock, questFindUniqueMock,
+  activityFindManyMock, activityUpdateMock, activityUpdateManyMock, questFindUniqueMock,
   activityFindFirstMock, activityFindUniqueMock,
   applyDowntimeRewardsMock, parseDowntimeRewardsMock,
 } = vi.hoisted(() => ({
@@ -21,6 +21,10 @@ const {
   applyDebtChangesMock: vi.fn(),
   activityFindManyMock: vi.fn(),
   activityUpdateMock: vi.fn(),
+  // #304: the guarded completion write goes through updateMany (scoped to
+  // status: 'ACTIVE'), distinct from the plain update used for a
+  // non-completing day-progress bump.
+  activityUpdateManyMock: vi.fn(),
   questFindUniqueMock: vi.fn(),
   // #211: createDynamicActivity's single-active-downtime pre-check.
   activityFindFirstMock: vi.fn(),
@@ -35,7 +39,10 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     character: { findUnique: findUniqueMock, update: updateMock },
     scene: { findFirst: findFirstMock },
-    downtimeActivity: { create: activityCreateMock, findMany: activityFindManyMock, update: activityUpdateMock, findFirst: activityFindFirstMock, findUnique: activityFindUniqueMock },
+    downtimeActivity: {
+      create: activityCreateMock, findMany: activityFindManyMock, update: activityUpdateMock,
+      updateMany: activityUpdateManyMock, findFirst: activityFindFirstMock, findUnique: activityFindUniqueMock,
+    },
     worldMeta: { findUnique: worldMetaFindUniqueMock },
     quest: { create: questCreateMock, findUnique: questFindUniqueMock },
     $transaction: vi.fn(async (fn: any) => fn({})),
@@ -412,6 +419,9 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     activityUpdateMock.mockResolvedValue({})
+    // #304: default to "won the race" — count: 1 — so the existing
+    // completion-path tests below don't all need their own mock.
+    activityUpdateManyMock.mockResolvedValue({ count: 1 })
     // #312/#327: advanceDynamicDowntime's own isAlive check, the first DB
     // call it makes now.
     findUniqueMock.mockResolvedValue({ isAlive: true })
@@ -452,8 +462,8 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
 
     const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
 
-    expect(activityUpdateMock).toHaveBeenCalledWith({
-      where: { id: 'activity1' },
+    expect(activityUpdateManyMock).toHaveBeenCalledWith({
+      where: { id: 'activity1', status: 'ACTIVE' },
       data: { currentDay: 3, status: 'COMPLETED', completedAt: expect.any(Date) },
     })
     expect(results.some((r: any) => r.completed)).toBe(true)
@@ -479,10 +489,39 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
     await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
 
     expect(questFindUniqueMock).not.toHaveBeenCalled()
-    expect(activityUpdateMock).toHaveBeenCalledWith({
-      where: { id: 'activity1' },
+    expect(activityUpdateManyMock).toHaveBeenCalledWith({
+      where: { id: 'activity1', status: 'ACTIVE' },
       data: { currentDay: 3, status: 'COMPLETED', completedAt: expect.any(Date) },
     })
+  })
+
+  // #304: two concurrent PUT /dynamic-downtime calls for the same final-day
+  // activity both read it as ACTIVE before either write commits. Guarded
+  // the same way Quest completion (#212) already is: the second call's
+  // updateMany affects 0 rows because the first call already flipped the
+  // status out from under its WHERE clause.
+  it('skips duplicate reward application when a concurrent call already completed the activity', async () => {
+    activityFindManyMock.mockResolvedValue([baseActivity({ linkedQuestId: null, currentDay: 2, estimatedDays: 3 })])
+    activityUpdateManyMock.mockResolvedValue({ count: 0 })
+
+    const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(activityUpdateManyMock).toHaveBeenCalledWith({
+      where: { id: 'activity1', status: 'ACTIVE' },
+      data: { currentDay: 3, status: 'COMPLETED', completedAt: expect.any(Date) },
+    })
+    expect(AIDrivenDowntimeService.generateDynamicOutcomes).not.toHaveBeenCalled()
+    expect(results.some((r: any) => r.completed)).toBe(false)
+  })
+
+  it('still applies rewards exactly once when this call wins the completion race', async () => {
+    activityFindManyMock.mockResolvedValue([baseActivity({ linkedQuestId: null, currentDay: 2, estimatedDays: 3 })])
+    activityUpdateManyMock.mockResolvedValue({ count: 1 })
+
+    const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(AIDrivenDowntimeService.generateDynamicOutcomes).toHaveBeenCalledTimes(1)
+    expect(results.some((r: any) => r.completed)).toBe(true)
   })
 
   // #312/#327: a character who died elsewhere in the campaign shouldn't

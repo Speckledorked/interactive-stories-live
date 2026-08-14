@@ -12,6 +12,7 @@
 // (same guardrail philosophy as the world-tick caps).
 
 import { CapabilityState, OriginFamiliarity, Prisma } from '@prisma/client'
+import { isUniqueConstraintViolation } from './worldUpdaters/uniqueConstraintGuard'
 
 // ---------------------------------------------------------------------------
 // Qualitative bands (the only representation that ever leaves the server)
@@ -313,18 +314,33 @@ export async function applyCapabilityChanges(
         console.warn(`  ❓ capability_changes: unknown capability "${change.capability_key}" (not marked is_new) — skipped`)
         continue
       }
-      node = await db.campaignCapability.create({
-        data: {
-          campaignId,
-          key,
-          name: change.name || change.capability_key,
-          domain: change.domain || 'General',
-          // Nodes born mid-story were unknown to everyone — secret until
-          // each character glimpses them through the fiction.
-          isSecret: true,
-        },
-      })
-      log.push(`New capability discovered in this world: ${node.name}`)
+      // The findFirst above just confirmed no matching node exists yet, so
+      // this create should never actually collide — but this runs inside
+      // stateUpdater.ts's single transaction wrapping the whole scene's
+      // world_updates (#279), and two genuinely concurrent scenes both
+      // narrating the same newly-discovered capability at once is exactly
+      // the race a plain check-then-create can't close. Every sibling
+      // applier (NPC, Faction, Quest) already guards this same shape;
+      // capabilities was the one that hadn't adopted it.
+      try {
+        node = await db.campaignCapability.create({
+          data: {
+            campaignId,
+            key,
+            name: change.name || change.capability_key,
+            domain: change.domain || 'General',
+            // Nodes born mid-story were unknown to everyone — secret until
+            // each character glimpses them through the fiction.
+            isSecret: true,
+          },
+        })
+        log.push(`New capability discovered in this world: ${node.name}`)
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) throw error
+        node = await db.campaignCapability.findFirst({ where: { campaignId, key } })
+        if (!node) throw error
+        console.warn(`  ⚠️ capability "${key}" collided with an existing node at write time — reusing it rather than aborting the scene`)
+      }
     }
 
     const existing = await db.characterCapability.findUnique({

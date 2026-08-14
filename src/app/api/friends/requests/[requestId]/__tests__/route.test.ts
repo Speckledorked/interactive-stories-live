@@ -9,7 +9,7 @@ import { NextRequest } from 'next/server'
 vi.mock('@/lib/auth', () => ({ getUser: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    friendRequest: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    friendRequest: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
     friendship: { create: vi.fn() },
     user: { findUnique: vi.fn() },
     $transaction: vi.fn(),
@@ -89,17 +89,37 @@ describe('PATCH', () => {
     expect(notificationService.sendFriendRequestAccepted).toHaveBeenCalledWith('sender1', 'receiver1', 'Receiver')
   })
 
-  it('rejects the request without creating a friendship or notifying anyone', async () => {
+  // #315: accepting one direction of a mutually-PENDING pair must also
+  // clean up the reciprocal PENDING row in the same transaction, or a
+  // later accept attempt on it would try to create a second Friendship for
+  // the same pair and 500 against Friendship's own unique constraint.
+  it('#315: cleans up a reciprocal PENDING request in the same transaction as accept', async () => {
     db.friendRequest.findUnique.mockResolvedValue({ id: 'req1', senderId: 'sender1', receiverId: 'receiver1', status: 'PENDING' })
-    db.friendRequest.update.mockResolvedValue({ id: 'req1', status: 'REJECTED' })
+    db.$transaction.mockResolvedValue([{ id: 'friendship1', user1Id: 'receiver1', user2Id: 'sender1' }])
+
+    await PATCH(patchRequest({ action: 'accept' }), { params: { requestId: 'req1' } })
+
+    expect(db.friendRequest.deleteMany).toHaveBeenCalledWith({
+      where: { senderId: 'receiver1', receiverId: 'sender1', status: 'PENDING' },
+    })
+    // Bundled into the same $transaction call as the friendship create/
+    // request update, not a separate write outside it.
+    expect(db.$transaction).toHaveBeenCalledTimes(1)
+  })
+
+  // #307: a REJECTED row left in place would permanently block the sender
+  // from ever sending this receiver another request, since
+  // @@unique([senderId, receiverId]) has no status scoping — deleted
+  // instead, matching cancel's own convention.
+  it('#307: rejects by deleting the row, not leaving a permanent REJECTED block', async () => {
+    db.friendRequest.findUnique.mockResolvedValue({ id: 'req1', senderId: 'sender1', receiverId: 'receiver1', status: 'PENDING' })
+    db.friendRequest.delete.mockResolvedValue({ id: 'req1' })
 
     const response = await PATCH(patchRequest({ action: 'reject' }), { params: { requestId: 'req1' } })
 
     expect(response.status).toBe(200)
-    expect(db.friendRequest.update).toHaveBeenCalledWith({
-      where: { id: 'req1' },
-      data: expect.objectContaining({ status: 'REJECTED' }),
-    })
+    expect(db.friendRequest.delete).toHaveBeenCalledWith({ where: { id: 'req1' } })
+    expect(db.friendRequest.update).not.toHaveBeenCalled()
     expect(db.$transaction).not.toHaveBeenCalled()
     expect(notificationService.sendFriendRequestAccepted).not.toHaveBeenCalled()
   })

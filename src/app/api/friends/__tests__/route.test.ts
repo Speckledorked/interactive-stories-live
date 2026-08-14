@@ -12,6 +12,7 @@ vi.mock('@/lib/auth', () => ({ getUser: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     friendship: { findMany: vi.fn(), deleteMany: vi.fn() },
+    friendRequest: { deleteMany: vi.fn() },
     user: { findMany: vi.fn() },
   },
 }))
@@ -74,6 +75,17 @@ describe('DELETE', () => {
     expect(response.status).toBe(200)
     expect(db.friendship.deleteMany).toHaveBeenCalledWith({
       where: { OR: [{ user1Id: 'u1', user2Id: 'f1' }, { user1Id: 'f1', user2Id: 'u1' }] },
+    })
+  })
+
+  // #307: the FriendRequest that originally led to this friendship would
+  // otherwise sit ACCEPTED forever — @@unique([senderId, receiverId]) has
+  // no status scoping, so that stale row would permanently block a fresh
+  // request in either direction after unfriending.
+  it('#307: also cleans up the FriendRequest row in either direction', async () => {
+    await DELETE(deleteRequest('?friendId=f1'))
+    expect(db.friendRequest.deleteMany).toHaveBeenCalledWith({
+      where: { OR: [{ senderId: 'u1', receiverId: 'f1' }, { senderId: 'f1', receiverId: 'u1' }] },
     })
   })
 })

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { notificationService } from '@/lib/notifications/notification-service'
+import { isUniqueConstraintViolation } from '@/lib/game/worldUpdaters/uniqueConstraintGuard'
 
 // GET /api/friends/requests - Get incoming and outgoing friend requests
 export async function GET(request: NextRequest) {
@@ -138,15 +139,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create the request
-    const friendRequest = await prisma.friendRequest.create({
-      data: {
-        senderId: userId,
-        receiverId,
-        message,
-        status: 'PENDING',
-      },
-    })
+    // Create the request. The check above only looks at PENDING rows, so
+    // reject/unfriend (#307) deleting their FriendRequest row is what
+    // normally keeps this collision-free for a repeat request — this catch
+    // is defense in depth for any row that predates that fix (or any other
+    // path that leaves a non-PENDING row behind): reactivate it to PENDING
+    // instead of surfacing @@unique([senderId, receiverId])'s P2002 as an
+    // opaque 500.
+    let friendRequest
+    try {
+      friendRequest = await prisma.friendRequest.create({
+        data: {
+          senderId: userId,
+          receiverId,
+          message,
+          status: 'PENDING',
+        },
+      })
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error
+      friendRequest = await prisma.friendRequest.update({
+        where: { senderId_receiverId: { senderId: userId, receiverId } },
+        data: { status: 'PENDING', message, respondedAt: null },
+      })
+    }
 
     // Send notification to receiver
     const sender = await prisma.user.findUnique({

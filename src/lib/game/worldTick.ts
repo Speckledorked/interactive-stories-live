@@ -38,6 +38,7 @@ import { tickLogistics } from './tick/logisticsTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
 import { tickNpcs } from './tick/npcTick'
 import { tickMigration } from './tick/migrationTick'
+import { tickInformation } from './tick/informationTick'
 import { tickNpcSocialTies, tickNpcJointSchemes } from './tick/npcSocietyTick'
 import { tickWake } from './tick/wakeTick'
 import { tickEconomy } from './tick/economyTick'
@@ -134,6 +135,19 @@ import { deriveSeason, GeneratedCalendar } from './calendar'
 // exempt from fleeing it again), and it depends on tickLocationCondition's
 // conditionScore from earlier in this same pass as its distress signal.
 //
+// tickInformation runs right after tickMigration on purpose (#101): an
+// NPC-sourced significant WorldEvent's propagation origin uses that NPC's
+// post-commute locationId for this same turn, not last turn's — the same
+// freshness reasoning tickMigration itself documents above for reading
+// tickNpcs' output. It has no same-tick ctx dependency on any other
+// handler (it writes a silent EventWitness side-table, like
+// PopulationFlightEvent, never a WorldChange), and it only ever reads
+// WorldEvent rows already committed by a PRIOR turn's post-transaction
+// persistWorldEvents call (see below) — this turn's own changes aren't
+// WorldEvent rows yet while any handler is still running — so its exact
+// position relative to every OTHER handler doesn't matter beyond this one
+// freshness reason.
+//
 // tickWake runs right before tickEconomy (see below), after everything
 // else has had a chance to collapse a faction or leave an NPC dead this
 // same turn (#103): it reads ctx.collapseRoughnessByFactionId (set by
@@ -157,7 +171,7 @@ import { deriveSeason, GeneratedCalendar } from './calendar'
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not
 // last turn's. See its own file for what it does and doesn't repair.
-const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickNpcDisposition, tickFactions, tickFactionLeadership, tickWars, tickTerritoryLoyalty, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickEconomy, tickIntegrity]
+const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickNpcDisposition, tickFactions, tickFactionLeadership, tickWars, tickTerritoryLoyalty, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickInformation, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickEconomy, tickIntegrity]
 
 // Prisma's interactive-transaction default is 5s; this tick runs 10
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well

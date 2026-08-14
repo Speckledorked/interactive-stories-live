@@ -380,6 +380,7 @@ async function resolveWarProgress(
         reason: `The war between ${war.attacker.name} and ${war.defender.name} ends when one side collapses`,
         significant: true,
         importance: 'MAJOR',
+        originLocationId: war.contestedLocationId ?? null,
       })
       continue
     }
@@ -506,6 +507,7 @@ async function resolveWarProgress(
       reason: reasonByOutcome[resolution.outcome!],
       significant: true,
       importance: 'MAJOR',
+      originLocationId: war.contestedLocationId ?? null,
     })
   }
 
@@ -578,6 +580,7 @@ async function growWarCoalitions(
           reason: `${joiner.name} joins the war against ${primaryOpponentName} in support of its ally`,
           significant: true,
           importance: 'MAJOR',
+          originLocationId: war.contestedLocationId ?? null,
         })
 
         const index = remainingCandidates.findIndex((c) => c.id === joiner.id)
@@ -675,6 +678,7 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
       reason: `${attacker.name} declares war on ${defender.name}, both sides strong enough to see it through`,
       significant: true,
       importance: 'MAJOR',
+      originLocationId: decision.contestedLocationId ?? null,
     })
   }
 

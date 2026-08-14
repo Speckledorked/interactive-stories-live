@@ -25,10 +25,14 @@ import { groupEventWitnessesForPrompt, GroupedWitness } from '@/lib/game/eventWi
 // Information Latency (#101) — a query-cost bound only, not a correctness
 // one (the per-character MAX_WITNESSED/TOLD caps in eventWitness.ts do the
 // actual trimming): keeps this from being an unbounded range scan in a
-// very long campaign. Comfortably larger than tickInformation's own
-// PROPAGATION_WINDOW_TURNS (30) so a TOLD row is never queried out of the
-// prompt sooner than it could still be a fresh-enough rumor to mention.
-const RECENT_WITNESS_WINDOW_TURNS = 60
+// very long campaign. #101 v1.1: tickInformation's own lookback window is
+// now graph-diameter-derived (computePropagationWindow, informationTick.ts)
+// rather than a fixed constant, so this stays a generous fixed ceiling
+// instead of also computing a live diameter on the hot prompt-building
+// path — widening this only widens an already-indexed
+// (campaignId, characterId, turnNumber) DB range scan, never the prompt
+// itself, since MAX_WITNESSED/TOLD_EVENTS_IN_PROMPT caps the actual output.
+const RECENT_WITNESS_WINDOW_TURNS = 300
 
 /**
  * Shared between both builders below. Scoped to `characterIds` only — a

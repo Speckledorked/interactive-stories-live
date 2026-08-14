@@ -3066,6 +3066,16 @@ model WorldEvent {
   significant Boolean @default(false)
   importance  String  @default("NORMAL") // "NORMAL" | "MAJOR"
 
+  // #101 v1.1: where this event actually happened, captured at write time
+  // (e.g. the NPC's or contested location's id at the moment of the change)
+  // rather than approximated later from the target entity's CURRENT
+  // location, which drifts once the entity moves. Null for event types with
+  // no single natural location (FACTION/QUEST/etc. — see informationTick.ts)
+  // and for every pre-migration row — a valid, silent "nothing to show",
+  // same convention as checkKey. No FK, matching targetId's existing
+  // plain-string convention (target rows can be deleted independently).
+  originLocationId String?
+
   // Set only for events from an Integrity Engine repair (game/integrity/),
   // to the IntegrityCheck.key that produced it — null for every ordinary
   // tick/consequence write. Without this, an integrity repair to

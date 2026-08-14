@@ -533,17 +533,27 @@ describe('Scene Resolver', () => {
       expect(callAIGM).toHaveBeenCalledWith(mockAIRequest, mockCampaignId, mockSceneId, { debugMode: false });
     });
 
-    // #101: applyWorldUpdates' witnessCharacterIds param is derived from
-    // the AI request's own world_summary.characters — already the real,
-    // scene-participant-scoped roster — not a second, separately-built list.
-    it('passes world_summary.characters as the WITNESSED roster', async () => {
+    // #101 v1.1: applyWorldUpdates' witnessCharacterIds param is derived from
+    // the AI request's world_summary.characters, narrowed further to
+    // characters who acted within the recent-activity window (see
+    // sceneResolver.ts's RECENT_PRESENCE_EXCHANGE_WINDOW comment) — not just
+    // the raw, scene-lifetime-append-only participant list.
+    it('passes world_summary.characters as the WITNESSED roster, narrowed to recently active characters', async () => {
       const mockAIRequest = {
         campaign_id: mockCampaignId, scene_id: mockSceneId,
         world_summary: { characters: [{ id: 'char-a' }, { id: 'char-b' }] },
       };
+      const witnessScene = {
+        ...mockScene,
+        currentExchange: 1,
+        playerActions: [
+          { id: 'action-a', characterId: 'char-a', exchangeNumber: 1, status: 'resolved' },
+          { id: 'action-b', characterId: 'char-b', exchangeNumber: 0, status: 'resolved' },
+        ],
+      };
 
-      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
-      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(witnessScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(witnessScene as any);
       vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
       vi.mocked(buildSceneResolutionRequest).mockResolvedValue(mockAIRequest as any);
@@ -554,6 +564,38 @@ describe('Scene Resolver', () => {
 
       expect(applyWorldUpdates).toHaveBeenCalledWith(
         mockCampaignId, mockAIResponse, expect.anything(), true, expect.anything(), expect.anything(), ['char-a', 'char-b']
+      );
+    });
+
+    it('excludes a world_summary character who last acted outside the recent-activity window', async () => {
+      const mockAIRequest = {
+        campaign_id: mockCampaignId, scene_id: mockSceneId,
+        // char-c is a real scene participant (present in world_summary,
+        // scopeCharactersToParticipants would include them) but hasn't
+        // acted in a long time — the append-only-roster bug this fix closes.
+        world_summary: { characters: [{ id: 'char-a' }, { id: 'char-c' }] },
+      };
+      const witnessScene = {
+        ...mockScene,
+        currentExchange: 10,
+        playerActions: [
+          { id: 'action-a', characterId: 'char-a', exchangeNumber: 10, status: 'resolved' },
+          { id: 'action-c', characterId: 'char-c', exchangeNumber: 2, status: 'resolved' },
+        ],
+      };
+
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(witnessScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(witnessScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue(mockAIRequest as any);
+      vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
+
+      await resolveScene(mockCampaignId, mockSceneId);
+
+      expect(applyWorldUpdates).toHaveBeenCalledWith(
+        mockCampaignId, mockAIResponse, expect.anything(), true, expect.anything(), expect.anything(), ['char-a']
       );
     });
 

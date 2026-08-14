@@ -183,3 +183,28 @@ export function nearestLocation(edges: AdjacencyEdge[], fromLocationId: string, 
   }
   return best
 }
+
+/**
+ * Pure — the graph's diameter: the longest shortest-path distance between
+ * any two of its (reachable) locations. Used by tick/informationTick.ts to
+ * size its TOLD-propagation lookback window to the campaign's actual map
+ * instead of a fixed magic constant that can silently strand a distant
+ * character forever. Reuses shortestPath (one call per unique unordered
+ * location pair) rather than a second, bespoke single-source Dijkstra —
+ * O(V^2 log V) instead of O(V log V), an accepted tradeoff at this
+ * codebase's real scale (tens of locations per campaign — see this file's
+ * own header comment) in exchange for not maintaining a second pathfinding
+ * implementation that could subtly diverge from the one already audited
+ * (#259). Returns 0 for no edges or no reachable pairs.
+ */
+export function graphDiameter(edges: AdjacencyEdge[]): number {
+  const locationIds = [...new Set(edges.flatMap((e) => [e.locationAId, e.locationBId]))]
+  let diameter = 0
+  for (let i = 0; i < locationIds.length; i++) {
+    for (let j = i + 1; j < locationIds.length; j++) {
+      const result = shortestPath(edges, locationIds[i], locationIds[j])
+      if (result && result.distance > diameter) diameter = result.distance
+    }
+  }
+  return diameter
+}

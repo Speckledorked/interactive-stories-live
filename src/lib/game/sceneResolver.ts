@@ -285,7 +285,15 @@ async function performResolution(
 
     // 6. Apply world updates to database
     console.log('💾 Applying world updates...')
-    const { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber, aiRequest.action_mechanics || [])
+    // #101: aiRequest.world_summary.characters is already the real,
+    // scene-participant-scoped roster (scopeCharactersToParticipants,
+    // built into every AI request) — reused here as the WITNESSED roster
+    // rather than threading a second, separate participant list through.
+    // Optional-chained/defaulted like action_mechanics on the same line:
+    // defensive, not just test-mock friendliness — a malformed or partial
+    // AI request should degrade to "nobody witnessed this," never throw.
+    const witnessCharacterIds = aiRequest.world_summary?.characters?.map(c => c.id) || []
+    const { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber, aiRequest.action_mechanics || [], witnessCharacterIds)
 
     // 6.05. Apply the scene progress ledger — what this exchange
     // established/resolved, replacing re-derivation from raw prose (see

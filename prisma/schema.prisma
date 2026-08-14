@@ -166,6 +166,17 @@ enum WorldEventTargetType {
   LOCATION
 }
 
+// #101: a character's own record of a significant WorldEvent — WITNESSED
+// (present when it happened, 100% accurate) or TOLD (heard secondhand,
+// rumor-grade). UNKNOWN is deliberately NOT a value here: it's the
+// absence of an EventWitness row, not a third state, since a row per
+// (event, character) for every character on every event would be
+// O(events × characters) — see EventWitness's own comment.
+enum EventWitnessGrade {
+  WITNESSED
+  TOLD
+}
+
 //
 // USER & MEMBERSHIP
 //
@@ -383,6 +394,7 @@ model Campaign {
   // World Sim: persisted event stream
   worldEvents WorldEvent[]
   populationFlightEvents PopulationFlightEvent[]
+  eventWitnesses EventWitness[]
 
   // World Sim Phase 5: sustained multi-turn conflicts between factions.
   wars War[]
@@ -883,6 +895,10 @@ model Character {
 
   // Urban Shadows economy: social position with each faction (-3..+3).
   factionStandings FactionStanding[]
+
+  // #101: this character's own record of which significant WorldEvents
+  // they actually know about (WITNESSED vs. TOLD) — see EventWitness.
+  eventWitnesses EventWitness[]
 
   @@index([campaignId])
   @@index([userId])
@@ -3060,12 +3076,52 @@ model WorldEvent {
   // apart, not just "this field changed again."
   checkKey String?
 
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign  Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  witnesses EventWitness[]
 
   @@index([campaignId, turnNumber])
   @@index([campaignId, targetType, targetId])
   @@index([campaignId, type])
   @@map("world_events")
+}
+
+// #101: a character's own record of which significant WorldEvents they
+// actually know about, and how — the fix for fog-of-war being binary and
+// campaign-wide (see visibility.ts's visibleTo()) with no way for one
+// character to know something another doesn't. UNKNOWN is NOT a row here
+// — see EventWitnessGrade's comment — so this table only ever grows in
+// proportion to (significant events × characters who actually learned
+// about them), not to campaign size.
+model EventWitness {
+  id           String            @id @default(cuid())
+  campaignId   String
+  worldEventId String
+  characterId  String
+  grade        EventWitnessGrade
+
+  // Denormalized: WorldEvent.turnNumber when grade is WITNESSED (learned
+  // the instant it happened), or the tick turn tickInformation actually
+  // decided this character heard about it when grade is TOLD (always
+  // later than the event's own turnNumber, by the propagation delay).
+  // Lets every read path (prompt capping, tickInformation's own
+  // propagation-window query) sort/filter without a join back to
+  // world_events for the hot path.
+  turnNumber Int
+
+  createdAt DateTime @default(now())
+
+  campaign   Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  worldEvent WorldEvent @relation(fields: [worldEventId], references: [id], onDelete: Cascade)
+  character  Character  @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  // One record per (event, character) — what makes every insert
+  // skipDuplicates-safe, and what guarantees a later TOLD pass can never
+  // downgrade an existing WITNESSED row: the insert is simply skipped,
+  // never an update.
+  @@unique([worldEventId, characterId])
+  @@index([campaignId, characterId, turnNumber])
+  @@index([worldEventId])
+  @@map("event_witnesses")
 }
 
 // #262: decideMigration's background-population flight fraction (distinct

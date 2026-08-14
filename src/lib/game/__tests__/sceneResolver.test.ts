@@ -532,6 +532,48 @@ describe('Scene Resolver', () => {
       // and the circuit breaker) and a debug-mode flag, not just the request.
       expect(callAIGM).toHaveBeenCalledWith(mockAIRequest, mockCampaignId, mockSceneId, { debugMode: false });
     });
+
+    // #101: applyWorldUpdates' witnessCharacterIds param is derived from
+    // the AI request's own world_summary.characters — already the real,
+    // scene-participant-scoped roster — not a second, separately-built list.
+    it('passes world_summary.characters as the WITNESSED roster', async () => {
+      const mockAIRequest = {
+        campaign_id: mockCampaignId, scene_id: mockSceneId,
+        world_summary: { characters: [{ id: 'char-a' }, { id: 'char-b' }] },
+      };
+
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue(mockAIRequest as any);
+      vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
+
+      await resolveScene(mockCampaignId, mockSceneId);
+
+      expect(applyWorldUpdates).toHaveBeenCalledWith(
+        mockCampaignId, mockAIResponse, expect.anything(), true, expect.anything(), expect.anything(), ['char-a', 'char-b']
+      );
+    });
+
+    it('defaults the WITNESSED roster to empty when world_summary is missing (defensive, not just a test-mock convenience)', async () => {
+      const mockAIRequest = { campaign_id: mockCampaignId, scene_id: mockSceneId };
+
+      vi.mocked(prisma.scene.findUnique).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(prisma.worldMeta.update).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue(mockAIRequest as any);
+      vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
+      vi.mocked(applyWorldUpdates).mockResolvedValue({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] });
+
+      await resolveScene(mockCampaignId, mockSceneId);
+
+      expect(applyWorldUpdates).toHaveBeenCalledWith(
+        mockCampaignId, mockAIResponse, expect.anything(), true, expect.anything(), expect.anything(), []
+      );
+    });
   });
 
   describe('createNewScene', () => {

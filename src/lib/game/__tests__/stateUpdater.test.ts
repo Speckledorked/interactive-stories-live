@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: vi.fn(async (fn: any) => fn(tx)),
+    eventWitness: { createMany: vi.fn(async () => ({ count: 0 })) },
   },
 }))
 
@@ -38,9 +39,10 @@ vi.mock('../worldUpdaters/locations', () => ({ applyLocationChanges: vi.fn(async
 vi.mock('../worldUpdaters/quests', () => ({ applyQuestChanges: vi.fn(async () => ({ worldChanges: [] })) }))
 vi.mock('../worldUpdaters/bargainOffers', () => ({ applyBargainOffers: vi.fn(async () => {}) }))
 vi.mock('../worldUpdaters/worldMetaNotes', () => ({ storeGmNotesForTurn: vi.fn(async () => {}) }))
-vi.mock('../tick/worldEventLog', () => ({ persistWorldEvents: vi.fn(async () => 0) }))
+vi.mock('../tick/worldEventLog', () => ({ persistWorldEvents: vi.fn(async () => ({ count: 0, events: [] })) }))
 
 import { applyWorldUpdates } from '../stateUpdater'
+import { prisma } from '@/lib/prisma'
 import { applyTimelineEventChanges } from '../worldUpdaters/timelineEvents'
 import { applyClockChanges } from '../worldUpdaters/clocks'
 import { applyNpcChanges } from '../worldUpdaters/npcs'
@@ -50,6 +52,7 @@ import { applyLocationChanges } from '../worldUpdaters/locations'
 import { applyQuestChanges } from '../worldUpdaters/quests'
 import { applyBargainOffers } from '../worldUpdaters/bargainOffers'
 import { storeGmNotesForTurn } from '../worldUpdaters/worldMetaNotes'
+import { persistWorldEvents } from '../tick/worldEventLog'
 
 const makeTx = () => ({
   campaign: { findUnique: vi.fn(async () => ({ corruptionTheme: { name: 'The Hunger' } })) },
@@ -277,6 +280,75 @@ describe('applyWorldUpdates — results and failure', () => {
     await expect(
       applyWorldUpdates('camp1', response({ pc_changes: [{ character_name_or_id: 'Vera', changes: {} }] }), 1)
     ).rejects.toThrow()
+  })
+})
+
+// #101: everyone in the scene's participant roster (witnessCharacterIds)
+// WITNESSED whatever significant WorldEvents this call just produced —
+// gated on both sceneOrigin (fog of war) and the event actually being
+// significant (the same gate CampaignMemory/WikiEntry already use).
+describe('applyWorldUpdates — WITNESSED event-witness writes (#101)', () => {
+  const significantChange = {
+    entityType: 'FACTION', entityId: 'f1', entityName: 'The Rustwatch', campaignId: 'camp1',
+    field: 'resources', previousValue: 50, newValue: 47, reason: 'test', significant: true, importance: 'NORMAL',
+  }
+
+  it('writes a WITNESSED row per (event, character) pair for a significant event', async () => {
+    ;(applyQuestChanges as any).mockResolvedValueOnce({ worldChanges: [significantChange] })
+    ;(persistWorldEvents as any).mockResolvedValueOnce({ count: 1, events: [{ id: 'evt-1', significant: true }] })
+
+    await applyWorldUpdates(
+      'camp1', response({ quest_changes: [{ name: 'Q' }] }), 5, true, undefined, [], ['char-a', 'char-b']
+    )
+
+    expect(prisma.eventWitness.createMany).toHaveBeenCalledWith({
+      data: [
+        { campaignId: 'camp1', worldEventId: 'evt-1', characterId: 'char-a', grade: 'WITNESSED', turnNumber: 5 },
+        { campaignId: 'camp1', worldEventId: 'evt-1', characterId: 'char-b', grade: 'WITNESSED', turnNumber: 5 },
+      ],
+      skipDuplicates: true,
+    })
+  })
+
+  it('never witnesses a non-significant event', async () => {
+    ;(applyQuestChanges as any).mockResolvedValueOnce({ worldChanges: [significantChange] })
+    ;(persistWorldEvents as any).mockResolvedValueOnce({ count: 1, events: [{ id: 'evt-1', significant: false }] })
+
+    await applyWorldUpdates(
+      'camp1', response({ quest_changes: [{ name: 'Q' }] }), 5, true, undefined, [], ['char-a']
+    )
+
+    expect(prisma.eventWitness.createMany).not.toHaveBeenCalled()
+  })
+
+  it('skips entirely on the offscreen path (sceneOrigin false), even with witnesses named', async () => {
+    ;(applyQuestChanges as any).mockResolvedValueOnce({ worldChanges: [significantChange] })
+    ;(persistWorldEvents as any).mockResolvedValueOnce({ count: 1, events: [{ id: 'evt-1', significant: true }] })
+
+    await applyWorldUpdates(
+      'camp1', response({ quest_changes: [{ name: 'Q' }] }), 5, false, undefined, [], ['char-a']
+    )
+
+    expect(prisma.eventWitness.createMany).not.toHaveBeenCalled()
+  })
+
+  it('skips when no witnessCharacterIds are given (the default, and every caller predating this parameter)', async () => {
+    ;(applyQuestChanges as any).mockResolvedValueOnce({ worldChanges: [significantChange] })
+    ;(persistWorldEvents as any).mockResolvedValueOnce({ count: 1, events: [{ id: 'evt-1', significant: true }] })
+
+    await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), 5)
+
+    expect(prisma.eventWitness.createMany).not.toHaveBeenCalled()
+  })
+
+  it('does not throw the whole update when the witness write fails (best-effort)', async () => {
+    ;(applyQuestChanges as any).mockResolvedValueOnce({ worldChanges: [significantChange] })
+    ;(persistWorldEvents as any).mockResolvedValueOnce({ count: 1, events: [{ id: 'evt-1', significant: true }] })
+    ;(prisma.eventWitness.createMany as any).mockRejectedValueOnce(new Error('db down'))
+
+    await expect(
+      applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), 5, true, undefined, [], ['char-a'])
+    ).resolves.toBeDefined()
   })
 })
 

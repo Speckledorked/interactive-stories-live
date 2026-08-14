@@ -73,7 +73,15 @@ export async function applyWorldUpdates(
   // Character.stress drift (see stress.ts). Defaults empty for callers
   // with nothing to report — offscreen world-turn narration never touches
   // pc_changes at all, so this is simply unused on that path.
-  actionMechanics: ActionMechanics[] = []
+  actionMechanics: ActionMechanics[] = [],
+  // #101: characters actually present in this scene — every SIGNIFICANT
+  // WorldEvent this call produces gets a WITNESSED EventWitness row for
+  // each of them. Empty by default (and effectively ignored whenever
+  // sceneOrigin is false, see below) so every caller that predates this
+  // parameter, and the offscreen path in particular, correctly witnesses
+  // nobody — matching sceneOrigin's own "must not silently teach the AI"
+  // comment above, now extended from entity discovery to event knowledge.
+  witnessCharacterIds: string[] = []
 ): Promise<AppliedWorldUpdates> {
   console.log('💾 Applying world updates to database...')
 
@@ -212,7 +220,36 @@ export async function applyWorldUpdates(
     // failure here must not undo (or block) the world updates that just
     // committed; persistWorldEvents' own doc comment covers the tradeoff.
     if (worldChanges.length > 0) {
-      await persistWorldEvents(campaignId, currentTurnNumber, worldChanges)
+      const { events } = await persistWorldEvents(campaignId, currentTurnNumber, worldChanges)
+
+      // #101: everyone present in this scene WITNESSED whatever significant
+      // things just happened in it — this is the scene's whole party, not
+      // narrowed to exactly who caused/was targeted by any one change (the
+      // same scene-level, not exchange-level, granularity fog-of-war
+      // discovery already operates at above). Gated on sceneOrigin, same as
+      // discovery: the offscreen background-tick path must not silently
+      // teach a character about something they were never there for.
+      if (sceneOrigin && witnessCharacterIds.length > 0) {
+        const significantEventIds = events.filter((e) => e.significant).map((e) => e.id)
+        if (significantEventIds.length > 0) {
+          try {
+            await prisma.eventWitness.createMany({
+              data: significantEventIds.flatMap((worldEventId) =>
+                witnessCharacterIds.map((characterId) => ({
+                  campaignId,
+                  worldEventId,
+                  characterId,
+                  grade: 'WITNESSED' as const,
+                  turnNumber: currentTurnNumber,
+                }))
+              ),
+              skipDuplicates: true,
+            })
+          } catch (error) {
+            console.error('⚠️ Failed to persist event witnesses (non-critical):', error)
+          }
+        }
+      }
     }
 
     return { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames, worldChanges }

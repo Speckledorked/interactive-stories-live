@@ -24,6 +24,16 @@ function typeFor(change: WorldChange): string {
   return `${change.entityType.toLowerCase()}.${change.field}`
 }
 
+/** The subset of a persisted WorldEvent row callers actually need back —
+ * #101's WITNESSED write path needs the real ids (createMany alone never
+ * returns rows) to attach EventWitness records to the events a scene's
+ * changes just produced, and only cares about the ones that were
+ * significant (the same gate CampaignMemory/WikiEntry already use). */
+export interface PersistedWorldEvent {
+  id: string
+  significant: boolean
+}
+
 /**
  * Persist a batch of WorldChanges as WorldEvent rows. Best-effort — a
  * failure here shouldn't take down tick processing or scene resolution.
@@ -35,11 +45,11 @@ export async function persistWorldEvents(
   campaignId: string,
   turnNumber: number,
   changes: WorldChange[]
-): Promise<number> {
-  if (changes.length === 0) return 0
+): Promise<{ count: number; events: PersistedWorldEvent[] }> {
+  if (changes.length === 0) return { count: 0, events: [] }
 
   try {
-    const result = await prisma.worldEvent.createMany({
+    const events = await prisma.worldEvent.createManyAndReturn({
       data: changes.map((change) => ({
         campaignId,
         turnNumber,
@@ -57,11 +67,12 @@ export async function persistWorldEvents(
         importance: change.importance,
         checkKey: change.checkKey ?? null,
       })),
+      select: { id: true, significant: true },
     })
 
-    return result.count
+    return { count: events.length, events }
   } catch (error) {
     console.error('⚠️ Failed to persist world events (non-critical):', error)
-    return 0
+    return { count: 0, events: [] }
   }
 }

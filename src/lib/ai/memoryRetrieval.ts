@@ -147,6 +147,25 @@ export async function retrieveRelevantHistory(
             AND cardinality("involvedCharacterIds") = 0
           )  -- Also include general memories
         )
+        -- #285/#327: fog-of-war independent guard. The API-route layer has
+        -- a real, AST-enforced visibleTo() gate (see fogOfWar.test.ts), but
+        -- this RAG query feeds the AI-facing narration prompt directly and
+        -- had no equivalent — a memory referencing a currently-undiscovered
+        -- NPC/faction could be pulled into context by semantic similarity
+        -- alone, regardless of whether every upstream caller happened to
+        -- have already filtered. Excludes a memory the moment ANY entity it
+        -- involves isn't discovered yet, rather than trusting npcIds/
+        -- factionIds (the CURRENT scene's roster) to already be clean.
+        AND NOT EXISTS (
+          SELECT 1 FROM unnest("involvedNpcIds") AS npc_id
+          JOIN "NPC" ON "NPC"."id" = npc_id
+          WHERE "NPC"."isDiscovered" = false
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM unnest("involvedFactionIds") AS faction_id
+          JOIN "Faction" ON "Faction"."id" = faction_id
+          WHERE "Faction"."isDiscovered" = false
+        )
       ORDER BY
         -- Blend similarity with recency and importance
         (1 - (embedding <=> ${embeddingString}::vector)) * ${1 - opts.recencyBias} +
@@ -284,6 +303,11 @@ export async function retrieveNpcHistory(
       WHERE
         "campaignId" = ${campaignId}
         AND ${npcId} = ANY("involvedNpcIds")
+        -- #285/#327: same independent fog-of-war guard as
+        -- retrieveRelevantHistory above — don't trust the caller to have
+        -- already confirmed this NPC is discovered before asking for
+        -- their history.
+        AND EXISTS (SELECT 1 FROM "NPC" WHERE "NPC"."id" = ${npcId} AND "NPC"."isDiscovered" = true)
       ORDER BY "turnNumber" DESC
       LIMIT ${limit}
     `;

@@ -166,4 +166,101 @@ describeIfDb('retrieveRelevantHistory — real pgvector search', () => {
     expect(result).toEqual([])
     await prisma.campaign.delete({ where: { id: emptyCampaign.id } }).catch(() => {})
   })
+
+  // #285/#327: retrieveRelevantHistory used to filter only by campaignId
+  // and entity-id overlap — no isDiscovered check at all. A memory
+  // referencing a currently-undiscovered NPC could in principle be pulled
+  // into the prompt by semantic similarity alone, leaking fog-gated
+  // information into player-facing narration.
+  it('excludes a memory referencing an undiscovered NPC, even when it is otherwise the closest semantic match', async () => {
+    const { createCampaignMemory } = await import('@/lib/ai/memoryCreation')
+    const { retrieveRelevantHistory } = await import('../memoryRetrieval')
+
+    const hiddenNpc = await prisma.nPC.create({
+      data: { campaignId, name: 'The Hidden Cultist', isDiscovered: false },
+    })
+    const knownNpc = await prisma.nPC.create({
+      data: { campaignId, name: 'The Known Blacksmith', isDiscovered: true },
+    })
+
+    await createCampaignMemory({
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 3,
+      title: 'Undiscovered NPC memory', summary: 'TOPIC_A memory about the hidden cultist', fullContext: 'TOPIC_A',
+      involvedCharacterIds: [], involvedNpcIds: [hiddenNpc.id], involvedFactionIds: [], locationTags: [],
+      importance: 'NORMAL', tags: [],
+    })
+    await createCampaignMemory({
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 3,
+      title: 'Discovered NPC memory', summary: 'TOPIC_A memory about the known blacksmith', fullContext: 'TOPIC_A',
+      involvedCharacterIds: [], involvedNpcIds: [knownNpc.id], involvedFactionIds: [], locationTags: [],
+      importance: 'NORMAL', tags: [],
+    })
+
+    const scene = await prisma.scene.create({ data: { campaignId, sceneNumber: 3, sceneIntroText: 'x' } })
+
+    const result = await retrieveRelevantHistory(
+      campaignId,
+      { currentScene: scene, playerActions: [], characters: [], npcs: [{ id: hiddenNpc.id }, { id: knownNpc.id }] as any, factions: [] },
+      { minSimilarity: -1, recencyBias: 0 },
+      'a query about TOPIC_A'
+    )
+
+    const titles = result.map((r) => r.title)
+    expect(titles).toContain('Discovered NPC memory')
+    expect(titles).not.toContain('Undiscovered NPC memory')
+  })
+})
+
+describeIfDb('retrieveNpcHistory — real fog-of-war guard (#285/#327)', () => {
+  const prisma = new PrismaClient()
+  let campaignId: string
+
+  beforeAll(async () => {
+    const campaign = await prisma.campaign.create({
+      data: { title: 'RAG NPC History Test Campaign', aiSystemPrompt: 'test', initialWorldSeed: 'test' },
+    })
+    campaignId = campaign.id
+  })
+
+  afterAll(async () => {
+    await prisma.campaign.delete({ where: { id: campaignId } }).catch(() => {})
+    await prisma.$disconnect()
+  })
+
+  it('returns nothing for an undiscovered NPC, even though a real memory references them', async () => {
+    const { createCampaignMemory } = await import('@/lib/ai/memoryCreation')
+    const { retrieveNpcHistory } = await import('../memoryRetrieval')
+
+    const hiddenNpc = await prisma.nPC.create({
+      data: { campaignId, name: 'The Hidden Cultist', isDiscovered: false },
+    })
+    await createCampaignMemory({
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 1,
+      title: 'A memory about the hidden cultist', summary: 's', fullContext: 'f',
+      involvedCharacterIds: [], involvedNpcIds: [hiddenNpc.id], involvedFactionIds: [], locationTags: [],
+      importance: 'NORMAL', tags: [],
+    })
+
+    const result = await retrieveNpcHistory(campaignId, hiddenNpc.id)
+    expect(result).toEqual([])
+  })
+
+  it('returns real history for a discovered NPC', async () => {
+    const { createCampaignMemory } = await import('@/lib/ai/memoryCreation')
+    const { retrieveNpcHistory } = await import('../memoryRetrieval')
+
+    const knownNpc = await prisma.nPC.create({
+      data: { campaignId, name: 'The Known Blacksmith', isDiscovered: true },
+    })
+    await createCampaignMemory({
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 1,
+      title: 'A memory about the known blacksmith', summary: 's', fullContext: 'f',
+      involvedCharacterIds: [], involvedNpcIds: [knownNpc.id], involvedFactionIds: [], locationTags: [],
+      importance: 'NORMAL', tags: [],
+    })
+
+    const result = await retrieveNpcHistory(campaignId, knownNpc.id)
+    expect(result).toHaveLength(1)
+    expect(result[0].title).toBe('A memory about the known blacksmith')
+  })
 })

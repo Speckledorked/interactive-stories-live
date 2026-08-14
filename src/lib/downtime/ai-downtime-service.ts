@@ -545,6 +545,17 @@ Respond in an engaging, narrative style as MythOS. Keep it to 2-3 paragraphs.`
 
   // Advance time for all activities with dynamic processing
   static async advanceDynamicDowntime(characterId: string, days: number = 1) {
+    // #312/#327: DowntimeActivity has no relation field to Character (just
+    // a plain characterId scalar, no @relation — see schema.prisma), so
+    // this can't be expressed as a nested `character: { isAlive: true }`
+    // filter the way the tick pipeline's isAlive-gated queries can.
+    // Defense in depth at the service layer regardless of what the calling
+    // route already checked — a character who died elsewhere in the
+    // campaign after starting a multi-day activity should not have it
+    // silently keep advancing and paying out.
+    const character = await prisma.character.findUnique({ where: { id: characterId }, select: { isAlive: true } })
+    if (!character?.isAlive) return []
+
     const activeActivities = await prisma.downtimeActivity.findMany({
       where: {
         characterId,

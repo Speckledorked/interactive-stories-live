@@ -146,6 +146,15 @@ describe('applyDowntimeRewards', () => {
     expect(data.resources.gold).toBe(310)
   })
 
+  // #312/#327: a character who died between starting the activity and it
+  // completing shouldn't have rewards applied to their sheet.
+  it('is a no-op when the character is no longer alive', async () => {
+    const db = makeDb({ id: 'ch1', name: 'Vera', resources: { gold: 10 }, inventory: null, isAlive: false })
+    const log = await applyDowntimeRewards(db as any, 'camp1', 'ch1', 'Smithing', { ...empty, gold: 300 })
+    expect(log).toEqual([])
+    expect(db.character.update).not.toHaveBeenCalled()
+  })
+
   // #261: when a downtime activity has a real resolved payer (its
   // linkedQuestId's quest-giver faction), gold routes through the same
   // assessPayout TRANSFER model quest rewards already use — parity with
@@ -183,7 +192,7 @@ describe('applyDowntimeRewards', () => {
   })
 
   it('merges contacts without duplicating existing ones', async () => {
-    const db = makeDb({ id: 'ch1', name: 'Vera', resources: { gold: 0, contacts: ['Old Maren'] }, inventory: null })
+    const db = makeDb({ id: 'ch1', name: 'Vera', resources: { gold: 0, contacts: ['Old Maren'] }, inventory: null, isAlive: true })
     await applyDowntimeRewards(db as any, 'camp1', 'ch1', 'Carousing', {
       ...empty,
       contacts: ['Old Maren', 'Fence Ilya'],

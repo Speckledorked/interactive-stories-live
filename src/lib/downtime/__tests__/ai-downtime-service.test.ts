@@ -412,6 +412,9 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     activityUpdateMock.mockResolvedValue({})
+    // #312/#327: advanceDynamicDowntime's own isAlive check, the first DB
+    // call it makes now.
+    findUniqueMock.mockResolvedValue({ isAlive: true })
     // Event/outcome generation is its own AI pipeline, out of scope for
     // gating logic — stubbed deterministic so day-advancement is testable
     // without a real completion/event roll.
@@ -480,6 +483,22 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
       where: { id: 'activity1' },
       data: { currentDay: 3, status: 'COMPLETED', completedAt: expect.any(Date) },
     })
+  })
+
+  // #312/#327: a character who died elsewhere in the campaign shouldn't
+  // have their in-flight downtime activity keep silently advancing/paying
+  // out — DowntimeActivity has no relation field to Character (see
+  // ai-downtime-service.ts's own comment), so this is checked with an
+  // explicit isAlive lookup, not a query-level filter.
+  it('does nothing when the character is no longer alive', async () => {
+    findUniqueMock.mockResolvedValue({ isAlive: false })
+    activityFindManyMock.mockResolvedValue([baseActivity({ currentDay: 2, estimatedDays: 3, linkedQuestId: null })])
+
+    const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(results).toEqual([])
+    expect(activityFindManyMock).not.toHaveBeenCalled()
+    expect(activityUpdateMock).not.toHaveBeenCalled()
   })
 })
 

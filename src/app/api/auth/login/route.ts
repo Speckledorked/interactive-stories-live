@@ -9,25 +9,30 @@ import { verifyPassword } from '@/lib/password'
 import { createToken } from '@/lib/auth'
 import { LoginRequest, AuthResponse, ErrorResponse } from '@/types/api'
 import { checkRateLimit, rateLimitExceededResponse, getClientIp, LOGIN_LIMIT } from '@/lib/rateLimit'
+import { normalizeEmail } from '@/lib/auth/normalizeEmail'
 
 export async function POST(request: NextRequest) {
   try {
     const body: LoginRequest = await request.json()
-    const { email, password } = body
+    const { password } = body
 
     // Validate input
-    if (!email || !password) {
+    if (!body.email || !password) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Email and password are required' },
         { status: 400 }
       )
     }
 
+    // #302: same normalization signup now applies at write time — a
+    // case-variant of the stored email must still find the account.
+    const email = normalizeEmail(body.email)
+
     // #210: brute force protection, keyed by IP+email so a real attacker
     // rotating through many emails from one IP is still limited per pair,
     // without globally rate-limiting an entire shared IP (NAT, office,
     // school) off of every account at once.
-    const rateLimitKey = `${getClientIp(request)}:${email.toLowerCase()}`
+    const rateLimitKey = `${getClientIp(request)}:${email}`
     const rateLimit = await checkRateLimit(rateLimitKey, LOGIN_LIMIT.bucket, LOGIN_LIMIT.limit, LOGIN_LIMIT.windowSeconds)
     if (!rateLimit.allowed) {
       return rateLimitExceededResponse(rateLimit)

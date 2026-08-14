@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUser } from '@/lib/auth'
 import { getVapidPublicKey, savePushSubscription, deletePushSubscription } from '@/lib/notifications/push-service'
+import { validatePushEndpoint } from '@/lib/notifications/pushEndpointValidation'
 
 export async function GET(request: NextRequest) {
   const user = await getUser(request)
@@ -37,6 +38,15 @@ export async function POST(request: NextRequest) {
         { error: 'A push subscription with endpoint and keys.p256dh/keys.auth is required' },
         { status: 400 }
       )
+    }
+
+    // #303: reject at registration time, not silently at send time — a
+    // stored endpoint is a server-initiated, VAPID-signed outbound request
+    // target (push-service.ts's sendPushToUser), so an unvalidated one is
+    // a self-service SSRF primitive.
+    const validation = validatePushEndpoint(endpoint)
+    if (!validation.valid) {
+      return NextResponse.json({ error: `Invalid push endpoint: ${validation.reason}` }, { status: 400 })
     }
 
     await savePushSubscription({

@@ -66,27 +66,61 @@ describe('GET', () => {
   })
 })
 
+const REAL_ENDPOINT = 'https://fcm.googleapis.com/fcm/send/abc123'
+
 describe('POST', () => {
   it('rejects an unauthenticated request', async () => {
     ;(getUser as any).mockResolvedValue(null)
-    const response = await POST(postRequest({ endpoint: 'e', keys: { p256dh: 'p', auth: 'a' } }))
+    const response = await POST(postRequest({ endpoint: REAL_ENDPOINT, keys: { p256dh: 'p', auth: 'a' } }))
     expect(response.status).toBe(401)
   })
 
   it('requires endpoint and keys', async () => {
-    const response = await POST(postRequest({ endpoint: 'e' }))
+    const response = await POST(postRequest({ endpoint: REAL_ENDPOINT }))
     expect(response.status).toBe(400)
     expect(savePushSubscription).not.toHaveBeenCalled()
   })
 
   it('saves a well-formed subscription', async () => {
-    const response = await POST(postRequest({ endpoint: 'e', keys: { p256dh: 'p', auth: 'a' } }))
+    const response = await POST(postRequest({ endpoint: REAL_ENDPOINT, keys: { p256dh: 'p', auth: 'a' } }))
     const body = await response.json()
     expect(response.status).toBe(200)
     expect(body).toEqual({ success: true })
     expect(savePushSubscription).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'u1', endpoint: 'e', p256dh: 'p', auth: 'a',
+      userId: 'u1', endpoint: REAL_ENDPOINT, p256dh: 'p', auth: 'a',
     }))
+  })
+
+  // #303: a stored endpoint is a server-initiated, VAPID-signed outbound
+  // request target — an unvalidated one is a self-service SSRF primitive
+  // (register a metadata/internal-network URL, then trigger a
+  // notification to yourself). Rejected at registration, not silently at
+  // send time.
+  it('#303: rejects an internal/metadata-range endpoint', async () => {
+    const response = await POST(postRequest({
+      endpoint: 'http://169.254.169.254/latest/meta-data/',
+      keys: { p256dh: 'p', auth: 'a' },
+    }))
+    expect(response.status).toBe(400)
+    expect(savePushSubscription).not.toHaveBeenCalled()
+  })
+
+  it('#303: rejects a public but non-push-service hostname', async () => {
+    const response = await POST(postRequest({
+      endpoint: 'https://evil.example.com/collect',
+      keys: { p256dh: 'p', auth: 'a' },
+    }))
+    expect(response.status).toBe(400)
+    expect(savePushSubscription).not.toHaveBeenCalled()
+  })
+
+  it('#303: rejects a non-https push-service-looking endpoint', async () => {
+    const response = await POST(postRequest({
+      endpoint: 'http://fcm.googleapis.com/fcm/send/abc123',
+      keys: { p256dh: 'p', auth: 'a' },
+    }))
+    expect(response.status).toBe(400)
+    expect(savePushSubscription).not.toHaveBeenCalled()
   })
 })
 

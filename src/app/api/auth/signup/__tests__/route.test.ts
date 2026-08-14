@@ -115,4 +115,47 @@ describe('POST /api/auth/signup', () => {
     expect(response.status).toBe(429)
     expect(db.user.create).not.toHaveBeenCalled()
   })
+
+  // #302: a case-variant of an existing account (or of a
+  // PLATFORM_ADMIN_EMAILS entry) must not be able to create a second,
+  // distinct account — normalized before both the existence check and the
+  // create, not just at read time on the platform-admin gate's own side.
+  it('#302: normalizes email to lowercase before the existence check and the create', async () => {
+    db.user.findUnique.mockResolvedValue(null)
+    db.user.create.mockResolvedValue({ id: 'new-user', email: 'boss@site.com' })
+
+    const response = await POST(makeRequest({ email: 'BOSS@Site.com', password: 'hunter2' }))
+
+    expect(response.status).toBe(201)
+    expect(db.user.findUnique).toHaveBeenCalledWith({ where: { email: 'boss@site.com' } })
+    expect(db.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ email: 'boss@site.com' }) })
+    )
+  })
+
+  it('#302: a case-variant of an already-registered email is rejected as a duplicate', async () => {
+    db.user.findUnique.mockResolvedValue({ id: 'existing', email: 'a@b.com' })
+
+    const response = await POST(makeRequest({ email: 'A@B.com', password: 'hunter2' }))
+
+    expect(response.status).toBe(409)
+    expect(db.user.findUnique).toHaveBeenCalledWith({ where: { email: 'a@b.com' } })
+    expect(db.user.create).not.toHaveBeenCalled()
+  })
+
+  it('#302: a genuine concurrent-signup race (findUnique missed it) still surfaces a clean 409, not a 500', async () => {
+    const { Prisma } = await import('@prisma/client')
+    db.user.findUnique.mockResolvedValue(null)
+    db.user.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed on the fields: (email)', {
+        code: 'P2002',
+        clientVersion: '5.22.0',
+        meta: { target: ['email'] },
+      })
+    )
+
+    const response = await POST(makeRequest({ email: 'race@example.com', password: 'hunter2' }))
+
+    expect(response.status).toBe(409)
+  })
 })

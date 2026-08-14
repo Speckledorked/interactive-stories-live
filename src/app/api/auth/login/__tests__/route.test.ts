@@ -114,4 +114,16 @@ describe('POST /api/auth/login', () => {
     expect(response.status).toBe(429)
     expect(db.user.findUnique).not.toHaveBeenCalled()
   })
+
+  // #302: the account is always stored lowercase now (signup normalizes),
+  // so a case-variant typed at login must still resolve to it.
+  it('#302: normalizes email to lowercase before the lookup', async () => {
+    db.user.findUnique.mockResolvedValue({ id: 'u1', email: 'a@b.com', password: 'hashed', tokenVersion: 1 })
+    ;(verifyPassword as any).mockResolvedValue(true)
+
+    const response = await POST(loginRequest({ email: 'A@B.com', password: 'hunter2' }))
+
+    expect(response.status).toBe(200)
+    expect(db.user.findUnique).toHaveBeenCalledWith({ where: { email: 'a@b.com' } })
+  })
 })

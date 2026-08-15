@@ -7,6 +7,7 @@ import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SectionHeader } from '@/components/ui/section-header'
 import { getLastCampaignId } from '@/lib/clientAuth'
+import { BookOpen, Dices, Download, Feather, Map as MapIcon, MessageSquare, Scroll, Users } from 'lucide-react'
 
 export default function HelpPage() {
   const [lastCampaignId, setLastCampaignId] = useState<string | null>(null)
@@ -28,7 +29,7 @@ export default function HelpPage() {
           href="/tutorial"
           className="group rounded-lg border border-myth-border bg-myth-surface p-6 transition-colors hover:border-myth-border-strong"
         >
-          <div className="text-5xl mb-4">📚</div>
+          <BookOpen className="mx-auto mb-4 h-10 w-10 text-myth-ink-faint" />
           <h3 className="font-display mb-2 text-2xl font-semibold text-myth-ink">
             Interactive Tutorial
           </h3>
@@ -173,17 +174,17 @@ export default function HelpPage() {
           <SectionHeader as="h2" title="Features" />
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
-              { icon: '👥', title: 'Invite Your Party', desc: 'No cap on how many players can join a campaign — share an invite link from the Players panel and everyone plays together' },
-              { icon: '💬', title: 'Chat', desc: 'Real-time in-character (IC) and out-of-character (OOC) chat to talk with the other real players in your campaign' },
-              { icon: '🎲', title: 'Turn Order', desc: 'Play is simultaneous by default — everyone acts anytime. Any player can turn on an optional turn queue for a scene that wants it' },
-              { icon: '📝', title: 'Notes', desc: 'Take private or shared notes to track NPCs, clues, and plot points' },
-              { icon: '🗺️', title: 'Maps', desc: 'AI-generated tactical maps with zones and character tokens' },
-              { icon: '📚', title: 'Wiki', desc: 'Track NPCs, factions, and progress threads automatically updated by MythOS' },
-              { icon: '📜', title: 'Story Log', desc: 'Auto-generated chronicle of your adventure with highlights and timeline' },
-              { icon: '📥', title: 'Export', desc: 'Download your campaign data — characters, scenes, factions, and more — as JSON' }
+              { icon: Users, title: 'Invite Your Party', desc: 'No cap on how many players can join a campaign — share an invite link from the Players panel and everyone plays together' },
+              { icon: MessageSquare, title: 'Chat', desc: 'Real-time in-character (IC) and out-of-character (OOC) chat to talk with the other real players in your campaign' },
+              { icon: Dices, title: 'Turn Order', desc: 'Play is simultaneous by default — everyone acts anytime. Any player can turn on an optional turn queue for a scene that wants it' },
+              { icon: Feather, title: 'Notes', desc: 'Take private or shared notes to track NPCs, clues, and plot points' },
+              { icon: MapIcon, title: 'Maps', desc: 'AI-generated tactical maps with zones and character tokens' },
+              { icon: BookOpen, title: 'Wiki', desc: 'Track NPCs, factions, and progress threads automatically updated by MythOS' },
+              { icon: Scroll, title: 'Story Log', desc: 'Auto-generated chronicle of your adventure with highlights and timeline' },
+              { icon: Download, title: 'Export', desc: 'Download your campaign data — characters, scenes, factions, and more — as JSON' }
             ].map((feature, index) => (
               <div key={index} className="rounded-lg border border-myth-border p-4">
-                <div className="text-3xl mb-2">{feature.icon}</div>
+                <feature.icon className="mb-2 h-6 w-6 text-myth-ink-muted" />
                 <h3 className="mb-1 text-lg font-bold text-myth-ink">{feature.title}</h3>
                 <p className="text-sm leading-relaxed text-myth-ink-muted">{feature.desc}</p>
               </div>
@@ -192,7 +193,7 @@ export default function HelpPage() {
         </section>
 
         <section>
-          <SectionHeader as="h2" title="Safety Tools" eyebrow="✋" />
+          <SectionHeader as="h2" title="Safety Tools" />
           <div className="mt-6 space-y-6 divide-y divide-myth-border">
             <div>
               <h3 className="mb-2 text-lg font-bold text-myth-ink">X-Card</h3>
@@ -229,7 +230,7 @@ export default function HelpPage() {
         </section>
 
         <section>
-          <SectionHeader as="h2" title="Support" eyebrow="💡" description="Need more help? Here are some resources:" />
+          <SectionHeader as="h2" title="Support" description="Need more help? Here are some resources:" />
           <div className="mt-6 space-y-3">
             {[
               { key: 'Cmd+K', desc: 'Open the command palette anywhere' },

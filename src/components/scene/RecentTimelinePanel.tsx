@@ -31,7 +31,7 @@ export function RecentTimelinePanel({ timeline, campaignId }: RecentTimelinePane
         meta={selectedEvent ? `Turn ${selectedEvent.turnNumber}` : undefined}
         body={selectedEvent?.summaryPublic || 'No summary recorded for this event.'}
         footerLinkHref={`/campaigns/${campaignId}/story-log`}
-        footerLinkLabel="View full story log →"
+        footerLinkLabel="View full story log"
       />
     </CollapsibleSidebarCard>
   )

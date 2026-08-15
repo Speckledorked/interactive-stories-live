@@ -8,8 +8,10 @@ import { getToken } from '@/lib/clientAuth';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs } from '@/components/ui/tabs';
 import { IconButton } from '@/components/ui/icon-button';
+import { NOTIFICATION_ICONS, NOTIFICATION_FALLBACK_ICON } from '@/lib/ui/icons';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Inbox } from 'lucide-react'
 
 interface Notification {
   id: string;
@@ -219,23 +221,8 @@ export default function NotificationPanel({
     }
   };
 
-  const getNotificationIcon = (type: string) => {
-    const icons: Record<string, string> = {
-      'TURN_REMINDER': '⏰',
-      'SCENE_CHANGE': '🎬',
-      'MENTION': '💬',
-      'WHISPER_RECEIVED': '🔒',
-      'NOTE_SHARED': '📝',
-      'CAMPAIGN_INVITE': '🎲',
-      'SCENE_RESOLVED': '✅',
-      'AI_RESPONSE_READY': '🤖',
-      'WORLD_EVENT': '🌍',
-      'FRIEND_REQUEST': '👋',
-      'SAFETY_ALERT': '✋',
-      'CAMPAIGN_MILESTONE': '🏆'
-    };
-    return icons[type] || '📢';
-  };
+  const getNotificationIcon = (type: string) =>
+    NOTIFICATION_ICONS[type] ?? NOTIFICATION_FALLBACK_ICON;
 
   const getPriorityColor = (priority: string) => {
     const colors: Record<string, string> = {
@@ -310,7 +297,7 @@ export default function NotificationPanel({
             </div>
           ) : notifications.length === 0 ? (
             <div className="text-center p-8 text-myth-gold">
-              <div className="text-4xl mb-2">📭</div>
+              <Inbox className="mx-auto mb-2 h-8 w-8 text-myth-ink-faint" />
               <p>No notifications</p>
             </div>
           ) : (
@@ -325,7 +312,7 @@ export default function NotificationPanel({
                 >
                   <div className="flex items-start gap-3">
                     <div className="text-xl">
-                      {getNotificationIcon(notification.type)}
+                      {(() => { const Icon = getNotificationIcon(notification.type); return <Icon className="h-4 w-4" />; })()}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
@@ -336,15 +323,15 @@ export default function NotificationPanel({
                         </h4>
                         <div className="flex items-center gap-1">
                           <div className={`w-2 h-2 rounded-full ${getPriorityColor(notification.priority)}`} />
-                          <Button
-                            variant="ghost" size="sm"
+                          <IconButton
+                            icon={X}
+                            label="Dismiss notification"
+                            size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               dismissNotification(notification.id);
                             }}
-                          >
-                            ✕
-                          </Button>
+                          />
                         </div>
                       </div>
                       <p className="text-sm text-myth-ink-faint mt-1 line-clamp-2">

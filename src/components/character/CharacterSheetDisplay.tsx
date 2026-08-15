@@ -14,7 +14,8 @@ import { DynamicDowntimeManager } from '@/components/downtime/DynamicDowntimeMan
 import { SectionHeader } from '@/components/ui/section-header'
 import { parseCorruptionTheme, corruptionStage, MAX_CORRUPTION } from '@/lib/game/corruption'
 import { Tabs } from '@/components/ui/tabs'
-import { Backpack, BarChart3, ClipboardList, HeartHandshake, Moon, Star } from 'lucide-react'
+import { Backpack, BarChart3, Circle, ClipboardList, Coins, CreditCard, DollarSign, HeartHandshake, JapaneseYen, Moon, Sparkles, Sprout, Star, Target, TrendingUp } from 'lucide-react'
+import { type IconComponent } from '@/lib/ui/icons'
 
 interface CharacterSheetDisplayProps {
   character: any
@@ -30,31 +31,31 @@ interface CharacterSheetDisplayProps {
 }
 
 // Helper function to get currency name based on universe
-function getCurrencyName(universe?: string): { singular: string; plural: string; icon: string } {
-  if (!universe) return { singular: 'gold', plural: 'gold', icon: '💰' }
+function getCurrencyName(universe?: string): { singular: string; plural: string; icon: IconComponent } {
+  if (!universe) return { singular: 'gold', plural: 'gold', icon: Coins }
 
   const lowerUniverse = universe.toLowerCase()
 
   // My Hero Academia / Modern settings
   if (lowerUniverse.includes('hero') || lowerUniverse.includes('mha') || lowerUniverse.includes('modern')) {
     if (lowerUniverse.includes('japan')) {
-      return { singular: 'yen', plural: 'yen', icon: '¥' }
+      return { singular: 'yen', plural: 'yen', icon: JapaneseYen }
     }
-    return { singular: 'dollar', plural: 'dollars', icon: '$' }
+    return { singular: 'dollar', plural: 'dollars', icon: DollarSign }
   }
 
   // Sci-fi settings
   if (lowerUniverse.includes('space') || lowerUniverse.includes('sci-fi') || lowerUniverse.includes('cyberpunk')) {
-    return { singular: 'credit', plural: 'credits', icon: '💳' }
+    return { singular: 'credit', plural: 'credits', icon: CreditCard }
   }
 
   // Post-apocalyptic
   if (lowerUniverse.includes('apocalypse') || lowerUniverse.includes('wasteland')) {
-    return { singular: 'cap', plural: 'caps', icon: '🔘' }
+    return { singular: 'cap', plural: 'caps', icon: Circle }
   }
 
   // Default to gold for fantasy
-  return { singular: 'gold', plural: 'gold', icon: '💰' }
+  return { singular: 'gold', plural: 'gold', icon: Coins }
 }
 
 // Reference/utility card — CRUD-ish or tabular content (see docs/design-system.md).
@@ -601,7 +602,8 @@ export default function CharacterSheetDisplay({
                         {resources.gold === 1 ? currency.singular : currency.plural}
                       </span>
                       <span className="text-2xl font-bold text-myth-ink">
-                        {currency.icon} {resources.gold}
+                        <currency.icon className="mr-1 inline h-4 w-4 align-[-0.15em]" />
+                        {resources.gold}
                       </span>
                     </div>
                   )}
@@ -653,7 +655,7 @@ export default function CharacterSheetDisplay({
             {!equipment.weapon && !equipment.armor && items.length === 0 && Object.keys(resources).length === 0 && (
               <Card className="md:col-span-2">
                 <div className="py-8 text-center text-myth-ink-faint">
-                  <div className="mb-2 text-4xl">🎒</div>
+                  <Backpack className="mx-auto mb-2 h-8 w-8 text-myth-ink-faint" />
                   <p className="text-sm">No items or equipment</p>
                   <p className="mt-1 text-xs">Your inventory is empty</p>
                 </div>
@@ -674,7 +676,7 @@ export default function CharacterSheetDisplay({
 
             {allConsequences.filter(c => c.type === 'enemy').length > 0 && (
               <Card>
-                <CardLabel className="text-myth-danger">⚔️ Enemies</CardLabel>
+                <CardLabel className="text-myth-danger">Enemies</CardLabel>
                 <div className="space-y-3">
                   {allConsequences
                     .filter(c => c.type === 'enemy')
@@ -689,7 +691,7 @@ export default function CharacterSheetDisplay({
 
             {allConsequences.filter(c => c.type === 'promise').length > 0 && (
               <Card>
-                <CardLabel>🤝 Promises</CardLabel>
+                <CardLabel>Promises</CardLabel>
                 <div className="space-y-3">
                   {allConsequences
                     .filter(c => c.type === 'promise')
@@ -704,7 +706,7 @@ export default function CharacterSheetDisplay({
 
             {allConsequences.filter(c => c.type === 'debt').length > 0 && (
               <Card>
-                <CardLabel>💰 Debts</CardLabel>
+                <CardLabel>Debts</CardLabel>
                 <div className="space-y-3">
                   {allConsequences
                     .filter(c => c.type === 'debt')
@@ -719,7 +721,7 @@ export default function CharacterSheetDisplay({
 
             {allConsequences.filter(c => c.type === 'longTermThreat').length > 0 && (
               <Card>
-                <CardLabel className="text-myth-danger">⚠️ Long-Term Threats</CardLabel>
+                <CardLabel className="text-myth-danger">Long-Term Threats</CardLabel>
                 <div className="space-y-3">
                   {allConsequences
                     .filter(c => c.type === 'longTermThreat')
@@ -735,7 +737,7 @@ export default function CharacterSheetDisplay({
             {allConsequences.length === 0 && (
               <Card>
                 <div className="py-12 text-center text-myth-ink-faint">
-                  <div className="mb-4 text-6xl">🌟</div>
+                  <Sparkles className="mx-auto mb-4 h-12 w-12 text-myth-ink-faint" />
                   <p className="mb-1 text-lg">No lasting ties yet</p>
                   <p className="text-sm">Your actions will shape these over time</p>
                 </div>
@@ -772,7 +774,7 @@ export default function CharacterSheetDisplay({
                 <div className="mt-4">
                 {entries.length === 0 ? (
                   <div className="py-8 text-center text-myth-ink-faint">
-                    <div className="mb-3 text-4xl">🌱</div>
+                    <Sprout className="mx-auto mb-3 h-8 w-8 text-myth-ink-faint" />
                     <p>No advancements yet</p>
                     <p className="mt-1 text-sm">Keep playing — your character grows organically through action</p>
                   </div>
@@ -781,25 +783,25 @@ export default function CharacterSheetDisplay({
                     {[...entries].reverse().map((entry: any, idx: number) => {
                       const date = new Date(entry.timestamp).toLocaleDateString()
                       const turnInfo = entry.turnNumber ? ` · Turn ${entry.turnNumber}` : ''
-                      let icon = '⭐'
+                      let Icon: IconComponent = Star
                       let color = 'text-myth-ink-muted'
                       let label = ''
                       if (entry.type === 'stat_increase') {
-                        icon = '📈'
+                        Icon = TrendingUp
                         color = 'text-myth-ink'
                         label = `${entry.details.statKey} ${entry.details.oldValue} → ${entry.details.newValue}`
                       } else if (entry.type === 'perk_gained') {
-                        icon = '✨'
+                        Icon = Sparkles
                         color = 'text-myth-good'
                         label = entry.details.perkName || entry.details.perkId
                       } else if (entry.type === 'move_learned') {
-                        icon = '🎯'
+                        Icon = Target
                         color = 'text-myth-ink'
                         label = entry.details.moveId
                       }
                       return (
                         <div key={idx} className="flex items-start gap-3 rounded-lg border border-myth-border bg-myth-surface-sunken p-3">
-                          <span className="text-lg">{icon}</span>
+                          <Icon className="mt-0.5 h-4 w-4 flex-shrink-0" />
                           <div className="min-w-0 flex-1">
                             <div className={`text-sm font-medium ${color}`}>{label}</div>
                             <div className="mt-0.5 text-xs text-myth-ink-faint">{entry.details.reason}</div>

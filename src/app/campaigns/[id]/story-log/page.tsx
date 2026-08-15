@@ -13,6 +13,7 @@ import { TavernCard, TavernEmptyState, TavernSpinner } from '@/components/tavern
 import { CalendarMonthGrid } from '@/components/tavern/CalendarMonthGrid'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { UI_ICONS } from '@/lib/ui/icons'
 
 interface CampaignLogEntry {
   id: string
@@ -204,7 +205,7 @@ export default function StoryLogPage() {
                 disabled={regenerating}
                 title="Re-summarize existing entries with a fresh AI pass"
               >
-                {regenerating ? 'Regenerating…' : '🔄 Regenerate All'}
+                {regenerating ? 'Regenerating…' : 'Regenerate All'}
               </Button>
               {regenerateResult && (
                 <p className="text-xs text-myth-gold text-right max-w-xs">{regenerateResult}</p>
@@ -287,7 +288,8 @@ export default function StoryLogPage() {
                   variant="ghost" size="sm" className="-ml-3 mb-3"
                   onClick={() => setShowPreCalendar((v) => !v)}
                 >
-                  {showPreCalendar ? '▾' : '▸'} Before your calendar began ({preCalendarLogs.length})
+                  {(() => { const I = showPreCalendar ? UI_ICONS.expanded : UI_ICONS.collapsed; return <I className="mr-1 inline h-3.5 w-3.5 align-[-0.15em]" /> })()}
+                  Before your calendar began ({preCalendarLogs.length})
                 </Button>
                 {showPreCalendar && (
                   <div className="space-y-4">

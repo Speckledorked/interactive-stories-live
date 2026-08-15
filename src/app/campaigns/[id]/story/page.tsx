@@ -28,7 +28,7 @@ import { MapViewerPanel } from '@/components/scene/MapViewerPanel'
 import { SceneChatPanel } from '@/components/scene/SceneChatPanel'
 import { ActiveClocksPanel } from '@/components/scene/ActiveClocksPanel'
 import { RecentTimelinePanel } from '@/components/scene/RecentTimelinePanel'
-import { Home, Scroll, StickyNote, Map as MapIcon, MessageSquare, Settings as SettingsIcon, Keyboard } from 'lucide-react'
+import { BookOpen, Home, Keyboard, Map as MapIcon, MessageSquare, Scroll, Settings as SettingsIcon, StickyNote, X } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
@@ -39,6 +39,7 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Spinner } from '@/components/ui/spinner'
 import { IconButton } from '@/components/ui/icon-button'
+import { UI_ICONS } from '@/lib/ui/icons'
 
 // Whether `characterId` may act in `scene` — participants is null for a
 // genuinely open scene (anyone can act; membership grows dynamically as
@@ -660,7 +661,7 @@ export default function StoryPage() {
         throw new Error(data.error || 'Failed to submit action')
       }
 
-      setSuccess('✓ Action submitted! The scene will auto-resolve once everyone has acted.')
+      setSuccess('Action submitted! The scene will auto-resolve once everyone has acted.')
       setActionText(prev => ({ ...prev, [sceneId]: '' }))
       await loadData() // Reload to show new action
     } catch (err) {
@@ -1186,7 +1187,7 @@ export default function StoryPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         {scene.isPaused && (
                           <span className="px-3 py-1 rounded-full text-xs font-medium bg-myth-danger/10 text-myth-danger">
-                            ✋ paused
+                            Paused
                           </span>
                         )}
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -1206,7 +1207,7 @@ export default function StoryPage() {
                             disabled={regeneratingSceneId === scene.id}
                             title="Regenerate this scene's opening — only available before anyone has acted"
                           >
-                            {regeneratingSceneId === scene.id ? 'Regenerating…' : '🔄 Regenerate'}
+                            {regeneratingSceneId === scene.id ? 'Regenerating…' : 'Regenerate'}
                           </Button>
                         )}
                         {isAdmin && (
@@ -1216,7 +1217,7 @@ export default function StoryPage() {
                             disabled={deletingSceneId === scene.id}
                             title="Permanently delete this scene"
                           >
-                            {deletingSceneId === scene.id ? 'Deleting…' : '🗑️ Delete'}
+                            {deletingSceneId === scene.id ? 'Deleting…' : 'Delete'}
                           </Button>
                         )}
                         {scene.status === 'RESOLVING' && isAdmin && (
@@ -1295,7 +1296,7 @@ export default function StoryPage() {
                               onClick={() => handleGenerateSceneImage(scene.id)}
                               disabled={generatingImageFor[scene.id]}
                             >
-                              {generatingImageFor[scene.id] ? 'Generating…' : '🖼️ Generate scene image'}
+                              {generatingImageFor[scene.id] ? 'Generating…' : 'Generate scene image'}
                             </Button>
                             {imageGenError[scene.id] && (
                               <span className="text-xs text-myth-danger">{imageGenError[scene.id]}</span>
@@ -1332,7 +1333,7 @@ export default function StoryPage() {
                                         Exchange {idx + 1}
                                       </h4>
                                       <span className="text-myth-ink-faint text-xs flex-shrink-0 ml-2">
-                                        {isExpanded ? '▼' : '▶'}
+                                        {(() => { const I = isExpanded ? UI_ICONS.expanded : UI_ICONS.collapsed; return <I className="h-4 w-4" /> })()}
                                       </span>
                                     </button>
                                   ) : null}
@@ -1379,7 +1380,7 @@ export default function StoryPage() {
                           Player Actions ({scene.playerActions.length})
                         </h3>
                         <span className="text-myth-ink-faint">
-                          {expandedActions[scene.id] ? '▼' : '▶'}
+                          {(() => { const I = expandedActions[scene.id] ? UI_ICONS.expanded : UI_ICONS.collapsed; return <I className="h-4 w-4" /> })()}
                         </span>
                       </button>
                       {expandedActions[scene.id] && (
@@ -1419,7 +1420,7 @@ export default function StoryPage() {
                             title="Your progress is saved — come back anytime"
                           >
                             <span>Save &amp; read later</span>
-                            <span className="opacity-70">📖</span>
+                            <BookOpen className="h-4 w-4 opacity-70" />
                           </a>
                         )}
                       </div>
@@ -1457,7 +1458,7 @@ export default function StoryPage() {
                   {scene.status === 'AWAITING_ACTIONS' && userHasSubmitted && (
                     <div className="rounded-lg border border-myth-good/30 bg-myth-good/10 p-5">
                       <p className="text-myth-good text-sm">
-                        ✓ You've submitted your action. Waiting for other participants...
+                        You&rsquo;ve submitted your action. Waiting for other participants…
                       </p>
                     </div>
                   )}
@@ -1475,12 +1476,12 @@ export default function StoryPage() {
                         className="flex items-center justify-between w-full text-left"
                       >
                         <div>
-                          <h3 className="text-sm font-medium text-myth-ink-muted">💬 Ask the GM</h3>
+                          <h3 className="flex items-center gap-1.5 text-sm font-medium text-myth-ink-muted"><MessageSquare className="h-4 w-4" />Ask the GM</h3>
                           <p className="text-xs text-myth-ink-faint mt-0.5">
                             A clarifying question, out of character — this doesn&apos;t count as your action and nothing happens in the story because of it.
                           </p>
                         </div>
-                        <span className="text-myth-ink-faint flex-shrink-0 ml-3">{showAskGm[scene.id] ? '▼' : '▶'}</span>
+                        {(() => { const I = showAskGm[scene.id] ? UI_ICONS.expanded : UI_ICONS.collapsed; return <I className="ml-3 h-4 w-4 flex-shrink-0 text-myth-ink-faint" /> })()}
                       </button>
 
                       {showAskGm[scene.id] && (
@@ -1549,14 +1550,14 @@ export default function StoryPage() {
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                           <div className="flex-1">
                             <p className={`text-sm font-medium mb-1 ${allParticipantsSubmitted ? 'text-myth-good' : 'text-myth-info'}`}>
-                              🎲 Scene Controls
+                              Scene Controls
                             </p>
                             <p className="text-myth-ink-muted text-xs mb-2">
                               {(scene.playerActions || []).length} action(s) submitted. Current exchange: {scene.currentExchange ?? 0}
                             </p>
                             {allParticipantsSubmitted ? (
                               <p className="text-myth-good text-xs mb-1">
-                                ✓ Everyone has submitted — resolution starts on its own.
+                                Everyone has submitted — resolution starts on its own.
                               </p>
                             ) : (
                               <p className="text-myth-ink-faint text-xs">
@@ -1607,7 +1608,7 @@ export default function StoryPage() {
           ) : (
             <div className="rounded-lg border border-myth-border bg-myth-surface px-5 py-12">
               <div className="text-center mb-8">
-                <div className="text-6xl mb-4">📜</div>
+                <Scroll className="mx-auto mb-4 h-12 w-12 text-myth-ink-faint" />
                 <h2 className="font-display text-xl font-semibold text-myth-ink mb-2">
                   {resolvedScenes.length > 0 ? 'Scene Complete!' : 'No Active Scene'}
                 </h2>
@@ -1625,7 +1626,7 @@ export default function StoryPage() {
                 <div className="max-w-2xl mx-auto mb-8">
                   <div className="bg-myth-surface-sunken rounded-lg p-4 border border-myth-border">
                     <div className="flex items-start gap-3 mb-3">
-                      <span className="text-2xl">📖</span>
+                      <BookOpen className="h-5 w-5 flex-shrink-0" />
                       <div className="flex-1">
                         <h3 className="font-display text-myth-ink mb-1">Last Scene Summary</h3>
                         <p className="text-sm text-myth-ink-muted line-clamp-3">
@@ -1639,7 +1640,7 @@ export default function StoryPage() {
                       href={`/campaigns/${campaignId}/story-log`}
                       className="text-xs text-myth-ink-muted hover:text-myth-ink transition-colors"
                     >
-                      View complete story log →
+                      View complete story log
                     </Link>
                   </div>
                 </div>
@@ -1663,7 +1664,7 @@ export default function StoryPage() {
                           </span>
                         ) : (
                           <span className="flex items-center justify-center gap-2">
-                            🎬 {resolvedScenes.length > 0 ? 'Continue Story' : 'Start First Scene'}
+                            {resolvedScenes.length > 0 ? 'Continue Story' : 'Start First Scene'}
                           </span>
                         )}
                       </Button>
@@ -1673,7 +1674,7 @@ export default function StoryPage() {
                           variant="ghost" size="sm" className="w-full"
                           onClick={() => setShowSceneOptions(true)}
                         >
-                          ⚙️ More scene options...
+                          More scene options…
                         </Button>
                       )}
 
@@ -1687,15 +1688,15 @@ export default function StoryPage() {
                     <div className="bg-myth-surface-sunken rounded-lg border border-myth-border p-6 space-y-4">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="font-display text-myth-ink text-lg">Scene Creation Options</h3>
-                        <Button
-                          variant="ghost" size="sm"
+                        <IconButton
+                          icon={X}
+                          label="Close scene creation options"
+                          size="sm"
                           onClick={() => {
                             setShowSceneOptions(false)
                             setSelectedSceneCharacters([])
                           }}
-                        >
-                          ✕
-                        </Button>
+                        />
                       </div>
 
                       {/* Option 1: Continue Story */}
@@ -1705,7 +1706,7 @@ export default function StoryPage() {
                           onClick={handleContinueStory}
                           disabled={startingScene}
                         >
-                          {startingScene ? 'Generating...' : '📖 Continue Story Naturally'}
+                          {startingScene ? 'Generating…' : 'Continue Story Naturally'}
                         </Button>
                         <p className="text-xs text-myth-ink-faint">
                           AI chooses the next scene based on story flow and character goals
@@ -1723,7 +1724,7 @@ export default function StoryPage() {
                               onClick={handleFullPartyScene}
                               disabled={startingScene}
                             >
-                              {startingScene ? 'Generating...' : '👥 Full Party Scene'}
+                              {startingScene ? 'Generating…' : 'Full Party Scene'}
                             </Button>
                             <p className="text-xs text-myth-ink-faint">
                               Create a scene with all {campaign.characters.length} characters
@@ -1738,7 +1739,7 @@ export default function StoryPage() {
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <label className="font-display text-myth-ink text-sm">
-                            🎭 Character-Focused Scene
+                            Character-Focused Scene
                           </label>
                           <span className="text-xs text-myth-ink-faint">
                             {selectedSceneCharacters.length} selected

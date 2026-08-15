@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
 import { getPusherClient } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
 import { Button } from '@/components/ui/button';
+import { Check } from 'lucide-react'
 
 interface TurnInfo {
   currentPlayer: {
@@ -257,7 +258,7 @@ export default function TurnTracker({
           <div className="flex items-center justify-between mb-3">
             <div>
               <div className="font-medium text-myth-ink">
-                {isMyTurn ? '🎯 Your Turn!' : `Waiting for ${turnInfo.currentPlayer.name}`}
+                {isMyTurn ? 'Your Turn!' : `Waiting for ${turnInfo.currentPlayer.name}`}
               </div>
               <div className="text-sm text-myth-ink-muted">
                 {turnInfo.currentPlayer.name}
@@ -327,7 +328,7 @@ export default function TurnTracker({
                   )}
                 </div>
                 <div className="text-xs text-myth-ink-faint">
-                  {index < turnInfo.turnIndex ? '✓' :
+                  {index < turnInfo.turnIndex ? <Check className="h-3 w-3" /> :
                    index === turnInfo.turnIndex ? '⏳' : '⏸️'}
                 </div>
               </div>

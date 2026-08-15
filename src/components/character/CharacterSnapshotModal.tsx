@@ -11,7 +11,7 @@ import CharacterAvatar from './CharacterAvatar'
 import ConsequenceBadge from './ConsequenceBadge'
 import { Button } from '@/components/ui/button'
 import { Tabs } from '@/components/ui/tabs'
-import { Backpack, BarChart3, HeartHandshake, X } from 'lucide-react'
+import { Backpack, BarChart3, Coins, Handshake, HeartHandshake, Sparkles, Swords, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 
 interface CharacterSnapshotModalProps {
@@ -349,7 +349,7 @@ export default function CharacterSnapshotModal({
 
                     {allConsequences.filter(c => c.type === 'enemy').length > 0 && (
                       <div>
-                        <h3 className="text-sm font-medium text-myth-danger mb-2">⚔️ ENEMIES</h3>
+                        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-myth-danger"><Swords className="h-4 w-4" />ENEMIES</h3>
                         <div className="space-y-2">
                           {allConsequences
                             .filter(c => c.type === 'enemy')
@@ -364,7 +364,7 @@ export default function CharacterSnapshotModal({
 
                     {allConsequences.filter(c => c.type === 'promise').length > 0 && (
                       <div>
-                        <h3 className="text-sm font-medium text-myth-good mb-2">🤝 PROMISES</h3>
+                        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-myth-good"><Handshake className="h-4 w-4" />PROMISES</h3>
                         <div className="space-y-2">
                           {allConsequences
                             .filter(c => c.type === 'promise')
@@ -379,7 +379,7 @@ export default function CharacterSnapshotModal({
 
                     {allConsequences.filter(c => c.type === 'debt').length > 0 && (
                       <div>
-                        <h3 className="text-sm font-medium text-myth-warn mb-2">💰 DEBTS</h3>
+                        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-myth-warn"><Coins className="h-4 w-4" />DEBTS</h3>
                         <div className="space-y-2">
                           {allConsequences
                             .filter(c => c.type === 'debt')
@@ -394,7 +394,7 @@ export default function CharacterSnapshotModal({
 
                     {allConsequences.length === 0 && (
                       <div className="text-center py-8 text-myth-ink-faint">
-                        <div className="text-4xl mb-2">🌟</div>
+                        <Sparkles className="mx-auto mb-2 h-8 w-8 text-myth-ink-faint" />
                         <p className="text-sm">No lasting ties yet</p>
                         <p className="text-xs mt-1">Your actions will shape these over time</p>
                       </div>
@@ -424,7 +424,7 @@ export default function CharacterSnapshotModal({
               className="rounded-md bg-myth-accent px-4 py-2 text-sm font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover"
               target="_blank"
             >
-              Full Character Sheet →
+              Full Character Sheet
             </a>
           </div>
         </div>

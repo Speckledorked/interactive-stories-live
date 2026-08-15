@@ -300,7 +300,7 @@ export default function CampaignLobbyPage() {
           <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
             <p className="text-myth-danger">{error || 'Campaign not found'}</p>
             <Link href="/campaigns" className="mt-4 inline-block text-myth-ink-muted hover:text-myth-ink hover:underline">
-              ← Back to campaigns
+              Back to campaigns
             </Link>
           </div>
         </main>
@@ -438,7 +438,7 @@ export default function CampaignLobbyPage() {
               href={`/campaigns/${campaignId}/wiki?type=RUMORS`}
               className="text-sm text-myth-ink-faint hover:text-myth-ink hover:underline"
             >
-              See everything that's happened →
+              See everything that&rsquo;s happened
             </Link>
           </div>
         )}
@@ -460,7 +460,7 @@ export default function CampaignLobbyPage() {
                     disabled={regeneratingLogs}
                     title="Re-summarize existing entries with a fresh AI pass"
                   >
-                    {regeneratingLogs ? 'Regenerating…' : '🔄 Regenerate All'}
+                    {regeneratingLogs ? 'Regenerating…' : 'Regenerate All'}
                   </Button>
                   {regenerateLogsResult && (
                     <p className="max-w-xs text-right text-xs text-myth-ink-faint">{regenerateLogsResult}</p>

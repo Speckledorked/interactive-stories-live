@@ -6,6 +6,8 @@
 import { useState } from 'react'
 import SceneMoodTag, { detectSceneMood } from './SceneMoodTag'
 import { Button } from '@/components/ui/button'
+import { UI_ICONS } from '@/lib/ui/icons'
+import { BookOpen } from 'lucide-react'
 
 interface TimelineEvent {
   id: string
@@ -30,7 +32,7 @@ export default function VisualTimeline({ events, compact = false }: VisualTimeli
   if (events.length === 0) {
     return (
       <div className="text-center py-16">
-        <div className="text-6xl mb-4">📖</div>
+        <BookOpen className="mx-auto mb-4 h-12 w-12 text-myth-ink-faint" />
         <p className="text-xl text-myth-ink mb-2">Your story begins here</p>
         <p className="text-sm text-myth-gold">Events will appear as your adventure unfolds</p>
       </div>
@@ -126,7 +128,7 @@ export default function VisualTimeline({ events, compact = false }: VisualTimeli
                 <div className="mt-4 flex items-center justify-between text-xs text-myth-gold">
                   <span>{new Date(event.createdAt).toLocaleDateString()} at {new Date(event.createdAt).toLocaleTimeString()}</span>
                   <Button variant="ghost" size="sm">
-                    {isExpanded ? 'Show less ▲' : 'Show more ▼'}
+                    {(() => { const I = isExpanded ? UI_ICONS.expanded : UI_ICONS.collapsed; return <><span>{isExpanded ? 'Show less' : 'Show more'}</span><I className="ml-1 inline h-3.5 w-3.5 align-[-0.15em]" /></> })()}
                   </Button>
                 </div>
               </div>

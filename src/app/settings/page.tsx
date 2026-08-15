@@ -9,7 +9,7 @@ import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId, update
 import NotificationSettings from '@/components/settings/NotificationSettings'
 import { ThemeSetting } from '@/components/settings/ThemeSetting'
 import BalanceDisplay from '@/components/BalanceDisplay'
-import { Bell, Lock, User, X } from 'lucide-react'
+import { AlertTriangle, Bell, Coins, Lock, User, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
@@ -18,8 +18,16 @@ import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { UI_ICONS } from '@/lib/ui/icons'
 
 type TabKey = 'notifications' | 'profile' | 'privacy'
+
+// Success/failure used to be encoded in the message string itself — a
+// '✓ '/'✗ ' prefix that the render site then read back with
+// `.startsWith('✓')` to pick a color. That made a glyph load-bearing:
+// changing the icon would have silently broken the coloring. The state
+// carries the outcome explicitly now, and the icon is just an icon.
+type StatusMessage = { ok: boolean; text: string } | null
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -30,7 +38,7 @@ export default function SettingsPage() {
   // Profile editing state
   const [displayName, setDisplayName] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
-  const [profileMessage, setProfileMessage] = useState('')
+  const [profileMessage, setProfileMessage] = useState<StatusMessage>(null)
 
   // Password change state
   const [showPasswordModal, setShowPasswordModal] = useState(false)
@@ -38,13 +46,13 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
-  const [passwordMessage, setPasswordMessage] = useState('')
+  const [passwordMessage, setPasswordMessage] = useState<StatusMessage>(null)
 
   // Delete account state
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deletingAccount, setDeletingAccount] = useState(false)
-  const [deleteMessage, setDeleteMessage] = useState('')
+  const [deleteMessage, setDeleteMessage] = useState<StatusMessage>(null)
   const [lastCampaignId, setLastCampaignIdState] = useState<string | null>(null)
 
   useEffect(() => {
@@ -63,7 +71,7 @@ export default function SettingsPage() {
   // Handler: Save profile
   const handleSaveProfile = async () => {
     setSavingProfile(true)
-    setProfileMessage('')
+    setProfileMessage(null)
 
     try {
       const response = await authenticatedFetch('/api/user', {
@@ -77,14 +85,14 @@ export default function SettingsPage() {
       if (response.ok) {
         setUser(data.user)
         updateStoredUser({ name: displayName })
-        setProfileMessage('✓ Profile updated successfully!')
-        setTimeout(() => setProfileMessage(''), 3000)
+        setProfileMessage({ ok: true, text: 'Profile updated successfully!' })
+        setTimeout(() => setProfileMessage(null), 3000)
       } else {
-        setProfileMessage(`✗ ${data.error || 'Failed to update profile'}`)
+        setProfileMessage({ ok: false, text: `${data.error || 'Failed to update profile'}` })
       }
     } catch (error) {
       console.error('Save profile error:', error)
-      setProfileMessage('✗ An error occurred while saving')
+      setProfileMessage({ ok: false, text: 'An error occurred while saving' })
     } finally {
       setSavingProfile(false)
     }
@@ -92,21 +100,21 @@ export default function SettingsPage() {
 
   // Handler: Change password
   const handleChangePassword = async () => {
-    setPasswordMessage('')
+    setPasswordMessage(null)
 
     // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setPasswordMessage('✗ All fields are required')
+      setPasswordMessage({ ok: false, text: 'All fields are required' })
       return
     }
 
     if (newPassword !== confirmPassword) {
-      setPasswordMessage('✗ New passwords do not match')
+      setPasswordMessage({ ok: false, text: 'New passwords do not match' })
       return
     }
 
     if (newPassword.length < 8) {
-      setPasswordMessage('✗ Password must be at least 8 characters')
+      setPasswordMessage({ ok: false, text: 'Password must be at least 8 characters' })
       return
     }
 
@@ -122,20 +130,20 @@ export default function SettingsPage() {
       const data = await response.json()
 
       if (response.ok) {
-        setPasswordMessage('✓ Password changed successfully!')
+        setPasswordMessage({ ok: true, text: 'Password changed successfully!' })
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')
         setTimeout(() => {
           setShowPasswordModal(false)
-          setPasswordMessage('')
+          setPasswordMessage(null)
         }, 2000)
       } else {
-        setPasswordMessage(`✗ ${data.error || 'Failed to change password'}`)
+        setPasswordMessage({ ok: false, text: `${data.error || 'Failed to change password'}` })
       }
     } catch (error) {
       console.error('Change password error:', error)
-      setPasswordMessage('✗ An error occurred')
+      setPasswordMessage({ ok: false, text: 'An error occurred' })
     } finally {
       setChangingPassword(false)
     }
@@ -143,10 +151,10 @@ export default function SettingsPage() {
 
   // Handler: Delete account
   const handleDeleteAccount = async () => {
-    setDeleteMessage('')
+    setDeleteMessage(null)
 
     if (deleteConfirmation !== 'DELETE MY ACCOUNT') {
-      setDeleteMessage('✗ Please type "DELETE MY ACCOUNT" to confirm')
+      setDeleteMessage({ ok: false, text: 'Please type "DELETE MY ACCOUNT" to confirm' })
       return
     }
 
@@ -162,7 +170,7 @@ export default function SettingsPage() {
       const data = await response.json()
 
       if (response.ok) {
-        setDeleteMessage('✓ Account deleted. Redirecting...')
+        setDeleteMessage({ ok: true, text: 'Account deleted. Redirecting...' })
         // Clear auth and redirect to home
         localStorage.removeItem('token')
         localStorage.removeItem('user')
@@ -170,11 +178,11 @@ export default function SettingsPage() {
           router.push('/')
         }, 1500)
       } else {
-        setDeleteMessage(`✗ ${data.error || 'Failed to delete account'}`)
+        setDeleteMessage({ ok: false, text: `${data.error || 'Failed to delete account'}` })
       }
     } catch (error) {
       console.error('Delete account error:', error)
-      setDeleteMessage('✗ An error occurred')
+      setDeleteMessage({ ok: false, text: 'An error occurred' })
     } finally {
       setDeletingAccount(false)
     }
@@ -224,7 +232,7 @@ export default function SettingsPage() {
         {activeTab === 'notifications' && (
           <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="text-3xl">🔔</div>
+              <Bell className="h-7 w-7 text-myth-ink-muted" />
               <h2 className="text-2xl font-bold text-myth-ink">Notification Preferences</h2>
             </div>
             <NotificationSettings />
@@ -234,7 +242,7 @@ export default function SettingsPage() {
         {activeTab === 'profile' && (
           <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="text-3xl">👤</div>
+              <User className="h-7 w-7 text-myth-ink-muted" />
               <h2 className="text-2xl font-bold text-myth-ink">Profile Settings</h2>
             </div>
             <div className="space-y-5">
@@ -292,10 +300,11 @@ export default function SettingsPage() {
                   )}
                 </Button>
                 {profileMessage && (
-                  <p className={`text-sm mt-3 flex items-center gap-1 ${
-                    profileMessage.startsWith('✓') ? 'text-myth-good' : 'text-myth-danger'
+                  <p className={`mt-3 flex items-center gap-1.5 text-sm ${
+                    profileMessage.ok ? 'text-myth-good' : 'text-myth-danger'
                   }`}>
-                    {profileMessage}
+                    {profileMessage.ok ? <UI_ICONS.success className="h-4 w-4" /> : <UI_ICONS.failure className="h-4 w-4" />}
+                    {profileMessage.text}
                   </p>
                 )}
               </div>
@@ -307,7 +316,7 @@ export default function SettingsPage() {
         {activeTab === 'profile' && (
           <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="text-3xl">💰</div>
+              <Coins className="h-7 w-7 text-myth-ink-muted" />
               <h2 className="text-2xl font-bold text-myth-ink">Balance & Billing</h2>
             </div>
             <p className="text-sm text-myth-ink-muted mb-4">
@@ -320,7 +329,7 @@ export default function SettingsPage() {
         {activeTab === 'privacy' && (
           <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="text-3xl">🔒</div>
+              <Lock className="h-7 w-7 text-myth-ink-muted" />
               <h2 className="text-2xl font-bold text-myth-ink">Privacy & Security</h2>
             </div>
             <div className="space-y-0">
@@ -377,7 +386,7 @@ export default function SettingsPage() {
         {activeTab === 'privacy' && (
           <div className="rounded-lg border border-myth-danger/30 bg-myth-danger/10 p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="text-3xl">⚠️</div>
+              <AlertTriangle className="h-7 w-7 text-myth-danger" />
               <h3 className="text-xl font-bold text-myth-danger">Danger Zone</h3>
             </div>
             <p className="text-sm text-myth-ink-muted mb-6 leading-relaxed">
@@ -404,7 +413,7 @@ export default function SettingsPage() {
                 label="Close change-password dialog"
                 onClick={() => {
                   setShowPasswordModal(false)
-                  setPasswordMessage('')
+                  setPasswordMessage(null)
                   setCurrentPassword('')
                   setNewPassword('')
                   setConfirmPassword('')
@@ -447,10 +456,11 @@ export default function SettingsPage() {
               </div>
 
               {passwordMessage && (
-                <p className={`text-sm flex items-center gap-1 ${
-                  passwordMessage.startsWith('✓') ? 'text-myth-good' : 'text-myth-danger'
+                <p className={`flex items-center gap-1.5 text-sm ${
+                  passwordMessage.ok ? 'text-myth-good' : 'text-myth-danger'
                 }`}>
-                  {passwordMessage}
+                  {passwordMessage.ok ? <UI_ICONS.success className="h-4 w-4" /> : <UI_ICONS.failure className="h-4 w-4" />}
+                  {passwordMessage.text}
                 </p>
               )}
 
@@ -473,7 +483,7 @@ export default function SettingsPage() {
                   variant="secondary"
                   onClick={() => {
                     setShowPasswordModal(false)
-                    setPasswordMessage('')
+                    setPasswordMessage(null)
                     setCurrentPassword('')
                     setNewPassword('')
                     setConfirmPassword('')
@@ -493,7 +503,7 @@ export default function SettingsPage() {
           <div className="rounded-lg border border-myth-danger/30 bg-myth-surface-raised p-6 max-w-md w-full shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2">
-                <span className="text-2xl">⚠️</span>
+                <AlertTriangle className="h-6 w-6 flex-shrink-0 text-myth-danger" />
                 <h3 className="text-xl font-bold text-myth-danger">Delete Account</h3>
               </div>
               <IconButton
@@ -501,7 +511,7 @@ export default function SettingsPage() {
                 label="Close delete-account dialog"
                 onClick={() => {
                   setShowDeleteModal(false)
-                  setDeleteMessage('')
+                  setDeleteMessage(null)
                   setDeleteConfirmation('')
                 }}
               />
@@ -537,10 +547,11 @@ export default function SettingsPage() {
               </div>
 
               {deleteMessage && (
-                <p className={`text-sm flex items-center gap-1 ${
-                  deleteMessage.startsWith('✓') ? 'text-myth-good' : 'text-myth-danger'
+                <p className={`flex items-center gap-1.5 text-sm ${
+                  deleteMessage.ok ? 'text-myth-good' : 'text-myth-danger'
                 }`}>
-                  {deleteMessage}
+                  {deleteMessage.ok ? <UI_ICONS.success className="h-4 w-4" /> : <UI_ICONS.failure className="h-4 w-4" />}
+                  {deleteMessage.text}
                 </p>
               )}
 
@@ -563,7 +574,7 @@ export default function SettingsPage() {
                   variant="secondary"
                   onClick={() => {
                     setShowDeleteModal(false)
-                    setDeleteMessage('')
+                    setDeleteMessage(null)
                     setDeleteConfirmation('')
                   }}
                 >

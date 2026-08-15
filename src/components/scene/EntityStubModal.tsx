@@ -66,7 +66,7 @@ export function EntityStubModal({
         {footerLinkHref && (
           <div className="px-5 py-3 border-t border-myth-border">
             <Link href={footerLinkHref} className="text-sm text-myth-accent hover:underline">
-              {footerLinkLabel || 'View in wiki →'}
+              {footerLinkLabel || 'View in wiki'}
             </Link>
           </div>
         )}

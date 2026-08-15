@@ -4,6 +4,7 @@
 'use client'
 
 import { getHarmStatus, HarmLevel } from '@/lib/game/harm'
+import { AlertTriangle } from 'lucide-react'
 
 interface HarmTrackerProps {
   current: number // Current harm (0-6)
@@ -94,7 +95,7 @@ export default function HarmTracker({
 
       {harmStatus.status !== 'Fine' && (
         <div className="text-xs text-myth-warn bg-myth-warn/10 border border-myth-warn/30 rounded px-2 py-1">
-          ⚠️ {harmStatus.description}
+          <AlertTriangle className="mr-1 inline h-3.5 w-3.5 align-[-0.15em]" />{harmStatus.description}
         </div>
       )}
     </div>

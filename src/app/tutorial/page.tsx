@@ -8,6 +8,7 @@ import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import type { TutorialStepWithProgress, TutorialProgressResponse } from '@/types/api'
 import { Button } from '@/components/ui/button'
+import { Check, Gamepad2, Lightbulb, MessageSquare, Rocket, Swords } from 'lucide-react'
 
 type TutorialStep = TutorialStepWithProgress
 
@@ -91,10 +92,10 @@ export default function TutorialPage() {
   }
 
   const categoryIcons = {
-    basics: '🎮',
-    social: '💬',
-    combat: '⚔️',
-    advanced: '🚀'
+    basics: Gamepad2,
+    social: MessageSquare,
+    combat: Swords,
+    advanced: Rocket
   }
 
   return (
@@ -146,7 +147,10 @@ export default function TutorialPage() {
           return (
             <div key={category} className="rounded-lg border border-myth-border bg-myth-surface p-6">
               <div className="mb-6 flex items-center gap-3">
-                <div className="text-4xl">{categoryIcons[category as keyof typeof categoryIcons]}</div>
+                {(() => {
+                  const Icon = categoryIcons[category as keyof typeof categoryIcons]
+                  return <Icon className="h-8 w-8 flex-shrink-0 text-myth-ink-muted" />
+                })()}
                 <h2 className="text-2xl font-bold text-myth-ink">
                   {categoryLabels[category as keyof typeof categoryLabels]}
                 </h2>
@@ -225,7 +229,7 @@ export default function TutorialPage() {
 
                           {isCompleted && step.userProgress?.completedAt && (
                             <div className="text-xs font-medium text-myth-good">
-                              ✓ {new Date(step.userProgress.completedAt).toLocaleDateString()}
+                              <Check className="mr-1 inline h-3.5 w-3.5 align-[-0.15em]" />{new Date(step.userProgress.completedAt).toLocaleDateString()}
                             </div>
                           )}
                         </div>
@@ -242,7 +246,7 @@ export default function TutorialPage() {
       {/* Help Text */}
       <div className="mt-8 rounded-lg border border-myth-border bg-myth-surface p-6">
         <div className="flex items-start gap-4">
-          <div className="text-3xl">💡</div>
+          <Lightbulb className="h-7 w-7 flex-shrink-0 text-myth-ink-muted" />
           <div>
             <h3 className="mb-3 text-lg font-bold text-myth-ink">How the Tutorial Works</h3>
             <ul className="space-y-2 text-sm text-myth-ink-muted">

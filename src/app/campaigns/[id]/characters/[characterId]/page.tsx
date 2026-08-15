@@ -171,7 +171,7 @@ export default function CharacterPage() {
           <h2 className="mb-4 text-2xl font-bold text-myth-danger">Error</h2>
           <p className="mb-4 text-myth-ink-muted">{error || 'Character not found'}</p>
           <Link href={`/campaigns/${campaignId}`} className="text-myth-accent hover:text-myth-accent-hover">
-            ← Back to Campaign
+            Back to Campaign
           </Link>
         </main>
       </TavernPage>

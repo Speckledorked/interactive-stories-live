@@ -3,6 +3,8 @@
 
 'use client'
 
+import { MOOD_ICONS } from '@/lib/ui/icons'
+
 export type SceneMood =
   | 'combat'
   | 'social'
@@ -22,18 +24,8 @@ interface SceneMoodTagProps {
 // Myth only has 4 semantic color slots (good/warn/danger/info) plus
 // neutral ink — collapsing the old 9 distinct hues by valence rather than
 // inventing new colors. Icons stay per-mood to carry the fine-grained
-// distinction the shared colors lose.
-const MOOD_ICONS: Record<SceneMood, string> = {
-  combat: '⚔️',
-  social: '💬',
-  investigation: '🔍',
-  stealth: '🌙',
-  exploration: '🗺️',
-  downtime: '☕',
-  dramatic: '🎭',
-  tense: '⚡',
-  peaceful: '🕊️',
-}
+// distinction the shared colors lose; they live in lib/ui/icons.ts so the
+// same mood reads the same everywhere.
 
 const MOOD_LABELS: Record<SceneMood, string> = {
   combat: 'Combat',
@@ -74,6 +66,7 @@ export default function SceneMoodTag({ mood, size = 'md' }: SceneMoodTagProps) {
   }
 
   const config = VALENCE_CLASSES[MOOD_VALENCE[mood]]
+  const MoodIcon = MOOD_ICONS[mood]
 
   return (
     <div
@@ -86,7 +79,7 @@ export default function SceneMoodTag({ mood, size = 'md' }: SceneMoodTagProps) {
         transition-colors
       `}
     >
-      <span>{MOOD_ICONS[mood]}</span>
+      <MoodIcon className={size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
       <span>{MOOD_LABELS[mood]}</span>
     </div>
   )

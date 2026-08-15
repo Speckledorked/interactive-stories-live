@@ -22,6 +22,7 @@ import {
   MAX_ITEM_VALUE,
   MAX_RARITY_POINTS_PER_ARC,
   ARC_LENGTH_TURNS,
+  maxValueForRarity,
 } from '../itemValue'
 
 describe('rarity', () => {
@@ -39,8 +40,8 @@ describe('rarity', () => {
 })
 
 describe('itemUnitValue', () => {
-  it('prefers a reported value', () => {
-    expect(itemUnitValue({ value: 250, rarity: 'common' })).toBe(250)
+  it('prefers a reported value within what the rarity can plausibly be worth', () => {
+    expect(itemUnitValue({ value: 30, rarity: 'common' })).toBe(30)
   })
 
   it('falls back to what the rarity implies, so rarity is never free', () => {
@@ -59,9 +60,40 @@ describe('itemUnitValue', () => {
     expect(itemUnitValue({ value: -500 })).toBe(0)
   })
 
-  it('clamps a pathological reported value', () => {
-    expect(itemUnitValue({ value: 1e12 })).toBe(MAX_ITEM_VALUE)
+  it('clamps a pathological reported value to its own rarity tier\'s ceiling, not the absolute max', () => {
+    expect(itemUnitValue({ value: 1e12, rarity: 'common' })).toBe(maxValueForRarity('common'))
+    expect(itemUnitValue({ value: 1e12, rarity: 'common' })).toBeLessThan(MAX_ITEM_VALUE)
     expect(itemUnitValue({ value: NaN })).toBe(0)
+  })
+
+  // #277 (adversarial audit, Finding #7): rarity and value are
+  // independently AI-controlled — applyGrantBudget spends against rarity
+  // alone, so an under-reported rarity paired with an inflated value used
+  // to sail through the budget almost for free while still contributing
+  // its full inflated value to inventoryValue()/payout cost.
+  it('#277: clamps a mismatched rarity/value pair instead of trusting value independently', () => {
+    const exploitAttempt = itemUnitValue({ rarity: 'common', value: 1_000_000 })
+    expect(exploitAttempt).toBe(maxValueForRarity('common'))
+    expect(exploitAttempt).toBeLessThan(1_000_000)
+  })
+
+  it('#277: missing rarity clamps to the same cheapest tier rarityRank falls back to, not an unbounded value', () => {
+    // Omitting rarity entirely costs the grant budget the same as
+    // 'common' (rarityRank's own fallback) — the value ceiling must match
+    // that fallback too, or omission becomes a second bypass route.
+    expect(itemUnitValue({ value: 1_000_000 })).toBe(maxValueForRarity('common'))
+  })
+
+  it('#277: still allows real headroom above the rarity default, not just the default itself', () => {
+    expect(maxValueForRarity('common')).toBeGreaterThan(DEFAULT_VALUE_BY_RARITY.common)
+    expect(itemUnitValue({ rarity: 'uncommon', value: DEFAULT_VALUE_BY_RARITY.uncommon * 2 })).toBe(
+      DEFAULT_VALUE_BY_RARITY.uncommon * 2
+    )
+  })
+
+  it('#277: a legendary item genuinely can be worth far more than a common one', () => {
+    expect(maxValueForRarity('legendary')).toBeGreaterThan(maxValueForRarity('common'))
+    expect(itemUnitValue({ rarity: 'legendary', value: 40_000 })).toBe(40_000)
   })
 })
 
@@ -78,7 +110,7 @@ describe('itemStackValue / inventoryValue', () => {
 
   it('totals a whole inventory', () => {
     expect(inventoryValue([
-      { value: 100, quantity: 2 },
+      { value: 100, quantity: 2, rarity: 'uncommon' },
       { rarity: 'rare' },
       { name: 'rope' },
     ])).toBe(200 + DEFAULT_VALUE_BY_RARITY.rare)

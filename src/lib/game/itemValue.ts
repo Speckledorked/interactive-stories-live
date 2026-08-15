@@ -61,8 +61,33 @@ export const DEFAULT_VALUE_BY_RARITY: Record<ItemRarity, number> = {
   legendary: 5000,
 }
 
-/** Ceiling on a single item's reported value — the same backstop-not-balance role clampGoldDelta plays. */
+/** Absolute ceiling on a single item's reported value — the same backstop-not-balance role clampGoldDelta plays. Rarely the binding constraint now that maxValueForRarity gates every tier well below it (see #277). */
 export const MAX_ITEM_VALUE = 1_000_000
+
+// #277: rarity and value are independently AI-controlled fields on the
+// same response object, and applyGrantBudget spends against rarity alone
+// (rarityPoints). Without this, an item reported as { rarity: 'common',
+// value: 1_000_000 } cost the grant budget almost nothing yet contributed
+// its full value to inventoryValue()/carried wealth and payout cost — a
+// mechanical bypass of the exact mechanism this budget exists to enforce,
+// reachable through ordinary AI narration with no prompt injection
+// required. A reported value is now clamped against what its OWN rarity
+// tier can plausibly be worth, with enough headroom over the tier's
+// default to allow real narrative variance ("a particularly fine common
+// dagger") without letting an under-reported rarity smuggle an outsized
+// value past the budget it's supposed to gate.
+const VALUE_HEADROOM_MULTIPLIER = 10
+
+/**
+ * Ceiling on what a reported value may claim for a given rarity tier.
+ * Missing/invalid rarity clamps to the same cheapest tier rarityRank()
+ * already falls back to — never a loophole to claim an unbounded value by
+ * simply omitting rarity instead of under-reporting it.
+ */
+export function maxValueForRarity(rarity: unknown): number {
+  const tier = isItemRarity(rarity) ? rarity : 'common'
+  return Math.min(DEFAULT_VALUE_BY_RARITY[tier] * VALUE_HEADROOM_MULTIPLIER, MAX_ITEM_VALUE)
+}
 
 export interface ValuableItem {
   name?: string
@@ -72,14 +97,15 @@ export interface ValuableItem {
 }
 
 /**
- * Unit value of an item: what was reported, else what its rarity implies,
+ * Unit value of an item: what was reported (clamped to what its rarity
+ * tier can plausibly be worth), else what its rarity implies by default,
  * else nothing. Never negative — an item is not a liability.
  */
 export function itemUnitValue(item: ValuableItem | null | undefined): number {
   if (!item) return 0
   const reported = Number(item.value)
   if (Number.isFinite(reported) && reported > 0) {
-    return Math.min(Math.trunc(reported), MAX_ITEM_VALUE)
+    return Math.min(Math.trunc(reported), maxValueForRarity(item.rarity))
   }
   if (isItemRarity(item.rarity)) return DEFAULT_VALUE_BY_RARITY[item.rarity]
   return 0

@@ -9,6 +9,13 @@ import { prisma } from '@/lib/prisma';
 import { embedWithCostTracking } from './embeddingService';
 import type { Scene } from '@prisma/client';
 
+// #284: a single bounded retry for a transient embedding-API failure
+// before giving up — most embedding failures are exactly that (a rate
+// limit, a momentary network blip), not a permanent rejection, and this
+// runs in the post-tick tail where an extra half-second costs nothing a
+// player would notice.
+const EMBEDDING_RETRY_DELAY_MS = 500;
+
 type MemoryType = 'SCENE' | 'NPC_INTERACTION' | 'FACTION_EVENT' | 'LOCATION_EVENT' | 'CHARACTER_MOMENT' | 'CLOCK_COMPLETION' | 'WORLD_EVENT';
 type MemoryImportance = 'MINOR' | 'NORMAL' | 'MAJOR' | 'CRITICAL';
 
@@ -43,8 +50,17 @@ export interface MemoryData {
  */
 export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
   try {
-    // Generate embedding for the summary
-    const embeddingString = await embedWithCostTracking(data.campaignId, data.summary, 'memory_embedding');
+    // Generate embedding for the summary. One bounded retry: most
+    // embedding failures are transient (a rate limit, a momentary network
+    // blip), not permanent.
+    let embeddingString: string;
+    try {
+      embeddingString = await embedWithCostTracking(data.campaignId, data.summary, 'memory_embedding');
+    } catch (firstError) {
+      console.error('Embedding call failed, retrying once:', firstError);
+      await new Promise((resolve) => setTimeout(resolve, EMBEDDING_RETRY_DELAY_MS));
+      embeddingString = await embedWithCostTracking(data.campaignId, data.summary, 'memory_embedding');
+    }
 
     // Insert using raw SQL to handle vector type. Column names are quoted
     // and camelCase because that's what Prisma actually created the table
@@ -95,7 +111,28 @@ export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('Error creating campaign memory:', error);
-    // Don't throw - we don't want memory creation to block scene resolution
+    // Don't throw - we don't want memory creation to block scene resolution.
+    // #284: this used to be silent past this point — a scene the party
+    // actually experienced could vanish from campaign history with no
+    // record it was ever attempted. Persist the full payload that failed
+    // (not just an error string) so it's queryable and a future
+    // retry/reader can recreate the memory exactly, not reconstruct it
+    // from the original scene from scratch. Best-effort: if even this
+    // write fails, there's nothing further to fall back to but the log.
+    try {
+      await prisma.memoryCreationFailure.create({
+        data: {
+          campaignId: data.campaignId,
+          memoryType: data.memoryType,
+          sourceId: data.sourceId,
+          turnNumber: data.turnNumber,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          data: data as object,
+        },
+      });
+    } catch (recordError) {
+      console.error('Failed to record memory creation failure:', recordError);
+    }
     console.error('Failed to create memory, continuing without it');
     return false;
   }

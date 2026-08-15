@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $executeRaw: vi.fn().mockResolvedValue(undefined),
+    memoryCreationFailure: { create: vi.fn().mockResolvedValue({}) },
   },
 }))
 
@@ -37,6 +38,13 @@ function makeMemoryData(overrides: Partial<MemoryData> = {}): MemoryData {
 describe('createCampaignMemory (baseline)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // clearAllMocks resets call history but not a persistent
+    // mockRejectedValue/mockResolvedValue implementation set by an earlier
+    // test — re-establish clean defaults every test so one test's failure
+    // scenario can't leak into the next.
+    vi.mocked(embedWithCostTracking).mockResolvedValue('[0.01,0.01]')
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(undefined as any)
+    vi.mocked(prisma.memoryCreationFailure.create).mockResolvedValue({} as any)
   })
 
   it('embeds the summary text, not the full context', async () => {
@@ -58,15 +66,84 @@ describe('createCampaignMemory (baseline)', () => {
     await expect(createCampaignMemory(makeMemoryData())).resolves.toBe(true)
   })
 
-  it('does not throw when embedding generation fails, and resolves false', async () => {
-    vi.mocked(embedWithCostTracking).mockRejectedValueOnce(new Error('embedding service down'))
+  // #284: a single transient embedding failure is retried once before
+  // giving up, so this doesn't fail the whole memory over a momentary
+  // blip.
+  it('retries once after a transient embedding failure and succeeds', async () => {
+    vi.mocked(embedWithCostTracking).mockRejectedValueOnce(new Error('rate limited'))
+    await expect(createCampaignMemory(makeMemoryData())).resolves.toBe(true)
+    expect(embedWithCostTracking).toHaveBeenCalledTimes(2)
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(prisma.memoryCreationFailure.create).not.toHaveBeenCalled()
+  })
+
+  it('does not throw when embedding generation fails twice in a row, and resolves false', async () => {
+    vi.mocked(embedWithCostTracking).mockRejectedValue(new Error('embedding service down'))
     await expect(createCampaignMemory(makeMemoryData())).resolves.toBe(false)
+    expect(embedWithCostTracking).toHaveBeenCalledTimes(2)
     expect(prisma.$executeRaw).not.toHaveBeenCalled()
   })
 
   it('does not throw when the DB write fails, and resolves false', async () => {
     vi.mocked(prisma.$executeRaw).mockRejectedValueOnce(new Error('db down'))
     await expect(createCampaignMemory(makeMemoryData())).resolves.toBe(false)
+  })
+
+  // #284: the actual fix — a lost memory used to vanish into a
+  // console.error with nothing queryable anywhere. Both failure paths
+  // (embedding and the raw-SQL write) must persist a recoverable record.
+  describe('MemoryCreationFailure recording (#284)', () => {
+    it('records a queryable failure — not just a console log — when embedding fails permanently', async () => {
+      vi.mocked(embedWithCostTracking).mockRejectedValue(new Error('embedding service down'))
+      const data = makeMemoryData({ title: 'The party confronts the Duke' })
+
+      await createCampaignMemory(data)
+
+      expect(prisma.memoryCreationFailure.create).toHaveBeenCalledWith({
+        data: {
+          campaignId: 'campaign-1',
+          memoryType: 'SCENE',
+          sourceId: 'scene-1',
+          turnNumber: 3,
+          errorMessage: 'embedding service down',
+          data,
+        },
+      })
+    })
+
+    it('records a queryable failure when the raw-SQL write fails', async () => {
+      vi.mocked(prisma.$executeRaw).mockRejectedValueOnce(new Error('connection reset'))
+      const data = makeMemoryData()
+
+      await createCampaignMemory(data)
+
+      expect(prisma.memoryCreationFailure.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ errorMessage: 'connection reset', data }),
+        })
+      )
+    })
+
+    it('preserves the full memory payload in the failure record, not just a summary', async () => {
+      vi.mocked(embedWithCostTracking).mockRejectedValue(new Error('down'))
+      const data = makeMemoryData({
+        involvedNpcIds: ['npc-1', 'npc-2'],
+        involvedFactionIds: ['faction-1'],
+        tags: ['combat', 'relationships'],
+      })
+
+      await createCampaignMemory(data)
+
+      const call = vi.mocked(prisma.memoryCreationFailure.create).mock.calls[0][0]
+      expect(call.data.data).toEqual(data)
+    })
+
+    it('a best-effort failure-record write never itself throws out of createCampaignMemory', async () => {
+      vi.mocked(embedWithCostTracking).mockRejectedValue(new Error('down'))
+      vi.mocked(prisma.memoryCreationFailure.create).mockRejectedValueOnce(new Error('audit table unavailable too'))
+
+      await expect(createCampaignMemory(makeMemoryData())).resolves.toBe(false)
+    })
   })
 })
 

@@ -1,9 +1,17 @@
 // Persistent left navigation for wide viewports (lg:+), mounted only for
 // variant="myth" pages (see TavernHeader, which owns mounting this
-// alongside TavernMobileMenu). Below lg:, this renders nothing — mobile
-// keeps TavernNav's bottom tab bar + TavernMobileMenu's drawer exactly as
-// before. Reuses the same link destinations/icons those two already
-// define rather than inventing a second navigation vocabulary.
+// alongside TavernMobileMenu). Below lg:, this renders nothing.
+//
+// This is the *adaptation upward* of the mobile chrome, not the source
+// of truth — the app is mobile-first (docs/design-system.md). The three
+// groups below are the same three TavernMobileMenu uses, in the same
+// order, with the same labels and icons, so there is one navigation
+// vocabulary rather than two.
+//
+// The one deliberate difference: Overview/Story/Characters/Quests appear
+// in the Campaign group here, because at lg:+ there is no bottom tab bar
+// carrying them. On mobile those four are the bar, so the drawer omits
+// them rather than listing them twice.
 
 'use client'
 
@@ -11,7 +19,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
-  Beer,
   Home,
   Scroll,
   MessageSquare,
@@ -24,6 +31,10 @@ import {
   ScrollText,
   Settings as SettingsIcon,
   LogOut,
+  Swords,
+  Landmark,
+  Clock,
+  Target,
 } from 'lucide-react'
 import { authenticatedFetch, logout } from '@/lib/clientAuth'
 
@@ -51,6 +62,7 @@ export function TavernSidebar({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const tab = searchParams.get('tab')
+  const entityType = searchParams.get('type')
 
   const campaignHome = campaignId ? `/campaigns/${campaignId}` : null
   const isCampaignHome = campaignHome !== null && pathname === campaignHome
@@ -82,12 +94,77 @@ export function TavernSidebar({
   }, [campaignId])
 
   const globalLinks: NavLink[] = [
-    { href: '/campaigns', label: 'Campaigns', icon: Beer, isActive: (p) => p === '/campaigns' },
+    { href: '/campaigns', label: 'All Campaigns', icon: Home, isActive: (p) => p === '/campaigns' },
   ]
+
+  // The four the bottom tab bar carries on mobile. They only appear here
+  // because at lg:+ that bar is hidden — see this file's header comment.
+  const campaignPrimary: NavLink[] = campaignHome
+    ? [
+        { href: campaignHome, label: 'Overview', icon: Home, isActive: () => isCampaignHome && (!tab || tab === 'overview') },
+        {
+          href: `${campaignHome}/story`,
+          label: 'Story',
+          icon: BookOpen,
+          isActive: (p) => p.startsWith(`${campaignHome}/story`) && !p.startsWith(`${campaignHome}/story-log`),
+        },
+        {
+          href: `${campaignHome}/characters`,
+          label: 'Characters',
+          icon: Users,
+          isActive: (p) => p.startsWith(`${campaignHome}/characters`),
+        },
+        {
+          href: `${campaignHome}/quests`,
+          label: 'Quests',
+          icon: Target,
+          isActive: (p) => p.startsWith(`${campaignHome}/quests`),
+        },
+      ]
+    : []
+
+  // Entity browsing lives on the wiki's `?type=` tabs today. Phase 5 of
+  // the redesign splits that page into a Codex (lore) and a World browser
+  // (live entities) and repoints these three at /world?type=…; the labels
+  // and grouping here are already the ones that split expects. Kept
+  // identical to TavernMobileMenu's World group.
+  const worldLinks: NavLink[] = campaignHome
+    ? [
+        {
+          href: `${campaignHome}/wiki?type=FACTION`,
+          label: 'Factions',
+          icon: Swords,
+          isActive: (p) => p.startsWith(`${campaignHome}/wiki`) && entityType === 'FACTION',
+        },
+        {
+          href: `${campaignHome}/wiki?type=LOCATION`,
+          label: 'Locations',
+          icon: Landmark,
+          isActive: (p) => p.startsWith(`${campaignHome}/wiki`) && entityType === 'LOCATION',
+        },
+        {
+          href: `${campaignHome}/wiki?type=CLOCK`,
+          label: 'Threads',
+          icon: Clock,
+          isActive: (p) => p.startsWith(`${campaignHome}/wiki`) && entityType === 'CLOCK',
+        },
+        {
+          href: `${campaignHome}?tab=maps`,
+          label: 'Maps',
+          icon: MapIcon,
+          isActive: () => isCampaignHome && tab === 'maps',
+        },
+        {
+          href: `${campaignHome}/wiki`,
+          label: 'Campaign Wiki',
+          icon: BookOpen,
+          isActive: (p) => p.startsWith(`${campaignHome}/wiki`) && entityType === null,
+        },
+      ]
+    : []
 
   const campaignLinks: NavLink[] = campaignHome
     ? [
-        { href: campaignHome, label: 'Overview', icon: Home, isActive: () => isCampaignHome && !tab },
         {
           href: `${campaignHome}?tab=progression`,
           label: 'Story Log',
@@ -105,30 +182,6 @@ export function TavernSidebar({
           label: 'Notes',
           icon: StickyNote,
           isActive: () => isCampaignHome && tab === 'notes',
-        },
-        {
-          href: `${campaignHome}?tab=maps`,
-          label: 'Maps',
-          icon: MapIcon,
-          isActive: () => isCampaignHome && tab === 'maps',
-        },
-        {
-          href: `${campaignHome}/characters`,
-          label: 'Characters',
-          icon: Users,
-          isActive: (p) => p.startsWith(`${campaignHome}/characters`),
-        },
-        {
-          href: `${campaignHome}/quests`,
-          label: 'Quests',
-          icon: ScrollText,
-          isActive: (p) => p.startsWith(`${campaignHome}/quests`),
-        },
-        {
-          href: `${campaignHome}/wiki`,
-          label: 'Wiki',
-          icon: BookOpen,
-          isActive: (p) => p.startsWith(`${campaignHome}/wiki`),
         },
         ...(isAdmin
           ? [
@@ -156,10 +209,13 @@ export function TavernSidebar({
       <Link
         key={link.href}
         href={link.href}
-        className={`flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+        // The gold left-rule is the active marker; the accent tint behind
+        // it is secondary. Inactive items carry a transparent rule of the
+        // same width so nothing shifts horizontally when selection moves.
+        className={`flex min-h-[44px] items-center gap-3 rounded-r-lg border-l-2 px-3 py-2.5 text-sm transition-colors ${
           active
-            ? 'bg-myth-accent/10 text-myth-accent'
-            : 'text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink'
+            ? 'border-myth-gold bg-myth-accent/10 text-myth-accent'
+            : 'border-transparent text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink'
         }`}
       >
         <link.icon className="h-4 w-4 flex-shrink-0" />
@@ -167,6 +223,16 @@ export function TavernSidebar({
       </Link>
     )
   }
+
+  const renderSection = (label: string | null, group: NavLink[]) =>
+    group.length === 0 ? null : (
+      <div>
+        {label && (
+          <p className="mb-1 px-3 font-mono text-xs uppercase tracking-wider text-myth-ink-faint">{label}</p>
+        )}
+        <div className="space-y-1">{group.map(renderLink)}</div>
+      </div>
+    )
 
   return (
     <aside className="fixed left-0 top-0 bottom-0 z-30 hidden w-64 flex-col border-r border-myth-border bg-myth-surface lg:flex">
@@ -176,18 +242,18 @@ export function TavernSidebar({
           <h1 className="font-display text-xl tracking-[0.15em] text-myth-gold">MythOS</h1>
           <span className="text-xs tracking-widest text-myth-gold/50">──◈</span>
         </div>
-        <p className="-mt-2 text-[11px] tracking-[0.2em] text-myth-gold/60">THE WORLD REMEMBERS.</p>
+        {/* The tagline is context-dependent on purpose: inside a campaign
+            this rail is the game-master console, and at account level it's
+            the product's own line. */}
+        <p className="-mt-2 text-[11px] tracking-[0.2em] text-myth-gold/60">
+          {campaignHome ? 'AI GAME MASTER' : 'THE WORLD REMEMBERS.'}
+        </p>
       </div>
 
       <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
-        <div className="space-y-1">{globalLinks.map(renderLink)}</div>
-
-        {campaignLinks.length > 0 && (
-          <div>
-            <p className="mb-1 px-3 font-mono text-xs uppercase tracking-wider text-myth-ink-faint">Campaign</p>
-            <div className="space-y-1">{campaignLinks.map(renderLink)}</div>
-          </div>
-        )}
+        {renderSection(null, campaignPrimary.length > 0 ? campaignPrimary : globalLinks)}
+        {renderSection('World', worldLinks)}
+        {renderSection('Campaign', campaignLinks)}
 
         {identity && (
           <div className="rounded-lg border border-myth-border bg-myth-surface-raised px-3 py-3">
@@ -200,10 +266,8 @@ export function TavernSidebar({
           </div>
         )}
 
-        <div>
-          <p className="mb-1 px-3 font-mono text-xs uppercase tracking-wider text-myth-ink-faint">Account</p>
-          <div className="space-y-1">{accountLinks.map(renderLink)}</div>
-        </div>
+        {campaignPrimary.length > 0 && renderSection(null, globalLinks)}
+        {renderSection('Account', accountLinks)}
       </nav>
 
       <div className="border-t border-myth-border p-2">

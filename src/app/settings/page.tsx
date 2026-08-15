@@ -576,7 +576,7 @@ export default function SettingsPage() {
       )}
       </main>
 
-      <TavernNav active="settings" campaignId={lastCampaignId || undefined} variant="myth" />
+      <TavernNav campaignId={lastCampaignId || undefined} variant="myth" />
     </TavernPage>
   )
 }

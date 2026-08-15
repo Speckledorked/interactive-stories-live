@@ -216,7 +216,7 @@ export default function CharacterPage() {
         />
       </main>
 
-      <TavernNav active="characters" campaignId={campaignId} variant="myth" />
+      <TavernNav campaignId={campaignId} variant="myth" />
     </TavernPage>
   )
 }

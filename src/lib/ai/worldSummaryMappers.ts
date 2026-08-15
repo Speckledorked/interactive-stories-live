@@ -158,6 +158,13 @@ export function mapNpcsForPrompt(discoveredNpcs: any[], discoveredNpcNameById: M
     // PbtA GM-facing flavor (threat archetype, drives, custom moves) —
     // only present for NPCs where it's actually set (see npcFlavorFields).
     ...npcFlavorFields(n),
+    // Adversarial audit Section 6/7 (#288): npcTick.ts already writes
+    // currentPlan/goalProgress every tick for importance>=4 NPCs, but
+    // neither reached the live scene prompt — only the admin panel and
+    // wiki saw them. Gated on currentPlan being actually set (npcTick's
+    // own importance threshold naturally leaves it null for everyone
+    // else), same "only when populated" convention as npcFlavorFields.
+    ...(n.currentPlan ? { currentPlan: n.currentPlan, goalProgress: n.goalProgress } : {}),
     // #101: this NPC's own TOLD knowledge of significant WorldEvents — no
     // witnessed_events for NPCs (they never get WITNESSED, see
     // EventWitness's schema comment). Defaulted to [] the same way

@@ -435,6 +435,16 @@ export interface AIGMRequest {
       // knowledge of significant WorldEvents — no witnessed_events for
       // NPCs, see lib/game/eventWitness.ts.
       told_events?: string[]
+      // Phase 9 NPC society: this NPC's own web of allies/rivals, named
+      // only for other discovered NPCs (see describeNpcSocialTies).
+      social_ties?: string[]
+      // #288: npcTick.ts's own in-progress plan/goal-completion state for
+      // this NPC — only set for importance>=4 NPCs (npcTick.ts's own
+      // threshold), matching npcFlavorFields' "only when populated"
+      // convention. Previously computed and stored but never reached the
+      // live scene prompt — only the admin panel and wiki saw it.
+      currentPlan?: string
+      goalProgress?: number
     }>
     factions: Array<{
       id: string

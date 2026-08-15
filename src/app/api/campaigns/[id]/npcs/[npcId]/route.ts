@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
+import { guardNpcLeaderAssignment } from '@/lib/game/leadershipGuard'
 
 export async function PATCH(
   request: NextRequest,
@@ -33,6 +34,19 @@ export async function PATCH(
       ? await resolveOrCreateLocationId(prisma, campaignId, body.currentLocation, body.isDiscovered !== false)
       : undefined
 
+    // #275: "at most one leader either way" — reject/auto-demote a
+    // conflicting claim before it's ever written, rather than leaving the
+    // faction with two simultaneous leaders for the integrity engine to
+    // find later. excludeNpcId is this NPC itself — being (re)confirmed as
+    // LEADER isn't a conflict with its own prior role.
+    const factionRole = body.factionId ? (body.factionRole || 'MEMBER') : null
+    if (factionRole === 'LEADER') {
+      const guard = await guardNpcLeaderAssignment(campaignId, body.factionId, npcId)
+      if (!guard.ok) {
+        return NextResponse.json({ error: guard.error }, { status: 400 })
+      }
+    }
+
     // Update NPC
     const npc = await prisma.nPC.update({
       where: {
@@ -50,7 +64,7 @@ export async function PATCH(
         importance: body.importance,
         gmNotes: body.gmNotes,
         factionId: body.factionId || null,
-        factionRole: body.factionId ? (body.factionRole || 'MEMBER') : null,
+        factionRole,
         isDiscovered: body.isDiscovered,
       },
     })

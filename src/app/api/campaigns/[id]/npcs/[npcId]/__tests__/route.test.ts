@@ -14,11 +14,13 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/game/worldUpdaters/locations', () => ({ resolveOrCreateLocationId: vi.fn() }))
+vi.mock('@/lib/game/leadershipGuard', () => ({ guardNpcLeaderAssignment: vi.fn() }))
 
 import { getUser } from '@/lib/auth'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { prisma } from '@/lib/prisma'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
+import { guardNpcLeaderAssignment } from '@/lib/game/leadershipGuard'
 import { PATCH, DELETE } from '../route'
 
 const db = prisma as any
@@ -39,6 +41,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   ;(getUser as any).mockResolvedValue({ userId: 'admin1', email: 'admin1@example.com' })
   ;(requireCampaignAdmin as any).mockResolvedValue({ membership: { role: 'ADMIN' } })
+  ;(guardNpcLeaderAssignment as any).mockResolvedValue({ ok: true })
 })
 
 describe('PATCH', () => {
@@ -109,6 +112,30 @@ describe('PATCH', () => {
     db.nPC.update.mockRejectedValue(new Error('db down'))
     const response = await PATCH(patchRequest({ name: 'New Name' }), { params: { id: 'camp1', npcId: 'npc1' } })
     expect(response.status).toBe(500)
+  })
+
+  // #275: the update route needed the same "at most one leader either way"
+  // cross-check the create route now has — an existing NPC being promoted
+  // to LEADER is just as capable of colliding with a PC leader or another
+  // living NPC LEADER as a newly created one is.
+  it('#275: does not check leadership when factionRole is not LEADER', async () => {
+    db.nPC.update.mockResolvedValue({ id: 'npc1' })
+    await PATCH(patchRequest({ factionId: 'f1', factionRole: 'MEMBER' }), { params: { id: 'camp1', npcId: 'npc1' } })
+    expect(guardNpcLeaderAssignment).not.toHaveBeenCalled()
+  })
+
+  it('#275: guards a LEADER assignment, excluding this NPC itself from the conflict check', async () => {
+    db.nPC.update.mockResolvedValue({ id: 'npc1' })
+    await PATCH(patchRequest({ factionId: 'f1', factionRole: 'LEADER' }), { params: { id: 'camp1', npcId: 'npc1' } })
+    expect(guardNpcLeaderAssignment).toHaveBeenCalledWith('camp1', 'f1', 'npc1')
+    expect(db.nPC.update).toHaveBeenCalled()
+  })
+
+  it('#275: rejects the update when the leadership guard fails, e.g. a PC already leads the faction', async () => {
+    ;(guardNpcLeaderAssignment as any).mockResolvedValue({ ok: false, error: 'This faction already has a player-character leader.' })
+    const response = await PATCH(patchRequest({ factionId: 'f1', factionRole: 'LEADER' }), { params: { id: 'camp1', npcId: 'npc1' } })
+    expect(response.status).toBe(400)
+    expect(db.nPC.update).not.toHaveBeenCalled()
   })
 })
 

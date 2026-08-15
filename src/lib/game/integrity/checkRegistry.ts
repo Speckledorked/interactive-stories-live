@@ -6,13 +6,19 @@
 
 import { REFERENTIAL_INTEGRITY_CHECKS } from './checks/referentialIntegrity'
 import { REFERENTIAL_INTEGRITY_REPAIRS } from './repairs/referentialIntegrity'
-import { factionHasOneLivingLeader, repairFactionLeadership } from './checks/factionLeadership'
+import {
+  factionHasOneLivingLeader,
+  repairFactionLeadership,
+  factionHasAtMostOneLivingLeader,
+  repairFactionLeadershipConflict,
+} from './checks/factionLeadership'
 import { DUPLICATE_NAME_CHECKS } from './checks/duplicateNames'
 import { IntegrityCheck, RepairFn } from './types'
 
 export const INTEGRITY_CHECKS: IntegrityCheck[] = [
   ...REFERENTIAL_INTEGRITY_CHECKS,
   factionHasOneLivingLeader,
+  factionHasAtMostOneLivingLeader,
   ...DUPLICATE_NAME_CHECKS,
 ]
 
@@ -23,4 +29,5 @@ export const INTEGRITY_CHECKS: IntegrityCheck[] = [
 export const INTEGRITY_REPAIRS: Record<string, RepairFn> = {
   ...REFERENTIAL_INTEGRITY_REPAIRS,
   'faction.leadership.exactlyOneLivingLeader': repairFactionLeadership,
+  'faction.leadership.atMostOneLivingLeader': repairFactionLeadershipConflict,
 }

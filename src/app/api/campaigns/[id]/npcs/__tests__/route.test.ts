@@ -21,6 +21,7 @@ vi.mock('@/lib/game/visibility', () => ({
   redactGmNotesList: vi.fn((list: any, isAdmin: boolean) => isAdmin ? list : list.map((n: any) => ({ ...n, gmNotes: null }))),
 }))
 vi.mock('@/lib/game/worldUpdaters/locations', () => ({ resolveOrCreateLocationId: vi.fn() }))
+vi.mock('@/lib/game/leadershipGuard', () => ({ guardNpcLeaderAssignment: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { nPC: { findMany: vi.fn(), create: vi.fn() } },
 }))
@@ -28,6 +29,7 @@ vi.mock('@/lib/prisma', () => ({
 import { getUser } from '@/lib/auth'
 import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
+import { guardNpcLeaderAssignment } from '@/lib/game/leadershipGuard'
 import { prisma } from '@/lib/prisma'
 import { GET, POST } from '../route'
 
@@ -51,6 +53,7 @@ beforeEach(() => {
   ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
   ;(requireCampaignAdmin as any).mockResolvedValue({ membership: { role: 'ADMIN' } })
   ;(resolveOrCreateLocationId as any).mockResolvedValue('loc1')
+  ;(guardNpcLeaderAssignment as any).mockResolvedValue({ ok: true })
   db.nPC.findMany.mockResolvedValue([{ id: 'n1', name: 'Rowan', gmNotes: 'secret' }])
 })
 
@@ -93,5 +96,28 @@ describe('POST', () => {
     const body = await response.json()
     expect(response.status).toBe(201)
     expect(body.npc).toEqual({ id: 'n1', name: 'Rowan' })
+  })
+
+  // #275: creating an NPC with factionRole: 'LEADER' must run the same
+  // "at most one leader either way" cross-check the Faction route already
+  // enforces on its own side, or two NPCs (or an NPC and a PC) could hold
+  // the seat simultaneously with nothing ever catching it.
+  it('#275: does not check leadership when factionRole is not LEADER', async () => {
+    await POST(postRequest({ name: 'Rowan', factionId: 'f1', factionRole: 'MEMBER' }), { params: { id: 'camp1' } })
+    expect(guardNpcLeaderAssignment).not.toHaveBeenCalled()
+  })
+
+  it('#275: guards a LEADER assignment against the target faction before creating', async () => {
+    db.nPC.create.mockResolvedValue({ id: 'n1', name: 'Rowan' })
+    await POST(postRequest({ name: 'Rowan', factionId: 'f1', factionRole: 'LEADER' }), { params: { id: 'camp1' } })
+    expect(guardNpcLeaderAssignment).toHaveBeenCalledWith('camp1', 'f1', null)
+    expect(db.nPC.create).toHaveBeenCalled()
+  })
+
+  it('#275: rejects creation when the leadership guard fails, e.g. a PC already leads the faction', async () => {
+    ;(guardNpcLeaderAssignment as any).mockResolvedValue({ ok: false, error: 'This faction already has a player-character leader.' })
+    const response = await POST(postRequest({ name: 'Rowan', factionId: 'f1', factionRole: 'LEADER' }), { params: { id: 'camp1' } })
+    expect(response.status).toBe(400)
+    expect(db.nPC.create).not.toHaveBeenCalled()
   })
 })

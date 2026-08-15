@@ -12,12 +12,12 @@ import type { ChronicleGlance } from '@/lib/game/chronicleTypes'
 // fresh query on page load.
 //
 // Every tile links somewhere real rather than sitting inert: Weather and
-// Faction Activity deep-link to the specific wiki entry when one is known
-// (falling back to the general tab otherwise — chronicleGlance JSON
+// Faction Activity deep-link to the specific /world entry when one is
+// known (falling back to the general tab otherwise — chronicleGlance JSON
 // persisted before weatherLocationName existed won't have it yet, same
 // null-vs-absent caveat the field's own doc comment names), Conflicts
 // goes to Factions (wars are fought between factions, and there's no
-// dedicated wiki entry type for a war itself), Rumors and World Events
+// dedicated entry type for a war itself), Rumors and World Events
 // both go to the Story Log tab, which is the actual chronological
 // history behind both.
 //
@@ -71,10 +71,12 @@ export function WorldGlance({
   const rumorCount = glance.rumorCount ?? 0
   const worldEventCount = glance.worldEventCount ?? glance.recentEventCount
 
-  const wikiHref = (type: string, entryName?: string | null) =>
+  // Weather, factions and conflicts are all live entities, so these deep
+  // links go to /world rather than the Codex.
+  const worldHref = (type: string, entryName?: string | null) =>
     entryName
-      ? `/campaigns/${campaignId}/wiki?type=${type}&entry=${encodeURIComponent(entryName)}`
-      : `/campaigns/${campaignId}/wiki?type=${type}`
+      ? `/campaigns/${campaignId}/world?type=${type}&entry=${encodeURIComponent(entryName)}`
+      : `/campaigns/${campaignId}/world?type=${type}`
 
   return (
     <div className="space-y-3">
@@ -84,19 +86,19 @@ export function WorldGlance({
           icon={CloudSun}
           label="Weather"
           value={glance.weatherLabel ?? 'Unknown'}
-          href={wikiHref('LOCATION', glance.weatherLocationName)}
+          href={worldHref('LOCATION', glance.weatherLocationName)}
         />
         <GlanceTile
           icon={Shield}
           label="Faction Activity"
           value={glance.topFaction ? `${glance.topFaction.name} (threat ${glance.topFaction.threatLevel})` : 'Quiet'}
-          href={wikiHref('FACTION', glance.topFaction?.name)}
+          href={worldHref('FACTION', glance.topFaction?.name)}
         />
         <GlanceTile
           icon={Swords}
           label="Conflicts"
           value={glance.activeConflictCount > 0 ? `${glance.activeConflictCount} active` : 'None active'}
-          href={wikiHref('FACTION')}
+          href={worldHref('FACTION')}
         />
         <GlanceTile
           icon={MessageCircle}

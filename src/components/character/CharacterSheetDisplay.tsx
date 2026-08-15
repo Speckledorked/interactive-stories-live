@@ -638,7 +638,7 @@ export default function CharacterSheetDisplay({
                         {resources.contacts.map((contact: string, idx: number) => (
                           <Link
                             key={idx}
-                            href={`/campaigns/${campaignId}/wiki?type=NPC&search=${encodeURIComponent(contact)}`}
+                            href={`/campaigns/${campaignId}/world?type=NPC&search=${encodeURIComponent(contact)}`}
                             className="cursor-pointer rounded-full border border-myth-border bg-myth-surface px-3 py-1 text-xs text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
                             title={`View ${contact} in wiki`}
                           >

@@ -8,6 +8,7 @@ import { TavernNav } from '@/components/tavern/TavernNav'
 import { SectionHeader } from '@/components/ui/section-header'
 import { getLastCampaignId } from '@/lib/clientAuth'
 import { BookOpen, Dices, Download, Feather, Map as MapIcon, MessageSquare, Scroll, Users } from 'lucide-react'
+import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
 
 export default function HelpPage() {
   const [lastCampaignId, setLastCampaignId] = useState<string | null>(null)
@@ -20,7 +21,7 @@ export default function HelpPage() {
     <TavernPage background="myth">
       <TavernHeader backHref="/campaigns" title="Help & Documentation" variant="myth" />
 
-      <main className="max-w-4xl mx-auto px-4 pt-28 pb-28">
+      <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         <p className="mb-8 text-sm text-myth-ink-faint">Everything you need to know about playing AI-powered TTRPGs</p>
 
       {/* Quick Links — real navigation/action CTAs, stay bordered */}
@@ -179,7 +180,7 @@ export default function HelpPage() {
               { icon: Dices, title: 'Turn Order', desc: 'Play is simultaneous by default — everyone acts anytime. Any player can turn on an optional turn queue for a scene that wants it' },
               { icon: Feather, title: 'Notes', desc: 'Take private or shared notes to track NPCs, clues, and plot points' },
               { icon: MapIcon, title: 'Maps', desc: 'AI-generated tactical maps with zones and character tokens' },
-              { icon: BookOpen, title: 'Wiki', desc: 'Track NPCs, factions, and progress threads automatically updated by MythOS' },
+              { icon: BookOpen, title: 'World & Codex', desc: 'World tracks the NPCs, factions, locations and threads MythOS updates every turn; the Codex holds the lore, items and rumors behind them' },
               { icon: Scroll, title: 'Story Log', desc: 'Auto-generated chronicle of your adventure with highlights and timeline' },
               { icon: Download, title: 'Export', desc: 'Download your campaign data — characters, scenes, factions, and more — as JSON' }
             ].map((feature, index) => (

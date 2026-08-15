@@ -37,6 +37,7 @@ import { groupWikiEntriesByCategory } from '@/lib/wikiCategoryGrouping'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ENTITY_ICONS, ENTITY_FALLBACK_ICON, type IconComponent } from '@/lib/ui/icons'
+import { HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
 
 type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
 // RUMORS isn't a WikiEntryType — it's a separate feed (offscreen
@@ -280,7 +281,7 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
         }
       />
 
-      <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
+      <main className={`max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-28`}>
         <p className="mb-6 text-sm text-myth-ink-faint">{intro}</p>
 
         {/* Search */}
@@ -288,7 +289,10 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
           <Input
             wrapperClassName="w-full" className="pl-10"
             type="text"
-            placeholder="Search wiki entries..."
+            /* Names the surface being searched, not the table behind it —
+               "wiki entries" was left over from before the split and read
+               wrong on a page titled World. */
+            placeholder={`Search ${title}...`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />

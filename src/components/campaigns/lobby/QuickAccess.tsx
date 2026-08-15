@@ -34,18 +34,18 @@ export function QuickAccess({ campaignId }: { campaignId: string }) {
     },
     {
       label: 'Locations',
-      href: `/campaigns/${campaignId}/wiki?type=LOCATION`,
+      href: `/campaigns/${campaignId}/world?type=LOCATION`,
       art: '/images/quick-access/locations.svg',
       icon: Landmark,
     },
     {
       label: 'Factions',
-      href: `/campaigns/${campaignId}/wiki?type=FACTION`,
+      href: `/campaigns/${campaignId}/world?type=FACTION`,
       art: '/images/quick-access/factions.svg',
       icon: Swords,
     },
     {
-      label: 'Campaign Wiki',
+      label: 'Codex',
       href: `/campaigns/${campaignId}/wiki`,
       art: '/images/quick-access/codex.svg',
       icon: BookOpen,

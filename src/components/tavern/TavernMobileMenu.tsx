@@ -94,26 +94,26 @@ function TavernMobileMenuInner({
     icon,
     isActive: onLobby && tab === key,
   })
-  // Entity browsing lives on the wiki's `?type=` tabs today. Phase 5 of the
-  // redesign splits that page into a Codex (lore) and a World browser
-  // (live entities) and repoints these three at /world?type=… — the labels
-  // and grouping here are already the ones that split expects.
-  const wikiType = (type: string, label: string, icon: typeof Home): MenuLink => ({
-    href: `${home}/wiki?type=${type}`,
+  // Live entities live on /world's `?type=` tabs; the Codex link below
+  // keeps /wiki. Both surfaces redirect the other's types, so an older
+  // bookmark still lands correctly — but linking straight to the right one
+  // avoids a redirect hop the user would see as a flash.
+  const worldType = (type: string, label: string, icon: typeof Home): MenuLink => ({
+    href: `${home}/world?type=${type}`,
     label,
     icon,
-    isActive: pathname.startsWith(`${home}/wiki`) && searchParams.get('type') === type,
+    isActive: pathname.startsWith(`${home}/world`) && searchParams.get('type') === type,
   })
 
   const worldLinks: MenuLink[] = home
     ? [
-        wikiType('FACTION', 'Factions', Swords),
-        wikiType('LOCATION', 'Locations', Landmark),
-        wikiType('CLOCK', 'Threads', Clock),
+        worldType('FACTION', 'Factions', Swords),
+        worldType('LOCATION', 'Locations', Landmark),
+        worldType('CLOCK', 'Threads', Clock),
         lobbyTab('maps', 'Maps', MapIcon),
         {
           href: `${home}/wiki`,
-          label: 'Campaign Wiki',
+          label: 'Codex',
           icon: BookOpen,
           // Only the bare wiki, so it doesn't light up alongside the three
           // `?type=` entries above.

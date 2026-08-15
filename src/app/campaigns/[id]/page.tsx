@@ -34,6 +34,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Tabs } from '@/components/ui/tabs'
 import { Timeline, TimelineItem } from '@/components/ui/timeline'
 import { QuickAccess } from '@/components/campaigns/lobby/QuickAccess'
+import { HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
 
 interface CampaignData {
   campaign: any
@@ -291,7 +292,7 @@ export default function CampaignLobbyPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref="/campaigns" title="Loading…" campaignId={campaignId} variant="myth" minimalHeaderAtDesktop />
-        <main className="flex justify-center max-w-6xl mx-auto px-4 pt-28 pb-16">
+        <main className={`flex justify-center max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16`}>
           <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
         </main>
       </TavernPage>
@@ -302,7 +303,7 @@ export default function CampaignLobbyPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref="/campaigns" title="Campaign" campaignId={campaignId} variant="myth" />
-        <main className="max-w-2xl mx-auto px-4 pt-28 pb-16">
+        <main className={`max-w-2xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16`}>
           <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
             <p className="text-myth-danger">{error || 'Campaign not found'}</p>
             <Link href="/campaigns" className="mt-4 inline-block text-myth-ink-muted hover:text-myth-ink hover:underline">
@@ -352,7 +353,7 @@ export default function CampaignLobbyPage() {
         }
       />
 
-      <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
+      <main className={`max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-28`}>
         {/* World-seeding lock: canon lore is still being imported and the
             world rebuilt from it — play opens when this clears. */}
         {worldSeeding && (

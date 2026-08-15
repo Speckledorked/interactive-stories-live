@@ -57,7 +57,7 @@ export function ActiveClocksPanel({ clocks, campaignId }: ActiveClocksPanelProps
             .filter(Boolean)
             .join('\n\n') || 'No further details recorded for this clock yet.'
         }
-        footerLinkHref={`/campaigns/${campaignId}/wiki?type=CLOCK`}
+        footerLinkHref={`/campaigns/${campaignId}/world?type=CLOCK`}
         footerLinkLabel="View all clocks in wiki"
       />
     </CollapsibleSidebarCard>

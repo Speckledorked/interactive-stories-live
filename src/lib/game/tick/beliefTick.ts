@@ -145,6 +145,23 @@ function classifyWorldEvent(row: { type: string; newValue: string | null; origin
 const RELEVANT_EVENT_TYPES = ['faction.warResolved', 'faction.warEnded', 'faction.ambitionResolved', 'faction.stability']
 
 export async function tickBeliefDrift(ctx: TickContext): Promise<TickHandlerResult> {
+  // #276: idle-cron ticking can invoke this handler with the SAME
+  // turnNumber over and over (WorldMeta.currentTurnNumber only advances
+  // via scene resolution — nothing else ever moves it, despite this
+  // file's own window looking like it should). Short-circuit once this
+  // campaign's watermark already covers the turn this pass would query,
+  // so the exact same WorldEvent rows never get reclassified into fresh
+  // drift a second time. See the watermark fields' own doc comment on
+  // WorldMeta for the full picture.
+  const targetTurn = ctx.turnNumber - 1
+  const meta = await ctx.db.worldMeta.findUnique({
+    where: { campaignId: ctx.campaignId },
+    select: { beliefDriftProcessedThroughTurn: true },
+  })
+  if (meta && meta.beliefDriftProcessedThroughTurn !== null && meta.beliefDriftProcessedThroughTurn >= targetTurn) {
+    return { changes: [] }
+  }
+
   const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
     orderBy: { createdAt: 'asc' },
@@ -159,7 +176,7 @@ export async function tickBeliefDrift(ctx: TickContext): Promise<TickHandlerResu
     const events = await ctx.db.worldEvent.findMany({
       where: {
         campaignId: ctx.campaignId,
-        turnNumber: ctx.turnNumber - 1,
+        turnNumber: targetTurn,
         targetType: 'FACTION',
         targetId: faction.id,
         type: { in: RELEVANT_EVENT_TYPES },
@@ -193,6 +210,19 @@ export async function tickBeliefDrift(ctx: TickContext): Promise<TickHandlerResu
       // severity wobbles — not on its own worth a history/RAG entry.
       significant: false,
       importance: 'NORMAL',
+    })
+  }
+
+  // Mark this turn as scanned regardless of whether any faction actually
+  // drifted — an empty result is still a real answer to "did anything
+  // change in this window", not a reason to re-ask the same question
+  // next pass.
+  if (!ctx.dryRun) {
+    // updateMany (not update) — some campaigns in tests/older data may
+    // predate a WorldMeta row; degrade to a no-op rather than throwing.
+    await ctx.db.worldMeta.updateMany({
+      where: { campaignId: ctx.campaignId },
+      data: { beliefDriftProcessedThroughTurn: targetTurn },
     })
   }
 

@@ -1912,6 +1912,23 @@ model WorldMeta {
   factionCap Int?
   npcCap     Int?
 
+  // #276: currentTurnNumber only ever advances via scene resolution
+  // (sceneResolver.ts) — an idle campaign, ticked only by the daily cron
+  // sweep, passes runWorldTick the SAME frozen turnNumber on every pass.
+  // beliefTick.ts/npcDispositionTick.ts each classify WorldEvent rows from
+  // exactly `turnNumber - 1` — a window that never moves while frozen —
+  // so without this, the same handful of events would be reclassified and
+  // reapplied as fresh drift on every single idle-cron pass, driving
+  // belief/disposition vectors to their clamp within days of inactivity.
+  // Null means "never processed" (a brand-new campaign); each handler
+  // short-circuits once its own watermark already covers turnNumber - 1,
+  // and advances it past that same value after a pass actually runs its
+  // query — so a genuinely-frozen turnNumber naturally stops reprocessing
+  // after the first pass, while a real turn advance (scene resolution
+  // eventually happens) still runs the window fresh, exactly as before.
+  beliefDriftProcessedThroughTurn      Int?
+  dispositionDriftProcessedThroughTurn Int?
+
   // Phase 15: AI Health & Cost Tracking
   aiHealth              Json? // Circuit breaker state and AI failure tracking
   aiMetrics             Json? // Token usage, costs, response times

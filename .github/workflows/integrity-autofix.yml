@@ -235,12 +235,77 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      # A real run against a seeded regression (see docs/ARCHITECTURE.md's
+      # Fix Log) surfaced a gap this job never anticipated: `git revert
+      # --no-edit` assumes the target commit still applies cleanly, but main
+      # moves — something can touch the same lines later for an unrelated,
+      # legitimate reason, and the revert conflicts. Deciding which side wins
+      # on a conflicting revert is a real judgment call, and this pipeline
+      # deliberately keeps that kind of judgment (and the AI agent that would
+      # otherwise make it) out of anything that can merge with zero human
+      # review — the revert path exists specifically to be the one
+      # unambiguous, agent-free step. So a conflict aborts cleanly and files
+      # a tracking issue instead of either leaving a half-reverted workspace
+      # or reaching for an agent to resolve it. Deduped per checkKey the same
+      # way triage dedupes open fix/revert PRs, since the same conflict would
+      # otherwise refile on every future scheduled run against this checkKey
+      # until a human actually resolves it.
       - name: Revert the commit that didn't work
+        id: revert
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REGRESSION_PR: ${{ needs.triage.outputs.regression_pr }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           git config user.name "integrity-autofix[bot]"
           git config user.email "integrity-autofix@users.noreply.github.com"
           git checkout -b "integrity-autofix/revert-${CHECK_KEY}-${{ github.run_id }}"
-          git revert --no-edit "${REVERT_SHA}"
+
+          if git revert --no-edit "${REVERT_SHA}"; then
+            exit 0
+          fi
+
+          echo "Revert conflicted — aborting cleanly and filing a tracking issue instead of forcing it."
+          git revert --abort
+
+          already_open=$(gh issue list --label "revert-conflict:${CHECK_KEY}" --state open --json number --jq 'length')
+          if [ "$already_open" -gt 0 ]; then
+            echo "An open revert-conflict issue for ${CHECK_KEY} already exists — not filing a duplicate."
+            exit 1
+          fi
+
+          {
+            echo "## A regression was detected, but the automatic revert couldn't be applied cleanly"
+            echo ""
+            printf -- '- **checkKey:** `%s`\n' "${CHECK_KEY}"
+            printf -- '- **Fix PR that appears to have regressed:** #%s (commit `%s`)\n' "${REGRESSION_PR}" "${REVERT_SHA}"
+            printf -- '- **Failed run:** %s\n' "${RUN_URL}"
+            echo ""
+            echo "\`git revert --no-edit ${REVERT_SHA}\` conflicted against the current base branch —"
+            echo "something has changed the same lines since that fix merged, so a mechanical revert is"
+            echo "no longer unambiguous. This pipeline deliberately does not use an AI agent to resolve"
+            echo "revert conflicts (the same judgment call an agent would have to make here is exactly"
+            echo "what the zero-human-review merge path is built to avoid), so this needs a human to"
+            echo "resolve by hand: either revert the relevant behavior manually, or confirm the newer"
+            echo "change already fixed or superseded the original bug and close this out."
+            echo ""
+            echo "This checkKey will keep escalating and this same conflict will keep recurring on"
+            echo "every future run until it's resolved — the pipeline will not retry this automatically."
+            echo ""
+            echo "---"
+            echo "_Filed automatically by the Integrity Engine's Phase 5 pipeline (revert-regression job)._"
+          } > /tmp/issue_body.md
+
+          gh label create "revert-conflict:${CHECK_KEY}" \
+            --color "B60205" \
+            --description "A regression revert for this checkKey could not be applied automatically" \
+            || echo "label create failed or already exists (see error above) — continuing"
+          gh issue create \
+            --title "Auto-fix revert conflict: ${CHECK_KEY}" \
+            --label "revert-conflict:${CHECK_KEY}" \
+            --body-file /tmp/issue_body.md
+
+          exit 1
 
       # Reverting should restore known-good state, but confirm it rather
       # than assume it — cheap insurance, not redundant with anything else.

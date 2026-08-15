@@ -541,20 +541,28 @@ deliberately just enough to know what happened without re-deriving it.
 Ordered by what most closes the gap between current state and the vision
 above. Items that block later ones are flagged.
 
-1. **Verify `integrity-autofix.yml`'s detect-and-revert path for real, then
-   decide whether to enable `schedule`.** Half proven, half still not (see
-   #89's own status comments): the fire-and-merge half is done — 12 manual
-   (`workflow_dispatch`) runs, culminating in a real defect diagnosed,
-   fixed, verified, and merged with zero human involvement in the merge
-   decision (PR #153; see the Scorecard's Autonomous code-fix pipeline row
-   and the Fix Log for the 8 pipeline-plumbing defects that run surfaced).
-   `regressionDetection.ts` — the piece that's supposed to catch a merged
-   fix going bad and auto-revert it — has **never fired for real, only
-   unit-tested**. The remaining step: deliberately seed a second violation
-   for the same checkKey (simulating the fix not actually working) and
-   confirm a real auto-revert happens. Only once both halves have been
-   watched happening for real should `schedule` be considered — this needs
-   a human to watch a live `workflow_dispatch` run, not more code.
+1. **Resolve tracking issue #366 by hand** — the one loose end #89 deliberately
+   left open rather than force. `revert-regression` correctly detected a
+   real regression against `character.relationships.keys.resolve`'s only
+   merged fix (PR #153), but the revert conflicts: `characters.ts` has
+   picked up 6 unrelated commits since that fix merged, so a mechanical
+   revert is no longer unambiguous. The pipeline deliberately won't route
+   that judgment call to an AI agent (see the Autonomous code-fix pipeline
+   Scorecard row), so a human needs to either manually revert the relevant
+   behavior or confirm the newer changes already superseded the original
+   bug and close the issue out. Until resolved, this exact conflict will
+   keep recurring (and re-filing against the same open issue, deduped) on
+   every future `schedule` run that touches this checkKey.
+*(#89 — verify `integrity-autofix.yml`'s detect-and-revert path for real,
+then decide whether to enable `schedule` — is resolved: both the
+fire-and-merge half (12 manual runs, PR #153, zero human involvement in
+the merge decision) and the revert-regression conflict-handling half
+(issue #366 above, filed cleanly after two real bugs found and fixed in
+the filing path itself) were fired for real, not just unit-tested.
+`schedule` is now enabled — see the Autonomous code-fix pipeline Scorecard
+row for exactly what's proven vs. accepted as reasoned-safe on the one
+remaining unobserved branch, a fully clean, non-conflicting
+revert-and-automerge.)*
 *(The Pusher module split, `consequences.ts`'s entity-matching bug, giving
 checkKeys a shared type, the war stability-hit write path's missing direct
 test coverage, making outcome-band adherence visible to players, the

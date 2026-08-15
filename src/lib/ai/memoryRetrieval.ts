@@ -49,6 +49,40 @@ const DEFAULT_OPTIONS: Required<RetrievalOptions> = {
   importanceBoost: true,
 };
 
+// #349: pgvector's ANN index only accelerates a BARE `embedding <=> $1`
+// ORDER BY — the old query wrapped that in the recency-blend arithmetic,
+// which defeated the index entirely regardless of recencyBias's value
+// (confirmed via EXPLAIN in campaignMemoryAnnIndex.liveDb.test.ts, even
+// after #286 restored the index). retrieveRelevantHistory's query below is
+// now a two-stage CTE: an inner query does ONLY `campaignId` + `embedding
+// IS NOT NULL`, bare `ORDER BY embedding <=> $1 LIMIT candidatePoolSize` —
+// deliberately matching the exact minimal shape #286's test proved the
+// planner picks the index for — then an outer query applies the
+// entity-overlap/fog-of-war filters and the recency blend on that already-
+// small, materialized candidate set (no vector operator in scope there, so
+// wrapping arithmetic around `similarity` there is free).
+//
+// This was a real design decision, not just a performance refactor (see
+// the issue): the entity/fog filters COULD instead live inside the inner
+// query alongside campaignId, which would preserve today's filtering
+// semantics exactly (a filtered row never even competes for the LIMIT).
+// Deliberately not done: this repo's pgvector is 0.6.0, which predates
+// iterative index scans (added in 0.8) — pgvector's own docs describe
+// filtered ANN queries applying filters AFTER the index scan, silently
+// returning fewer than LIMIT rows when the filter is selective, with no
+// mitigation available at this version. A correlated NOT EXISTS subquery
+// (the fog-of-war check) is also expensive per-candidate and makes the
+// planner considerably less likely to choose the index at all. Moving
+// those filters to the outer, non-indexed step avoids both risks, at the
+// cost of a real, deliberately-accepted tradeoff: a memory that's
+// entity/fog-eligible but ranks outside the inner query's similarity-only
+// candidate window is invisible to the outer step, same as any other
+// bounded candidate pool in this codebase (cf. Debt economy's `take: 300`
+// backstop) — not a tight precision cap, a generous one, verified against
+// the same realistic multi-campaign scale #286 established.
+const CANDIDATE_POOL_MULTIPLIER = 10;
+const MIN_CANDIDATE_POOL_SIZE = 100;
+
 const IMPORTANCE_WEIGHTS: Record<string, number> = {
   CRITICAL: 1.3,
   MAJOR: 1.15,
@@ -141,30 +175,47 @@ export async function retrieveRelevantHistory(
     const factionIds = context.factions.map(f => f.id);
     const characterIds = context.characters.map(c => c.id);
 
-    // Semantic search with pgvector
-    // Uses cosine distance operator <=> (1 - cosine similarity)
-    // Handle empty entity arrays by providing empty arrays to PostgreSQL
-    // PostgreSQL's && operator returns false when one array is empty, which is what we want
+    // Semantic search with pgvector, using cosine distance operator <=>.
+    // See the CANDIDATE_POOL_MULTIPLIER comment above for why this is a
+    // two-stage CTE rather than one flat query (#349).
+    const candidatePoolSize = Math.max(opts.maxMemories * CANDIDATE_POOL_MULTIPLIER, MIN_CANDIDATE_POOL_SIZE);
     // See campaignMemoryColumns.ts for why the shared column list is quoted.
     const memories = await prisma.$queryRaw<RetrievedMemory[]>`
+      WITH candidates AS (
+        -- Index-accelerated stage: deliberately ONLY campaignId + a bare
+        -- vector-distance ORDER BY, matching the exact shape
+        -- campaignMemoryAnnIndex.liveDb.test.ts proves the planner picks
+        -- the HNSW index for. Nothing else belongs in this stage.
+        SELECT
+          ${MEMORY_SEARCH_COLUMNS},
+          "involvedNpcIds",
+          "involvedFactionIds",
+          "involvedCharacterIds",
+          (1 - (embedding <=> ${embeddingString}::vector)) as similarity
+        FROM campaign_memories
+        WHERE "campaignId" = ${campaignId} AND embedding IS NOT NULL
+        ORDER BY embedding <=> ${embeddingString}::vector
+        LIMIT ${candidatePoolSize}
+      )
+      -- Non-indexed stage: operates on the already-small candidate set
+      -- above, so filtering it further and blending in recency here costs
+      -- nothing extra — no vector operator is in scope at this point.
       SELECT
         ${MEMORY_SEARCH_COLUMNS},
-        (1 - (embedding <=> ${embeddingString}::vector)) as similarity,
-        -- #293: the same similarity+recency blend ORDER BY ranks by,
-        -- returned as a real column so filterAndRankMemories's
-        -- importance-boosted re-sort can multiply onto it instead of
-        -- silently discarding the blend back down to raw similarity.
-        (1 - (embedding <=> ${embeddingString}::vector)) * ${1 - opts.recencyBias} +
+        similarity,
+        -- #293: the same similarity+recency blend, returned as a real
+        -- column so filterAndRankMemories's importance-boosted re-sort can
+        -- multiply onto it instead of silently discarding the blend back
+        -- down to raw similarity.
+        similarity * ${1 - opts.recencyBias} +
         ("turnNumber"::float / GREATEST((SELECT MAX("turnNumber") FROM campaign_memories WHERE "campaignId" = ${campaignId}), 1)) * ${opts.recencyBias}
         as "relevanceScore"
-      FROM campaign_memories
+      FROM candidates
       WHERE
-        "campaignId" = ${campaignId}
-        AND embedding IS NOT NULL
         -- Entity filtering: include memories involving current NPCs/factions/characters
         -- When arrays are empty, use ARRAY[]::text[] which makes the overlap check return false
         -- This ensures we only match general memories (with no entities) when no entities are provided
-        AND (
+        (
           (${npcIds.length > 0} AND "involvedNpcIds" && ${npcIds}::text[])
           OR (${factionIds.length > 0} AND "involvedFactionIds" && ${factionIds}::text[])
           OR (${characterIds.length > 0} AND "involvedCharacterIds" && ${characterIds}::text[])

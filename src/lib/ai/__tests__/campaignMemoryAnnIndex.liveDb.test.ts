@@ -171,6 +171,65 @@ describeIfDb('CampaignMemory embedding ANN index (#286)', () => {
     expect(planText).toContain('campaign_memories_embedding_idx')
   })
 
+  // #349: verifies the actual FIX — memoryRetrieval.ts's real two-stage CTE
+  // query (an inner index-accelerated candidate-selection stage doing only
+  // campaignId + a bare vector-distance ORDER BY, and an outer stage that
+  // applies entity/fog-of-war filtering plus the recency blend on that
+  // already-small candidate set) genuinely uses the index for its inner
+  // stage, at the same realistic scale the pure-query test above proves it
+  // at. This is the real production query text (entity arrays empty,
+  // matching this file's bulk-inserted "general memory" rows), not a
+  // simplified stand-in — Postgres is free to inline a singly-referenced
+  // CTE, so this is the only way to know whether that inlining preserves
+  // or defeats the index once the outer filters/arithmetic are folded in.
+  it('confirms the restructured two-stage CTE query DOES use the index for its inner candidate-selection stage', async () => {
+    const probeId = `t${1}`
+    const planText = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off')
+      await tx.$executeRawUnsafe('SET LOCAL enable_bitmapscan = off')
+      await tx.$executeRawUnsafe('SET LOCAL enable_indexscan = off')
+      const plan = await tx.$queryRaw<Array<{ 'QUERY PLAN': string }>>`
+        EXPLAIN (FORMAT TEXT)
+        WITH candidates AS (
+          SELECT
+            id, "turnNumber", title, summary, "memoryType", importance, "emotionalTone",
+            "involvedNpcIds", "involvedFactionIds", "involvedCharacterIds",
+            (1 - (embedding <=> (SELECT embedding FROM campaign_memories WHERE id = ${probeId}))) as similarity
+          FROM campaign_memories
+          WHERE "campaignId" = ${campaignId} AND embedding IS NOT NULL
+          ORDER BY embedding <=> (SELECT embedding FROM campaign_memories WHERE id = ${probeId})
+          LIMIT 100
+        )
+        SELECT
+          id, "turnNumber", title, summary, "memoryType", importance, "emotionalTone", similarity,
+          similarity * 0.7 +
+          ("turnNumber"::float / GREATEST((SELECT MAX("turnNumber") FROM campaign_memories WHERE "campaignId" = ${campaignId}), 1)) * 0.3
+          as "relevanceScore"
+        FROM candidates
+        WHERE
+          (
+            cardinality("involvedNpcIds") = 0
+            AND cardinality("involvedFactionIds") = 0
+            AND cardinality("involvedCharacterIds") = 0
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM unnest("involvedNpcIds") AS npc_id
+            JOIN "NPC" ON "NPC"."id" = npc_id
+            WHERE "NPC"."isDiscovered" = false
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM unnest("involvedFactionIds") AS faction_id
+            JOIN "Faction" ON "Faction"."id" = faction_id
+            WHERE "Faction"."isDiscovered" = false
+          )
+        ORDER BY "relevanceScore" DESC
+        LIMIT 20
+      `
+      return plan.map((row) => row['QUERY PLAN']).join('\n')
+    })
+    expect(planText).toContain('campaign_memories_embedding_idx')
+  })
+
   // #286 follow-up: documents (doesn't merely assert) that the actual
   // production query cannot benefit from this index as written, so this
   // limitation is pinned by a real, running check rather than only a

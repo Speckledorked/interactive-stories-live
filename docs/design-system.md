@@ -1,12 +1,21 @@
 # MythOS "myth" design system
 
-The `myth` visual system (parchment/leather aesthetic, replacing the older
-dark `tavern`/`ember`/`wine` palette) lives in `src/app/globals.css`
-(`--myth-*` CSS custom properties, light + dark via
-`prefers-color-scheme`, or an explicit `[data-theme]` override for a future
-manual toggle) and is mapped into Tailwind via `tailwind.config.js`
-(`theme.extend.colors`). This file records the two conventions that keep
-new pages consistent without re-deriving them each time.
+The `myth` visual system (parchment/leather aesthetic) lives in
+`src/app/globals.css` — `--myth-*` CSS custom properties, light + dark via
+`prefers-color-scheme` plus an explicit `[data-theme]` override driven by
+the Light/Dark/System control in Settings — and is mapped into Tailwind via
+`tailwind.config.js` (`theme.extend.colors`).
+
+It is the only visual system in the app. The older dark
+`tavern`/`ember`/`wine` palette is fully retired: every page and component
+is on myth tokens, and the tavern half of the system has been deleted (see
+"The tavern theme is gone" at the end of this file). An
+`ember-*`/`wine-*`/`tavern-*` class in a live `className` is a mistake, not
+a surviving variant — the only such strings left in `src/` are two inside
+a comment in `ui/spinner.tsx` recording what that file replaced.
+
+This file records the conventions that keep new pages consistent without
+re-deriving them each time.
 
 ## Accent color
 
@@ -108,12 +117,81 @@ layer draws one on `:focus-visible` for every focusable element rather
 than relying on each component to remember. That inversion is the point:
 forgetting yields a ring, not the absence of one.
 
-## Component opt-in
+## Theme
 
-Shared chrome (`TavernPage`, `TavernBackground`, `TavernHeader`,
-`TavernNav`, `TavernMobileMenu`, `SubNavTabs`, `TavernCard`,
-`TavernButton`) takes a `variant?: 'tavern' | 'myth'` prop (`background?:`
-for `TavernPage`), defaulting to `'tavern'` for backward compatibility.
-Pass `"myth"` explicitly on any new or migrated page — there is no global
-layout wrapper deciding this automatically (see the per-campaign route
-tree, which has no `layout.tsx`).
+`src/lib/theme.ts` owns it: `'light' | 'dark' | 'system'`, defaulting to
+`system`. `localStorage` (`mythos-theme`) is the source of truth for
+*applying* a theme; `User.themePreference` persists it across devices and
+is reconciled in on load, with localStorage winning for the current page.
+
+`THEME_INIT_SCRIPT` runs inline in `layout.tsx` **before first paint** so
+an explicitly-chosen dark theme doesn't flash light on load — that's why
+it's an inline string rather than a normal module.
+
+Write colours as tokens (`bg-myth-surface`, `text-myth-ink`) and both
+themes come free. Never hardcode a hex or a Tailwind stock colour
+(`bg-slate-800`) in app code — it will be right in one theme and wrong in
+the other.
+
+## Clearing the fixed header
+
+`TavernHeader` is `fixed`, so it contributes no flow height and each page
+has to pad its own content out from under it. **Do not hardcode that
+padding.** Use the shared offsets:
+
+```tsx
+import { HEADER_OFFSET, HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
+
+<main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
+```
+
+Use `HEADER_OFFSET_SUBROW` on any page that passes a `subrow`, and
+`HEADER_OFFSET` otherwise.
+
+Both resolve to `--myth-header-h` (which `TavernHeader` measures itself
+into via a `ResizeObserver`) plus 2rem of breathing room; they differ only
+in their pre-hydration fallback. Every page used to hardcode `pt-28`
+(112px) instead, which was simply wrong wherever a page had a subrow — the
+bar is 122px tall with one, 128 on the story page — so the first line of
+content rendered *underneath* it. A static number can't be right for a bar
+whose height depends on the subrow, and on the breakpoint: the campaign
+lobby's header measures 121px at 390px and 68px at 1440px.
+
+## Icons
+
+One vocabulary, from `src/lib/ui/icons.ts` (`ENTITY_ICONS`, `MOOD_ICONS`,
+`NOTIFICATION_ICONS`, `UI_ICONS`, …), all `lucide-react`. **No emoji as UI
+chrome** — not as disclosure arrows, status glyphs, or button faces. The
+app had ~280 of them across 36 files before the Phase 2 sweep; they don't
+respond to theme or font size, can't take a colour token, and render
+differently per platform.
+
+Emoji stay only where they're *content*: the campaign-template picker's
+author-chosen emoji, and anything a player typed.
+
+## Navigation vs. tabsets
+
+Two different things, two different components:
+
+- **`SubNavTabs`** is navigation. Most of its items are `Link`s to sibling
+  pages, and a set of links is not a tabset. It marks the current item with
+  `aria-current` — not `role="tab"`/`aria-selected`, which would also
+  require a `role="tablist"` container and `tabpanel` targets this
+  component doesn't own.
+- **`ui/tabs.tsx`** is for genuine in-page tabsets that swap panel content,
+  and has the full tablist wiring.
+
+## The tavern theme is gone
+
+Deleted, not deprecated — don't go looking for it:
+
+| Was | Status |
+|---|---|
+| `src/components/tavern/ui.tsx` (`TavernCard`, `TavernButton`, `TavernEmptyState`, `TavernSpinner`, `TavernErrorBanner`) | Deleted. Use `ui/card.tsx`, `ui/button.tsx`, `ui/empty-state.tsx`, `ui/spinner.tsx`. |
+| `src/lib/tavernTheme.ts` (`displayFont` Cinzel, `bodyFont` Cormorant Garamond) | Deleted. Use `font-display` (Fraunces) / the sitewide sans. |
+| `public/images/tavern-bg.jpg` | Deleted. `TavernBackground` is a myth-canvas fill with a dark-mode vignette. |
+| `variant?: 'tavern' \| 'myth'` on `TavernHeader`, `TavernNav`, `TavernMobileMenu`, `TavernBackground`, `SubNavTabs`; `background?:` on `TavernPage` | Removed along with every branch behind them. These components take no theme prop — pass nothing. |
+
+The `Tavern*` names survive on the chrome components purely because
+renaming ~14 call sites bought nothing; they are the app's only chrome and
+have no relationship to the retired theme.

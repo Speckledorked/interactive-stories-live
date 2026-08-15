@@ -249,6 +249,44 @@ body {
   @apply bg-myth-accent/30;
 }
 
+/* ---------------------------------------------------------------------- *
+ * Default keyboard focus indicator, app-wide.
+ *
+ * An audit found 86 of 86 <button> elements carrying a className had no
+ * focus-visible ring — not most, all. The UI primitives in
+ * src/components/ui/ now apply one explicitly (FOCUS_RING in styles.ts),
+ * but that only covers controls that go through a primitive. Bespoke
+ * buttons with genuinely custom layout — nav items, tabs, disclosure
+ * rows, cards-that-are-buttons — plus every link in the app, would still
+ * have none.
+ *
+ * So the ring is the DEFAULT here rather than something each call site
+ * opts into. That inverts the failure mode: forgetting to do anything now
+ * yields a focused control that is visible, instead of one that isn't.
+ *
+ * No double-ring with the primitives: FOCUS_RING begins with
+ * `focus-visible:outline-none`, which suppresses this outline before
+ * drawing its own ring-shadow. :focus-visible (not :focus) means mouse
+ * clicks don't show it — only keyboard and other non-pointer interaction.
+ * ---------------------------------------------------------------------- */
+@layer base {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  summary:focus-visible,
+  [tabindex]:not([tabindex='-1']):focus-visible,
+  [role='button']:focus-visible,
+  [role='tab']:focus-visible,
+  [role='radio']:focus-visible,
+  [role='menuitem']:focus-visible {
+    outline: 2px solid rgb(var(--myth-accent));
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+}
+
 /* Suppress the grey flash iOS/Android draw over a tapped element. Every
  * interactive primitive already sets `touch-manipulation` (see
  * src/components/ui/styles.ts) to kill the 300ms double-tap delay; this

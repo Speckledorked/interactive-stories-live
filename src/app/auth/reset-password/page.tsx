@@ -10,6 +10,8 @@ import Link from 'next/link'
 import { KeyRound, AlertTriangle } from 'lucide-react'
 import { fontDisplay, fontSans } from '@/lib/fonts'
 import { TavernBackground } from '@/components/tavern/TavernBackground'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 function ResetPasswordForm() {
   const router = useRouter()
@@ -68,48 +70,33 @@ function ResetPasswordForm() {
         </div>
       )}
 
-      <div>
-        <label htmlFor="password" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
-          New Password
-        </label>
-        <input
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
-          placeholder="At least 8 characters"
-          minLength={8}
-          required
-          autoComplete="new-password"
-        />
-      </div>
+      <Input
+        id="password"
+        type="password"
+        label="New Password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="At least 8 characters"
+        minLength={8}
+        required
+        autoComplete="new-password"
+      />
 
-      <div>
-        <label htmlFor="confirm" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
-          Confirm Password
-        </label>
-        <input
-          id="confirm"
-          type="password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
-          placeholder="Same again"
-          minLength={8}
-          required
-          autoComplete="new-password"
-        />
-      </div>
+      <Input
+        id="confirm"
+        type="password"
+        label="Confirm Password"
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        placeholder="Same again"
+        minLength={8}
+        required
+        autoComplete="new-password"
+      />
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-myth-accent px-4 py-3 font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover disabled:opacity-50"
-      >
-        <KeyRound className="h-4 w-4" />
+      <Button type="submit" size="lg" fullWidth loading={loading} icon={KeyRound}>
         {loading ? 'Updating…' : 'Set New Password'}
-      </button>
+      </Button>
     </form>
   )
 }

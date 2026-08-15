@@ -35,7 +35,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
   secondary:
     'bg-myth-surface text-myth-ink-muted border border-myth-border hover:border-myth-border-strong hover:text-myth-ink',
   ghost: 'bg-transparent text-myth-ink-muted border border-transparent hover:bg-myth-surface-sunken hover:text-myth-ink',
-  danger: 'bg-myth-danger text-white hover:opacity-90 border border-transparent',
+  // text-myth-danger-ink, not text-white: dark mode's danger fill is a
+  // light salmon where white measures 3.60:1. The token flips per theme.
+  danger: 'bg-myth-danger text-myth-danger-ink hover:opacity-90 border border-transparent',
 }
 
 // Padding/text only — vertical size comes from TOUCH_TARGET's min-h, so

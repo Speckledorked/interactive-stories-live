@@ -132,7 +132,7 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-4 text-center">
-            <Link href="/auth/forgot-password" className="text-sm text-myth-ink-faint transition-colors hover:text-myth-ink">
+            <Link href="/auth/forgot-password" className="inline-flex min-h-[44px] items-center justify-center touch-manipulation text-sm text-myth-ink-faint transition-colors hover:text-myth-ink">
               Forgot your password?
             </Link>
           </p>
@@ -153,7 +153,7 @@ export default function LoginPage() {
         <div className="mt-6 text-center">
           <Link
             href="/help"
-            className="inline-flex items-center gap-1 text-sm text-myth-ink-faint transition-colors hover:text-myth-ink"
+            className="inline-flex min-h-[44px] touch-manipulation items-center gap-1 text-sm text-myth-ink-faint transition-colors hover:text-myth-ink"
           >
             Need help?
           </Link>

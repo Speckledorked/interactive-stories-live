@@ -120,7 +120,7 @@ export default function ResetPasswordPage() {
           <div className="my-6 h-px bg-myth-border" />
 
           <p className="text-center text-sm text-myth-ink-muted">
-            <Link href="/login" className="font-semibold text-myth-accent transition-colors hover:text-myth-accent-hover">
+            <Link href="/login" className="inline-flex min-h-[44px] items-center justify-center touch-manipulation font-semibold text-myth-accent transition-colors hover:text-myth-accent-hover">
               Back to login
             </Link>
           </p>

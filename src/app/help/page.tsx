@@ -7,7 +7,7 @@ import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SectionHeader } from '@/components/ui/section-header'
 import { getLastCampaignId } from '@/lib/clientAuth'
-import { BookOpen, Dices, Download, Feather, Map as MapIcon, MessageSquare, Scroll, Users } from 'lucide-react'
+import { BookOpen, Dices, Download, Feather, Keyboard, Map as MapIcon, MessageSquare, Scroll, Users } from 'lucide-react'
 import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
 
 export default function HelpPage() {
@@ -46,7 +46,7 @@ export default function HelpPage() {
           }}
           className="group rounded-lg border border-myth-border bg-myth-surface p-6 text-left transition-colors hover:border-myth-border-strong"
         >
-          <div className="text-5xl mb-4">⌨️</div>
+          <Keyboard className="mb-4 h-12 w-12 text-myth-accent" />
           <h3 className="font-display mb-2 text-2xl font-semibold text-myth-ink">
             Keyboard Shortcuts
           </h3>

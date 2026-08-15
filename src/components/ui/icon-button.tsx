@@ -67,7 +67,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
           // the caller (e.g. "Notifications, 3 unread"), so exposing it
           // twice would make the control read redundantly.
           aria-hidden
-          className="absolute right-1 top-1 min-w-[1.125rem] rounded-full bg-myth-danger px-1 text-center font-mono text-[10px] font-semibold leading-[1.125rem] text-white"
+          className="absolute right-1 top-1 min-w-[1.125rem] rounded-full bg-myth-danger px-1 text-center font-mono text-[10px] font-semibold leading-[1.125rem] text-myth-danger-ink"
         >
           {badgeText}
         </span>

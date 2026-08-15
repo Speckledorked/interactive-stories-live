@@ -217,7 +217,7 @@ export default function StoryLogPage() {
                 {regenerating ? 'Regenerating…' : 'Regenerate All'}
               </Button>
               {regenerateResult && (
-                <p className="text-xs text-myth-gold text-right max-w-xs">{regenerateResult}</p>
+                <p className="text-xs text-myth-ink-faint text-right max-w-xs">{regenerateResult}</p>
               )}
             </div>
           )}
@@ -228,17 +228,17 @@ export default function StoryLogPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="text-center">
               <div className={`font-display text-3xl text-myth-ink-muted mb-1`}>{logs.length}</div>
-              <div className="text-sm text-myth-gold">Chronicle Entries</div>
+              <div className="text-sm text-myth-ink-faint">Chronicle Entries</div>
             </div>
             <div className="text-center">
               <div className={`font-display text-3xl text-myth-good mb-1`}>
                 {logs.reduce((sum, l) => sum + (l.highlights?.length || 0), 0)}
               </div>
-              <div className="text-sm text-myth-gold">Key Moments</div>
+              <div className="text-sm text-myth-ink-faint">Key Moments</div>
             </div>
             <div className="text-center">
               <div className={`font-display text-3xl text-myth-ink-muted mb-1`}>{logs[0]?.turnNumber || 0}</div>
-              <div className="text-sm text-myth-gold">Current Turn</div>
+              <div className="text-sm text-myth-ink-faint">Current Turn</div>
             </div>
           </div>
         </Card>
@@ -264,7 +264,7 @@ export default function StoryLogPage() {
                 {dayDetailLoading ? (
                   <SpinnerBlock className="h-8 w-8" />
                 ) : !dayDetail || (dayDetail.logs.length === 0 && dayDetail.rumors.length === 0) ? (
-                  <p className="text-sm text-myth-gold">Nothing recorded for this day yet.</p>
+                  <p className="text-sm text-myth-ink-faint">Nothing recorded for this day yet.</p>
                 ) : (
                   <div className="space-y-4">
                     {dayDetail.logs.map((log) => (
@@ -272,7 +272,7 @@ export default function StoryLogPage() {
                     ))}
                     {dayDetail.rumors.length > 0 && (
                       <div className={dayDetail.logs.length > 0 ? 'pt-4 border-t border-myth-border' : ''}>
-                        <h4 className="text-xs font-medium text-myth-gold mb-2 flex items-center gap-1.5">
+                        <h4 className="text-xs font-medium text-myth-ink-faint mb-2 flex items-center gap-1.5">
                           <MessageCircle className="w-3.5 h-3.5" />
                           Word on the Street
                         </h4>
@@ -358,7 +358,7 @@ function LogEntryCard({
               Turn {log.turnNumber}
             </span>
             {log.entryType !== 'scene' && (
-              <span className="text-xs px-2 py-1 rounded bg-myth-surface-sunken border border-myth-border text-myth-gold">
+              <span className="text-xs px-2 py-1 rounded bg-myth-surface-sunken border border-myth-border text-myth-ink-faint">
                 {log.entryType}
               </span>
             )}
@@ -376,7 +376,7 @@ function LogEntryCard({
               className={copied ? 'text-myth-good hover:text-myth-good' : undefined}
               onClick={handleShare}
             />
-            <div className="text-xs text-myth-gold whitespace-nowrap">
+            <div className="text-xs text-myth-ink-faint whitespace-nowrap">
               {new Date(log.createdAt).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
@@ -387,7 +387,7 @@ function LogEntryCard({
         </div>
 
         {log.inGameDate && (
-          <p className="text-xs text-myth-gold mb-3">
+          <p className="text-xs text-myth-ink-faint mb-3">
             {log.inGameDate}
             {log.duration && ` • Duration: ${log.duration}`}
           </p>
@@ -397,7 +397,7 @@ function LogEntryCard({
 
         {log.highlights && log.highlights.length > 0 && (
           <div className="pt-4 border-t border-myth-border">
-            <h4 className="text-xs font-medium text-myth-gold mb-2">Key Moments</h4>
+            <h4 className="text-xs font-medium text-myth-ink-faint mb-2">Key Moments</h4>
             <ul className="space-y-1">
               {log.highlights.map((highlight, i) => (
                 <li key={i} className="text-sm text-myth-ink-faint flex items-start gap-2">

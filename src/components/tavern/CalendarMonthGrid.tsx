@@ -96,7 +96,7 @@ export function CalendarMonthGrid({ campaignId, onSelectDay, selectedDayNumber }
         style={{ gridTemplateColumns: `repeat(${data.weekdayNames.length}, minmax(0, 1fr))` }}
       >
         {data.weekdayNames.map((weekday) => (
-          <div key={weekday} className="text-center text-[10px] uppercase tracking-wide text-myth-gold pb-1">
+          <div key={weekday} className="text-center text-[10px] uppercase tracking-wide text-myth-ink-faint pb-1">
             {weekday.slice(0, 2)}
           </div>
         ))}

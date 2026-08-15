@@ -4,7 +4,7 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Clock } from 'lucide-react'
 
 interface ClockProgressProps {
   name: string
@@ -33,12 +33,17 @@ export default function ClockProgress({
   // Calculate stroke dash offset for circular progress
   const strokeDashoffset = circumference - (percentage / 100) * circumference
 
-  // Get color based on progress
+  // Get color based on progress. Token-driven, not hardcoded hex: the
+  // palette sweep left literal #ef4444/#f59e0b/#c99a3a/#855f24 here, which
+  // don't flip with the theme — and CompactClock, in this same file,
+  // already reads the tokens this way. The dead `glow` key (referencing
+  // shadow-danger-500/shadow-warning-500, classes that don't exist in
+  // tailwind.config.js) is gone rather than carried forward.
   const getColor = () => {
-    if (percentage >= 90) return { stroke: '#ef4444', glow: 'shadow-danger-500/50', bg: 'from-myth-danger/30 to-myth-danger/20' }
-    if (percentage >= 75) return { stroke: '#f59e0b', glow: 'shadow-warning-500/50', bg: 'from-myth-accent/30 to-myth-accent/20' }
-    if (percentage >= 50) return { stroke: '#c99a3a', glow: 'shadow-myth-accent/40', bg: 'from-myth-accent/20 to-myth-accent/10' }
-    return { stroke: '#855f24', glow: 'shadow-black/30', bg: 'from-myth-surface-raised to-myth-surface' }
+    if (percentage >= 90) return { stroke: 'rgb(var(--myth-danger))', bg: 'from-myth-danger/30 to-myth-danger/20' }
+    if (percentage >= 75) return { stroke: 'rgb(var(--myth-warn))', bg: 'from-myth-accent/30 to-myth-accent/20' }
+    if (percentage >= 50) return { stroke: 'rgb(var(--myth-gold))', bg: 'from-myth-accent/20 to-myth-accent/10' }
+    return { stroke: 'rgb(var(--myth-border-strong))', bg: 'from-myth-surface-raised to-myth-surface' }
   }
 
   const sizeClasses = {
@@ -57,9 +62,9 @@ export default function ClockProgress({
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
           <h3 className={`font-bold text-myth-ink ${size === 'sm' ? 'text-sm' : 'text-lg'} flex items-center gap-2`}>
-            ⏰ {name}
+            <Clock className="h-4 w-4 flex-shrink-0" />{name}
             {isHidden && (
-              <span className="text-xs bg-myth-surface-sunken text-myth-gold px-2 py-0.5 rounded">Hidden</span>
+              <span className="text-xs bg-myth-surface-sunken text-myth-ink-faint px-2 py-0.5 rounded">Hidden</span>
             )}
           </h3>
           {description && (
@@ -77,7 +82,7 @@ export default function ClockProgress({
               cx={config.circle / 2}
               cy={config.circle / 2}
               r="45"
-              stroke="#3d2c15"
+              stroke="rgb(var(--myth-border))"
               strokeWidth="8"
               fill="none"
             />
@@ -102,12 +107,12 @@ export default function ClockProgress({
             <div className={`font-bold text-myth-ink ${config.text}`}>
               {current}/{max}
             </div>
-            <div className="text-xs text-myth-gold">ticks</div>
+            <div className="text-xs text-myth-ink-faint">ticks</div>
           </div>
 
           {/* Pulsing effect when near completion */}
           {percentage >= 75 && (
-            <div className={`absolute inset-0 rounded-full bg-${colors.stroke}/10 animate-ping`} />
+            <div className="absolute inset-0 animate-ping rounded-full bg-myth-danger/10" />
           )}
         </div>
       </div>
@@ -129,14 +134,17 @@ export default function ClockProgress({
         ))}
       </div>
 
-      {/* Consequence */}
+      {/* Consequence. bg-myth-danger/10, not a solid fill: the palette
+          sweep turned the original bg-wine-800/30 tint into an opaque red
+          panel and left text-myth-danger on top of it — danger on danger,
+          i.e. invisible. The /10 tint is the app-wide convention here. */}
       {consequence && (
         <div className={`p-3 rounded-lg border ${
           percentage >= 90
-            ? 'bg-myth-danger border-myth-danger/40'
+            ? 'bg-myth-danger/10 border-myth-danger/40'
             : 'bg-myth-surface-sunken border-myth-border'
         }`}>
-          <p className="text-xs font-semibold text-myth-gold mb-1">When Complete:</p>
+          <p className="text-xs font-semibold text-myth-ink-faint mb-1">When Complete:</p>
           <p className={`text-sm ${percentage >= 90 ? 'text-myth-danger' : 'text-myth-ink'}`}>
             {consequence}
           </p>
@@ -156,7 +164,7 @@ export default function ClockProgress({
       {/* Completion badge */}
       {current >= max && (
         <div className="mt-4 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-myth-danger border border-myth-danger/40 rounded-lg text-myth-danger font-bold">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-myth-danger/10 border border-myth-danger/40 rounded-lg text-myth-danger font-bold">
             <AlertTriangle className="mr-1 inline h-3.5 w-3.5 align-[-0.15em]" />COMPLETE
           </div>
         </div>

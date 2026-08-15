@@ -16,7 +16,7 @@ import { useState, useEffect } from 'react';
 import { getPusherClient } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
 import { Button } from '@/components/ui/button';
-import { Check } from 'lucide-react'
+import { Check, Hourglass, Pause } from 'lucide-react'
 
 interface TurnInfo {
   currentPlayer: {
@@ -329,7 +329,7 @@ export default function TurnTracker({
                 </div>
                 <div className="text-xs text-myth-ink-faint">
                   {index < turnInfo.turnIndex ? <Check className="h-3 w-3" /> :
-                   index === turnInfo.turnIndex ? '⏳' : '⏸️'}
+                   index === turnInfo.turnIndex ? <Hourglass className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
                 </div>
               </div>
             ))}

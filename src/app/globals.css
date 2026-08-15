@@ -26,7 +26,13 @@
   --myth-border-strong: 199 185 152;
   --myth-ink: 36 31 24;
   --myth-ink-muted: 92 83 68;
-  --myth-ink-faint: 118 109 88;
+  /* Contrast floor: ink-faint is routinely used at 10-12px, so it has to
+     clear 4.5:1 against the DARKEST light surface, not just the canvas.
+     It was 118 109 88, which measured 4.63:1 on --myth-canvas but only
+     4.24:1 on --myth-surface-sunken — where the campaign-card meta rows
+     and the lobby Turn/Date labels actually render. 112 103 83 is 4.63:1
+     on sunken and 5.06:1 on canvas. Darken further, never lighten. */
+  --myth-ink-faint: 112 103 83;
 
   /* Royal purple/jewel-violet (hue ~275°) — deliberately far from every
      semantic hue below (good ~140°, warn ~37°, danger ~0°, info ~208°).
@@ -39,6 +45,11 @@
   --myth-good: 42 111 61;
   --myth-warn: 143 93 14;
   --myth-danger: 158 42 42;
+  /* Text color for a SOLID --myth-danger fill. Not a constant: light
+     mode's danger is a deep red that wants white on it (7.45:1), dark
+     mode's is a light salmon where white measures 3.60:1 and fails. The
+     danger Button hardcoded text-white and was unreadable in dark. */
+  --myth-danger-ink: 255 255 255;
   --myth-info: 45 90 130;
 
   /* Decorative "world/lore" gold — wordmark, dividers, codex flourishes.
@@ -47,8 +58,11 @@
      would make a purely decorative flourish read as a warning state
      elsewhere in the UI. Not intended for small body text — reserved for
      display type, dividers, and chip/label accents. See
-     docs/design-system.md. */
-  --myth-gold: 150 108 32;
+     docs/design-system.md. Was 150 108 32, which fell below 4.5:1 on
+     every light surface (4.25:1 on canvas, 3.89:1 on sunken) — even the
+     wordmark's own tagline failed. 132 94 24 clears 4.83:1 on the worst
+     light surface; the dark value needs no change (8-9:1 throughout). */
+  --myth-gold: 132 94 24;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -61,7 +75,7 @@
     --myth-border-strong: 74 64 48;
     --myth-ink: 242 236 224;
     --myth-ink-muted: 184 173 152;
-    --myth-ink-faint: 142 132 110;
+    --myth-ink-faint: 146 136 114;
 
     --myth-accent: 176 132 214;
     --myth-accent-hover: 193 153 224;
@@ -70,6 +84,7 @@
     --myth-good: 106 168 108;
     --myth-warn: 214 158 74;
     --myth-danger: 214 100 90;
+    --myth-danger-ink: 20 17 13;
     --myth-info: 122 165 199;
 
     --myth-gold: 214 178 92;
@@ -85,15 +100,16 @@
   --myth-border-strong: 199 185 152;
   --myth-ink: 36 31 24;
   --myth-ink-muted: 92 83 68;
-  --myth-ink-faint: 118 109 88;
+  --myth-ink-faint: 112 103 83;
   --myth-accent: 91 45 120;
   --myth-accent-hover: 72 33 98;
   --myth-accent-ink: 251 248 242;
   --myth-good: 42 111 61;
   --myth-warn: 143 93 14;
   --myth-danger: 158 42 42;
+  --myth-danger-ink: 255 255 255;
   --myth-info: 45 90 130;
-  --myth-gold: 150 108 32;
+  --myth-gold: 132 94 24;
 }
 
 [data-theme='dark'] {
@@ -105,13 +121,14 @@
   --myth-border-strong: 74 64 48;
   --myth-ink: 242 236 224;
   --myth-ink-muted: 184 173 152;
-  --myth-ink-faint: 142 132 110;
+  --myth-ink-faint: 146 136 114;
   --myth-accent: 176 132 214;
   --myth-accent-hover: 193 153 224;
   --myth-accent-ink: 26 16 36;
   --myth-good: 106 168 108;
   --myth-warn: 214 158 74;
   --myth-danger: 214 100 90;
+  --myth-danger-ink: 20 17 13;
   --myth-info: 122 165 199;
   --myth-gold: 214 178 92;
 }

@@ -28,7 +28,7 @@ import { MapViewerPanel } from '@/components/scene/MapViewerPanel'
 import { SceneChatPanel } from '@/components/scene/SceneChatPanel'
 import { ActiveClocksPanel } from '@/components/scene/ActiveClocksPanel'
 import { RecentTimelinePanel } from '@/components/scene/RecentTimelinePanel'
-import { BookOpen, Bookmark, ChevronRight, Clock, Eye, Home, Keyboard, Loader, Lock, Map as MapIcon, MessageSquare, Pause, Scroll, Search, Settings as SettingsIcon, StickyNote, X } from 'lucide-react'
+import { BookOpen, Bookmark, ChevronRight, Clock, Eye, Home, Hourglass, Keyboard, Loader, Lock, Map as MapIcon, MessageSquare, Pause, Scroll, Search, Settings as SettingsIcon, StickyNote, X } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
@@ -1087,8 +1087,14 @@ export default function StoryPage() {
         campaignId={campaignId}
         isAdmin={isAdmin}
         subrow={
-          <div className="max-w-7xl mx-auto px-4 flex items-center justify-between gap-3 border-t border-myth-border pt-2 pb-0">
-            <nav className="flex items-center gap-2 overflow-x-auto text-sm">
+          // Stacked below sm:. Side by side, the flex-shrink-0 safety
+          // cluster took 208px of a 390px viewport and left the tab strip
+          // 72px of visible width against 633px of content — six tabs in a
+          // window barely wider than one of them. The header measures and
+          // publishes its own height (see TavernHeader), so the extra row
+          // costs nothing in page offset.
+          <div className="max-w-7xl mx-auto px-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 border-t border-myth-border pt-2 pb-0">
+            <nav className="flex min-w-0 items-center gap-2 overflow-x-auto text-sm">
               <SubNavTabs tabs={storyTabs} activeKey="story" itemClassName="whitespace-nowrap flex-shrink-0" />
             </nav>
             <div className="flex items-center gap-2 flex-shrink-0 pb-1.5">
@@ -1665,7 +1671,7 @@ export default function StoryPage() {
                               </p>
                             ) : (
                               <p className="text-myth-ink-faint text-xs">
-                                ⏳ Waiting for {participantUserIds.length - submittedUserIds.size} more player(s). The scene resolves automatically when everyone has acted.
+                                <Hourglass className="mr-1 inline h-3 w-3 align-[-0.1em]" />Waiting for {participantUserIds.length - submittedUserIds.size} more player(s). The scene resolves automatically when everyone has acted.
                               </p>
                             )}
                           </div>

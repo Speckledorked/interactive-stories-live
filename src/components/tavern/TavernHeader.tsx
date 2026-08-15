@@ -115,15 +115,15 @@ export function TavernHeader({
           // first; the name itself stays.
           <div className="flex min-w-0 flex-col items-center lg:hidden">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="hidden text-myth-gold/50 text-xs tracking-widest sm:inline">◈──</span>
+              <span aria-hidden className="hidden text-myth-gold/50 text-xs tracking-widest sm:inline">◈──</span>
               <h1
                 className="truncate font-display text-2xl tracking-[0.15em] text-myth-gold"
               >
                 MythOS
               </h1>
-              <span className="hidden text-myth-gold/50 text-xs tracking-widest sm:inline">──◈</span>
+              <span aria-hidden className="hidden text-myth-gold/50 text-xs tracking-widest sm:inline">──◈</span>
             </div>
-            <p className="truncate text-[11px] tracking-[0.2em] text-myth-gold/60 -mt-0.5">THE WORLD REMEMBERS.</p>
+            <p className="truncate text-[11px] tracking-[0.2em] text-myth-gold -mt-0.5">THE WORLD REMEMBERS.</p>
           </div>
         ) : (
           <h1

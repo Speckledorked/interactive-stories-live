@@ -34,7 +34,7 @@ export default function VisualTimeline({ events, compact = false }: VisualTimeli
       <div className="text-center py-16">
         <BookOpen className="mx-auto mb-4 h-12 w-12 text-myth-ink-faint" />
         <p className="text-xl text-myth-ink mb-2">Your story begins here</p>
-        <p className="text-sm text-myth-gold">Events will appear as your adventure unfolds</p>
+        <p className="text-sm text-myth-ink-faint">Events will appear as your adventure unfolds</p>
       </div>
     )
   }
@@ -77,7 +77,7 @@ export default function VisualTimeline({ events, compact = false }: VisualTimeli
                           Scene {event.sceneNumber}
                         </div>
                       )}
-                      <div className="text-xs text-myth-gold">
+                      <div className="text-xs text-myth-ink-faint">
                         Turn {event.turnNumber}
                       </div>
                     </div>
@@ -101,7 +101,7 @@ export default function VisualTimeline({ events, compact = false }: VisualTimeli
                         ? 'bg-success-500/20 text-success-400 border border-success-500/40'
                         : event.status === 'AWAITING_ACTIONS'
                           ? 'bg-myth-surface-sunken text-myth-ink-muted border border-myth-border-strong'
-                          : 'bg-myth-surface-sunken text-myth-gold border border-myth-border'
+                          : 'bg-myth-surface-sunken text-myth-ink-faint border border-myth-border'
                       }
                     `}>
                       {event.status.replace('_', ' ')}
@@ -117,7 +117,7 @@ export default function VisualTimeline({ events, compact = false }: VisualTimeli
                 {/* Expanded content */}
                 {isExpanded && event.sceneIntroText && (
                   <div className="mt-4 pt-4 border-t border-myth-border">
-                    <p className="text-sm text-myth-gold mb-2 font-semibold">Scene Introduction:</p>
+                    <p className="text-sm text-myth-ink-faint mb-2 font-semibold">Scene Introduction:</p>
                     <p className="text-myth-ink text-sm whitespace-pre-wrap bg-myth-surface-sunken p-3 rounded border border-myth-border">
                       {event.sceneIntroText}
                     </p>
@@ -125,7 +125,7 @@ export default function VisualTimeline({ events, compact = false }: VisualTimeli
                 )}
 
                 {/* Metadata */}
-                <div className="mt-4 flex items-center justify-between text-xs text-myth-gold">
+                <div className="mt-4 flex items-center justify-between text-xs text-myth-ink-faint">
                   <span>{new Date(event.createdAt).toLocaleDateString()} at {new Date(event.createdAt).toLocaleTimeString()}</span>
                   <Button variant="ghost" size="sm">
                     {(() => { const I = isExpanded ? UI_ICONS.expanded : UI_ICONS.collapsed; return <><span>{isExpanded ? 'Show less' : 'Show more'}</span><I className="ml-1 inline h-3.5 w-3.5 align-[-0.15em]" /></> })()}
@@ -142,7 +142,7 @@ export default function VisualTimeline({ events, compact = false }: VisualTimeli
         <div className="absolute left-3 md:left-9 top-0 w-6 h-6 rounded-full bg-myth-surface-sunken border-4 border-myth-canvas flex items-center justify-center">
           <div className="w-2 h-2 rounded-full bg-myth-surface-sunken" />
         </div>
-        <div className="text-sm text-myth-gold italic">
+        <div className="text-sm text-myth-ink-faint italic">
           The story continues...
         </div>
       </div>

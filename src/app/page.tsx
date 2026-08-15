@@ -21,10 +21,10 @@ export default function HomePage() {
   }, [router])
 
   return (
-    <div className="-mx-4 -my-8 min-h-screen flex items-center justify-center bg-tavern-950">
+    <div className="-mx-4 -my-8 min-h-screen flex items-center justify-center bg-myth-canvas">
       <div className="text-center">
         <div className="spinner h-10 w-10 mx-auto" />
-        <p className="mt-4 text-ember-300/50 text-sm tracking-wide">Loading…</p>
+        <p className="mt-4 text-myth-ink-faint text-sm tracking-wide">Loading…</p>
       </div>
     </div>
   )

@@ -85,17 +85,17 @@ export function CalendarMonthGrid({ campaignId, onSelectDay, selectedDayNumber }
         <button
           onClick={goPrev}
           aria-label="Previous month"
-          className="w-8 h-8 flex items-center justify-center rounded-lg border border-ember-900/40 text-ember-300 hover:border-ember-700/60 transition-colors"
+          className="w-8 h-8 flex items-center justify-center rounded-lg border border-myth-border text-myth-ink-muted hover:border-myth-border-strong transition-colors"
         >
           ‹
         </button>
-        <h3 className={`${displayFont.className} text-lg text-ember-100`}>
+        <h3 className={`${displayFont.className} text-lg text-myth-ink`}>
           {data.monthName}, Year {data.year}
         </h3>
         <button
           onClick={goNext}
           aria-label="Next month"
-          className="w-8 h-8 flex items-center justify-center rounded-lg border border-ember-900/40 text-ember-300 hover:border-ember-700/60 transition-colors"
+          className="w-8 h-8 flex items-center justify-center rounded-lg border border-myth-border text-myth-ink-muted hover:border-myth-border-strong transition-colors"
         >
           ›
         </button>
@@ -106,7 +106,7 @@ export function CalendarMonthGrid({ campaignId, onSelectDay, selectedDayNumber }
         style={{ gridTemplateColumns: `repeat(${data.weekdayNames.length}, minmax(0, 1fr))` }}
       >
         {data.weekdayNames.map((weekday) => (
-          <div key={weekday} className="text-center text-[10px] uppercase tracking-wide text-ember-400/40 pb-1">
+          <div key={weekday} className="text-center text-[10px] uppercase tracking-wide text-myth-gold pb-1">
             {weekday.slice(0, 2)}
           </div>
         ))}
@@ -125,17 +125,17 @@ export function CalendarMonthGrid({ campaignId, onSelectDay, selectedDayNumber }
               onClick={() => onSelectDay(cell.absoluteDay, `${cell.dayOfMonth} ${data.monthName}, Year ${data.year}`)}
               className={`aspect-square rounded-lg text-sm flex flex-col items-center justify-center gap-0.5 border transition-colors ${
                 isSelected
-                  ? 'bg-ember-700/40 border-ember-500 text-ember-100'
+                  ? 'bg-myth-surface-sunken border-myth-accent text-myth-ink'
                   : isToday
-                    ? 'border-ember-600/60 bg-ember-900/30 text-ember-200'
-                    : 'border-ember-900/30 bg-black/20 text-ember-300/70 hover:border-ember-700/50'
+                    ? 'border-myth-border-strong bg-myth-surface-sunken text-myth-ink'
+                    : 'border-myth-border bg-myth-surface-sunken text-myth-ink-muted hover:border-myth-border-strong'
               }`}
             >
               <span>{cell.dayOfMonth}</span>
               {hasEntries && (
                 <span className="flex gap-0.5">
-                  {marker?.hasLogs && <span className="w-1 h-1 rounded-full bg-ember-400" />}
-                  {marker?.hasRumors && <span className="w-1 h-1 rounded-full bg-wine-400" />}
+                  {marker?.hasLogs && <span className="w-1 h-1 rounded-full bg-myth-gold" />}
+                  {marker?.hasRumors && <span className="w-1 h-1 rounded-full bg-myth-danger" />}
                 </span>
               )}
             </button>

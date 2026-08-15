@@ -32,6 +32,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs } from '@/components/ui/tabs'
+import { Timeline, TimelineItem } from '@/components/ui/timeline'
+import { QuickAccess } from '@/components/campaigns/lobby/QuickAccess'
 
 interface CampaignData {
   campaign: any
@@ -40,6 +42,10 @@ interface CampaignData {
 
 const VALID_TABS = ['overview', 'chat', 'notes', 'maps', 'progression'] as const
 type LobbyTab = (typeof VALID_TABS)[number]
+
+// The lobby shows a window onto the away-recap, not the whole thing —
+// an unbounded list on a phone pushes everything below it off the page.
+const RECENT_EVENT_LIMIT = 5
 
 export default function CampaignLobbyPage() {
   const router = useRouter()
@@ -377,10 +383,66 @@ export default function CampaignLobbyPage() {
           onCreateCharacter={() => setShowCreateCharacter(true)}
         />
 
-      {/* Overview Tab - Existing Content */}
+      {/* Overview Tab.
+          Vertical order at 390px is chosen by what a returning player
+          needs first: what should I do (Current Objective) -> what
+          changed (Glance, Chronicle, Timeline) -> where do I go (Quick
+          Access) -> who's here (roster). The roster and player list are
+          reference content and sit below the world state rather than
+          above it, which is the opposite of the pre-redesign order. */}
       {activeTab === 'overview' && (
       <div className="space-y-6">
         <CurrentObjective campaignId={campaignId} />
+
+        <WorldGlance
+          campaignId={campaignId}
+          glance={(campaign.worldMeta?.chronicleGlance as ChronicleGlance | null) ?? null}
+          turnNumber={campaign.worldMeta?.currentTurnNumber || 0}
+        />
+
+        <WorldChronicle
+          campaignId={campaignId}
+          narration={campaign.worldMeta?.chronicleNarration ?? null}
+          hoursSinceWorldTurn={campaign.worldMeta?.hoursSinceWorldTurn ?? null}
+          worldTurnHours={campaign.worldMeta?.worldTurnHours ?? null}
+        />
+
+        {/* World Timeline — offscreen world-turn fallout the player missed
+            since they last opened this lobby, on the shared dotted rail so
+            it reads as a sequence of turns rather than a run-on paragraph.
+            Not persisted as dismissed (it naturally won't reappear once
+            lastViewedAt advances past these events).
+
+            The mockup shows this and a separate "Recent Events" list, but
+            both are the same TimelineEvent feed — rendering it twice would
+            be two views of one thing rather than two things. */}
+        {awayRecap && awayRecap.events.length > 0 && (
+          <div className="space-y-3">
+            <SectionHeader as="h2" title="World Timeline" description={`While you were away (${awayRecap.awayLabel})`} />
+            <Timeline>
+              {awayRecap.events.slice(0, RECENT_EVENT_LIMIT).map((e, i, shown) => (
+                <TimelineItem
+                  key={e.id}
+                  isLast={i === shown.length - 1}
+                  tone={i === 0 ? 'accent' : 'muted'}
+                >
+                  <p className="text-sm font-medium text-myth-ink">{e.title}</p>
+                  <p className="mt-0.5 text-sm leading-relaxed text-myth-ink-muted">{e.summary}</p>
+                </TimelineItem>
+              ))}
+            </Timeline>
+            <Link
+              href={`/campaigns/${campaignId}?tab=progression`}
+              className="inline-flex min-h-[44px] items-center text-sm text-myth-ink-faint hover:text-myth-ink hover:underline"
+            >
+              {awayRecap.events.length > RECENT_EVENT_LIMIT
+                ? `See all ${awayRecap.events.length} in the story log`
+                : 'See everything that\u2019s happened'}
+            </Link>
+          </div>
+        )}
+
+        <QuickAccess campaignId={campaignId} />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
@@ -406,42 +468,9 @@ export default function CampaignLobbyPage() {
           </div>
         </div>
 
-        <WorldGlance
-          campaignId={campaignId}
-          glance={(campaign.worldMeta?.chronicleGlance as ChronicleGlance | null) ?? null}
-          turnNumber={campaign.worldMeta?.currentTurnNumber || 0}
-        />
-
-        <WorldChronicle
-          campaignId={campaignId}
-          narration={campaign.worldMeta?.chronicleNarration ?? null}
-          hoursSinceWorldTurn={campaign.worldMeta?.hoursSinceWorldTurn ?? null}
-          worldTurnHours={campaign.worldMeta?.worldTurnHours ?? null}
-        />
-
-        {/* World Timeline — offscreen world-turn fallout the player missed
-            since they last opened this lobby. Not persisted as dismissed
-            (it naturally won't reappear once lastViewedAt advances past
-            these events). */}
-        {awayRecap && (
-          <div className="space-y-2">
-            <SectionHeader as="h2" title="World Timeline" description={`While you were away (${awayRecap.awayLabel})`} />
-            <p className="leading-relaxed text-myth-ink-muted">
-              {awayRecap.events.map((e, i) => (
-                <span key={e.id}>
-                  {i > 0 && ' '}
-                  <span className="text-myth-ink">{e.title}.</span> {e.summary}
-                </span>
-              ))}
-            </p>
-            <Link
-              href={`/campaigns/${campaignId}/wiki?type=RUMORS`}
-              className="text-sm text-myth-ink-faint hover:text-myth-ink hover:underline"
-            >
-              See everything that&rsquo;s happened
-            </Link>
-          </div>
-        )}
+        <p className="pt-2 text-center text-sm italic text-myth-ink-faint">
+          The world does not wait. It lives, it breathes, it remembers.
+        </p>
       </div>
       )}
 

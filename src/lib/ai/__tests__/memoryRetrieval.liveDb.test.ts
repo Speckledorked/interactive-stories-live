@@ -209,6 +209,66 @@ describeIfDb('retrieveRelevantHistory — real pgvector search', () => {
     expect(titles).toContain('Discovered NPC memory')
     expect(titles).not.toContain('Undiscovered NPC memory')
   })
+
+  // #293: the ORDER BY blends similarity and recency in one expression —
+  // nothing proved that blend was actually wired to recencyBias rather
+  // than being dead weight. Writing this test surfaced a real bug: the
+  // blend used to only decide the SQL's own LIMIT-cutoff candidate pool —
+  // filterAndRankMemories's importance-boosted re-sort (the default,
+  // importanceBoost: true, left un-overridden by both calls below to
+  // match production's own call site in sceneResolutionRequest.ts) then
+  // unconditionally re-ranked by raw similarity, discarding the blend
+  // entirely. Fixed by returning the blend as its own `relevanceScore`
+  // column and boosting that instead of raw similarity — see
+  // filterAndRankMemories's own comment. A dedicated campaign/turn range
+  // keeps this independent of the other memories/turnNumbers created
+  // elsewhere in this describe block, since the recency term is
+  // normalized against this campaign's own MAX(turnNumber).
+  it('lets recencyBias flip the ranking toward a more recent, less similar memory', async () => {
+    const { createCampaignMemory } = await import('@/lib/ai/memoryCreation')
+    const { retrieveRelevantHistory } = await import('../memoryRetrieval')
+
+    const recencyCampaign = await prisma.campaign.create({
+      data: { title: 'RAG Recency Blend Test Campaign', aiSystemPrompt: 'test', initialWorldSeed: 'test' },
+    })
+
+    await createCampaignMemory({
+      campaignId: recencyCampaign.id, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 1,
+      title: 'Old similar memory', summary: 'TOPIC_A memory content', fullContext: 'TOPIC_A memory content',
+      involvedCharacterIds: [], involvedNpcIds: [], involvedFactionIds: [], locationTags: [],
+      importance: 'NORMAL', tags: [],
+    })
+    await createCampaignMemory({
+      campaignId: recencyCampaign.id, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 50,
+      title: 'Recent dissimilar memory', summary: 'TOPIC_B memory content', fullContext: 'TOPIC_B memory content',
+      involvedCharacterIds: [], involvedNpcIds: [], involvedFactionIds: [], locationTags: [],
+      importance: 'NORMAL', tags: [],
+    })
+
+    const scene = await prisma.scene.create({
+      data: { campaignId: recencyCampaign.id, sceneNumber: 1, sceneIntroText: 'x' },
+    })
+
+    // minSimilarity: -1 admits both regardless of raw similarity, so only
+    // the ORDER BY blend decides which ranks first.
+    const pureSimilarity = await retrieveRelevantHistory(
+      recencyCampaign.id,
+      { currentScene: scene, playerActions: [], characters: [], npcs: [], factions: [] },
+      { minSimilarity: -1, recencyBias: 0 },
+      'a query about TOPIC_A'
+    )
+    expect(pureSimilarity[0].title).toBe('Old similar memory')
+
+    const pureRecency = await retrieveRelevantHistory(
+      recencyCampaign.id,
+      { currentScene: scene, playerActions: [], characters: [], npcs: [], factions: [] },
+      { minSimilarity: -1, recencyBias: 1 },
+      'a query about TOPIC_A'
+    )
+    expect(pureRecency[0].title).toBe('Recent dissimilar memory')
+
+    await prisma.campaign.delete({ where: { id: recencyCampaign.id } }).catch(() => {})
+  })
 })
 
 describeIfDb('retrieveNpcHistory — real fog-of-war guard (#285/#327)', () => {

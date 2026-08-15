@@ -46,4 +46,17 @@ describe('POST', () => {
     const response = await POST(req(), { params: { stepId: 'step1' } })
     expect(response.status).toBe(500)
   })
+
+  // #318: skipping a required step is a client error, not a server fault.
+  it('returns 400, not 500, when the service rejects skipping a required step', async () => {
+    ;(TutorialService.skipStep as any).mockRejectedValue(new Error('Cannot skip "create_character": it is a required step'))
+    const response = await POST(req(), { params: { stepId: 'step1' } })
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 400, not 500, when the step does not exist', async () => {
+    ;(TutorialService.skipStep as any).mockRejectedValue(new Error('Tutorial step not found'))
+    const response = await POST(req(), { params: { stepId: 'step1' } })
+    expect(response.status).toBe(400)
+  })
 })

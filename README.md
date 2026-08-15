@@ -147,7 +147,9 @@ npm run prisma:generate    # Generate Prisma Client
 │   ├── init-db.sql       # Database initialization
 │   └── README.md         # Scripts documentation
 ├── docs/
-│   └── ARCHITECTURE.md   # Full technical audit: what's built, tested, and next
+│   ├── ARCHITECTURE.md   # Full technical audit: what's built, tested, and next
+│   ├── design-system.md  # UI conventions: tokens, type scale, primitives, chrome
+│   └── MIGRATIONS.md     # How to write and apply schema migrations
 ├── docker-compose.yml    # Docker setup with pgvector
 └── SETUP.md             # Detailed setup guide
 ```
@@ -161,7 +163,10 @@ npm run prisma:generate    # Generate Prisma Client
   story generation, with a multi-model fallback chain and an opt-in
   per-scene image-generation model
 - **Real-time**: Pusher for live updates
-- **Styling**: Tailwind CSS
+- **Styling**: Tailwind CSS over the `myth` design token system (light/dark
+  with a manual toggle) — conventions in `docs/design-system.md`. Every
+  interactive control comes from `src/components/ui/`; don't hand-style a
+  raw `<button>` or `<input>`.
 - **Testing**: Vitest
 - **Payments**: Stripe
 

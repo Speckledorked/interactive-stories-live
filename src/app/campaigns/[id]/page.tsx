@@ -856,7 +856,7 @@ export default function CampaignLobbyPage() {
               </button>
               <button
                 onClick={() => handleDeleteCharacter(deletingCharacterId)}
-                className="min-h-[44px] flex-1 touch-manipulation rounded-md bg-red-700 px-4 py-2 text-white transition-colors hover:bg-red-800"
+                className="min-h-[44px] flex-1 touch-manipulation rounded-md bg-myth-danger px-4 py-2 text-white transition-colors hover:bg-myth-danger/80"
               >
                 Delete
               </button>

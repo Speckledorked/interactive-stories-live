@@ -132,9 +132,9 @@ interface Member {
 // here. campaignHealthBands.ts is dependency-free precisely so a client
 // component can share the rule without pulling Prisma into the bundle.
 const HEALTH_BAND_COLORS: Record<HealthBand, string> = {
-  good: 'text-emerald-400',
-  fair: 'text-amber-400',
-  'needs-intervention': 'text-red-400',
+  good: 'text-myth-good',
+  fair: 'text-myth-warn',
+  'needs-intervention': 'text-myth-danger',
 }
 
 export default function AdminPage() {
@@ -1212,7 +1212,7 @@ export default function AdminPage() {
                     ) : (
                       <>
                         {health.needsIntervention && (
-                          <p className="text-xs text-red-400 mb-2">
+                          <p className="text-xs text-myth-danger mb-2">
                             This campaign needs your attention.
                           </p>
                         )}

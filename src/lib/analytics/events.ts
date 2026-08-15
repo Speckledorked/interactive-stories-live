@@ -52,12 +52,25 @@ const FUNNEL_TYPES: AnalyticsEventType[] = [
   'SIGNUP', 'CAMPAIGN_CREATED', 'CHARACTER_CREATED', 'SCENE_STARTED', 'ACTION_SUBMITTED',
 ]
 
+// #313: this and getCampaignCostSummary's queries below were the only two
+// dashboard queries with no date bound at all, unlike every day-bucketed
+// query in this file. Both are meant to read as running *totals* (not a
+// windowed metric — getSignupsByDay/getAICostByDay already cover "last 30
+// days" trends), so a short window would silently change what the number
+// means, not just make it faster. This is a generous backstop instead —
+// same convention as #202/#221/#224 elsewhere in the tick pipeline — long
+// enough that it's indistinguishable from "all time" for the platform's
+// actual age, while still giving these queries a real ceiling as the
+// tables grow.
+const ANALYTICS_TOTALS_LOOKBACK_DAYS = 730
+
 /** Distinct users who have logged at least one event of each funnel stage. */
 export async function getFunnelCounts(): Promise<FunnelCounts> {
+  const since = new Date(Date.now() - ANALYTICS_TOTALS_LOOKBACK_DAYS * 86400_000)
   const counts = await Promise.all(
     FUNNEL_TYPES.map(type =>
       prisma.analyticsEvent.findMany({
-        where: { type, userId: { not: null } },
+        where: { type, userId: { not: null }, createdAt: { gte: since } },
         distinct: ['userId'],
         select: { userId: true },
       })
@@ -294,16 +307,18 @@ interface CampaignPaidRow {
  * revenue matter regardless of who administers a campaign.
  */
 export async function getCampaignCostSummary(): Promise<CampaignCostSummary> {
+  const since = new Date(Date.now() - ANALYTICS_TOTALS_LOOKBACK_DAYS * 86400_000)
   const [grouped, paidRows] = await Promise.all([
     prisma.aICostEntry.groupBy({
       by: ['campaignId'],
+      where: { createdAt: { gte: since } },
       _sum: { costMicros: true },
       _count: { _all: true },
     }),
     prisma.$queryRaw<CampaignPaidRow[]>`
       SELECT metadata->>'campaignId' AS "campaignId", (SUM(-amount)::numeric / 100)::float8 AS "paidDollars"
       FROM transactions
-      WHERE type = 'DEBIT' AND metadata->>'campaignId' IS NOT NULL
+      WHERE type = 'DEBIT' AND metadata->>'campaignId' IS NOT NULL AND "createdAt" >= ${since}
       GROUP BY metadata->>'campaignId'
     `,
   ])

@@ -13,7 +13,7 @@
 // everywhere else.
 
 import { describe, it, expect } from 'vitest'
-import { decideSuccession, type SuccessionCandidate } from '../leadershipTick'
+import { decideSuccession, detectLeadershipConflict, type SuccessionCandidate } from '../leadershipTick'
 
 const member = (over: Partial<SuccessionCandidate> = {}): SuccessionCandidate => ({
   id: 'npc1', name: 'Bram', importance: 2, factionRole: 'MEMBER', ...over,
@@ -202,5 +202,66 @@ describe('successionRoughness (#112)', () => {
     ], null, 0))
     expect(decision!.successionRoughness).toBeLessThanOrEqual(1)
     expect(decision!.successionRoughness).toBeGreaterThanOrEqual(0)
+  })
+})
+
+// #275: the inverse invariant from decideSuccession — decideSuccession's
+// own first two lines return null the instant EITHER a PC leader or any
+// NPC LEADER already exists, so it can never see a faction that's landed
+// with TWO simultaneous leadership claims. detectLeadershipConflict is
+// what actually looks for that.
+describe('detectLeadershipConflict', () => {
+  it('finds nothing wrong for exactly one NPC leader and no PC leader', () => {
+    expect(detectLeadershipConflict(faction([
+      member({ id: 'a', factionRole: 'LEADER' }),
+      member({ id: 'b', factionRole: 'MEMBER' }),
+    ]))).toBeNull()
+  })
+
+  it('finds nothing wrong for a PC leader with no NPC LEADER', () => {
+    expect(detectLeadershipConflict(faction([
+      member({ id: 'a', factionRole: 'MEMBER' }),
+    ], 'char1'))).toBeNull()
+  })
+
+  it('finds nothing wrong for a leaderless faction — that is decideSuccession\'s job, not this one\'s', () => {
+    expect(detectLeadershipConflict(faction([
+      member({ id: 'a', factionRole: 'MEMBER' }),
+    ]))).toBeNull()
+  })
+
+  it('flags a PC leader coexisting with a living NPC LEADER', () => {
+    const conflict = detectLeadershipConflict(faction([
+      member({ id: 'a', name: 'Bram', factionRole: 'LEADER' }),
+    ], 'char1'))
+    expect(conflict).toMatchObject({ hasPCLeader: true, conflictingLeaderIds: ['a'] })
+  })
+
+  it('flags every NPC LEADER when a PC also leads, not just one', () => {
+    const conflict = detectLeadershipConflict(faction([
+      member({ id: 'a', name: 'Bram', factionRole: 'LEADER' }),
+      member({ id: 'b', name: 'Sera', factionRole: 'LEADER' }),
+    ], 'char1'))
+    expect(conflict?.hasPCLeader).toBe(true)
+    expect(conflict?.conflictingLeaderIds.sort()).toEqual(['a', 'b'])
+  })
+
+  it('flags two NPC LEADERs with no PC leader, keeping the higher-importance one', () => {
+    const conflict = detectLeadershipConflict(faction([
+      member({ id: 'a', name: 'Bram', importance: 2, factionRole: 'LEADER' }),
+      member({ id: 'b', name: 'Sera', importance: 9, factionRole: 'LEADER' }),
+    ]))
+    expect(conflict?.hasPCLeader).toBe(false)
+    // Sera (importance 9) keeps the seat; Bram is the one flagged as the conflict.
+    expect(conflict?.conflictingLeaderIds).toEqual(['a'])
+  })
+
+  it('flags every loser when three or more NPCs simultaneously hold LEADER', () => {
+    const conflict = detectLeadershipConflict(faction([
+      member({ id: 'a', name: 'Bram', importance: 2, factionRole: 'LEADER' }),
+      member({ id: 'b', name: 'Sera', importance: 9, factionRole: 'LEADER' }),
+      member({ id: 'c', name: 'Odo', importance: 5, factionRole: 'LEADER' }),
+    ]))
+    expect(conflict?.conflictingLeaderIds.sort()).toEqual(['a', 'c'])
   })
 })

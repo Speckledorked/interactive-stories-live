@@ -84,6 +84,11 @@ export const ORACLE_TECHNIQUE_FOR: Readonly<Partial<Record<CheckKey, OracleTechn
   //   4's per-family containment (once real oscillation-based retirement
   //   is built there — see Phase 5's 5h) is the right home for the first
   //   reading; code-level fix generation is a poor fit for either.
+  // - 'faction.leadership.atMostOneLivingLeader' (#275) — same reasoning
+  //   as its sibling immediately above: a recurring two-leader conflict is
+  //   just as plausibly a worldRule letting co-leadership through on
+  //   purpose as it is a write path skipping the cross-check this check
+  //   exists to catch.
 } as const
 
 /**

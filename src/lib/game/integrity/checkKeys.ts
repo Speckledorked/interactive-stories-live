@@ -26,6 +26,7 @@ export type CheckKey =
   | 'debt.counterpartyId.resolves'
   | 'clock.sourceFactionId.active'
   | 'faction.leadership.exactlyOneLivingLeader'
+  | 'faction.leadership.atMostOneLivingLeader'
   | 'npc.name.unique'
   | 'faction.name.unique'
   | 'quest.name.unique'

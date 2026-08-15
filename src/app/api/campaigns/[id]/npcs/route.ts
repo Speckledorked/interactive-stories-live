@@ -6,6 +6,7 @@ import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
 import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
+import { guardNpcLeaderAssignment } from '@/lib/game/leadershipGuard'
 
 // GET /api/campaigns/:id/npcs - List all NPCs for a campaign
 export async function GET(
@@ -84,6 +85,18 @@ export async function POST(
     // location either.
     const locationId = await resolveOrCreateLocationId(prisma, campaignId, body.currentLocation, isDiscovered)
 
+    // #275: "at most one leader either way" — reject/auto-demote a
+    // conflicting claim before it's ever written, rather than leaving the
+    // faction with two simultaneous leaders for the integrity engine to
+    // find later.
+    const factionRole = body.factionId ? (body.factionRole || 'MEMBER') : null
+    if (factionRole === 'LEADER') {
+      const guard = await guardNpcLeaderAssignment(campaignId, body.factionId, null)
+      if (!guard.ok) {
+        return NextResponse.json({ error: guard.error }, { status: 400 })
+      }
+    }
+
     // Create NPC
     const npc = await prisma.nPC.create({
       data: {
@@ -102,7 +115,7 @@ export async function POST(
         impulses: body.impulses || [],
         moves: body.moves || [],
         factionId: body.factionId || null,
-        factionRole: body.factionId ? (body.factionRole || 'MEMBER') : null,
+        factionRole,
         isDiscovered,
       },
     })

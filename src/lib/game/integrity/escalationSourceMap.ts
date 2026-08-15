@@ -40,7 +40,8 @@ export const ESCALATION_SOURCE_FILES: Readonly<Partial<Record<CheckKey, readonly
   'clock.participantNpcIds.resolve': ['src/lib/game/tick/npcSocietyTick.ts'],
 
   // debt.counterpartyId.resolves, clock.sourceFactionId.active,
-  // faction.leadership.exactlyOneLivingLeader, and the three
+  // faction.leadership.exactlyOneLivingLeader,
+  // faction.leadership.atMostOneLivingLeader (#275), and the three
   // *.name.unique checks are DELIBERATELY ABSENT — see oracleTechnique.ts
   // for why each one is a poor fit for automated fix-generation even
   // though some of them have a data repair (Phase 1) or a mechanical

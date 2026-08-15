@@ -132,6 +132,65 @@ export function decideSuccession(faction: {
   }
 }
 
+export interface LeadershipConflict {
+  /** Living NPCs currently holding factionRole LEADER — the ones that need demoting. */
+  conflictingLeaderIds: string[]
+  /** True when a player character also holds Faction.leaderCharacterId at the same time. */
+  hasPCLeader: boolean
+  reason: string
+}
+
+/**
+ * #275: the inverse problem from decideSuccession. decideSuccession only
+ * ever detects a MISSING leader — its very first line returns null the
+ * instant faction.leaderCharacterId is set, and its second returns null the
+ * instant any member already holds factionRole LEADER, treating either as
+ * "already has a leader, nothing to do." That means it can never see a
+ * faction that has landed with TWO simultaneous leadership claims — a
+ * living NPC LEADER on a faction that also has leaderCharacterId set (both
+ * routes exist to write each side without ever checking the other), or two
+ * or more living NPCs each holding factionRole LEADER (the faction PATCH
+ * route only demotes an existing NPC leader when a NEW leaderCharacterId is
+ * set through that same route — the NPC create/update routes had no
+ * matching cross-check on the way in at all before this).
+ *
+ * Pure, no DB access, same shape as decideSuccession — a schema invariant
+ * this codebase already treats as "at most one leader either way" is worth
+ * exactly one definition of "is that broken", not a second one that could
+ * drift from the first.
+ */
+export function detectLeadershipConflict(faction: {
+  name: string
+  leaderCharacterId: string | null
+  /** Living affiliated members only. */
+  members: SuccessionCandidate[]
+}): LeadershipConflict | null {
+  const members = Array.isArray(faction.members) ? faction.members : []
+  const npcLeaders = members.filter(m => m.factionRole === 'LEADER')
+  const hasPCLeader = Boolean(faction.leaderCharacterId)
+
+  if (hasPCLeader && npcLeaders.length > 0) {
+    return {
+      conflictingLeaderIds: npcLeaders.map(m => m.id),
+      hasPCLeader: true,
+      reason: `${faction.name} has both a player-character leader and ${npcLeaders.length} NPC LEADER${npcLeaders.length === 1 ? '' : 's'}`,
+    }
+  }
+
+  if (!hasPCLeader && npcLeaders.length > 1) {
+    // The strongest candidate (same ranking decideSuccession uses to pick a
+    // successor) keeps the seat; everyone else is the conflict to resolve.
+    const [keep, ...rest] = [...npcLeaders].sort(compareCandidates)
+    return {
+      conflictingLeaderIds: rest.map(m => m.id),
+      hasPCLeader: false,
+      reason: `${faction.name} has ${npcLeaders.length} NPC LEADERs (${keep.name} outranks the rest and should be the only one)`,
+    }
+  }
+
+  return null
+}
+
 // NPC motivation model: a small nudge on top of raw importance — enough to
 // break a near-tie in a genuinely ambitious member's favor, never enough to
 // override a real importance gap. At the extremes (ambition 0 or 100) this

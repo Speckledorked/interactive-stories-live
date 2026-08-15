@@ -30,6 +30,12 @@ export const CHECK_SEVERITY: Partial<Record<CheckKey, number>> = {
   // all assume a leader exists. Worth repairing before anything else
   // competes for the same pass's budget.
   'faction.leadership.exactlyOneLivingLeader': 0,
+  // The inverse invariant on the same schema-documented "at most one
+  // leader either way" rule — two simultaneous leadership claims is just
+  // as functionally broken as zero (which one does succession/goal
+  // reassessment/war participation actually defer to?), so it gets the
+  // same top severity tier, not a lesser one.
+  'faction.leadership.atMostOneLivingLeader': 0,
 
   // The actual shape of the Phase 0 crash bug (a live war pointing at a
   // location that no longer exists) — now backstopped by a real FK

@@ -20,7 +20,7 @@
 // doesn't fire for that faction. Absent or inactive rules mean this runs
 // exactly as it always has.
 
-import { decideSuccession } from '../../tick/leadershipTick'
+import { decideSuccession, detectLeadershipConflict } from '../../tick/leadershipTick'
 import { IntegrityCheck, IntegritySnapshot, Repair, RepairFn, Violation } from '../types'
 import { isRuleActive, ruleFor } from '../worldRules'
 import { CheckKey } from '../checkKeys'
@@ -83,5 +83,60 @@ export const repairFactionLeadership: RepairFn = (violation, snapshot): Repair |
     newValue: 'LEADER',
     description: decision.reason,
     write: { model: 'nPC', id: decision.successorId, data: { factionRole: 'LEADER' } },
+  }
+}
+
+// #275: the inverse invariant — "at most one leader", not "at least one".
+// `factionHasOneLivingLeader` above reuses `decideSuccession`, which can
+// only ever detect a MISSING leader (its first two lines return null the
+// instant EITHER a PC leader or any NPC LEADER already exists — either
+// looks like "already has a leader, nothing to do" to that function). A
+// faction that's landed with TWO simultaneous leadership claims (an NPC
+// create/update route setting factionRole: LEADER with no cross-check
+// against Faction.leaderCharacterId or another living LEADER NPC on the
+// same faction — the gap this check exists to catch) was invisible to
+// both the tick and this engine before now. One violation per conflicting
+// NPC (not one per faction) so each has a single, self-contained repair —
+// matching Repair's own one-entity-one-write shape.
+export const factionHasAtMostOneLivingLeader: IntegrityCheck = {
+  key: 'faction.leadership.atMostOneLivingLeader' satisfies CheckKey,
+  description: 'An active Faction should never have more than one simultaneous leadership claim (a PC leader alongside an NPC LEADER, or more than one living NPC LEADER)',
+  run(snapshot: IntegritySnapshot): Violation[] {
+    const violations: Violation[] = []
+    for (const faction of snapshot.factions) {
+      if (!faction.isActive) continue
+      const conflict = detectLeadershipConflict({
+        name: faction.name,
+        leaderCharacterId: faction.leaderCharacterId,
+        members: membersFor(snapshot, faction.id),
+      })
+      if (!conflict) continue
+      for (const npcId of conflict.conflictingLeaderIds) {
+        const npc = snapshot.npcs.find((n) => n.id === npcId)
+        if (!npc) continue
+        violations.push({
+          checkKey: 'faction.leadership.atMostOneLivingLeader',
+          entityType: 'NPC',
+          entityId: npc.id,
+          entityName: npc.name,
+          description: conflict.reason,
+        })
+      }
+    }
+    return violations
+  },
+}
+
+export const repairFactionLeadershipConflict: RepairFn = (violation): Repair | null => {
+  return {
+    violation,
+    entityType: 'NPC',
+    entityId: violation.entityId,
+    entityName: violation.entityName,
+    field: 'factionRole',
+    previousValue: 'LEADER',
+    newValue: 'MEMBER',
+    description: `${violation.entityName} demoted to MEMBER to resolve a duplicate-leader conflict: ${violation.description}`,
+    write: { model: 'nPC', id: violation.entityId, data: { factionRole: 'MEMBER' } },
   }
 }

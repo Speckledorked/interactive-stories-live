@@ -26,7 +26,13 @@ export interface RetrievedMemory {
   memoryType: string;
   importance: string;
   emotionalTone: string | null;
-  similarity: number; // How relevant this memory is (0-1)
+  similarity: number; // Raw semantic similarity (0-1), independent of recency
+  // #293: the same similarity+recency blend the SQL ORDER BY uses, only
+  // set by retrieveRelevantHistory (retrieveNpcHistory/
+  // retrieveCrossEntityHistory have no recency component to blend, so they
+  // never select this). filterAndRankMemories falls back to `similarity`
+  // when absent — see its own comment for why this exists at all.
+  relevanceScore?: number;
 }
 
 export interface RetrievalOptions {
@@ -55,6 +61,20 @@ const IMPORTANCE_WEIGHTS: Record<string, number> = {
  * filter by minimum similarity, then (optionally) boost by static importance
  * and re-sort. No DB access — kept separate from retrieveRelevantHistory so
  * this ranking logic is testable without mocking pgvector.
+ *
+ * #293: the importance-boosted re-sort used to key off raw `similarity`
+ * alone — silently discarding the SQL's own similarity+recency blend the
+ * moment importanceBoost was on (the production default, see
+ * sceneResolutionRequest.ts's call site, which passes both recencyBias:0.3
+ * AND importanceBoost:true). recencyBias had no effect whatsoever on final
+ * ordering in that combination — only on which candidates survived the
+ * SQL's own LIMIT cutoff before ever reaching this function. Boosting now
+ * multiplies the importance weight onto `relevanceScore` (the blended
+ * value) when the caller supplied one, falling back to `similarity` for
+ * callers that never blend recency at all (retrieveNpcHistory,
+ * retrieveCrossEntityHistory). The minSimilarity floor stays keyed on raw
+ * `similarity` either way — it's a semantic-relevance gate, not a
+ * recency-blended one.
  */
 export function filterAndRankMemories(
   memories: RetrievedMemory[],
@@ -66,7 +86,7 @@ export function filterAndRankMemories(
     filtered = filtered
       .map((m) => ({
         ...m,
-        boostedScore: m.similarity * (IMPORTANCE_WEIGHTS[m.importance] || 1.0),
+        boostedScore: (m.relevanceScore ?? m.similarity) * (IMPORTANCE_WEIGHTS[m.importance] || 1.0),
       }))
       .sort((a, b) => b.boostedScore - a.boostedScore);
   }
@@ -129,7 +149,14 @@ export async function retrieveRelevantHistory(
     const memories = await prisma.$queryRaw<RetrievedMemory[]>`
       SELECT
         ${MEMORY_SEARCH_COLUMNS},
-        (1 - (embedding <=> ${embeddingString}::vector)) as similarity
+        (1 - (embedding <=> ${embeddingString}::vector)) as similarity,
+        -- #293: the same similarity+recency blend ORDER BY ranks by,
+        -- returned as a real column so filterAndRankMemories's
+        -- importance-boosted re-sort can multiply onto it instead of
+        -- silently discarding the blend back down to raw similarity.
+        (1 - (embedding <=> ${embeddingString}::vector)) * ${1 - opts.recencyBias} +
+        ("turnNumber"::float / GREATEST((SELECT MAX("turnNumber") FROM campaign_memories WHERE "campaignId" = ${campaignId}), 1)) * ${opts.recencyBias}
+        as "relevanceScore"
       FROM campaign_memories
       WHERE
         "campaignId" = ${campaignId}
@@ -166,11 +193,7 @@ export async function retrieveRelevantHistory(
           JOIN "Faction" ON "Faction"."id" = faction_id
           WHERE "Faction"."isDiscovered" = false
         )
-      ORDER BY
-        -- Blend similarity with recency and importance
-        (1 - (embedding <=> ${embeddingString}::vector)) * ${1 - opts.recencyBias} +
-        ("turnNumber"::float / GREATEST((SELECT MAX("turnNumber") FROM campaign_memories WHERE "campaignId" = ${campaignId}), 1)) * ${opts.recencyBias}
-        DESC
+      ORDER BY "relevanceScore" DESC
       LIMIT ${opts.maxMemories * 2}  -- Get extra, then filter by similarity threshold
     `;
 

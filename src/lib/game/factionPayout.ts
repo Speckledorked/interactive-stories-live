@@ -86,9 +86,18 @@ export function assessPayout(promised: number, resources: number): PayoutAssessm
     return { promised: 0, paid: 0, shortfall: 0, resourceCost: 0, defaulted: false }
   }
 
-  // Everything a faction could pay if it emptied itself, in gold.
+  // Everything a faction could pay if it emptied itself, in gold — but
+  // never more than MAX_RESOURCE_COST_PER_PAYOUT's worth. #306: `paid`
+  // used to be capped only by `capacity`, independent of the cap below on
+  // what the faction actually loses — for any faction above
+  // BROKE_THRESHOLD (resources > 15) and any reward above 1,500 gold, the
+  // player received the reward in full while the faction's tracked
+  // depletion reflected only a fraction of it. Deriving `paid` from the
+  // same ceiling keeps both numbers consistent with the file's own "a
+  // payout is a TRANSFER" design.
   const capacity = have * GOLD_PER_RESOURCE_POINT
-  const paid = Math.min(want, capacity)
+  const maxPayoutGold = MAX_RESOURCE_COST_PER_PAYOUT * GOLD_PER_RESOURCE_POINT
+  const paid = Math.min(want, capacity, maxPayoutGold)
 
   // Cost in the faction's own units, rounded UP: a payout must never be
   // free through rounding, or a faction could bankroll the party forever

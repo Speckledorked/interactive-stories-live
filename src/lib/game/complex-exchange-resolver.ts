@@ -5,6 +5,38 @@
 import { prisma } from '@/lib/prisma'
 import { ExchangeManager, ActionPriority } from './exchange-manager'
 import type { ActionMechanics } from './resolution'
+import { normalizeEntityName } from './entityResolution'
+
+/**
+ * A campaign entity (Character or NPC) conflict detection can resolve an
+ * action's target against. Callers pass the scene's actual roster (see
+ * sceneResolutionRequest.ts) — never a hardcoded or guessed list.
+ */
+export interface ExchangeRosterEntity {
+  id: string
+  name: string
+}
+
+// Filler words stripped from an entity's own name before matching, so a
+// name like "Lord of the North" only requires "lord"/"north" to appear, not
+// the connective words. actionText itself is never stripped — the exact
+// words of a roster entity's name still have to appear in it, just not
+// contiguously or in the entity's own order (see extractTargets below).
+const TARGET_NAME_STOPWORDS = new Set(['the', 'a', 'an', 'of', 'to', 'in', 'on', 'at', 'and'])
+
+function significantNameWords(name: string): string[] {
+  return normalizeEntityName(name)
+    .split(' ')
+    .filter((w) => w.length > 0 && !TARGET_NAME_STOPWORDS.has(w))
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function containsWholeWord(text: string, word: string): boolean {
+  return new RegExp(`\\b${escapeRegExp(word)}\\b`, 'i').test(text)
+}
 
 /**
  * Micro-exchange structure for breaking down complex exchanges
@@ -159,7 +191,8 @@ export class ComplexExchangeResolver {
    */
   detectConflicts(
     microExchange: MicroExchange,
-    mechanicsByActionId: Map<string, MechanicsForRanking> = new Map()
+    mechanicsByActionId: Map<string, MechanicsForRanking> = new Map(),
+    roster: ExchangeRosterEntity[] = []
   ): ActionConflict[] {
     const conflicts: ActionConflict[] = []
     const actions = microExchange.actions
@@ -168,22 +201,23 @@ export class ComplexExchangeResolver {
       return conflicts
     }
 
-    // Check for actions targeting the same NPC/entity
-    const targetMap = new Map<string, any[]>()
+    // Check for actions targeting the same roster entity (Character or NPC)
+    const targetMap = new Map<string, { entity: ExchangeRosterEntity; actions: any[] }>()
 
     actions.forEach(action => {
-      const targets = this.extractTargets(action.actionText)
-      targets.forEach(target => {
-        if (!targetMap.has(target)) {
-          targetMap.set(target, [])
+      const targets = this.extractTargets(action.actionText, roster)
+      targets.forEach(entity => {
+        if (!targetMap.has(entity.id)) {
+          targetMap.set(entity.id, { entity, actions: [] })
         }
-        targetMap.get(target)!.push(action)
+        targetMap.get(entity.id)!.actions.push(action)
       })
     })
 
     // Detect conflicting actions on same target
-    targetMap.forEach((targetActions, target) => {
+    targetMap.forEach(({ entity, actions: targetActions }) => {
       if (targetActions.length > 1) {
+        const target = entity.name
         const types = targetActions.map(a => this.classifyActionIntent(a.actionText))
         const ranked = rankActionsByOutcome(targetActions, mechanicsByActionId)
         const resolutionOrder = ranked.map(a => a.character?.name || 'Unknown')
@@ -227,7 +261,8 @@ export class ComplexExchangeResolver {
    */
   async generateNarrativeSequence(
     microExchanges: MicroExchange[],
-    mechanicsByActionId: Map<string, MechanicsForRanking> = new Map()
+    mechanicsByActionId: Map<string, MechanicsForRanking> = new Map(),
+    roster: ExchangeRosterEntity[] = []
   ): Promise<string> {
     let narrative = '## Complex Exchange Breakdown\n\n'
 
@@ -241,7 +276,7 @@ export class ComplexExchangeResolver {
       }
 
       // Add detected conflicts
-      const conflicts = this.detectConflicts(micro, mechanicsByActionId)
+      const conflicts = this.detectConflicts(micro, mechanicsByActionId, roster)
       if (conflicts.length > 0) {
         narrative += `\n**⚠️ Conflicts Detected:**\n`
         conflicts.forEach(conflict => {
@@ -264,29 +299,22 @@ export class ComplexExchangeResolver {
   }
 
   /**
-   * Extract targets from action text (simple heuristic)
+   * Resolve which of the scene's real roster entities (Character or NPC)
+   * an action's free text refers to, per #294: an entity matches when every
+   * significant word of its own name (stopwords like "the"/"of" stripped)
+   * appears as a whole word somewhere in the action text, in any order —
+   * not a single-word regex extraction keyed to a fixed verb list. This is
+   * what makes "attack the captain of the guard" and "negotiate with the
+   * guard captain" resolve to the same entity (both contain "guard" and
+   * "captain") despite sharing no contiguous substring, where the old
+   * regex extracted a different single word from each. Grouping downstream
+   * is by resolved entity id, never by raw extracted text.
    */
-  private extractTargets(actionText: string): string[] {
-    const targets: string[] = []
-    const lower = actionText.toLowerCase()
-
-    // Common target patterns
-    const patterns = [
-      /(?:attack|strike|hit|shoot)\s+(?:the\s+)?(\w+)/gi,
-      /(?:talk to|speak with|negotiate with|convince)\s+(?:the\s+)?(\w+)/gi,
-      /(?:target|at)\s+(?:the\s+)?(\w+)/gi
-    ]
-
-    patterns.forEach(pattern => {
-      const matches = actionText.matchAll(pattern)
-      for (const match of matches) {
-        if (match[1]) {
-          targets.push(match[1].toLowerCase())
-        }
-      }
+  private extractTargets(actionText: string, roster: ExchangeRosterEntity[]): ExchangeRosterEntity[] {
+    return roster.filter((entity) => {
+      const words = significantNameWords(entity.name)
+      return words.length > 0 && words.every((w) => containsWholeWord(actionText, w))
     })
-
-    return [...new Set(targets)] // Remove duplicates
   }
 
   /**
@@ -323,9 +351,15 @@ export class ComplexExchangeResolver {
    *   when provided, conflicting actions on the same target are ranked by
    *   actual roll outcome (see rankActionsByOutcome) instead of being left
    *   for the AI to arbitrate freeform.
+   * @param roster - the scene's actual Character/NPC roster, used to
+   *   resolve which real entity an action's free text refers to (#294).
+   *   Conflict detection finds nothing without it — an empty/omitted
+   *   roster means no targets can ever resolve, not a silent fallback to
+   *   the old regex heuristic.
    */
   async resolveComplexExchange(
-    mechanicsByActionId: Map<string, MechanicsForRanking> = new Map()
+    mechanicsByActionId: Map<string, MechanicsForRanking> = new Map(),
+    roster: ExchangeRosterEntity[] = []
   ): Promise<{
     microExchanges: MicroExchange[]
     narrativeSequence: string
@@ -333,12 +367,12 @@ export class ComplexExchangeResolver {
     totalActions: number
   }> {
     const microExchanges = await this.createMicroExchanges()
-    const narrativeSequence = await this.generateNarrativeSequence(microExchanges, mechanicsByActionId)
+    const narrativeSequence = await this.generateNarrativeSequence(microExchanges, mechanicsByActionId, roster)
 
     // Collect all conflicts
     const allConflicts: ActionConflict[] = []
     microExchanges.forEach(micro => {
-      const conflicts = this.detectConflicts(micro, mechanicsByActionId)
+      const conflicts = this.detectConflicts(micro, mechanicsByActionId, roster)
       allConflicts.push(...conflicts)
     })
 

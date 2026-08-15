@@ -568,6 +568,27 @@ Respond in an engaging, narrative style as MythOS. Keep it to 2-3 paragraphs.`
 
     const results = []
 
+    // #305: retry any already-COMPLETED activity whose outcome generation
+    // failed last time (AI outage/malformed response) — this is the only
+    // path back in, since the ACTIVE-only query above never sees a
+    // COMPLETED row again. Retried before the day-advancement loop so a
+    // long-silent lost reward gets a chance to resolve as soon as the
+    // player next touches downtime at all, not just when they happen to
+    // have another ACTIVE activity too.
+    const failedOutcomeActivities = await prisma.downtimeActivity.findMany({
+      where: { characterId, status: 'COMPLETED', outcomeGenerationFailedAt: { not: null } },
+    })
+    for (const activity of failedOutcomeActivities) {
+      const aiInterpretation = (activity.outcomes as any)?.aiInterpretation || {}
+      const outcomes = await this.generateDynamicOutcomes(activity.id, activity.description, aiInterpretation)
+      results.push({
+        activityId: activity.id,
+        activityName: activity.summary,
+        completed: true,
+        outcomes
+      })
+    }
+
     for (const activity of activeActivities) {
       // costs.requiresQuest (see ai-downtime-service.ts's DowntimeCosts)
       // spawned a real, linked Quest — the activity can't actually finish
@@ -819,15 +840,37 @@ Based on the player's original intent and what happened during the activity, gen
         })
       })
 
+      // #305: an unchecked non-2xx response used to fall straight through
+      // to `data.choices[0].message.content`, throwing a confusing
+      // TypeError on whatever error-shaped body OpenAI actually returned
+      // — caught below the same as any other failure, but worth failing
+      // fast and legibly here instead.
+      if (!response.ok) {
+        throw new Error(`Downtime outcome completion failed: ${response.status} ${response.statusText}`)
+      }
+
       const data = await response.json()
       const outcomes = JSON.parse(data.choices[0].message.content)
+      // #305: unlike pc_changes (validateAIResponseWithRepair), this
+      // payload had no shape check at all — a response missing the fields
+      // this function and its caller actually read (primaryOutcome as the
+      // player-facing summary, narrative as finalOutcome) would silently
+      // persist a broken/empty completion rather than being treated as
+      // the failure it is.
+      if (typeof outcomes?.primaryOutcome !== 'string' || typeof outcomes?.narrative !== 'string') {
+        throw new Error('Downtime outcome completion returned an unexpected shape')
+      }
 
       // Update activity with outcomes and set final outcome
       await prisma.downtimeActivity.update({
         where: { id: activityId },
         data: {
           outcomes,
-          finalOutcome: outcomes.narrative
+          finalOutcome: outcomes.narrative,
+          // A retry (see advanceDynamicDowntime's own retry pass) landing
+          // here means this attempt succeeded — clear any failure a prior
+          // attempt recorded.
+          outcomeGenerationFailedAt: null,
         }
       })
 
@@ -875,10 +918,26 @@ Based on the player's original intent and what happened during the activity, gen
       return outcomes
     } catch (error) {
       console.error('Error generating dynamic outcomes:', error)
+      // #305: this used to return a fake-success narrative here — the
+      // activity was already committed COMPLETED by the caller before
+      // this function ever ran, so an AI outage/malformed response meant
+      // the player saw "success" while zero gold/items/standing/training
+      // were ever applied, permanently (the reward loop only ever
+      // touches status: ACTIVE activities, so a COMPLETED one had no path
+      // back in). Recorded here instead so it's auditable and retriable —
+      // advanceDynamicDowntime retries any activity carrying this flag on
+      // the character's next downtime-advance call, and this same
+      // function clears it the moment a retry actually succeeds.
+      await prisma.downtimeActivity.update({
+        where: { id: activityId },
+        data: { outcomeGenerationFailedAt: new Date() },
+      }).catch((markError) => {
+        console.error('Failed to record downtime outcome-generation failure (non-critical):', markError)
+      })
       return {
-        primaryOutcome: "The activity was completed successfully.",
-        skillProgress: { experienceGained: 10 },
-        narrative: "Your efforts have paid off in ways both expected and surprising."
+        primaryOutcome: "The activity concluded, but its results are still being tallied — check back shortly.",
+        skillProgress: { experienceGained: 0 },
+        narrative: "Something interrupted the reckoning of this activity's outcome. It will be resolved automatically.",
       }
     }
   }

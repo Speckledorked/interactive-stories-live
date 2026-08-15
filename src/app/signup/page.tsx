@@ -10,6 +10,8 @@ import { UserPlus, AlertTriangle, Check, X } from 'lucide-react'
 import { signup } from '@/lib/clientAuth'
 import { fontDisplay, fontSans } from '@/lib/fonts'
 import { TavernBackground } from '@/components/tavern/TavernBackground'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -88,32 +90,24 @@ export default function SignupPage() {
               </div>
             )}
 
-            <div>
-              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
-                placeholder="your@email.com"
-                required
-                autoComplete="email"
-              />
-            </div>
+            <Input
+              id="email"
+              type="email"
+              label="Email Address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              required
+              autoComplete="email"
+            />
 
             <div>
-              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
-                Password
-              </label>
-              <input
+              <Input
                 id="password"
                 type="password"
+                label="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                 placeholder="At least 6 characters"
                 required
                 minLength={6}
@@ -136,15 +130,12 @@ export default function SignupPage() {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
-                Confirm Password
-              </label>
-              <input
+              <Input
                 id="confirmPassword"
                 type="password"
+                label="Confirm Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                 placeholder="Re-enter your password"
                 required
                 minLength={6}
@@ -167,23 +158,9 @@ export default function SignupPage() {
               )}
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-myth-accent px-4 py-3 font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-myth-accent-ink" />
-                  Creating account…
-                </>
-              ) : (
-                <>
-                  <UserPlus className="h-4 w-4" />
-                  Create Account
-                </>
-              )}
-            </button>
+            <Button type="submit" size="lg" fullWidth loading={loading} icon={UserPlus}>
+              {loading ? 'Creating account…' : 'Create Account'}
+            </Button>
           </form>
 
           <div className="my-6 h-px bg-myth-border" />

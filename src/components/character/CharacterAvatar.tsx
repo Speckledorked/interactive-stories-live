@@ -26,14 +26,23 @@ export default function CharacterAvatar({ name, size = 'md', className = '' }: C
       hash = name.charCodeAt(i) + ((hash << 5) - hash)
     }
 
+    // Deliberately NOT myth tokens. These are identicon colours — their job
+    // is to make two characters visually distinguishable at a glance, so they
+    // need to differ from each other, not to match the theme. The palette is
+    // mid-tone and saturated so it reads on both the light parchment and the
+    // dark canvas, and white initials stay legible on every entry.
+    //
+    // Previously this mixed `ember`/`wine` (the retired legacy palette) with
+    // real Tailwind hues, which meant two of the eight would have changed
+    // meaning or vanished when those tokens go.
     const colors = [
-      'from-ember-500 to-ember-600',
-      'from-wine-500 to-wine-700',
       'from-amber-500 to-amber-600',
-      'from-emerald-600 to-emerald-700',
-      'from-orange-600 to-orange-700',
       'from-rose-600 to-rose-700',
-      'from-yellow-600 to-yellow-700',
+      'from-emerald-600 to-emerald-700',
+      'from-sky-600 to-sky-700',
+      'from-orange-600 to-orange-700',
+      'from-violet-600 to-violet-700',
+      'from-teal-600 to-teal-700',
       'from-slate-500 to-slate-600',
     ]
 

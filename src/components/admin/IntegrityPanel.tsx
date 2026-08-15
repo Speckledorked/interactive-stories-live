@@ -150,7 +150,7 @@ export function IntegrityPanel({ campaignId, worldMeta }: { campaignId: string; 
   }
 
   if (error) {
-    return <p className="text-sm text-red-400">{error}</p>
+    return <p className="text-sm text-myth-danger">{error}</p>
   }
 
   if (!data || !data.assessed || !data.latest) {
@@ -199,11 +199,11 @@ export function IntegrityPanel({ campaignId, worldMeta }: { campaignId: string; 
       </section>
 
       {latest.escalations.length > 0 && (
-        <section className="rounded-lg border border-red-700/40 p-5">
+        <section className="rounded-lg border border-myth-danger/40/40 p-5">
           <h3 className="font-medium text-myth-ink">Escalations — looks like a code bug, not routine drift</h3>
           <div className="mt-3 space-y-2">
             {latest.escalations.map((esc, i) => (
-              <div key={i} className="rounded-md border border-red-700/30 p-3">
+              <div key={i} className="rounded-md border border-myth-danger/40/30 p-3">
                 <p className="text-sm text-myth-ink">
                   <span className="font-mono text-xs text-myth-ink-muted">{esc.checkKey}</span>
                   {' — '}
@@ -222,7 +222,7 @@ export function IntegrityPanel({ campaignId, worldMeta }: { campaignId: string; 
         <section
           className={`rounded-lg border p-5 ${
             latest.validationDegradation.degraded
-              ? 'border-red-700/40'
+              ? 'border-myth-danger/40/40'
               : 'border-myth-border bg-myth-surface'
           }`}
         >

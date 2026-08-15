@@ -10,6 +10,8 @@ import { LogIn, AlertTriangle, MailCheck } from 'lucide-react'
 import { login } from '@/lib/clientAuth'
 import { fontDisplay, fontSans } from '@/lib/fonts'
 import { TavernBackground } from '@/components/tavern/TavernBackground'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 // Reads ?verified= from the email-verification redirect; isolated in a
 // Suspense child because useSearchParams requires it in the app router.
@@ -102,55 +104,31 @@ export default function LoginPage() {
               </div>
             )}
 
-            <div>
-              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
-                placeholder="your@email.com"
-                required
-                autoComplete="email"
-              />
-            </div>
+            <Input
+              id="email"
+              type="email"
+              label="Email Address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              required
+              autoComplete="email"
+            />
 
-            <div>
-              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-myth-ink-muted">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
-                placeholder="Enter your password"
-                required
-                autoComplete="current-password"
-              />
-            </div>
+            <Input
+              id="password"
+              type="password"
+              label="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              required
+              autoComplete="current-password"
+            />
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-myth-accent px-4 py-3 font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-myth-accent-ink" />
-                  Logging in…
-                </>
-              ) : (
-                <>
-                  <LogIn className="h-4 w-4" />
-                  Login
-                </>
-              )}
-            </button>
+            <Button type="submit" size="lg" fullWidth loading={loading} icon={LogIn}>
+              {loading ? 'Logging in…' : 'Login'}
+            </Button>
           </form>
 
           <p className="mt-4 text-center">

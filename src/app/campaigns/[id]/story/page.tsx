@@ -28,7 +28,7 @@ import { MapViewerPanel } from '@/components/scene/MapViewerPanel'
 import { SceneChatPanel } from '@/components/scene/SceneChatPanel'
 import { ActiveClocksPanel } from '@/components/scene/ActiveClocksPanel'
 import { RecentTimelinePanel } from '@/components/scene/RecentTimelinePanel'
-import { BookOpen, Home, Keyboard, Map as MapIcon, MessageSquare, Scroll, Settings as SettingsIcon, StickyNote, X } from 'lucide-react'
+import { BookOpen, Bookmark, ChevronRight, Clock, Eye, Home, Keyboard, Loader, Lock, Map as MapIcon, MessageSquare, Pause, Scroll, Search, Settings as SettingsIcon, StickyNote, X } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
@@ -39,6 +39,9 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Spinner } from '@/components/ui/spinner'
 import { IconButton } from '@/components/ui/icon-button'
+import { buildActionSuggestions, type ActionSuggestion } from '@/lib/game/actionSuggestions'
+import { Badge } from '@/components/ui/badge'
+import { Timeline, TimelineItem } from '@/components/ui/timeline'
 import { UI_ICONS } from '@/lib/ui/icons'
 
 // Whether `characterId` may act in `scene` — participants is null for a
@@ -88,6 +91,17 @@ function sceneTabLabel(scene: any, characters: any[]): string {
     if (names.length > 0) return names.join(', ')
   }
   return `Scene ${scene.sceneNumber}`
+}
+
+// Matches the mockup's 0 / 600 counter. A cap is the point: an action
+// is one beat, and an unbounded field invites a paragraph the GM then
+// has to compress anyway.
+const ACTION_MAX_LENGTH = 600
+
+const SUGGESTION_ICONS: Record<ActionSuggestion['kind'], React.ComponentType<{ className?: string }>> = {
+  dialogue: MessageSquare,
+  investigate: Search,
+  observe: Eye,
 }
 
 export default function StoryPage() {
@@ -1144,12 +1158,18 @@ export default function StoryPage() {
                 <button
                   key={scene.id}
                   onClick={() => setActiveSceneId(scene.id)}
-                  className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                  className={`inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors touch-manipulation ${
                     currentScene?.id === scene.id
                       ? 'bg-myth-accent/10 border-myth-accent text-myth-ink'
                       : 'bg-myth-surface-sunken border-myth-border text-myth-ink-faint hover:text-myth-ink-muted'
                   }`}
                 >
+                  {/* A scene this character can't act in reads as locked
+                      rather than merely unselected — the difference used to
+                      only show up after tapping into it. */}
+                  {selectedCharacterId && !canParticipateInScene(scene, selectedCharacterId, availableScenes) && (
+                    <Lock className="h-3.5 w-3.5 flex-shrink-0 opacity-60" />
+                  )}
                   {sceneTabLabel(scene, campaign?.characters || [])}
                 </button>
               ))}
@@ -1186,19 +1206,20 @@ export default function StoryPage() {
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {scene.isPaused && (
-                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-myth-danger/10 text-myth-danger">
-                            Paused
-                          </span>
+                          <Badge variant="failed" icon={Pause}>Paused</Badge>
                         )}
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          scene.status === 'AWAITING_ACTIONS'
-                            ? 'bg-myth-good/10 text-myth-good'
-                            : scene.status === 'RESOLVING'
-                            ? 'bg-myth-info/10 text-myth-info'
-                            : 'bg-myth-surface-sunken text-myth-ink-faint'
-                        }`}>
+                        <Badge
+                          variant={
+                            scene.status === 'AWAITING_ACTIONS'
+                              ? 'awaiting'
+                              : scene.status === 'RESOLVING'
+                              ? 'gmOnly'
+                              : 'complete'
+                          }
+                          icon={scene.status === 'RESOLVING' ? Loader : undefined}
+                        >
                           {scene.status.replace('_', ' ')}
-                        </span>
+                        </Badge>
                         {scene.status === 'AWAITING_ACTIONS' && !scene.sceneResolutionText &&
                           (!scene.playerActions || scene.playerActions.length === 0) && (
                           <Button
@@ -1312,43 +1333,69 @@ export default function StoryPage() {
                               earlier ones collapse to a one-line preview so a
                               long-running scene doesn't turn into an endless
                               scroll. Each collapses/reopens independently. */}
+                          {/* Split multiple resolutions by separator, on the
+                              shared dotted-rail timeline (ui/timeline.tsx) so
+                              a long scene reads as a sequence rather than a
+                              stack of boxes. Only the most recent exchange is
+                              expanded by default — earlier ones collapse to a
+                              one-line preview so a long-running scene doesn't
+                              turn into an endless scroll. Each collapses and
+                              reopens independently. */}
                           {(() => {
                             const resolutions = scene.sceneResolutionText!.split('\n\n---\n\n')
                             const lastIdx = resolutions.length - 1
                             const overrides = expandedExchanges[scene.id]
-                            return resolutions.map((resolution: string, idx: number) => {
-                              const isExpanded = overrides?.[idx] ?? idx === lastIdx
+                            if (resolutions.length === 1) {
                               return (
-                                <div key={idx} className={idx > 0 ? 'mt-4 pt-4 border-t border-myth-border' : ''}>
-                                  {resolutions.length > 1 ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setExpandedExchanges(prev => ({
-                                        ...prev,
-                                        [scene.id]: { ...prev[scene.id], [idx]: !isExpanded },
-                                      }))}
-                                      className="w-full flex items-center justify-between text-left mb-2 group"
-                                    >
-                                      <h4 className="text-sm font-medium text-myth-ink-faint group-hover:text-myth-ink transition-colors">
-                                        Exchange {idx + 1}
-                                      </h4>
-                                      <span className="text-myth-ink-faint text-xs flex-shrink-0 ml-2">
-                                        {(() => { const I = isExpanded ? UI_ICONS.expanded : UI_ICONS.collapsed; return <I className="h-4 w-4" /> })()}
-                                      </span>
-                                    </button>
-                                  ) : null}
-                                  {isExpanded ? (
-                                    <p className="max-w-prose whitespace-pre-wrap leading-relaxed text-myth-ink-muted">
-                                      {resolution}
-                                    </p>
-                                  ) : (
-                                    <p className="max-w-prose truncate text-sm text-myth-ink-faint italic">
-                                      {resolution.trim().slice(0, 140)}{resolution.trim().length > 140 ? '…' : ''}
-                                    </p>
-                                  )}
-                                </div>
+                                <p className="max-w-prose whitespace-pre-wrap leading-relaxed text-myth-ink-muted">
+                                  {resolutions[0]}
+                                </p>
                               )
-                            })
+                            }
+                            return (
+                              <Timeline>
+                                {resolutions.map((resolution: string, idx: number) => {
+                                  const isExpanded = overrides?.[idx] ?? idx === lastIdx
+                                  return (
+                                    <TimelineItem
+                                      key={idx}
+                                      isLast={idx === lastIdx}
+                                      tone={idx === lastIdx ? 'accent' : 'muted'}
+                                      meta={`Exchange ${idx + 1}`}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpandedExchanges(prev => ({
+                                          ...prev,
+                                          [scene.id]: { ...prev[scene.id], [idx]: !isExpanded },
+                                        }))}
+                                        // min-h: a collapsed exchange is one
+                                        // truncated line, so without this the
+                                        // tap target for expanding it is the
+                                        // height of that text.
+                                        className="group flex min-h-[44px] w-full items-start gap-2 py-1 text-left touch-manipulation"
+                                        aria-expanded={isExpanded}
+                                      >
+                                        {isExpanded ? (
+                                          <UI_ICONS.expanded className="mt-1 h-4 w-4 flex-shrink-0 text-myth-ink-faint" />
+                                        ) : (
+                                          <UI_ICONS.collapsed className="mt-1 h-4 w-4 flex-shrink-0 text-myth-ink-faint" />
+                                        )}
+                                        {isExpanded ? (
+                                          <span className="max-w-prose whitespace-pre-wrap leading-relaxed text-myth-ink-muted">
+                                            {resolution}
+                                          </span>
+                                        ) : (
+                                          <span className="max-w-prose truncate text-sm italic text-myth-ink-faint">
+                                            {resolution.trim().slice(0, 140)}{resolution.trim().length > 140 ? '…' : ''}
+                                          </span>
+                                        )}
+                                      </button>
+                                    </TimelineItem>
+                                  )
+                                })}
+                              </Timeline>
+                            )
                           })()}
                         </div>
 
@@ -1413,42 +1460,98 @@ export default function StoryPage() {
                     <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
                       <div className="flex items-center justify-between gap-3 mb-4">
                         <h3 className="font-display text-lg font-semibold text-myth-ink">Your Action</h3>
-                        {scene.sceneResolutionText && (
-                          <a
-                            href={`/campaigns/${campaignId}/story-log`}
-                            className="text-xs text-myth-ink-faint hover:text-myth-ink transition-colors whitespace-nowrap flex items-center gap-1"
-                            title="Your progress is saved — come back anytime"
-                          >
-                            <span>Save &amp; read later</span>
-                            <BookOpen className="h-4 w-4 opacity-70" />
-                          </a>
-                        )}
+                        {/* Always shown, not just once a resolution exists:
+                            "your progress is saved, come back later" is most
+                            reassuring to someone staring at an empty box for
+                            the first time. */}
+                        <a
+                          href={`/campaigns/${campaignId}/story-log`}
+                          className="-mr-2 inline-flex min-h-[44px] items-center gap-1 whitespace-nowrap px-2 text-xs text-myth-ink-faint transition-colors hover:text-myth-ink touch-manipulation"
+                          title="Your progress is saved — come back anytime"
+                        >
+                          <Bookmark className="h-3.5 w-3.5" />
+                          <span>Save &amp; read later</span>
+                        </a>
                       </div>
                       {isWaitingOnUser && (
-                        <div className="bg-myth-info/10 border border-myth-info/30 text-myth-info px-3 py-2 rounded-lg mb-4 text-sm">
-                          ⏳ Waiting for your action...
+                        <div className="mb-4 flex items-center gap-2 rounded-lg border border-myth-info/30 bg-myth-info/10 px-3 py-2 text-sm text-myth-info">
+                          <Clock className="h-4 w-4 flex-shrink-0" />
+                          Waiting for your action…
                         </div>
                       )}
                       <form onSubmit={(e) => handleSubmitAction(e, scene.id)} className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-myth-ink-muted mb-2">
-                            What do you do?
-                          </label>
+                          <div className="mb-2 flex items-baseline justify-between gap-3">
+                            <label htmlFor={`action-${scene.id}`} className="text-sm font-medium text-myth-ink-muted">
+                              What do you do?
+                            </label>
+                            <span
+                              className={`font-mono text-xs tabular-nums ${
+                                (actionText[scene.id] || '').length > ACTION_MAX_LENGTH - 60
+                                  ? 'text-myth-warn'
+                                  : 'text-myth-ink-faint'
+                              }`}
+                            >
+                              {(actionText[scene.id] || '').length} / {ACTION_MAX_LENGTH}
+                            </span>
+                          </div>
                           <Textarea
+                            id={`action-${scene.id}`}
                             wrapperClassName="min-h-[100px]"
                             value={actionText[scene.id] || ''}
+                            maxLength={ACTION_MAX_LENGTH}
                             onChange={(e) => setActionText(prev => ({ ...prev, [scene.id]: e.target.value }))}
+                            // On a phone the software keyboard covers the
+                            // lower half of the viewport, and this field
+                            // sits low on the page — without this the box
+                            // you're typing into is the part you can't see.
+                            onFocus={(e) => {
+                              const el = e.currentTarget
+                              setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250)
+                            }}
                             placeholder={`What does ${selectedCharacter?.name || 'your character'} do? Be specific about their actions, intentions, and approach...`}
                             required
                           />
                         </div>
 
+                        {/* Starting points for a blank box. Deterministic
+                            templates over text the page already has — see
+                            lib/game/actionSuggestions.ts for why this is
+                            deliberately not an AI call. Wraps rather than
+                            scrolls: a horizontally scrolling row hides
+                            options behind an interaction most people never
+                            perform. */}
+                        <div>
+                          <p className="mb-2 font-mono text-xs uppercase tracking-wider text-myth-ink-faint">Examples</p>
+                          <div className="flex flex-wrap gap-2">
+                            {buildActionSuggestions({
+                              resolutionText: scene.sceneResolutionText,
+                              stakes: scene.stakes,
+                            }).map((suggestion) => {
+                              const Icon = SUGGESTION_ICONS[suggestion.kind]
+                              return (
+                                <button
+                                  key={suggestion.kind}
+                                  type="button"
+                                  onClick={() => setActionText(prev => ({ ...prev, [scene.id]: suggestion.text }))}
+                                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-myth-border px-3 text-xs text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink touch-manipulation"
+                                >
+                                  <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                                  {suggestion.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+
                         <Button
-                          variant="primary" fullWidth
+                          variant="primary"
+                          fullWidth
                           type="submit"
-                          disabled={submitting[scene.id]}
+                          loading={submitting[scene.id]}
+                          iconRight={ChevronRight}
                         >
-                          {submitting[scene.id] ? 'Submitting...' : 'Submit Action'}
+                          {submitting[scene.id] ? 'Submitting…' : 'Submit Action'}
                         </Button>
                       </form>
                     </div>

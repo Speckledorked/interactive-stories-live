@@ -9,6 +9,7 @@ import HarmTracker from './HarmTracker'
 import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
 import ConsequenceBadge from './ConsequenceBadge'
+import { Button } from '@/components/ui/button'
 
 interface CharacterSnapshotModalProps {
   characterId: string
@@ -422,12 +423,11 @@ export default function CharacterSnapshotModal({
         {/* Footer */}
         <div className="p-4 border-t border-myth-border bg-myth-surface-sunken">
           <div className="flex items-center justify-between">
-            <button
+            <Button variant="secondary"
               onClick={onClose}
-              className="rounded-md border border-myth-border px-4 py-2 text-sm font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
             >
               Close
-            </button>
+            </Button>
             <a
               href={`/campaigns/${campaignId}/characters/${characterId}`}
               className="rounded-md bg-myth-accent px-4 py-2 text-sm font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover"

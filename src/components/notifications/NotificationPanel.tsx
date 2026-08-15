@@ -234,12 +234,12 @@ export default function NotificationPanel({
 
   const getPriorityColor = (priority: string) => {
     const colors: Record<string, string> = {
-      'LOW': 'text-ember-700',
-      'NORMAL': 'text-ember-500',
-      'HIGH': 'text-ember-300',
-      'URGENT': 'text-wine-400'
+      'LOW': 'text-myth-ink-faint',
+      'NORMAL': 'text-myth-ink-faint',
+      'HIGH': 'text-myth-ink-muted',
+      'URGENT': 'text-myth-danger'
     };
-    return colors[priority] || 'text-ember-700';
+    return colors[priority] || 'text-myth-ink-faint';
   };
 
   const getRelativeTime = (timestamp: string) => {
@@ -261,29 +261,29 @@ export default function NotificationPanel({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-myth-surface-sunken backdrop-blur-sm" onClick={onClose} />
 
-      <div className="absolute right-0 top-0 h-full w-full max-w-[85vw] sm:max-w-md bg-gradient-to-br from-tavern-800 to-tavern-950 shadow-2xl shadow-black/50 border-l border-ember-900/40">
+      <div className="absolute right-0 top-0 h-full w-full max-w-[85vw] sm:max-w-md bg-myth-surface-raised shadow-2xl shadow-black/50 border-l border-myth-border">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-ember-900/30 bg-gradient-to-r from-ember-900/15 to-transparent">
+        <div className="flex items-center justify-between p-4 border-b border-myth-border bg-gradient-to-r from-myth-accent/15 to-transparent">
           <div>
-            <h2 className="text-lg font-semibold text-ember-100">Notifications</h2>
+            <h2 className="text-lg font-semibold text-myth-ink">Notifications</h2>
             {unreadCount > 0 && (
-              <span className="text-sm text-ember-300/60">{unreadCount} unread</span>
+              <span className="text-sm text-myth-ink-faint">{unreadCount} unread</span>
             )}
           </div>
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="text-sm text-ember-300 hover:text-ember-200 transition-colors"
+                className="text-sm text-myth-ink-muted hover:text-myth-ink transition-colors"
               >
                 Mark all read
               </button>
             )}
             <button
               onClick={onClose}
-              className="text-ember-300/60 hover:text-ember-100 transition-colors text-xl"
+              className="text-myth-ink-faint hover:text-myth-ink transition-colors text-xl"
             >
               ✕
             </button>
@@ -291,7 +291,7 @@ export default function NotificationPanel({
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex border-b border-ember-900/30 bg-black/20">
+        <div className="flex border-b border-myth-border bg-myth-surface-sunken">
           {[
             { key: 'all', label: 'All' },
             { key: 'unread', label: 'Unread' },
@@ -303,8 +303,8 @@ export default function NotificationPanel({
               onClick={() => setFilter(tab.key as any)}
               className={`flex-1 py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
                 filter === tab.key
-                  ? 'border-ember-400 text-ember-200 bg-ember-900/20'
-                  : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
+                  ? 'border-myth-accent text-myth-ink bg-myth-surface-sunken'
+                  : 'border-transparent text-myth-ink-muted hover:text-myth-ink-muted'
               }`}
             >
               {tab.label}
@@ -319,17 +319,17 @@ export default function NotificationPanel({
               <div className="spinner h-8 w-8"></div>
             </div>
           ) : notifications.length === 0 ? (
-            <div className="text-center p-8 text-ember-400/50">
+            <div className="text-center p-8 text-myth-gold">
               <div className="text-4xl mb-2">📭</div>
               <p>No notifications</p>
             </div>
           ) : (
-            <div className="divide-y divide-ember-900/20">
+            <div className="divide-y divide-myth-border">
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
                   className={`p-4 hover:bg-white/5 cursor-pointer transition-colors ${
-                    notification.status === 'UNREAD' ? 'bg-ember-900/10 border-l-2 border-ember-500' : ''
+                    notification.status === 'UNREAD' ? 'bg-myth-surface-sunken border-l-2 border-myth-accent' : ''
                   }`}
                   onClick={() => handleNotificationClick(notification)}
                 >
@@ -340,7 +340,7 @@ export default function NotificationPanel({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <h4 className={`text-sm font-medium ${
-                          notification.status === 'UNREAD' ? 'text-ember-100' : 'text-ember-200/70'
+                          notification.status === 'UNREAD' ? 'text-myth-ink' : 'text-myth-ink'
                         }`}>
                           {notification.title}
                         </h4>
@@ -351,21 +351,21 @@ export default function NotificationPanel({
                               e.stopPropagation();
                               dismissNotification(notification.id);
                             }}
-                            className="text-ember-500/50 hover:text-ember-300 text-xs transition-colors"
+                            className="text-myth-ink-faint hover:text-myth-ink-muted text-xs transition-colors"
                           >
                             ✕
                           </button>
                         </div>
                       </div>
-                      <p className="text-sm text-ember-300/60 mt-1 line-clamp-2">
+                      <p className="text-sm text-myth-ink-faint mt-1 line-clamp-2">
                         {notification.message}
                       </p>
                       <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs text-ember-400/40">
+                        <span className="text-xs text-myth-gold">
                           {getRelativeTime(notification.createdAt)}
                         </span>
                         {notification.campaign && (
-                          <span className="text-xs text-ember-300/60 bg-black/25 px-2 py-1 rounded border border-ember-900/30">
+                          <span className="text-xs text-myth-ink-faint bg-myth-surface-sunken px-2 py-1 rounded border border-myth-border">
                             {notification.campaign.title}
                           </span>
                         )}

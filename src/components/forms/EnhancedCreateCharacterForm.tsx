@@ -7,6 +7,10 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { PBTA_STATS } from '@/lib/pbta-moves'
+import { Textarea } from '@/components/ui/textarea'
+import { Select } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 // The final tab's submit button sits at the exact same screen position as
 // every other tab's "Next →" button. Tapping through tabs quickly, a tap
@@ -494,13 +498,12 @@ export default function EnhancedCreateCharacterForm({
               <label htmlFor="name" className="block text-sm font-medium text-myth-ink mb-1">
                 Character Name <span className="text-myth-danger">*</span>
               </label>
-              <input
+              <Input
                 type="text"
                 id="name"
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="input-field"
                 placeholder="Enter your character's name"
               />
             </div>
@@ -509,12 +512,11 @@ export default function EnhancedCreateCharacterForm({
               <label htmlFor="pronouns" className="block text-sm font-medium text-myth-ink mb-1">
                 Pronouns
               </label>
-              <input
+              <Input
                 type="text"
                 id="pronouns"
                 value={formData.pronouns}
                 onChange={(e) => setFormData({ ...formData, pronouns: e.target.value })}
-                className="input-field"
                 placeholder="e.g., they/them, she/her, he/him"
               />
             </div>
@@ -523,12 +525,11 @@ export default function EnhancedCreateCharacterForm({
               <label htmlFor="appearance" className="block text-sm font-medium text-myth-ink mb-1">
                 Physical Appearance
               </label>
-              <textarea
+              <Textarea
                 id="appearance"
                 rows={3}
                 value={formData.appearance}
                 onChange={(e) => setFormData({ ...formData, appearance: e.target.value })}
-                className="input-field"
                 placeholder="Describe your character's physical appearance: height, build, hair, eyes, distinctive features, clothing style, etc."
               />
             </div>
@@ -537,12 +538,11 @@ export default function EnhancedCreateCharacterForm({
               <label htmlFor="description" className="block text-sm font-medium text-myth-ink mb-1">
                 General Description
               </label>
-              <textarea
+              <Textarea
                 id="description"
                 rows={3}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="input-field"
                 placeholder="A brief overview of your character: who they are, what they do, their general demeanor."
               />
             </div>
@@ -551,12 +551,11 @@ export default function EnhancedCreateCharacterForm({
               <label htmlFor="currentLocation" className="block text-sm font-medium text-myth-ink mb-1">
                 Starting Location
               </label>
-              <input
+              <Input
                 type="text"
                 id="currentLocation"
                 value={formData.currentLocation}
                 onChange={(e) => setFormData({ ...formData, currentLocation: e.target.value })}
-                className="input-field"
                 placeholder="Where does your character begin their journey?"
               />
               <p className="text-xs text-myth-ink-faint mt-1">This will be used to personalize the opening scene.</p>
@@ -579,12 +578,11 @@ export default function EnhancedCreateCharacterForm({
               <label htmlFor="personality" className="block text-sm font-medium text-myth-ink mb-1">
                 Personality Traits
               </label>
-              <textarea
+              <Textarea
                 id="personality"
                 rows={3}
                 value={formData.personality}
                 onChange={(e) => setFormData({ ...formData, personality: e.target.value })}
-                className="input-field"
                 placeholder="How does your character act and think? Are they brave, cautious, witty, serious, compassionate, ruthless?"
               />
             </div>
@@ -593,16 +591,15 @@ export default function EnhancedCreateCharacterForm({
               <label htmlFor="originFamiliarity" className="block text-sm font-medium text-myth-ink mb-1">
                 How well do they know this world?
               </label>
-              <select
+              <Select
                 id="originFamiliarity"
                 value={formData.originFamiliarity}
                 onChange={(e) => setFormData({ ...formData, originFamiliarity: e.target.value as 'NATIVE' | 'NEWCOMER' | 'OUTSIDER' })}
-                className="input-field"
               >
                 <option value="NATIVE">Native — grew up here, knows what exists</option>
                 <option value="NEWCOMER">Newcomer — heard of the big things, hazy on details</option>
                 <option value="OUTSIDER">Outsider — a stranger to this world&apos;s ways entirely</option>
-              </select>
+              </Select>
               <p className="text-xs text-myth-ink-muted mt-1">
                 This shapes what appears on your character sheet. An outsider starts with a nearly blank sheet and discovers this world&apos;s powers, arts, and secrets through the story itself.
               </p>
@@ -612,12 +609,11 @@ export default function EnhancedCreateCharacterForm({
               <label htmlFor="backstory" className="block text-sm font-medium text-myth-ink mb-1">
                 Backstory
               </label>
-              <textarea
+              <Textarea
                 id="backstory"
                 rows={5}
                 value={formData.backstory}
                 onChange={(e) => setFormData({ ...formData, backstory: e.target.value })}
-                className="input-field"
                 placeholder="What is your character's history? Where did they come from? What important events shaped who they are today?"
               />
               {selectedArchetype && selectedArchetype.backstoryPrompts.length > 0 && (
@@ -636,12 +632,11 @@ export default function EnhancedCreateCharacterForm({
               <label htmlFor="goals" className="block text-sm font-medium text-myth-ink mb-1">
                 Goals & Motivations
               </label>
-              <textarea
+              <Textarea
                 id="goals"
                 rows={3}
                 value={formData.goals}
                 onChange={(e) => setFormData({ ...formData, goals: e.target.value })}
-                className="input-field"
                 placeholder="What does your character want to achieve? What drives them forward?"
               />
             </div>
@@ -705,12 +700,11 @@ export default function EnhancedCreateCharacterForm({
                   <label htmlFor="weapon" className="block text-sm font-medium text-myth-ink mb-1">
                     Primary Weapon
                   </label>
-                  <input
+                  <Input
                     type="text"
                     id="weapon"
                     value={formData.equipment.weapon}
                     onChange={(e) => setFormData({ ...formData, equipment: { ...formData.equipment, weapon: e.target.value } })}
-                    className="input-field"
                     placeholder="e.g., Rusty Sword, Laser Pistol, Wooden Staff"
                   />
                 </div>
@@ -719,12 +713,11 @@ export default function EnhancedCreateCharacterForm({
                   <label htmlFor="armor" className="block text-sm font-medium text-myth-ink mb-1">
                     Armor / Protection
                   </label>
-                  <input
+                  <Input
                     type="text"
                     id="armor"
                     value={formData.equipment.armor}
                     onChange={(e) => setFormData({ ...formData, equipment: { ...formData.equipment, armor: e.target.value } })}
-                    className="input-field"
                     placeholder="e.g., Leather Armor, Kevlar Vest, Enchanted Robes"
                   />
                 </div>
@@ -733,12 +726,11 @@ export default function EnhancedCreateCharacterForm({
                   <label htmlFor="misc" className="block text-sm font-medium text-myth-ink mb-1">
                     Accessory / Misc. Equipment
                   </label>
-                  <input
+                  <Input
                     type="text"
                     id="misc"
                     value={formData.equipment.misc}
                     onChange={(e) => setFormData({ ...formData, equipment: { ...formData.equipment, misc: e.target.value } })}
-                    className="input-field"
                     placeholder="e.g., Magic Amulet, Toolkit, Communicator"
                   />
                 </div>
@@ -815,13 +807,12 @@ export default function EnhancedCreateCharacterForm({
                           </div>
                         )}
                       </div>
-                      <button
+                      <Button variant="danger"
                         type="button"
                         onClick={() => handleRemoveItem(item.id)}
-                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -832,32 +823,29 @@ export default function EnhancedCreateCharacterForm({
                 <p className="text-sm font-medium text-myth-ink">Add Custom Item:</p>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="col-span-2">
-                    <input
+                    <Input
                       type="text"
                       value={newItemName}
                       onChange={(e) => setNewItemName(e.target.value)}
                       placeholder="Item name"
-                      className="input-field"
                     />
                   </div>
                   <div>
-                    <input
+                    <Input
                       type="number"
                       min="1"
                       value={newItemQuantity}
                       onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)}
                       placeholder="Qty"
-                      className="input-field"
                     />
                   </div>
                 </div>
                 <div>
-                  <input
+                  <Input
                     type="text"
                     value={newItemTags}
                     onChange={(e) => setNewItemTags(e.target.value)}
                     placeholder="Tags (comma-separated, e.g., weapon, magical)"
-                    className="input-field"
                   />
                 </div>
                 <button
@@ -901,13 +889,12 @@ export default function EnhancedCreateCharacterForm({
                   {formData.resources.contacts.map((contact, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{contact}</span>
-                      <button
+                      <Button variant="danger"
                         type="button"
                         onClick={() => removeContact(index)}
-                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -955,13 +942,12 @@ export default function EnhancedCreateCharacterForm({
                   {formData.consequences.promises.map((promise, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{promise}</span>
-                      <button
+                      <Button variant="danger"
                         type="button"
                         onClick={() => removePromise(index)}
-                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -998,13 +984,12 @@ export default function EnhancedCreateCharacterForm({
                   {formData.consequences.debts.map((debt, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{debt}</span>
-                      <button
+                      <Button variant="danger"
                         type="button"
                         onClick={() => removeDebt(index)}
-                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -1041,13 +1026,12 @@ export default function EnhancedCreateCharacterForm({
                   {formData.consequences.enemies.map((enemy, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{enemy}</span>
-                      <button
+                      <Button variant="danger"
                         type="button"
                         onClick={() => removeEnemy(index)}
-                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>

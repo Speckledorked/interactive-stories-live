@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
+import { Button } from '@/components/ui/button'
 
 interface BalanceDisplayProps {
   userId: string
@@ -83,9 +84,8 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
   return (
     <div className="relative">
       {/* Balance Display */}
-      <button
+      <Button variant="secondary"
         onClick={() => setShowAddFunds(!showAddFunds)}
-        className="flex items-center gap-2 rounded-lg border border-myth-border bg-myth-surface-sunken px-3 py-1.5 transition-colors hover:border-myth-border-strong"
         title="Click to add funds"
       >
         <svg
@@ -104,7 +104,7 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
         <span className={`text-sm font-bold ${getBalanceColorClass()}`}>
           {balanceFormatted}
         </span>
-      </button>
+      </Button>
 
       {/* Add Funds Modal */}
       {showAddFunds && (
@@ -157,14 +157,13 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
                 </div>
                 <div className="mt-2 flex gap-2">
                   {['0.50', '1.00', '5.00', '10.00'].map((amount) => (
-                    <button
+                    <Button variant="secondary" size="sm"
                       key={amount}
                       onClick={() => setAddAmount(amount)}
-                      className="rounded-lg border border-myth-border px-3 py-1 text-xs text-myth-ink-muted transition-colors hover:border-myth-border-strong"
                       disabled={isLoading}
                     >
                       ${amount}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -182,20 +181,18 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
               )}
 
               <div className="flex gap-3">
-                <button
+                <Button variant="primary" fullWidth
                   onClick={handleAddFunds}
                   disabled={isLoading}
-                  className="flex-1 rounded-lg bg-myth-accent px-4 py-2 font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isLoading ? 'Processing...' : 'Add Funds'}
-                </button>
-                <button
+                </Button>
+                <Button variant="secondary"
                   onClick={() => setShowAddFunds(false)}
                   disabled={isLoading}
-                  className="rounded-lg border border-myth-border px-4 py-2 font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong"
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
 
               <p className="mt-4 text-center text-xs text-myth-ink-faint">

@@ -32,10 +32,10 @@ export default function ClockProgress({
 
   // Get color based on progress
   const getColor = () => {
-    if (percentage >= 90) return { stroke: '#ef4444', glow: 'shadow-danger-500/50', bg: 'from-wine-800/30 to-wine-800/20' }
-    if (percentage >= 75) return { stroke: '#f59e0b', glow: 'shadow-warning-500/50', bg: 'from-ember-900/30 to-ember-800/20' }
-    if (percentage >= 50) return { stroke: '#c99a3a', glow: 'shadow-ember-500/40', bg: 'from-ember-900/20 to-ember-900/10' }
-    return { stroke: '#855f24', glow: 'shadow-black/30', bg: 'from-tavern-800/40 to-tavern-900/30' }
+    if (percentage >= 90) return { stroke: '#ef4444', glow: 'shadow-danger-500/50', bg: 'from-myth-danger/30 to-myth-danger/20' }
+    if (percentage >= 75) return { stroke: '#f59e0b', glow: 'shadow-warning-500/50', bg: 'from-myth-accent/30 to-myth-accent/20' }
+    if (percentage >= 50) return { stroke: '#c99a3a', glow: 'shadow-myth-accent/40', bg: 'from-myth-accent/20 to-myth-accent/10' }
+    return { stroke: '#855f24', glow: 'shadow-black/30', bg: 'from-myth-surface-raised to-myth-surface' }
   }
 
   const sizeClasses = {
@@ -49,18 +49,18 @@ export default function ClockProgress({
   const colors = getColor()
 
   return (
-    <div className={`rounded-xl bg-gradient-to-br ${colors.bg} border border-ember-900/30 hover:border-ember-700/40 shadow-lg shadow-black/30 p-5 transition-all`}>
+    <div className={`rounded-xl bg-gradient-to-br ${colors.bg} border border-myth-border hover:border-myth-border-strong shadow-lg shadow-black/30 p-5 transition-all`}>
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <h3 className={`font-bold text-ember-100 ${size === 'sm' ? 'text-sm' : 'text-lg'} flex items-center gap-2`}>
+          <h3 className={`font-bold text-myth-ink ${size === 'sm' ? 'text-sm' : 'text-lg'} flex items-center gap-2`}>
             ⏰ {name}
             {isHidden && (
-              <span className="text-xs bg-black/30 text-ember-400/60 px-2 py-0.5 rounded">Hidden</span>
+              <span className="text-xs bg-myth-surface-sunken text-myth-gold px-2 py-0.5 rounded">Hidden</span>
             )}
           </h3>
           {description && (
-            <p className="text-xs text-ember-300/50 mt-1">{description}</p>
+            <p className="text-xs text-myth-ink-faint mt-1">{description}</p>
           )}
         </div>
       </div>
@@ -96,10 +96,10 @@ export default function ClockProgress({
 
           {/* Center content */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className={`font-bold text-ember-100 ${config.text}`}>
+            <div className={`font-bold text-myth-ink ${config.text}`}>
               {current}/{max}
             </div>
-            <div className="text-xs text-ember-400/50">ticks</div>
+            <div className="text-xs text-myth-gold">ticks</div>
           </div>
 
           {/* Pulsing effect when near completion */}
@@ -118,7 +118,7 @@ export default function ClockProgress({
               h-2 flex-1 rounded-full transition-all duration-300
               ${i < current
                 ? 'bg-gradient-to-r from-current to-current'
-                : 'bg-black/30'
+                : 'bg-myth-surface-sunken'
               }
             `}
             style={{ color: i < current ? colors.stroke : undefined }}
@@ -130,11 +130,11 @@ export default function ClockProgress({
       {consequence && (
         <div className={`p-3 rounded-lg border ${
           percentage >= 90
-            ? 'bg-wine-800/20 border-wine-700/40'
-            : 'bg-black/25 border-ember-900/30'
+            ? 'bg-myth-danger border-myth-danger/40'
+            : 'bg-myth-surface-sunken border-myth-border'
         }`}>
-          <p className="text-xs font-semibold text-ember-400/60 mb-1">When Complete:</p>
-          <p className={`text-sm ${percentage >= 90 ? 'text-wine-300' : 'text-ember-200/70'}`}>
+          <p className="text-xs font-semibold text-myth-gold mb-1">When Complete:</p>
+          <p className={`text-sm ${percentage >= 90 ? 'text-myth-danger' : 'text-myth-ink'}`}>
             {consequence}
           </p>
         </div>
@@ -144,7 +144,7 @@ export default function ClockProgress({
       {onTick && current < max && (
         <button
           onClick={onTick}
-          className="w-full mt-4 px-4 py-2 bg-wine-600 hover:bg-wine-500 text-ember-100 rounded-lg transition-colors font-medium text-sm"
+          className="w-full mt-4 px-4 py-2 bg-myth-danger hover:bg-myth-danger text-myth-ink rounded-lg transition-colors font-medium text-sm"
         >
           + Advance Thread
         </button>
@@ -153,7 +153,7 @@ export default function ClockProgress({
       {/* Completion badge */}
       {current >= max && (
         <div className="mt-4 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-wine-800/30 border border-wine-600/50 rounded-lg text-wine-400 font-bold">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-myth-danger border border-myth-danger/40 rounded-lg text-myth-danger font-bold">
             ⚠️ COMPLETE
           </div>
         </div>

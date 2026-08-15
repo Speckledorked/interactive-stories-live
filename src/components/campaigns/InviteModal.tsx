@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { X, Check } from 'lucide-react'
 import { authenticatedFetch } from '@/lib/clientAuth'
+import { Button } from '@/components/ui/button'
 
 interface InviteModalProps {
   campaignId: string
@@ -81,14 +82,14 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
-      <div className="bg-gradient-to-br from-tavern-800 to-tavern-950 border border-ember-900/40 rounded-lg shadow-2xl shadow-black/50 max-w-2xl w-full max-h-[80vh] overflow-hidden">
-        <div className="p-6 border-b border-ember-900/30">
+    <div className="fixed inset-0 bg-myth-surface-sunken flex items-center justify-center p-4 z-50">
+      <div className="bg-myth-surface-raised border border-myth-border rounded-lg shadow-2xl shadow-black/50 max-w-2xl w-full max-h-[80vh] overflow-hidden">
+        <div className="p-6 border-b border-myth-border">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-ember-100">Campaign Invites</h2>
+            <h2 className="text-2xl font-bold text-myth-ink">Campaign Invites</h2>
             <button
               onClick={onClose}
-              className="text-ember-300/60 hover:text-ember-100 transition"
+              className="text-myth-ink-faint hover:text-myth-ink transition"
             >
               <X className="w-5 h-5" />
             </button>
@@ -96,29 +97,29 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
         </div>
 
         <div className="p-6 overflow-y-auto max-h-[60vh]">
-          <button
+          <Button variant="primary" size="lg" fullWidth
+            className="mb-6"
             onClick={handleCreateInvite}
             disabled={creating}
-            className="w-full bg-gradient-to-b from-wine-500 to-wine-700 hover:from-wine-400 hover:to-wine-600 disabled:opacity-50 text-ember-100 font-semibold py-3 px-4 rounded-lg transition mb-6"
           >
             {creating ? 'Creating...' : '+ Create New Invite Link'}
-          </button>
+          </Button>
 
           {loading ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-ember-400 mx-auto"></div>
-              <p className="text-ember-300/50 mt-2">Loading invites...</p>
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-myth-accent mx-auto"></div>
+              <p className="text-myth-ink-faint mt-2">Loading invites...</p>
             </div>
           ) : invites.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-ember-300/50">No invite links yet. Create one to invite players!</p>
+              <p className="text-myth-ink-faint">No invite links yet. Create one to invite players!</p>
             </div>
           ) : (
             <div className="space-y-3">
               {invites.map((invite) => (
                 <div
                   key={invite.id}
-                  className={`bg-black/25 border border-ember-900/30 rounded-lg p-4 ${
+                  className={`bg-myth-surface-sunken border border-myth-border rounded-lg p-4 ${
                     invite.isExpired || invite.isExhausted
                       ? 'opacity-50'
                       : ''
@@ -126,10 +127,10 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
-                      <p className="text-xs text-ember-400/50 font-mono mb-1">
+                      <p className="text-xs text-myth-gold font-mono mb-1">
                         {invite.token}
                       </p>
-                      <div className="flex items-center gap-2 text-sm text-ember-200/70">
+                      <div className="flex items-center gap-2 text-sm text-myth-ink">
                         <span>Uses: {invite.uses} / {invite.maxUses === 0 ? '∞' : invite.maxUses}</span>
                         <span>•</span>
                         <span>
@@ -138,12 +139,12 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
                       </div>
                     </div>
                     {invite.isExpired && (
-                      <span className="text-xs bg-wine-800/40 text-wine-300 px-2 py-1 rounded">
+                      <span className="text-xs bg-myth-danger text-myth-danger px-2 py-1 rounded">
                         Expired
                       </span>
                     )}
                     {invite.isExhausted && (
-                      <span className="text-xs bg-ember-900/40 text-ember-300 px-2 py-1 rounded">
+                      <span className="text-xs bg-myth-surface-sunken text-myth-ink-muted px-2 py-1 rounded">
                         Max Uses
                       </span>
                     )}
@@ -154,12 +155,12 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
                       type="text"
                       value={invite.joinUrl}
                       readOnly
-                      className="flex-1 bg-black/30 border border-ember-900/30 text-ember-200/80 px-3 py-2 rounded text-sm font-mono"
+                      className="flex-1 bg-myth-surface-sunken border border-myth-border text-myth-ink-muted px-3 py-2 rounded text-sm font-mono"
                     />
                     <button
                       onClick={() => handleCopyLink(invite)}
                       disabled={invite.isExpired || invite.isExhausted}
-                      className="flex items-center gap-1.5 bg-success-600 hover:bg-success-500 disabled:opacity-50 text-tavern-950 px-4 py-2 rounded text-sm font-semibold transition"
+                      className="flex items-center gap-1.5 bg-success-600 hover:bg-success-500 disabled:opacity-50 text-myth-accent-ink px-4 py-2 rounded text-sm font-semibold transition"
                     >
                       {copiedToken === invite.token ? (
                         <>
@@ -176,13 +177,12 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
           )}
         </div>
 
-        <div className="p-6 border-t border-ember-900/30">
-          <button
+        <div className="p-6 border-t border-myth-border">
+          <Button variant="secondary" fullWidth
             onClick={onClose}
-            className="w-full bg-black/30 hover:bg-black/40 border border-ember-900/40 text-ember-200 font-semibold py-2 px-4 rounded-lg transition"
           >
             Close
-          </button>
+          </Button>
         </div>
       </div>
     </div>

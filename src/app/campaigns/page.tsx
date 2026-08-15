@@ -21,6 +21,8 @@ import { TavernNav } from '@/components/tavern/TavernNav'
 import { TavernButton } from '@/components/tavern/ui'
 import { EmptyState } from '@/components/ui/empty-state'
 import { CampaignChronicleCard } from '@/components/campaigns/CampaignChronicleCard'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 interface Campaign {
   id: string
@@ -135,13 +137,12 @@ export default function CampaignsPage() {
                 Every world you&rsquo;ve stepped into, remembered exactly as you left it.
               </p>
             </div>
-            <button
+            <Button variant="primary"
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 rounded-lg bg-myth-accent px-4 py-2.5 text-sm font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover"
             >
               <Plus className="w-4 h-4" />
               <span>New Campaign</span>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -440,11 +441,10 @@ function CreateCampaignModal({
                 <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                   Campaign Title <span className="text-myth-danger">*</span>
                 </label>
-                <input
+                <Input
                   type="text"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                   placeholder={selectedTpl ? `e.g., ${selectedTpl.name} - My Campaign` : 'e.g., The Shattered Realm'}
                   required
                   autoFocus
@@ -470,11 +470,10 @@ function CreateCampaignModal({
                 <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                   Canon Lore <span className="font-normal text-myth-ink-faint">(optional)</span>
                 </label>
-                <input
+                <Input
                   type="url"
                   value={loreUrl}
                   onChange={(e) => setLoreUrl(e.target.value)}
-                  className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                   placeholder="e.g., https://coppermind.net — a wiki or article about your universe"
                 />
                 <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-myth-ink-muted">
@@ -501,11 +500,10 @@ function CreateCampaignModal({
                     <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                       Universe <span className="text-myth-danger">*</span>
                     </label>
-                    <input
+                    <Input
                       type="text"
                       value={formData.universe}
                       onChange={(e) => setFormData({ ...formData, universe: e.target.value })}
-                      className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                       placeholder="e.g., Original, Tolkien, Sci-Fi, Noir"
                       required
                     />
@@ -555,11 +553,10 @@ function CreateCampaignModal({
                     <div className="mt-4 space-y-4 border-l border-myth-border pl-4">
                       <div>
                         <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">Universe</label>
-                        <input
+                        <Input
                           type="text"
                           value={formData.universe}
                           onChange={(e) => setFormData({ ...formData, universe: e.target.value })}
-                          className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                           placeholder={selectedTpl?.universe}
                         />
                       </div>

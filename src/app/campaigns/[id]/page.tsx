@@ -27,6 +27,9 @@ import { WorldChronicle } from '@/components/campaigns/lobby/WorldChronicle'
 import { CurrentObjective } from '@/components/campaigns/lobby/CurrentObjective'
 import { WorldGlance } from '@/components/campaigns/lobby/WorldGlance'
 import type { ChronicleGlance } from '@/lib/game/chronicleTypes'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 interface CampaignData {
   campaign: any
@@ -460,14 +463,13 @@ export default function CampaignLobbyPage() {
             action={
               userRole === 'ADMIN' && campaignLogs.length > 0 ? (
                 <div className="flex flex-col items-end gap-1">
-                  <button
+                  <Button variant="secondary" size="sm"
                     onClick={handleRegenerateLogs}
                     disabled={regeneratingLogs}
-                    className="rounded border border-myth-border px-3 py-1.5 text-xs text-myth-ink-muted transition-colors hover:border-myth-border-strong disabled:opacity-50"
                     title="Re-summarize existing entries with a fresh AI pass"
                   >
                     {regeneratingLogs ? 'Regenerating…' : '🔄 Regenerate All'}
-                  </button>
+                  </Button>
                   {regenerateLogsResult && (
                     <p className="max-w-xs text-right text-xs text-myth-ink-faint">{regenerateLogsResult}</p>
                   )}
@@ -532,13 +534,12 @@ export default function CampaignLobbyPage() {
                     own oldest-first reading order. */}
                 {logsHasMore && (
                   <div className="mb-4 flex justify-center">
-                    <button
+                    <Button variant="secondary" size="sm"
                       onClick={loadEarlierLogs}
                       disabled={loadingEarlierLogs}
-                      className="rounded border border-myth-border px-3 py-1.5 text-xs text-myth-ink-muted transition-colors hover:border-myth-border-strong disabled:opacity-50"
                     >
                       {loadingEarlierLogs ? 'Loading…' : 'Load earlier entries'}
-                    </button>
+                    </Button>
                   </div>
                 )}
 
@@ -682,44 +683,40 @@ export default function CampaignLobbyPage() {
                   <div className="space-y-3">
                     <div>
                       <label className="mb-1 block text-sm text-myth-ink-muted">Map Name</label>
-                      <input
+                      <Input
                         type="text"
                         value={newMapName}
                         onChange={(e) => setNewMapName(e.target.value)}
-                        className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                         placeholder="e.g., Tavern Floor Plan, Dungeon Level 1"
                         required
                       />
                     </div>
                     <div>
                       <label className="mb-1 block text-sm text-myth-ink-muted">Description</label>
-                      <textarea
+                      <Textarea
                         value={newMapDescription}
                         onChange={(e) => setNewMapDescription(e.target.value)}
-                        className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                         rows={2}
                         placeholder="Optional description"
                       />
                     </div>
                     <div className="flex gap-2">
-                      <button
+                      <Button variant="primary"
                         type="submit"
                         disabled={creatingMap || !newMapName.trim()}
-                        className="rounded-md bg-myth-accent px-4 py-2.5 text-center font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover disabled:opacity-50"
                       >
                         {creatingMap ? 'Creating...' : 'Create Map'}
-                      </button>
-                      <button
+                      </Button>
+                      <Button variant="secondary"
                         type="button"
                         onClick={() => {
                           setShowCreateMap(false)
                           setNewMapName('')
                           setNewMapDescription('')
                         }}
-                        className="rounded-md border border-myth-border px-4 py-2.5 text-center font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
                       >
                         Cancel
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </form>
@@ -758,7 +755,7 @@ export default function CampaignLobbyPage() {
                       </div>
                       <div className="flex gap-2">
                         {userRole === 'ADMIN' && !map.isActive && (
-                          <button
+                          <Button variant="secondary" size="sm"
                             onClick={async () => {
                               try {
                                 const response = await authenticatedFetch(
@@ -775,10 +772,9 @@ export default function CampaignLobbyPage() {
                                 console.error('Failed to set active map:', err)
                               }
                             }}
-                            className="rounded border border-myth-border px-3 py-1 text-xs text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                           >
                             Set Active
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -845,21 +841,19 @@ export default function CampaignLobbyPage() {
               </div>
             )}
             <div className="flex flex-col gap-3 sm:flex-row">
-              <button
+              <Button variant="secondary" fullWidth
                 onClick={() => {
                   setDeletingCharacterId(null)
                   setDeleteError('')
                 }}
-                className="min-h-[44px] flex-1 touch-manipulation rounded-md border border-myth-border px-4 py-2.5 text-center font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button variant="danger" fullWidth
                 onClick={() => handleDeleteCharacter(deletingCharacterId)}
-                className="min-h-[44px] flex-1 touch-manipulation rounded-md bg-myth-danger px-4 py-2 text-white transition-colors hover:bg-myth-danger/80"
               >
                 Delete
-              </button>
+              </Button>
             </div>
           </div>
         </div>

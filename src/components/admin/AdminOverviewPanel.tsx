@@ -1,6 +1,7 @@
 import { SectionHeader } from '@/components/ui/section-header'
 import { SetupChecklist, type SetupChecklistItem } from '@/components/admin/SetupChecklist'
 import WorldStateDashboard from '@/components/admin/WorldStateDashboard'
+import { Button } from '@/components/ui/button'
 
 interface CampaignIdentity {
   title: string
@@ -79,13 +80,12 @@ export function AdminOverviewPanel({
               className="mt-1 block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-myth-accent focus:outline-none"
             />
           </div>
-          <button
+          <Button variant="primary"
             onClick={onSaveCampaignInfo}
             disabled={saving}
-            className="rounded-md bg-myth-accent px-4 py-2 text-sm font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save Campaign Information'}
-          </button>
+          </Button>
         </div>
       </section>
 

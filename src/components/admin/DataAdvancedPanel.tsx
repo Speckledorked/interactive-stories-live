@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { Badge } from '@/components/ui/badge'
 import { SectionHeader } from '@/components/ui/section-header'
+import { Button } from '@/components/ui/button'
 
 interface TickChange {
   entityName: string
@@ -108,7 +109,7 @@ export function DataAdvancedPanel({
         <SectionHeader title="Export & Backup" action={<Badge variant="recommended">Recommended</Badge>} />
         <div className="mt-3 rounded-lg border border-myth-border bg-myth-surface p-5">
           <p className="mb-4 text-sm text-myth-ink-muted">Download your campaign data for backup or to move to another platform.</p>
-          <button
+          <Button variant="secondary"
             onClick={async () => {
               try {
                 const response = await authenticatedFetch(`/api/campaigns/${campaignId}/export`)
@@ -130,10 +131,9 @@ export function DataAdvancedPanel({
                 alert('Export failed. Please try again.')
               }
             }}
-            className="rounded-md border border-myth-border px-4 py-2 text-sm text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
           >
             Export Campaign (JSON)
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -156,13 +156,12 @@ export function DataAdvancedPanel({
                 Dry-runs the world tick against current state — shows exactly what would change and why, without
                 writing anything or advancing the turn.
               </p>
-              <button
+              <Button variant="secondary"
                 onClick={onPreviewTick}
                 disabled={tickPreviewLoading}
-                className="rounded-md border border-myth-border px-4 py-2 text-sm text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
               >
                 {tickPreviewLoading ? 'Simulating...' : 'Preview Next Tick'}
-              </button>
+              </Button>
 
               {tickPreview !== null && (
                 <div className="mt-4 space-y-2">
@@ -210,13 +209,12 @@ export function DataAdvancedPanel({
                     className="block w-28 rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-myth-accent focus:outline-none"
                   />
                 </div>
-                <button
+                <Button variant="secondary"
                   onClick={onLoadWorldEvents}
                   disabled={worldEventsLoading}
-                  className="rounded-md border border-myth-border px-4 py-2 text-sm text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                 >
                   {worldEventsLoading ? 'Loading...' : 'Load'}
-                </button>
+                </Button>
               </div>
 
               {worldEventsLoading ? (
@@ -360,12 +358,11 @@ export function DataAdvancedPanel({
           </p>
 
           {!showDeleteConfirm ? (
-            <button
+            <Button variant="danger"
               onClick={() => setShowDeleteConfirm(true)}
-              className="rounded-md bg-myth-danger px-4 py-2 text-sm text-white transition-colors hover:bg-myth-danger/80"
             >
               Delete Campaign
-            </button>
+            </Button>
           ) : (
             <div className="space-y-3">
               <label className="block text-sm text-myth-ink-muted">
@@ -379,23 +376,21 @@ export function DataAdvancedPanel({
                 placeholder={campaignTitle}
               />
               <div className="flex gap-2">
-                <button
+                <Button variant="danger"
                   onClick={onDeleteCampaign}
                   disabled={saving || confirmText !== campaignTitle}
-                  className="rounded-md bg-myth-danger px-4 py-2 text-sm text-white transition-colors hover:bg-myth-danger/80 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {saving ? 'Deleting...' : 'Yes, Delete Campaign'}
-                </button>
-                <button
+                </Button>
+                <Button variant="secondary"
                   onClick={() => {
                     setShowDeleteConfirm(false)
                     setConfirmText('')
                   }}
                   disabled={saving}
-                  className="rounded-md border border-myth-border px-4 py-2 text-sm text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
             </div>
           )}

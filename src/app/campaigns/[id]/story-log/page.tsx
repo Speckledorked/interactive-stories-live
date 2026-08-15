@@ -177,8 +177,8 @@ export default function StoryLogPage() {
       <TavernPage>
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" campaignId={campaignId} />
         <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
-          <TavernCard className="p-6 bg-wine-800/20 border-wine-600/40">
-            <p className="text-wine-400">{error}</p>
+          <TavernCard className="p-6 bg-myth-danger border-myth-danger/40">
+            <p className="text-myth-danger">{error}</p>
           </TavernCard>
         </main>
       </TavernPage>
@@ -191,7 +191,7 @@ export default function StoryLogPage() {
 
       <main className="max-w-4xl mx-auto px-4 pt-28 pb-28">
         <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
-          <p className="text-ember-300/50 text-sm">
+          <p className="text-myth-ink-faint text-sm">
             {campaign?.name || 'Campaign'} — a chronicle of your adventure, updated after each scene
           </p>
           {isAdmin && logs.length > 0 && (
@@ -199,13 +199,13 @@ export default function StoryLogPage() {
               <button
                 onClick={handleRegenerate}
                 disabled={regenerating}
-                className="text-xs px-3 py-1.5 rounded border border-ember-800/40 bg-ember-900/20 text-ember-300 hover:border-ember-700/60 transition-colors disabled:opacity-50"
+                className="text-xs px-3 py-1.5 rounded border border-myth-border bg-myth-surface-sunken text-myth-ink-muted hover:border-myth-border-strong transition-colors disabled:opacity-50"
                 title="Re-summarize existing entries with a fresh AI pass"
               >
                 {regenerating ? 'Regenerating…' : '🔄 Regenerate All'}
               </button>
               {regenerateResult && (
-                <p className="text-xs text-ember-400/60 text-right max-w-xs">{regenerateResult}</p>
+                <p className="text-xs text-myth-gold text-right max-w-xs">{regenerateResult}</p>
               )}
             </div>
           )}
@@ -215,18 +215,18 @@ export default function StoryLogPage() {
         <TavernCard className="p-6 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="text-center">
-              <div className={`${displayFont.className} text-3xl text-ember-300 mb-1`}>{logs.length}</div>
-              <div className="text-sm text-ember-400/50">Chronicle Entries</div>
+              <div className={`${displayFont.className} text-3xl text-myth-ink-muted mb-1`}>{logs.length}</div>
+              <div className="text-sm text-myth-gold">Chronicle Entries</div>
             </div>
             <div className="text-center">
               <div className={`${displayFont.className} text-3xl text-success-400 mb-1`}>
                 {logs.reduce((sum, l) => sum + (l.highlights?.length || 0), 0)}
               </div>
-              <div className="text-sm text-ember-400/50">Key Moments</div>
+              <div className="text-sm text-myth-gold">Key Moments</div>
             </div>
             <div className="text-center">
-              <div className={`${displayFont.className} text-3xl text-ember-300 mb-1`}>{logs[0]?.turnNumber || 0}</div>
-              <div className="text-sm text-ember-400/50">Current Turn</div>
+              <div className={`${displayFont.className} text-3xl text-myth-ink-muted mb-1`}>{logs[0]?.turnNumber || 0}</div>
+              <div className="text-sm text-myth-gold">Current Turn</div>
             </div>
           </div>
         </TavernCard>
@@ -248,27 +248,27 @@ export default function StoryLogPage() {
 
             {selectedDayNumber !== null && (
               <TavernCard className="p-5">
-                <h3 className={`${displayFont.className} text-lg text-ember-100 mb-4`}>{selectedDayLabel}</h3>
+                <h3 className={`${displayFont.className} text-lg text-myth-ink mb-4`}>{selectedDayLabel}</h3>
                 {dayDetailLoading ? (
                   <TavernSpinner className="h-8 w-8" />
                 ) : !dayDetail || (dayDetail.logs.length === 0 && dayDetail.rumors.length === 0) ? (
-                  <p className="text-sm text-ember-400/50">Nothing recorded for this day yet.</p>
+                  <p className="text-sm text-myth-gold">Nothing recorded for this day yet.</p>
                 ) : (
                   <div className="space-y-4">
                     {dayDetail.logs.map((log) => (
                       <LogEntryCard key={log.id} log={log} campaignId={campaignId} chronicleShare={chronicleShare} />
                     ))}
                     {dayDetail.rumors.length > 0 && (
-                      <div className={dayDetail.logs.length > 0 ? 'pt-4 border-t border-ember-900/30' : ''}>
-                        <h4 className="text-xs font-medium text-ember-400/60 mb-2 flex items-center gap-1.5">
+                      <div className={dayDetail.logs.length > 0 ? 'pt-4 border-t border-myth-border' : ''}>
+                        <h4 className="text-xs font-medium text-myth-gold mb-2 flex items-center gap-1.5">
                           <MessageCircle className="w-3.5 h-3.5" />
                           Word on the Street
                         </h4>
                         <div className="space-y-2">
                           {dayDetail.rumors.map((rumor) => (
                             <TavernCard key={rumor.id} className="p-3">
-                              <p className="text-sm font-medium text-ember-100 mb-1">{rumor.title}</p>
-                              <p className="text-xs text-ember-300/70">{rumor.summary}</p>
+                              <p className="text-sm font-medium text-myth-ink mb-1">{rumor.title}</p>
+                              <p className="text-xs text-myth-ink-muted">{rumor.summary}</p>
                             </TavernCard>
                           ))}
                         </div>
@@ -283,7 +283,7 @@ export default function StoryLogPage() {
               <div>
                 <button
                   onClick={() => setShowPreCalendar((v) => !v)}
-                  className="text-xs text-ember-400/60 hover:text-ember-300 transition-colors mb-3"
+                  className="text-xs text-myth-gold hover:text-myth-ink-muted transition-colors mb-3"
                 >
                   {showPreCalendar ? '▾' : '▸'} Before your calendar began ({preCalendarLogs.length})
                 </button>
@@ -338,28 +338,28 @@ function LogEntryCard({
 
   return (
     <Link href={`/campaigns/${campaignId}/story`} className="block">
-      <TavernCard className="p-5 group hover:border-ember-700/50 transition-colors cursor-pointer">
+      <TavernCard className="p-5 group hover:border-myth-border-strong transition-colors cursor-pointer">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-xs font-medium text-ember-300 bg-ember-900/30 border border-ember-800/40 rounded px-2 py-1">
+            <span className="text-xs font-medium text-myth-ink-muted bg-myth-surface-sunken border border-myth-border rounded px-2 py-1">
               Turn {log.turnNumber}
             </span>
             {log.entryType !== 'scene' && (
-              <span className="text-xs px-2 py-1 rounded bg-black/30 border border-ember-900/30 text-ember-400/60">
+              <span className="text-xs px-2 py-1 rounded bg-myth-surface-sunken border border-myth-border text-myth-gold">
                 {log.entryType}
               </span>
             )}
-            <h3 className={`${displayFont.className} text-lg text-ember-100`}>{log.title}</h3>
+            <h3 className={`${displayFont.className} text-lg text-myth-ink`}>{log.title}</h3>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
               onClick={handleShare}
               title={chronicleShare?.enabled ? 'Copy a shareable recap link' : 'Enable the public chronicle link to share a recap'}
-              className="rounded p-1.5 text-ember-400/50 transition-colors hover:bg-ember-900/30 hover:text-ember-300"
+              className="rounded p-1.5 text-myth-gold transition-colors hover:bg-myth-surface-sunken hover:text-myth-ink-muted"
             >
               {copied ? <span className="text-xs text-success-400">Copied!</span> : <Share2 className="h-4 w-4" />}
             </button>
-            <div className="text-xs text-ember-400/40 whitespace-nowrap">
+            <div className="text-xs text-myth-gold whitespace-nowrap">
               {new Date(log.createdAt).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
@@ -370,21 +370,21 @@ function LogEntryCard({
         </div>
 
         {log.inGameDate && (
-          <p className="text-xs text-ember-400/50 mb-3">
+          <p className="text-xs text-myth-gold mb-3">
             {log.inGameDate}
             {log.duration && ` • Duration: ${log.duration}`}
           </p>
         )}
 
-        <p className="text-ember-200/70 leading-relaxed mb-4 whitespace-pre-wrap text-sm">{log.summary}</p>
+        <p className="text-myth-ink leading-relaxed mb-4 whitespace-pre-wrap text-sm">{log.summary}</p>
 
         {log.highlights && log.highlights.length > 0 && (
-          <div className="pt-4 border-t border-ember-900/30">
-            <h4 className="text-xs font-medium text-ember-400/60 mb-2">Key Moments</h4>
+          <div className="pt-4 border-t border-myth-border">
+            <h4 className="text-xs font-medium text-myth-gold mb-2">Key Moments</h4>
             <ul className="space-y-1">
               {log.highlights.map((highlight, i) => (
-                <li key={i} className="text-sm text-ember-300/60 flex items-start gap-2">
-                  <span className="text-ember-500 mt-1">•</span>
+                <li key={i} className="text-sm text-myth-ink-faint flex items-start gap-2">
+                  <span className="text-myth-ink-faint mt-1">•</span>
                   <span>{highlight}</span>
                 </li>
               ))}
@@ -392,7 +392,7 @@ function LogEntryCard({
           </div>
         )}
 
-        <div className="mt-4 flex items-center gap-1 text-sm text-ember-300 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="mt-4 flex items-center gap-1 text-sm text-myth-ink-muted opacity-0 group-hover:opacity-100 transition-opacity">
           <span>View in Story</span>
           <ChevronRight className="w-4 h-4" />
         </div>

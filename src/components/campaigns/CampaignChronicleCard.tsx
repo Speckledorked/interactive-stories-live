@@ -18,6 +18,7 @@
 import { Pencil, Trash2, Users, BookOpen } from 'lucide-react'
 import { bannerIconFor, formatRelativeTime } from '@/lib/tavernUtils'
 import { pluralize } from '@/lib/format'
+import { Button } from '@/components/ui/button'
 
 export function CampaignChronicleCard({
   id,
@@ -89,7 +90,7 @@ export function CampaignChronicleCard({
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
-          <button
+          <Button variant="danger"
             type="button"
             onClick={(e) => {
               e.stopPropagation()
@@ -97,10 +98,9 @@ export function CampaignChronicleCard({
             }}
             disabled={deleting}
             aria-label="Delete campaign"
-            className="rounded-full border border-myth-danger/30 bg-myth-canvas/70 p-1.5 text-myth-danger backdrop-blur-sm transition-colors hover:border-myth-danger/60 disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
       )}
 

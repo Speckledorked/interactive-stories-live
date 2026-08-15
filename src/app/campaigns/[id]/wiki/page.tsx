@@ -14,6 +14,7 @@ import { TavernNav } from '@/components/tavern/TavernNav'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { SectionHeader } from '@/components/ui/section-header'
 import { groupWikiEntriesByCategory } from '@/lib/wikiCategoryGrouping'
+import { Button } from '@/components/ui/button'
 
 type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
 // RUMORS isn't a WikiEntryType — it's a separate feed (offscreen
@@ -442,15 +443,14 @@ export default function WikiPage() {
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">Connections</h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedEntry.relatedEntries.map((link: any, i: number) => (
-                      <button
+                      <Button variant="secondary" size="sm"
                         key={i}
                         onClick={() => followRelatedLink(link)}
-                        className="rounded-lg border border-myth-border px-3 py-1.5 text-left text-xs transition-colors hover:border-myth-border-strong hover:bg-myth-surface-sunken"
                       >
                         <span className="mr-1">{ENTRY_TYPE_ICONS[link.type as WikiEntryType] || '🔗'}</span>
                         <span className="font-medium text-myth-ink">{link.id}</span>
                         <span className="text-myth-ink-faint"> — {link.relationship}</span>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
+import { Button } from '@/components/ui/button'
 
 interface SimpleXCardProps {
   campaignId: string
@@ -48,14 +49,13 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
 
   return (
     <>
-      <button
+      <Button variant="danger"
         onClick={() => setIsOpen(true)}
-        className="px-4 py-2 border-2 border-myth-danger text-myth-danger hover:bg-myth-danger hover:text-white rounded-lg transition-colors font-medium flex items-center gap-2"
         title="Use X-Card to pause/rewind uncomfortable content"
       >
         <span className="text-xl">✋</span>
         X-Card
-      </button>
+      </Button>
 
       {isOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
@@ -108,22 +108,20 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
                 </div>
 
                 <div className="flex gap-3">
-                  <button
+                  <Button variant="danger" fullWidth
                     onClick={useXCard}
                     disabled={isSubmitting}
-                    className="flex-1 px-4 py-2 bg-myth-danger hover:opacity-90 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
                   >
                     {isSubmitting ? 'Using X-Card...' : 'Use X-Card'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant="secondary"
                     onClick={() => {
                       setIsOpen(false)
                       setReason('')
                     }}
-                    className="px-4 py-2 border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink rounded-lg transition-colors"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </>
             ) : (

@@ -21,6 +21,10 @@ import type { SetupChecklistItem } from '@/components/admin/SetupChecklist'
 import { FieldHelp } from '@/components/ui/field-help'
 import { SectionHeader } from '@/components/ui/section-header'
 import { parseCorruptionTheme } from '@/lib/game/corruption'
+import { Textarea } from '@/components/ui/textarea'
+import { Select } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 interface Campaign {
   id: string
@@ -1183,13 +1187,12 @@ export default function AdminPage() {
                   </select>
                 </div>
 
-                <button
+                <Button variant="primary"
                   onClick={handleSaveAISettings}
                   disabled={saving}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : 'Save AI Settings'}
-                </button>
+                </Button>
 
                 <div className="mt-8 pt-6 border-t border-myth-border">
                   <h3 className="font-semibold text-myth-ink mb-1">Origin Archetypes & Corruption Theme</h3>
@@ -1216,13 +1219,12 @@ export default function AdminPage() {
                       </div>
                     )
                   })()}
-                  <button
+                  <Button variant="primary"
                     onClick={handleGenerateWorldExtras}
                     disabled={generatingExtras}
-                    className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                   >
                     {generatingExtras ? 'Generating...' : 'Generate Archetypes & Corruption Theme'}
-                  </button>
+                  </Button>
                 </div>
 
                 {health && (
@@ -1289,7 +1291,7 @@ export default function AdminPage() {
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">
                           Faction cap (default {simulationSettings.defaultFactionCap})
                         </label>
-                        <input
+                        <Input
                           type="number"
                           min={1}
                           placeholder={String(simulationSettings.defaultFactionCap)}
@@ -1300,14 +1302,13 @@ export default function AdminPage() {
                               factionCap: e.target.value === '' ? null : parseInt(e.target.value),
                             })
                           }
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">
                           NPC cap (default {simulationSettings.defaultNpcCap})
                         </label>
-                        <input
+                        <Input
                           type="number"
                           min={1}
                           placeholder={String(simulationSettings.defaultNpcCap)}
@@ -1318,7 +1319,6 @@ export default function AdminPage() {
                               npcCap: e.target.value === '' ? null : parseInt(e.target.value),
                             })
                           }
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                     </div>
@@ -1392,13 +1392,13 @@ export default function AdminPage() {
                         className="block w-full max-w-xs rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                       />
                     </div>
-                    <button
+                    <Button variant="primary"
+                      className="mt-3"
                       onClick={handleSaveSimulationSettings}
                       disabled={saving}
-                      className="mt-3 rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                     >
                       {saving ? 'Saving...' : 'Save Simulation Settings'}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -1411,12 +1411,11 @@ export default function AdminPage() {
                   title="NPCs"
                   description="Non-player characters the world tick moves and grows on its own between scenes — goals, importance, and faction ties all shape what it does with them. Click 'Why?' on any NPC to see its actual next-tick decision, not a guess."
                 />
-                <button
+                <Button variant="primary"
                   onClick={() => setCreatingNpc(true)}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
                   + Create NPC
-                </button>
+                </Button>
 
                 {creatingNpc && (
                   <div className="rounded-lg border border-myth-border p-4 bg-myth-surface-sunken">
@@ -1442,28 +1441,25 @@ export default function AdminPage() {
                     >
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Name *</label>
-                        <input
+                        <Input
                           type="text"
                           name="name"
                           required
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Description</label>
-                        <textarea
+                        <Textarea
                           name="description"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Location</label>
-                          <input
+                          <Input
                             type="text"
                             name="currentLocation"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
@@ -1475,56 +1471,51 @@ export default function AdminPage() {
                               whenToUse="Mark your major recurring cast higher than one-off background characters."
                             />
                           </div>
-                          <input
+                          <Input
                             type="number"
                             name="importance"
                             min="1"
                             max="5"
                             defaultValue="1"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Goals</label>
-                        <textarea
+                        <Textarea
                           name="goals"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Relationship to Party</label>
-                        <input
+                        <Input
                           type="text"
                           name="relationship"
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Faction</label>
-                          <select
+                          <Select
                             name="factionId"
                             defaultValue=""
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           >
                             <option value="">None</option>
                             {factions.map((f) => (
                               <option key={f.id} value={f.id}>{f.name}</option>
                             ))}
-                          </select>
+                          </Select>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Role</label>
-                          <select
+                          <Select
                             name="factionRole"
                             defaultValue="MEMBER"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           >
                             <option value="MEMBER">Member</option>
                             <option value="LEADER">Leader</option>
-                          </select>
+                          </Select>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -1541,27 +1532,24 @@ export default function AdminPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
-                        <textarea
+                        <Textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <button
+                        <Button variant="primary"
                           type="submit"
                           disabled={saving}
-                          className="rounded-md bg-myth-accent px-3 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="secondary"
                           type="button"
                           onClick={() => setCreatingNpc(false)}
-                          className="rounded-md border border-myth-border px-3 py-2 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   </div>
@@ -1571,15 +1559,13 @@ export default function AdminPage() {
                   <div key={npc.id} className="rounded-lg border border-myth-border p-4">
                     {editingNpc === npc.id ? (
                       <div className="space-y-2">
-                        <input
+                        <Input
                           value={npc.name}
                           onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, name: e.target.value } : n))}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                         />
-                        <textarea
+                        <Textarea
                           value={npc.description || ''}
                           onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, description: e.target.value } : n))}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           rows={2}
                         />
                         <input
@@ -1593,28 +1579,26 @@ export default function AdminPage() {
                         <div className="flex space-x-4">
                           <div>
                             <label className="text-xs">Faction</label>
-                            <select
+                            <Select
                               value={npc.factionId || ''}
                               onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, factionId: e.target.value || null } : n))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             >
                               <option value="">None</option>
                               {factions.map((f) => (
                                 <option key={f.id} value={f.id}>{f.name}</option>
                               ))}
-                            </select>
+                            </Select>
                           </div>
                           <div>
                             <label className="text-xs">Role</label>
-                            <select
+                            <Select
                               value={npc.factionRole || 'MEMBER'}
                               onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, factionRole: e.target.value } : n))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                               disabled={!npc.factionId}
                             >
                               <option value="MEMBER">Member</option>
                               <option value="LEADER">Leader</option>
-                            </select>
+                            </Select>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -1627,19 +1611,17 @@ export default function AdminPage() {
                           <label className="text-xs">Discovered by players</label>
                         </div>
                         <div className="flex space-x-2">
-                          <button
+                          <Button variant="primary" size="sm"
                             onClick={() => handleUpdateNPC(npc)}
                             disabled={saving}
-                            className="rounded-md bg-myth-accent px-3 py-1 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                           >
                             Save
-                          </button>
-                          <button
+                          </Button>
+                          <Button variant="secondary" size="sm"
                             onClick={() => setEditingNpc(null)}
-                            className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -1663,19 +1645,17 @@ export default function AdminPage() {
                             )}
                           </div>
                           <div className="flex gap-2">
-                            <button
+                            <Button variant="secondary" size="sm"
                               onClick={() => handlePreviewNpcReasoning(npc.id)}
                               disabled={npcReasoningLoading[npc.id]}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                             >
                               {npcReasoningLoading[npc.id] ? 'Thinking…' : 'Why?'}
-                            </button>
-                            <button
+                            </Button>
+                            <Button variant="secondary" size="sm"
                               onClick={() => setEditingNpc(npc.id)}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                             >
                               Edit
-                            </button>
+                            </Button>
                           </div>
                         </div>
                         {npcReasoning[npc.id] && (
@@ -1705,12 +1685,11 @@ export default function AdminPage() {
                   title="Factions"
                   description="Organizations that pursue their own goals turn over turn — reassessing strategy from their own resources/stability/military, drifting in disposition from their own history, and going to war with rivals when it serves them. Click 'Why?' on any faction to see the actual next reassessment, not a guess."
                 />
-                <button
+                <Button variant="primary"
                   onClick={() => setCreatingFaction(true)}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
                   + Create Faction
-                </button>
+                </Button>
 
                 {creatingFaction && (
                   <div className="rounded-lg border border-myth-border p-4 bg-myth-surface-sunken">
@@ -1737,69 +1716,63 @@ export default function AdminPage() {
                     >
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Name *</label>
-                        <input
+                        <Input
                           type="text"
                           name="name"
                           required
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Description</label>
-                        <textarea
+                        <Textarea
                           name="description"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Goals</label>
-                        <textarea
+                        <Textarea
                           name="goals"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Simulation Goal</label>
-                          <select
+                          <Select
                             name="goal"
                             defaultValue="CONSOLIDATE"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           >
                             {FACTION_GOALS.map((g) => (
                               <option key={g} value={g}>{g.replace('_', ' ')}</option>
                             ))}
-                          </select>
+                          </Select>
                           <p className="text-xs text-myth-ink-faint mt-1">Drives what this faction pursues in the background each turn.</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Archetype</label>
-                          <select
+                          <Select
                             name="archetype"
                             defaultValue="GENERIC"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           >
                             {FACTION_ARCHETYPES.map((a) => (
                               <option key={a.value} value={a.value}>{a.label}</option>
                             ))}
-                          </select>
+                          </Select>
                           <p className="text-xs text-myth-ink-faint mt-1">Shapes the flavor of ambitions this faction pursues (e.g. tournament vs. coup).</p>
                         </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Leader (Player Character)</label>
-                        <select
+                        <Select
                           name="leaderCharacterId"
                           defaultValue=""
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         >
                           <option value="">None (NPC-led)</option>
                           {characters.map((c) => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
-                        </select>
+                        </Select>
                         <p className="text-xs text-myth-ink-faint mt-1">If set, this faction's Simulation Goal is the player's call — the world tick won't reassess it automatically.</p>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -1816,10 +1789,9 @@ export default function AdminPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Current Plan</label>
-                        <textarea
+                        <Textarea
                           name="currentPlan"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
@@ -1832,13 +1804,12 @@ export default function AdminPage() {
                               whenToUse="Signal how dangerous or ambitious this faction should feel as the world moves on its own."
                             />
                           </div>
-                          <input
+                          <Input
                             type="number"
                             name="threatLevel"
                             min="1"
                             max="5"
                             defaultValue="1"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
@@ -1850,39 +1821,35 @@ export default function AdminPage() {
                               whenToUse="Reflect how well-funded or depleted a faction currently is."
                             />
                           </div>
-                          <input
+                          <Input
                             type="number"
                             name="resources"
                             min="0"
                             max="100"
                             defaultValue="50"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
-                        <textarea
+                        <Textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <button
+                        <Button variant="primary"
                           type="submit"
                           disabled={saving}
-                          className="rounded-md bg-myth-accent px-3 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="secondary"
                           type="button"
                           onClick={() => setCreatingFaction(false)}
-                          className="rounded-md border border-myth-border px-3 py-2 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   </div>
@@ -1892,16 +1859,14 @@ export default function AdminPage() {
                   <div key={faction.id} className={`rounded-lg border border-myth-border p-4 ${faction.isActive === false ? 'opacity-50' : ''}`}>
                     {editingFaction === faction.id ? (
                       <div className="space-y-2">
-                        <input
+                        <Input
                           value={faction.name}
                           onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, name: e.target.value } : f))}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                         />
-                        <textarea
+                        <Textarea
                           value={faction.currentPlan || ''}
                           onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, currentPlan: e.target.value } : f))}
                           placeholder="Current Plan"
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           rows={2}
                         />
                         <div className="flex space-x-4">
@@ -1931,41 +1896,38 @@ export default function AdminPage() {
                         <div className="flex space-x-4">
                           <div>
                             <label className="text-xs">Simulation Goal</label>
-                            <select
+                            <Select
                               value={faction.goal || 'CONSOLIDATE'}
                               onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, goal: e.target.value } : f))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             >
                               {FACTION_GOALS.map((g) => (
                                 <option key={g} value={g}>{g.replace('_', ' ')}</option>
                               ))}
-                            </select>
+                            </Select>
                           </div>
                           <div>
                             <label className="text-xs">Archetype</label>
-                            <select
+                            <Select
                               value={faction.archetype || 'GENERIC'}
                               onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, archetype: e.target.value } : f))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             >
                               {FACTION_ARCHETYPES.map((a) => (
                                 <option key={a.value} value={a.value}>{a.label}</option>
                               ))}
-                            </select>
+                            </Select>
                           </div>
                         </div>
                         <div>
                           <label className="text-xs">Leader (Player Character)</label>
-                          <select
+                          <Select
                             value={faction.leaderCharacterId || ''}
                             onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, leaderCharacterId: e.target.value || null } : f))}
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           >
                             <option value="">None (NPC-led)</option>
                             {characters.map((c) => (
                               <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
-                          </select>
+                          </Select>
                         </div>
                         <div className="flex items-center space-x-2">
                           <input
@@ -1977,19 +1939,17 @@ export default function AdminPage() {
                           <label className="text-xs">Discovered by players</label>
                         </div>
                         <div className="flex space-x-2">
-                          <button
+                          <Button variant="primary" size="sm"
                             onClick={() => handleUpdateFaction(faction)}
                             disabled={saving}
-                            className="rounded-md bg-myth-accent px-3 py-1 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                           >
                             Save
-                          </button>
-                          <button
+                          </Button>
+                          <Button variant="secondary" size="sm"
                             onClick={() => setEditingFaction(null)}
-                            className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -2024,19 +1984,17 @@ export default function AdminPage() {
                             </p>
                           </div>
                           <div className="flex gap-2">
-                            <button
+                            <Button variant="secondary" size="sm"
                               onClick={() => handlePreviewFactionReasoning(faction.id)}
                               disabled={factionReasoningLoading[faction.id]}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                             >
                               {factionReasoningLoading[faction.id] ? 'Thinking…' : 'Why?'}
-                            </button>
-                            <button
+                            </Button>
+                            <Button variant="secondary" size="sm"
                               onClick={() => setEditingFaction(faction.id)}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                             >
                               Edit
-                            </button>
+                            </Button>
                           </div>
                         </div>
                         {factionReasoning[faction.id] && (
@@ -2128,12 +2086,11 @@ export default function AdminPage() {
                   title="Locations"
                   description="Places in the world — the environment tick ages each one on its own: an ongoing siege damages it, disputed rule strains it, and peacetime slowly recovers it. Click 'Why?' on any location to see that math for real."
                 />
-                <button
+                <Button variant="primary"
                   onClick={() => setCreatingLocation(true)}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
                   + Create Location
-                </button>
+                </Button>
 
                 {creatingLocation && (
                   <div className="rounded-lg border border-myth-border p-4 bg-myth-surface-sunken">
@@ -2155,43 +2112,39 @@ export default function AdminPage() {
                     >
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Name *</label>
-                        <input
+                        <Input
                           type="text"
                           name="name"
                           required
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Description</label>
-                        <textarea
+                        <Textarea
                           name="description"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Type</label>
-                          <input
+                          <Input
                             type="text"
                             name="locationType"
                             placeholder="town, dungeon, wilderness, inn..."
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Owner Faction</label>
-                          <select
+                          <Select
                             name="ownerFactionId"
                             defaultValue=""
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           >
                             <option value="">None</option>
                             {factions.map((f) => (
                               <option key={f.id} value={f.id}>{f.name}</option>
                             ))}
-                          </select>
+                          </Select>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -2208,27 +2161,24 @@ export default function AdminPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
-                        <textarea
+                        <Textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <button
+                        <Button variant="primary"
                           type="submit"
                           disabled={saving}
-                          className="rounded-md bg-myth-accent px-3 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="secondary"
                           type="button"
                           onClick={() => setCreatingLocation(false)}
-                          className="rounded-md border border-myth-border px-3 py-2 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   </div>
@@ -2238,40 +2188,36 @@ export default function AdminPage() {
                   <div key={location.id} className="rounded-lg border border-myth-border p-4">
                     {editingLocation === location.id ? (
                       <div className="space-y-2">
-                        <input
+                        <Input
                           value={location.name}
                           onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, name: e.target.value } : l))}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                         />
-                        <textarea
+                        <Textarea
                           value={location.description || ''}
                           onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, description: e.target.value } : l))}
                           placeholder="Description"
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           rows={2}
                         />
                         <div className="flex space-x-4">
                           <div className="flex-1">
                             <label className="text-xs">Type</label>
-                            <input
+                            <Input
                               type="text"
                               value={location.locationType || ''}
                               onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, locationType: e.target.value } : l))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             />
                           </div>
                           <div className="flex-1">
                             <label className="text-xs">Owner Faction</label>
-                            <select
+                            <Select
                               value={location.ownerFactionId || ''}
                               onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, ownerFactionId: e.target.value || null } : l))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             >
                               <option value="">None</option>
                               {factions.map((f) => (
                                 <option key={f.id} value={f.id}>{f.name}</option>
                               ))}
-                            </select>
+                            </Select>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -2283,27 +2229,24 @@ export default function AdminPage() {
                           />
                           <label className="text-xs">Discovered by players</label>
                         </div>
-                        <textarea
+                        <Textarea
                           value={location.gmNotes || ''}
                           onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, gmNotes: e.target.value } : l))}
                           placeholder="Host Notes"
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           rows={2}
                         />
                         <div className="flex space-x-2">
-                          <button
+                          <Button variant="primary" size="sm"
                             onClick={() => handleUpdateLocation(location)}
                             disabled={saving}
-                            className="rounded-md bg-myth-accent px-3 py-1 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                           >
                             Save
-                          </button>
-                          <button
+                          </Button>
+                          <Button variant="secondary" size="sm"
                             onClick={() => setEditingLocation(null)}
-                            className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -2325,19 +2268,17 @@ export default function AdminPage() {
                             </p>
                           </div>
                           <div className="flex gap-2">
-                            <button
+                            <Button variant="secondary" size="sm"
                               onClick={() => handlePreviewLocationReasoning(location.id)}
                               disabled={locationReasoningLoading[location.id]}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                             >
                               {locationReasoningLoading[location.id] ? 'Thinking…' : 'Why?'}
-                            </button>
-                            <button
+                            </Button>
+                            <Button variant="secondary" size="sm"
                               onClick={() => setEditingLocation(location.id)}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                             >
                               Edit
-                            </button>
+                            </Button>
                           </div>
                         </div>
                         {locationReasoning[location.id] && (
@@ -2365,12 +2306,11 @@ export default function AdminPage() {
                   title="Threads"
                   description="Countdowns the world tick advances on its own — ambitions, threats, and schemes moving toward a consequence whether or not anyone acts. A thread's pace comes from whatever it's actually tied to (a faction's own strength, a linked faction's instability, a joint NPC scheme) or, with no tie at all, its category and the campaign's current tension. Click 'Why?' on any thread for that math."
                 />
-                <button
+                <Button variant="primary"
                   onClick={() => setCreatingClock(true)}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
                   + Create Thread
-                </button>
+                </Button>
 
                 {creatingClock && (
                   <div className="rounded-lg border border-myth-border p-4 bg-myth-surface-sunken">
@@ -2394,40 +2334,36 @@ export default function AdminPage() {
                     >
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Name *</label>
-                        <input
+                        <Input
                           type="text"
                           name="name"
                           required
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Description</label>
-                        <textarea
+                        <Textarea
                           name="description"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Max Segments</label>
-                          <input
+                          <Input
                             type="number"
                             name="maxTicks"
                             min="1"
                             max="12"
                             defaultValue="4"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Category</label>
-                          <input
+                          <Input
                             type="text"
                             name="category"
                             placeholder="e.g., Threat, Progress"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                       </div>
@@ -2440,19 +2376,17 @@ export default function AdminPage() {
                             whenToUse="Any thread where reaching full should trigger a specific narrative beat."
                           />
                         </div>
-                        <textarea
+                        <Textarea
                           name="consequence"
                           rows={2}
                           placeholder="What happens when this thread fills..."
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
-                        <textarea
+                        <Textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -2472,20 +2406,18 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <button
+                        <Button variant="primary"
                           type="submit"
                           disabled={saving}
-                          className="rounded-md bg-myth-accent px-3 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="secondary"
                           type="button"
                           onClick={() => setCreatingClock(false)}
-                          className="rounded-md border border-myth-border px-3 py-2 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   </div>
@@ -2509,27 +2441,25 @@ export default function AdminPage() {
                         }
                       />
                       <div className="mt-2 flex gap-2">
-                        <button
+                        <Button variant="secondary" size="sm" fullWidth
                           onClick={() => handleTickClock(clock.id, 'untick')}
                           disabled={clock.currentTicks <= 0}
-                          className="rounded-md border border-myth-border px-3 py-1 text-sm text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50 flex-1"
                         >
                           - Remove Tick
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="secondary" size="sm" fullWidth
                           onClick={() => handleToggleClockVisibility(clock)}
-                          className="rounded-md border border-myth-border px-3 py-1 text-sm text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink flex-1"
                         >
                           {clock.isHidden ? 'Show' : 'Hide'}
-                        </button>
+                        </Button>
                       </div>
-                      <button
+                      <Button variant="secondary" size="sm" fullWidth
+                        className="mt-2"
                         onClick={() => handlePreviewClockReasoning(clock.id)}
                         disabled={clockReasoningLoading[clock.id]}
-                        className="mt-2 w-full rounded-md border border-myth-border px-3 py-1 text-sm text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                       >
                         {clockReasoningLoading[clock.id] ? 'Thinking…' : 'Why?'}
-                      </button>
+                      </Button>
                       {clockReasoning[clock.id] && (
                         <div className="mt-2 rounded-md border border-myth-border bg-myth-surface-sunken p-3 text-sm">
                           <p className="font-medium text-myth-ink">
@@ -2683,12 +2613,11 @@ export default function AdminPage() {
                   title="Invites"
                   description="Shareable join links for this campaign — set a use limit (or leave it unlimited) and share the link with whoever you want at the table."
                 />
-                <button
+                <Button variant="primary"
                   onClick={handleCreateInvite}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
                   Create New Invite
-                </button>
+                </Button>
 
                 <div className="space-y-2">
                   {invites.map((invite) => (
@@ -2702,15 +2631,14 @@ export default function AdminPage() {
                             {invite.isExhausted && ' (Exhausted)'}
                           </p>
                         </div>
-                        <button
+                        <Button variant="secondary" size="sm"
                           onClick={() => {
                             navigator.clipboard.writeText(invite.joinUrl)
                             alert('Invite link copied!')
                           }}
-                          className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                         >
                           Copy
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -2762,23 +2690,21 @@ export default function AdminPage() {
                             <option value="PLAYER">Player</option>
                             <option value="ADMIN">Admin</option>
                           </select>
-                          <button
+                          <Button variant="danger" size="sm"
                             onClick={() => handleRemoveMember(member.user.id)}
                             disabled={saving}
-                            className="rounded-md border border-myth-danger/40 px-3 py-1 text-sm text-myth-danger hover:bg-myth-danger/10 disabled:opacity-50"
                             title="Remove from campaign — they can rejoin with a new invite"
                           >
                             Remove
-                          </button>
+                          </Button>
                           {member.role !== 'ADMIN' && (
-                            <button
+                            <Button variant="danger" size="sm"
                               onClick={() => handleBanMember(member.user.id)}
                               disabled={saving}
-                              className="px-3 py-1 rounded-md border border-myth-danger/40 text-myth-danger hover:bg-myth-danger/10 disabled:opacity-50 text-sm"
                               title="Ban — removes them and blocks rejoining via invite link"
                             >
                               Ban
-                            </button>
+                            </Button>
                           )}
                         </div>
                       </div>
@@ -2877,13 +2803,12 @@ export default function AdminPage() {
                           />
                         </div>
                       </div>
-                      <button
+                      <Button variant="primary"
                         onClick={handleSaveSafetySettings}
                         disabled={savingSafetySettings}
-                        className="rounded-md bg-myth-accent px-4 py-2 hover:bg-myth-accent-hover text-myth-accent-ink disabled:opacity-50 text-sm"
                       >
                         {savingSafetySettings ? 'Saving...' : 'Save Safety Settings'}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -2915,20 +2840,18 @@ export default function AdminPage() {
                               </p>
                             </div>
                             <div className="flex gap-2 flex-shrink-0">
-                              <button
+                              <Button variant="primary" size="sm"
                                 onClick={() => handleResolveReport(report.id)}
                                 disabled={saving}
-                                className="rounded-md bg-myth-accent px-3 py-1 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50 text-sm"
                               >
                                 Resolve
-                              </button>
-                              <button
+                              </Button>
+                              <Button variant="secondary" size="sm"
                                 onClick={() => handleDismissReport(report.id)}
                                 disabled={saving}
-                                className="px-3 py-1 rounded-md border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50 text-sm"
                               >
                                 Dismiss
-                              </button>
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -2973,13 +2896,12 @@ export default function AdminPage() {
                               {ban.isPermanent ? ' • permanent' : ban.expiresAt ? ` • until ${new Date(ban.expiresAt).toLocaleDateString()}` : ''}
                             </p>
                           </div>
-                          <button
+                          <Button variant="secondary" size="sm"
                             onClick={() => handleUnbanMember(ban.userId)}
                             disabled={saving}
-                            className="px-3 py-1 rounded-md border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50 text-sm flex-shrink-0"
                           >
                             Unban
-                          </button>
+                          </Button>
                         </div>
                       ))}
                     </div>

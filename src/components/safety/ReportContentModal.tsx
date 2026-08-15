@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
+import { Button } from '@/components/ui/button'
 
 interface ReportContentModalProps {
   campaignId: string
@@ -66,14 +67,13 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
 
   return (
     <>
-      <button
+      <Button variant="secondary"
         onClick={() => setIsOpen(true)}
-        className="px-4 py-2 border-2 border-myth-border text-myth-ink-muted hover:bg-myth-surface-sunken rounded-lg transition-colors font-medium flex items-center gap-2"
         title="Report content or behavior to the campaign host"
       >
         <span className="text-xl">🚩</span>
         Report
-      </button>
+      </Button>
 
       {isOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
@@ -125,22 +125,20 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
                 {error && <p className="text-sm text-myth-danger mb-3">{error}</p>}
 
                 <div className="flex gap-3">
-                  <button
+                  <Button variant="primary" fullWidth
                     onClick={submitReport}
                     disabled={isSubmitting}
-                    className="flex-1 px-4 py-2 bg-myth-accent hover:bg-myth-accent-hover disabled:opacity-50 text-myth-accent-ink rounded-lg font-medium transition-colors"
                   >
                     {isSubmitting ? 'Submitting...' : 'Submit Report'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant="secondary"
                     onClick={() => {
                       setIsOpen(false)
                       setError('')
                     }}
-                    className="px-4 py-2 border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink rounded-lg transition-colors"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </>
             ) : (

@@ -47,6 +47,19 @@ export async function GET(request: NextRequest) {
   if (autoAdvanced) {
     console.log(`⏭️  Cron: auto-advanced ${autoAdvanced} expired turn(s)`)
   }
+  // #320: a deadline that passes with autoAdvanceTurn: false (the only
+  // mode anything currently sets) used to produce total silence — nothing
+  // told the host a scene was stuck waiting on someone past their
+  // deadline. This notifies each affected campaign's admins once per
+  // deadline (gated on TurnTracker.overdueNotifiedAt, cleared whenever a
+  // new deadline is set), not every sweep.
+  const overdueNotified = await TurnTracker.notifyOverdueTurns().catch(err => {
+    console.error('Cron: overdue-turn notification sweep failed (non-fatal):', err)
+    return 0
+  })
+  if (overdueNotified) {
+    console.log(`⏸️  Cron: notified hosts of ${overdueNotified} overdue turn(s)`)
+  }
 
   const result = await sweepWorldTurnsForAllCampaigns()
   console.log(

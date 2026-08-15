@@ -78,7 +78,8 @@ export class TurnTracker {
         turnStartedAt: new Date(),
         turnDeadline: newDeadline,
         remindersSent: [],
-        lastReminderSent: null
+        lastReminderSent: null,
+        overdueNotifiedAt: null
       }
     });
 
@@ -287,6 +288,63 @@ export class TurnTracker {
     }
   }
 
+  // Notify the campaign's admins/hosts once a turn deadline has passed
+  // with no auto-advance and no one has acted. Without this, an expired
+  // deadline with `autoAdvanceTurn: false` (the only mode anything sets
+  // today) produces total silence — the only recovery is a host noticing
+  // the frontend countdown hit zero on their own.
+  static async notifyOverdueTurns() {
+    const overdueTurns = await prisma.turnTracker.findMany({
+      where: {
+        turnDeadline: { lte: new Date() },
+        autoAdvanceTurn: false,
+        overdueNotifiedAt: null
+      },
+      include: {
+        campaign: { select: { title: true } }
+      }
+    });
+
+    let notified = 0;
+
+    for (const tracker of overdueTurns) {
+      try {
+        const turnOrder = tracker.turnOrder as unknown as TurnOrder[];
+        const currentPlayer = turnOrder[tracker.currentTurn];
+
+        const admins = await prisma.campaignMembership.findMany({
+          where: { campaignId: tracker.campaignId, role: 'ADMIN' },
+          select: { userId: true }
+        });
+
+        for (const admin of admins) {
+          await NotificationService.createNotification({
+            type: 'TURN_REMINDER',
+            title: '⏸️ Turn Overdue',
+            message: `${currentPlayer?.name || 'A player'}'s turn deadline has passed with no action taken in "${tracker.campaign.title}". The scene is waiting on them.`,
+            userId: admin.userId,
+            campaignId: tracker.campaignId,
+            sceneId: tracker.sceneId || undefined,
+            priority: 'HIGH',
+            actionUrl: `/campaigns/${tracker.campaignId}`,
+            triggerSound: 'turn-reminder'
+          });
+        }
+
+        await prisma.turnTracker.update({
+          where: { id: tracker.id },
+          data: { overdueNotifiedAt: new Date() }
+        });
+
+        notified++;
+      } catch (error) {
+        console.error('Failed to send overdue-turn notification:', error);
+      }
+    }
+
+    return notified;
+  }
+
   // End scene and clear turn tracking
   static async endScene(campaignId: string, sceneId: string) {
     // Remove turn tracker
@@ -383,7 +441,9 @@ export class TurnTracker {
 
     // Adjust current turn index if necessary
     let newCurrentTurn = turnTracker.currentTurn;
-    if (playerIndex < turnTracker.currentTurn) {
+    if (turnOrder.length === 0) {
+      newCurrentTurn = 0;
+    } else if (playerIndex < turnTracker.currentTurn) {
       newCurrentTurn--;
     } else if (playerIndex === turnTracker.currentTurn) {
       // Current player left, advance to next

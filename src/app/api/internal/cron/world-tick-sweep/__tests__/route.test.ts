@@ -11,7 +11,7 @@ import { NextRequest } from 'next/server'
 vi.mock('@/lib/game/worldTurnSweep', () => ({ sweepWorldTurnsForAllCampaigns: vi.fn() }))
 vi.mock('@/lib/game/resolutionQueue', () => ({ sweepGloballyStuckResolutionJobs: vi.fn() }))
 vi.mock('@/lib/notifications/turn-tracker', () => ({
-  TurnTracker: { sendPeriodicReminders: vi.fn(), checkExpiredTurns: vi.fn() },
+  TurnTracker: { sendPeriodicReminders: vi.fn(), checkExpiredTurns: vi.fn(), notifyOverdueTurns: vi.fn() },
 }))
 
 import { sweepWorldTurnsForAllCampaigns } from '@/lib/game/worldTurnSweep'
@@ -33,6 +33,7 @@ beforeEach(() => {
   ;(sweepGloballyStuckResolutionJobs as any).mockResolvedValue(undefined)
   ;(TurnTracker.sendPeriodicReminders as any).mockResolvedValue(undefined)
   ;(TurnTracker.checkExpiredTurns as any).mockResolvedValue(0)
+  ;(TurnTracker.notifyOverdueTurns as any).mockResolvedValue(0)
   ;(sweepWorldTurnsForAllCampaigns as any).mockResolvedValue({ ticked: 0, campaignsChecked: 0, failed: 0, skippedAtCap: 0 })
 })
 
@@ -70,8 +71,15 @@ describe('GET', () => {
     ;(sweepGloballyStuckResolutionJobs as any).mockRejectedValue(new Error('stuck-job sweep down'))
     ;(TurnTracker.sendPeriodicReminders as any).mockRejectedValue(new Error('reminders down'))
     ;(TurnTracker.checkExpiredTurns as any).mockRejectedValue(new Error('expired-turn sweep down'))
+    ;(TurnTracker.notifyOverdueTurns as any).mockRejectedValue(new Error('overdue-notification sweep down'))
     const response = await GET(req('sweep-secret'))
     expect(response.status).toBe(200)
     expect(sweepWorldTurnsForAllCampaigns).toHaveBeenCalled()
+  })
+
+  it('#320: runs the overdue-turn notification sweep', async () => {
+    const response = await GET(req('sweep-secret'))
+    expect(response.status).toBe(200)
+    expect(TurnTracker.notifyOverdueTurns).toHaveBeenCalled()
   })
 })

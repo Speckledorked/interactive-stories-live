@@ -395,20 +395,20 @@ export function PlayerMapViewer({
       <div className="absolute top-2 left-2 sm:top-4 sm:left-4 space-y-1.5 sm:space-y-2 max-w-[48%]">
         <Card className="p-1.5 sm:p-2">
           <div className="flex space-x-1">
-            <Button size="sm" variant="outline" className="px-2 sm:px-3" onClick={zoomIn}>
+            <Button size="sm" variant="secondary" className="px-2 sm:px-3" onClick={zoomIn}>
               <ZoomIn className="w-4 h-4" />
             </Button>
-            <Button size="sm" variant="outline" className="px-2 sm:px-3" onClick={zoomOut}>
+            <Button size="sm" variant="secondary" className="px-2 sm:px-3" onClick={zoomOut}>
               <ZoomOut className="w-4 h-4" />
             </Button>
-            <Button size="sm" variant="outline" className="hidden sm:inline-flex" onClick={resetView}>
+            <Button size="sm" variant="secondary" className="hidden sm:inline-flex" onClick={resetView}>
               Reset
             </Button>
           </div>
         </Card>
 
         <Card className="p-1.5 sm:p-2">
-          <Button size="sm" variant="outline" className="px-2 sm:px-3" onClick={focusOnMyCharacter}>
+          <Button size="sm" variant="secondary" className="px-2 sm:px-3" onClick={focusOnMyCharacter}>
             <Users className="w-4 h-4 sm:mr-1" />
             <span className="hidden sm:inline">Find Me</span>
           </Button>
@@ -437,11 +437,11 @@ export function PlayerMapViewer({
             <div className="text-sm">
               <div className="font-semibold flex items-center gap-2 mb-1">
                 {hoveredElement.type === 'token' ? (
-                  <Badge variant="secondary">
+                  <Badge variant="neutral">
                     {'isPC' in hoveredElement.data && hoveredElement.data.isPC ? 'Player' : 'Character'}
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="bg-ember-900/20">
+                  <Badge variant="neutral" className="bg-ember-900/20">
                     {'triggerType' in hoveredElement.data && hoveredElement.data.triggerType ? 'Interactive' : 'Area'}
                   </Badge>
                 )}
@@ -469,10 +469,10 @@ export function PlayerMapViewer({
 
       {/* Status Indicator */}
       <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 flex flex-col items-end gap-1 sm:flex-row sm:gap-2">
-        <Badge variant="secondary">
+        <Badge variant="neutral">
           AI Generated
         </Badge>
-        <Badge variant="outline">
+        <Badge variant="neutral">
           Zoom: {Math.round(viewState.zoom * 100)}%
         </Badge>
       </div>

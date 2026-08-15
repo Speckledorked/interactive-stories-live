@@ -85,7 +85,7 @@ describe('PATCH', () => {
     expect(db.user.update).toHaveBeenCalledWith({
       where: { id: 'user1' },
       data: { name: 'Alex' },
-      select: { id: true, email: true, name: true, createdAt: true },
+      select: { id: true, email: true, name: true, themePreference: true, createdAt: true },
     })
   })
 
@@ -99,6 +99,71 @@ describe('PATCH', () => {
     db.user.update.mockResolvedValue({ id: 'user1', email: 'user1@example.com', name: 'Alex', createdAt: new Date() })
     await PATCH(patchRequest({ name: 'Alex', userId: 'someone-elses-id' }))
     expect(db.user.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'user1' } }))
+  })
+
+  // themePreference. The partial-update behaviour below is the important
+  // one: this route used to write `name: name || null` unconditionally, so
+  // adding a second field would have made "change my theme" silently erase
+  // the user's display name.
+  it('updates themePreference without touching an unsupplied name', async () => {
+    db.user.update.mockResolvedValue({
+      id: 'user1',
+      email: 'user1@example.com',
+      name: 'Alex',
+      themePreference: 'dark',
+      createdAt: new Date(),
+    })
+    const response = await PATCH(patchRequest({ themePreference: 'dark' }))
+    expect(response.status).toBe(200)
+    expect(db.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { themePreference: 'dark' } })
+    )
+  })
+
+  it('rejects a themePreference outside the closed set', async () => {
+    const response = await PATCH(patchRequest({ themePreference: 'neon' }))
+    expect(response.status).toBe(400)
+    expect(db.user.update).not.toHaveBeenCalled()
+  })
+
+  it('accepts every valid theme value', async () => {
+    for (const theme of ['light', 'dark', 'system']) {
+      db.user.update.mockResolvedValue({
+        id: 'user1',
+        email: 'user1@example.com',
+        name: null,
+        themePreference: theme,
+        createdAt: new Date(),
+      })
+      const response = await PATCH(patchRequest({ themePreference: theme }))
+      expect(response.status).toBe(200)
+    }
+  })
+
+  it('can update both fields at once', async () => {
+    db.user.update.mockResolvedValue({
+      id: 'user1',
+      email: 'user1@example.com',
+      name: 'Alex',
+      themePreference: 'light',
+      createdAt: new Date(),
+    })
+    await PATCH(patchRequest({ name: 'Alex', themePreference: 'light' }))
+    expect(db.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { name: 'Alex', themePreference: 'light' } })
+    )
+  })
+
+  it('sends an empty data object when nothing updatable was supplied', async () => {
+    db.user.update.mockResolvedValue({
+      id: 'user1',
+      email: 'user1@example.com',
+      name: 'Alex',
+      themePreference: null,
+      createdAt: new Date(),
+    })
+    await PATCH(patchRequest({ somethingElse: true }))
+    expect(db.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: {} }))
   })
 })
 

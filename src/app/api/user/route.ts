@@ -8,6 +8,16 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import { handleRouteError } from '@/lib/api/errors'
+import { isTheme } from '@/lib/theme'
+
+// Shared so GET and PATCH can't drift on what they expose.
+const USER_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  themePreference: true,
+  createdAt: true
+} as const
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,12 +25,7 @@ export async function GET(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { id: tokenUser.userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        createdAt: true
-      }
+      select: USER_SELECT
     })
 
     if (!user) {
@@ -41,8 +46,7 @@ export async function PATCH(request: NextRequest) {
     const tokenUser = await requireAuth(request)
     const body = await request.json()
 
-    // Only allow updating name for now
-    const { name } = body
+    const { name, themePreference } = body
 
     if (name !== undefined && typeof name !== 'string') {
       return NextResponse.json<ErrorResponse>(
@@ -59,17 +63,29 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // Closed set, validated server-side — the column is a plain String, so
+    // without this an arbitrary value could be stored and then read back
+    // into a data-theme attribute.
+    if (themePreference !== undefined && themePreference !== null && !isTheme(themePreference)) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'themePreference must be one of: light, dark, system' },
+        { status: 400 }
+      )
+    }
+
+    // Build the update from only the keys actually present. This used to
+    // be an unconditional `name: name || null`, which meant a PATCH
+    // updating any OTHER field would silently clear the user's name — a
+    // latent bug that only became reachable once this route accepted a
+    // second field.
+    const data: { name?: string | null; themePreference?: string | null } = {}
+    if (name !== undefined) data.name = name || null
+    if (themePreference !== undefined) data.themePreference = themePreference
+
     const user = await prisma.user.update({
       where: { id: tokenUser.userId },
-      data: {
-        name: name || null
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        createdAt: true
-      }
+      data,
+      select: USER_SELECT
     })
 
     return NextResponse.json({ user })

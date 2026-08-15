@@ -208,6 +208,15 @@ model User {
   // Payment system - balance stored in cents (e.g., 100 = $1.00)
   balance Int @default(0)
 
+  // UI theme preference: 'light' | 'dark' | 'system'. Null means never
+  // set, which the client treats as 'system'. A plain String rather than
+  // a Postgres enum, matching Campaign.contentModerationLevel's existing
+  // precedent — a new enum for three values isn't worth the migration
+  // friction. localStorage is what actually applies the theme before
+  // paint (see src/lib/theme.ts); this column exists so the choice
+  // follows the user to another device.
+  themePreference String?
+
   // Account security: email verification + password reset.
   // Tokens are UUIDs looked up via findFirst on plain indexes — not
   // @unique, because prisma db push conservatively flags adding a unique

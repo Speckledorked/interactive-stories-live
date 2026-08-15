@@ -10,6 +10,7 @@ import {
   applyHarm, healHarm, canAct, Condition, appendConditionHistory, MAX_CONDITION_HISTORY,
   makeDeathSave, performRecoveryRoll, PERMANENT_INJURIES,
 } from '../harm'
+import { CONSUMED_CONDITION_NAME } from '../corruption'
 
 describe('applyHarm', () => {
   it('adds damage minus armor reduction, floored at 0', () => {
@@ -102,6 +103,22 @@ describe('canAct', () => {
       rollModifier: -1,
     }
     expect(canAct(0, [stunned])).toBe(true)
+  })
+
+  // #290: corruption's terminal Consumed condition set a mechanicalEffect
+  // string that matched neither "cannot act" nor "cannot take actions" —
+  // the ONLY existing enforcement path — so a fully-corrupted character
+  // mechanically played completely normally despite being "slipping
+  // beyond the player's control" per the condition's own description.
+  it('forbids action under the Consumed condition even at low harm', () => {
+    const consumed: Condition = {
+      id: 'consumed_1',
+      name: CONSUMED_CONDITION_NAME,
+      category: 'Special',
+      description: "Corruption has taken all there was to take. This character is slipping beyond the player's control.",
+      mechanicalEffect: 'The final stage of corruption — irreversible',
+    }
+    expect(canAct(0, [consumed])).toBe(false)
   })
 })
 

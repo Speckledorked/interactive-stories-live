@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
+import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
 
 interface Campaign {
   id: string
@@ -118,7 +119,7 @@ export default function CampaignsPage() {
       <TavernHeader wordmark variant="myth" />
 
       {/* Content */}
-      <main className="max-w-2xl lg:max-w-6xl mx-auto px-4 pt-28 pb-28">
+      <main className={`max-w-2xl lg:max-w-6xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         {/* Cinematic header — the freshest world's own hero art fills the
             box, text sits over it via gradient. Mirrors CampaignHero.tsx's
             proven pattern exactly rather than a bespoke side-by-side

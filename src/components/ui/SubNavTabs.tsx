@@ -77,9 +77,23 @@ export function SubNavTabs({ tabs, activeKey, onSelect, itemClassName = '', vari
           </>
         )
 
+        // Which tab is active was conveyed by colour alone — a border and a
+        // text shade, nothing in the accessibility tree. `aria-current` is
+        // the fix rather than role="tab"/aria-selected: most of this bar's
+        // items are Links that navigate to a sibling page, and a set of
+        // links is navigation, not a tabset. Real tab semantics would also
+        // require a role="tablist" container and role="tabpanel" targets,
+        // neither of which this component owns (it renders a bare fragment
+        // and each caller supplies its own wrapper). ui/tabs.tsx is the
+        // primitive for genuine in-page tabsets and has that full wiring.
         if (tab.href) {
           return (
-            <Link key={tab.key} href={tab.href} className={className}>
+            <Link
+              key={tab.key}
+              href={tab.href}
+              className={className}
+              aria-current={isActive ? 'page' : undefined}
+            >
               {content}
             </Link>
           )
@@ -87,14 +101,20 @@ export function SubNavTabs({ tabs, activeKey, onSelect, itemClassName = '', vari
 
         if (onSelect) {
           return (
-            <button key={tab.key} onClick={() => onSelect(tab.key)} className={className}>
+            <button
+              key={tab.key}
+              onClick={() => onSelect(tab.key)}
+              className={className}
+              aria-current={isActive ? true : undefined}
+            >
               {content}
             </button>
           )
         }
 
+        // No href and no onSelect: the current page's own inert label.
         return (
-          <span key={tab.key} className={className}>
+          <span key={tab.key} className={className} aria-current={isActive ? 'page' : undefined}>
             {content}
           </span>
         )

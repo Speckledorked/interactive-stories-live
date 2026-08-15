@@ -8,7 +8,7 @@
 
 'use client'
 
-import { useState, useSyncExternalStore, Suspense } from 'react'
+import { useState, useSyncExternalStore, useEffect, useRef, Suspense } from 'react'
 import Link from 'next/link'
 import { Bell, UserCircle, Menu, ArrowLeft } from 'lucide-react'
 import { displayFont } from '@/lib/tavernTheme'
@@ -61,6 +61,29 @@ export function TavernHeader({
   const user = getUser()
   const myth = variant === 'myth'
 
+  // This header is `fixed`, so it contributes no flow height and every page
+  // has to pad its own content clear of it. That used to be a hardcoded
+  // `pt-28` (112px) on all 14 pages — a guess that silently drifted: a bar
+  // carrying a `subrow` actually measures 122px (128 on the story page), so
+  // the first line of content sat *under* the bar on every subrow page.
+  //
+  // A static number can't be right for a bar whose height depends on the
+  // variant, the subrow, and the breakpoint, so it publishes its measured
+  // height instead and pages offset by it (see headerOffset.ts). Nothing
+  // can drift out of sync with a value that's measured rather than assumed.
+  const headerRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const publish = () => {
+      document.documentElement.style.setProperty('--myth-header-h', `${Math.round(el.getBoundingClientRect().height)}px`)
+    }
+    publish()
+    const ro = new ResizeObserver(publish)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   // min-h/min-w-[44px]: this is a Link, so it can't route through
   // IconButton (which renders a <button>) — but it sits in the same row as
   // two IconButtons and has to match their hit area, not just their look.
@@ -72,6 +95,7 @@ export function TavernHeader({
   return (
     <>
     <header
+      ref={headerRef}
       className={
         myth
           ? `fixed top-0 inset-x-0 lg:left-64 z-30 bg-myth-surface/90 backdrop-blur-md border-b border-myth-border ${minimalHeaderAtDesktop ? 'lg:border-none lg:bg-transparent lg:backdrop-blur-none' : ''}`

@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { UI_ICONS } from '@/lib/ui/icons'
+import { HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
 
 type TabKey = 'notifications' | 'profile' | 'privacy'
 
@@ -192,7 +193,7 @@ export default function SettingsPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref="/campaigns" title="Settings" variant="myth" />
-        <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
+        <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16`}>
           <div className="flex justify-center py-16">
             <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
           </div>
@@ -224,7 +225,7 @@ export default function SettingsPage() {
         }
       />
 
-      <main className="max-w-4xl mx-auto px-4 pt-28 pb-28 space-y-6">
+      <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-28 space-y-6`}>
         <p className="text-sm text-myth-ink-faint">Manage your account settings and preferences</p>
 
       {/* Tab Content */}

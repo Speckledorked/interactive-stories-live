@@ -14,6 +14,7 @@ import { CalendarMonthGrid } from '@/components/tavern/CalendarMonthGrid'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { UI_ICONS } from '@/lib/ui/icons'
+import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
 
 interface CampaignLogEntry {
   id: string
@@ -168,7 +169,7 @@ export default function StoryLogPage() {
     return (
       <TavernPage>
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" campaignId={campaignId} />
-        <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
+        <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
           <TavernSpinner className="h-16 w-16" />
         </main>
       </TavernPage>
@@ -179,7 +180,7 @@ export default function StoryLogPage() {
     return (
       <TavernPage>
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" campaignId={campaignId} />
-        <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
+        <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
           <TavernCard className="p-6 bg-myth-danger border-myth-danger/40">
             <p className="text-myth-danger">{error}</p>
           </TavernCard>
@@ -192,7 +193,7 @@ export default function StoryLogPage() {
     <TavernPage>
       <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" campaignId={campaignId} />
 
-      <main className="max-w-4xl mx-auto px-4 pt-28 pb-28">
+      <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
           <p className="text-myth-ink-faint text-sm">
             {campaign?.name || 'Campaign'} — a chronicle of your adventure, updated after each scene

@@ -10,6 +10,7 @@ import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { EmptyState } from '@/components/ui/empty-state'
+import { HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
 
 export default function CharactersListPage() {
   const router = useRouter()
@@ -61,7 +62,7 @@ export default function CharactersListPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Characters" campaignId={campaignId} variant="myth" />
-        <main className="max-w-6xl mx-auto px-4 pt-28 pb-16">
+        <main className={`max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16`}>
           <div className="flex justify-center py-16">
             <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
           </div>
@@ -74,7 +75,7 @@ export default function CharactersListPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Characters" campaignId={campaignId} variant="myth" />
-        <main className="max-w-6xl mx-auto px-4 pt-28 pb-16 text-center">
+        <main className={`max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16 text-center`}>
           <h2 className="mb-4 text-2xl font-bold text-myth-danger">Error</h2>
           <p className="mb-4 text-myth-ink-muted">{error || 'Campaign not found'}</p>
           <Link href="/campaigns" className="text-myth-accent hover:text-myth-accent-hover">
@@ -108,7 +109,7 @@ export default function CharactersListPage() {
         }
       />
 
-      <main className="max-w-6xl mx-auto px-4 pt-28 pb-28">
+      <main className={`max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-28`}>
         {characters.length === 0 ? (
           <EmptyState
             title="No characters in this campaign yet."

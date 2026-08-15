@@ -131,22 +131,22 @@ export function TavernSidebar({
   const worldLinks: NavLink[] = campaignHome
     ? [
         {
-          href: `${campaignHome}/wiki?type=FACTION`,
+          href: `${campaignHome}/world?type=FACTION`,
           label: 'Factions',
           icon: Swords,
-          isActive: (p) => p.startsWith(`${campaignHome}/wiki`) && entityType === 'FACTION',
+          isActive: (p) => p.startsWith(`${campaignHome}/world`) && entityType === 'FACTION',
         },
         {
-          href: `${campaignHome}/wiki?type=LOCATION`,
+          href: `${campaignHome}/world?type=LOCATION`,
           label: 'Locations',
           icon: Landmark,
-          isActive: (p) => p.startsWith(`${campaignHome}/wiki`) && entityType === 'LOCATION',
+          isActive: (p) => p.startsWith(`${campaignHome}/world`) && entityType === 'LOCATION',
         },
         {
-          href: `${campaignHome}/wiki?type=CLOCK`,
+          href: `${campaignHome}/world?type=CLOCK`,
           label: 'Threads',
           icon: Clock,
-          isActive: (p) => p.startsWith(`${campaignHome}/wiki`) && entityType === 'CLOCK',
+          isActive: (p) => p.startsWith(`${campaignHome}/world`) && entityType === 'CLOCK',
         },
         {
           href: `${campaignHome}?tab=maps`,
@@ -156,7 +156,7 @@ export function TavernSidebar({
         },
         {
           href: `${campaignHome}/wiki`,
-          label: 'Campaign Wiki',
+          label: 'Codex',
           icon: BookOpen,
           isActive: (p) => p.startsWith(`${campaignHome}/wiki`) && entityType === null,
         },

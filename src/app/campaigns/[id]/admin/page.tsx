@@ -26,6 +26,7 @@ import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
 
 interface Campaign {
   id: string
@@ -1033,7 +1034,7 @@ export default function AdminPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Admin" campaignId={campaignId} isAdmin variant="myth" />
-        <main className="max-w-7xl mx-auto px-4 pt-28 pb-16 flex items-center justify-center">
+        <main className={`max-w-7xl mx-auto px-4 ${HEADER_OFFSET} pb-16 flex items-center justify-center`}>
           <AILoadingState />
         </main>
       </TavernPage>
@@ -1077,7 +1078,7 @@ export default function AdminPage() {
     <TavernPage background="myth">
       <TavernHeader backHref={`/campaigns/${campaignId}`} title="Campaign Admin" campaignId={campaignId} isAdmin variant="myth" />
 
-      <main className="max-w-7xl mx-auto px-4 pt-28 pb-28">
+      <main className={`max-w-7xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         {error && (
           <div className="mb-4 rounded-md border border-myth-danger/30 bg-myth-danger/10 p-4 text-myth-danger">
             {error}

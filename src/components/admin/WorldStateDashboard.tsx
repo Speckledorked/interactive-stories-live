@@ -108,7 +108,7 @@ export default function WorldStateDashboard({
               return (
                 <Link
                   key={npc.id}
-                  href={`/campaigns/${campaignId}/wiki?type=NPC&entry=${encodeURIComponent(npc.name)}`}
+                  href={`/campaigns/${campaignId}/world?type=NPC&entry=${encodeURIComponent(npc.name)}`}
                   className="block rounded-md border border-myth-border p-3 transition-colors hover:border-myth-border-strong hover:bg-myth-surface-sunken"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -135,7 +135,7 @@ export default function WorldStateDashboard({
             factions.map((faction) => (
               <Link
                 key={faction.id}
-                href={`/campaigns/${campaignId}/wiki?type=FACTION&entry=${encodeURIComponent(faction.name)}`}
+                href={`/campaigns/${campaignId}/world?type=FACTION&entry=${encodeURIComponent(faction.name)}`}
                 className="block rounded-md border border-myth-border p-3 transition-colors hover:border-myth-border-strong hover:bg-myth-surface-sunken"
               >
                 <div className="mb-2 flex items-start justify-between gap-2">

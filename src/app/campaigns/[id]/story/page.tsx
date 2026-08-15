@@ -43,6 +43,7 @@ import { buildActionSuggestions, type ActionSuggestion } from '@/lib/game/action
 import { Badge } from '@/components/ui/badge'
 import { Timeline, TimelineItem } from '@/components/ui/timeline'
 import { UI_ICONS } from '@/lib/ui/icons'
+import { HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
 
 // Whether `characterId` may act in `scene` — participants is null for a
 // genuinely open scene (anyone can act; membership grows dynamically as
@@ -1039,7 +1040,7 @@ export default function StoryPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} variant="myth" />
-        <main className="max-w-7xl mx-auto px-4 pt-28 pb-16 flex justify-center items-center min-h-[60vh]">
+        <main className={`max-w-7xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16 flex justify-center items-center min-h-[60vh]`}>
           <AILoadingState type="scene" />
         </main>
       </TavernPage>
@@ -1104,7 +1105,7 @@ export default function StoryPage() {
         }
       />
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 pt-28 pb-28">
+      <main className={`max-w-7xl mx-auto px-3 sm:px-4 ${HEADER_OFFSET_SUBROW} pb-28`}>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6">
         {/* Main Story Column */}
         <div className="lg:col-span-3 space-y-4 lg:space-y-6">

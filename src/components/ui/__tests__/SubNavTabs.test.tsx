@@ -97,4 +97,39 @@ describe('SubNavTabs', () => {
     expect(screen.queryByRole('link')).toBeNull()
     expect(screen.getByText('Story')).toBeTruthy()
   })
+
+  // Which tab is active used to be conveyed by colour alone, so a screen
+  // reader announced every tab identically. These pin the fix across all
+  // three interaction models -- and pin that only the ACTIVE one carries
+  // the attribute, since aria-current on every tab is the same as on none.
+  it('marks the active link with aria-current="page" and leaves the others without it', () => {
+    const tabs: SubNavTab[] = [
+      { key: 'a', label: 'One', icon: Icon, href: '/one' },
+      { key: 'b', label: 'Two', icon: Icon, href: '/two' },
+    ]
+    render(<SubNavTabs tabs={tabs} activeKey="b" />)
+
+    expect(screen.getByRole('link', { name: /Two/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /One/ })).not.toHaveAttribute('aria-current')
+  })
+
+  it('marks the active button with aria-current', () => {
+    const tabs: SubNavTab[] = [
+      { key: 'a', label: 'One', icon: Icon },
+      { key: 'b', label: 'Two', icon: Icon },
+    ]
+    render(<SubNavTabs tabs={tabs} activeKey="a" onSelect={() => {}} />)
+
+    expect(screen.getByRole('button', { name: /One/ })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('button', { name: /Two/ })).not.toHaveAttribute('aria-current')
+  })
+
+  it('marks the inert current-page label with aria-current="page"', () => {
+    const tabs: SubNavTab[] = [{ key: 'a', label: 'Characters', icon: Icon }]
+    render(<SubNavTabs tabs={tabs} activeKey="a" />)
+
+    // getByText returns the inner label span; the attribute is on the
+    // wrapper that carries the tab's own classes.
+    expect(screen.getByText('Characters').parentElement).toHaveAttribute('aria-current', 'page')
+  })
 })

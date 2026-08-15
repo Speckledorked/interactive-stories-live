@@ -119,12 +119,21 @@ export function CampaignHero({
     <div className="relative mb-8 overflow-hidden rounded-lg">
       {imageUrl && (
         <>
+          {/* Below sm: the art is its own 16:9 band with the text stacked
+              underneath. Overlaying a title on a photograph needs enough
+              measure for the gradient to establish contrast, and 390px
+              doesn't have it — the mockup's overlay is a desktop
+              composition. From sm: up it becomes the overlay again. */}
           {/* eslint-disable-next-line @next/next/no-img-element -- no next/image remote-host config exists yet; plain <img> matches the only existing convention in the app (wiki/page.tsx). */}
-          <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-myth-canvas via-myth-canvas/70 to-transparent" />
+          <img
+            src={imageUrl}
+            alt=""
+            className="aspect-video w-full object-cover sm:absolute sm:inset-0 sm:aspect-auto sm:h-full"
+          />
+          <div className="hidden bg-gradient-to-t from-myth-canvas via-myth-canvas/70 to-transparent sm:absolute sm:inset-0 sm:block" />
         </>
       )}
-      <div className={imageUrl ? 'relative px-5 py-10 sm:py-14' : ''}>
+      <div className={imageUrl ? 'relative px-0 pt-5 sm:px-5 sm:py-14' : ''}>
         <h1 className="font-display text-4xl font-semibold leading-tight text-myth-ink sm:text-6xl">{title}</h1>
         {description && <p className="mt-3 italic text-myth-ink-muted">{description}</p>}
         <CampaignEntryCTA campaignId={campaignId} hasCharacter={hasCharacter} onCreateCharacter={onCreateCharacter} />

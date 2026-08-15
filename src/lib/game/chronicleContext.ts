@@ -77,8 +77,12 @@ export async function buildChronicleNarrationInput(campaignId: string): Promise<
     prisma.timelineEvent.findMany({
       where: { campaignId, visibility: { in: ['PUBLIC', 'MIXED'] } },
       orderBy: { turnNumber: 'desc' },
-      take: 3,
-      select: { title: true, summaryPublic: true },
+      // 8 rather than 3: the narration only ever reads the top few, but
+      // the lobby's Rumors and World Events tiles split this feed by
+      // visibility, and a 3-row window can land entirely on one side and
+      // report zero of the other.
+      take: 8,
+      select: { title: true, summaryPublic: true, visibility: true },
     }),
   ])
 
@@ -112,7 +116,7 @@ export async function buildChronicleNarrationInput(campaignId: string): Promise<
       momentum: w.momentum,
       status: w.status,
     })),
-    recentEvents: recentEvents.map(e => ({ title: e.title, summaryPublic: e.summaryPublic })),
+    recentEvents: recentEvents.map(e => ({ title: e.title, summaryPublic: e.summaryPublic, visibility: e.visibility })),
   }
 }
 
@@ -125,11 +129,19 @@ export async function buildChronicleNarrationInput(campaignId: string): Promise<
  */
 export function deriveChronicleGlance(input: ChronicleNarrationInput): ChronicleGlance {
   const topFaction = input.factionSignals[0] ?? null
+  // Rumors vs World Events splits the same TimelineEvent feed on the
+  // visibility the rows already carry: MIXED means the party knows some
+  // of it, which is what a rumor is, and PUBLIC means it's established.
+  // No second query, and no new concept invented to fill a tile.
+  const rumorCount = input.recentEvents.filter(e => e.visibility === 'MIXED').length
+  const worldEventCount = input.recentEvents.filter(e => e.visibility === 'PUBLIC').length
   return {
     weatherLabel: input.weather ? `${input.weather.condition} in ${input.weather.locationName}` : null,
     weatherLocationName: input.weather?.locationName ?? null,
     topFaction: topFaction ? { name: topFaction.name, threatLevel: topFaction.threatLevel } : null,
     activeConflictCount: input.activeWars.length,
     recentEventCount: input.recentEvents.length,
+    rumorCount,
+    worldEventCount,
   }
 }

@@ -159,6 +159,8 @@ describe('deriveChronicleGlance', () => {
       topFaction: null,
       activeConflictCount: 0,
       recentEventCount: 0,
+      rumorCount: 0,
+      worldEventCount: 0,
     })
   })
 
@@ -189,11 +191,33 @@ describe('deriveChronicleGlance', () => {
         { name: 'War of Ash', attackerName: 'A', defenderName: 'B', momentum: 10, status: 'ESCALATING' },
       ],
       recentEvents: [
-        { title: 'Ambush', summaryPublic: 'An ambush occurred.' },
-        { title: 'Treaty', summaryPublic: null },
+        { title: 'Ambush', summaryPublic: 'An ambush occurred.', visibility: 'PUBLIC' },
+        { title: 'Treaty', summaryPublic: null, visibility: 'PUBLIC' },
       ],
     })
     expect(result.activeConflictCount).toBe(1)
     expect(result.recentEventCount).toBe(2)
+  })
+
+  // Rumors and World Events are the same feed split on visibility, so the
+  // two counts must partition recentEventCount rather than double-count it.
+  it('splits recent events into rumors (MIXED) and world events (PUBLIC)', () => {
+    const result = deriveChronicleGlance({
+      ...baseInput,
+      recentEvents: [
+        { title: 'Ambush', summaryPublic: 'An ambush occurred.', visibility: 'PUBLIC' },
+        { title: 'Whispers', summaryPublic: 'Something about the bridge.', visibility: 'MIXED' },
+        { title: 'Rumour', summaryPublic: null, visibility: 'MIXED' },
+      ],
+    })
+    expect(result.rumorCount).toBe(2)
+    expect(result.worldEventCount).toBe(1)
+    expect((result.rumorCount ?? 0) + (result.worldEventCount ?? 0)).toBe(result.recentEventCount)
+  })
+
+  it('reports zero for both when there are no recent events', () => {
+    const result = deriveChronicleGlance({ ...baseInput, recentEvents: [] })
+    expect(result.rumorCount).toBe(0)
+    expect(result.worldEventCount).toBe(0)
   })
 })

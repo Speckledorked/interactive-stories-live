@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { SectionHeader } from '@/components/ui/section-header'
 import { resolveWorldTurnHours } from '@/lib/game/tick/pacing'
 
@@ -51,27 +50,12 @@ export function WorldChronicle({
           </p>
         </div>
       )}
-      <div className="pt-1 text-sm text-myth-ink-faint">
-        <Link href={`/campaigns/${campaignId}/characters`} className="hover:text-myth-ink hover:underline">
-          Characters
-        </Link>
-        {' · '}
-        <Link href={`/campaigns/${campaignId}/wiki?type=LOCATION`} className="hover:text-myth-ink hover:underline">
-          Locations
-        </Link>
-        {' · '}
-        <Link href={`/campaigns/${campaignId}/wiki?type=FACTION`} className="hover:text-myth-ink hover:underline">
-          Factions
-        </Link>
-        {' · '}
-        <Link href={`/campaigns/${campaignId}/wiki?type=CLOCK`} className="hover:text-myth-ink hover:underline">
-          Threads
-        </Link>
-        {' · '}
-        <Link href={`/campaigns/${campaignId}/wiki`} className="hover:text-myth-ink hover:underline">
-          Full wiki
-        </Link>
-      </div>
+      {/* The inline "Characters · Locations · Factions · Threads · Full
+          wiki" index that used to sit here is gone. QuickAccess renders
+          directly below this with the same destinations as real 88px
+          cards, and Phase 1 put Threads in both the drawer and the
+          sidebar — so this was the same navigation a third time, at a
+          20px tap target, which is the worst of the three. */}
     </div>
   )
 }

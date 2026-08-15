@@ -19,7 +19,7 @@ export interface ChronicleNarrationInput {
     currentPlan: string | null
   }>
   activeWars: Array<{ name: string; attackerName: string; defenderName: string; momentum: number; status: string }>
-  recentEvents: Array<{ title: string; summaryPublic: string | null }>
+  recentEvents: Array<{ title: string; summaryPublic: string | null; visibility: string }>
 }
 
 // Plain-data snapshot of the same signals above, for the lobby's
@@ -37,4 +37,11 @@ export interface ChronicleGlance {
   topFaction: { name: string; threatLevel: number } | null
   activeConflictCount: number
   recentEventCount: number
+  // Rumors vs World Events: the same TimelineEvent feed split on
+  // visibility (MIXED = partially known = a rumor, PUBLIC = established).
+  // Optional for the same reason weatherLocationName is — a campaign's
+  // persisted chronicleGlance predates these and won't carry them until
+  // its next world turn.
+  rumorCount?: number
+  worldEventCount?: number
 }

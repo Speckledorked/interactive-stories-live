@@ -32,7 +32,7 @@ const baseInput: ChronicleNarrationInput = {
   activeWars: [
     { name: 'The Border Dispute', attackerName: 'Ironveil Guild', defenderName: 'Free Merchants', momentum: 20, status: 'ESCALATING' },
   ],
-  recentEvents: [{ title: 'A merchant vanished', summaryPublic: 'A merchant caravan went missing near the Eastern Road.' }],
+  recentEvents: [{ title: 'A merchant vanished', summaryPublic: 'A merchant caravan went missing near the Eastern Road.', visibility: 'PUBLIC' }],
 }
 
 const validNarration = () =>

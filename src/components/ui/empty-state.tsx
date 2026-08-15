@@ -1,4 +1,5 @@
 import React from 'react'
+import { Button, buttonClasses } from './button'
 
 export interface EmptyStateAction {
   label: string
@@ -15,23 +16,28 @@ export interface EmptyStateProps {
   className?: string
 }
 
+// Goes through the Button primitive rather than hand-rolling its classes.
+// It used to do the latter, and drifted: `rounded-md` where the app has
+// exactly one control radius, and py-2 with no min-height, which rendered
+// 36px tall — under the 44px touch rule, on what is often a brand-new
+// user's very first tap target ("Create Your First Campaign").
 function ActionButton({ action, primary }: { action: EmptyStateAction; primary?: boolean }) {
-  const className = primary
-    ? 'inline-flex items-center justify-center rounded-md bg-myth-accent px-4 py-2 text-sm font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-myth-accent focus-visible:ring-offset-2'
-    : 'inline-flex items-center justify-center rounded-md border border-myth-border px-4 py-2 text-sm font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-myth-accent focus-visible:ring-offset-2'
+  const variant = primary ? 'primary' : 'secondary'
 
+  // An action with an href navigates, so it has to be an anchor — the one
+  // case Button itself can't render. Same classes either way.
   if (action.href) {
     return (
-      <a href={action.href} className={className}>
+      <a href={action.href} className={buttonClasses({ variant })}>
         {action.label}
       </a>
     )
   }
 
   return (
-    <button type="button" onClick={action.onClick} className={className}>
+    <Button variant={variant} onClick={action.onClick}>
       {action.label}
-    </button>
+    </Button>
   )
 }
 

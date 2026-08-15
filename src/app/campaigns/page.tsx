@@ -22,6 +22,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { CampaignChronicleCard } from '@/components/campaigns/CampaignChronicleCard'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
@@ -338,8 +339,13 @@ function CreateCampaignModal({
   const selectedTpl = selectedTemplate ? TEMPLATES.find(t => t.id === selectedTemplate) : null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-myth-border bg-myth-surface-raised shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
+    // Goes through the Dialog primitive rather than a hand-rolled
+    // `fixed inset-0` overlay. As a bare div this had no role="dialog", no
+    // focus trap (focus stayed on the "New Campaign" button behind it),
+    // no scroll lock, and Escape did nothing — on the app's entry page.
+    // hideClose because the header below already has its own close button.
+    <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
+      <DialogContent hideClose className="sm:max-w-2xl">
         <div className="p-8">
           {/* Header */}
           <div className="mb-8 flex items-center justify-between">
@@ -347,9 +353,9 @@ function CreateCampaignModal({
               {step === 'details' && (
                 <IconButton icon={ChevronLeft} label="Back to templates" onClick={() => setStep('template')} />
               )}
-              <h2 className={`${fontDisplay.className} text-2xl font-semibold text-myth-ink`}>
+              <DialogTitle className={`${fontDisplay.className} text-2xl font-semibold text-myth-ink`}>
                 {step === 'template' ? 'Choose a Starting Point' : 'Campaign Details'}
-              </h2>
+              </DialogTitle>
             </div>
             <IconButton icon={X} label="Close" size="lg" onClick={onClose} />
           </div>
@@ -591,7 +597,7 @@ function CreateCampaignModal({
             </form>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

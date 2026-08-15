@@ -352,9 +352,9 @@ export function DataAdvancedPanel({
       </section>
 
       {/* Danger Zone — always last, visually isolated */}
-      <section className="mt-12 border-t-2 border-red-700/40 pt-6">
+      <section className="mt-12 border-t-2 border-myth-danger/40/40 pt-6">
         <SectionHeader title="Danger Zone" action={<Badge variant="dangerous">Dangerous</Badge>} />
-        <div className="mt-3 rounded-lg border border-red-700/40 p-5">
+        <div className="mt-3 rounded-lg border border-myth-danger/40/40 p-5">
           <p className="mb-4 text-sm text-myth-ink-muted">
             This permanently removes every character, scene, and recorded event in {campaignTitle}. There is no undo.
           </p>
@@ -362,7 +362,7 @@ export function DataAdvancedPanel({
           {!showDeleteConfirm ? (
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="rounded-md bg-red-700 px-4 py-2 text-sm text-white transition-colors hover:bg-red-800"
+              className="rounded-md bg-myth-danger px-4 py-2 text-sm text-white transition-colors hover:bg-myth-danger/80"
             >
               Delete Campaign
             </button>
@@ -375,14 +375,14 @@ export function DataAdvancedPanel({
                 type="text"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                className="block w-full max-w-sm rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-red-600 focus:outline-none"
+                className="block w-full max-w-sm rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-myth-danger/40 focus:outline-none"
                 placeholder={campaignTitle}
               />
               <div className="flex gap-2">
                 <button
                   onClick={onDeleteCampaign}
                   disabled={saving || confirmText !== campaignTitle}
-                  className="rounded-md bg-red-700 px-4 py-2 text-sm text-white transition-colors hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-md bg-myth-danger px-4 py-2 text-sm text-white transition-colors hover:bg-myth-danger/80 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {saving ? 'Deleting...' : 'Yes, Delete Campaign'}
                 </button>

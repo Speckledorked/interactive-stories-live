@@ -259,7 +259,7 @@ export default function CommandPalette({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh] bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-2xl mx-4 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-hidden">
+      <div className="w-full max-w-2xl mx-4 bg-myth-surface-raised border border-myth-border rounded-xl shadow-2xl overflow-hidden">
         {/* Search Input */}
         <div className="relative">
           <input
@@ -267,18 +267,18 @@ export default function CommandPalette({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Type a command or search..."
-            className="w-full px-4 py-4 bg-gray-900 text-white placeholder-gray-500 focus:outline-none border-b border-gray-700"
+            className="w-full px-4 py-4 min-h-[44px] bg-myth-surface-raised text-base sm:text-sm text-myth-ink placeholder:text-myth-ink-faint focus:outline-none border-b border-myth-border"
             autoFocus
           />
-          <div className="absolute right-4 top-4 text-xs text-gray-500">
-            <kbd className="px-2 py-1 bg-gray-800 rounded border border-gray-700">ESC</kbd>
+          <div className="absolute right-4 top-4 text-xs text-myth-ink-faint">
+            <kbd className="px-2 py-1 bg-myth-surface-sunken rounded border border-myth-border font-mono text-myth-ink-muted">ESC</kbd>
           </div>
         </div>
 
         {/* Commands List */}
         <div className="max-h-[400px] overflow-y-auto">
           {filteredCommands.length === 0 ? (
-            <div className="px-4 py-8 text-center text-gray-500">
+            <div className="px-4 py-8 text-center text-myth-ink-faint">
               No commands found for "{search}"
             </div>
           ) : (
@@ -290,7 +290,7 @@ export default function CommandPalette({
 
                 return (
                   <div key={category}>
-                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <div className="px-4 py-2 font-mono text-xs font-semibold text-myth-ink-faint uppercase tracking-wider">
                       {category}
                     </div>
                     {categoryCommands.map((cmd, idx) => {
@@ -306,19 +306,19 @@ export default function CommandPalette({
                             setSearch('')
                           }}
                           onMouseEnter={() => setSelectedIndex(globalIndex)}
-                          className={`w-full px-4 py-3 text-left flex items-center gap-3 transition-colors ${
+                          className={`w-full min-h-[44px] px-4 py-3 text-left flex items-center gap-3 transition-colors ${
                             isSelected
-                              ? 'bg-primary-600 text-white'
-                              : 'hover:bg-gray-800 text-gray-300'
+                              ? 'bg-myth-accent text-myth-accent-ink'
+                              : 'hover:bg-myth-surface-sunken text-myth-ink-muted'
                           }`}
                         >
                           <span className="text-2xl">{cmd.icon}</span>
                           <div className="flex-1">
-                            <div className={`font-medium ${isSelected ? 'text-white' : 'text-gray-200'}`}>
+                            <div className={`font-medium ${isSelected ? 'text-myth-accent-ink' : 'text-myth-ink'}`}>
                               {cmd.name}
                             </div>
                             {cmd.description && (
-                              <div className={`text-sm ${isSelected ? 'text-primary-100' : 'text-gray-500'}`}>
+                              <div className={`text-sm ${isSelected ? 'text-myth-accent-ink/80' : 'text-myth-ink-faint'}`}>
                                 {cmd.description}
                               </div>
                             )}
@@ -334,25 +334,25 @@ export default function CommandPalette({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 bg-gray-800/50 border-t border-gray-700 flex items-center justify-between text-xs text-gray-500">
+        <div className="px-4 py-3 bg-myth-surface-sunken border-t border-myth-border flex items-center justify-between text-xs text-myth-ink-faint">
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-gray-700 rounded">↑↓</kbd>
+              <kbd className="px-1.5 py-0.5 bg-myth-surface rounded border border-myth-border font-mono">↑↓</kbd>
               Navigate
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-gray-700 rounded">↵</kbd>
+              <kbd className="px-1.5 py-0.5 bg-myth-surface rounded border border-myth-border font-mono">↵</kbd>
               Select
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-gray-700 rounded">ESC</kbd>
+              <kbd className="px-1.5 py-0.5 bg-myth-surface rounded border border-myth-border font-mono">ESC</kbd>
               Close
             </span>
           </div>
           <div className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-gray-700 rounded">⌘K</kbd>
+            <kbd className="px-1.5 py-0.5 bg-myth-surface rounded border border-myth-border font-mono">⌘K</kbd>
             <span>or</span>
-            <kbd className="px-1.5 py-0.5 bg-gray-700 rounded">Ctrl+K</kbd>
+            <kbd className="px-1.5 py-0.5 bg-myth-surface rounded border border-myth-border font-mono">Ctrl+K</kbd>
           </div>
         </div>
       </div>

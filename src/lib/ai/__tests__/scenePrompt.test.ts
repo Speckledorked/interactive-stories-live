@@ -392,6 +392,49 @@ describe('buildUserPrompt — NPC told_events (#101 misinformation)', () => {
   })
 })
 
+describe('buildUserPrompt — NPC currentPlan/goalProgress/social_ties (#288)', () => {
+  function makeNpcRequest(npc: Record<string, unknown>): AIGMRequest {
+    return {
+      world_summary: {
+        turn_number: 1,
+        in_game_date: 'Day 1',
+        characters: [],
+        npcs: [{ id: 'npc-1', name: 'Old Harl', relationship: 'Neutral', goals: 'Survive', importance: 5, ...npc }],
+        factions: [], clocks: [], recent_timeline_events: [],
+      },
+      current_scene_intro: 'The room is quiet.',
+      player_actions: [],
+    } as unknown as AIGMRequest
+  }
+
+  it('renders the plan and progress percentage when currentPlan is set', () => {
+    const prompt = buildUserPrompt(makeNpcRequest({ currentPlan: 'Smuggle the relic out of the city', goalProgress: 42 }))
+    expect(prompt).toMatch(/Plan: Smuggle the relic out of the city \(42% along\)/)
+  })
+
+  it('defaults the progress percentage to 0 when goalProgress is absent', () => {
+    const prompt = buildUserPrompt(makeNpcRequest({ currentPlan: 'Watch the docks' }))
+    expect(prompt).toMatch(/Plan: Watch the docks \(0% along\)/)
+  })
+
+  it('omits the Plan clause when currentPlan is absent (minor NPCs never get one)', () => {
+    const prompt = buildUserPrompt(makeNpcRequest({}))
+    expect(prompt).not.toMatch(/Plan:/)
+  })
+
+  it('renders social ties when present', () => {
+    const prompt = buildUserPrompt(makeNpcRequest({ social_ties: ['ally: Mira', 'rival: The Warden'] }))
+    expect(prompt).toMatch(/Ties: ally: Mira, rival: The Warden/)
+  })
+
+  it('omits the Ties clause when social_ties is empty or absent', () => {
+    const promptEmpty = buildUserPrompt(makeNpcRequest({ social_ties: [] }))
+    expect(promptEmpty).not.toMatch(/Ties:/)
+    const promptAbsent = buildUserPrompt(makeNpcRequest({}))
+    expect(promptAbsent).not.toMatch(/Ties:/)
+  })
+})
+
 describe('buildUserPrompt — player actions are not quote-wrapped like dialogue', () => {
   // Presenting the whole action as `Name: "text"` visually primed the
   // model to treat it as a spoken line, reinforcing the same bug the

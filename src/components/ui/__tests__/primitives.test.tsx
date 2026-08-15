@@ -360,4 +360,15 @@ describe('every interactive primitive', () => {
   it('TOUCH_TARGET includes touch-manipulation to kill the 300ms tap delay', () => {
     expect(TOUCH_TARGET).toContain('touch-manipulation')
   })
+
+  // FOCUS_RING must start by suppressing the outline. globals.css sets a
+  // base-layer `outline` on every focusable element so bespoke buttons and
+  // links get a ring for free; without outline-none here, a primitive would
+  // paint BOTH that outline and its own ring. Verified in a real browser
+  // (primitives: outline suppressed + ring visible; links: outline visible,
+  // no ring), and pinned here so the ordering can't be lost in an edit.
+  it('FOCUS_RING suppresses the base-layer outline before drawing its ring', () => {
+    expect(FOCUS_RING).toContain('focus-visible:outline-none')
+    expect(FOCUS_RING).toContain('focus-visible:ring-2')
+  })
 })

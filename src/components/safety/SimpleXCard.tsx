@@ -50,7 +50,7 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="px-4 py-2 border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+        className="px-4 py-2 border-2 border-myth-danger text-myth-danger hover:bg-myth-danger hover:text-white rounded-lg transition-colors font-medium flex items-center gap-2"
         title="Use X-Card to pause/rewind uncomfortable content"
       >
         <span className="text-xl">✋</span>
@@ -59,13 +59,13 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
 
       {isOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-myth-surface-raised rounded-lg p-6 max-w-md w-full border-2 border-red-500">
+          <div className="bg-myth-surface-raised rounded-lg p-6 max-w-md w-full border-2 border-myth-danger">
             {!submitted ? (
               <>
-                <h2 className="text-2xl font-bold mb-4 text-red-400">Use X-Card</h2>
+                <h2 className="font-display text-2xl font-bold mb-4 text-myth-danger">Use X-Card</h2>
 
-                <div className="bg-red-900/30 border border-red-500 rounded-lg p-4 mb-4">
-                  <p className="text-red-200 text-sm">
+                <div className="bg-myth-danger/10 border border-myth-danger/30 rounded-lg p-4 mb-4">
+                  <p className="text-myth-ink text-sm">
                     The X-Card allows you to pause or rewind content that makes you uncomfortable.
                     Your safety and comfort are the priority. Use this tool freely - no explanation needed.
                   </p>
@@ -78,7 +78,7 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
                   <select
                     value={trigger}
                     onChange={(e) => setTrigger(e.target.value)}
-                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink focus:outline-none focus:border-red-500"
+                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink focus:outline-none focus:border-myth-danger"
                   >
                     <option value="GENERAL">General discomfort</option>
                     <option value="VIOLENCE">Violence</option>
@@ -102,7 +102,7 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     placeholder="You don't need to explain, but you can if it helps..."
-                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink placeholder-myth-ink-faint focus:outline-none focus:border-red-500 resize-none"
+                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink placeholder-myth-ink-faint focus:outline-none focus:border-myth-danger resize-none"
                     rows={3}
                   />
                 </div>
@@ -111,7 +111,7 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
                   <button
                     onClick={useXCard}
                     disabled={isSubmitting}
-                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-800 text-white rounded-lg font-medium transition-colors"
+                    className="flex-1 px-4 py-2 bg-myth-danger hover:opacity-90 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
                   >
                     {isSubmitting ? 'Using X-Card...' : 'Use X-Card'}
                   </button>

@@ -11,17 +11,18 @@
 
 import { ImageResponse } from 'next/og'
 import { prisma } from '@/lib/prisma'
+import { truncateWithEllipsis } from '@/lib/format'
 
 export const alt = 'Session recap'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
 // Long titles/summaries would otherwise overflow the fixed-size card —
-// truncate rather than shrink font size indefinitely, matching the same
-// "truncate, don't cram" discipline used elsewhere in this codebase
-// (see lib/format.ts's truncateWithEllipsis).
+// truncate rather than shrink font size indefinitely. Cuts one char short
+// of `max` since '…' is a single character, keeping total output length
+// capped at `max`.
 function truncate(text: string, max: number): string {
-  return text.length > max ? text.slice(0, max - 1).trimEnd() + '…' : text
+  return truncateWithEllipsis(text, max, max - 1)
 }
 
 export default async function RecapOpengraphImage({

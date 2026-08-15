@@ -85,7 +85,7 @@ describe('buildScenePrompt', () => {
       location: null,
     })
     expect(prompt.length).toBeLessThan(2000)
-    expect(prompt).toContain('...')
+    expect(prompt).toContain('…')
   })
 
   it('always appends the style suffix', () => {
@@ -175,7 +175,7 @@ describe('buildCampaignHeroPrompt', () => {
   it('truncates an overlong description', () => {
     const prompt = buildCampaignHeroPrompt({ title: 'T', description: 'x'.repeat(2000), universe: null })
     expect(prompt.length).toBeLessThan(2000)
-    expect(prompt).toContain('...')
+    expect(prompt).toContain('…')
   })
 })
 

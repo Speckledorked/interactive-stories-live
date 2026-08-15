@@ -14,15 +14,19 @@ export function pluralize(count: number, word: string): string {
 }
 
 /**
- * Cuts `text` to `cutChars` and appends '...' once `text` exceeds
- * `maxChars`; returns `text` unchanged otherwise. `cutChars` defaults to
- * `maxChars` (matching most call sites), but is a separate parameter
- * because one existing call site caps the *total* output length at
- * `maxChars` by cutting 3 chars short to leave room for the ellipsis —
- * preserved here rather than smoothed over.
+ * Cuts `text` to `cutChars`, trims trailing whitespace left dangling by the
+ * cut, and appends a single '…' once `text` exceeds `maxChars`; returns
+ * `text` unchanged otherwise. `cutChars` defaults to `maxChars` (matching
+ * most call sites), but is a separate parameter because some call sites
+ * cap the *total* output length at `maxChars` by cutting short to leave
+ * room for the ellipsis — preserved here rather than smoothed over. #296:
+ * this used to be two divergent implementations — this one ('...', no
+ * trim) and a duplicate local `truncate()` in the recap opengraph-image
+ * route ('…' + trimEnd) — reconciled into the nicer '…' + trim behavior,
+ * the single shared version every caller now gets.
  */
 export function truncateWithEllipsis(text: string, maxChars: number, cutChars: number = maxChars): string {
-  return text.length > maxChars ? text.substring(0, cutChars) + '...' : text
+  return text.length > maxChars ? text.slice(0, cutChars).trimEnd() + '…' : text
 }
 
 /**

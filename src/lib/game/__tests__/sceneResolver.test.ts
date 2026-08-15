@@ -932,7 +932,7 @@ describe('fallbackSummaryFromSceneText', () => {
   it('falls back to a character-limited slice when no sentence boundaries are found', () => {
     const text = 'a'.repeat(400);
     const result = fallbackSummaryFromSceneText(text);
-    expect(result).toBe('a'.repeat(300) + '...');
+    expect(result).toBe('a'.repeat(300) + '…');
   });
 
   it('does not append an ellipsis to short sentence-less text', () => {

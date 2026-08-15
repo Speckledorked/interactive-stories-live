@@ -25,35 +25,6 @@ export interface AuthResponse {
 }
 
 // ============================================
-// CAMPAIGNS
-// ============================================
-
-export interface CreateCampaignRequest {
-  title: string
-  description: string
-  universe: string
-  aiSystemPrompt: string
-  initialWorldSeed: string
-}
-
-export interface JoinCampaignRequest {
-  campaignId: string
-}
-
-// ============================================
-// CHARACTERS
-// ============================================
-
-export interface CreateCharacterRequest {
-  campaignId: string
-  name: string
-  concept: string
-  stats: Record<string, any>
-  conditions: string[]
-  currentLocation?: string
-}
-
-// ============================================
 // PLAYER ACTIONS
 // ============================================
 

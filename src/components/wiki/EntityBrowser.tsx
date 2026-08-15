@@ -32,6 +32,7 @@ import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
+import { EntityStatRow } from './EntityStatRow'
 import { SectionHeader } from '@/components/ui/section-header'
 import { groupWikiEntriesByCategory } from '@/lib/wikiCategoryGrouping'
 import { Button } from '@/components/ui/button'
@@ -393,6 +394,12 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
                             </span>
                           </div>
                           <p className="line-clamp-2 text-xs leading-relaxed text-myth-ink-muted">{entry.summary}</p>
+                          {/* Live simulation state, present only on the
+                              /world types the API enriches. This is the
+                              actual difference between a World card and a
+                              Codex card — the prose above is the same on
+                              both. */}
+                          {entry.stats && <EntityStatRow stats={entry.stats} />}
                           {entry.lastSeenTurn && (
                             <p className="mt-2 flex items-center gap-1 text-xs text-myth-ink-faint">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -441,6 +448,17 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
                   {selectedEntry.importance}
                 </span>
               </div>
+
+              {/* Current state, repeated from the list card on purpose:
+                  the detail pane replaces the list at mobile widths, so
+                  without this the numbers vanish the moment you open the
+                  entity you wanted to read about. */}
+              {selectedEntry.stats && (
+                <div className="mb-4">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">Current State</h3>
+                  <EntityStatRow stats={selectedEntry.stats} />
+                </div>
+              )}
 
               {/* Per-viewer, not campaign-wide: drawn from the logged-in
                   player's own hidden trust/tension/respect/fear with this

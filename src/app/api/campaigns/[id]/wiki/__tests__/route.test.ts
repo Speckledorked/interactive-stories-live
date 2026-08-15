@@ -201,3 +201,95 @@ describe('POST', () => {
     })
   })
 })
+
+// Live simulation stats on /world entity cards. The fog-of-war property
+// is the one that actually matters here: the stat row is a second path by
+// which a hidden entity's real numbers could reach a player, independent
+// of whether its entry is listed.
+describe('GET entity stats', () => {
+  it('attaches faction stats matched by name, case-insensitively', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([
+      { id: 'w1', entryType: 'FACTION', name: 'The Ashen Court', summary: 's', importance: 'normal' },
+    ])
+    db.faction.findMany.mockResolvedValue([
+      { name: 'the ashen court', threatLevel: 4, stability: 20, influence: 60, military: 70, isActive: true },
+    ])
+
+    const response = await GET(getRequest('?type=FACTION'), { params: { id: 'camp1' } })
+    const { entries } = await response.json()
+
+    expect(entries[0].stats).toEqual({
+      kind: 'FACTION',
+      threatLevel: 4,
+      stability: 20,
+      influence: 60,
+      military: 70,
+      isActive: true,
+    })
+  })
+
+  it('derives location condition tags with the same helper the tick uses', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([
+      { id: 'w1', entryType: 'LOCATION', name: 'Kel Marsh', summary: 's', importance: 'normal' },
+    ])
+    db.location.findMany.mockResolvedValue([
+      { name: 'Kel Marsh', conditionScore: 10, isContested: true, weather: 'STORM', weatherSeverity: 4 },
+    ])
+
+    const response = await GET(getRequest('?type=LOCATION'), { params: { id: 'camp1' } })
+    const { entries } = await response.json()
+
+    // conditionScore 10 -> RUINED, plus CONTESTED because isContested.
+    expect(entries[0].stats.conditionTags).toEqual(['RUINED', 'CONTESTED'])
+    expect(entries[0].stats.weather).toBe('STORM')
+  })
+
+  it('attaches clock progress', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([
+      { id: 'w1', entryType: 'CLOCK', name: 'The Siege', summary: 's', importance: 'normal' },
+    ])
+    db.clock.findMany.mockResolvedValue([
+      { name: 'The Siege', currentTicks: 3, maxTicks: 6, category: 'WAR' },
+    ])
+
+    const response = await GET(getRequest('?type=CLOCK'), { params: { id: 'camp1' } })
+    const { entries } = await response.json()
+
+    expect(entries[0].stats).toEqual({ kind: 'CLOCK', currentTicks: 3, maxTicks: 6, category: 'WAR' })
+  })
+
+  // An admin sees a hidden entity listed, so it reaches the enrichment
+  // step. A player must not get its numbers even if the entry somehow got
+  // that far — the visibility predicate is re-applied, not assumed.
+  it('omits stats for an entity the viewer cannot see', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([
+      { id: 'w1', entryType: 'FACTION', name: 'Hidden Cabal', summary: 's', importance: 'normal' },
+    ])
+    // Name-match query returns nothing: the visibility filter excluded it.
+    db.faction.findMany.mockResolvedValue([])
+
+    const response = await GET(getRequest('?type=FACTION'), { params: { id: 'camp1' } })
+    const { entries } = await response.json()
+
+    expect(entries.every((e: any) => e.stats === undefined)).toBe(true)
+  })
+
+  // Asserted as an admin on purpose: a PLAYER request always queries all
+  // four tables to build filterDiscoveredEntries' name index, which would
+  // mask whether the enrichment added a query of its own. An admin skips
+  // that filter, so these counts are attributable to the enrichment and
+  // the stub lookup alone — and with the type narrowed to LORE, both
+  // should sit this out entirely.
+  it('never queries stat tables for a Codex-only request', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
+    db.wikiEntry.findMany.mockResolvedValue([
+      { id: 'w1', entryType: 'LORE', name: 'The Long Winter', summary: 's', importance: 'normal' },
+    ])
+
+    await GET(getRequest('?type=LORE'), { params: { id: 'camp1' } })
+
+    expect(db.faction.findMany).not.toHaveBeenCalled()
+    expect(db.location.findMany).not.toHaveBeenCalled()
+    expect(db.clock.findMany).not.toHaveBeenCalled()
+  })
+})

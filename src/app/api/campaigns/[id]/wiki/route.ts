@@ -5,6 +5,8 @@ import { UserRole } from '@prisma/client'
 import { visibleTo } from '@/lib/api/visibility'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { summarizeNpcRelationship, type NpcRelationshipValues } from '@/lib/game/npcRelationship'
+import { deriveConditionTags } from '@/lib/game/tick/locationConditionTick'
+import type { EntityStats } from '@/lib/game/entityStats'
 
 // Fog of war: WikiEntry rows are matched to their source entity by name, not
 // a real FK, so there's no isDiscovered column to filter on directly here.
@@ -178,6 +180,117 @@ async function attachMyNpcStanding<T extends { entryType: string; name: string }
   })
 }
 
+/**
+ * Attaches `stats: EntityStats` to FACTION / LOCATION / CLOCK entries —
+ * the live numbers the world tick moves each turn, which is the whole
+ * point of the /world browser as distinct from the Codex.
+ *
+ * Matched to the real row by name, same as the fog-of-war filter and the
+ * NPC standing enrichment above; there's no FK to follow. Phase 1b's
+ * case-insensitive uniqueness on (campaignId, name) is what makes that
+ * safe for factions, and Location has had @@unique([campaignId, name])
+ * all along.
+ *
+ * Two things this deliberately does NOT do:
+ *   - It never selects gmNotes, or any field beyond the specific stats
+ *     rendered on a card.
+ *   - It re-runs the role-aware visibility filter rather than trusting
+ *     that the caller already filtered. The entries are filtered by then,
+ *     so this is redundant — but a stat row is exactly the kind of thing
+ *     a later refactor could start attaching before filtering, and the
+ *     cost is one predicate on a query already being made.
+ *
+ * Skips each query entirely when the requested type excludes it, so the
+ * NPC and Codex tabs pay nothing for this.
+ */
+async function attachEntityStats<T extends { entryType: string; name: string }>(
+  campaignId: string,
+  isAdmin: boolean,
+  entries: T[]
+): Promise<Array<T & { stats?: EntityStats }>> {
+  const present = (type: string) => entries.some((e) => e.entryType === type)
+  if (!present('FACTION') && !present('LOCATION') && !present('CLOCK')) return entries
+
+  const role = isAdmin ? 'ADMIN' : 'PLAYER'
+  const [factions, locations, clocks] = await Promise.all([
+    present('FACTION')
+      ? prisma.faction.findMany({
+          where: { campaignId, ...visibleTo('faction', role) },
+          select: { name: true, threatLevel: true, stability: true, influence: true, military: true, isActive: true },
+        })
+      : [],
+    present('LOCATION')
+      ? prisma.location.findMany({
+          where: { campaignId, ...visibleTo('location', role) },
+          select: { name: true, conditionScore: true, isContested: true, weather: true, weatherSeverity: true },
+        })
+      : [],
+    present('CLOCK')
+      ? prisma.clock.findMany({
+          where: { campaignId, ...visibleTo('clock', role) },
+          select: { name: true, currentTicks: true, maxTicks: true, category: true },
+        })
+      : [],
+  ])
+
+  const factionByName = new Map(factions.map((f) => [f.name.toLowerCase(), f]))
+  const locationByName = new Map(locations.map((l) => [l.name.toLowerCase(), l]))
+  const clockByName = new Map(clocks.map((c) => [c.name.toLowerCase(), c]))
+
+  return entries.map((entry) => {
+    const key = entry.name.toLowerCase()
+    if (entry.entryType === 'FACTION') {
+      const f = factionByName.get(key)
+      return f
+        ? {
+            ...entry,
+            stats: {
+              kind: 'FACTION' as const,
+              threatLevel: f.threatLevel,
+              stability: f.stability,
+              influence: f.influence,
+              military: f.military,
+              isActive: f.isActive,
+            },
+          }
+        : entry
+    }
+    if (entry.entryType === 'LOCATION') {
+      const l = locationByName.get(key)
+      return l
+        ? {
+            ...entry,
+            stats: {
+              kind: 'LOCATION' as const,
+              conditionScore: l.conditionScore,
+              // Derived by the same helper the tick uses, so the card can
+              // never disagree with the simulation about what "RUINED"
+              // means (see locationConditionTick.ts).
+              conditionTags: deriveConditionTags(l.conditionScore, l.isContested),
+              weather: l.weather,
+              weatherSeverity: l.weatherSeverity,
+            },
+          }
+        : entry
+    }
+    if (entry.entryType === 'CLOCK') {
+      const c = clockByName.get(key)
+      return c
+        ? {
+            ...entry,
+            stats: {
+              kind: 'CLOCK' as const,
+              currentTicks: c.currentTicks,
+              maxTicks: c.maxTicks,
+              category: c.category,
+            },
+          }
+        : entry
+    }
+    return entry
+  })
+}
+
 // GET /api/campaigns/[id]/wiki - Get wiki entries
 export async function GET(
   request: NextRequest,
@@ -233,7 +346,12 @@ export async function GET(
     // never gets a chance to match an entry the user shouldn't see exists.
     const combined = await attachMyNpcStanding(campaignId, user.userId, [...visibleEntries, ...stubs])
 
-    return NextResponse.json({ entries: combined })
+    // Live simulation numbers for the /world browser's cards. Runs last,
+    // for the same reason the standing enrichment runs after filtering: it
+    // only ever decorates rows that already survived fog of war.
+    const withStats = await attachEntityStats(campaignId, isAdmin, combined)
+
+    return NextResponse.json({ entries: withStats })
   } catch (error) {
     console.error('Error fetching wiki entries:', error)
     return NextResponse.json({ error: 'Failed to fetch wiki entries' }, { status: 500 })

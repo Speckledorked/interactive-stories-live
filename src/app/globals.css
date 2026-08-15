@@ -166,25 +166,35 @@
   background: none;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar.
+ *
+ * Previously hard-coded to a gold gradient on a #0c0705 track — i.e. a
+ * near-black scrollbar sitting next to warm parchment in light mode. Now
+ * token-driven, so it follows the theme like everything else. */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0c0705;
-  border-radius: 8px;
+  background: rgb(var(--myth-surface-sunken));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #a87b2c 0%, #c99a3a 100%);
+  background: rgb(var(--myth-border-strong));
   border-radius: 8px;
-  border: 2px solid #0c0705;
+  border: 2px solid rgb(var(--myth-surface-sunken));
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #c99a3a 0%, #dcae47 100%);
+  background: rgb(var(--myth-ink-faint));
+}
+
+/* Firefox equivalent — the -webkit- rules above are Chromium/WebKit only,
+ * so without this Firefox kept the default OS scrollbar regardless of theme. */
+* {
+  scrollbar-color: rgb(var(--myth-border-strong)) rgb(var(--myth-surface-sunken));
+  scrollbar-width: thin;
 }
 
 /* Thin scrollbar for horizontal scrolling areas */
@@ -198,12 +208,12 @@
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #5c421c;
+  background: rgb(var(--myth-border));
   border-radius: 4px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #855f24;
+  background: rgb(var(--myth-border-strong));
 }
 
 /* Mobile-specific overrides */
@@ -220,124 +230,79 @@
   }
 }
 
-/* Base styles */
+/* Base styles.
+ *
+ * `body` was `bg-tavern-950 text-gray-100` with two tavern-toned radial
+ * gradients — the old permanently-dark palette, applied regardless of
+ * theme. Every migrated page only looked right because TavernBackground's
+ * fixed, full-bleed layer painted over it; anything that scrolled past
+ * that layer, or rendered before it mounted, showed the old dark ground
+ * under a light-mode page. Now token-driven, so the base matches the
+ * theme and TavernBackground layers depth on top rather than covering a
+ * mistake. */
 body {
-  @apply bg-tavern-950 text-gray-100;
-  background-image:
-    radial-gradient(at 0% 0%, rgba(220, 174, 71, 0.05) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(139, 58, 58, 0.04) 0px, transparent 50%);
-  background-attachment: fixed;
+  @apply bg-myth-canvas text-myth-ink;
 }
 
 /* Text selection */
 ::selection {
-  @apply bg-ember-500/30 text-white;
+  @apply bg-myth-accent/30;
 }
 
-/* Custom utility classes — tavern theme */
+/* Suppress the grey flash iOS/Android draw over a tapped element. Every
+ * interactive primitive already sets `touch-manipulation` (see
+ * src/components/ui/styles.ts) to kill the 300ms double-tap delay; this
+ * is the other half, and it belongs here rather than per component. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Component classes.
+ *
+ * Twelve classes were deleted from this block during the Phase 0
+ * foundation pass — .card, .card-glass, .card-header, .modal-overlay,
+ * .modal-content, .badge, .badge-primary/-success/-warning/-danger,
+ * .divider, .btn-danger, .btn-ghost and .glow-on-hover. Every one was
+ * still on the old ember/wine/tavern palette, and every one had zero
+ * call sites (verified by grepping for both the quoted class name and
+ * its use inside a className attribute — the only remaining matches were
+ * the words appearing in prose comments). They are replaced by real
+ * components under src/components/ui/, which is where a variant belongs:
+ * a CSS class can't enforce a focus ring or a touch target, and the
+ * absence of those was the app's most widespread UI defect.
+ *
+ * What's left below is the short list that still has real callers.
+ * .btn-primary/.btn-secondary/.input-field are used only by
+ * EnhancedCreateCharacterForm.tsx and .spinner by five files; both go
+ * away in the Phase 0 adoption sweep, when those files move to <Button>,
+ * <Input> and <Spinner>. Retokened here in the meantime so nothing
+ * renders old-palette in the interim. */
 @layer components {
-  /* Buttons */
-  /* .btn-primary/.btn-secondary/.input-field below are the myth (light
-     parchment) tokens, not tavern — they're used exclusively by
-     EnhancedCreateCharacterForm.tsx, which renders inside myth-chrome
-     pages. Confirmed via grep before changing: no other component uses
-     these three classes, so this can't regress a still-tavern page. */
   .btn-primary {
     @apply relative bg-myth-accent hover:bg-myth-accent-hover
-           text-myth-accent-ink font-semibold py-2.5 px-5 rounded-xl shadow-sm
+           text-myth-accent-ink font-semibold py-2.5 px-5 rounded-lg shadow-sm
            transition-all duration-200 hover:shadow-md
            active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
   }
 
   .btn-secondary {
-    @apply relative bg-myth-surface hover:bg-myth-surface-sunken text-myth-ink-muted font-semibold py-2.5 px-5 rounded-xl
+    @apply relative bg-myth-surface hover:bg-myth-surface-sunken text-myth-ink-muted font-semibold py-2.5 px-5 rounded-lg
            border border-myth-border hover:border-myth-border-strong shadow-sm
            transition-all duration-200 hover:shadow-md;
   }
 
-  .btn-danger {
-    @apply relative bg-gradient-to-r from-wine-700 to-wine-600 hover:from-wine-600 hover:to-wine-500
-           text-ember-100 font-semibold py-2.5 px-5 rounded-xl shadow-lg shadow-black/30
-           transition-all duration-200 hover:shadow-xl hover:scale-[1.02]
-           active:scale-[0.98];
-  }
-
-  .btn-ghost {
-    @apply relative text-ember-300/70 hover:text-ember-100 font-medium py-2 px-4 rounded-lg
-           hover:bg-white/5 transition-all duration-200;
-  }
-
-  /* Input Fields */
+  /* text-base on mobile: a smaller font makes iOS Safari zoom the
+     viewport on focus. Matches FIELD_BASE in src/components/ui/styles.ts. */
   .input-field {
     @apply w-full px-4 py-2.5 bg-myth-surface border border-myth-border
-           rounded-xl text-myth-ink placeholder:text-myth-ink-faint
+           rounded-lg text-base sm:text-sm text-myth-ink placeholder:text-myth-ink-faint
            focus:ring-2 focus:ring-myth-accent/40 focus:border-myth-accent
            outline-none transition-all duration-200;
   }
 
-  /* Cards */
-  .card {
-    @apply bg-gradient-to-br from-tavern-800/70 to-tavern-900/70 backdrop-blur-md
-           rounded-2xl border border-ember-900/30 p-6 shadow-lg shadow-black/30
-           hover:border-ember-700/40
-           transition-all duration-300;
-  }
-
-  .card-glass {
-    @apply bg-black/30 backdrop-blur-xl rounded-2xl border border-white/5 p-6
-           shadow-2xl shadow-black/50 hover:border-white/10 transition-all duration-300;
-  }
-
-  .card-header {
-    @apply text-xl font-bold mb-4 text-ember-100 tracking-tight;
-  }
-
-  /* Modal Overlay */
-  .modal-overlay {
-    @apply fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4
-           animate-fade-in;
-  }
-
-  .modal-content {
-    @apply bg-gradient-to-br from-tavern-800 to-tavern-950 rounded-2xl border border-ember-900/40
-           shadow-2xl shadow-black/50 max-w-2xl w-full max-h-[90vh] overflow-y-auto
-           animate-scale-in;
-  }
-
-  /* Badge */
-  .badge {
-    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
-           border backdrop-blur-sm;
-  }
-
-  .badge-primary {
-    @apply bg-ember-500/10 border-ember-500/20 text-ember-400;
-  }
-
-  .badge-success {
-    @apply bg-success-500/10 border-success-500/20 text-success-400;
-  }
-
-  .badge-warning {
-    @apply bg-warning-500/10 border-warning-500/20 text-warning-400;
-  }
-
-  .badge-danger {
-    @apply bg-wine-500/10 border-wine-500/20 text-wine-400;
-  }
-
-  /* Divider */
-  .divider {
-    @apply h-px bg-gradient-to-r from-transparent via-ember-900/40 to-transparent;
-  }
-
-  /* Loading Spinner */
+  /* border-current rather than a fixed colour, so a spinner is legible on
+     an accent fill and on the canvas without per-call-site handling. */
   .spinner {
-    @apply animate-spin rounded-full border-b-2 border-ember-400;
-  }
-
-  /* Glow Effect */
-  .glow-on-hover {
-    @apply hover:shadow-glow transition-shadow duration-300;
+    @apply animate-spin rounded-full border-2 border-current border-t-transparent;
   }
 }

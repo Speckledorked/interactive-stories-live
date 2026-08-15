@@ -302,7 +302,7 @@ export function DynamicDowntimeManager({
 
                 <div className="flex justify-end space-x-2">
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     onClick={() => setCreateModal(prev => ({ ...prev, isOpen: false }))}
                   >
                     Cancel
@@ -379,7 +379,7 @@ export function DynamicDowntimeManager({
                     <div className="flex items-center gap-2 mb-2">
                       {getEventIcon('opportunity')}
                       <span className="font-medium text-myth-ink">{event.title}</span>
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="neutral" className="text-xs">
                         Day {event.day}
                       </Badge>
                     </div>
@@ -508,7 +508,7 @@ export function DynamicDowntimeManager({
                             </div>
                             <p className="text-myth-ink-muted">{event.description}</p>
                             {event.choices && !event.resolvedAt && (
-                              <Badge variant="secondary" className="text-xs mt-1">
+                              <Badge variant="neutral" className="text-xs mt-1">
                                 Awaiting Your Response
                               </Badge>
                             )}
@@ -606,7 +606,7 @@ export function DynamicDowntimeManager({
 
               <div className="flex justify-end space-x-2">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => setEventResponse(prev => ({ ...prev, isOpen: false }))}
                 >
                   Cancel

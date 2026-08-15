@@ -1,25 +1,41 @@
-import React from 'react'
+// src/components/ui/badge.tsx
+//
+// Keeps the semantic variant set (which was already myth-native and is
+// used across the admin panels) and drops the four dead legacy variants
+// that were still wine/ember. Adds the three status variants the story
+// page's scene list needs — AWAITING / COMPLETE / LOCKED.
+//
+// All variants share one shape: a low-opacity tint of a single semantic
+// colour plus full-opacity text of that same colour.
 
-export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?:
-    | 'default'
-    | 'secondary'
-    | 'outline'
-    | 'destructive'
-    | 'gmOnly'
-    | 'visible'
-    | 'public'
-    | 'advanced'
-    | 'recommended'
-    | 'dangerous'
-    | 'optional'
+import React from 'react'
+import { cn } from './styles'
+
+export type BadgeVariant =
+  // Fog-of-war / visibility
+  | 'gmOnly'
+  | 'visible'
+  | 'public'
+  // Guidance
+  | 'advanced'
+  | 'recommended'
+  | 'dangerous'
+  | 'optional'
+  // Scene/job lifecycle
+  | 'awaiting'
+  | 'complete'
+  | 'locked'
+  | 'failed'
+  // Neutral default
+  | 'neutral'
+
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  variant?: BadgeVariant
+  /** Optional leading icon — a lucide component, never an emoji. */
+  icon?: React.ComponentType<{ className?: string }>
 }
 
-// MythOS semantic variants (gmOnly/visible/public/advanced/recommended/
-// dangerous/optional) share one shape: a low-opacity tint of a single
-// semantic color plus full-opacity text of that same color. "public" is
-// the one variant allowed to use the brass accent — see design brief.
-const semanticVariantStyles = {
+const VARIANTS: Record<BadgeVariant, string> = {
   gmOnly: 'bg-myth-info/10 text-myth-info',
   visible: 'bg-myth-good/10 text-myth-good',
   public: 'bg-myth-accent/10 text-myth-accent',
@@ -27,37 +43,29 @@ const semanticVariantStyles = {
   recommended: 'bg-myth-good/10 text-myth-good',
   dangerous: 'bg-myth-danger/10 text-myth-danger',
   optional: 'bg-myth-ink/5 text-myth-ink-muted',
-} as const
+  awaiting: 'bg-myth-good/10 text-myth-good',
+  complete: 'bg-myth-ink/5 text-myth-ink-muted',
+  locked: 'bg-myth-ink/5 text-myth-ink-faint',
+  failed: 'bg-myth-danger/10 text-myth-danger',
+  neutral: 'bg-myth-surface-sunken text-myth-ink-muted',
+}
 
-const legacyVariantStyles = {
-  default: 'bg-wine-600 text-ember-100',
-  secondary: 'bg-black/30 text-ember-200/80 border border-ember-900/30',
-  outline: 'border border-ember-900/40 bg-black/20 text-ember-200/80',
-  destructive: 'bg-wine-700 text-ember-100',
-} as const
-
-export const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
-  ({ className = '', variant = 'default', ...props }, ref) => {
-    if (variant in semanticVariantStyles) {
-      const semanticStyle = semanticVariantStyles[variant as keyof typeof semanticVariantStyles]
-      return (
-        <div
-          ref={ref}
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors ${semanticStyle} ${className}`}
-          {...props}
-        />
-      )
-    }
-
-    const legacyStyle = legacyVariantStyles[variant as keyof typeof legacyVariantStyles]
-    return (
-      <div
-        ref={ref}
-        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors ${legacyStyle} ${className}`}
-        {...props}
-      />
-    )
-  }
-)
-
-Badge.displayName = 'Badge'
+export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(function Badge(
+  { className = '', variant = 'neutral', icon: Icon, children, ...props },
+  ref
+) {
+  return (
+    <span
+      ref={ref}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider',
+        VARIANTS[variant],
+        className
+      )}
+      {...props}
+    >
+      {Icon && <Icon className="h-3 w-3 flex-shrink-0" />}
+      {children}
+    </span>
+  )
+})

@@ -2679,6 +2679,7 @@ model Transaction {
   createdAt     DateTime        @default(now())
 
   @@index([userId, createdAt])
+  @@index([type, createdAt])
   @@map("transactions")
 }
 
@@ -2703,6 +2704,7 @@ model AICostEntry {
 
   @@index([campaignId])
   @@index([sceneId])
+  @@index([createdAt])
 }
 
 //

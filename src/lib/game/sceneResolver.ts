@@ -268,6 +268,20 @@ async function performResolution(
     console.log(`Scene text length: ${aiResponse.scene_text.length}`)
     console.log(`Updates: ${summarizeWorldUpdates(aiResponse)}`)
 
+    // #273: X-Card safety re-check. The `scene` param captured at the top
+    // of resolveScene is now stale — the ~150s AI call above is exactly
+    // the window an X-Card pull mid-resolution needs to land in for the
+    // scene-level check (before the call) to have already passed. Without
+    // this, content generated after a pause was requested would still
+    // reach every player's screen — the opposite of what an X-Card is for.
+    // Fresh read, discard rather than persist/broadcast if it fired.
+    const freshScene = await prisma.scene.findUnique({ where: { id: sceneId }, select: { isPaused: true } })
+    if (freshScene?.isPaused) {
+      throw new Error(
+        'Scene resolution was discarded: a safety pause (X-Card) was activated while this resolution was in progress. A GM must resume the scene before resolving again.'
+      )
+    }
+
     // 5.5. Capture world state before applying updates (for transparency)
     console.log('📸 Capturing world state snapshot...')
     const beforeSnapshot = await captureWorldStateSnapshot(campaignId)

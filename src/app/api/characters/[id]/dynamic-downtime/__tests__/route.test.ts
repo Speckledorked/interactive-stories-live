@@ -131,6 +131,15 @@ describe('POST', () => {
     expect(AIDrivenDowntimeService.createDynamicActivity).not.toHaveBeenCalled()
   })
 
+  // #274: a moderation outage must fail closed, not silently let the
+  // description through as if it had been checked and found clean.
+  it('#274: fails closed with a 503 when the moderation check itself is unavailable', async () => {
+    ;(moderatePlayerText as any).mockResolvedValue({ flagged: true, categories: [], unavailable: true })
+    const response = await POST(postRequest({ description: 'anything' }), { params: { id: 'char1' } })
+    expect(response.status).toBe(503)
+    expect(AIDrivenDowntimeService.createDynamicActivity).not.toHaveBeenCalled()
+  })
+
   it('creates the activity for clean input', async () => {
     ;(AIDrivenDowntimeService.createDynamicActivity as any).mockResolvedValue({ id: 'a1' })
     const response = await POST(postRequest({ description: 'Go fishing' }), { params: { id: 'char1' } })

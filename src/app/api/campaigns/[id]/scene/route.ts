@@ -174,6 +174,12 @@ export async function POST(
     })
     const moderationLevel = campaignForModeration?.contentModerationLevel === 'strict' ? 'strict' : 'standard'
     const moderation = await moderatePlayerText(actionText, moderationLevel)
+    if (moderation.unavailable) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Safety check unavailable right now — please try again in a moment.' },
+        { status: 503 }
+      )
+    }
     if (moderation.flagged) {
       return NextResponse.json<ErrorResponse>(
         { error: `Your action was blocked by content moderation (${moderation.categories.join(', ')}). Please rephrase it.` },

@@ -89,6 +89,15 @@ describe('POST', () => {
     expect(AIDrivenDowntimeService.respondToDynamicEvent).not.toHaveBeenCalled()
   })
 
+  // #274: a moderation outage must fail closed, not silently let the
+  // response through as if it had been checked and found clean.
+  it('#274: fails closed with a 503 when the moderation check itself is unavailable', async () => {
+    ;(moderatePlayerText as any).mockResolvedValue({ flagged: true, categories: [], unavailable: true })
+    const response = await POST(req({ response: 'anything' }), { params: { id: 'event1' } })
+    expect(response.status).toBe(503)
+    expect(AIDrivenDowntimeService.respondToDynamicEvent).not.toHaveBeenCalled()
+  })
+
   it('responds to the event for clean input', async () => {
     ;(AIDrivenDowntimeService.respondToDynamicEvent as any).mockResolvedValue({ outcome: 'success' })
     const response = await POST(req({ response: 'I flee' }), { params: { id: 'event1' } })

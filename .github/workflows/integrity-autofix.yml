@@ -268,7 +268,7 @@ jobs:
           echo "Revert conflicted — aborting cleanly and filing a tracking issue instead of forcing it."
           git revert --abort
 
-          already_open=$(gh issue list --label "revert-conflict:${CHECK_KEY}" --state open --json number --jq 'length')
+          already_open=$(gh issue list --label "rvc:${CHECK_KEY}" --state open --json number --jq 'length')
           if [ "$already_open" -gt 0 ]; then
             echo "An open revert-conflict issue for ${CHECK_KEY} already exists — not filing a duplicate."
             exit 1
@@ -296,13 +296,13 @@ jobs:
             echo "_Filed automatically by the Integrity Engine's Phase 5 pipeline (revert-regression job)._"
           } > /tmp/issue_body.md
 
-          gh label create "revert-conflict:${CHECK_KEY}" \
+          gh label create "rvc:${CHECK_KEY}" \
             --color "B60205" \
             --description "A regression revert for this checkKey could not be applied automatically" \
             || echo "label create failed or already exists (see error above) — continuing"
           gh issue create \
             --title "Auto-fix revert conflict: ${CHECK_KEY}" \
-            --label "revert-conflict:${CHECK_KEY}" \
+            --label "rvc:${CHECK_KEY}" \
             --body-file /tmp/issue_body.md
 
           exit 1

@@ -52,6 +52,41 @@ const ICON_SIZES: Record<ButtonSize, string> = {
   lg: 'h-5 w-5',
 }
 
+/**
+ * The button's full class string, for the one case `Button` itself can't
+ * cover: a control that must render as an `<a>` because it navigates.
+ *
+ * This exists so "I need a button-shaped link" never again means
+ * hand-rolling the classes — which is exactly how EmptyState ended up
+ * with a 36px-tall, `rounded-md` action button that missed both the 44px
+ * touch rule and the app's single control radius. Prefer `<Button>`;
+ * reach for this only when the element genuinely has to be an anchor.
+ */
+export function buttonClasses({
+  variant = 'primary',
+  size = 'md',
+  fullWidth = false,
+  className = '',
+}: {
+  variant?: ButtonVariant
+  size?: ButtonSize
+  fullWidth?: boolean
+  className?: string
+} = {}): string {
+  return cn(
+    'inline-flex items-center justify-center font-medium transition-colors',
+    CONTROL_RADIUS,
+    TOUCH_TARGET,
+    SIZES[size],
+    VARIANTS[variant],
+    DISABLED,
+    fullWidth && 'w-full',
+    className,
+    // Last so a caller's className can never accidentally drop it.
+    FOCUS_RING
+  )
+}
+
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
     className = '',
@@ -76,18 +111,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cn(
-        'inline-flex items-center justify-center font-medium transition-colors',
-        CONTROL_RADIUS,
-        TOUCH_TARGET,
-        SIZES[size],
-        VARIANTS[variant],
-        DISABLED,
-        fullWidth && 'w-full',
-        className,
-        // Last so a caller's className can never accidentally drop it.
-        FOCUS_RING
-      )}
+      className={buttonClasses({ variant, size, fullWidth, className })}
       {...props}
     >
       {loading ? (

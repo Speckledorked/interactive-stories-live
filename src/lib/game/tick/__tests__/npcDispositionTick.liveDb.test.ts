@@ -160,4 +160,48 @@ describeIfDb('tickNpcDisposition — real database', () => {
 
     await prisma.campaign.delete({ where: { id: idempCampaignId } }).catch(() => {})
   })
+
+  // #283: the per-tick NPC cap ordered by importance desc alone — among
+  // NPCs tied at the same importance, the same subset (DB scan order) won
+  // the cap every single tick forever. npcDispositionTick.ts now appends
+  // the shared capOrdering.ts rotation key as a tiebreaker, so equally-
+  // important NPCs rotate through instead.
+  it('#283: rotates equally-important NPCs through the cap across consecutive ticks', async () => {
+    const campaign = await prisma.campaign.create({
+      data: { title: 'NPC Cap Rotation Live Test', aiSystemPrompt: 'test', initialWorldSeed: 'test' },
+    })
+    const rotationCampaignId = campaign.id
+    await prisma.worldMeta.create({ data: { campaignId: rotationCampaignId, currentTurnNumber: 2 } })
+
+    // 12 NPCs, all tied at the same major importance, against a cap of 5.
+    const npcIds: string[] = []
+    for (let i = 0; i < 12; i++) {
+      const n = await prisma.nPC.create({
+        data: { campaignId: rotationCampaignId, name: `Lieutenant ${i}`, importance: 5, isAlive: true },
+      })
+      npcIds.push(n.id)
+    }
+
+    const selectedEachTick: string[][] = []
+    for (let turn = 2; turn <= 4; turn++) {
+      const ctx: TickContext = {
+        campaignId: rotationCampaignId, turnNumber: turn, factionCap: 10, npcCap: 5, dryRun: false, db: prisma as any,
+      }
+      await tickNpcDisposition(ctx)
+
+      const rows = await prisma.nPC.findMany({
+        where: { campaignId: rotationCampaignId, lastTickedAt: { not: null } },
+        select: { id: true },
+      })
+      const tickedSoFar = new Set(rows.map((r) => r.id))
+      const newlyTicked = npcIds.filter((id) => tickedSoFar.has(id) && !selectedEachTick.flat().includes(id))
+      selectedEachTick.push(newlyTicked)
+    }
+
+    expect(new Set(selectedEachTick[0])).not.toEqual(new Set(selectedEachTick[1]))
+    const everTicked = new Set(selectedEachTick.flat())
+    expect(everTicked.size).toBe(12)
+
+    await prisma.campaign.delete({ where: { id: rotationCampaignId } }).catch(() => {})
+  })
 })

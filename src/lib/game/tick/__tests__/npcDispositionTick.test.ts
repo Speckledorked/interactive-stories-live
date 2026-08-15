@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    nPC: { findMany: vi.fn(), update: vi.fn() },
+    nPC: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     worldEvent: { findMany: vi.fn() },
     worldMeta: { findUnique: vi.fn(), updateMany: vi.fn() },
   },
@@ -345,7 +345,10 @@ describe('tickNpcDisposition (DB handler)', () => {
       expect.objectContaining({
         where: expect.objectContaining({ campaignId: 'campaign-1', isAlive: true, importance: { gte: 4 } }),
         take: 7,
-        orderBy: { importance: 'desc' },
+        // #283: importance desc is still the priority; the rotation key
+        // (lastTickedAt asc, nulls first) breaks ties instead of the same
+        // equally-important subset winning the cap forever.
+        orderBy: [{ importance: 'desc' }, { lastTickedAt: { sort: 'asc', nulls: 'first' } }],
       })
     )
   })

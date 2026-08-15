@@ -21,6 +21,7 @@ import type { Faction, FactionGoal } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, hasActiveRival, parseFactionRelationships } from './types'
 import { BeliefVector, parseBeliefVector } from './beliefTick'
 import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
+import { TICK_ROTATION_ORDER, markFactionsTicked } from './capOrdering'
 
 interface FactionDelta {
   resources: number
@@ -402,9 +403,11 @@ export function decideDefection(members: DefectionCandidate[]): DefectionDecisio
 export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult> {
   const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
-    orderBy: { createdAt: 'asc' },
+    orderBy: TICK_ROTATION_ORDER,
     take: ctx.factionCap,
   })
+  // #283: rotates which factions win the cap across ticks — see capOrdering.ts.
+  if (!ctx.dryRun) await markFactionsTicked(ctx.db, factions.map((f) => f.id))
 
   // #79: how long each faction has held its current goal, read back from
   // the `faction.goal` events the tick has always written. No new column —

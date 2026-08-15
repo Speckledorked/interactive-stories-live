@@ -24,6 +24,7 @@ import type { FactionGoal, Prisma } from '@prisma/client'
 import { band } from './factionTick'
 import { FactionRelationshipEntry, TickContext, TickHandlerResult } from './types'
 import { tickPairwiseTies } from './relationshipEngine'
+import { TICK_ROTATION_ORDER, markFactionsTicked } from './capOrdering'
 
 export type RelationshipType = 'RIVAL' | 'ALLY' | 'NEUTRAL'
 
@@ -53,9 +54,11 @@ export function decideRelationshipTick(
 export async function tickFactionRelationships(ctx: TickContext): Promise<TickHandlerResult> {
   const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
-    orderBy: { createdAt: 'asc' },
+    orderBy: TICK_ROTATION_ORDER,
     take: ctx.factionCap,
   })
+  // #283: rotates which factions win the cap across ticks — see capOrdering.ts.
+  if (!ctx.dryRun) await markFactionsTicked(ctx.db, factions.map((f) => f.id))
 
   // Full campaign roster (uncapped, defunct included) for two jobs below:
   // knowing which relationship entries point at factions that no longer

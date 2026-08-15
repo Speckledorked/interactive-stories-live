@@ -1037,6 +1037,14 @@ model NPC {
   // it's what lets a FAILED quest reach back to the person who gave it.
   questsGiven Quest[] @relation("QuestGiverNpc")
 
+  // #283: rotation state for the per-tick entity cap — see Faction's
+  // identical field for the full picture. npcTick.ts/npcDispositionTick.ts/
+  // npcSocietyTick.ts additionally order by importance desc first (an
+  // intentional priority, not the bug this fixes), with this field
+  // breaking ties among equally-important NPCs instead of the same
+  // importance-tied subset winning forever.
+  lastTickedAt DateTime?
+
   // Real uniqueness enforced by a case-insensitive functional index
   // (migration 20260729030000_phase1b_schema_invariants) — not expressible
   // as a Prisma @@unique, which can't target lower(name). Case-insensitive
@@ -1164,6 +1172,20 @@ model Faction {
   // #111: faction-to-faction debts — this faction as creditor/debtor.
   creditFactionDebts FactionDebt[] @relation("FactionDebtCreditor")
   debtFactionDebts   FactionDebt[] @relation("FactionDebtDebtor")
+
+  // #283: rotation state for the per-tick entity cap. Every tick handler
+  // that reads a capped slice of a campaign's factions (factionTick.ts,
+  // ambitionTick.ts, beliefTick.ts, leadershipTick.ts, relationshipTick.ts,
+  // seasonTick.ts, warTick.ts) used to order that slice by createdAt asc —
+  // a static key, so the same oldest-created factions won the cap every
+  // single tick forever, permanently starving anything created after a
+  // campaign first exceeded its cap (including splinter/succession
+  // factions the simulation itself spawns). Ordering by this field
+  // ascending instead (null sorts first — an untouched faction is
+  // maximally overdue) and bumping it to now for whatever a handler
+  // actually selects rotates every faction through the cap over time. See
+  // tick/capOrdering.ts.
+  lastTickedAt DateTime?
 
   // Real uniqueness enforced by a case-insensitive functional index
   // (migration 20260729030000_phase1b_schema_invariants) — see NPC's

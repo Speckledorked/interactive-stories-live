@@ -23,6 +23,7 @@
 
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
+import { TICK_ROTATION_ORDER, markNpcsTicked } from './capOrdering'
 import { ConsequenceAction } from '@/lib/ai/consequenceExtraction'
 
 export interface NpcDisposition {
@@ -202,11 +203,14 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
 
   const npcs = await ctx.db.nPC.findMany({
     where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
-    orderBy: { importance: 'desc' },
+    // #283: importance desc is the intentional priority; the rotation key
+    // breaks ties among equally-important NPCs — see capOrdering.ts.
+    orderBy: [{ importance: 'desc' }, TICK_ROTATION_ORDER],
     take: ctx.npcCap,
     select: { id: true, name: true, factionId: true, disposition: true },
   })
   if (npcs.length === 0) return { changes: [] }
+  if (!ctx.dryRun) await markNpcsTicked(ctx.db, npcs.map((n) => n.id))
 
   const changes: WorldChange[] = []
 

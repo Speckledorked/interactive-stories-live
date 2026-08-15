@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    faction: { findMany: vi.fn(), update: vi.fn() },
+    faction: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     worldEvent: { findMany: vi.fn() },
     worldMeta: { findUnique: vi.fn(), updateMany: vi.fn() },
   },

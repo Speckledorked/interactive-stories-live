@@ -712,8 +712,18 @@ async function attemptAIGM(
     devLog('✅ AI GM response received')
     devLog('Response length:', content.length)
 
-    // Phase 15.6: Debug mode - log raw prompts and response
-    if (options?.debugMode) {
+    // Phase 15.6: Debug mode - log raw prompts and response.
+    // #287: AI_DEBUG_MODE (sceneResolver.ts) is a DANGEROUS, dev-only
+    // switch — the dump below is the entire assembled prompt, including
+    // GM-only world-summary context that's legitimately in-prompt but not
+    // meant for casual log exposure. An accidental production toggle (or
+    // a leaked/misconfigured env value) would leak full campaign state
+    // into ordinary server logs, which may have weaker access controls
+    // than the database itself. Gated on NODE_ENV in addition to the flag
+    // itself so a misconfigured production env var can't accidentally
+    // enable it — this can never fire in a production build no matter
+    // what AI_DEBUG_MODE is set to.
+    if (options?.debugMode && process.env.NODE_ENV !== 'production') {
       console.log('🐛 DEBUG MODE - Raw AI Data:')
       console.log('System Prompt:', systemPrompt)
       console.log('User Prompt:', userPrompt)

@@ -102,6 +102,55 @@ describe('callAIGM — multi-model fallback (#116)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  // #287: AI_DEBUG_MODE dumps the full raw prompt (including GM-only
+  // world-summary context) to server logs — a dangerous, dev-only switch.
+  // A misconfigured/leaked production env value must not be able to
+  // enable it, so this is gated on NODE_ENV in addition to the flag.
+  describe('debug mode logging (#287)', () => {
+    let consoleLogSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      consoleLogSpy.mockRestore()
+    })
+
+    it('dumps the raw prompt/response when debugMode is on outside production', async () => {
+      vi.stubEnv('NODE_ENV', 'development')
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(validContent))
+      vi.stubGlobal('fetch', fetchMock)
+
+      await callAIGM(makeRequest(), 'campaign-debug-dev', undefined, { debugMode: true })
+
+      const logged = consoleLogSpy.mock.calls.map((call: unknown[]) => call[0])
+      expect(logged).toContain('🐛 DEBUG MODE - Raw AI Data:')
+    })
+
+    it('never dumps the raw prompt/response when NODE_ENV is production, even with debugMode on', async () => {
+      vi.stubEnv('NODE_ENV', 'production')
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(validContent))
+      vi.stubGlobal('fetch', fetchMock)
+
+      await callAIGM(makeRequest(), 'campaign-debug-prod', undefined, { debugMode: true })
+
+      const logged = consoleLogSpy.mock.calls.map((call: unknown[]) => call[0])
+      expect(logged).not.toContain('🐛 DEBUG MODE - Raw AI Data:')
+    })
+
+    it('does not dump when debugMode is off, regardless of NODE_ENV', async () => {
+      vi.stubEnv('NODE_ENV', 'development')
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(validContent))
+      vi.stubGlobal('fetch', fetchMock)
+
+      await callAIGM(makeRequest(), 'campaign-debug-off')
+
+      const logged = consoleLogSpy.mock.calls.map((call: unknown[]) => call[0])
+      expect(logged).not.toContain('🐛 DEBUG MODE - Raw AI Data:')
+    })
+  })
+
   it('skips straight to the EFFICIENT fallback when the circuit breaker is already open', async () => {
     const campaignId = 'campaign-circuit-open'
     const breaker = circuitBreakerManager.getBreaker(campaignId)

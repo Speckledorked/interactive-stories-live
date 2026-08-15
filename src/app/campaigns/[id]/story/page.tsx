@@ -44,6 +44,7 @@ import { Badge } from '@/components/ui/badge'
 import { Timeline, TimelineItem } from '@/components/ui/timeline'
 import { UI_ICONS } from '@/lib/ui/icons'
 import { HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
+import { TOUCH_HEIGHT } from '@/components/ui/styles'
 
 // Whether `characterId` may act in `scene` — participants is null for a
 // genuinely open scene (anyone can act; membership grows dynamically as
@@ -1087,10 +1088,10 @@ export default function StoryPage() {
         isAdmin={isAdmin}
         subrow={
           <div className="max-w-7xl mx-auto px-4 flex items-center justify-between gap-3 border-t border-myth-border pt-2 pb-0">
-            <nav className="flex items-center gap-1 overflow-x-auto text-sm">
+            <nav className="flex items-center gap-2 overflow-x-auto text-sm">
               <SubNavTabs tabs={storyTabs} activeKey="story" itemClassName="whitespace-nowrap flex-shrink-0" />
             </nav>
-            <div className="flex items-center gap-1 flex-shrink-0 pb-1.5">
+            <div className="flex items-center gap-2 flex-shrink-0 pb-1.5">
               <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
               <ReportContentModal campaignId={campaignId} />
               <IconButton
@@ -1576,7 +1577,7 @@ export default function StoryPage() {
                       <button
                         type="button"
                         onClick={() => setShowAskGm(prev => ({ ...prev, [scene.id]: !prev[scene.id] }))}
-                        className="flex items-center justify-between w-full text-left"
+                        className={`flex items-center justify-between w-full text-left ${TOUCH_HEIGHT}`}
                       >
                         <div>
                           <h3 className="flex items-center gap-1.5 text-sm font-medium text-myth-ink-muted"><MessageSquare className="h-4 w-4" />Ask the GM</h3>

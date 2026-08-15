@@ -94,7 +94,7 @@ export default function CharactersListPage() {
         campaignId={campaignId}
         isAdmin={userRole === 'ADMIN'}
         subrow={
-          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-myth-border pt-2 pb-0">
+          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-2 text-sm border-t border-myth-border pt-2 pb-0">
             <SubNavTabs
               tabs={[
                 { key: 'overview', label: 'Overview', icon: Home, href: `/campaigns/${campaignId}` },
@@ -156,7 +156,7 @@ export default function CharactersListPage() {
 
                 {character.user && (
                   <div className="mt-4 border-t border-myth-border pt-4">
-                    <p className="flex items-center gap-1 text-xs text-myth-ink-faint">
+                    <p className="flex items-center gap-2 text-xs text-myth-ink-faint">
                       <User className="h-3 w-3" />
                       {character.user.name || character.user.email || 'Unknown'}
                     </p>

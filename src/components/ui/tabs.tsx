@@ -54,7 +54,7 @@ export function Tabs<K extends string = string>({
       aria-label={ariaLabel}
       className={cn(
         'flex items-center overflow-x-auto',
-        underline ? 'gap-1 border-b border-myth-border' : 'gap-1 rounded-lg bg-myth-surface-sunken p-1',
+        underline ? 'gap-2 border-b border-myth-border' : 'gap-2 rounded-lg bg-myth-surface-sunken p-1',
         className
       )}
     >

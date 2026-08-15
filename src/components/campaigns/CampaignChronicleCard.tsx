@@ -89,7 +89,7 @@ export function CampaignChronicleCard({
       )}
 
       {userRole === 'ADMIN' && (
-        <div className="absolute right-3 top-3 z-10 flex gap-1.5 opacity-80 transition-opacity group-hover:opacity-100">
+        <div className="absolute right-3 top-3 z-10 flex gap-2 opacity-80 transition-opacity group-hover:opacity-100">
           <IconButton
             icon={Pencil}
             label="Edit campaign"

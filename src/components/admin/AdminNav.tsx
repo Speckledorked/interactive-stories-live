@@ -5,6 +5,7 @@ import { Menu, X, ChevronDown } from 'lucide-react'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { TOUCH_HEIGHT } from '@/components/ui/styles'
 
 export type AdminTabKey =
   | 'overview'
@@ -108,7 +109,7 @@ function NavList({
               key={group.key}
               type="button"
               onClick={() => onSelect(item.key)}
-              className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+              className={`flex w-full items-center ${TOUCH_HEIGHT} rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 isActive
                   ? 'bg-myth-accent/10 font-medium text-myth-accent'
                   : 'text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink'
@@ -124,7 +125,7 @@ function NavList({
             <button
               type="button"
               onClick={() => onToggleGroup(group.key)}
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-mono uppercase tracking-wider transition-colors ${
+              className={`flex w-full items-center justify-between ${TOUCH_HEIGHT} rounded-lg px-3 py-2 text-left text-xs font-mono uppercase tracking-wider transition-colors ${
                 isActiveGroup ? 'text-myth-ink' : 'text-myth-ink-faint hover:text-myth-ink-muted'
               }`}
               aria-expanded={expanded}

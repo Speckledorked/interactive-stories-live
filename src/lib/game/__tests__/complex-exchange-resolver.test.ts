@@ -6,7 +6,7 @@
 // computed.
 
 import { describe, it, expect } from 'vitest'
-import { ComplexExchangeResolver, compareActionsByOutcome, rankActionsByOutcome, MicroExchange } from '../complex-exchange-resolver'
+import { ComplexExchangeResolver, compareActionsByOutcome, rankActionsByOutcome, MicroExchange, ExchangeRosterEntity } from '../complex-exchange-resolver'
 import { ActionPriority } from '../exchange-manager'
 import type { ActionMechanics } from '../resolution'
 
@@ -71,6 +71,9 @@ describe('rankActionsByOutcome', () => {
 
 describe('ComplexExchangeResolver.detectConflicts', () => {
   const resolver = new ComplexExchangeResolver('camp1', 'scene1')
+  const guardCaptain: ExchangeRosterEntity = { id: 'npc-guard-captain', name: 'Guard Captain' }
+  const ogre: ExchangeRosterEntity = { id: 'npc-ogre', name: 'the Ogre' }
+  const roster: ExchangeRosterEntity[] = [guardCaptain, ogre]
 
   function microExchange(actions: any[]): MicroExchange {
     return { id: 'm1', priority: ActionPriority.IMMEDIATE_COMBAT, actions, description: 'test', sequenceOrder: 0 }
@@ -85,7 +88,7 @@ describe('ComplexExchangeResolver.detectConflicts', () => {
       ['attack-1', mechanics('strongHit', 11)],
       ['negotiate-1', mechanics('miss', 5)],
     ])
-    const conflicts = resolver.detectConflicts(microExchange(actions), m)
+    const conflicts = resolver.detectConflicts(microExchange(actions), m, roster)
     expect(conflicts).toHaveLength(1)
     expect(conflicts[0].type).toBe('contradictory')
     expect(conflicts[0].resolutionOrder).toEqual(['Rook', 'Sable'])
@@ -103,7 +106,7 @@ describe('ComplexExchangeResolver.detectConflicts', () => {
       ['a1', mechanics('weakHit', 8)],
       ['a2', mechanics('strongHit', 10)],
     ])
-    const conflicts = resolver.detectConflicts(microExchange(actions), m)
+    const conflicts = resolver.detectConflicts(microExchange(actions), m, roster)
     expect(conflicts).toHaveLength(1)
     expect(conflicts[0].type).toBe('simultaneous')
     expect(conflicts[0].resolutionOrder).toEqual(['Bramble', 'Ashen'])
@@ -114,13 +117,50 @@ describe('ComplexExchangeResolver.detectConflicts', () => {
       { id: 'attack-1', character: { name: 'Rook' }, actionText: 'attack the guard captain' },
       { id: 'negotiate-1', character: { name: 'Sable' }, actionText: 'negotiate with the guard captain' },
     ]
-    const conflicts = resolver.detectConflicts(microExchange(actions))
+    const conflicts = resolver.detectConflicts(microExchange(actions), undefined, roster)
     expect(conflicts).toHaveLength(1)
     expect(conflicts[0].resolutionOrder).toEqual(['Rook', 'Sable'])
     expect(conflicts[0].resolution).toContain('no roll on record')
   })
 
   it('returns no conflicts for fewer than two actions', () => {
-    expect(resolver.detectConflicts(microExchange([{ id: 'a', character: { name: 'Solo' }, actionText: 'attack the ogre' }]))).toEqual([])
+    expect(resolver.detectConflicts(microExchange([{ id: 'a', character: { name: 'Solo' }, actionText: 'attack the ogre' }]), undefined, roster)).toEqual([])
+  })
+
+  // #294: the old single-word regex extracted a different word from each of
+  // these two phrasings ("captain" vs "guard") and never detected the
+  // conflict at all. Roster-based resolution requires every significant
+  // word of the entity's real name ("Guard", "Captain") to appear
+  // somewhere in the text, in any order, so both phrasings resolve to the
+  // same npc-guard-captain id despite sharing no contiguous substring.
+  it('detects a conflict across naturalistic phrasing a fixed-pattern regex could not', () => {
+    const actions = [
+      { id: 'attack-1', character: { name: 'Rook' }, actionText: 'Attack the captain of the guard!' },
+      { id: 'negotiate-1', character: { name: 'Sable' }, actionText: 'I want to negotiate with the guard captain instead.' },
+    ]
+    const m = new Map([
+      ['attack-1', mechanics('strongHit', 11)],
+      ['negotiate-1', mechanics('miss', 5)],
+    ])
+    const conflicts = resolver.detectConflicts(microExchange(actions), m, roster)
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0].type).toBe('contradictory')
+    expect(conflicts[0].resolution).toContain('Guard Captain')
+  })
+
+  it('does not flag two actions against different roster entities as conflicting', () => {
+    const actions = [
+      { id: 'attack-1', character: { name: 'Rook' }, actionText: 'attack the guard captain' },
+      { id: 'attack-2', character: { name: 'Sable' }, actionText: 'attack the ogre' },
+    ]
+    expect(resolver.detectConflicts(microExchange(actions), undefined, roster)).toEqual([])
+  })
+
+  it('finds no conflict when the roster is empty, rather than falling back to a text heuristic', () => {
+    const actions = [
+      { id: 'attack-1', character: { name: 'Rook' }, actionText: 'attack the guard captain' },
+      { id: 'negotiate-1', character: { name: 'Sable' }, actionText: 'negotiate with the guard captain' },
+    ]
+    expect(resolver.detectConflicts(microExchange(actions))).toEqual([])
   })
 })

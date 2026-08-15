@@ -221,7 +221,11 @@ export async function buildSceneResolutionRequest(
   if (scene.playerActions.length > 3) {
     console.log('🔀 Complex exchange detected - generating narrative sequence')
     const resolver = new ComplexExchangeResolver(campaignId, sceneId)
-    const complexExchange = await resolver.resolveComplexExchange(mechanicsByActionId)
+    // #294: resolve action targets against the scene's real roster instead
+    // of a fixed-pattern regex — entities is already fetched above for the
+    // world summary, so this adds no extra query.
+    const conflictRoster = [...entities.characters, ...entities.npcs].map((e) => ({ id: e.id, name: e.name }))
+    const complexExchange = await resolver.resolveComplexExchange(mechanicsByActionId, conflictRoster)
 
     exchangeGuidance = complexExchange.narrativeSequence
 

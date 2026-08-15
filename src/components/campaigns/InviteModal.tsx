@@ -83,8 +83,11 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
 
   if (!isOpen) return null
 
+  // The backdrop is bg-black/70, matching ui/dialog.tsx. The palette sweep
+  // rewrote this scrim to an opaque bg-myth-surface-sunken, which hid the
+  // page behind a flat panel instead of dimming it.
   return (
-    <div className="fixed inset-0 bg-myth-surface-sunken flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-myth-surface-raised border border-myth-border rounded-lg shadow-2xl shadow-black/50 max-w-2xl w-full max-h-[80vh] overflow-hidden">
         <div className="p-6 border-b border-myth-border">
           <div className="flex justify-between items-center">
@@ -125,7 +128,7 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
-                      <p className="text-xs text-myth-gold font-mono mb-1">
+                      <p className="text-xs text-myth-ink-faint font-mono mb-1">
                         {invite.token}
                       </p>
                       <div className="flex items-center gap-2 text-sm text-myth-ink">
@@ -137,7 +140,7 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
                       </div>
                     </div>
                     {invite.isExpired && (
-                      <span className="text-xs bg-myth-danger text-myth-danger px-2 py-1 rounded">
+                      <span className="text-xs bg-myth-danger/10 text-myth-danger px-2 py-1 rounded">
                         Expired
                       </span>
                     )}

@@ -296,7 +296,7 @@ export default function NotificationPanel({
               <Spinner className="h-8 w-8" />
             </div>
           ) : notifications.length === 0 ? (
-            <div className="text-center p-8 text-myth-gold">
+            <div className="text-center p-8 text-myth-ink-faint">
               <Inbox className="mx-auto mb-2 h-8 w-8 text-myth-ink-faint" />
               <p>No notifications</p>
             </div>
@@ -338,7 +338,7 @@ export default function NotificationPanel({
                         {notification.message}
                       </p>
                       <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs text-myth-gold">
+                        <span className="text-xs text-myth-ink-faint">
                           {getRelativeTime(notification.createdAt)}
                         </span>
                         {notification.campaign && (

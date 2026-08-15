@@ -148,7 +148,11 @@ module.exports = {
         // Semantic palette — separate from the accent, never reused for it.
         'myth-good': 'rgb(var(--myth-good) / <alpha-value>)',
         'myth-warn': 'rgb(var(--myth-warn) / <alpha-value>)',
-        'myth-danger': 'rgb(var(--myth-danger) / <alpha-value>)',
+        'myth-danger': {
+          DEFAULT: 'rgb(var(--myth-danger) / <alpha-value>)',
+          // Readable text ON a solid danger fill; flips per theme.
+          ink: 'rgb(var(--myth-danger-ink) / <alpha-value>)',
+        },
         'myth-info': 'rgb(var(--myth-info) / <alpha-value>)',
         // Decorative "world/lore" gold — never a semantic state color.
         'myth-gold': 'rgb(var(--myth-gold) / <alpha-value>)',

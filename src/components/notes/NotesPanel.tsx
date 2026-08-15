@@ -384,7 +384,7 @@ export default function NotesPanel({
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <h4 className="font-medium text-myth-ink">{note.title}</h4>
-                    <p className="text-xs text-myth-gold">
+                    <p className="text-xs text-myth-ink-faint">
                       {getEntityDisplay(note)} •
                       {note.visibility === 'PRIVATE' ? ' Private' : ' Shared'} •
                       by {note.author.name || note.author.email} •

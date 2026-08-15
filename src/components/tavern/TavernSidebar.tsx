@@ -238,14 +238,14 @@ export function TavernSidebar({
     <aside className="fixed left-0 top-0 bottom-0 z-30 hidden w-64 flex-col border-r border-myth-border bg-myth-surface lg:flex">
       <div className="flex flex-col items-center gap-3 border-b border-myth-gold/20 px-4 py-5">
         <div className="flex items-center gap-3">
-          <span className="text-xs tracking-widest text-myth-gold/50">◈──</span>
+          <span aria-hidden className="text-xs tracking-widest text-myth-gold/50">◈──</span>
           <h1 className="font-display text-xl tracking-[0.15em] text-myth-gold">MythOS</h1>
-          <span className="text-xs tracking-widest text-myth-gold/50">──◈</span>
+          <span aria-hidden className="text-xs tracking-widest text-myth-gold/50">──◈</span>
         </div>
         {/* The tagline is context-dependent on purpose: inside a campaign
             this rail is the game-master console, and at account level it's
             the product's own line. */}
-        <p className="-mt-2 text-[11px] tracking-[0.2em] text-myth-gold/60">
+        <p className="-mt-2 text-[11px] tracking-[0.2em] text-myth-gold">
           {campaignHome ? 'AI GAME MASTER' : 'THE WORLD REMEMBERS.'}
         </p>
       </div>

@@ -8,12 +8,20 @@
 
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useSyncExternalStore, Suspense } from 'react'
 import Link from 'next/link'
 import { Bell, UserCircle, Menu, ArrowLeft } from 'lucide-react'
 import { displayFont } from '@/lib/tavernTheme'
 import { getUser } from '@/lib/clientAuth'
 import { TavernMobileMenu } from './TavernMobileMenu'
+import { useUnreadCount } from '@/hooks/useUnreadCount'
+import {
+  closeMobileMenu,
+  getMobileMenuOpen,
+  getMobileMenuServerSnapshot,
+  openMobileMenu,
+  subscribeMobileMenu,
+} from './mobileMenuStore'
 import { TavernSidebar } from './TavernSidebar'
 import NotificationPanel from '@/components/notifications/NotificationPanel'
 import { IconButton } from '@/components/ui/icon-button'
@@ -44,8 +52,12 @@ export function TavernHeader({
    * background to stay legible over scrolling content. */
   minimalHeaderAtDesktop?: boolean
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
+  // The drawer's open state lives in a module store rather than here,
+  // because TavernNav's "More" tab opens the same drawer from a sibling
+  // subtree this component can't reach (see mobileMenuStore.ts).
+  const menuOpen = useSyncExternalStore(subscribeMobileMenu, getMobileMenuOpen, getMobileMenuServerSnapshot)
   const [notifOpen, setNotifOpen] = useState(false)
+  const unreadCount = useUnreadCount()
   const user = getUser()
   const myth = variant === 'myth'
 
@@ -111,7 +123,8 @@ export function TavernHeader({
         <div className="flex items-center gap-0.5 flex-shrink-0">
           <IconButton
             icon={Bell}
-            label="Notifications"
+            label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+            badge={unreadCount}
             variant={myth ? 'ghost' : undefined}
             className={myth ? undefined : 'text-ember-300/80 hover:text-ember-200'}
             onClick={() => setNotifOpen(true)}
@@ -121,7 +134,7 @@ export function TavernHeader({
             label="Menu"
             variant={myth ? 'ghost' : undefined}
             className={myth ? undefined : 'text-ember-300/80 hover:text-ember-200'}
-            onClick={() => setMenuOpen(true)}
+            onClick={openMobileMenu}
           />
           <Link href="/settings" className={iconButtonClass} aria-label="Profile">
             <UserCircle className="w-5 h-5" />
@@ -137,7 +150,7 @@ export function TavernHeader({
         <TavernSidebar campaignId={campaignId} isAdmin={isAdmin} />
       </Suspense>
     )}
-    <TavernMobileMenu isOpen={menuOpen} onClose={() => setMenuOpen(false)} campaignId={campaignId} isAdmin={isAdmin} variant={variant} />
+    <TavernMobileMenu isOpen={menuOpen} onClose={closeMobileMenu} campaignId={campaignId} isAdmin={isAdmin} variant={variant} />
     {user && (
       <NotificationPanel
         userId={user.id}

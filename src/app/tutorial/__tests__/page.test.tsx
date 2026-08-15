@@ -33,6 +33,13 @@ vi.mock('@/lib/clientAuth', () => ({
   isAuthenticated: () => true,
   getUser: () => ({ id: 'u1', email: 'u1@example.com' }),
   getLastCampaignId: () => null,
+  // TavernHeader's bell reads the unread count (useUnreadCount), which
+  // needs a token to fetch with. Returning null here is the "logged out /
+  // no token" path the hook already handles by rendering no badge, which
+  // is what this page's tests care about — they're about the checklist,
+  // not the chrome.
+  getToken: () => null,
+  logout: () => {},
 }))
 
 import TutorialPage from '../page'

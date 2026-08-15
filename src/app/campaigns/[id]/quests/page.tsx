@@ -201,7 +201,7 @@ export default function QuestsPage() {
         )}
       </main>
 
-      <TavernNav active="quests" campaignId={campaignId} variant="myth" />
+      <TavernNav campaignId={campaignId} variant="myth" />
     </TavernPage>
   )
 }

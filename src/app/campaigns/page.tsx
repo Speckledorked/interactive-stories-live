@@ -202,7 +202,7 @@ export default function CampaignsPage() {
         </div>
       </main>
 
-      <TavernNav active="tavern" campaignId={lastCampaignId || undefined} variant="myth" />
+      <TavernNav campaignId={lastCampaignId || undefined} variant="myth" />
 
       {showCreateModal && (
         <CreateCampaignModal

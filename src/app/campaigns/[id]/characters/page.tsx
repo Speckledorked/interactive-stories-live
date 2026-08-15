@@ -169,7 +169,7 @@ export default function CharactersListPage() {
         )}
       </main>
 
-      <TavernNav active="characters" campaignId={campaignId} variant="myth" />
+      <TavernNav campaignId={campaignId} variant="myth" />
     </TavernPage>
   )
 }

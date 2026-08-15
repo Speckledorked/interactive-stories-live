@@ -119,4 +119,62 @@ describe('sweepWorldTurnsForAllCampaigns', () => {
     expect(runWorldTurnIfDue).toHaveBeenCalledTimes(25) // capped
     expect(result.skippedAtCap).toBe(2)
   })
+
+  // #282: without fairness ordering, campaigns come back in stable scan
+  // order every sweep, so the same first MAX_TURNS_PER_SWEEP always win
+  // the cap and everything past that position is permanently starved, not
+  // just delayed.
+  it('orders campaigns by most-overdue-first for the cap to actually rotate through', async () => {
+    db.campaign.findMany.mockResolvedValue([{ id: 'c1', worldMeta: { lastRealTimeTickAt: null } }])
+    ;(runWorldTurnIfDue as any).mockResolvedValue({ ran: false })
+
+    await sweepWorldTurnsForAllCampaigns()
+
+    expect(db.campaign.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { worldMeta: { hoursSinceWorldTurn: 'desc' } } })
+    )
+  })
+
+  it('rotates every campaign through the cap across consecutive days, not just the first 25 forever', async () => {
+    // 30 campaigns, more than MAX_TURNS_PER_SWEEP (25) — simulates the
+    // real orderBy by sorting on each findMany call, and simulates a real
+    // tick resetting hoursSinceWorldTurn back down (worldTurn.ts's own
+    // remainingHours behavior) so a ticked campaign naturally falls to
+    // the back of tomorrow's queue instead of winning the cap again.
+    const state = new Map<string, number>(
+      Array.from({ length: 30 }, (_, i) => [`c${i}`, 100 + i])
+    )
+    db.campaign.findMany.mockImplementation(async () => {
+      return [...state.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([id]) => ({ id, worldMeta: { lastRealTimeTickAt: null, hoursSinceWorldTurn: state.get(id) } }))
+    })
+
+    const tickedEachDay: string[][] = []
+    for (let day = 0; day < 3; day++) {
+      const tickedIds: string[] = []
+      ;(runWorldTurnIfDue as any).mockImplementation(async (campaignId: string) => {
+        tickedIds.push(campaignId)
+        state.set(campaignId, 0)
+        return { ran: true }
+      })
+
+      await sweepWorldTurnsForAllCampaigns()
+      tickedEachDay.push(tickedIds)
+
+      // Real elapsed time passing: every campaign not ticked today grows
+      // more overdue, exactly like hoursSinceWorldTurn accumulating.
+      for (const id of state.keys()) {
+        if (!tickedIds.includes(id)) state.set(id, (state.get(id) ?? 0) + 24)
+      }
+    }
+
+    const everTicked = new Set(tickedEachDay.flat())
+    // Day 1 and day 2 must NOT tick the identical set — real rotation, not
+    // the same 25 winning every single day.
+    expect(new Set(tickedEachDay[0])).not.toEqual(new Set(tickedEachDay[1]))
+    // Across enough days, campaigns beyond the original top 25 must
+    // eventually get a turn too — nobody is permanently starved.
+    expect(everTicked.size).toBeGreaterThan(25)
+  })
 })

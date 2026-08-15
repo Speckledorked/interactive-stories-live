@@ -3,6 +3,7 @@
 // Implements a 6-segment harm track and condition management
 
 import type { Rng } from './rng'
+import { CONSUMED_CONDITION_NAME } from './corruption'
 
 /**
  * Harm Track States
@@ -284,10 +285,18 @@ export function canAct(harm: HarmLevel, conditions: Condition[]): boolean {
     return false
   }
 
-  // Cannot act if any condition prevents it
+  // Cannot act if any condition prevents it. Consumed (corruption's
+  // terminal stage — see corruption.ts) is checked by name, not by
+  // mechanicalEffect substring: its own text ("The final stage of
+  // corruption — irreversible") deliberately doesn't match either
+  // phrase, and #290 found that left it mechanically identical to any
+  // ordinary condition — full stat rolls, full agency, no lockout —
+  // despite the character being "slipping beyond the player's control"
+  // per its own description.
   const hasIncapacitatingCondition = conditions.some(c =>
     c.mechanicalEffect?.toLowerCase().includes('cannot take actions') ||
-    c.mechanicalEffect?.toLowerCase().includes('cannot act')
+    c.mechanicalEffect?.toLowerCase().includes('cannot act') ||
+    c.name === CONSUMED_CONDITION_NAME
   )
 
   return !hasIncapacitatingCondition

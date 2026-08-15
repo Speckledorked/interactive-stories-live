@@ -9,8 +9,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
-import { displayFont } from '@/lib/tavernTheme'
-import { TavernCard, TavernSpinner } from './ui'
+import { Card } from '@/components/ui/card'
+import { SpinnerBlock } from '@/components/ui/spinner'
 import { IconButton } from '@/components/ui/icon-button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -57,9 +57,9 @@ export function CalendarMonthGrid({ campaignId, onSelectDay, selectedDayNumber }
 
   if (loading && !data) {
     return (
-      <TavernCard className="p-5">
-        <TavernSpinner className="h-10 w-10" />
-      </TavernCard>
+      <Card className="p-5">
+        <SpinnerBlock className="h-10 w-10" />
+      </Card>
     )
   }
   if (!data) return null
@@ -82,10 +82,10 @@ export function CalendarMonthGrid({ campaignId, onSelectDay, selectedDayNumber }
   }
 
   return (
-    <TavernCard className="p-5">
+    <Card className="p-5">
       <div className="flex items-center justify-between mb-4">
         <IconButton icon={ChevronLeft} label="Previous month" variant="secondary" size="sm" onClick={goPrev} />
-        <h3 className={`${displayFont.className} text-lg text-myth-ink`}>
+        <h3 className={`font-display text-lg text-myth-ink`}>
           {data.monthName}, Year {data.year}
         </h3>
         <IconButton icon={ChevronRight} label="Next month" variant="secondary" size="sm" onClick={goNext} />
@@ -132,6 +132,6 @@ export function CalendarMonthGrid({ campaignId, onSelectDay, selectedDayNumber }
           )
         })}
       </div>
-    </TavernCard>
+    </Card>
   )
 }

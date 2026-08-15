@@ -290,8 +290,8 @@ export default function CampaignLobbyPage() {
 
   if (loading) {
     return (
-      <TavernPage background="myth">
-        <TavernHeader backHref="/campaigns" title="Loading…" campaignId={campaignId} variant="myth" minimalHeaderAtDesktop />
+      <TavernPage>
+        <TavernHeader backHref="/campaigns" title="Loading…" campaignId={campaignId} minimalHeaderAtDesktop />
         <main className={`flex justify-center max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16`}>
           <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
         </main>
@@ -301,8 +301,8 @@ export default function CampaignLobbyPage() {
 
   if (error || !data) {
     return (
-      <TavernPage background="myth">
-        <TavernHeader backHref="/campaigns" title="Campaign" campaignId={campaignId} variant="myth" />
+      <TavernPage>
+        <TavernHeader backHref="/campaigns" title="Campaign" campaignId={campaignId} />
         <main className={`max-w-2xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16`}>
           <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
             <p className="text-myth-danger">{error || 'Campaign not found'}</p>
@@ -323,13 +323,12 @@ export default function CampaignLobbyPage() {
 
 
   return (
-    <TavernPage background="myth">
+    <TavernPage>
       <TavernHeader
         backHref="/campaigns"
         title={campaign.title}
         campaignId={campaignId}
         isAdmin={userRole === 'ADMIN'}
-        variant="myth"
         minimalHeaderAtDesktop
         subrow={
           // lg:hidden — TavernSidebar already lists all five of these as
@@ -821,7 +820,7 @@ export default function CampaignLobbyPage() {
       )}
       </main>
 
-      <TavernNav campaignId={campaignId} variant="myth" />
+      <TavernNav campaignId={campaignId} />
 
       {/* Notification Panel - Phase 8/9 Communication */}
       {data && (

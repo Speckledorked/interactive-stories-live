@@ -18,7 +18,6 @@ import { fontDisplay } from '@/lib/fonts'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernButton } from '@/components/tavern/ui'
 import { EmptyState } from '@/components/ui/empty-state'
 import { CampaignChronicleCard } from '@/components/campaigns/CampaignChronicleCard'
 import { Input } from '@/components/ui/input'
@@ -115,8 +114,8 @@ export default function CampaignsPage() {
   const backdropUrl = campaigns.find((c) => c.heroImageStatus === 'READY' && c.heroImageUrl)?.heroImageUrl ?? null
 
   return (
-    <TavernPage background="myth">
-      <TavernHeader wordmark variant="myth" />
+    <TavernPage>
+      <TavernHeader wordmark />
 
       {/* Content */}
       <main className={`max-w-2xl lg:max-w-6xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
@@ -203,7 +202,7 @@ export default function CampaignsPage() {
         </div>
       </main>
 
-      <TavernNav campaignId={lastCampaignId || undefined} variant="myth" />
+      <TavernNav campaignId={lastCampaignId || undefined} />
 
       {showCreateModal && (
         <CreateCampaignModal
@@ -575,10 +574,10 @@ function CreateCampaignModal({
               )}
 
               <div className="flex gap-3 pt-2">
-                <TavernButton type="button" onClick={onClose} variant="secondary" theme="myth" className="flex-1 text-center">
+                <Button type="button" onClick={onClose} variant="secondary" className="flex-1 justify-center">
                   Cancel
-                </TavernButton>
-                <TavernButton type="submit" disabled={loading} theme="myth" className="flex-1 text-center">
+                </Button>
+                <Button type="submit" disabled={loading} className="flex-1 justify-center">
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
                       <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-myth-accent-ink" />
@@ -587,7 +586,7 @@ function CreateCampaignModal({
                   ) : (
                     'Create Campaign'
                   )}
-                </TavernButton>
+                </Button>
               </div>
             </form>
           )}

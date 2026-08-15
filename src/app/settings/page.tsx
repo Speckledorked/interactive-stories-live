@@ -191,8 +191,8 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <TavernPage background="myth">
-        <TavernHeader backHref="/campaigns" title="Settings" variant="myth" />
+      <TavernPage>
+        <TavernHeader backHref="/campaigns" title="Settings" />
         <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16`}>
           <div className="flex justify-center py-16">
             <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
@@ -213,14 +213,13 @@ export default function SettingsPage() {
   ]
 
   return (
-    <TavernPage background="myth">
+    <TavernPage>
       <TavernHeader
         backHref="/campaigns"
         title="Settings"
-        variant="myth"
         subrow={
           <nav className="max-w-4xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-myth-border pt-2 pb-0">
-            <SubNavTabs tabs={tabs} activeKey={activeTab} onSelect={(key) => setActiveTab(key as TabKey)} variant="myth" />
+            <SubNavTabs tabs={tabs} activeKey={activeTab} onSelect={(key) => setActiveTab(key as TabKey)} />
           </nav>
         }
       />
@@ -588,7 +587,7 @@ export default function SettingsPage() {
       )}
       </main>
 
-      <TavernNav campaignId={lastCampaignId || undefined} variant="myth" />
+      <TavernNav campaignId={lastCampaignId || undefined} />
     </TavernPage>
   )
 }

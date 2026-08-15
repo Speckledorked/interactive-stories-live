@@ -16,9 +16,10 @@
 // way *out* of a campaign rather than a destination within one, so it
 // moves to the top of the drawer.
 //
-// variant="myth" (opt-in) swaps the permanently-dark bar for a flat,
-// theme-adaptive myth-surface one with the accent color on the active
-// item. Every other consumer keeps the unchanged default.
+// A flat, theme-adaptive myth-surface bar, with the accent colour and a
+// tinted pill marking the active item. It used to carry a `variant` prop
+// selecting between this and a permanently-dark ember bar; every page is
+// on the myth system now, so that branch had no callers and is gone.
 //
 // Active state is auto-detected from the URL (usePathname/useSearchParams)
 // rather than trusting a per-page prop — most pages never passed one, so
@@ -37,12 +38,9 @@ import { openMobileMenu } from './mobileMenuStore'
 
 function TavernNavInner({
   campaignId,
-  variant = 'tavern',
 }: {
   campaignId?: string
-  variant?: 'tavern' | 'myth'
 }) {
-  const myth = variant === 'myth'
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const tab = searchParams.get('tab')
@@ -84,16 +82,16 @@ function TavernNavInner({
     },
   ] as const
 
-  const activeClass = myth ? 'text-myth-accent' : 'text-ember-300'
-  const inactiveClass = myth ? 'text-myth-ink-faint' : 'text-ember-500/40'
-  const hoverClass = myth ? 'hover:text-myth-ink-muted' : 'hover:text-ember-200'
+  const activeClass = 'text-myth-accent'
+  const inactiveClass = 'text-myth-ink-faint'
+  const hoverClass = 'hover:text-myth-ink-muted'
 
   const itemClass = (isActive: boolean, interactive: boolean) =>
     [
       // min-h-[56px]: taller than the 44px floor because a stacked
       // icon+label needs the room, and this is the bar a thumb hits most.
       'mx-1.5 flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-xl py-2 text-[11px] transition-colors touch-manipulation',
-      myth && isActive ? 'bg-myth-accent/10' : '',
+      isActive ? 'bg-myth-accent/10' : '',
       isActive ? activeClass : inactiveClass,
       interactive ? hoverClass : 'cursor-default',
     ]
@@ -102,18 +100,14 @@ function TavernNavInner({
 
   return (
     <nav
-      className={
-        myth
-          ? 'fixed bottom-0 inset-x-0 z-30 bg-myth-surface/90 backdrop-blur-md border-t border-myth-border pb-[env(safe-area-inset-bottom)] lg:hidden'
-          : 'fixed bottom-0 inset-x-0 z-30 bg-black/70 backdrop-blur-md border-t border-ember-900/40 pb-[env(safe-area-inset-bottom)]'
-      }
+      className="fixed bottom-0 inset-x-0 z-30 bg-myth-surface/90 backdrop-blur-md border-t border-myth-border pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       <div className="max-w-2xl mx-auto grid grid-cols-5">
         {items.map((item) => {
           const content = (
             <div className={itemClass(item.isActive, item.href !== null)}>
               <item.icon className="w-5 h-5" />
-              <span className={myth ? 'uppercase tracking-wide' : ''}>{item.label}</span>
+              <span className="uppercase tracking-wide">{item.label}</span>
             </div>
           )
           return item.href ? (
@@ -134,7 +128,7 @@ function TavernNavInner({
         <button type="button" onClick={openMobileMenu} aria-label="More navigation">
           <div className={itemClass(false, true)}>
             <Menu className="w-5 h-5" />
-            <span className={myth ? 'uppercase tracking-wide' : ''}>More</span>
+            <span className="uppercase tracking-wide">More</span>
           </div>
         </button>
       </div>
@@ -142,21 +136,16 @@ function TavernNavInner({
   )
 }
 
-export function TavernNav(props: { campaignId?: string; variant?: 'tavern' | 'myth' }) {
-  const myth = props.variant === 'myth'
+export function TavernNav(props: { campaignId?: string }) {
   return (
     <Suspense
       fallback={
         <nav
-          className={
-            myth
-              ? 'fixed bottom-0 inset-x-0 z-30 h-[68px] bg-myth-surface/90 backdrop-blur-md border-t border-myth-border pb-[env(safe-area-inset-bottom)] lg:hidden'
-              : 'fixed bottom-0 inset-x-0 z-30 h-[68px] bg-black/70 backdrop-blur-md border-t border-ember-900/40 pb-[env(safe-area-inset-bottom)]'
-          }
+          className="fixed bottom-0 inset-x-0 z-30 h-[68px] bg-myth-surface/90 backdrop-blur-md border-t border-myth-border pb-[env(safe-area-inset-bottom)] lg:hidden"
         />
       }
     >
-      <TavernNavInner campaignId={props.campaignId} variant={props.variant} />
+      <TavernNavInner campaignId={props.campaignId} />
     </Suspense>
   )
 }

@@ -7,7 +7,6 @@ import { AlertTriangle, Dices } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
 import { fontDisplay, fontSans } from '@/lib/fonts'
 import { TavernBackground } from '@/components/tavern/TavernBackground'
-import { TavernButton } from '@/components/tavern/ui'
 import { Button } from '@/components/ui/button'
 
 interface CampaignInfo {
@@ -85,7 +84,7 @@ export default function JoinCampaignPage() {
   if (loading) {
     return (
       <div className={`${fontSans.className} -mx-4 -my-8 flex min-h-screen items-center justify-center p-4`}>
-        <TavernBackground variant="myth" />
+        <TavernBackground />
         <div className="w-full max-w-md rounded-lg border border-myth-border bg-myth-surface p-8 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
           <div className="animate-pulse space-y-4">
             <div className="h-8 w-3/4 rounded bg-myth-surface-sunken" />
@@ -100,12 +99,12 @@ export default function JoinCampaignPage() {
   if (error && !campaign) {
     return (
       <div className={`${fontSans.className} -mx-4 -my-8 flex min-h-screen items-center justify-center p-4`}>
-        <TavernBackground variant="myth" />
+        <TavernBackground />
         <div className="w-full max-w-md rounded-lg border border-myth-border bg-myth-surface p-8 text-center shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
           <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-myth-danger" />
           <h1 className={`${fontDisplay.className} mb-4 text-2xl font-semibold text-myth-ink`}>Invalid Invite</h1>
           <p className="mb-6 text-myth-ink-muted">{error}</p>
-          <TavernButton theme="myth" onClick={() => router.push('/campaigns')}>Go to My Campaigns</TavernButton>
+          <Button onClick={() => router.push('/campaigns')}>Go to My Campaigns</Button>
         </div>
       </div>
     )
@@ -113,7 +112,7 @@ export default function JoinCampaignPage() {
 
   return (
     <div className={`${fontSans.className} -mx-4 -my-8 flex min-h-screen items-center justify-center p-4`}>
-      <TavernBackground variant="myth" />
+      <TavernBackground />
       <div className="w-full max-w-md rounded-lg border border-myth-border bg-myth-surface p-8 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
         <div className="mb-6 text-center">
           <Dices className="mx-auto mb-4 h-10 w-10 text-myth-accent" />
@@ -153,18 +152,18 @@ export default function JoinCampaignPage() {
             )}
 
             {canJoin ? (
-              <TavernButton theme="myth" onClick={handleJoinCampaign} disabled={joining} className="w-full">
+              <Button onClick={handleJoinCampaign} disabled={joining} className="w-full">
                 {joining ? 'Joining…' : 'Join Campaign'}
-              </TavernButton>
+              </Button>
             ) : (
               <Button variant="secondary" fullWidth disabled>
                 Cannot Join
               </Button>
             )}
 
-            <TavernButton theme="myth" variant="secondary" onClick={() => router.push('/campaigns')} className="w-full">
+            <Button variant="secondary" onClick={() => router.push('/campaigns')} className="w-full">
               Cancel
-            </TavernButton>
+            </Button>
           </div>
         )}
       </div>

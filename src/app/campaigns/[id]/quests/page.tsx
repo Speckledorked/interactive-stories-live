@@ -99,8 +99,8 @@ export default function QuestsPage() {
 
   if (loading) {
     return (
-      <TavernPage background="myth">
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} variant="myth" />
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} />
         <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
           <div className="flex justify-center py-16">
             <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
@@ -112,8 +112,8 @@ export default function QuestsPage() {
 
   if (error) {
     return (
-      <TavernPage background="myth">
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} variant="myth" />
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} />
         <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
           <div className="rounded-lg border border-myth-danger/30 bg-myth-danger/10 p-6">
             <p className="text-myth-danger">{error}</p>
@@ -126,8 +126,8 @@ export default function QuestsPage() {
   const activeCount = quests.filter(q => q.status === 'ACTIVE').length
 
   return (
-    <TavernPage background="myth">
-      <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} variant="myth" />
+    <TavernPage>
+      <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} />
 
       <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         <p className="mb-6 text-sm text-myth-ink-faint">
@@ -202,7 +202,7 @@ export default function QuestsPage() {
         )}
       </main>
 
-      <TavernNav campaignId={campaignId} variant="myth" />
+      <TavernNav campaignId={campaignId} />
     </TavernPage>
   )
 }

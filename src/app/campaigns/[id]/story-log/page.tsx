@@ -5,11 +5,12 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { BookOpen, Check, ChevronRight, MessageCircle, Share2 } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
-import { displayFont } from '@/lib/tavernTheme'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernCard, TavernEmptyState, TavernSpinner } from '@/components/tavern/ui'
+import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { SpinnerBlock } from '@/components/ui/spinner'
 import { CalendarMonthGrid } from '@/components/tavern/CalendarMonthGrid'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -48,7 +49,11 @@ interface DayDetail {
 
 interface Campaign {
   id: string
-  name: string
+  // `title`, not `name`: this interface said `name`, which the API has
+  // never returned, so the header below silently rendered the literal
+  // string "Campaign" for every campaign. tsc couldn't catch it because
+  // the fetch response is parsed as untyped JSON.
+  title: string
   description: string | null
   userRole?: string
 }
@@ -170,7 +175,7 @@ export default function StoryLogPage() {
       <TavernPage>
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" campaignId={campaignId} />
         <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
-          <TavernSpinner className="h-16 w-16" />
+          <SpinnerBlock className="h-16 w-16" />
         </main>
       </TavernPage>
     )
@@ -181,9 +186,12 @@ export default function StoryLogPage() {
       <TavernPage>
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Story Log" campaignId={campaignId} />
         <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
-          <TavernCard className="p-6 bg-myth-danger border-myth-danger/40">
+          {/* Tinted ground, not a solid danger fill: this was
+              bg-myth-danger with text-myth-danger on top, i.e. the text
+              was the same colour as the surface it sat on. */}
+          <Card className="border-myth-danger/40 bg-myth-danger/10 p-6">
             <p className="text-myth-danger">{error}</p>
-          </TavernCard>
+          </Card>
         </main>
       </TavernPage>
     )
@@ -196,7 +204,7 @@ export default function StoryLogPage() {
       <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
           <p className="text-myth-ink-faint text-sm">
-            {campaign?.name || 'Campaign'} — a chronicle of your adventure, updated after each scene
+            {campaign?.title || 'Campaign'} — a chronicle of your adventure, updated after each scene
           </p>
           {isAdmin && logs.length > 0 && (
             <div className="flex flex-col items-end gap-1">
@@ -216,29 +224,29 @@ export default function StoryLogPage() {
         </div>
 
         {/* Stats */}
-        <TavernCard className="p-6 mb-8">
+        <Card className="p-6 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="text-center">
-              <div className={`${displayFont.className} text-3xl text-myth-ink-muted mb-1`}>{logs.length}</div>
+              <div className={`font-display text-3xl text-myth-ink-muted mb-1`}>{logs.length}</div>
               <div className="text-sm text-myth-gold">Chronicle Entries</div>
             </div>
             <div className="text-center">
-              <div className={`${displayFont.className} text-3xl text-success-400 mb-1`}>
+              <div className={`font-display text-3xl text-myth-good mb-1`}>
                 {logs.reduce((sum, l) => sum + (l.highlights?.length || 0), 0)}
               </div>
               <div className="text-sm text-myth-gold">Key Moments</div>
             </div>
             <div className="text-center">
-              <div className={`${displayFont.className} text-3xl text-myth-ink-muted mb-1`}>{logs[0]?.turnNumber || 0}</div>
+              <div className={`font-display text-3xl text-myth-ink-muted mb-1`}>{logs[0]?.turnNumber || 0}</div>
               <div className="text-sm text-myth-gold">Current Turn</div>
             </div>
           </div>
-        </TavernCard>
+        </Card>
 
         {/* Log Entries */}
         {logs.length === 0 ? (
-          <TavernEmptyState
-            icon={BookOpen}
+          <EmptyState
+            icon={<BookOpen className="h-12 w-12" />}
             title="No story entries yet"
             description="The story log will be automatically updated as scenes are resolved"
           />
@@ -251,10 +259,10 @@ export default function StoryLogPage() {
             />
 
             {selectedDayNumber !== null && (
-              <TavernCard className="p-5">
-                <h3 className={`${displayFont.className} text-lg text-myth-ink mb-4`}>{selectedDayLabel}</h3>
+              <Card className="p-5">
+                <h3 className={`font-display text-lg text-myth-ink mb-4`}>{selectedDayLabel}</h3>
                 {dayDetailLoading ? (
-                  <TavernSpinner className="h-8 w-8" />
+                  <SpinnerBlock className="h-8 w-8" />
                 ) : !dayDetail || (dayDetail.logs.length === 0 && dayDetail.rumors.length === 0) ? (
                   <p className="text-sm text-myth-gold">Nothing recorded for this day yet.</p>
                 ) : (
@@ -270,17 +278,17 @@ export default function StoryLogPage() {
                         </h4>
                         <div className="space-y-2">
                           {dayDetail.rumors.map((rumor) => (
-                            <TavernCard key={rumor.id} className="p-3">
+                            <Card key={rumor.id} className="p-3">
                               <p className="text-sm font-medium text-myth-ink mb-1">{rumor.title}</p>
                               <p className="text-xs text-myth-ink-muted">{rumor.summary}</p>
-                            </TavernCard>
+                            </Card>
                           ))}
                         </div>
                       </div>
                     )}
                   </div>
                 )}
-              </TavernCard>
+              </Card>
             )}
 
             {preCalendarLogs.length > 0 && (
@@ -343,7 +351,7 @@ function LogEntryCard({
 
   return (
     <Link href={`/campaigns/${campaignId}/story`} className="block">
-      <TavernCard className="p-5 group hover:border-myth-border-strong transition-colors cursor-pointer">
+      <Card className="p-5 group hover:border-myth-border-strong transition-colors cursor-pointer">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-xs font-medium text-myth-ink-muted bg-myth-surface-sunken border border-myth-border rounded px-2 py-1">
@@ -354,7 +362,7 @@ function LogEntryCard({
                 {log.entryType}
               </span>
             )}
-            <h3 className={`${displayFont.className} text-lg text-myth-ink`}>{log.title}</h3>
+            <h3 className={`font-display text-lg text-myth-ink`}>{log.title}</h3>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <IconButton
@@ -405,7 +413,7 @@ function LogEntryCard({
           <span>View in Story</span>
           <ChevronRight className="w-4 h-4" />
         </div>
-      </TavernCard>
+      </Card>
     </Link>
   )
 }

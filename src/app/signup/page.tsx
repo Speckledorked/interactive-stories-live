@@ -62,7 +62,7 @@ export default function SignupPage() {
 
   return (
     <div className={`${fontSans.className} -mx-4 -my-8 flex min-h-screen items-center justify-center px-4 py-12`}>
-      <TavernBackground variant="myth" />
+      <TavernBackground />
 
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">

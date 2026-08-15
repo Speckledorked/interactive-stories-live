@@ -18,8 +18,8 @@ export default function HelpPage() {
   }, [])
 
   return (
-    <TavernPage background="myth">
-      <TavernHeader backHref="/campaigns" title="Help & Documentation" variant="myth" />
+    <TavernPage>
+      <TavernHeader backHref="/campaigns" title="Help & Documentation" />
 
       <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         <p className="mb-8 text-sm text-myth-ink-faint">Everything you need to know about playing AI-powered TTRPGs</p>
@@ -252,7 +252,7 @@ export default function HelpPage() {
       </div>
       </main>
 
-      <TavernNav campaignId={lastCampaignId || undefined} variant="myth" />
+      <TavernNav campaignId={lastCampaignId || undefined} />
     </TavernPage>
   )
 }

@@ -67,8 +67,8 @@ export default function TutorialPage() {
 
   if (loading) {
     return (
-      <TavernPage background="myth">
-        <TavernHeader backHref="/campaigns" title="Tutorial & Onboarding" variant="myth" />
+      <TavernPage>
+        <TavernHeader backHref="/campaigns" title="Tutorial & Onboarding" />
         <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
           <div className="flex justify-center py-16">
             <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
@@ -100,8 +100,8 @@ export default function TutorialPage() {
   }
 
   return (
-    <TavernPage background="myth">
-      <TavernHeader backHref="/campaigns" title="Tutorial & Onboarding" variant="myth" />
+    <TavernPage>
+      <TavernHeader backHref="/campaigns" title="Tutorial & Onboarding" />
 
       <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         <p className="mb-8 text-sm text-myth-ink-faint">Master the art of AI-powered tabletop adventures</p>
@@ -281,7 +281,7 @@ export default function TutorialPage() {
       </div>
       </main>
 
-      <TavernNav campaignId={lastCampaignId || undefined} variant="myth" />
+      <TavernNav campaignId={lastCampaignId || undefined} />
     </TavernPage>
   )
 }

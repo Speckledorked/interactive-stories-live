@@ -53,7 +53,11 @@ describe('SubNavTabs', () => {
     const one = screen.getByRole('link', { name: /One/ })
     const two = screen.getByRole('link', { name: /Two/ })
     expect(one.className).toContain('border-transparent')
-    expect(two.className).toContain('border-ember-400')
+    // Was border-ember-400: this pinned the old `variant="tavern"`
+    // default's active class. That variant is gone (every page is on the
+    // myth token system), so the class genuinely changed rather than the
+    // assertion being loosened to hide a regression.
+    expect(two.className).toContain('border-myth-accent')
   })
 
   // The string-icon case this used to cover is gone on purpose: SubNavTab's

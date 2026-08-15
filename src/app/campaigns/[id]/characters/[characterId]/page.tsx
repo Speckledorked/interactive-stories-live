@@ -153,8 +153,8 @@ export default function CharacterPage() {
 
   if (loading) {
     return (
-      <TavernPage background="myth">
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} variant="myth" />
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} />
         <main className={`max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16`}>
           <div className="flex justify-center py-16">
             <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
@@ -166,8 +166,8 @@ export default function CharacterPage() {
 
   if (error || !character) {
     return (
-      <TavernPage background="myth">
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Character" campaignId={campaignId} variant="myth" />
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Character" campaignId={campaignId} />
         <main className={`max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16 text-center`}>
           <h2 className="mb-4 text-2xl font-bold text-myth-danger">Error</h2>
           <p className="mb-4 text-myth-ink-muted">{error || 'Character not found'}</p>
@@ -180,13 +180,12 @@ export default function CharacterPage() {
   }
 
   return (
-    <TavernPage background="myth">
+    <TavernPage>
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title={character.name}
         campaignId={campaignId}
         isAdmin={campaign?.userRole === 'ADMIN'}
-        variant="myth"
         subrow={
           <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-myth-border pt-2 pb-0">
             <SubNavTabs
@@ -196,7 +195,6 @@ export default function CharacterPage() {
                 { key: 'character', label: 'Character', icon: User },
               ]}
               activeKey="character"
-              variant="myth"
             />
           </nav>
         }
@@ -217,7 +215,7 @@ export default function CharacterPage() {
         />
       </main>
 
-      <TavernNav campaignId={campaignId} variant="myth" />
+      <TavernNav campaignId={campaignId} />
     </TavernPage>
   )
 }

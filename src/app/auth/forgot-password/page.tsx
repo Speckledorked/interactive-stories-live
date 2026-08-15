@@ -41,7 +41,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className={`${fontSans.className} -mx-4 -my-8 flex min-h-screen items-center justify-center px-4 py-12`}>
-      <TavernBackground variant="myth" />
+      <TavernBackground />
 
       <div className="w-full max-w-md">
         <div className="rounded-lg border border-myth-border bg-myth-surface p-8 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">

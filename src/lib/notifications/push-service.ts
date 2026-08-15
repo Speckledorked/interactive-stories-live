@@ -51,7 +51,18 @@ function ensureVapidConfigured(): boolean {
     return false
   }
 
-  webpush.setVapidDetails(subject, publicKey, privateKey)
+  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey)
+  } catch (error) {
+    console.warn(
+      'Push notifications disabled: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY are malformed. ' +
+      'Regenerate a pair with `npx web-push generate-vapid-keys`. In-app and email delivery are unaffected.',
+      error
+    )
+    vapidConfigured = false
+    return false
+  }
+
   vapidConfigured = true
   return true
 }
@@ -93,8 +104,8 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     data: payload.data,
   })
 
-  let delivered = 0
   const staleEndpoints: string[] = []
+  const deliveredEndpoints: string[] = []
 
   await Promise.all(
     subscriptions.map(async (sub) => {
@@ -103,7 +114,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           body
         )
-        delivered++
+        deliveredEndpoints.push(sub.endpoint)
       } catch (error: any) {
         if (isGoneStatus(error?.statusCode)) {
           staleEndpoints.push(sub.endpoint)
@@ -120,13 +131,13 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
       .catch(err => console.error('Failed to prune stale push subscriptions:', err))
   }
 
-  if (delivered > 0) {
+  if (deliveredEndpoints.length > 0) {
     await prisma.pushSubscription
-      .updateMany({ where: { userId }, data: { lastUsedAt: new Date() } })
+      .updateMany({ where: { endpoint: { in: deliveredEndpoints } }, data: { lastUsedAt: new Date() } })
       .catch(() => { /* bookkeeping only */ })
   }
 
-  return delivered
+  return deliveredEndpoints.length
 }
 
 /**

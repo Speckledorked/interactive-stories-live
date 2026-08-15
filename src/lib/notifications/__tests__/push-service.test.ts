@@ -9,10 +9,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const sendNotification = vi.fn()
+const setVapidDetails = vi.fn()
 
 vi.mock('web-push', () => ({
   default: {
-    setVapidDetails: vi.fn(),
+    setVapidDetails: (...args: unknown[]) => setVapidDetails(...args),
     sendNotification: (...args: unknown[]) => sendNotification(...args),
   },
 }))
@@ -121,6 +122,40 @@ describe('sendPushToUser', () => {
     const { sendPushToUser } = await import('../push-service')
     expect(await sendPushToUser('u1', { title: 'T', message: 'M' })).toBe(0)
     expect(prisma.pushSubscription.findMany).not.toHaveBeenCalled()
+  })
+
+  it('#314: latches to a single warning instead of throwing on every call when VAPID keys are malformed', async () => {
+    setVapidDetails.mockImplementation(() => {
+      throw new Error('Invalid GCM/FCM API key')
+    })
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const { sendPushToUser } = await import('../push-service')
+    await expect(sendPushToUser('u1', { title: 'T', message: 'M' })).resolves.toBe(0)
+    await expect(sendPushToUser('u1', { title: 'T', message: 'M' })).resolves.toBe(0)
+
+    expect(setVapidDetails).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(prisma.pushSubscription.findMany).not.toHaveBeenCalled()
+
+    warnSpy.mockRestore()
+    setVapidDetails.mockReset()
+  })
+
+  it('#323: only stamps lastUsedAt on subscriptions that actually delivered', async () => {
+    ;(prisma.pushSubscription.findMany as any).mockResolvedValue([sub('ok'), sub('transient-fail')])
+    sendNotification
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(Object.assign(new Error('boom'), { statusCode: 500 }))
+
+    const { sendPushToUser } = await import('../push-service')
+    const delivered = await sendPushToUser('u1', { title: 'T', message: 'M' })
+
+    expect(delivered).toBe(1)
+    expect(prisma.pushSubscription.updateMany).toHaveBeenCalledWith({
+      where: { endpoint: { in: ['ok'] } },
+      data: { lastUsedAt: expect.any(Date) },
+    })
   })
 })
 

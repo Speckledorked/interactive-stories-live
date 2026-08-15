@@ -11,8 +11,9 @@ It is the only visual system in the app. The older dark
 is on myth tokens, and the tavern half of the system has been deleted (see
 "The tavern theme is gone" at the end of this file). An
 `ember-*`/`wine-*`/`tavern-*` class in a live `className` is a mistake, not
-a surviving variant — the only such strings left in `src/` are two inside
-a comment in `ui/spinner.tsx` recording what that file replaced.
+a surviving variant — the only such strings left in `src/` are three
+inside comments (`ui/spinner.tsx`, `clock/ClockProgress.tsx`,
+`ui/__tests__/SubNavTabs.test.tsx`) recording what each replaced.
 
 This file records the conventions that keep new pages consistent without
 re-deriving them each time.
@@ -30,6 +31,48 @@ mode and ≥6:1 in dark mode, so `text-myth-accent`/`bg-myth-accent` stay
 legible as either text or a button fill in both modes. Hover darkens in
 light mode and brightens in dark mode, matching every other token pair's
 convention.
+
+## Contrast — check against the worst surface, not the canvas
+
+Every ink token has to clear 4.5:1 (3:1 for large text) against the
+**darkest light surface and the lightest dark surface** it can land on —
+`--myth-surface-sunken` in light mode, `--myth-surface-raised` in dark —
+not against `--myth-canvas`. Checking the canvas is how three tokens
+shipped failing: `--myth-ink-faint` measured a comfortable 4.63:1 on the
+canvas but **4.24:1** on sunken, which is where campaign-card meta rows
+and the lobby's Turn/Date labels actually render.
+
+The current values and their measured worst case are recorded in comments
+beside each token in `globals.css`. Two rules:
+
+- **Darken a light ink token, lighten a dark one — never the reverse.**
+- **Alpha compounds.** `text-myth-gold/60` on the wordmark tagline
+  composited to **2.21:1**. A token that only just clears the bar has no
+  headroom left for an opacity modifier; drop the alpha instead.
+
+### `--myth-gold` is decorative, not a muted-text color
+
+Gold is for the wordmark, dividers, the campaign sigil, and codex
+flourishes. It is **not** a substitute for `--myth-ink-muted`/`-faint` on
+labels, captions, timestamps, or empty-state copy. The palette migration
+mapped a faded `ember-400/50` onto `text-myth-gold` and produced 23 sites
+where a brand color was doing muted-body-text duty, several of them below
+4.5:1. If the text is secondary prose, it wants an ink token.
+
+### Text on a solid semantic fill needs its own token
+
+`--myth-danger-ink` exists because the right text color on a danger fill
+is **not** the same in both themes: light mode's danger is a deep red that
+takes white at 7.45:1, dark mode's is a light salmon where white measures
+3.60:1. The `danger` Button hardcoded `text-white` and was unreadable in
+dark. Any future solid semantic fill (`bg-myth-good`, `bg-myth-warn`)
+needs the same treatment rather than an assumed white.
+
+A related failure mode worth naming: a semantic token used as *both*
+background and foreground on the same element. The migration produced two
+of these (`bg-myth-danger` + `text-myth-danger`, i.e. invisible text) by
+dropping the alpha off a tint. Tints are `/10`; solid fills need an `-ink`
+foreground.
 
 ## Type scale — use `SectionHeader`, don't hand-roll
 
@@ -97,6 +140,30 @@ Two rules the primitives enforce so call sites can't get them wrong:
   mainly so an icon-only control can't ship without an accessible `label`.
 - **`text-base` on inputs below `sm:`** — anything smaller makes iOS
   Safari zoom the viewport on focus.
+
+#### The one exemption: links inline in a sentence
+
+A `<Link>` sitting *inside a run of prose* — "Already have an account?
+**Login here**", "you agree to our **Terms of Service**" — is exempt, and
+deliberately so. `min-height` has no effect on a non-replaced inline
+element, so adding `min-h-[44px]` there is a no-op; making it apply means
+switching to `inline-flex`, which forces the whole line box to 44px and
+blows out the spacing of the sentence around it. The fix would be a
+layout change to the copy, not a class.
+
+This exemption is narrow and easy to over-apply. **A link on its own line
+is not inline prose**, even when it reads conversationally — those get a
+44px hit area like any other control (see `login`'s "Forgot your
+password?" and "Need help?"). The test is whether the link shares a line
+box with surrounding sentence text, not whether it *sounds* like a
+sentence.
+
+If a "link" is the only action available on the screen, it isn't a
+secondary link at all — promote it to a real button. `reset-password`'s
+dead-end state (no `?token=`) had its sole recovery action as an
+underlined inline link inside the error text; it's a full-width `Button`
+now. Use `buttonClasses()` from `ui/button.tsx` when the control has to
+stay an `<a>` because it navigates.
 
 ### What deliberately stays a raw `<button>`
 

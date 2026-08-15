@@ -4,6 +4,7 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
+import { AlertTriangle } from 'lucide-react'
 
 interface ClockProgressProps {
   name: string
@@ -156,7 +157,7 @@ export default function ClockProgress({
       {current >= max && (
         <div className="mt-4 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-myth-danger border border-myth-danger/40 rounded-lg text-myth-danger font-bold">
-            ⚠️ COMPLETE
+            <AlertTriangle className="mr-1 inline h-3.5 w-3.5 align-[-0.15em]" />COMPLETE
           </div>
         </div>
       )}

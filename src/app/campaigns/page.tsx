@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Plus, Scroll, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pencil, Plus, Scroll, X } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated, getLastCampaignId } from '@/lib/clientAuth'
 import { fontDisplay } from '@/lib/fonts'
 import { TavernPage } from '@/components/tavern/TavernPage'
@@ -396,7 +396,7 @@ function CreateCampaignModal({
                 className="group w-full rounded-lg border border-dashed border-myth-border p-5 text-left transition-all hover:border-myth-border-strong hover:bg-myth-surface-sunken"
               >
                 <div className="flex items-center gap-4">
-                  <span className="text-3xl">✏️</span>
+                  <Pencil className="h-7 w-7 text-myth-ink-faint" />
                   <div className="flex-1">
                     <p className="font-semibold text-myth-ink-muted group-hover:text-myth-ink">Custom</p>
                     <p className="text-sm text-myth-ink-faint">Build your own world from scratch</p>

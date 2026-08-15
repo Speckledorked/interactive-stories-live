@@ -5,6 +5,7 @@ import { authenticatedFetch } from '@/lib/clientAuth'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
+import { Check, Hand } from 'lucide-react'
 
 interface SimpleXCardProps {
   campaignId: string
@@ -56,7 +57,7 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
         onClick={() => setIsOpen(true)}
         title="Use X-Card to pause/rewind uncomfortable content"
       >
-        <span className="text-xl">✋</span>
+        <Hand className="h-5 w-5 flex-shrink-0 text-myth-danger" />
         X-Card
       </Button>
 
@@ -131,7 +132,7 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
               </>
             ) : (
               <div className="text-center py-8">
-                <div className="text-6xl mb-4">✅</div>
+                <Check className="mx-auto mb-4 h-12 w-12 text-myth-good" />
                 <h3 className="font-display text-2xl text-myth-ink mb-2">X-Card Used</h3>
                 <p className="text-myth-ink-muted">
                   The rest of the table has been notified. The scene will be adjusted.

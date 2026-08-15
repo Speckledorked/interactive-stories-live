@@ -8,6 +8,7 @@
 
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import { MapPin } from 'lucide-react'
 
 interface CharacterSelectorPanelProps {
   userCharacters: any[]
@@ -53,12 +54,12 @@ export function CharacterSelectorPanel({
               onClick={onShowSnapshot}
               title="Quick Reference"
             >
-              👁️ View
+              View
             </Button>
           </div>
           {selectedCharacter.currentLocation && (
             <p className="text-xs text-myth-ink-faint">
-              📍 {selectedCharacter.currentLocation}
+              <MapPin className="mr-1 inline h-3.5 w-3.5 align-[-0.15em]" />{selectedCharacter.currentLocation}
             </p>
           )}
           {Array.isArray(selectedCharacter.conditions) &&

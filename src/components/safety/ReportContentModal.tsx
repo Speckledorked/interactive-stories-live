@@ -5,6 +5,7 @@ import { authenticatedFetch } from '@/lib/clientAuth'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
+import { Check, Flag } from 'lucide-react'
 
 interface ReportContentModalProps {
   campaignId: string
@@ -74,7 +75,7 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
         onClick={() => setIsOpen(true)}
         title="Report content or behavior to the campaign host"
       >
-        <span className="text-xl">🚩</span>
+        <Flag className="h-5 w-5 flex-shrink-0 text-myth-danger" />
         Report
       </Button>
 
@@ -148,7 +149,7 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
               </>
             ) : (
               <div className="text-center py-8">
-                <div className="text-6xl mb-4">✅</div>
+                <Check className="mx-auto mb-4 h-12 w-12 text-myth-good" />
                 <h3 className="font-display text-2xl text-myth-ink mb-2">Report Submitted</h3>
                 <p className="text-myth-ink-muted">The campaign host will review this in their moderation queue.</p>
               </div>

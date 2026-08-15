@@ -56,13 +56,10 @@ describe('SubNavTabs', () => {
     expect(two.className).toContain('border-ember-400')
   })
 
-  it('renders a string icon (emoji) as plain text instead of a component', () => {
-    const tabs: SubNavTab[] = [{ key: 'a', label: 'NPCs', icon: '👤', href: '/npcs' }]
-    render(<SubNavTabs tabs={tabs} activeKey="a" />)
-
-    expect(screen.queryByTestId('icon-component')).toBeNull()
-    expect(screen.getByText('👤')).toBeTruthy()
-  })
+  // The string-icon case this used to cover is gone on purpose: SubNavTab's
+  // `icon` no longer accepts a string, so an emoji here is a compile error
+  // rather than a supported second rendering path. Keeping a runtime test
+  // for it would have meant keeping the branch alive to test.
 
   it('renders an icon component when icon is a component, not a string', () => {
     const tabs: SubNavTab[] = [{ key: 'a', label: 'Friends', icon: Icon, href: '/friends' }]

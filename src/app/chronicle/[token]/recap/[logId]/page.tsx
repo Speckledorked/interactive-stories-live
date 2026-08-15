@@ -111,7 +111,7 @@ export default function PublicRecapPage() {
             href={`/chronicle/${token}`}
             className="text-sm text-myth-accent hover:underline"
           >
-            Read the full chronicle of {campaign.title} →
+            Read the full chronicle of {campaign.title}
           </Link>
         </div>
       </main>

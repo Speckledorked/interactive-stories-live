@@ -5,6 +5,7 @@
 
 import { IconButton } from '@/components/ui/icon-button'
 import { X } from 'lucide-react'
+import { CONSEQUENCE_ICONS } from '@/lib/ui/icons'
 
 interface ConsequenceBadgeProps {
   type: 'promise' | 'debt' | 'enemy' | 'longTermThreat'
@@ -17,7 +18,7 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
     switch (type) {
       case 'promise':
         return {
-          label: '🤝 Promise',
+          label: 'Promise',
           bgColor: 'bg-myth-good/10',
           borderColor: 'border-myth-good/30',
           textColor: 'text-myth-ink',
@@ -31,11 +32,11 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
         // character-creation form's own "Debts Owed" flavor-text field.
         // Neither source is linked to Debt.status, so an entry here can
         // never be marked resolved and may already have been settled (or
-        // never existed as a real Debt) — labeled and noted distinctly
-        // from "⚖️" so it doesn't read as the tracked economy shown in
+        // never existed as a real Debt) — labeled "Noted Debt" and annotated so it
+        // doesn't read as the tracked economy shown in
         // the Obligations section above.
         return {
-          label: '📝 Noted Debt',
+          label: 'Noted Debt',
           bgColor: 'bg-myth-warn/10',
           borderColor: 'border-myth-warn/30',
           textColor: 'text-myth-ink',
@@ -44,7 +45,7 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
         }
       case 'enemy':
         return {
-          label: '⚔️ Enemy',
+          label: 'Enemy',
           bgColor: 'bg-myth-danger/10',
           borderColor: 'border-myth-danger/30',
           textColor: 'text-myth-danger',
@@ -52,7 +53,7 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
         }
       case 'longTermThreat':
         return {
-          label: '☠️ Threat',
+          label: 'Threat',
           bgColor: 'bg-myth-danger/10',
           borderColor: 'border-myth-danger/20',
           textColor: 'text-myth-danger',
@@ -62,6 +63,7 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
   }
 
   const config = getTypeConfig()
+  const TypeIcon = CONSEQUENCE_ICONS[type]
 
   return (
     <div
@@ -74,7 +76,8 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
-          <div className={`text-xs font-semibold ${config.iconColor} mb-1`}>
+          <div className={`mb-1 flex items-center gap-1.5 text-xs font-semibold ${config.iconColor}`}>
+            <TypeIcon className="h-3.5 w-3.5 flex-shrink-0" />
             {config.label}
           </div>
           <p className={`text-sm ${config.textColor}`}>

@@ -8,6 +8,7 @@ import { getToken } from '@/lib/clientAuth';
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { BarChart3, Bell, Mail, Moon, Volume2 } from 'lucide-react'
 
 interface NotificationSettings {
   // Email notifications
@@ -247,7 +248,7 @@ export default function NotificationSettings() {
 
       {/* Email Notifications */}
       <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
-        <h2 className="text-lg font-semibold text-myth-ink mb-4">📧 Email Notifications</h2>
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-myth-ink"><Mail className="h-5 w-5" />Email Notifications</h2>
 
         <ToggleSwitch
           enabled={settings.emailEnabled}
@@ -301,7 +302,7 @@ export default function NotificationSettings() {
       {/* Push Notifications */}
       {pushSupported && pushConfigured && (
         <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
-          <h2 className="text-lg font-semibold text-myth-ink mb-4">🔔 Browser Notifications</h2>
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-myth-ink"><Bell className="h-5 w-5" />Browser Notifications</h2>
 
           <ToggleSwitch
             enabled={settings.pushEnabled}
@@ -348,7 +349,7 @@ export default function NotificationSettings() {
 
       {/* Sound Notifications */}
       <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
-        <h2 className="text-lg font-semibold text-myth-ink mb-4">🔊 Sound Effects</h2>
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-myth-ink"><Volume2 className="h-5 w-5" />Sound Effects</h2>
 
         <ToggleSwitch
           enabled={settings.soundEnabled}
@@ -394,7 +395,7 @@ export default function NotificationSettings() {
 
       {/* Quiet Hours */}
       <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
-        <h2 className="text-lg font-semibold text-myth-ink mb-4">🌙 Quiet Hours</h2>
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-myth-ink"><Moon className="h-5 w-5" />Quiet Hours</h2>
 
         <ToggleSwitch
           enabled={settings.quietHoursEnabled}
@@ -433,7 +434,7 @@ export default function NotificationSettings() {
 
       {/* Digest Preferences */}
       <div className="rounded-lg border border-myth-border bg-myth-surface p-6">
-        <h2 className="text-lg font-semibold text-myth-ink mb-4">📊 Digest Emails</h2>
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-myth-ink"><BarChart3 className="h-5 w-5" />Digest Emails</h2>
 
         <ToggleSwitch
           enabled={settings.dailyDigestEnabled}

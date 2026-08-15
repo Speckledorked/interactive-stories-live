@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getUser } from '@/lib/clientAuth'
 import { Input } from '@/components/ui/input'
+import { COMMAND_ICONS, type IconComponent } from '@/lib/ui/icons'
 
 interface Command {
   id: string
   name: string
   description?: string
-  icon?: string
+  icon?: IconComponent
   action: () => void
   keywords?: string[]
   category: 'navigation' | 'actions' | 'shortcuts'
@@ -44,7 +45,7 @@ export default function CommandPalette({
         id: 'nav-overview',
         name: 'Go to Campaign Overview',
         description: 'View campaign dashboard',
-        icon: '🏠',
+        icon: COMMAND_ICONS.lobby,
         action: () => router.push(`/campaigns/${campaignId}`),
         keywords: ['overview', 'home', 'dashboard'],
         category: 'navigation'
@@ -54,7 +55,7 @@ export default function CommandPalette({
         id: 'nav-story',
         name: 'Go to Story',
         description: 'Enter the active scene',
-        icon: '🎭',
+        icon: COMMAND_ICONS.story,
         action: () => router.push(`/campaigns/${campaignId}/story`),
         keywords: ['story', 'scene', 'play'],
         category: 'navigation'
@@ -64,7 +65,7 @@ export default function CommandPalette({
         id: 'nav-characters',
         name: 'View Characters',
         description: 'See all campaign characters',
-        icon: '👥',
+        icon: COMMAND_ICONS.characters,
         action: () => router.push(`/campaigns/${campaignId}/characters`),
         keywords: ['characters', 'party', 'players'],
         category: 'navigation'
@@ -74,7 +75,7 @@ export default function CommandPalette({
         id: 'nav-story-log',
         name: 'View Story Log',
         description: 'Read campaign history',
-        icon: '📜',
+        icon: COMMAND_ICONS.quests,
         action: () => router.push(`/campaigns/${campaignId}/story-log`),
         keywords: ['log', 'history', 'timeline'],
         category: 'navigation'
@@ -84,7 +85,7 @@ export default function CommandPalette({
         id: 'nav-wiki',
         name: 'Open Wiki',
         description: 'Browse NPCs, factions, and threads',
-        icon: '📚',
+        icon: COMMAND_ICONS.wiki,
         action: () => router.push(`/campaigns/${campaignId}/wiki`),
         keywords: ['wiki', 'npcs', 'factions', 'clocks', 'threads'],
         category: 'navigation'
@@ -94,7 +95,7 @@ export default function CommandPalette({
         id: 'nav-maps',
         name: 'View Maps',
         description: 'See campaign maps',
-        icon: '🗺️',
+        icon: COMMAND_ICONS.maps,
         action: () => router.push(`/campaigns/${campaignId}`),
         keywords: ['maps', 'locations'],
         category: 'navigation'
@@ -106,7 +107,7 @@ export default function CommandPalette({
       id: 'nav-campaigns',
       name: 'Go to Campaigns',
       description: 'View all campaigns',
-      icon: '🎲',
+      icon: COMMAND_ICONS.roll,
       action: () => router.push('/campaigns'),
       keywords: ['campaigns', 'all'],
       category: 'navigation'
@@ -116,7 +117,7 @@ export default function CommandPalette({
       id: 'nav-settings',
       name: 'Go to Settings',
       description: 'User preferences',
-      icon: '⚙️',
+      icon: COMMAND_ICONS.settings,
       action: () => router.push('/settings'),
       keywords: ['settings', 'preferences'],
       category: 'navigation'
@@ -129,7 +130,7 @@ export default function CommandPalette({
           id: 'action-submit',
           name: 'Submit Action',
           description: 'Submit your character action',
-          icon: '✍️',
+          icon: COMMAND_ICONS.submitAction,
           action: () => {
             onAction('submit-action')
             setIsOpen(false)
@@ -142,7 +143,7 @@ export default function CommandPalette({
           id: 'action-resolve',
           name: 'Resolve Exchange',
           description: 'GM: Resolve the current exchange',
-          icon: '🎬',
+          icon: COMMAND_ICONS.newScene,
           action: () => {
             onAction('resolve-exchange')
             setIsOpen(false)
@@ -155,7 +156,7 @@ export default function CommandPalette({
           id: 'action-end-scene',
           name: 'End Scene',
           description: 'GM: End the current scene',
-          icon: '🏁',
+          icon: COMMAND_ICONS.endScene,
           action: () => {
             onAction('end-scene')
             setIsOpen(false)
@@ -169,7 +170,7 @@ export default function CommandPalette({
         id: 'action-create-character',
         name: 'Create Character',
         description: 'Create a new character',
-        icon: '➕',
+        icon: COMMAND_ICONS.create,
         action: () => {
           onAction('create-character')
           setIsOpen(false)
@@ -184,7 +185,7 @@ export default function CommandPalette({
       id: 'shortcut-help',
       name: 'View Keyboard Shortcuts',
       description: 'See all available shortcuts',
-      icon: '⌨️',
+      icon: COMMAND_ICONS.shortcuts,
       action: () => {
         onAction?.('show-shortcuts')
         setIsOpen(false)
@@ -313,7 +314,7 @@ export default function CommandPalette({
                               : 'hover:bg-myth-surface-sunken text-myth-ink-muted'
                           }`}
                         >
-                          <span className="text-2xl">{cmd.icon}</span>
+                          {cmd.icon && <cmd.icon className="h-5 w-5 flex-shrink-0" />}
                           <div className="flex-1">
                             <div className={`font-medium ${isSelected ? 'text-myth-accent-ink' : 'text-myth-ink'}`}>
                               {cmd.name}

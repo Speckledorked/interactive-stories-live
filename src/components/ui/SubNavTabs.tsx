@@ -7,7 +7,10 @@ export interface SubNavTab {
   key: string
   label: string
   /** Either a component (rendered as `<Icon className="w-3.5 h-3.5" />`) or a plain string/emoji (rendered as-is). */
-  icon: ComponentType<{ className?: string }> | string
+  // Component only, never a string. This used to accept an emoji too,
+  // which is how the app ended up with two icon vocabularies; closing the
+  // union is what stops a third from appearing.
+  icon: ComponentType<{ className?: string }>
   /** Present -> renders as a Link to a sibling page. Absent -> renders as a button (if onSelect is given) or an inert span for the current page's own tab. */
   href?: string | null
   badge?: number
@@ -60,7 +63,7 @@ export function SubNavTabs({ tabs, activeKey, onSelect, itemClassName = '', vari
 
         const content = (
           <>
-            {typeof tab.icon === 'string' ? <span>{tab.icon}</span> : <tab.icon className="w-3.5 h-3.5" />}
+            <tab.icon className="w-3.5 h-3.5" />
             <span>{tab.label}</span>
             {!!tab.badge && (
               <span

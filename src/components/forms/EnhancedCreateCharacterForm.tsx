@@ -12,7 +12,7 @@ import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Tabs } from '@/components/ui/tabs'
-import { ArrowLeft, ArrowRight, Backpack, BookOpen, Coins, Swords, User, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, Backpack, BookOpen, Coins, Lightbulb, Swords, User, Zap } from 'lucide-react'
 
 // The final tab's submit button sits at the exact same screen position as
 // every other tab's "Next →" button. Tapping through tabs quickly, a tap
@@ -666,7 +666,7 @@ export default function EnhancedCreateCharacterForm({
 
             <div className="bg-myth-accent/10 border border-myth-border-strong rounded-md p-4">
               <p className="text-sm text-myth-ink-muted">
-                💡 <strong>Tip:</strong> Special moves and perks are earned during gameplay through character advancement and story progression.
+                <Lightbulb className="mr-1 inline h-4 w-4 align-[-0.2em]" /><strong>Tip:</strong> Special moves and perks are earned during gameplay through character advancement and story progression.
               </p>
             </div>
           </div>
@@ -910,7 +910,7 @@ export default function EnhancedCreateCharacterForm({
           <div className="space-y-6">
             <div className="bg-myth-accent/10 border border-myth-border-strong rounded-md p-4">
               <p className="text-sm text-myth-ink-muted">
-                ⚠️ <strong>Note:</strong> These elements create personal stakes and drama. MythOS will incorporate them into your story to create compelling narrative tension.
+                <AlertTriangle className="mr-1 inline h-4 w-4 align-[-0.2em]" /><strong>Note:</strong> These elements create personal stakes and drama. MythOS will incorporate them into your story to create compelling narrative tension.
               </p>
             </div>
 

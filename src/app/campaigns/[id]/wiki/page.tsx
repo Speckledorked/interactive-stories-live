@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
-import { Search } from 'lucide-react'
+import { BookOpen, Megaphone, Search } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
@@ -16,6 +16,7 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { groupWikiEntriesByCategory } from '@/lib/wikiCategoryGrouping'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ENTITY_ICONS, ENTITY_FALLBACK_ICON, type IconComponent } from '@/lib/ui/icons'
 
 type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
 // RUMORS isn't a WikiEntryType — it's a separate feed (offscreen
@@ -25,17 +26,6 @@ type WikiTab = WikiEntryType | 'RUMORS'
 
 // Covers every WikiEntryType, not just the ones with tabs — cross-reference
 // links can point at LORE/CUSTOM entries that have no tab of their own.
-const ENTRY_TYPE_ICONS: Record<WikiEntryType, string> = {
-  NPC: '👤',
-  FACTION: '⚔️',
-  LOCATION: '🏛️',
-  CLOCK: '⏰',
-  ITEM: '🎒',
-  QUEST: '📜',
-  LORE: '📖',
-  CUSTOM: '🔖',
-}
-
 export default function WikiPage() {
   const router = useRouter()
   const params = useParams()
@@ -154,14 +144,14 @@ export default function WikiPage() {
     (rumor.summary || '').toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const tabs: { key: WikiTab; label: string; icon: string }[] = [
-    { key: 'NPC', label: 'NPCs', icon: '👤' },
-    { key: 'FACTION', label: 'Factions', icon: '⚔️' },
-    { key: 'LOCATION', label: 'Locations', icon: '🏛️' },
-    { key: 'CLOCK', label: 'Threads', icon: '⏰' },
-    { key: 'ITEM', label: 'Items', icon: '🎒' },
-    { key: 'QUEST', label: 'Quests', icon: '📜' },
-    { key: 'RUMORS', label: 'Rumors', icon: '🗣️' },
+  const tabs: { key: WikiTab; label: string; icon: IconComponent }[] = [
+    { key: 'NPC', label: 'NPCs', icon: ENTITY_ICONS.NPC },
+    { key: 'FACTION', label: 'Factions', icon: ENTITY_ICONS.FACTION },
+    { key: 'LOCATION', label: 'Locations', icon: ENTITY_ICONS.LOCATION },
+    { key: 'CLOCK', label: 'Threads', icon: ENTITY_ICONS.CLOCK },
+    { key: 'ITEM', label: 'Items', icon: ENTITY_ICONS.ITEM },
+    { key: 'QUEST', label: 'Quests', icon: ENTITY_ICONS.QUEST },
+    { key: 'RUMORS', label: 'Rumors', icon: Megaphone },
   ]
 
   // #169: below the lg breakpoint the list and detail panes stack instead
@@ -449,7 +439,10 @@ export default function WikiPage() {
                         key={i}
                         onClick={() => followRelatedLink(link)}
                       >
-                        <span className="mr-1">{ENTRY_TYPE_ICONS[link.type as WikiEntryType] || '🔗'}</span>
+                        {(() => {
+                          const Icon = ENTITY_ICONS[link.type as WikiEntryType] ?? ENTITY_FALLBACK_ICON
+                          return <Icon className="mr-1 inline h-3.5 w-3.5 align-[-0.15em]" />
+                        })()}
                         <span className="font-medium text-myth-ink">{link.id}</span>
                         <span className="text-myth-ink-faint"> — {link.relationship}</span>
                       </Button>
@@ -494,7 +487,7 @@ export default function WikiPage() {
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-myth-border px-5 py-12 text-center">
-              <div className="mb-4 text-6xl">📖</div>
+              <BookOpen className="mx-auto mb-4 h-12 w-12 text-myth-ink-faint" />
               <p className="text-myth-ink-muted">Select an entry to view details</p>
             </div>
           )}

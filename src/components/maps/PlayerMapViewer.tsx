@@ -116,7 +116,7 @@ export function PlayerMapViewer({
         ctx.font = '12px sans-serif'
         ctx.textAlign = 'center'
         ctx.fillText(
-          '⚡ ' + zone.name,
+          zone.name,
           zone.x + zone.width / 2,
           zone.y + zone.height / 2
         )

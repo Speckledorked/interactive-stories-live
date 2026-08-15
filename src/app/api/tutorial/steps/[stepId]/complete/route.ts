@@ -21,7 +21,14 @@ export async function POST(
 
     return NextResponse.json(progress);
   } catch (error: any) {
-    console.error('Error completing tutorial step:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // #317: a missing-step or unmet-prerequisite rejection from
+    // completeStep is a client error, not a server fault — distinguished
+    // by message prefix rather than a custom error class, matching this
+    // service's existing plain-Error convention.
+    const isValidationError = typeof error?.message === 'string' && /^(Tutorial step not found|Cannot complete)/.test(error.message);
+    if (!isValidationError) {
+      console.error('Error completing tutorial step:', error);
+    }
+    return NextResponse.json({ error: error.message }, { status: isValidationError ? 400 : 500 });
   }
 }

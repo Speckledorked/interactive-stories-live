@@ -26,6 +26,24 @@ export interface TutorialStepData {
   validationRules?: Record<string, any>;
 }
 
+/**
+ * A prerequisite is satisfied by either COMPLETED or SKIPPED (#318:
+ * intentional, not an oversight — once skipStep rejects skipping a
+ * required step server-side, the only steps that can ever end up SKIPPED
+ * are optional ones, and an optional prerequisite that's been skipped
+ * must still unblock whatever depends on it, or skipping it would strand
+ * the tutorial forever instead of actually skipping anything).
+ */
+function arePrerequisitesSatisfied(
+  prerequisites: string[],
+  statusByStepKey: Map<string, TutorialStatus | undefined>
+): boolean {
+  return prerequisites.every((prereqKey) => {
+    const status = statusByStepKey.get(prereqKey);
+    return status === TutorialStatus.COMPLETED || status === TutorialStatus.SKIPPED;
+  });
+}
+
 export class TutorialService {
   /**
    * Initialize default tutorial steps
@@ -357,21 +375,13 @@ export class TutorialService {
    */
   static async getNextStep(userId: string) {
     const progress = await this.getUserProgress(userId);
+    const statusByStepKey = new Map(progress.map((s) => [s.stepKey, s.userProgress?.status]));
 
     // Find first incomplete required step
     for (const step of progress) {
       if (step.isOptional) continue;
       if (!step.userProgress || step.userProgress.status !== TutorialStatus.COMPLETED) {
-        // Check prerequisites
-        const prereqsMet = step.prerequisites.every((prereqKey) => {
-          const prereqStep = progress.find((s) => s.stepKey === prereqKey);
-          return (
-            prereqStep?.userProgress?.status === TutorialStatus.COMPLETED ||
-            prereqStep?.userProgress?.status === TutorialStatus.SKIPPED
-          );
-        });
-
-        if (prereqsMet) {
+        if (arePrerequisitesSatisfied(step.prerequisites, statusByStepKey)) {
           return step;
         }
       }
@@ -402,9 +412,36 @@ export class TutorialService {
   }
 
   /**
-   * Complete a tutorial step
+   * Complete a tutorial step.
+   *
+   * #317: this used to be a bare upsert with no prerequisite check at all
+   * — that logic only ever existed in the separate, advisory getNextStep.
+   * Any authenticated user who fetched the step list once (to get real
+   * stepIds) could POST each step's complete endpoint directly, in any
+   * order, and getCompletionPercentage would report 100% even though
+   * prerequisite steps were never actually done in sequence. Reuses the
+   * same arePrerequisitesSatisfied logic getNextStep already has, so the
+   * two can't drift apart on what "satisfied" means.
    */
   static async completeStep(userId: string, stepId: string) {
+    const step = await prisma.tutorialStep.findUnique({ where: { id: stepId } });
+    if (!step) {
+      throw new Error('Tutorial step not found');
+    }
+
+    if (step.prerequisites.length > 0) {
+      const prereqRows = await prisma.userTutorialProgress.findMany({
+        where: { userId, step: { stepKey: { in: step.prerequisites } } },
+        select: { status: true, step: { select: { stepKey: true } } },
+      });
+      const statusByStepKey = new Map(prereqRows.map((r) => [r.step.stepKey, r.status]));
+      if (!arePrerequisitesSatisfied(step.prerequisites, statusByStepKey)) {
+        throw new Error(
+          `Cannot complete "${step.stepKey}": prerequisite step(s) not yet completed or skipped`
+        );
+      }
+    }
+
     return await prisma.userTutorialProgress.upsert({
       where: {
         userId_stepId: { userId, stepId },
@@ -423,9 +460,26 @@ export class TutorialService {
   }
 
   /**
-   * Skip a tutorial step
+   * Skip a tutorial step.
+   *
+   * #318: the UI only ever shows the Skip button for an optional,
+   * not-started step, but the API itself had no matching server-side
+   * check — a direct call could skip a REQUIRED step, which
+   * getNextStep's prerequisite check (SKIPPED counts the same as
+   * COMPLETED) would then treat as satisfied while
+   * getCompletionPercentage (COMPLETED-only) never counted it — an
+   * internally inconsistent state where the tutorial reads as both
+   * "unblocked past this point" and "not actually done."
    */
   static async skipStep(userId: string, stepId: string) {
+    const step = await prisma.tutorialStep.findUnique({ where: { id: stepId }, select: { isOptional: true, stepKey: true } });
+    if (!step) {
+      throw new Error('Tutorial step not found');
+    }
+    if (!step.isOptional) {
+      throw new Error(`Cannot skip "${step.stepKey}": it is a required step`);
+    }
+
     return await prisma.userTutorialProgress.upsert({
       where: {
         userId_stepId: { userId, stepId },
@@ -526,8 +580,16 @@ export class TutorialService {
     for (const step of steps) {
       const progress = step.userProgress[0];
       if (progress?.status === TutorialStatus.IN_PROGRESS) {
-        // Auto-complete the step
-        await this.completeStep(userId, step.id);
+        // Auto-complete the step. Best-effort (#317's new prerequisite
+        // check can now reject this) — tutorial tracking is cosmetic, and
+        // one step's real in-game trigger firing out of the tutorial's
+        // expected order shouldn't break the actual game action that
+        // triggered it.
+        try {
+          await this.completeStep(userId, step.id);
+        } catch (error) {
+          console.warn(`Tutorial auto-complete for "${step.stepKey}" skipped:`, error);
+        }
       }
     }
   }

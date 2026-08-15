@@ -1,5 +1,5 @@
 // Persistent left navigation for wide viewports (lg:+), mounted only for
-// variant="myth" pages (see TavernHeader, which owns mounting this
+// pages (see TavernHeader, which owns mounting this
 // alongside TavernMobileMenu). Below lg:, this renders nothing.
 //
 // This is the *adaptation upward* of the mobile chrome, not the source

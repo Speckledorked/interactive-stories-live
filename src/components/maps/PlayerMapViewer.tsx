@@ -362,9 +362,9 @@ export function PlayerMapViewer({
   if (!map) {
     return (
       <Card className={`p-8 text-center ${className}`}>
-        <MapPin className="w-16 h-16 mx-auto text-ember-400/50 mb-4" />
-        <h3 className="text-lg font-semibold mb-2 text-ember-100">No Map Available</h3>
-        <p className="text-ember-300/60">
+        <MapPin className="w-16 h-16 mx-auto text-myth-ink-faint mb-4" />
+        <h3 className="text-lg font-semibold mb-2 text-myth-ink">No Map Available</h3>
+        <p className="text-myth-ink-muted">
           MythOS will generate a map when the scene begins.
         </p>
       </Card>
@@ -372,7 +372,7 @@ export function PlayerMapViewer({
   }
 
   return (
-    <div className={`relative w-full bg-tavern-900 rounded-lg overflow-hidden ${className}`} ref={containerRef}>
+    <div className={`relative w-full bg-myth-surface-sunken rounded-lg overflow-hidden ${className}`} ref={containerRef}>
       {/* Map Canvas — fixed aspect ratio so it scales proportionally at any
           viewport width instead of stretching to an unconstrained height. */}
       <div className="w-full aspect-[4/3]">
@@ -418,11 +418,11 @@ export function PlayerMapViewer({
       {/* Map Info */}
       <div className="absolute top-2 right-2 sm:top-4 sm:right-4 max-w-[48%] sm:max-w-xs">
         <Card className="p-2 sm:p-3">
-          <h3 className="font-semibold text-xs sm:text-sm mb-1 sm:mb-2 text-ember-100 truncate">{map.name}</h3>
+          <h3 className="font-semibold text-xs sm:text-sm mb-1 sm:mb-2 text-myth-ink truncate">{map.name}</h3>
           {map.description && (
-            <p className="hidden sm:block text-xs text-ember-300/60 mb-2 line-clamp-3">{map.description}</p>
+            <p className="hidden sm:block text-xs text-myth-ink-muted mb-2 line-clamp-3">{map.description}</p>
           )}
-          <div className="space-y-0.5 sm:space-y-1 text-[10px] sm:text-xs text-ember-200/70">
+          <div className="space-y-0.5 sm:space-y-1 text-[10px] sm:text-xs text-myth-ink-muted">
             <div>Players: {map.tokens.filter(t => t.isPC).length}</div>
             <div>NPCs: {map.tokens.filter(t => !t.isPC).length}</div>
             <div className="hidden sm:block">Interactive Areas: {map.zones.filter(z => z.triggerType).length}</div>
@@ -441,24 +441,24 @@ export function PlayerMapViewer({
                     {'isPC' in hoveredElement.data && hoveredElement.data.isPC ? 'Player' : 'Character'}
                   </Badge>
                 ) : (
-                  <Badge variant="neutral" className="bg-ember-900/20">
+                  <Badge variant="neutral" className="bg-myth-border">
                     {'triggerType' in hoveredElement.data && hoveredElement.data.triggerType ? 'Interactive' : 'Area'}
                   </Badge>
                 )}
                 <span className="truncate">{hoveredElement.data.name}</span>
               </div>
               {'description' in hoveredElement.data && hoveredElement.data.description && (
-                <div className="text-xs text-ember-300/60 mb-1">
+                <div className="text-xs text-myth-ink-muted mb-1">
                   {hoveredElement.data.description}
                 </div>
               )}
               {hoveredElement.type === 'zone' && 'triggerType' in hoveredElement.data && hoveredElement.data.triggerType && (
-                <div className="text-xs text-ember-300 font-medium">
+                <div className="text-xs text-myth-ink-muted font-medium">
                   Click to interact
                 </div>
               )}
               {hoveredElement.type === 'token' && 'character' in hoveredElement.data && hoveredElement.data.character?.name === characterName && (
-                <div className="text-xs text-ember-400 font-medium">
+                <div className="text-xs text-myth-accent font-medium">
                   This is your character
                 </div>
               )}

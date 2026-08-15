@@ -1038,8 +1038,8 @@ export default function StoryPage() {
 
   if (loading) {
     return (
-      <TavernPage background="myth">
-        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} variant="myth" />
+      <TavernPage>
+        <TavernHeader backHref={`/campaigns/${campaignId}`} title="Loading…" campaignId={campaignId} />
         <main className={`max-w-7xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16 flex justify-center items-center min-h-[60vh]`}>
           <AILoadingState type="scene" />
         </main>
@@ -1079,17 +1079,16 @@ export default function StoryPage() {
   ]
 
   return (
-    <TavernPage background="myth">
+    <TavernPage>
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title={campaign?.campaign?.name || 'Story'}
         campaignId={campaignId}
         isAdmin={isAdmin}
-        variant="myth"
         subrow={
           <div className="max-w-7xl mx-auto px-4 flex items-center justify-between gap-3 border-t border-myth-border pt-2 pb-0">
             <nav className="flex items-center gap-1 overflow-x-auto text-sm">
-              <SubNavTabs tabs={storyTabs} activeKey="story" itemClassName="whitespace-nowrap flex-shrink-0" variant="myth" />
+              <SubNavTabs tabs={storyTabs} activeKey="story" itemClassName="whitespace-nowrap flex-shrink-0" />
             </nav>
             <div className="flex items-center gap-1 flex-shrink-0 pb-1.5">
               <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
@@ -1937,7 +1936,7 @@ export default function StoryPage() {
       </div>
       </main>
 
-      <TavernNav campaignId={campaignId} variant="myth" />
+      <TavernNav campaignId={campaignId} />
 
       {/* Character Snapshot Modal */}
       {selectedCharacterId && (

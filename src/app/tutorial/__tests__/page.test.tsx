@@ -17,13 +17,6 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
-// TavernPage's font module calls next/font/google at module load time,
-// which only works inside an actual Next.js build — not under vitest.
-vi.mock('@/lib/tavernTheme', () => ({
-  displayFont: { className: 'font-display' },
-  bodyFont: { className: 'font-body' },
-}))
-
 const { authenticatedFetchMock } = vi.hoisted(() => ({
   authenticatedFetchMock: vi.fn(),
 }))

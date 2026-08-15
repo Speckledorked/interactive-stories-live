@@ -14,7 +14,6 @@ import { formatRelativeTime } from '@/lib/tavernUtils'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import { TavernButton } from '@/components/tavern/ui'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
@@ -208,28 +207,27 @@ export default function FriendsPage() {
 
   if (loading) {
     return (
-      <TavernPage background="myth">
-        <TavernHeader backHref="/campaigns" title="Friends" campaignId={lastCampaignId || undefined} variant="myth" />
+      <TavernPage>
+        <TavernHeader backHref="/campaigns" title="Friends" campaignId={lastCampaignId || undefined} />
         <main className={`max-w-2xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16`}>
           <div className="flex justify-center py-16">
             <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
           </div>
         </main>
-        <TavernNav campaignId={lastCampaignId || undefined} variant="myth" />
+        <TavernNav campaignId={lastCampaignId || undefined} />
       </TavernPage>
     )
   }
 
   return (
-    <TavernPage background="myth">
+    <TavernPage>
       <TavernHeader
         backHref="/campaigns"
         title="Friends"
         campaignId={lastCampaignId || undefined}
-        variant="myth"
         subrow={
           <nav className="max-w-2xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-myth-border pt-2 pb-0">
-            <SubNavTabs tabs={tabs} activeKey={activeTab} onSelect={(key) => setActiveTab(key as TabKey)} variant="myth" />
+            <SubNavTabs tabs={tabs} activeKey={activeTab} onSelect={(key) => setActiveTab(key as TabKey)} />
           </nav>
         }
       />
@@ -390,15 +388,15 @@ export default function FriendsPage() {
                   ) : result.friendRequest?.type === 'incoming' ? (
                     <span className="flex-shrink-0 text-xs text-myth-ink-faint">Check Requests tab</span>
                   ) : (
-                    <TavernButton
-                      theme="myth"
+                    <Button
+                      size="sm"
                       onClick={() => sendRequest(result.id)}
                       disabled={pendingActionId === result.id}
-                      className="!py-1.5 !px-3 text-xs flex-shrink-0"
+                      className="flex-shrink-0"
                     >
                       <UserPlus className="w-3.5 h-3.5" />
                       Add
-                    </TavernButton>
+                    </Button>
                   )}
                 </div>
               ))}
@@ -407,7 +405,7 @@ export default function FriendsPage() {
         )}
       </main>
 
-      <TavernNav campaignId={lastCampaignId || undefined} variant="myth" />
+      <TavernNav campaignId={lastCampaignId || undefined} />
     </TavernPage>
   )
 }

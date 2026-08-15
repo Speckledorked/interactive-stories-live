@@ -133,8 +133,8 @@ export default function AnalyticsDashboardPage() {
   const maxDailyCost = data ? Math.max(0.01, ...data.aiCostByDay.map(d => d.costDollars)) : 0.01
 
   return (
-    <TavernPage background="myth">
-      <TavernHeader backHref="/campaigns" title="Alpha Instrumentation" variant="myth" />
+    <TavernPage>
+      <TavernHeader backHref="/campaigns" title="Alpha Instrumentation" />
 
       <main className={`max-w-5xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         {loading && (

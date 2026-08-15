@@ -263,12 +263,11 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
   }
 
   return (
-    <TavernPage background="myth">
+    <TavernPage>
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
         title={title}
         campaignId={campaignId}
-        variant="myth"
         subrow={
           <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-myth-border pt-2 pb-0">
             <SubNavTabs
@@ -276,7 +275,6 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
               activeKey={selectedType}
               onSelect={(key) => setSelectedType(key as WikiTab)}
               itemClassName="whitespace-nowrap flex-shrink-0"
-              variant="myth"
             />
           </nav>
         }
@@ -585,7 +583,7 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
       )}
       </main>
 
-      <TavernNav campaignId={campaignId} variant="myth" />
+      <TavernNav campaignId={campaignId} />
     </TavernPage>
   )
 }

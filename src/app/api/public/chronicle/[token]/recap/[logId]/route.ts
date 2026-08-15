@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { checkRateLimit, getClientIp, RECAP_VIEW_LIMIT } from '@/lib/rateLimit'
 
 export async function GET(
   request: NextRequest,
@@ -55,10 +56,24 @@ export async function GET(
     // all — counts an actual page load, not a share-link copy/generation.
     // Awaited (not fire-and-forget) since serverless functions can be
     // frozen the instant the response is sent.
-    await prisma.campaignLog.update({
-      where: { id: log.id },
-      data: { recapViewCount: { increment: 1 } },
-    })
+    //
+    // #324: unconditionally incrementing here let a trivial scripted loop
+    // inflate the count arbitrarily. Deduped per IP+recap rather than
+    // rejected outright — this is a public, unauthenticated read route and
+    // the view itself must still succeed either way, only the counter is
+    // gated.
+    const viewLimit = await checkRateLimit(
+      `${getClientIp(request)}:${log.id}`,
+      RECAP_VIEW_LIMIT.bucket,
+      RECAP_VIEW_LIMIT.limit,
+      RECAP_VIEW_LIMIT.windowSeconds
+    )
+    if (viewLimit.allowed) {
+      await prisma.campaignLog.update({
+        where: { id: log.id },
+        data: { recapViewCount: { increment: 1 } },
+      })
+    }
 
     return NextResponse.json({
       campaign: {

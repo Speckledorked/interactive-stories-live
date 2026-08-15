@@ -15,9 +15,15 @@ vi.mock('@/lib/prisma', () => ({
     friendRequest: { findMany: vi.fn() },
   },
 }))
+vi.mock('@/lib/rateLimit', () => ({
+  FRIEND_SEARCH_LIMIT: { bucket: 'friend-search', limit: 20, windowSeconds: 60 },
+  checkRateLimit: vi.fn(),
+  rateLimitExceededResponse: vi.fn(),
+}))
 
 import { getUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { GET } from '../route'
 
 const db = prisma as any
@@ -29,6 +35,7 @@ function req(query: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   ;(getUser as any).mockResolvedValue({ userId: 'me' })
+  ;(checkRateLimit as any).mockResolvedValue({ allowed: true, remaining: 19, retryAfterSeconds: 0 })
   db.friendship.findMany.mockResolvedValue([])
   db.friendRequest.findMany.mockResolvedValue([])
 })
@@ -44,6 +51,23 @@ describe('GET', () => {
     const response = await GET(req('a'))
     expect(response.status).toBe(400)
     expect(db.user.findMany).not.toHaveBeenCalled()
+  })
+
+  // #316: search returns full emails/names for up to 10 users per call
+  // with zero rate limiting — exactly the shape a script enumerates the
+  // user base with.
+  it('#316: rejects a request over the rate limit before searching', async () => {
+    ;(checkRateLimit as any).mockResolvedValue({ allowed: false, remaining: 0, retryAfterSeconds: 30 })
+    ;(rateLimitExceededResponse as any).mockReturnValue(new Response(null, { status: 429 }))
+    const response = await GET(req('alice'))
+    expect(response.status).toBe(429)
+    expect(db.user.findMany).not.toHaveBeenCalled()
+  })
+
+  it('#316: keys the rate limit on the authenticated user', async () => {
+    db.user.findMany.mockResolvedValue([])
+    await GET(req('alice'))
+    expect(checkRateLimit).toHaveBeenCalledWith('me', 'friend-search', 20, 60)
   })
 
   it('excludes the caller from their own search results', async () => {

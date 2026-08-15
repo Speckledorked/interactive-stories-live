@@ -13,8 +13,14 @@ import { NextRequest } from 'next/server'
 vi.mock('@/lib/prisma', () => ({
   prisma: { campaign: { findUnique: vi.fn() }, campaignLog: { findUnique: vi.fn(), update: vi.fn() } },
 }))
+vi.mock('@/lib/rateLimit', () => ({
+  RECAP_VIEW_LIMIT: { bucket: 'recap-view', limit: 1, windowSeconds: 3600 },
+  checkRateLimit: vi.fn(),
+  getClientIp: vi.fn(() => '127.0.0.1'),
+}))
 
 import { prisma } from '@/lib/prisma'
+import { checkRateLimit } from '@/lib/rateLimit'
 import { GET } from '../route'
 
 const db = prisma as any
@@ -25,6 +31,7 @@ function req(token: string, logId: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  ;(checkRateLimit as any).mockResolvedValue({ allowed: true, remaining: 0, retryAfterSeconds: 0 })
 })
 
 describe('GET', () => {
@@ -98,6 +105,31 @@ describe('GET', () => {
     db.campaignLog.findUnique.mockResolvedValue(null)
     await GET(req('live-token', 'missing'), { params: { token: 'live-token', logId: 'missing' } })
     expect(db.campaignLog.update).not.toHaveBeenCalled()
+  })
+
+  // #324: unconditionally incrementing on every hit let a trivial scripted
+  // loop inflate the count arbitrarily.
+  it('#324: does not increment recapViewCount once the per-IP/recap view limit is already used up', async () => {
+    ;(checkRateLimit as any).mockResolvedValue({ allowed: false, remaining: 0, retryAfterSeconds: 1800 })
+    db.campaign.findUnique.mockResolvedValue({ id: 'camp1', title: 'T', universe: null, heroImageUrl: null, chronicleShareEnabled: true })
+    db.campaignLog.findUnique.mockResolvedValue({
+      id: 'log1', campaignId: 'camp1', title: 'The Siege Breaks', summary: 's',
+      highlights: [], entryType: 'scene', inGameDate: null, turnNumber: 5,
+    })
+    const response = await GET(req('live-token', 'log1'), { params: { token: 'live-token', logId: 'log1' } })
+    expect(response.status).toBe(200) // the view itself still succeeds — only the counter is gated
+    expect(db.campaignLog.update).not.toHaveBeenCalled()
+  })
+
+  it('#324: keys the dedup on IP + the specific recap, not just IP', async () => {
+    db.campaign.findUnique.mockResolvedValue({ id: 'camp1', title: 'T', universe: null, heroImageUrl: null, chronicleShareEnabled: true })
+    db.campaignLog.findUnique.mockResolvedValue({
+      id: 'log1', campaignId: 'camp1', title: 'The Siege Breaks', summary: 's',
+      highlights: [], entryType: 'scene', inGameDate: null, turnNumber: 5,
+    })
+    db.campaignLog.update.mockResolvedValue({})
+    await GET(req('live-token', 'log1'), { params: { token: 'live-token', logId: 'log1' } })
+    expect(checkRateLimit).toHaveBeenCalledWith('127.0.0.1:log1', 'recap-view', 1, 3600)
   })
 
   it('returns 500 on an unexpected error', async () => {

@@ -14,15 +14,21 @@ vi.mock('@/lib/db/campaignAccess', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     campaignMembership: { count: vi.fn(), delete: vi.fn(), update: vi.fn() },
+    turnTracker: { findMany: vi.fn() },
   },
+}))
+vi.mock('@/lib/notifications/turn-tracker', () => ({
+  TurnTracker: { removePlayerFromTurn: vi.fn().mockResolvedValue([]) },
 }))
 
 import { requireAuth } from '@/lib/auth'
 import { requireCampaignAdmin, getCampaignMembership } from '@/lib/db/campaignAccess'
 import { prisma } from '@/lib/prisma'
+import { TurnTracker } from '@/lib/notifications/turn-tracker'
 import { DELETE, PATCH } from '../route'
 
 const db = prisma as any
+const turnTracker = TurnTracker as any
 
 function deleteRequest() {
   return new NextRequest('http://localhost/api/campaigns/camp1/members/user2', { method: 'DELETE' })
@@ -40,6 +46,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   ;(requireAuth as any).mockResolvedValue({ userId: 'admin1', email: 'admin@example.com' })
   ;(requireCampaignAdmin as any).mockResolvedValue({ membership: { role: 'ADMIN' } })
+  db.turnTracker.findMany.mockResolvedValue([])
+  turnTracker.removePlayerFromTurn.mockResolvedValue([])
 })
 
 describe('DELETE', () => {
@@ -77,6 +85,40 @@ describe('DELETE', () => {
   it('allows removing an admin when another admin remains', async () => {
     ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
     db.campaignMembership.count.mockResolvedValue(2)
+    const response = await DELETE(deleteRequest(), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(200)
+    expect(db.campaignMembership.delete).toHaveBeenCalled()
+  })
+
+  // #319: removePlayerFromTurn/addPlayerToTurn were fully built but called
+  // from nowhere — a removed member's slot in an active scene's turnOrder
+  // was never actually cleared, only made inaccessible to them.
+  it('#319: drops the removed member from a scene turnOrder they are present in', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
+    db.turnTracker.findMany.mockResolvedValue([
+      { sceneId: 'scene1', turnOrder: [{ userId: 'user2', name: 'Bob' }, { userId: 'user3', name: 'Carol' }] },
+    ])
+    const response = await DELETE(deleteRequest(), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(200)
+    expect(turnTracker.removePlayerFromTurn).toHaveBeenCalledWith('camp1', 'scene1', 'user2')
+  })
+
+  it('#319: does not touch a turnTracker the removed member is not part of', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
+    db.turnTracker.findMany.mockResolvedValue([
+      { sceneId: 'scene1', turnOrder: [{ userId: 'user3', name: 'Carol' }] },
+    ])
+    const response = await DELETE(deleteRequest(), { params: { id: 'camp1', userId: 'user2' } })
+    expect(response.status).toBe(200)
+    expect(turnTracker.removePlayerFromTurn).not.toHaveBeenCalled()
+  })
+
+  it('#319: a failure clearing turn order does not fail the member removal itself', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
+    db.turnTracker.findMany.mockResolvedValue([
+      { sceneId: 'scene1', turnOrder: [{ userId: 'user2', name: 'Bob' }] },
+    ])
+    turnTracker.removePlayerFromTurn.mockRejectedValue(new Error('db down'))
     const response = await DELETE(deleteRequest(), { params: { id: 'camp1', userId: 'user2' } })
     expect(response.status).toBe(200)
     expect(db.campaignMembership.delete).toHaveBeenCalled()

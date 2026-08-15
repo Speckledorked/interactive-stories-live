@@ -2248,6 +2248,12 @@ model TurnTracker {
   // Notifications sent
   remindersSent    Json      @default("[]") // Array of timestamps
   lastReminderSent DateTime?
+  // Set once a host overdue-turn notification has fired for the *current*
+  // deadline, so the daily cron sweep doesn't re-notify every run while a
+  // scene sits stuck. Cleared alongside remindersSent whenever a new
+  // deadline is set (advanceTurn/skipTurn), so a later overdue turn on the
+  // same tracker notifies again.
+  overdueNotifiedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

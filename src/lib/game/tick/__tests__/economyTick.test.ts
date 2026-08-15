@@ -118,7 +118,11 @@ describe('tickEconomy (DB handler)', () => {
     })
     expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'creditor1' }, data: { stability: expect.any(Number) } })
     expect(result.changes).toHaveLength(1)
-    expect(result.changes[0]).toMatchObject({ entityType: 'FACTION', entityId: 'creditor1', field: 'stability', origin: 'wake' })
+    // #310: this cascade must NOT carry the same discriminator a genuine
+    // NPC-death/faction-collapse wake does — npcDispositionTick.ts/
+    // beliefTick.ts both now branch on this to avoid misreading an ally's
+    // loan default as institutional-memory-loss abandonment.
+    expect(result.changes[0]).toMatchObject({ entityType: 'FACTION', entityId: 'creditor1', field: 'stability', origin: 'wake', wakeSourceType: 'FACTION_DEFAULT' })
   })
 
   it('defaults an outstanding debt whose debtor is still active but broke', async () => {
@@ -247,6 +251,72 @@ describe('tickEconomy (DB handler)', () => {
 
     expect(prisma.factionDebt.create).not.toHaveBeenCalled()
     expect(result.changes).toEqual([])
+  })
+
+  // #311: a debtor whose debt just defaulted (flipping OUTSTANDING ->
+  // DEFAULTED, never removing the row) used to pass the old
+  // OUTSTANDING-only existing-debt check and immediately re-borrow — in
+  // the same tick, from any still-solvent ally, frequently the very
+  // creditor it just stiffed (the cascade penalty only ever hits the
+  // creditor's stability, never the debtor's own resources). The
+  // existing-debt query itself must now also exclude a recent DEFAULTED
+  // debt, not just an OUTSTANDING one.
+  it('#311: the existing-debt query excludes both OUTSTANDING and a recently-DEFAULTED debt', async () => {
+    vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
+      { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+    ] as any)
+    vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([]) // no allies reached — findFirst is what's under test
+
+    await tickEconomy(baseCtx({ turnNumber: 10 }))
+
+    expect(prisma.factionDebt.findFirst).toHaveBeenCalledWith({
+      where: {
+        campaignId: 'campaign-1',
+        debtorFactionId: 'broke1',
+        OR: [
+          { status: 'OUTSTANDING' },
+          { status: 'DEFAULTED', turnResolved: { gte: 5 } }, // turnNumber(10) - cooldown(5)
+        ],
+      },
+      select: { id: true },
+    })
+  })
+
+  it('#311: does not originate a new loan for a debtor that defaulted within the cooldown window', async () => {
+    vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
+      { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+    ] as any)
+    // Simulates the DB actually finding the recent DEFAULTED row the OR
+    // clause above is meant to catch.
+    vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce({ id: 'defaulted-debt' } as any)
+
+    const result = await tickEconomy(baseCtx())
+
+    expect(prisma.factionDebt.create).not.toHaveBeenCalled()
+    expect(result.changes).toEqual([])
+  })
+
+  it('#311: a debtor whose last default is now outside the cooldown window is eligible again', async () => {
+    vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([
+        { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+      ] as any)
+      .mockResolvedValueOnce([{ id: 'ally1', name: 'Wealthy Co', resources: 90 }] as any)
+    // The real query (not asserted here) would exclude this row on its
+    // own — this test only pins the behavior once findFirst legitimately
+    // returns null (old default aged out), not the query shape itself.
+    vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
+
+    const result = await tickEconomy(baseCtx())
+
+    expect(prisma.factionDebt.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ creditorFactionId: 'ally1', debtorFactionId: 'broke1' }),
+    })
+    expect(result.changes).toHaveLength(1)
   })
 
   it('does not originate a loan when the broke faction has no ally at all', async () => {

@@ -124,6 +124,28 @@ describe('applyNpcConsequence', () => {
     const { changes } = applyNpcConsequence(npc, makeConsequence({ updatedGoal: 'new goal' }))
     expect(changes.every(c => c.origin === 'consequence')).toBe(true)
   })
+
+  // #309: the 'consequence' WorldChange (the only WorldEvent type
+  // npcDispositionTick's ENDANGERED/PROTECTED classification reads) used
+  // to be a fallback that fired only when nothing else changed — the
+  // ordinary case of a narratively meaningful consequence ALSO supplying
+  // an updated goal/relationship silently swallowed it. It must fire
+  // alongside those field changes, not only in their absence.
+  it('#309: still records a field: "consequence" entry even when goal/relationship also changed', () => {
+    const npc = makeNpc({ goals: 'old goal', relationship: 'stranger' })
+    const { changes } = applyNpcConsequence(npc, makeConsequence({
+      action: 'BETRAYED',
+      updatedGoal: 'seek revenge on the party',
+      updatedRelationship: 'sworn enemy',
+    }))
+    const consequenceChange = changes.find((c) => c.field === 'consequence')
+    expect(consequenceChange).toBeDefined()
+    expect(consequenceChange?.newValue).toBe('BETRAYED')
+    // The field-specific changes are still there too — this is additive,
+    // not a replacement.
+    expect(changes.find((c) => c.field === 'goals')).toBeDefined()
+    expect(changes.find((c) => c.field === 'relationship')).toBeDefined()
+  })
 })
 
 describe('applyFactionConsequence', () => {

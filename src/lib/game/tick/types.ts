@@ -58,6 +58,20 @@ export interface WorldChange {
    * ordinary play". */
   checkKey?: string
   /**
+   * #310: set only when origin is 'wake' — ActiveWake.sourceType ('NPC' |
+   * 'FACTION' | 'FACTION_DEFAULT'). Three independent handlers all write
+   * the identical (FACTION, field: 'stability', origin: 'wake') shape:
+   * wakeTick.ts's NPC-death ripple, its faction-collapse ripple, and
+   * economyTick.ts's loan-default cascade. Without this, a faction merely
+   * absorbing a shockwave from an ally's defaulted loan was
+   * indistinguishable from genuine institutional-memory loss (a member's
+   * death or a faction's own collapse) to npcDispositionTick.ts's
+   * FACTION_ABANDONED_THEM classification and beliefTick.ts's
+   * COLLAPSE_RIPPLE_SURVIVED classification, both of which now branch on
+   * this field instead of inferring cause purely from origin: 'wake'.
+   */
+  wakeSourceType?: 'NPC' | 'FACTION' | 'FACTION_DEFAULT'
+  /**
    * #101 v1.1: where this change actually happened, captured at write time
    * (e.g. an NPC's or a war's contested location) — used by
    * tick/informationTick.ts to compute an accurate TOLD-propagation delay

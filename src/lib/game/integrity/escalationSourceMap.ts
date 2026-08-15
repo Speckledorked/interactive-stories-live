@@ -21,12 +21,11 @@ import { CheckKey } from './checkKeys'
 export const ESCALATION_SOURCE_FILES: Readonly<Partial<Record<CheckKey, readonly string[]>>> = {
   // Phase 0's original bug, and the shape every other id-keyed-JSON-blob
   // check shares (1d: "same technique covers every other id-keyed JSON
-  // blob"). All four write through resolveEntityByNameOrId today; a
+  // blob"). All three write through resolveEntityByNameOrId today; a
   // recurrence means some new write path started skipping it again.
   'character.relationships.keys.resolve': ['src/lib/game/worldUpdaters/characters.ts'],
   'npc.socialTies.keys.resolve': ['src/lib/game/tick/npcSocietyTick.ts'],
   'faction.relationships.keys.resolve': ['src/lib/game/tick/relationshipTick.ts'],
-  'character.resources.reputation.keys.resolve': ['src/lib/game/questRewards.ts'],
 
   // Phase 0's other original bug. The FK (Phase 0 migration) makes this
   // structurally impossible today, so a recurrence would mean the
@@ -46,6 +45,21 @@ export const ESCALATION_SOURCE_FILES: Readonly<Partial<Record<CheckKey, readonly
   // for why each one is a poor fit for automated fix-generation even
   // though some of them have a data repair (Phase 1) or a mechanical
   // oracle (Phase 1d) already.
+  //
+  // character.resources.reputation.keys.resolve is ALSO deliberately
+  // absent, for a different reason than the above five: this attribution
+  // used to point at questRewards.ts, but that's stale — the AI-facing
+  // `reputation_changes` field was removed in favor of `standing_changes`
+  // writing to the relational FactionStanding table instead (see
+  // standing.ts), which resolves its faction reference through a real
+  // `db.faction.findFirst` lookup before ever writing, and is further
+  // guarded by an actual FK constraint (`onDelete: Cascade`) — structurally
+  // immune to the orphan-key shape this map exists to attribute. No code
+  // path writes a fresh violation into Character.resources.reputation
+  // anymore; repairCharacterReputation (Phase 1) still runs and still
+  // matters, but only to clean up rows that predate that migration. An
+  // escalation here would mean stale legacy data, not a live regressing
+  // bug — nothing for Phase 5 to attribute a fix attempt to.
 } as const
 
 /** Whether Phase 5 has anywhere to attribute a fix attempt for this

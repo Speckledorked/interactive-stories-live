@@ -269,7 +269,7 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
         title={title}
         campaignId={campaignId}
         subrow={
-          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-myth-border pt-2 pb-0">
+          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-2 overflow-x-auto text-sm border-t border-myth-border pt-2 pb-0">
             <SubNavTabs
               tabs={tabs}
               activeKey={selectedType}
@@ -399,7 +399,7 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
                               both. */}
                           {entry.stats && <EntityStatRow stats={entry.stats} />}
                           {entry.lastSeenTurn && (
-                            <p className="mt-2 flex items-center gap-1 text-xs text-myth-ink-faint">
+                            <p className="mt-2 flex items-center gap-2 text-xs text-myth-ink-faint">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>

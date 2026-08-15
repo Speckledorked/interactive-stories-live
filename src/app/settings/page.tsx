@@ -218,7 +218,7 @@ export default function SettingsPage() {
         backHref="/campaigns"
         title="Settings"
         subrow={
-          <nav className="max-w-4xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-myth-border pt-2 pb-0">
+          <nav className="max-w-4xl mx-auto px-4 flex items-center gap-2 text-sm border-t border-myth-border pt-2 pb-0">
             <SubNavTabs tabs={tabs} activeKey={activeTab} onSelect={(key) => setActiveTab(key as TabKey)} />
           </nav>
         }

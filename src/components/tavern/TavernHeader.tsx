@@ -107,17 +107,23 @@ export function TavernHeader({
         )}
 
         {wordmark ? (
-          <div className="flex flex-col items-center lg:hidden">
-            <div className="flex items-center gap-3">
-              <span className="text-myth-gold/50 text-xs tracking-widest">◈──</span>
+          // min-w-0 so this can shrink: the row is spacer + wordmark +
+          // a flex-shrink-0 icon cluster, and at 390px the full wordmark
+          // (191px) pushed the cluster's last item ~25px off-screen —
+          // the Profile link was literally unreachable on a phone. The
+          // ◈── flourishes are decoration, so they're the part that goes
+          // first; the name itself stays.
+          <div className="flex min-w-0 flex-col items-center lg:hidden">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="hidden text-myth-gold/50 text-xs tracking-widest sm:inline">◈──</span>
               <h1
-                className="font-display text-2xl tracking-[0.15em] text-myth-gold"
+                className="truncate font-display text-2xl tracking-[0.15em] text-myth-gold"
               >
                 MythOS
               </h1>
-              <span className="text-myth-gold/50 text-xs tracking-widest">──◈</span>
+              <span className="hidden text-myth-gold/50 text-xs tracking-widest sm:inline">──◈</span>
             </div>
-            <p className="text-[11px] tracking-[0.2em] text-myth-gold/60 -mt-0.5">THE WORLD REMEMBERS.</p>
+            <p className="truncate text-[11px] tracking-[0.2em] text-myth-gold/60 -mt-0.5">THE WORLD REMEMBERS.</p>
           </div>
         ) : (
           <h1
@@ -127,7 +133,7 @@ export function TavernHeader({
           </h1>
         )}
 
-        <div className="flex items-center gap-0.5 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <IconButton
             icon={Bell}
             label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}

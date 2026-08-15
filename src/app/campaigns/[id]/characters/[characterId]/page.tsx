@@ -187,7 +187,7 @@ export default function CharacterPage() {
         campaignId={campaignId}
         isAdmin={campaign?.userRole === 'ADMIN'}
         subrow={
-          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 text-sm border-t border-myth-border pt-2 pb-0">
+          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-2 text-sm border-t border-myth-border pt-2 pb-0">
             <SubNavTabs
               tabs={[
                 { key: 'overview', label: 'Overview', icon: Home, href: `/campaigns/${campaignId}` },

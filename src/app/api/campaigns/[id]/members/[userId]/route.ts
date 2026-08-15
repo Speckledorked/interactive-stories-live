@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { UserRole } from '@prisma/client';
 import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { handleRouteError } from '@/lib/api/errors';
+import { TurnTracker, type TurnOrder } from '@/lib/notifications/turn-tracker';
 
 // DELETE /api/campaigns/[id]/members/[userId] - Remove member from campaign
 export async function DELETE(
@@ -52,6 +53,24 @@ export async function DELETE(
         },
       },
     });
+
+    // Drop the removed member from any scene's stored turnOrder they're
+    // still present in — otherwise the queue stalls on their slot every
+    // time it comes back around, since getCampaignMembership already 403s
+    // them out of advancing their own turn but nothing ever clears the
+    // stale entry. Best-effort: a failure here shouldn't undo the removal.
+    const turnTrackers = await prisma.turnTracker.findMany({
+      where: { campaignId, sceneId: { not: null } },
+      select: { sceneId: true, turnOrder: true },
+    });
+    for (const tracker of turnTrackers) {
+      const turnOrder = tracker.turnOrder as unknown as TurnOrder[];
+      if (tracker.sceneId && turnOrder.some(p => p.userId === targetUserId)) {
+        await TurnTracker.removePlayerFromTurn(campaignId, tracker.sceneId, targetUserId).catch(err =>
+          console.error('Failed to remove member from turn order:', err)
+        );
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

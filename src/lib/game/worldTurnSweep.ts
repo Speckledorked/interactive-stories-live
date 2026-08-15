@@ -18,6 +18,15 @@ import { computeHeartbeatBankedHours } from './cronHeartbeat'
 // still due — and now correctly banked — on tomorrow's sweep.
 const MAX_TURNS_PER_SWEEP = 25
 
+// #297: banking runs for every active campaign every sweep, independent of
+// MAX_TURNS_PER_SWEEP — a fully sequential await-per-campaign here was a
+// real risk of exceeding a serverless function's max duration purely on
+// banking, before a single AI-calling turn even ran. Bounded (not
+// unbounded) concurrency to avoid opening more simultaneous DB connections
+// than the pool can serve, matching loreImportService.ts's existing
+// EMBED_BATCH_SIZE convention for the same tradeoff.
+const BANKING_BATCH_SIZE = 20
+
 export interface WorldTurnSweepResult {
   campaignsChecked: number
   ticked: number
@@ -50,33 +59,58 @@ export async function sweepWorldTurnsForAllCampaigns(): Promise<WorldTurnSweepRe
   let failed = 0
   let processed = 0
   let skippedAtCap = 0
+  const bankedOk = new Set<string>()
 
-  for (const campaign of campaigns) {
-    try {
-      const bankedHours = computeHeartbeatBankedHours(
-        campaign.worldMeta?.lastRealTimeTickAt ?? null,
-        now,
-        campaign.worldMeta?.hoursBankedSinceLastHeartbeat ?? 0
-      )
-      await prisma.worldMeta.update({
-        where: { campaignId: campaign.id },
-        data: {
-          hoursSinceWorldTurn: bankedHours > 0 ? { increment: bankedHours } : undefined,
-          lastRealTimeTickAt: now,
-          hoursBankedSinceLastHeartbeat: 0,
-        },
+  // Banking makes no AI calls and is cheap per-campaign, so it runs in
+  // bounded-parallel batches rather than one round-trip at a time — see
+  // BANKING_BATCH_SIZE above. A campaign whose banking update fails is
+  // excluded from this sweep's turn-tick phase below, matching the
+  // original one-loop behavior where a banking failure skipped that
+  // campaign's tick too.
+  for (let i = 0; i < campaigns.length; i += BANKING_BATCH_SIZE) {
+    const batch = campaigns.slice(i, i + BANKING_BATCH_SIZE)
+    await Promise.all(
+      batch.map(async (campaign) => {
+        try {
+          const bankedHours = computeHeartbeatBankedHours(
+            campaign.worldMeta?.lastRealTimeTickAt ?? null,
+            now,
+            campaign.worldMeta?.hoursBankedSinceLastHeartbeat ?? 0
+          )
+          await prisma.worldMeta.update({
+            where: { campaignId: campaign.id },
+            data: {
+              hoursSinceWorldTurn: bankedHours > 0 ? { increment: bankedHours } : undefined,
+              lastRealTimeTickAt: now,
+              hoursBankedSinceLastHeartbeat: 0,
+            },
+          })
+          bankedOk.add(campaign.id)
+        } catch (error) {
+          failed++
+          console.error(`World-turn sweep banking failed for campaign ${campaign.id}:`, error)
+        }
       })
+    )
+  }
 
-      if (processed >= MAX_TURNS_PER_SWEEP) {
-        skippedAtCap++
-        continue
-      }
-      processed++
+  // Turn-ticking stays fully sequential and capped: each tick can make real
+  // AI calls, so running these concurrently would multiply cost-control
+  // and rate-limit risk for no real duration benefit — MAX_TURNS_PER_SWEEP
+  // already bounds this phase's total work far below banking's.
+  for (const campaign of campaigns) {
+    if (!bankedOk.has(campaign.id)) continue
+    if (processed >= MAX_TURNS_PER_SWEEP) {
+      skippedAtCap++
+      continue
+    }
+    processed++
+    try {
       const { ran } = await runWorldTurnIfDue(campaign.id)
       if (ran) ticked++
     } catch (error) {
       failed++
-      console.error(`World-turn sweep failed for campaign ${campaign.id}:`, error)
+      console.error(`World-turn sweep tick failed for campaign ${campaign.id}:`, error)
     }
   }
 

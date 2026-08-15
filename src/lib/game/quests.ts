@@ -113,3 +113,29 @@ export function questGiverUpdateData(link: QuestGiverLink): {
     givenByFactionId: link.kind === 'faction' ? link.id : null,
   }
 }
+
+export type QuestStatus = 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'ABANDONED'
+
+// #281 (adversarial audit, Finding #12): the concurrency guard in
+// worldUpdaters/quests.ts protects against a RACE (two resolutions
+// applying to the same read status) but nothing previously checked
+// whether the reported transition was even legal — the AI reporting
+// status: 'COMPLETED' for a quest whose real status is 'FAILED'
+// (hallucination, or a narrative retcon) wrote it unconditionally,
+// double-granting a completion reward on top of the failure cost already
+// charged when it failed.
+//
+// Deliberately NOT "once terminal, always terminal" for every status: a
+// quest that FAILED and is later explicitly ABANDONED (or vice versa) is
+// an existing, intentionally-tested distinct outcome — see
+// worldUpdaters/quests.ts's failure-cost tests — not a repeat, and each
+// still charges its own failure cost. What's actually illegal is
+// completing something already resolved as lost (COMPLETED can only ever
+// be reached from ACTIVE), and undoing a genuine completion at all —
+// COMPLETED is the one truly one-way mark.
+export function isLegalQuestStatusTransition(from: QuestStatus, to: QuestStatus): boolean {
+  if (from === to) return false
+  if (from === 'COMPLETED') return false
+  if (to === 'COMPLETED' && from !== 'ACTIVE') return false
+  return true
+}

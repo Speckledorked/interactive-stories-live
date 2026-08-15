@@ -8,7 +8,7 @@ import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { applyQuestRewardGrant } from '../questRewards'
 import { appendBounded, QUEST_PROGRESS_BOUNDS } from '../textAppend'
-import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData } from '../quests'
+import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData, isLegalQuestStatusTransition, type QuestStatus } from '../quests'
 import { checkCorruptionGate, hasCorruptionGate } from '../corruptionGates'
 import { checkConditionGate } from '../conditionGates'
 import { applyQuestFailureCost, type QuestFailureStatus } from '../questFailure'
@@ -186,20 +186,34 @@ export async function applyQuestChanges(
         (changes.status === 'FAILED' || changes.status === 'ABANDONED') &&
         existing.status !== changes.status
       if (changes.status && changes.status !== existing.status) {
-        // Acquisition gate: only a transition INTO active is checked.
-        const becomingActive = changes.status === 'ACTIVE' && existing.status !== 'ACTIVE'
-        // The giver may have just been (re-)resolved above in this same
-        // pass — prefer that over the stale row, same pattern the reward/
-        // failure-cost lookups below already use.
-        const giverNpcId = (updateData.givenByNpcId as string | null | undefined) ?? existing.givenByNpcId
-        const acquisition = becomingActive
-          ? await questAcquisitionAllowed(existing, giverNpcId)
-          : { allowed: true }
-        if (becomingActive && !acquisition.allowed) {
-          console.log(`  🌑 "${existing.name}" refused to this party — ${acquisition.reason}`)
+        // #281: the concurrency guard further down protects against a
+        // RACE, not against an illegal transition — without this,
+        // reporting status: 'COMPLETED' for a quest whose real status is
+        // 'FAILED' (hallucination, or a narrative retcon) wrote it
+        // unconditionally, double-granting a completion reward on top of
+        // the failure cost already charged when it failed.
+        // COMPLETED/FAILED/ABANDONED are each meant to be a one-way,
+        // terminal mark — see isLegalQuestStatusTransition's own comment.
+        if (!isLegalQuestStatusTransition(existing.status as QuestStatus, changes.status as QuestStatus)) {
+          console.log(`  🚫 "${existing.name}": illegal quest status transition ${existing.status} → ${changes.status} refused`)
+          justCompleted = false
+          justFailed = false
         } else {
-          updateData.status = changes.status
-          if (changes.status !== 'ACTIVE') updateData.resolvedAt = new Date()
+          // Acquisition gate: only a transition INTO active is checked.
+          const becomingActive = changes.status === 'ACTIVE' && existing.status !== 'ACTIVE'
+          // The giver may have just been (re-)resolved above in this same
+          // pass — prefer that over the stale row, same pattern the reward/
+          // failure-cost lookups below already use.
+          const giverNpcId = (updateData.givenByNpcId as string | null | undefined) ?? existing.givenByNpcId
+          const acquisition = becomingActive
+            ? await questAcquisitionAllowed(existing, giverNpcId)
+            : { allowed: true }
+          if (becomingActive && !acquisition.allowed) {
+            console.log(`  🌑 "${existing.name}" refused to this party — ${acquisition.reason}`)
+          } else {
+            updateData.status = changes.status
+            if (changes.status !== 'ACTIVE') updateData.resolvedAt = new Date()
+          }
         }
       }
       if (Object.keys(updateData).length > 0) {

@@ -617,3 +617,68 @@ describe('applyQuestChanges — failure consequences', () => {
     expect(applyQuestFailureCost).not.toHaveBeenCalled()
   })
 })
+
+describe('applyQuestChanges — illegal status transitions (#281)', () => {
+  const active = (over: Record<string, unknown> = {}) => ({
+    id: 'q1',
+    name: 'The Ledger Job',
+    status: 'ACTIVE',
+    progressLog: null,
+    givenByNpcId: null,
+    givenByFactionId: 'f1',
+    minCorruption: null,
+    maxCorruption: null,
+    ...over,
+  })
+
+  it('refuses to grant a completion reward for a quest already FAILED — the exact exploit this issue names', async () => {
+    tx.quest.findFirst.mockResolvedValue(active({ status: 'FAILED' }))
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'The Ledger Job', changes: { status: 'COMPLETED', reward_grant: { gold: 50 } } } as QuestChange,
+    ])
+
+    expect(applyQuestRewardGrant).not.toHaveBeenCalled()
+    // The illegal status is never even written — a quest reported
+    // COMPLETED against a FAILED row must stay FAILED, not silently
+    // acquire a second, contradictory resolution.
+    expect(tx.quest.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('refuses to grant a completion reward for a quest already ABANDONED', async () => {
+    tx.quest.findFirst.mockResolvedValue(active({ status: 'ABANDONED' }))
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'The Ledger Job', changes: { status: 'COMPLETED', reward_grant: { gold: 50 } } } as QuestChange,
+    ])
+
+    expect(applyQuestRewardGrant).not.toHaveBeenCalled()
+    expect(tx.quest.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('refuses to reactivate a genuinely completed quest', async () => {
+    tx.quest.findFirst.mockResolvedValue(active({ status: 'COMPLETED' }))
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'The Ledger Job', changes: { status: 'ACTIVE' } } as QuestChange,
+    ])
+
+    expect(tx.quest.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('still allows a plain field update (no status change) on a resolved quest', async () => {
+    // The illegality check only ever gates a reported status change —
+    // description/progress-log edits on an already-resolved quest are
+    // unaffected bookkeeping, not a resolution being contested.
+    tx.quest.findFirst.mockResolvedValue(active({ status: 'FAILED' }))
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'The Ledger Job', changes: { description: 'Updated after the fact.' } } as QuestChange,
+    ])
+
+    expect(tx.quest.update).toHaveBeenCalledWith({
+      where: { id: 'q1' },
+      data: expect.objectContaining({ description: 'Updated after the fact.' }),
+    })
+  })
+})

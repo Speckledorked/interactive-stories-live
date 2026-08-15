@@ -7,7 +7,7 @@
 // lands on is who pays for it and who remembers it failed.
 
 import { describe, it, expect } from 'vitest'
-import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData } from '../quests'
+import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData, isLegalQuestStatusTransition } from '../quests'
 
 const npc = (id: string, name: string) => ({ id, name })
 
@@ -97,5 +97,42 @@ describe('questGiverUpdateData', () => {
     // faction would be charged to both.
     expect(questGiverUpdateData({ kind: 'unresolved' }))
       .toEqual({ givenByNpcId: null, givenByFactionId: null })
+  })
+})
+
+describe('isLegalQuestStatusTransition (#281)', () => {
+  it('allows ACTIVE to transition to any of the three terminal statuses', () => {
+    expect(isLegalQuestStatusTransition('ACTIVE', 'COMPLETED')).toBe(true)
+    expect(isLegalQuestStatusTransition('ACTIVE', 'FAILED')).toBe(true)
+    expect(isLegalQuestStatusTransition('ACTIVE', 'ABANDONED')).toBe(true)
+  })
+
+  it('refuses completing a quest already resolved as failed/abandoned', () => {
+    // The exact scenario the issue names: an AI hallucination or
+    // narrative retcon reporting COMPLETED for a quest that already
+    // FAILED must not double-grant a reward on top of the failure cost
+    // already charged.
+    expect(isLegalQuestStatusTransition('FAILED', 'COMPLETED')).toBe(false)
+    expect(isLegalQuestStatusTransition('ABANDONED', 'COMPLETED')).toBe(false)
+  })
+
+  it('refuses anything moving away from a genuine completion', () => {
+    // COMPLETED is the one truly one-way mark — nothing undoes it.
+    expect(isLegalQuestStatusTransition('COMPLETED', 'ACTIVE')).toBe(false)
+    expect(isLegalQuestStatusTransition('COMPLETED', 'FAILED')).toBe(false)
+    expect(isLegalQuestStatusTransition('COMPLETED', 'ABANDONED')).toBe(false)
+  })
+
+  it('still allows FAILED and ABANDONED to transition into each other, an intentionally distinct outcome', () => {
+    // Not the exploit this issue names — each is its own failure-cost
+    // event (see worldUpdaters/quests.ts's own failure-consequences
+    // tests), not a repeat of the same one.
+    expect(isLegalQuestStatusTransition('FAILED', 'ABANDONED')).toBe(true)
+    expect(isLegalQuestStatusTransition('ABANDONED', 'FAILED')).toBe(true)
+  })
+
+  it('treats reporting the same status again as not a transition at all', () => {
+    expect(isLegalQuestStatusTransition('ACTIVE', 'ACTIVE')).toBe(false)
+    expect(isLegalQuestStatusTransition('COMPLETED', 'COMPLETED')).toBe(false)
   })
 })

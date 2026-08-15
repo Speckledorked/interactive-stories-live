@@ -3444,6 +3444,36 @@ model AIValidationFailure {
   @@map("ai_validation_failures")
 }
 
+// #284: createCampaignMemory (memoryCreation.ts) used to wrap the embedding
+// call and the raw-SQL insert in one try/catch, swallowing any failure with
+// only a console.error — a scene the party actually experienced could
+// vanish from campaign history entirely, with no record it ever happened,
+// no way to know it was lost, no way to recover it. This is the queryable
+// record: `data` is the exact MemoryData payload that failed to write, so
+// a future retry/reader can recreate the memory precisely instead of
+// reconstructing it from the original scene from scratch. Loosely coupled
+// on purpose (no @relation), matching AIValidationFailure/StateMutation/
+// LoreCitation above: a failure record for a campaign that's since been
+// deleted is still real history.
+model MemoryCreationFailure {
+  id           String     @id @default(cuid())
+  campaignId   String
+  memoryType   MemoryType
+  sourceId     String
+  turnNumber   Int
+  errorMessage String
+  // The full MemoryData payload (title included) that failed to write —
+  // deliberately not also duplicated as a top-level title column: it's
+  // already in here.
+  data         Json
+
+  createdAt DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([createdAt])
+  @@map("memory_creation_failures")
+}
+
 // A different, finer-grained tier than AIValidationFailure above.
 // AIValidationFailure records the AI's whole JSON response failing Zod
 // schema validation (a STRUCTURAL failure — the response didn't parse).

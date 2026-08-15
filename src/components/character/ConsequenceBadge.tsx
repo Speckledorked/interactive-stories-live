@@ -21,12 +21,23 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
           iconColor: 'text-myth-good'
         }
       case 'debt':
+        // #292: this reads from Character.consequences.debts, a freeform
+        // string array — historically written by the AI GM before that
+        // path was aliased into the real, mechanically-live Debt model
+        // (see lib/game/debts.ts), and still written today only by the
+        // character-creation form's own "Debts Owed" flavor-text field.
+        // Neither source is linked to Debt.status, so an entry here can
+        // never be marked resolved and may already have been settled (or
+        // never existed as a real Debt) — labeled and noted distinctly
+        // from "⚖️" so it doesn't read as the tracked economy shown in
+        // the Obligations section above.
         return {
-          label: '⚖️ Debt',
+          label: '📝 Noted Debt',
           bgColor: 'bg-myth-warn/10',
           borderColor: 'border-myth-warn/30',
           textColor: 'text-myth-ink',
-          iconColor: 'text-myth-warn'
+          iconColor: 'text-myth-warn',
+          note: 'Informal note — not linked to the tracked Debt economy above.',
         }
       case 'enemy':
         return {
@@ -66,6 +77,9 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
           <p className={`text-sm ${config.textColor}`}>
             {description}
           </p>
+          {config.note && (
+            <p className="mt-1 text-[11px] italic text-myth-ink-faint">{config.note}</p>
+          )}
         </div>
         {onRemove && (
           <button

@@ -29,6 +29,17 @@ export async function sweepWorldTurnsForAllCampaigns(): Promise<WorldTurnSweepRe
   const now = new Date()
   const campaigns = await prisma.campaign.findMany({
     where: { isActive: true, worldMeta: { isNot: null } },
+    // #282: without this, campaigns come back in Postgres's natural scan
+    // order — stable and unrelated to how overdue any of them are — so
+    // the same ~25 campaigns (MAX_TURNS_PER_SWEEP) win the cap every
+    // single day, permanently starving anything sorting past that
+    // position as the platform's campaign count grows. Ordering
+    // most-overdue-first instead means whichever campaigns get ticked
+    // today have their hoursSinceWorldTurn reset back down (worldTurn.ts),
+    // which naturally rotates them out of the front of tomorrow's queue —
+    // no separate cursor to persist, the accumulator IS the fairness
+    // state.
+    orderBy: { worldMeta: { hoursSinceWorldTurn: 'desc' } },
     select: {
       id: true,
       worldMeta: { select: { lastRealTimeTickAt: true, hoursBankedSinceLastHeartbeat: true } },

@@ -72,17 +72,11 @@ export class AIVisualService {
       // Place tokens for mentioned entities
       const tokens = await this.generateTokens(visualAnalysis, mapData.id)
 
-      // Broadcast new map to players
-      const pusher = PusherServer()
-      if (pusher) {
-        await pusher.trigger(`campaign-${campaignId}`, 'ai-map-generated', {
-          mapId: mapData.id,
-          mapName: mapData.name,
-          sceneDescription,
-          zones,
-          tokens
-        })
-      }
+      // #291: broadcasting the completion event is now the job queue's
+      // job (mapGenQueue.ts's processMapGenJob), not this function's — the
+      // same split imageGenQueue.ts already makes between generation and
+      // completion notification, so this function stays broadcast-free
+      // and independently testable.
 
       return {
         mapId: mapData.id,

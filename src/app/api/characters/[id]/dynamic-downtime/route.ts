@@ -117,6 +117,12 @@ export async function POST(
     }
 
     const moderation = await moderatePlayerText(description)
+    if (moderation.unavailable) {
+      return NextResponse.json(
+        { error: 'Safety check unavailable right now — please try again in a moment.' },
+        { status: 503 }
+      )
+    }
     if (moderation.flagged) {
       return NextResponse.json(
         { error: `Your activity description was blocked by content moderation (${moderation.categories.join(', ')}). Please rephrase it.` },

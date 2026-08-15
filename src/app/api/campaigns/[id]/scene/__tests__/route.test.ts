@@ -152,6 +152,16 @@ describe('POST /api/campaigns/[id]/scene', () => {
     expect(db.playerAction.create).not.toHaveBeenCalled()
   })
 
+  // #274: a moderation-endpoint outage must fail closed (block, distinct
+  // 503) rather than silently letting unmoderated text through as if it
+  // were clean.
+  it('#274: fails closed with a 503 when the moderation check itself is unavailable', async () => {
+    ;(moderatePlayerText as any).mockResolvedValue({ flagged: true, categories: [], unavailable: true })
+    const response = await call()
+    expect(response.status).toBe(503)
+    expect(db.playerAction.create).not.toHaveBeenCalled()
+  })
+
   it("rejects a character that isn't the caller's own", async () => {
     db.character.findUnique.mockResolvedValue({ id: 'char1', userId: 'someone-else' })
     const response = await call()

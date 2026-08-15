@@ -12,6 +12,11 @@ const MAX_MODERATION_INPUT = 8000
 export interface ModerationResult {
   flagged: boolean
   categories: string[]
+  // #274: distinguishes "the moderation call itself failed" (a real outage
+  // — fail closed) from "flagged for a real category" and from the
+  // legitimate no-op state of no OPENAI_API_KEY configured (local dev,
+  // still CLEAN). Never set alongside flagged categories.
+  unavailable?: boolean
 }
 
 export type ModerationLevel = 'standard' | 'strict'
@@ -67,9 +72,18 @@ export async function moderatePlayerText(text: string, level: ModerationLevel = 
 
     return applyModerationLevel(parseModerationResponse(await response.json()), level)
   } catch (error) {
-    // Fail open — a moderation outage shouldn't block gameplay. The
-    // downstream completion call carries its own provider-side safety net.
-    console.error('Moderation check failed (failing open):', error)
-    return CLEAN
+    // #274: this used to fail open (return CLEAN) on ANY error here, not
+    // just a missing key — so a moderation-endpoint outage while the
+    // completion endpoint stayed healthy sent unmoderated player text
+    // straight through, including categories that are never
+    // genre-exempted (self-harm instructions, CSAM-adjacency, credible
+    // threats). This is ToS-compliance protection (OpenAI requires
+    // flagged content not be sent to completion models), not the
+    // in-fiction X-Card tool — it must not silently disable itself
+    // exactly when it's needed most. Fail closed instead: callers block
+    // the action and ask the player to retry, the same way they already
+    // handle a genuinely flagged result.
+    console.error('Moderation check failed (failing closed):', error)
+    return { flagged: true, categories: [], unavailable: true }
   }
 }

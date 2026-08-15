@@ -425,6 +425,15 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
     // #312/#327: advanceDynamicDowntime's own isAlive check, the first DB
     // call it makes now.
     findUniqueMock.mockResolvedValue({ isAlive: true })
+    // #305: advanceDynamicDowntime now issues a SECOND findMany for its
+    // outcome-generation-failure retry pass, after the ACTIVE-activities
+    // one every test below sets up. Defaulting to empty here (via
+    // mockResolvedValueOnce below, in call order) keeps that second call
+    // from picking up whatever the first test's own mockResolvedValue
+    // left behind — each test below uses mockResolvedValueOnce for its
+    // own ACTIVE-activity list precisely so this default takes over for
+    // the retry call that follows it.
+    activityFindManyMock.mockResolvedValue([])
     // Event/outcome generation is its own AI pipeline, out of scope for
     // gating logic — stubbed deterministic so day-advancement is testable
     // without a real completion/event roll.
@@ -433,7 +442,7 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
   })
 
   it('blocks completion while the linked quest is still active, even once all days have passed', async () => {
-    activityFindManyMock.mockResolvedValue([baseActivity({ currentDay: 3, estimatedDays: 3 })])
+    activityFindManyMock.mockResolvedValueOnce([baseActivity({ currentDay: 3, estimatedDays: 3 })])
     questFindUniqueMock.mockResolvedValue({ status: 'ACTIVE', name: 'Find the Ashenvale Ore' })
 
     const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
@@ -445,7 +454,7 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
   })
 
   it('lets days (and their events) still advance while blocked, capped just short of completion', async () => {
-    activityFindManyMock.mockResolvedValue([baseActivity({ currentDay: 0, estimatedDays: 3 })])
+    activityFindManyMock.mockResolvedValueOnce([baseActivity({ currentDay: 0, estimatedDays: 3 })])
     questFindUniqueMock.mockResolvedValue({ status: 'ACTIVE', name: 'Find the Ashenvale Ore' })
 
     await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 5)
@@ -457,7 +466,7 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
   })
 
   it('completes normally once the linked quest resolves', async () => {
-    activityFindManyMock.mockResolvedValue([baseActivity({ currentDay: 2, estimatedDays: 3 })])
+    activityFindManyMock.mockResolvedValueOnce([baseActivity({ currentDay: 2, estimatedDays: 3 })])
     questFindUniqueMock.mockResolvedValue({ status: 'COMPLETED', name: 'Find the Ashenvale Ore' })
 
     const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
@@ -470,7 +479,7 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
   })
 
   it('fails the activity outright when the linked quest fails', async () => {
-    activityFindManyMock.mockResolvedValue([baseActivity()])
+    activityFindManyMock.mockResolvedValueOnce([baseActivity()])
     questFindUniqueMock.mockResolvedValue({ status: 'FAILED', name: 'Find the Ashenvale Ore' })
 
     const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
@@ -484,7 +493,7 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
   })
 
   it('activities without a linked quest are unaffected', async () => {
-    activityFindManyMock.mockResolvedValue([baseActivity({ linkedQuestId: null, currentDay: 2, estimatedDays: 3 })])
+    activityFindManyMock.mockResolvedValueOnce([baseActivity({ linkedQuestId: null, currentDay: 2, estimatedDays: 3 })])
 
     await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
 
@@ -501,7 +510,7 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
   // updateMany affects 0 rows because the first call already flipped the
   // status out from under its WHERE clause.
   it('skips duplicate reward application when a concurrent call already completed the activity', async () => {
-    activityFindManyMock.mockResolvedValue([baseActivity({ linkedQuestId: null, currentDay: 2, estimatedDays: 3 })])
+    activityFindManyMock.mockResolvedValueOnce([baseActivity({ linkedQuestId: null, currentDay: 2, estimatedDays: 3 })])
     activityUpdateManyMock.mockResolvedValue({ count: 0 })
 
     const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
@@ -515,7 +524,7 @@ describe('advanceDynamicDowntime — quest-gated activities', () => {
   })
 
   it('still applies rewards exactly once when this call wins the completion race', async () => {
-    activityFindManyMock.mockResolvedValue([baseActivity({ linkedQuestId: null, currentDay: 2, estimatedDays: 3 })])
+    activityFindManyMock.mockResolvedValueOnce([baseActivity({ linkedQuestId: null, currentDay: 2, estimatedDays: 3 })])
     activityUpdateManyMock.mockResolvedValue({ count: 1 })
 
     const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
@@ -574,7 +583,7 @@ describe('generateDynamicOutcomes — downtime reward payer resolution (#261)', 
     worldMetaFindUniqueMock.mockResolvedValue({ currentTurnNumber: 12 })
     activityUpdateMock.mockResolvedValue({})
     findUniqueMock.mockResolvedValue({ campaignId: 'camp1' }) // owner (character) lookup
-    vi.stubGlobal('fetch', mockCompletion({ narrative: 'Done', materialRewards: { goldGained: 100 } }))
+    vi.stubGlobal('fetch', mockCompletion({ primaryOutcome: 'Done', narrative: 'Done', materialRewards: { goldGained: 100 } }))
   })
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -616,5 +625,99 @@ describe('generateDynamicOutcomes — downtime reward payer resolution (#261)', 
       expect.anything(), 'camp1', 'char1', 'Commission a masterwork blade',
       expect.anything(), 12, null
     )
+  })
+
+  // #305: an AI outage/malformed response used to silently return a
+  // fake-success narrative here — the activity had already been committed
+  // COMPLETED by the caller, so the player saw success while zero rewards
+  // were ever applied, permanently (the reward loop only ever touches
+  // status: ACTIVE activities). Now recorded as an auditable, retriable
+  // failure instead.
+  it('#305: a non-ok completion response is recorded as a failure, not a fake success', async () => {
+    activityFindUniqueMock.mockResolvedValue(baseActivityRow())
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, statusText: 'Internal Server Error' }))
+
+    const outcomes = await AIDrivenDowntimeService.generateDynamicOutcomes('activity1', 'Commission a blade', {})
+
+    expect(outcomes.primaryOutcome).not.toContain('completed successfully')
+    expect(activityUpdateMock).toHaveBeenCalledWith({
+      where: { id: 'activity1' },
+      data: { outcomeGenerationFailedAt: expect.any(Date) },
+    })
+    expect(applyDowntimeRewardsMock).not.toHaveBeenCalled()
+  })
+
+  it('#305: a malformed/unexpected-shape completion response is recorded as a failure', async () => {
+    activityFindUniqueMock.mockResolvedValue(baseActivityRow())
+    vi.stubGlobal('fetch', mockCompletion({ materialRewards: { goldGained: 100 } })) // no primaryOutcome/narrative
+
+    await AIDrivenDowntimeService.generateDynamicOutcomes('activity1', 'Commission a blade', {})
+
+    expect(activityUpdateMock).toHaveBeenCalledWith({
+      where: { id: 'activity1' },
+      data: { outcomeGenerationFailedAt: expect.any(Date) },
+    })
+    expect(applyDowntimeRewardsMock).not.toHaveBeenCalled()
+  })
+
+  it('#305: a successful completion clears any previously-recorded failure', async () => {
+    activityFindUniqueMock.mockResolvedValue(baseActivityRow())
+    vi.stubGlobal('fetch', mockCompletion({ primaryOutcome: 'Done', narrative: 'Done' }))
+
+    await AIDrivenDowntimeService.generateDynamicOutcomes('activity1', 'Commission a blade', {})
+
+    expect(activityUpdateMock).toHaveBeenCalledWith({
+      where: { id: 'activity1' },
+      data: expect.objectContaining({ outcomeGenerationFailedAt: null }),
+    })
+  })
+})
+
+// #305: advanceDynamicDowntime's own retry pass for a COMPLETED activity
+// whose outcome generation previously failed — the only path back in,
+// since the ACTIVE-only query never sees a COMPLETED row again.
+describe('advanceDynamicDowntime — outcome-generation-failure retry (#305)', () => {
+  function completedActivity(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'activity2',
+      characterId: 'char1',
+      summary: 'Commission a masterwork blade',
+      description: 'Commission a masterwork blade',
+      currentDay: 3,
+      estimatedDays: 3,
+      linkedQuestId: null,
+      outcomes: { aiInterpretation: { skillsInvolved: ['smithing'] } },
+      events: [],
+      ...overrides,
+    }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    findUniqueMock.mockResolvedValue({ isAlive: true })
+    activityFindManyMock.mockResolvedValueOnce([]) // no ACTIVE activities this call
+  })
+
+  it('retries a COMPLETED activity carrying a recorded failure, and clears it on success', async () => {
+    activityFindManyMock.mockResolvedValueOnce([completedActivity()]) // the retry query
+    const generateSpy = vi.spyOn(AIDrivenDowntimeService, 'generateDynamicOutcomes')
+      .mockResolvedValue({ primaryOutcome: 'Recovered', narrative: 'Recovered' } as any)
+
+    const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(generateSpy).toHaveBeenCalledWith('activity2', 'Commission a masterwork blade', { skillsInvolved: ['smithing'] })
+    expect(results).toEqual([
+      expect.objectContaining({ activityId: 'activity2', completed: true, outcomes: { primaryOutcome: 'Recovered', narrative: 'Recovered' } }),
+    ])
+  })
+
+  it('does not touch anything when no activity has a recorded failure', async () => {
+    activityFindManyMock.mockResolvedValueOnce([]) // the retry query finds nothing
+    const generateSpy = vi.spyOn(AIDrivenDowntimeService, 'generateDynamicOutcomes')
+
+    const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(generateSpy).not.toHaveBeenCalled()
+    expect(results).toEqual([])
   })
 })

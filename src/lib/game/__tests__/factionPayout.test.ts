@@ -64,6 +64,35 @@ describe('assessPayout', () => {
     expect(a.resourceCost).toBe(MAX_RESOURCE_COST_PER_PAYOUT)
   })
 
+  // #306: `paid` (what the player receives) used to be capped only by the
+  // faction's raw capacity, independent of `resourceCost`'s
+  // MAX_RESOURCE_COST_PER_PAYOUT cap — a healthy faction (resources > 15)
+  // could pay out thousands of gold for a reward well under
+  // clampGoldDelta's 100,000 ceiling while its tracked depletion reflected
+  // only a sliver of that. The two numbers must stay consistent: what the
+  // player receives can never exceed what the capped resourceCost is
+  // actually worth in gold.
+  it('#306: caps what the player receives to the same ceiling that caps resourceCost, not just capacity', () => {
+    // A healthy, well-resourced faction (80/100, well above BROKE_THRESHOLD)
+    // asked for an ordinary reward far under the 100,000 clamp ceiling —
+    // capacity alone (80 * 100 = 8,000) would happily cover it in full.
+    const a = assessPayout(5000, 80)
+    expect(a.paid).toBe(MAX_RESOURCE_COST_PER_PAYOUT * GOLD_PER_RESOURCE_POINT)
+    expect(a.paid).toBeLessThan(5000)
+    expect(a.resourceCost).toBe(MAX_RESOURCE_COST_PER_PAYOUT)
+    expect(a.defaulted).toBe(true)
+    expect(a.shortfall).toBe(5000 - a.paid)
+  })
+
+  it('#306: paid never exceeds resourceCost worth of gold, across a range of asks and resource levels', () => {
+    for (const resources of [16, 30, 50, 80, 100]) {
+      for (const promised of [1000, 5000, 50_000, 100_000]) {
+        const a = assessPayout(promised, resources)
+        expect(a.paid).toBeLessThanOrEqual(a.resourceCost * GOLD_PER_RESOURCE_POINT)
+      }
+    }
+  })
+
   it('never charges a faction more than it actually has', () => {
     for (const resources of [0, 1, 5, 12]) {
       const a = assessPayout(100_000, resources)

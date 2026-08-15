@@ -2369,11 +2369,23 @@ model DowntimeActivity {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   completedAt DateTime?
+  // #305: set when generateDynamicOutcomes's AI completion call (or the
+  // parse/shape check on its response) fails AFTER the activity has
+  // already been marked COMPLETED — the days genuinely passed, but the
+  // outcome/reward payload was never generated, so gold/items/standing
+  // were never applied. Null means no failure recorded (either it never
+  // failed, or a retry has since succeeded and cleared it). Non-null makes
+  // the loss visible/auditable instead of silent, and is what
+  // advanceDynamicDowntime's retry pass queries on — the reward loop used
+  // to only ever touch status: ACTIVE activities, so a COMPLETED one with
+  // a lost reward previously had no path back into it at all.
+  outcomeGenerationFailedAt DateTime?
 
   events DowntimeEvent[]
 
   @@index([characterId])
   @@index([status])
+  @@index([characterId, outcomeGenerationFailedAt])
   // #211: a real partial unique index enforcing at most one ACTIVE activity
   // per character — created by hand-written migration SQL (Prisma's
   // @@unique has no WHERE clause), matching this schema's existing

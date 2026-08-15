@@ -135,6 +135,47 @@ describe('sweepWorldTurnsForAllCampaigns', () => {
     )
   })
 
+  // #297: banking now runs in bounded-parallel batches rather than one
+  // sequential await per campaign — a campaign whose banking update itself
+  // fails must still be isolated (no crash of the whole sweep) and must
+  // still be excluded from the turn-tick phase, matching the original
+  // single-loop behavior where a banking failure skipped that campaign's
+  // tick too.
+  it('isolates a banking failure to one campaign, excludes it from ticking, and still ticks the rest', async () => {
+    db.campaign.findMany.mockResolvedValue([
+      { id: 'bad-bank', worldMeta: { lastRealTimeTickAt: null } },
+      { id: 'good', worldMeta: { lastRealTimeTickAt: null } },
+    ])
+    db.worldMeta.update.mockImplementation(async ({ where }: any) => {
+      if (where.campaignId === 'bad-bank') throw new Error('banking boom')
+      return {}
+    })
+    ;(runWorldTurnIfDue as any).mockResolvedValue({ ran: true })
+
+    const result = await sweepWorldTurnsForAllCampaigns()
+
+    expect(result.failed).toBe(1)
+    expect(result.ticked).toBe(1)
+    // Only the campaign that banked successfully is ever ticked.
+    expect(runWorldTurnIfDue).toHaveBeenCalledTimes(1)
+    expect(runWorldTurnIfDue).toHaveBeenCalledWith('good')
+  })
+
+  it('banks a large campaign count across more than one batch without dropping any', async () => {
+    const campaigns = Array.from({ length: 45 }, (_, i) => ({
+      id: `c${i}`,
+      worldMeta: { lastRealTimeTickAt: null },
+    }))
+    db.campaign.findMany.mockResolvedValue(campaigns)
+    ;(runWorldTurnIfDue as any).mockResolvedValue({ ran: false })
+
+    const result = await sweepWorldTurnsForAllCampaigns()
+
+    expect(result.campaignsChecked).toBe(45)
+    expect(db.worldMeta.update).toHaveBeenCalledTimes(45) // every campaign banked, across multiple batches
+    expect(result.failed).toBe(0)
+  })
+
   it('rotates every campaign through the cap across consecutive days, not just the first 25 forever', async () => {
     // 30 campaigns, more than MAX_TURNS_PER_SWEEP (25) — simulates the
     // real orderBy by sorting on each findMany call, and simulates a real

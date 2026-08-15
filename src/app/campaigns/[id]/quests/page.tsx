@@ -8,6 +8,7 @@ import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { EmptyState } from '@/components/ui/empty-state'
+import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
 
 type QuestStatus = 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'ABANDONED'
 
@@ -100,7 +101,7 @@ export default function QuestsPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} variant="myth" />
-        <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
+        <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
           <div className="flex justify-center py-16">
             <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
           </div>
@@ -113,7 +114,7 @@ export default function QuestsPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} variant="myth" />
-        <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
+        <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
           <div className="rounded-lg border border-myth-danger/30 bg-myth-danger/10 p-6">
             <p className="text-myth-danger">{error}</p>
           </div>
@@ -128,7 +129,7 @@ export default function QuestsPage() {
     <TavernPage background="myth">
       <TavernHeader backHref={`/campaigns/${campaignId}`} title="Quests" campaignId={campaignId} variant="myth" />
 
-      <main className="max-w-4xl mx-auto px-4 pt-28 pb-28">
+      <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         <p className="mb-6 text-sm text-myth-ink-faint">
           {campaign?.name || 'Campaign'} — {activeCount} active {activeCount === 1 ? 'quest' : 'quests'}
         </p>

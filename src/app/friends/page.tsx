@@ -20,6 +20,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { IconButton } from '@/components/ui/icon-button'
+import { HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
 
 interface Friend {
   id: string
@@ -209,7 +210,7 @@ export default function FriendsPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref="/campaigns" title="Friends" campaignId={lastCampaignId || undefined} variant="myth" />
-        <main className="max-w-2xl mx-auto px-4 pt-28 pb-16">
+        <main className={`max-w-2xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-16`}>
           <div className="flex justify-center py-16">
             <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
           </div>
@@ -233,7 +234,7 @@ export default function FriendsPage() {
         }
       />
 
-      <main className="max-w-2xl mx-auto px-4 pt-28 pb-28 space-y-4">
+      <main className={`max-w-2xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-28 space-y-4`}>
         {error && (
           <div className="rounded-lg border border-myth-danger/30 bg-myth-danger/10 px-4 py-3 text-sm text-myth-danger">
             {error}

@@ -9,6 +9,7 @@ import { TavernNav } from '@/components/tavern/TavernNav'
 import type { TutorialStepWithProgress, TutorialProgressResponse } from '@/types/api'
 import { Button } from '@/components/ui/button'
 import { Check, Gamepad2, Lightbulb, MessageSquare, Rocket, Swords } from 'lucide-react'
+import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
 
 type TutorialStep = TutorialStepWithProgress
 
@@ -68,7 +69,7 @@ export default function TutorialPage() {
     return (
       <TavernPage background="myth">
         <TavernHeader backHref="/campaigns" title="Tutorial & Onboarding" variant="myth" />
-        <main className="max-w-4xl mx-auto px-4 pt-28 pb-16">
+        <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
           <div className="flex justify-center py-16">
             <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
           </div>
@@ -102,7 +103,7 @@ export default function TutorialPage() {
     <TavernPage background="myth">
       <TavernHeader backHref="/campaigns" title="Tutorial & Onboarding" variant="myth" />
 
-      <main className="max-w-4xl mx-auto px-4 pt-28 pb-28">
+      <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         <p className="mb-8 text-sm text-myth-ink-faint">Master the art of AI-powered tabletop adventures</p>
 
       {/* Progress Card */}

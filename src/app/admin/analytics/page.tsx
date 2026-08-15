@@ -12,6 +12,7 @@ import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { SectionHeader } from '@/components/ui/section-header'
+import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
 
 interface CohortMetric {
   retained: number
@@ -135,7 +136,7 @@ export default function AnalyticsDashboardPage() {
     <TavernPage background="myth">
       <TavernHeader backHref="/campaigns" title="Alpha Instrumentation" variant="myth" />
 
-      <main className="max-w-5xl mx-auto px-4 pt-28 pb-28">
+      <main className={`max-w-5xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         {loading && (
           <div className="flex justify-center py-16">
             <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-myth-accent" />

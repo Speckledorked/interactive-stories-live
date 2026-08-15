@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId, updateStoredUser } from '@/lib/clientAuth'
 import NotificationSettings from '@/components/settings/NotificationSettings'
+import { ThemeSetting } from '@/components/settings/ThemeSetting'
 import BalanceDisplay from '@/components/BalanceDisplay'
 import { Bell, User, Lock } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
@@ -265,6 +266,10 @@ export default function SettingsPage() {
                   </svg>
                   This is how other players will see you
                 </p>
+              </div>
+
+              <div className="pt-4 border-t border-myth-border">
+                <ThemeSetting />
               </div>
 
               <div className="pt-4 border-t border-myth-border">

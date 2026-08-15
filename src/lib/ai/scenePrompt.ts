@@ -770,7 +770,12 @@ function buildNpcsSection(npcs: WorldSummary['npcs'], factions: WorldSummary['fa
     // Witnessed:/Heard secondhand: multi-line block is Character-only (see
     // buildCharactersSection).
     const toldPart = n.told_events && n.told_events.length > 0 ? ` | Heard: ${n.told_events[0]}` : ''
-    return `• ${n.name} - ${n.relationship || 'Neutral'} | Goals: ${n.goals || 'Unknown'} | Importance: ${n.importance}/5${factionPart}${threatPart}${impulsesPart}${movesPart}${toldPart}`
+    // #288: already computed for importance>=4 NPCs by npcTick.ts, but
+    // never reached the narrator before — narrate consistently with an
+    // NPC's own in-progress plan instead of contradicting it.
+    const planPart = n.currentPlan ? ` | Plan: ${n.currentPlan} (${n.goalProgress ?? 0}% along)` : ''
+    const socialTiesPart = n.social_ties && n.social_ties.length > 0 ? ` | Ties: ${n.social_ties.join(', ')}` : ''
+    return `• ${n.name} - ${n.relationship || 'Neutral'} | Goals: ${n.goals || 'Unknown'} | Importance: ${n.importance}/5${factionPart}${threatPart}${impulsesPart}${movesPart}${planPart}${socialTiesPart}${toldPart}`
   }).join('\n')
 }
 

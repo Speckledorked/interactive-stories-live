@@ -32,8 +32,6 @@ import {
   type StatUsage,
   type AdvancementLog
 } from './advancement'
-import { AIVisualService } from '@/lib/ai/ai-visual-service'
-import { MapService } from '@/lib/maps/map-service'
 import {
   captureWorldStateSnapshot,
   detectWorldStateChanges,
@@ -526,20 +524,30 @@ async function performResolution(
       console.error('⚠️ Failed to broadcast Pusher event:', pusherError)
     }
 
-    // 7.5. Generate map visualization from scene description — only on a
-    // scene's FIRST exchange. A scene can resolve several exchanges
-    // before the party moves on ("Keep scene active for continuous
-    // play"), and the map doesn't need to be re-derived from scratch on
-    // every single one — it was previously called here on every exchange
-    // regardless, which burned an AI call and a batch of zone/token
-    // writes on every action, not just when a genuinely new scene
-    // actually started.
+    // 7.5. Enqueue map visualization generation from scene description —
+    // only on a scene's FIRST exchange. A scene can resolve several
+    // exchanges before the party moves on ("Keep scene active for
+    // continuous play"), and the map doesn't need to be re-derived from
+    // scratch on every single one — it was previously called here on
+    // every exchange regardless, which burned an AI call and a batch of
+    // zone/token writes on every action, not just when a genuinely new
+    // scene actually started.
     // Gated on the per-campaign opt-in as well as the first-exchange check:
     // this is a second AI call plus a batch of zone/token writes per
     // qualifying scene, which is real recurring cost for a feature many
     // campaigns never look at (README Known Bugs #9/#59).
     //
-    // The settings lookup is inside the same try as generation on purpose:
+    // #291: this used to run synchronously here via a 30s Promise.race,
+    // architecturally inconsistent with scene illustration/hero-image
+    // generation (both already run off the request path in their own
+    // async job — see imageGenQueue.ts). Now mirrors that same pattern:
+    // deliberately NOT awaited to completion — only the job being CREATED
+    // and its worker KICKED (a few seconds at most). The actual analysis
+    // call and zone/token writes run in their own separate invocation
+    // (/api/internal/generate-map), so an optional, potentially slow map
+    // step can never extend how long a scene resolution itself takes.
+    //
+    // The settings lookup is inside the same try as enqueueing on purpose:
     // the whole map step is explicitly non-critical, so a failure reading
     // whether maps are even ENABLED must degrade to "no map this scene",
     // never take down an otherwise-successful scene resolution.
@@ -554,9 +562,8 @@ async function performResolution(
       } else if (!isFirstSceneExchange(existingResolutions)) {
         console.log('🗺️  Skipping map generation — scene already has a map from its first exchange')
       } else {
-        console.log('🗺️  Generating map visualization...')
-
-        // Get the active map for the campaign (if any)
+        // Get the active map for the campaign (if any) — generateMapFromScene
+        // reuses/replaces it rather than always creating a fresh one.
         const activeMap = await prisma.map.findFirst({
           where: {
             campaignId,
@@ -565,34 +572,14 @@ async function performResolution(
           select: { id: true }
         })
 
-        // Timeout map generation after 30 seconds
-        const MAP_TIMEOUT_MS = 30 * 1000
-        const mapPromise = AIVisualService.generateMapFromScene(
-          aiResponse.scene_text,
-          campaignId,
-          activeMap?.id
-        )
-
-        const mapTimeoutPromise = new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Map generation timeout')), MAP_TIMEOUT_MS)
-        )
-
-        await Promise.race([mapPromise, mapTimeoutPromise])
-
-        console.log('✅ Map visualization generated')
-
-        // Bound accumulation: generation creates a fresh Map+Zone+Token set
-        // whenever the AI decides a scene isn't reusing a location, and
-        // nothing previously removed old ones.
-        const pruned = await MapService.pruneOldMaps(campaignId)
-        if (pruned > 0) {
-          console.log(`🗺️  Pruned ${pruned} old map(s) past the per-campaign cap`)
-        }
+        const { enqueueMapGeneration } = await import('./mapGenQueue')
+        await enqueueMapGeneration(campaignId, sceneId, aiResponse.scene_text, activeMap?.id)
+        console.log('🗺️  Map generation enqueued')
       }
     } catch (visualError) {
-      // Don't fail the entire scene resolution if map generation fails
+      // Don't fail the entire scene resolution if enqueueing a map fails
       const errorMsg = visualError instanceof Error ? visualError.message : String(visualError)
-      console.error('⚠️  Map generation failed (non-critical):', errorMsg)
+      console.error('⚠️  Map generation enqueue failed (non-critical):', errorMsg)
     }
 
     // 7.5.5. Enqueue scene illustration (#96) — one image per SCENE, not

@@ -479,10 +479,21 @@ export default function StoryPage() {
       loadData()
     })
 
-    // Listen for map updates
-    channel.bind('ai-map-generated', (data: any) => {
+    // Listen for map updates (#291: map generation is now an async job —
+    // the completion event carries only a mapId, same minimal-payload
+    // convention scene:image-ready uses, so the client refetches the full
+    // map rather than expecting the broadcast to carry it).
+    channel.bind('map:ready', async (data: any) => {
       console.log('Map generated:', data)
-      setActiveMap(data.map)
+      try {
+        const mapResponse = await authenticatedFetch(`/api/campaigns/${campaignId}/maps/active`)
+        if (mapResponse.ok) {
+          const mapData = await mapResponse.json()
+          setActiveMap(mapData.map)
+        }
+      } catch (mapErr) {
+        console.error('Failed to refresh map after generation:', mapErr)
+      }
     })
 
     channel.bind('ai-character-moved', (data: any) => {

@@ -50,6 +50,14 @@ export async function GET(
       console.error('Stale job recovery failed (non-critical):', recoveryError)
     }
 
+    // #291: same opportunistic recovery for async map-generation jobs.
+    try {
+      const { recoverStaleMapJobs } = await import('@/lib/game/mapGenQueue')
+      await recoverStaleMapJobs(campaignId)
+    } catch (recoveryError) {
+      console.error('Stale map job recovery failed (non-critical):', recoveryError)
+    }
+
     // Get all active scenes (awaiting_actions or resolving)
     const activeScenes = await prisma.scene.findMany({
       where: {

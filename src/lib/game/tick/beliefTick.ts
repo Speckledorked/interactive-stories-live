@@ -25,6 +25,7 @@
 // rather than silently narrowed.
 
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
+import { TICK_ROTATION_ORDER, markFactionsTicked } from './capOrdering'
 
 export interface BeliefVector {
   aggression: number
@@ -164,11 +165,13 @@ export async function tickBeliefDrift(ctx: TickContext): Promise<TickHandlerResu
 
   const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true },
-    orderBy: { createdAt: 'asc' },
+    orderBy: TICK_ROTATION_ORDER,
     take: ctx.factionCap,
     select: { id: true, name: true, beliefVector: true },
   })
   if (factions.length === 0) return { changes: [] }
+  // #283: rotates which factions win the cap across ticks — see capOrdering.ts.
+  if (!ctx.dryRun) await markFactionsTicked(ctx.db, factions.map((f) => f.id))
 
   const changes: WorldChange[] = []
 

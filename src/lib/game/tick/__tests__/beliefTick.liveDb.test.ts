@@ -122,4 +122,58 @@ describeIfDb('tickBeliefDrift — real database', () => {
 
     await prisma.campaign.delete({ where: { id: idempCampaignId } }).catch(() => {})
   })
+
+  // #283: the per-tick faction cap used to order by createdAt asc with no
+  // rotation — the same oldest-created factions won the cap every single
+  // tick forever, permanently starving anything created after a campaign
+  // first exceeded its cap. beliefTick.ts shares the exact same
+  // capOrdering.ts rotation mechanism every other capped faction handler
+  // uses, so proving it here against real Postgres verifies the shared
+  // mechanism, not just this one handler.
+  it('#283: rotates every faction through the cap across consecutive ticks, not just the oldest N forever', async () => {
+    const campaign = await prisma.campaign.create({
+      data: { title: 'Faction Cap Rotation Live Test', aiSystemPrompt: 'test', initialWorldSeed: 'test' },
+    })
+    const rotationCampaignId = campaign.id
+    await prisma.worldMeta.create({ data: { campaignId: rotationCampaignId, currentTurnNumber: 2 } })
+
+    // 12 factions, created in a known order, against a cap of 5 — more
+    // than one tick's worth. No WorldEvent rows: this test only cares
+    // about WHICH factions the cap selects, not belief drift itself.
+    const factionIds: string[] = []
+    for (let i = 0; i < 12; i++) {
+      const f = await prisma.faction.create({
+        data: { campaignId: rotationCampaignId, name: `Faction ${i}`, isActive: true },
+      })
+      factionIds.push(f.id)
+    }
+
+    const selectedEachTick: string[][] = []
+    for (let turn = 2; turn <= 4; turn++) {
+      const ctx: TickContext = {
+        campaignId: rotationCampaignId, turnNumber: turn, factionCap: 5, npcCap: 20, dryRun: false, db: prisma as any,
+      }
+      await tickBeliefDrift(ctx)
+
+      const rows = await prisma.faction.findMany({
+        where: { campaignId: rotationCampaignId, lastTickedAt: { not: null } },
+        select: { id: true },
+      })
+      const tickedSoFar = new Set(rows.map((r) => r.id))
+      const newlyTicked = factionIds.filter(
+        (id) => tickedSoFar.has(id) && !selectedEachTick.flat().includes(id)
+      )
+      selectedEachTick.push(newlyTicked)
+    }
+
+    // Real rotation: tick 1 and tick 2 must select different factions, not
+    // the identical oldest-5 every time.
+    expect(new Set(selectedEachTick[0])).not.toEqual(new Set(selectedEachTick[1]))
+    // Across 3 ticks (5+5+2 at most), every one of the 12 factions must
+    // eventually get picked up — nobody permanently starved.
+    const everTicked = new Set(selectedEachTick.flat())
+    expect(everTicked.size).toBe(12)
+
+    await prisma.campaign.delete({ where: { id: rotationCampaignId } }).catch(() => {})
+  })
 })

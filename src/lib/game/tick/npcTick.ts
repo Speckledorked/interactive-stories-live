@@ -23,6 +23,7 @@
 import type { NPC } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, stableHash } from './types'
 import { AdjacencyEdge, directNeighborsOf } from '../worldGraph'
+import { TICK_ROTATION_ORDER, markNpcsTicked } from './capOrdering'
 
 // Exported so other systems that touch NPC.importance (e.g. consequence-driven
 // escalation in src/lib/game/consequences.ts) use the exact same cutoff for
@@ -183,7 +184,11 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
   const [npcs, locations, adjacencyRows] = await Promise.all([
     ctx.db.nPC.findMany({
       where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
-      orderBy: { importance: 'desc' },
+      // #283: importance desc is the intentional priority — most important
+      // NPCs first. The rotation key breaks ties among equally-important
+      // NPCs, so the same tied subset doesn't win the cap forever. See
+      // capOrdering.ts.
+      orderBy: [{ importance: 'desc' }, TICK_ROTATION_ORDER],
       take: ctx.npcCap,
       include: { faction: { select: { name: true, goal: true, isActive: true } } },
     }),
@@ -199,6 +204,7 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
       select: { locationAId: true, locationBId: true, distance: true },
     }),
   ])
+  if (!ctx.dryRun) await markNpcsTicked(ctx.db, npcs.map((n) => n.id))
 
   const discoveredLocationNames = locations.map((l) => l.name)
   // The tick only ever moves an NPC to a name drawn from this same

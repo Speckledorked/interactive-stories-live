@@ -4,6 +4,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     nPC: { findMany: vi.fn(), update: vi.fn() },
     worldEvent: { findMany: vi.fn() },
+    worldMeta: { findUnique: vi.fn(), updateMany: vi.fn() },
   },
 }))
 
@@ -124,6 +125,7 @@ describe('decideDispositionDrift (NPC motivation model)', () => {
 describe('tickNpcDisposition (DB handler)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue({ dispositionDriftProcessedThroughTurn: null } as any)
   })
 
   it('does nothing when the campaign has no major NPCs', async () => {
@@ -346,5 +348,58 @@ describe('tickNpcDisposition (DB handler)', () => {
         orderBy: { importance: 'desc' },
       })
     )
+  })
+
+  // #276: idle-cron reinvokes this handler with the SAME turnNumber over
+  // and over — these confirm the watermark actually stops reprocessing.
+  it('#276: short-circuits without querying NPCs when the watermark already covers this turn', async () => {
+    vi.mocked(prisma.worldMeta.findUnique).mockResolvedValueOnce({ dispositionDriftProcessedThroughTurn: 4 } as any)
+
+    const result = await tickNpcDisposition(baseCtx({ turnNumber: 5 }))
+
+    expect(result.changes).toEqual([])
+    expect(prisma.nPC.findMany).not.toHaveBeenCalled()
+    expect(prisma.worldEvent.findMany).not.toHaveBeenCalled()
+  })
+
+  it('#276: proceeds when the watermark is behind this turn', async () => {
+    vi.mocked(prisma.worldMeta.findUnique).mockResolvedValueOnce({ dispositionDriftProcessedThroughTurn: 2 } as any)
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'npc.consequence', newValue: 'THREATENED' }] as any)
+
+    const result = await tickNpcDisposition(baseCtx({ turnNumber: 5 }))
+
+    expect(result.changes).toHaveLength(1)
+  })
+
+  it('#276: proceeds on a brand-new campaign whose watermark is null', async () => {
+    vi.mocked(prisma.worldMeta.findUnique).mockResolvedValueOnce({ dispositionDriftProcessedThroughTurn: null } as any)
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([])
+
+    const result = await tickNpcDisposition(baseCtx({ turnNumber: 1 }))
+
+    expect(result.changes).toEqual([])
+    expect(prisma.nPC.findMany).toHaveBeenCalled()
+  })
+
+  it('#276: advances the watermark to turnNumber - 1 after a real pass', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([])
+
+    await tickNpcDisposition(baseCtx({ turnNumber: 5 }))
+
+    expect(prisma.worldMeta.updateMany).toHaveBeenCalledWith({
+      where: { campaignId: 'campaign-1' },
+      data: { dispositionDriftProcessedThroughTurn: 4 },
+    })
+  })
+
+  it('#276: does not advance the watermark in dry-run mode', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'npc.consequence', newValue: 'THREATENED' }] as any)
+
+    await tickNpcDisposition(baseCtx({ turnNumber: 5, dryRun: true }))
+
+    expect(prisma.worldMeta.updateMany).not.toHaveBeenCalled()
   })
 })

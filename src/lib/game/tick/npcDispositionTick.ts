@@ -183,6 +183,23 @@ const RELEVANT_OWN_EVENT_TYPES = ['npc.consequence', 'npc.goalCompleted']
 const RELEVANT_FACTION_EVENT_TYPES = ['faction.warResolved', 'faction.warEnded', 'faction.stability']
 
 export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerResult> {
+  // #276: idle-cron ticking can invoke this handler with the SAME
+  // turnNumber over and over (WorldMeta.currentTurnNumber only advances
+  // via scene resolution — nothing else ever moves it, despite this
+  // file's own window looking like it should). Short-circuit once this
+  // campaign's watermark already covers the turn this pass would query,
+  // so the exact same WorldEvent rows never get reclassified into fresh
+  // drift a second time. See the watermark fields' own doc comment on
+  // WorldMeta for the full picture.
+  const targetTurn = ctx.turnNumber - 1
+  const meta = await ctx.db.worldMeta.findUnique({
+    where: { campaignId: ctx.campaignId },
+    select: { dispositionDriftProcessedThroughTurn: true },
+  })
+  if (meta && meta.dispositionDriftProcessedThroughTurn !== null && meta.dispositionDriftProcessedThroughTurn >= targetTurn) {
+    return { changes: [] }
+  }
+
   const npcs = await ctx.db.nPC.findMany({
     where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
     orderBy: { importance: 'desc' },
@@ -198,7 +215,7 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
       ctx.db.worldEvent.findMany({
         where: {
           campaignId: ctx.campaignId,
-          turnNumber: ctx.turnNumber - 1,
+          turnNumber: targetTurn,
           targetType: 'NPC',
           targetId: npc.id,
           type: { in: RELEVANT_OWN_EVENT_TYPES },
@@ -209,7 +226,7 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
         ? ctx.db.worldEvent.findMany({
             where: {
               campaignId: ctx.campaignId,
-              turnNumber: ctx.turnNumber - 1,
+              turnNumber: targetTurn,
               targetType: 'FACTION',
               targetId: npc.factionId,
               type: { in: RELEVANT_FACTION_EVENT_TYPES },
@@ -248,6 +265,19 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
       // worth a history/RAG entry.
       significant: false,
       importance: 'NORMAL',
+    })
+  }
+
+  // Mark this turn as scanned regardless of whether any NPC actually
+  // drifted — an empty result is still a real answer to "did anything
+  // change in this window", not a reason to re-ask the same question
+  // next pass.
+  if (!ctx.dryRun) {
+    // updateMany (not update) — some campaigns in tests/older data may
+    // predate a WorldMeta row; degrade to a no-op rather than throwing.
+    await ctx.db.worldMeta.updateMany({
+      where: { campaignId: ctx.campaignId },
+      data: { dispositionDriftProcessedThroughTurn: targetTurn },
     })
   }
 

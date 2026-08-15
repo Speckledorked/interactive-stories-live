@@ -4,6 +4,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     faction: { findMany: vi.fn(), update: vi.fn() },
     worldEvent: { findMany: vi.fn() },
+    worldMeta: { findUnique: vi.fn(), updateMany: vi.fn() },
   },
 }))
 
@@ -102,6 +103,7 @@ describe('decideBeliefDrift (#104)', () => {
 describe('tickBeliefDrift (DB handler)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue({ beliefDriftProcessedThroughTurn: null } as any)
   })
 
   it('does nothing when the campaign has no active factions', async () => {
@@ -226,5 +228,58 @@ describe('tickBeliefDrift (DB handler)', () => {
 
     expect(prisma.faction.update).not.toHaveBeenCalled()
     expect(result.changes).toHaveLength(1)
+  })
+
+  // #276: idle-cron reinvokes this handler with the SAME turnNumber over
+  // and over — these confirm the watermark actually stops reprocessing.
+  it('#276: short-circuits without querying factions when the watermark already covers this turn', async () => {
+    vi.mocked(prisma.worldMeta.findUnique).mockResolvedValueOnce({ beliefDriftProcessedThroughTurn: 4 } as any)
+
+    const result = await tickBeliefDrift(baseCtx({ turnNumber: 5 }))
+
+    expect(result.changes).toEqual([])
+    expect(prisma.faction.findMany).not.toHaveBeenCalled()
+    expect(prisma.worldEvent.findMany).not.toHaveBeenCalled()
+  })
+
+  it('#276: proceeds when the watermark is behind this turn', async () => {
+    vi.mocked(prisma.worldMeta.findUnique).mockResolvedValueOnce({ beliefDriftProcessedThroughTurn: 2 } as any)
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'f1', name: 'Ashcrown', beliefVector: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'faction.warResolved', newValue: 'attacker', origin: 'tick' }] as any)
+
+    const result = await tickBeliefDrift(baseCtx({ turnNumber: 5 }))
+
+    expect(result.changes).toHaveLength(1)
+  })
+
+  it('#276: proceeds on a brand-new campaign whose watermark is null', async () => {
+    vi.mocked(prisma.worldMeta.findUnique).mockResolvedValueOnce({ beliefDriftProcessedThroughTurn: null } as any)
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([])
+
+    const result = await tickBeliefDrift(baseCtx({ turnNumber: 1 }))
+
+    expect(result.changes).toEqual([])
+    expect(prisma.faction.findMany).toHaveBeenCalled()
+  })
+
+  it('#276: advances the watermark to turnNumber - 1 after a real pass', async () => {
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'f1', name: 'Ashcrown', beliefVector: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([])
+
+    await tickBeliefDrift(baseCtx({ turnNumber: 5 }))
+
+    expect(prisma.worldMeta.updateMany).toHaveBeenCalledWith({
+      where: { campaignId: 'campaign-1' },
+      data: { beliefDriftProcessedThroughTurn: 4 },
+    })
+  })
+
+  it('#276: does not advance the watermark in dry-run mode', async () => {
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'f1', name: 'Ashcrown', beliefVector: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'faction.warResolved', newValue: 'attacker', origin: 'tick' }] as any)
+
+    await tickBeliefDrift(baseCtx({ turnNumber: 5, dryRun: true }))
+
+    expect(prisma.worldMeta.updateMany).not.toHaveBeenCalled()
   })
 })

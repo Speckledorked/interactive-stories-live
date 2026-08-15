@@ -110,4 +110,54 @@ describeIfDb('tickNpcDisposition — real database', () => {
     // Starting from the previous test's { selfPreservation: 54, loyalty: 50, ambition: 50 }.
     expect(npcAfter?.disposition).toMatchObject({ loyalty: 54, ambition: 54 })
   })
+
+  // #276: this is the exact scenario the frozen-turnNumber bug produces —
+  // an idle campaign's daily cron sweep invokes runWorldTick with the SAME
+  // turnNumber on every pass, since nothing else ever advances it. Without
+  // the watermark, the same WorldEvent row would be reclassified and
+  // reapplied as fresh drift every single time.
+  it('#276: does not reapply drift when invoked twice with the same turnNumber', async () => {
+    const campaign = await prisma.campaign.create({
+      data: { title: 'NPC Disposition Idempotency Test', aiSystemPrompt: 'test', initialWorldSeed: 'test' },
+    })
+    const idempCampaignId = campaign.id
+    await prisma.worldMeta.create({ data: { campaignId: idempCampaignId, currentTurnNumber: 2 } })
+
+    const npc = await prisma.nPC.create({
+      data: { campaignId: idempCampaignId, name: 'Idle Lieutenant', importance: 5, isAlive: true },
+    })
+    await prisma.worldEvent.create({
+      data: {
+        campaignId: idempCampaignId,
+        turnNumber: 1,
+        type: 'npc.consequence',
+        origin: 'consequence',
+        targetType: 'NPC',
+        targetId: npc.id,
+        targetName: 'Idle Lieutenant',
+        field: 'consequence',
+        previousValue: '(none)',
+        newValue: 'THREATENED',
+        reason: 'The party threatened the lieutenant',
+        significant: true,
+        importance: 'NORMAL',
+      },
+    })
+
+    const ctx: TickContext = {
+      campaignId: idempCampaignId, turnNumber: 2, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
+    }
+    const first = await tickNpcDisposition(ctx)
+    expect(first.changes).toHaveLength(1)
+
+    // Same turnNumber again — simulating the daily cron sweep re-ticking a
+    // genuinely idle campaign.
+    const second = await tickNpcDisposition(ctx)
+    expect(second.changes).toEqual([])
+
+    const npcAfter = await prisma.nPC.findUnique({ where: { id: npc.id }, select: { disposition: true } })
+    expect(npcAfter?.disposition).toMatchObject({ selfPreservation: 54 })
+
+    await prisma.campaign.delete({ where: { id: idempCampaignId } }).catch(() => {})
+  })
 })

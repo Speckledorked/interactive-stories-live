@@ -10,7 +10,7 @@ import Link from 'next/link'
 import { KeyRound, AlertTriangle } from 'lucide-react'
 import { fontDisplay, fontSans } from '@/lib/fonts'
 import { TavernBackground } from '@/components/tavern/TavernBackground'
-import { Button } from '@/components/ui/button'
+import { Button, buttonClasses } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 function ResetPasswordForm() {
@@ -49,14 +49,21 @@ function ResetPasswordForm() {
     }
   }
 
+  // Dead end: without a token there is no form to show, so requesting a
+  // fresh link is the ONLY thing left to do here. It used to be an
+  // underlined inline link inside the error sentence — the sole recovery
+  // action on the screen, styled as an aside and under the 44px hit area.
+  // It's the page's primary action, so it renders as one.
   if (!token) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-myth-danger/30 bg-myth-danger/10 px-4 py-3 text-sm text-myth-ink">
-        <AlertTriangle className="h-4 w-4 flex-shrink-0 text-myth-danger" />
-        <span>
-          This reset link is missing its token.{' '}
-          <Link href="/auth/forgot-password" className="underline">Request a new one.</Link>
-        </span>
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 rounded-lg border border-myth-danger/30 bg-myth-danger/10 px-4 py-3 text-sm text-myth-ink">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 text-myth-danger" />
+          <span>This reset link is missing its token.</span>
+        </div>
+        <Link href="/auth/forgot-password" className={buttonClasses({ fullWidth: true })}>
+          Request a new link
+        </Link>
       </div>
     )
   }

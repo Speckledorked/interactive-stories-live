@@ -17,6 +17,7 @@ import { TavernNav } from '@/components/tavern/TavernNav'
 import { TavernButton } from '@/components/tavern/ui'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Button } from '@/components/ui/button'
 
 interface Friend {
   id: string
@@ -267,14 +268,13 @@ export default function FriendsPage() {
                       </p>
                     </div>
                   </div>
-                  <button
+                  <Button variant="danger"
                     onClick={() => removeFriend(friend.id)}
                     disabled={pendingActionId === friend.id}
-                    className="p-2 text-myth-ink-faint transition-colors hover:text-myth-danger disabled:opacity-50 touch-manipulation"
                     aria-label="Remove friend"
                   >
                     <UserMinus className="w-4 h-4" />
-                  </button>
+                  </Button>
                 </div>
               ))
             )}
@@ -304,14 +304,13 @@ export default function FriendsPage() {
                         >
                           <Check className="w-4 h-4" />
                         </button>
-                        <button
+                        <Button variant="danger"
                           onClick={() => respondToRequest(req.id, 'reject')}
                           disabled={pendingActionId === req.id}
-                          className="p-2 text-myth-danger transition-colors hover:text-myth-danger disabled:opacity-50 touch-manipulation"
                           aria-label="Reject"
                         >
                           <X className="w-4 h-4" />
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -331,13 +330,12 @@ export default function FriendsPage() {
                       className="flex items-center justify-between gap-3 rounded-lg border border-myth-border bg-myth-surface p-4"
                     >
                       <p className="truncate font-medium text-myth-ink">{req.receiver.name || req.receiver.email}</p>
-                      <button
+                      <Button variant="danger" size="sm"
                         onClick={() => cancelRequest(req.id)}
                         disabled={pendingActionId === req.id}
-                        className="text-xs text-myth-ink-faint transition-colors hover:text-myth-danger disabled:opacity-50 touch-manipulation"
                       >
                         Cancel
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>

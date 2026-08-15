@@ -14,6 +14,7 @@ import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
+import { Button } from '@/components/ui/button'
 
 type TabKey = 'notifications' | 'profile' | 'privacy'
 
@@ -273,8 +274,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="pt-4 border-t border-myth-border">
-                <button
-                  className="px-4 py-2.5 rounded-lg bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink font-medium transition-colors text-center"
+                <Button variant="primary"
                   onClick={handleSaveProfile}
                   disabled={savingProfile}
                 >
@@ -286,7 +286,7 @@ export default function SettingsPage() {
                   ) : (
                     'Save Profile'
                   )}
-                </button>
+                </Button>
                 {profileMessage && (
                   <p className={`text-sm mt-3 flex items-center gap-1 ${
                     profileMessage.startsWith('✓') ? 'text-myth-good' : 'text-myth-danger'
@@ -362,9 +362,9 @@ export default function SettingsPage() {
                 <h3 className="text-myth-ink font-semibold">Change Password</h3>
               </div>
               <p className="text-sm text-myth-ink-muted mb-4">Update your password to keep your account secure</p>
-              <button className="px-4 py-2.5 rounded-lg border border-myth-border text-myth-ink-muted font-medium transition-colors hover:border-myth-border-strong hover:text-myth-ink text-center" onClick={() => setShowPasswordModal(true)}>
+              <Button variant="secondary" onClick={() => setShowPasswordModal(true)}>
                 Change Password
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -379,12 +379,12 @@ export default function SettingsPage() {
             <p className="text-sm text-myth-ink-muted mb-6 leading-relaxed">
               Permanently delete your account and all associated data. This action cannot be undone.
             </p>
-            <button className="px-4 py-2.5 rounded-lg bg-myth-danger hover:bg-myth-danger/90 text-white font-medium transition-colors text-center flex items-center justify-center gap-2" onClick={() => setShowDeleteModal(true)}>
+            <Button variant="danger" onClick={() => setShowDeleteModal(true)}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
               Delete Account
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -452,10 +452,9 @@ export default function SettingsPage() {
               )}
 
               <div className="flex gap-3 pt-4">
-                <button
+                <Button variant="primary" fullWidth
                   onClick={handleChangePassword}
                   disabled={changingPassword}
-                  className="px-4 py-2.5 rounded-lg bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink font-medium transition-colors text-center flex-1"
                 >
                   {changingPassword ? (
                     <div className="flex items-center justify-center gap-2">
@@ -465,8 +464,8 @@ export default function SettingsPage() {
                   ) : (
                     'Change Password'
                   )}
-                </button>
-                <button
+                </Button>
+                <Button variant="secondary"
                   onClick={() => {
                     setShowPasswordModal(false)
                     setPasswordMessage('')
@@ -474,10 +473,9 @@ export default function SettingsPage() {
                     setNewPassword('')
                     setConfirmPassword('')
                   }}
-                  className="px-4 py-2.5 rounded-lg border border-myth-border text-myth-ink-muted font-medium transition-colors hover:border-myth-border-strong hover:text-myth-ink text-center"
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -543,10 +541,9 @@ export default function SettingsPage() {
               )}
 
               <div className="flex gap-3 pt-4">
-                <button
+                <Button variant="danger" fullWidth
                   onClick={handleDeleteAccount}
                   disabled={deletingAccount || deleteConfirmation !== 'DELETE MY ACCOUNT'}
-                  className="px-4 py-2.5 rounded-lg bg-myth-danger hover:bg-myth-danger/90 text-white font-medium transition-colors text-center flex items-center justify-center gap-2 flex-1 disabled:opacity-50"
                 >
                   {deletingAccount ? (
                     <div className="flex items-center justify-center gap-2">
@@ -556,17 +553,16 @@ export default function SettingsPage() {
                   ) : (
                     'Delete My Account'
                   )}
-                </button>
-                <button
+                </Button>
+                <Button variant="secondary"
                   onClick={() => {
                     setShowDeleteModal(false)
                     setDeleteMessage('')
                     setDeleteConfirmation('')
                   }}
-                  className="px-4 py-2.5 rounded-lg border border-myth-border text-myth-ink-muted font-medium transition-colors hover:border-myth-border-strong hover:text-myth-ink text-center"
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
             </div>
           </div>

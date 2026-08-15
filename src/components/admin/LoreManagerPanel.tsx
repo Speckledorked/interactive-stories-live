@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { SectionHeader } from '@/components/ui/section-header'
+import { Button } from '@/components/ui/button'
 
 type SourceType = 'PASTE' | 'URL' | 'WIKI'
 type JobStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
@@ -395,14 +396,13 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
                   className="block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                 />
                 {sourceType === 'WIKI' && (
-                  <button
+                  <Button variant="secondary"
                     type="button"
                     onClick={handleFindCategories}
                     disabled={categoriesLoading || !url.trim()}
-                    className="shrink-0 rounded-md border border-myth-border px-3 py-2 text-sm text-myth-ink-muted hover:border-myth-accent hover:text-myth-accent disabled:opacity-50"
                   >
                     {categoriesLoading ? 'Reading wiki…' : 'Find categories'}
-                  </button>
+                  </Button>
                 )}
               </div>
               {sourceType === 'WIKI' && (
@@ -467,13 +467,12 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
 
           {formError && <p className="text-sm text-myth-danger">{formError}</p>}
 
-          <button
+          <Button variant="primary"
             type="submit"
             disabled={submitting}
-            className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
           >
             {submitting ? 'Starting import...' : 'Import'}
-          </button>
+          </Button>
         </form>
         </div>
       </section>
@@ -498,14 +497,13 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
             aren&apos;t affected.
           </span>
         </label>
-        <button
+        <Button variant="primary"
           type="button"
           onClick={handleReseed}
           disabled={reseedInFlight || jobs.every(j => j.status !== 'COMPLETED')}
-          className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
         >
           {reseedInFlight ? 'Reseeding world…' : 'Reseed world from imported lore'}
-        </button>
+        </Button>
         {jobs.length > 0 && jobs.every(j => j.status !== 'COMPLETED') && (
           <p className="mt-2 text-xs text-myth-ink-faint">Available once an import has completed.</p>
         )}
@@ -582,12 +580,11 @@ function LoreJobRow({ job, onDelete }: { job: LoreJob; onDelete: () => void }) {
           </p>
         )}
       </div>
-      <button
+      <Button variant="danger" size="sm"
         onClick={onDelete}
-        className="shrink-0 rounded-md border border-myth-border px-3 py-1 text-sm text-myth-ink-muted hover:border-myth-danger/40 hover:text-myth-danger"
       >
         Delete
-      </button>
+      </Button>
     </div>
   )
 }

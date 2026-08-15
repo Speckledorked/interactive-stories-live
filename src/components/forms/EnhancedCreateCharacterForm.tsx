@@ -10,6 +10,7 @@ import { PBTA_STATS } from '@/lib/pbta-moves'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 // The final tab's submit button sits at the exact same screen position as
 // every other tab's "Next →" button. Tapping through tabs quickly, a tap
@@ -806,13 +807,12 @@ export default function EnhancedCreateCharacterForm({
                           </div>
                         )}
                       </div>
-                      <button
+                      <Button variant="danger"
                         type="button"
                         onClick={() => handleRemoveItem(item.id)}
-                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -889,13 +889,12 @@ export default function EnhancedCreateCharacterForm({
                   {formData.resources.contacts.map((contact, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{contact}</span>
-                      <button
+                      <Button variant="danger"
                         type="button"
                         onClick={() => removeContact(index)}
-                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -943,13 +942,12 @@ export default function EnhancedCreateCharacterForm({
                   {formData.consequences.promises.map((promise, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{promise}</span>
-                      <button
+                      <Button variant="danger"
                         type="button"
                         onClick={() => removePromise(index)}
-                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -986,13 +984,12 @@ export default function EnhancedCreateCharacterForm({
                   {formData.consequences.debts.map((debt, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{debt}</span>
-                      <button
+                      <Button variant="danger"
                         type="button"
                         onClick={() => removeDebt(index)}
-                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -1029,13 +1026,12 @@ export default function EnhancedCreateCharacterForm({
                   {formData.consequences.enemies.map((enemy, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{enemy}</span>
-                      <button
+                      <Button variant="danger"
                         type="button"
                         onClick={() => removeEnemy(index)}
-                        className="text-myth-danger hover:text-myth-danger/80 text-sm"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>

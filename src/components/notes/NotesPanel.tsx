@@ -7,6 +7,7 @@ import { PlayerNote } from '@prisma/client';
 import { getToken } from '@/lib/clientAuth';
 import { subscribeToCampaignMessages, RealtimeNoteUpdate } from '@/lib/realtime/pusher-client';
 import { truncateWithEllipsis } from '@/lib/format';
+import { Button } from '@/components/ui/button'
 
 interface NotesPanelProps {
   campaignId: string;
@@ -348,13 +349,12 @@ export default function NotesPanel({
             </div>
 
             <div className="flex gap-2">
-              <button
+              <Button variant="danger"
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 bg-myth-danger text-myth-ink rounded-md text-sm hover:bg-myth-danger disabled:opacity-50"
               >
                 {editingNote ? 'Update Note' : 'Save Note'}
-              </button>
+              </Button>
               <button
                 type="button"
                 onClick={resetForm}
@@ -389,18 +389,16 @@ export default function NotesPanel({
                   </div>
                   {note.authorId === currentUserId && (
                     <div className="flex gap-1">
-                      <button
+                      <Button variant="primary" size="sm"
                         onClick={() => startEdit(note)}
-                        className="px-2 py-1 text-xs bg-myth-accent/80 text-myth-ink rounded hover:bg-myth-accent"
                       >
                         Edit
-                      </button>
-                      <button
+                      </Button>
+                      <Button variant="danger" size="sm"
                         onClick={() => deleteNote(note.id, note.authorId)}
-                        className="px-2 py-1 text-xs bg-myth-danger text-myth-ink rounded hover:bg-myth-danger"
                       >
                         Delete
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>

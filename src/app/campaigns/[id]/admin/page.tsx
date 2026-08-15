@@ -24,6 +24,7 @@ import { parseCorruptionTheme } from '@/lib/game/corruption'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 interface Campaign {
   id: string
@@ -1154,13 +1155,12 @@ export default function AdminPage() {
                   </select>
                 </div>
 
-                <button
+                <Button variant="primary"
                   onClick={handleSaveAISettings}
                   disabled={saving}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : 'Save AI Settings'}
-                </button>
+                </Button>
 
                 <div className="mt-8 pt-6 border-t border-myth-border">
                   <h3 className="font-semibold text-myth-ink mb-1">Origin Archetypes & Corruption Theme</h3>
@@ -1187,13 +1187,12 @@ export default function AdminPage() {
                       </div>
                     )
                   })()}
-                  <button
+                  <Button variant="primary"
                     onClick={handleGenerateWorldExtras}
                     disabled={generatingExtras}
-                    className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                   >
                     {generatingExtras ? 'Generating...' : 'Generate Archetypes & Corruption Theme'}
-                  </button>
+                  </Button>
                 </div>
 
                 {health && (
@@ -1361,13 +1360,13 @@ export default function AdminPage() {
                         className="block w-full max-w-xs rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                       />
                     </div>
-                    <button
+                    <Button variant="primary"
+                      className="mt-3"
                       onClick={handleSaveSimulationSettings}
                       disabled={saving}
-                      className="mt-3 rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                     >
                       {saving ? 'Saving...' : 'Save Simulation Settings'}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -1380,12 +1379,11 @@ export default function AdminPage() {
                   title="NPCs"
                   description="Non-player characters the world tick moves and grows on its own between scenes — goals, importance, and faction ties all shape what it does with them. Click 'Why?' on any NPC to see its actual next-tick decision, not a guess."
                 />
-                <button
+                <Button variant="primary"
                   onClick={() => setCreatingNpc(true)}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
                   + Create NPC
-                </button>
+                </Button>
 
                 {creatingNpc && (
                   <div className="rounded-lg border border-myth-border p-4 bg-myth-surface-sunken">
@@ -1508,20 +1506,18 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <button
+                        <Button variant="primary"
                           type="submit"
                           disabled={saving}
-                          className="rounded-md bg-myth-accent px-3 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="secondary"
                           type="button"
                           onClick={() => setCreatingNpc(false)}
-                          className="rounded-md border border-myth-border px-3 py-2 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   </div>
@@ -1583,19 +1579,17 @@ export default function AdminPage() {
                           <label className="text-xs">Discovered by players</label>
                         </div>
                         <div className="flex space-x-2">
-                          <button
+                          <Button variant="primary" size="sm"
                             onClick={() => handleUpdateNPC(npc)}
                             disabled={saving}
-                            className="rounded-md bg-myth-accent px-3 py-1 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                           >
                             Save
-                          </button>
-                          <button
+                          </Button>
+                          <Button variant="secondary" size="sm"
                             onClick={() => setEditingNpc(null)}
-                            className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -1619,19 +1613,17 @@ export default function AdminPage() {
                             )}
                           </div>
                           <div className="flex gap-2">
-                            <button
+                            <Button variant="secondary" size="sm"
                               onClick={() => handlePreviewNpcReasoning(npc.id)}
                               disabled={npcReasoningLoading[npc.id]}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                             >
                               {npcReasoningLoading[npc.id] ? 'Thinking…' : 'Why?'}
-                            </button>
-                            <button
+                            </Button>
+                            <Button variant="secondary" size="sm"
                               onClick={() => setEditingNpc(npc.id)}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                             >
                               Edit
-                            </button>
+                            </Button>
                           </div>
                         </div>
                         {npcReasoning[npc.id] && (
@@ -1661,12 +1653,11 @@ export default function AdminPage() {
                   title="Factions"
                   description="Organizations that pursue their own goals turn over turn — reassessing strategy from their own resources/stability/military, drifting in disposition from their own history, and going to war with rivals when it serves them. Click 'Why?' on any faction to see the actual next reassessment, not a guess."
                 />
-                <button
+                <Button variant="primary"
                   onClick={() => setCreatingFaction(true)}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
                   + Create Faction
-                </button>
+                </Button>
 
                 {creatingFaction && (
                   <div className="rounded-lg border border-myth-border p-4 bg-myth-surface-sunken">
@@ -1815,20 +1806,18 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <button
+                        <Button variant="primary"
                           type="submit"
                           disabled={saving}
-                          className="rounded-md bg-myth-accent px-3 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="secondary"
                           type="button"
                           onClick={() => setCreatingFaction(false)}
-                          className="rounded-md border border-myth-border px-3 py-2 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   </div>
@@ -1918,19 +1907,17 @@ export default function AdminPage() {
                           <label className="text-xs">Discovered by players</label>
                         </div>
                         <div className="flex space-x-2">
-                          <button
+                          <Button variant="primary" size="sm"
                             onClick={() => handleUpdateFaction(faction)}
                             disabled={saving}
-                            className="rounded-md bg-myth-accent px-3 py-1 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                           >
                             Save
-                          </button>
-                          <button
+                          </Button>
+                          <Button variant="secondary" size="sm"
                             onClick={() => setEditingFaction(null)}
-                            className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -1965,19 +1952,17 @@ export default function AdminPage() {
                             </p>
                           </div>
                           <div className="flex gap-2">
-                            <button
+                            <Button variant="secondary" size="sm"
                               onClick={() => handlePreviewFactionReasoning(faction.id)}
                               disabled={factionReasoningLoading[faction.id]}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                             >
                               {factionReasoningLoading[faction.id] ? 'Thinking…' : 'Why?'}
-                            </button>
-                            <button
+                            </Button>
+                            <Button variant="secondary" size="sm"
                               onClick={() => setEditingFaction(faction.id)}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                             >
                               Edit
-                            </button>
+                            </Button>
                           </div>
                         </div>
                         {factionReasoning[faction.id] && (
@@ -2069,12 +2054,11 @@ export default function AdminPage() {
                   title="Locations"
                   description="Places in the world — the environment tick ages each one on its own: an ongoing siege damages it, disputed rule strains it, and peacetime slowly recovers it. Click 'Why?' on any location to see that math for real."
                 />
-                <button
+                <Button variant="primary"
                   onClick={() => setCreatingLocation(true)}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
                   + Create Location
-                </button>
+                </Button>
 
                 {creatingLocation && (
                   <div className="rounded-lg border border-myth-border p-4 bg-myth-surface-sunken">
@@ -2151,20 +2135,18 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <button
+                        <Button variant="primary"
                           type="submit"
                           disabled={saving}
-                          className="rounded-md bg-myth-accent px-3 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="secondary"
                           type="button"
                           onClick={() => setCreatingLocation(false)}
-                          className="rounded-md border border-myth-border px-3 py-2 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   </div>
@@ -2222,19 +2204,17 @@ export default function AdminPage() {
                           rows={2}
                         />
                         <div className="flex space-x-2">
-                          <button
+                          <Button variant="primary" size="sm"
                             onClick={() => handleUpdateLocation(location)}
                             disabled={saving}
-                            className="rounded-md bg-myth-accent px-3 py-1 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                           >
                             Save
-                          </button>
-                          <button
+                          </Button>
+                          <Button variant="secondary" size="sm"
                             onClick={() => setEditingLocation(null)}
-                            className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -2256,19 +2236,17 @@ export default function AdminPage() {
                             </p>
                           </div>
                           <div className="flex gap-2">
-                            <button
+                            <Button variant="secondary" size="sm"
                               onClick={() => handlePreviewLocationReasoning(location.id)}
                               disabled={locationReasoningLoading[location.id]}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                             >
                               {locationReasoningLoading[location.id] ? 'Thinking…' : 'Why?'}
-                            </button>
-                            <button
+                            </Button>
+                            <Button variant="secondary" size="sm"
                               onClick={() => setEditingLocation(location.id)}
-                              className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                             >
                               Edit
-                            </button>
+                            </Button>
                           </div>
                         </div>
                         {locationReasoning[location.id] && (
@@ -2296,12 +2274,11 @@ export default function AdminPage() {
                   title="Threads"
                   description="Countdowns the world tick advances on its own — ambitions, threats, and schemes moving toward a consequence whether or not anyone acts. A thread's pace comes from whatever it's actually tied to (a faction's own strength, a linked faction's instability, a joint NPC scheme) or, with no tie at all, its category and the campaign's current tension. Click 'Why?' on any thread for that math."
                 />
-                <button
+                <Button variant="primary"
                   onClick={() => setCreatingClock(true)}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
                   + Create Thread
-                </button>
+                </Button>
 
                 {creatingClock && (
                   <div className="rounded-lg border border-myth-border p-4 bg-myth-surface-sunken">
@@ -2397,20 +2374,18 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <button
+                        <Button variant="primary"
                           type="submit"
                           disabled={saving}
-                          className="rounded-md bg-myth-accent px-3 py-2 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50"
                         >
                           {saving ? 'Creating...' : 'Create'}
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="secondary"
                           type="button"
                           onClick={() => setCreatingClock(false)}
-                          className="rounded-md border border-myth-border px-3 py-2 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   </div>
@@ -2434,27 +2409,25 @@ export default function AdminPage() {
                         }
                       />
                       <div className="mt-2 flex gap-2">
-                        <button
+                        <Button variant="secondary" size="sm" fullWidth
                           onClick={() => handleTickClock(clock.id, 'untick')}
                           disabled={clock.currentTicks <= 0}
-                          className="rounded-md border border-myth-border px-3 py-1 text-sm text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50 flex-1"
                         >
                           - Remove Tick
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="secondary" size="sm" fullWidth
                           onClick={() => handleToggleClockVisibility(clock)}
-                          className="rounded-md border border-myth-border px-3 py-1 text-sm text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink flex-1"
                         >
                           {clock.isHidden ? 'Show' : 'Hide'}
-                        </button>
+                        </Button>
                       </div>
-                      <button
+                      <Button variant="secondary" size="sm" fullWidth
+                        className="mt-2"
                         onClick={() => handlePreviewClockReasoning(clock.id)}
                         disabled={clockReasoningLoading[clock.id]}
-                        className="mt-2 w-full rounded-md border border-myth-border px-3 py-1 text-sm text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                       >
                         {clockReasoningLoading[clock.id] ? 'Thinking…' : 'Why?'}
-                      </button>
+                      </Button>
                       {clockReasoning[clock.id] && (
                         <div className="mt-2 rounded-md border border-myth-border bg-myth-surface-sunken p-3 text-sm">
                           <p className="font-medium text-myth-ink">
@@ -2603,12 +2576,11 @@ export default function AdminPage() {
                   title="Invites"
                   description="Shareable join links for this campaign — set a use limit (or leave it unlimited) and share the link with whoever you want at the table."
                 />
-                <button
+                <Button variant="primary"
                   onClick={handleCreateInvite}
-                  className="rounded-md bg-myth-accent px-4 py-2 text-myth-accent-ink hover:bg-myth-accent-hover"
                 >
                   Create New Invite
-                </button>
+                </Button>
 
                 <div className="space-y-2">
                   {invites.map((invite) => (
@@ -2622,15 +2594,14 @@ export default function AdminPage() {
                             {invite.isExhausted && ' (Exhausted)'}
                           </p>
                         </div>
-                        <button
+                        <Button variant="secondary" size="sm"
                           onClick={() => {
                             navigator.clipboard.writeText(invite.joinUrl)
                             alert('Invite link copied!')
                           }}
-                          className="rounded-md border border-myth-border px-3 py-1 text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
                         >
                           Copy
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -2682,23 +2653,21 @@ export default function AdminPage() {
                             <option value="PLAYER">Player</option>
                             <option value="ADMIN">Admin</option>
                           </select>
-                          <button
+                          <Button variant="danger" size="sm"
                             onClick={() => handleRemoveMember(member.user.id)}
                             disabled={saving}
-                            className="rounded-md border border-myth-danger/40 px-3 py-1 text-sm text-myth-danger hover:bg-myth-danger/10 disabled:opacity-50"
                             title="Remove from campaign — they can rejoin with a new invite"
                           >
                             Remove
-                          </button>
+                          </Button>
                           {member.role !== 'ADMIN' && (
-                            <button
+                            <Button variant="danger" size="sm"
                               onClick={() => handleBanMember(member.user.id)}
                               disabled={saving}
-                              className="px-3 py-1 rounded-md border border-myth-danger/40 text-myth-danger hover:bg-myth-danger/10 disabled:opacity-50 text-sm"
                               title="Ban — removes them and blocks rejoining via invite link"
                             >
                               Ban
-                            </button>
+                            </Button>
                           )}
                         </div>
                       </div>
@@ -2797,13 +2766,12 @@ export default function AdminPage() {
                           />
                         </div>
                       </div>
-                      <button
+                      <Button variant="primary"
                         onClick={handleSaveSafetySettings}
                         disabled={savingSafetySettings}
-                        className="rounded-md bg-myth-accent px-4 py-2 hover:bg-myth-accent-hover text-myth-accent-ink disabled:opacity-50 text-sm"
                       >
                         {savingSafetySettings ? 'Saving...' : 'Save Safety Settings'}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -2835,20 +2803,18 @@ export default function AdminPage() {
                               </p>
                             </div>
                             <div className="flex gap-2 flex-shrink-0">
-                              <button
+                              <Button variant="primary" size="sm"
                                 onClick={() => handleResolveReport(report.id)}
                                 disabled={saving}
-                                className="rounded-md bg-myth-accent px-3 py-1 text-myth-accent-ink hover:bg-myth-accent-hover disabled:opacity-50 text-sm"
                               >
                                 Resolve
-                              </button>
-                              <button
+                              </Button>
+                              <Button variant="secondary" size="sm"
                                 onClick={() => handleDismissReport(report.id)}
                                 disabled={saving}
-                                className="px-3 py-1 rounded-md border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50 text-sm"
                               >
                                 Dismiss
-                              </button>
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -2893,13 +2859,12 @@ export default function AdminPage() {
                               {ban.isPermanent ? ' • permanent' : ban.expiresAt ? ` • until ${new Date(ban.expiresAt).toLocaleDateString()}` : ''}
                             </p>
                           </div>
-                          <button
+                          <Button variant="secondary" size="sm"
                             onClick={() => handleUnbanMember(ban.userId)}
                             disabled={saving}
-                            className="px-3 py-1 rounded-md border border-myth-border text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50 text-sm flex-shrink-0"
                           >
                             Unban
-                          </button>
+                          </Button>
                         </div>
                       ))}
                     </div>

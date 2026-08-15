@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Message } from '@prisma/client';
 import { getPusherClient, subscribeToCampaignMessages, subscribeToUserWhispers, RealtimeMessage, isPusherConfigured } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
+import { Button } from '@/components/ui/button'
 
 interface ChatPanelProps {
   campaignId: string;
@@ -384,13 +385,12 @@ export default function ChatPanel({
             className="flex-1 p-2 border border-myth-border rounded-md text-sm bg-myth-surface-sunken text-myth-ink placeholder-myth-ink-faint"
             disabled={loading}
           />
-          <button
+          <Button variant="primary"
             type="submit"
             disabled={loading || !newMessage.trim()}
-            className="px-4 py-2 bg-myth-accent text-myth-accent-ink rounded-md text-sm hover:bg-myth-accent-hover disabled:opacity-50"
           >
             Send
-          </button>
+          </Button>
         </form>
       </div>
     </div>

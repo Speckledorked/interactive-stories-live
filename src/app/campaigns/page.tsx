@@ -22,6 +22,7 @@ import { TavernButton } from '@/components/tavern/ui'
 import { EmptyState } from '@/components/ui/empty-state'
 import { CampaignChronicleCard } from '@/components/campaigns/CampaignChronicleCard'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 interface Campaign {
   id: string
@@ -136,13 +137,12 @@ export default function CampaignsPage() {
                 Every world you&rsquo;ve stepped into, remembered exactly as you left it.
               </p>
             </div>
-            <button
+            <Button variant="primary"
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 rounded-lg bg-myth-accent px-4 py-2.5 text-sm font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover"
             >
               <Plus className="w-4 h-4" />
               <span>New Campaign</span>
-            </button>
+            </Button>
           </div>
         </div>
 

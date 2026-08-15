@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { X, Check } from 'lucide-react'
 import { authenticatedFetch } from '@/lib/clientAuth'
+import { Button } from '@/components/ui/button'
 
 interface InviteModalProps {
   campaignId: string
@@ -96,13 +97,13 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
         </div>
 
         <div className="p-6 overflow-y-auto max-h-[60vh]">
-          <button
+          <Button variant="primary" size="lg" fullWidth
+            className="mb-6"
             onClick={handleCreateInvite}
             disabled={creating}
-            className="w-full bg-gradient-to-b from-myth-danger to-myth-danger hover:from-myth-danger hover:to-myth-danger disabled:opacity-50 text-myth-ink font-semibold py-3 px-4 rounded-lg transition mb-6"
           >
             {creating ? 'Creating...' : '+ Create New Invite Link'}
-          </button>
+          </Button>
 
           {loading ? (
             <div className="text-center py-8">
@@ -177,12 +178,11 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
         </div>
 
         <div className="p-6 border-t border-myth-border">
-          <button
+          <Button variant="secondary" fullWidth
             onClick={onClose}
-            className="w-full bg-myth-surface-sunken hover:bg-myth-surface-sunken border border-myth-border text-myth-ink font-semibold py-2 px-4 rounded-lg transition"
           >
             Close
-          </button>
+          </Button>
         </div>
       </div>
     </div>

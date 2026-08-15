@@ -110,18 +110,23 @@ export function applyNpcConsequence(npc: NPC, consequence: ExtractedConsequence)
     })
   }
 
-  // Always record that the consequence happened, even if it produced no
-  // field changes worth their own entries (e.g. the LLM gave no updated
-  // goal/relationship text and the NPC was already major) — "the party
-  // spared Grik" should be retrievable on its own.
-  if (changes.length === 0) {
-    changes.push({
-      entityType: 'NPC', entityId: npc.id, entityName: npc.name, campaignId: npc.campaignId,
-      field: 'consequence', previousValue: '(none)', newValue: consequence.action,
-      reason: consequence.reason, significant: true, importance, origin: 'consequence',
-      originLocationId: npc.locationId,
-    })
-  }
+  // #309: this comment used to say "always" but the code only fired when
+  // changes.length === 0 — a last-resort fallback for the rare case
+  // nothing else changed, not the ordinary path. Since the AI extraction
+  // supplies an updatedGoal/updatedRelationship for most narratively
+  // meaningful consequences, `npc.consequence` (the only WorldEvent type
+  // npcDispositionTick.ts's ENDANGERED/PROTECTED classification reads)
+  // was silently starved in the common case, not just the edge case the
+  // comment described. "The party spared Grik" is a genuinely distinct
+  // fact from "Grik's goal changed to X" — both belong in the log, so
+  // this now always fires alongside whatever else changed, not only when
+  // nothing else did.
+  changes.push({
+    entityType: 'NPC', entityId: npc.id, entityName: npc.name, campaignId: npc.campaignId,
+    field: 'consequence', previousValue: '(none)', newValue: consequence.action,
+    reason: consequence.reason, significant: true, importance, origin: 'consequence',
+    originLocationId: npc.locationId,
+  })
 
   return { updateData, changes }
 }

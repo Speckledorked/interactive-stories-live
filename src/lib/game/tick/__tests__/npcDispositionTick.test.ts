@@ -251,6 +251,53 @@ describe('tickNpcDisposition (DB handler)', () => {
     expect(result.changes).toEqual([])
   })
 
+  // #310: a genuine NPC-death or faction-collapse wake ripple must still
+  // read as abandonment...
+  it('treats an NPC-death wake ripple (wakeSourceType NPC) as abandonment', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'NPC' }] as any)
+
+    const result = await tickNpcDisposition(baseCtx())
+
+    expect(prisma.nPC.update).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      data: { disposition: expect.objectContaining({ loyalty: NEUTRAL_DISPOSITION.loyalty - 4 }) },
+    })
+  })
+
+  it('treats a faction-collapse wake ripple (wakeSourceType FACTION) as abandonment', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'FACTION' }] as any)
+
+    const result = await tickNpcDisposition(baseCtx())
+
+    expect(prisma.nPC.update).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      data: { disposition: expect.objectContaining({ loyalty: NEUTRAL_DISPOSITION.loyalty - 4 }) },
+    })
+  })
+
+  // ...but a FACTION_DEFAULT wake (an ally merely defaulting on a bailout
+  // loan, economyTick.ts) must NOT — the bug this issue actually names.
+  // Before the fix, this indistinguishable-at-the-DB-level shape (same
+  // type/field/origin) misread an ally's loan default as the NPC's own
+  // faction having abandoned them.
+  it('#310: does NOT treat a FACTION_DEFAULT wake ripple as abandonment', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'FACTION_DEFAULT' }] as any)
+
+    const result = await tickNpcDisposition(baseCtx())
+
+    expect(result.changes).toEqual([])
+    expect(prisma.nPC.update).not.toHaveBeenCalled()
+  })
+
   it('reads the prior turn only, not full history, for both own and faction events', async () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null }] as any)
     vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([]).mockResolvedValueOnce([])

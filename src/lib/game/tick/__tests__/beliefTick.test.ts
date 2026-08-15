@@ -171,6 +171,38 @@ describe('tickBeliefDrift (DB handler)', () => {
     expect(result.changes).toEqual([])
   })
 
+  // #310: same fix as npcDispositionTick.ts's sibling classifier — a
+  // FACTION_DEFAULT wake (economyTick.ts's loan-default cascade) writes
+  // the identical (FACTION, field: 'stability', origin: 'wake') shape as
+  // a genuine death/collapse ripple, so origin alone can't tell them
+  // apart. Only the genuine ones should read as a survived collapse.
+  it('treats a genuine death/collapse wake ripple (wakeSourceType NPC or FACTION) as a survived collapse', async () => {
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'f1', name: 'Ashcrown', beliefVector: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([
+      { type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'FACTION' },
+    ] as any)
+
+    const result = await tickBeliefDrift(baseCtx())
+
+    expect(prisma.faction.update).toHaveBeenCalledWith({
+      where: { id: 'f1' },
+      data: { beliefVector: expect.objectContaining({ isolationism: NEUTRAL_BELIEF.isolationism + 4 }) },
+    })
+    expect(result.changes).toHaveLength(1)
+  })
+
+  it('#310: does NOT treat a FACTION_DEFAULT wake ripple as a survived collapse', async () => {
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'f1', name: 'Ashcrown', beliefVector: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([
+      { type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'FACTION_DEFAULT' },
+    ] as any)
+
+    const result = await tickBeliefDrift(baseCtx())
+
+    expect(result.changes).toEqual([])
+    expect(prisma.faction.update).not.toHaveBeenCalled()
+  })
+
   it('starts from an existing beliefVector rather than always from neutral', async () => {
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
       { id: 'f1', name: 'Ashcrown', beliefVector: { aggression: 90, isolationism: 50, mercantilism: 50, zealotry: 50 } },

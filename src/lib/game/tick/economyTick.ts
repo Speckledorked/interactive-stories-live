@@ -61,6 +61,17 @@ const MAX_CASCADE_PENALTY = 15
 const DEFAULT_ROUGHNESS = 0.4
 // Same decay window #103 already established.
 const CASCADE_DECAY_TURNS = 5
+// #311: a debtor whose debt just defaulted (this same tick or recently)
+// is excluded from new-loan eligibility for this many turns — without it,
+// a defaulted debt only flips OUTSTANDING -> DEFAULTED, so step 2's
+// existing-debt check (which only ever looked at OUTSTANDING) let the
+// very same debtor immediately re-borrow, in the same tick, from any
+// still-solvent ally (frequently the creditor it just stiffed, since the
+// cascade penalty only ever hits the creditor's stability, never the
+// debtor's own resources). Reuses CASCADE_DECAY_TURNS's window: a
+// defaulted debtor stays untrustworthy for as long as the stability
+// shockwave from that default is still being felt.
+const LOAN_DEFAULT_COOLDOWN_TURNS = CASCADE_DECAY_TURNS
 
 export interface LoanCandidate {
   factionId: string
@@ -195,6 +206,7 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
           significant: true,
           importance: 'NORMAL',
           origin: 'wake',
+          wakeSourceType: 'FACTION_DEFAULT',
         })
       }
     }
@@ -209,8 +221,20 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
   })
 
   for (const broke of brokeFactions) {
+    // #311: excludes both an already-in-flight loan (OUTSTANDING) and a
+    // recent default (DEFAULTED within the cooldown window, including one
+    // that defaulted earlier in this very same tick — turnResolved is set
+    // to ctx.turnNumber by step 1 above, and ctx.turnNumber - turnNumber
+    // is trivially 0, inside the window).
     const existingDebt = await ctx.db.factionDebt.findFirst({
-      where: { campaignId: ctx.campaignId, debtorFactionId: broke.id, status: 'OUTSTANDING' },
+      where: {
+        campaignId: ctx.campaignId,
+        debtorFactionId: broke.id,
+        OR: [
+          { status: 'OUTSTANDING' },
+          { status: 'DEFAULTED', turnResolved: { gte: ctx.turnNumber - LOAN_DEFAULT_COOLDOWN_TURNS } },
+        ],
+      },
       select: { id: true },
     })
     if (existingDebt) continue

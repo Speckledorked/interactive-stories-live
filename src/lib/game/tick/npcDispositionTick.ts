@@ -157,7 +157,7 @@ function classifyOwnEvent(row: { type: string; newValue: string | null }): Dispo
 }
 
 /** This NPC's affiliated faction's WorldEvent rows, classified — same shape as beliefTick.ts's classifyWorldEvent. */
-function classifyFactionEvent(row: { type: string; newValue: string | null; origin: string }): DispositionDriftEvent | null {
+function classifyFactionEvent(row: { type: string; newValue: string | null; origin: string; wakeSourceType: string | null }): DispositionDriftEvent | null {
   if (row.type === 'faction.warResolved') {
     if (row.newValue === 'attacker') return { kind: 'FACTION_WON' }
     if (row.newValue === 'defender') return { kind: 'FACTION_LOST' }
@@ -167,7 +167,13 @@ function classifyFactionEvent(row: { type: string; newValue: string | null; orig
     // Only ever logged for the surviving side (see warTick.ts).
     return { kind: 'FACTION_WON' }
   }
-  if (row.type === 'faction.stability' && row.origin === 'wake') {
+  // #310: origin: 'wake' alone doesn't distinguish genuine institutional-
+  // memory loss (a member's death, or the faction's own collapse) from an
+  // ally merely defaulting on a bailout loan (economyTick.ts's
+  // FACTION_DEFAULT cascade) — all three write the identical shape
+  // otherwise. Only the first two read as abandonment; a solvent faction
+  // whose ally stiffed it isn't the same story beat.
+  if (row.type === 'faction.stability' && row.origin === 'wake' && (row.wakeSourceType === 'NPC' || row.wakeSourceType === 'FACTION')) {
     return { kind: 'FACTION_ABANDONED_THEM' }
   }
   return null
@@ -208,14 +214,14 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
               targetId: npc.factionId,
               type: { in: RELEVANT_FACTION_EVENT_TYPES },
             },
-            select: { type: true, newValue: true, origin: true },
+            select: { type: true, newValue: true, origin: true, wakeSourceType: true },
           })
-        : Promise.resolve([] as { type: string; newValue: string | null; origin: string }[]),
+        : Promise.resolve([] as { type: string; newValue: string | null; origin: string; wakeSourceType: string | null }[]),
     ])
 
     const driftEvents = [
       ...ownEvents.map((row) => classifyOwnEvent({ type: row.type, newValue: row.newValue })),
-      ...factionEvents.map((row) => classifyFactionEvent({ type: row.type, newValue: row.newValue, origin: row.origin })),
+      ...factionEvents.map((row) => classifyFactionEvent({ type: row.type, newValue: row.newValue, origin: row.origin, wakeSourceType: row.wakeSourceType })),
     ].filter((e): e is DispositionDriftEvent => e !== null)
 
     if (driftEvents.length === 0) continue

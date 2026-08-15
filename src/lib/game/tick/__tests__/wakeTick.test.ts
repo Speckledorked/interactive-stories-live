@@ -146,7 +146,11 @@ describe('tickWake (DB handler)', () => {
     })
     expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'f1' }, data: { stability: 45 } })
     expect(result.changes).toHaveLength(1)
-    expect(result.changes[0]).toMatchObject({ entityType: 'FACTION', entityId: 'f1', field: 'stability', significant: true, importance: 'NORMAL', origin: 'wake' })
+    // #310: the discriminator npcDispositionTick.ts/beliefTick.ts now
+    // need to tell this genuine NPC-death ripple apart from
+    // economyTick.ts's FACTION_DEFAULT cascade, which writes the same
+    // (FACTION, field: 'stability', origin: 'wake') shape otherwise.
+    expect(result.changes[0]).toMatchObject({ entityType: 'FACTION', entityId: 'f1', field: 'stability', significant: true, importance: 'NORMAL', origin: 'wake', wakeSourceType: 'NPC' })
   })
 
   it('marks a leader\'s death MAJOR and scales the penalty by #112\'s successionRoughness', async () => {
@@ -219,7 +223,8 @@ describe('tickWake (DB handler)', () => {
     })
     expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'f-rival' }, data: { stability: 57 } })
     expect(result.changes).toHaveLength(1)
-    expect(result.changes[0]).toMatchObject({ entityId: 'f-rival', origin: 'wake', significant: true })
+    // #310: same discriminator as the NPC-death ripple above.
+    expect(result.changes[0]).toMatchObject({ entityId: 'f-rival', origin: 'wake', significant: true, wakeSourceType: 'FACTION' })
   })
 
   it('skips a collapse with no related factions at all', async () => {

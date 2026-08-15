@@ -103,15 +103,25 @@ describe('moderatePlayerText', () => {
     expect(result.categories).toEqual(['violence'])
   })
 
-  it('fails open when the moderation API errors', async () => {
+  // #274: a moderation-endpoint outage must fail CLOSED, not open — this is
+  // ToS-compliance protection (categories never genre-exempted, like
+  // self-harm instructions or credible threats, must not slip through
+  // unmoderated just because the moderation call itself is down), distinct
+  // from the legitimate "no API key configured" no-op case above.
+  it('#274: fails closed (flagged + unavailable) when the moderation API returns a non-ok status', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
-    expect(await moderatePlayerText('some player text')).toEqual({ flagged: false, categories: [] })
+    expect(await moderatePlayerText('some player text')).toEqual({ flagged: true, categories: [], unavailable: true })
   })
 
-  it('fails open when fetch itself throws', async () => {
+  it('#274: fails closed (flagged + unavailable) when fetch itself throws', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+    expect(await moderatePlayerText('some player text')).toEqual({ flagged: true, categories: [], unavailable: true })
+  })
+
+  it('#274: a missing API key is still a clean no-op, distinct from a real outage', async () => {
+    vi.stubEnv('OPENAI_API_KEY', '')
     expect(await moderatePlayerText('some player text')).toEqual({ flagged: false, categories: [] })
   })
 })

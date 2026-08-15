@@ -488,6 +488,43 @@ describe('Scene Resolver', () => {
       );
     });
 
+    // #273: the pre-call isPaused check above only catches a pause that was
+    // already active before resolution started. An X-Card pulled DURING the
+    // ~150s AI call — the exact window this safety tool exists to interrupt
+    // — was previously invisible: nothing re-checked isPaused after the AI
+    // response came back, so the generated narration would still be
+    // persisted and broadcast to every player's screen.
+    it('#273: discards the resolution if the scene is paused while the AI call is in flight', async () => {
+      let sceneFindUniqueCallCount = 0;
+      (prisma.scene.findUnique as any).mockImplementation(async () => {
+        sceneFindUniqueCallCount++;
+        // 1st call: resolveScene's own pre-call gate — must be unpaused, or
+        // resolution never starts in the first place, defeating the test.
+        // 2nd call: the new fresh re-check right after callAIGM returns —
+        // simulates an X-Card pulled while the AI call was in flight.
+        return { ...mockScene, isPaused: sceneFindUniqueCallCount >= 2 } as any;
+      });
+      vi.mocked(prisma.scene.update).mockResolvedValue(mockScene as any);
+      vi.mocked(prisma.worldMeta.findUnique).mockResolvedValue(mockWorldMeta as any);
+      vi.mocked(buildSceneResolutionRequest).mockResolvedValue({} as any);
+      vi.mocked(callAIGM).mockResolvedValue(mockAIResponse);
+
+      await expect(resolveScene(mockCampaignId, mockSceneId)).rejects.toThrow(/safety pause/i);
+
+      // The AI-generated content must never reach the database or players.
+      expect(applyWorldUpdates).not.toHaveBeenCalled();
+      expect(prisma.scene.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ sceneResolutionText: mockAIResponse.scene_text }) })
+      );
+      // Reverted back to AWAITING_ACTIONS so it can be retried once resumed
+      // (resolveScene's own pre-call gate then blocks any retry attempt
+      // until a GM actually resumes the scene, since isPaused stays true).
+      expect(prisma.scene.update).toHaveBeenCalledWith({
+        where: { id: mockSceneId },
+        data: { status: 'AWAITING_ACTIONS' },
+      });
+    });
+
     it('should throw error if no player actions submitted', async () => {
       const sceneWithoutActions = { ...mockScene, playerActions: [] };
       vi.mocked(prisma.scene.findUnique).mockResolvedValue(sceneWithoutActions as any);

@@ -3,8 +3,8 @@
 # fix merges itself once the mechanical checks below pass. That's a
 # deliberate choice, not an oversight; read on for what replaces a human.
 #
-# NOT YET ENABLED FOR AUTOPILOT — read this before turning on the
-# `schedule` trigger below. VERIFIED, not just designed: fired manually
+# ENABLED FOR AUTOPILOT (`schedule` below is live) — read this before
+# changing that. VERIFIED, not just designed: fired manually
 # (workflow_dispatch) 12 times against a real, deliberately seeded bug
 # (character.relationships.keys.resolve — see docs/ARCHITECTURE.md's
 # Scorecard row for this pipeline and its Known Bugs entries), the last of
@@ -24,9 +24,27 @@
 # requests" setting never having been enabled, and a prompt gap that let a
 # genuinely correct fix go unmerged for lack of diff-carried proof.
 #
-# What's left is a decision, not a defect: cadence (daily? less often?)
-# and comfort level, not correctness. Left commented out until that
-# decision is made on purpose, not because anything above is still broken.
+# #89's second half — proving revert-regression, not just diagnose-and-fix
+# — was fired for real too. The conflict-handling branch (git revert hits a
+# commit that no longer applies cleanly) is fully verified: two real runs
+# found and fixed two real bugs in it (missing conflict handling entirely,
+# then a revert-conflict:<checkKey> label that itself blew the 50-character
+# limit), and a third run confirmed the fix — issue #366 got filed cleanly.
+# The CLEAN branch (a revert that applies with no conflict, then pushes and
+# auto-merges itself) was NOT observed firing for real — every available
+# seeded-regression target either had a source file that had drifted too
+# far to revert cleanly (character.relationships.keys.resolve, whose only
+# merged fix is PR #153) or turned out to have no live write path left to
+# regress at all (character.resources.reputation.keys.resolve — see the
+# escalationSourceMap.ts fix that removed its now-stale attribution).
+# Manufacturing a clean-revert firing artificially (deliberately shipping a
+# throwaway bug just to give the pipeline something to revert) was
+# considered and rejected as a worse trade than the gap itself. This is a
+# deliberate, informed decision to enable anyway: that branch reuses the
+# exact push/PR/auto-merge code already proven for real in diagnose-and-fix
+# (PR #153), gated first by the same tsc+vitest check that branch also
+# uses — reasoned-safe, not observed-safe. If it ever fires for real, watch
+# it once before trusting it blindly a second time.
 #
 #   Repo secrets this workflow reads and does not create:
 #     - PRODUCTION_DATABASE_URL_READONLY — read access to real campaign
@@ -79,11 +97,9 @@ name: Integrity auto-fix
 
 on:
   # The manual-verification prerequisite this comment used to require is
-  # done — see the header above. Left commented out on purpose: uncomment
-  # when you've decided you actually want this running unattended, not as
-  # a leftover blocker.
-  # schedule:
-  #   - cron: '0 8 * * *'  # daily, offset from the app's own 06:00 UTC world-tick sweep (vercel.json)
+  # done — see the header above for exactly what's proven vs. reasoned-safe.
+  schedule:
+    - cron: '0 8 * * *'  # daily, offset from the app's own 06:00 UTC world-tick sweep (vercel.json)
   workflow_dispatch: {}
 
 # #226: the triage job's dedup check (gh pr list --label "fix:${CHECK_KEY}")

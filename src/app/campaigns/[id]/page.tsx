@@ -30,6 +30,8 @@ import type { ChronicleGlance } from '@/lib/game/chronicleTypes'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+import { Tabs } from '@/components/ui/tabs'
 
 interface CampaignData {
   campaign: any
@@ -312,7 +314,6 @@ export default function CampaignLobbyPage() {
     (c: any) => c.userId === currentUser?.id
   )
 
-  const tabIcons = { overview: Home, progression: Scroll, chat: MessageSquare, notes: StickyNote, maps: MapIcon } as const
 
   return (
     <TavernPage background="myth">
@@ -329,29 +330,19 @@ export default function CampaignLobbyPage() {
           // visible. Scoped to this file only: wiki/story pages' subrows
           // have no sidebar equivalent and must keep rendering at every
           // width (see TavernHeader's minimalHeaderAtDesktop doc comment).
-          <nav className="max-w-6xl mx-auto px-4 flex items-center gap-1 overflow-x-auto text-sm border-t border-myth-border pt-2 pb-0 lg:hidden">
-            {[
-              { key: 'overview', label: 'Overview' },
-              { key: 'progression', label: 'Story Log' },
-              { key: 'chat', label: 'Chat' },
-              { key: 'notes', label: 'Notes' },
-              { key: 'maps', label: 'Maps' },
-            ].map((tab) => {
-              const TabIcon = tabIcons[tab.key as keyof typeof tabIcons]
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key as any)}
-                  className={`flex items-center gap-1.5 px-3 py-2 border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
-                    activeTab === tab.key ? 'border-myth-accent text-myth-ink' : 'border-transparent text-myth-ink-faint hover:text-myth-ink-muted'
-                  }`}
-                >
-                  <TabIcon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              )
-            })}
-          </nav>
+          <Tabs
+            aria-label="Campaign sections"
+            value={activeTab}
+            onChange={(key) => setActiveTab(key as any)}
+            className="max-w-6xl mx-auto px-4 border-t border-b-0 border-myth-border pt-2 lg:hidden"
+            items={[
+              { key: 'overview', label: 'Overview', icon: Home },
+              { key: 'progression', label: 'Story Log', icon: Scroll },
+              { key: 'chat', label: 'Chat', icon: MessageSquare },
+              { key: 'notes', label: 'Notes', icon: StickyNote },
+              { key: 'maps', label: 'Maps', icon: MapIcon },
+            ]}
+          />
         }
       />
 
@@ -360,7 +351,7 @@ export default function CampaignLobbyPage() {
             world rebuilt from it — play opens when this clears. */}
         {worldSeeding && (
           <div className="mb-6 flex items-center gap-4 rounded-lg border border-myth-info/30 bg-myth-info/10 px-5 py-4">
-            <div className="spinner h-8 w-8 flex-shrink-0"></div>
+            <Spinner className="h-8 w-8 flex-shrink-0" />
             <div>
               <p className="font-medium text-myth-ink">The world is being forged from your canon lore…</p>
               <p className="mt-0.5 text-sm text-myth-ink-muted">
@@ -463,7 +454,8 @@ export default function CampaignLobbyPage() {
             action={
               userRole === 'ADMIN' && campaignLogs.length > 0 ? (
                 <div className="flex flex-col items-end gap-1">
-                  <Button variant="secondary" size="sm"
+                  <Button
+                    variant="secondary" size="sm"
                     onClick={handleRegenerateLogs}
                     disabled={regeneratingLogs}
                     title="Re-summarize existing entries with a fresh AI pass"
@@ -534,7 +526,8 @@ export default function CampaignLobbyPage() {
                     own oldest-first reading order. */}
                 {logsHasMore && (
                   <div className="mb-4 flex justify-center">
-                    <Button variant="secondary" size="sm"
+                    <Button
+                      variant="secondary" size="sm"
                       onClick={loadEarlierLogs}
                       disabled={loadingEarlierLogs}
                     >
@@ -634,12 +627,12 @@ export default function CampaignLobbyPage() {
             action={
               // Any player can create maps — shared table content, not a
               // GM power (there is no human GM in this product).
-              <button
+              <Button
+                variant="ghost" size="sm" className="-mr-3"
                 onClick={() => setShowCreateMap(true)}
-                className="text-sm text-myth-ink-muted hover:text-myth-ink"
               >
                 + Create Map
-              </button>
+              </Button>
             }
           />
           <div className="mt-6">
@@ -701,13 +694,15 @@ export default function CampaignLobbyPage() {
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="primary"
+                      <Button
+                        variant="primary"
                         type="submit"
                         disabled={creatingMap || !newMapName.trim()}
                       >
                         {creatingMap ? 'Creating...' : 'Create Map'}
                       </Button>
-                      <Button variant="secondary"
+                      <Button
+                        variant="secondary"
                         type="button"
                         onClick={() => {
                           setShowCreateMap(false)
@@ -755,7 +750,8 @@ export default function CampaignLobbyPage() {
                       </div>
                       <div className="flex gap-2">
                         {userRole === 'ADMIN' && !map.isActive && (
-                          <Button variant="secondary" size="sm"
+                          <Button
+                            variant="secondary" size="sm"
                             onClick={async () => {
                               try {
                                 const response = await authenticatedFetch(
@@ -841,7 +837,8 @@ export default function CampaignLobbyPage() {
               </div>
             )}
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button variant="secondary" fullWidth
+              <Button
+                variant="secondary" fullWidth
                 onClick={() => {
                   setDeletingCharacterId(null)
                   setDeleteError('')
@@ -849,7 +846,8 @@ export default function CampaignLobbyPage() {
               >
                 Cancel
               </Button>
-              <Button variant="danger" fullWidth
+              <Button
+                variant="danger" fullWidth
                 onClick={() => handleDeleteCharacter(deletingCharacterId)}
               >
                 Delete

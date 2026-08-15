@@ -2,6 +2,8 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { SetupChecklist, type SetupChecklistItem } from '@/components/admin/SetupChecklist'
 import WorldStateDashboard from '@/components/admin/WorldStateDashboard'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 
 interface CampaignIdentity {
   title: string
@@ -55,32 +57,33 @@ export function AdminOverviewPanel({
           </div>
           <div>
             <label className="block text-sm font-medium text-myth-ink-muted">Title</label>
-            <input
+            <Input
+              wrapperClassName="mt-1 w-full"
               type="text"
               value={campaign.title}
               onChange={(e) => onCampaignChange({ ...campaign, title: e.target.value })}
-              className="mt-1 block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-myth-accent focus:outline-none"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-myth-ink-muted">Description</label>
-            <textarea
+            <Textarea
+              wrapperClassName="mt-1 w-full"
               value={campaign.description || ''}
               onChange={(e) => onCampaignChange({ ...campaign, description: e.target.value })}
               rows={3}
-              className="mt-1 block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-myth-accent focus:outline-none"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-myth-ink-muted">Universe</label>
-            <input
+            <Input
+              wrapperClassName="mt-1 w-full"
               type="text"
               value={campaign.universe || ''}
               onChange={(e) => onCampaignChange({ ...campaign, universe: e.target.value })}
-              className="mt-1 block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-myth-accent focus:outline-none"
             />
           </div>
-          <Button variant="primary"
+          <Button
+            variant="primary"
             onClick={onSaveCampaignInfo}
             disabled={saving}
           >

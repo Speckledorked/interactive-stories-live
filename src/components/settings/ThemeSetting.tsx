@@ -94,7 +94,7 @@ export function ThemeSetting() {
               aria-checked={active}
               onClick={() => choose(option.value)}
               className={cn(
-                'inline-flex min-h-[44px] items-center gap-2 rounded-md px-3.5 text-sm font-medium transition-colors touch-manipulation',
+                'inline-flex min-h-[44px] items-center gap-2 rounded-lg px-3.5 text-sm font-medium transition-colors touch-manipulation',
                 active
                   ? 'bg-myth-accent text-myth-accent-ink'
                   : 'text-myth-ink-muted hover:bg-myth-surface hover:text-myth-ink',

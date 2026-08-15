@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Tabs } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
 
 interface RosterCharacter {
   id: string
@@ -46,24 +48,21 @@ export function CharacterRoster({
         <h2 className="font-display text-lg font-semibold text-myth-ink">Characters</h2>
         <div className="flex items-center gap-3">
           {showFilter && (
-            <div className="flex rounded-md border border-myth-border text-xs">
-              {(['all', 'yours'] as const).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setFilter(key)}
-                  className={`px-2.5 py-1 capitalize transition-colors ${
-                    filter === key ? 'bg-myth-surface-sunken text-myth-ink' : 'text-myth-ink-faint hover:text-myth-ink-muted'
-                  }`}
-                >
-                  {key}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              variant="pill"
+              aria-label="Filter characters"
+              value={filter}
+              onChange={(v) => setFilter(v as typeof filter)}
+              className="capitalize"
+              items={[
+                { key: 'all', label: 'All' },
+                { key: 'yours', label: 'Yours' },
+              ]}
+            />
           )}
-          <button type="button" onClick={onCreateCharacter} className="text-sm text-myth-ink-muted hover:text-myth-ink">
+          <Button variant="ghost" size="sm" className="-mr-3" type="button" onClick={onCreateCharacter}>
             + Create Character
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -116,18 +115,18 @@ export function CharacterRoster({
                     {character.isAlive ? 'Alive' : 'Dead'}
                   </span>
                   {isMine && (
-                    <button
+                    <Button
+                      variant="ghost" size="sm" className="opacity-0 hover:text-myth-danger group-hover:opacity-100"
                       type="button"
                       onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
                         onDeleteCharacter(character.id)
                       }}
-                      className="text-xs text-myth-ink-faint opacity-0 transition-opacity hover:text-myth-danger group-hover:opacity-100"
                       title="Delete character"
                     >
                       Delete
-                    </button>
+                    </Button>
                   )}
                 </div>
               </Link>

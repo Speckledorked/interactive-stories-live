@@ -5,6 +5,8 @@ import { useState, useEffect } from 'react'
 import { X, Check } from 'lucide-react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { IconButton } from '@/components/ui/icon-button'
 
 interface InviteModalProps {
   campaignId: string
@@ -87,17 +89,13 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
         <div className="p-6 border-b border-myth-border">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold text-myth-ink">Campaign Invites</h2>
-            <button
-              onClick={onClose}
-              className="text-myth-ink-faint hover:text-myth-ink transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <IconButton icon={X} label="Close invites" onClick={onClose} />
           </div>
         </div>
 
         <div className="p-6 overflow-y-auto max-h-[60vh]">
-          <Button variant="primary" size="lg" fullWidth
+          <Button
+            variant="primary" size="lg" fullWidth
             className="mb-6"
             onClick={handleCreateInvite}
             disabled={creating}
@@ -151,16 +149,15 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
                   </div>
 
                   <div className="flex items-center gap-2 mt-3">
-                    <input
+                    <Input
+                      wrapperClassName="flex-1" className="font-mono"
                       type="text"
                       value={invite.joinUrl}
                       readOnly
-                      className="flex-1 bg-myth-surface-sunken border border-myth-border text-myth-ink-muted px-3 py-2 rounded text-sm font-mono"
                     />
-                    <button
+                    <Button
                       onClick={() => handleCopyLink(invite)}
                       disabled={invite.isExpired || invite.isExhausted}
-                      className="flex items-center gap-1.5 bg-success-600 hover:bg-success-500 disabled:opacity-50 text-myth-accent-ink px-4 py-2 rounded text-sm font-semibold transition"
                     >
                       {copiedToken === invite.token ? (
                         <>
@@ -169,7 +166,7 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
                       ) : (
                         'Copy'
                       )}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -178,7 +175,8 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
         </div>
 
         <div className="p-6 border-t border-myth-border">
-          <Button variant="secondary" fullWidth
+          <Button
+            variant="secondary" fullWidth
             onClick={onClose}
           >
             Close

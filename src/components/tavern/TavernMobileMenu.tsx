@@ -15,6 +15,7 @@ import { X, Beer, Settings as SettingsIcon, HelpCircle, BookOpen, ScrollText, Sh
 import { displayFont } from '@/lib/tavernTheme'
 import { logout } from '@/lib/clientAuth'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
+import { IconButton } from '@/components/ui/icon-button'
 
 interface TavernMobileMenuProps {
   isOpen: boolean
@@ -97,13 +98,12 @@ export function TavernMobileMenu({ isOpen, onClose, campaignId, isAdmin = false,
       >
         <div className={myth ? 'flex items-center justify-between p-4 border-b border-myth-border' : 'flex items-center justify-between p-4 border-b border-ember-900/30'}>
           <h2 className={myth ? 'font-display text-lg text-myth-ink' : `${displayFont.className} text-lg text-ember-100`}>Menu</h2>
-          <button
+          <IconButton
+            icon={X}
+            label="Close menu"
+            className={myth ? '-mr-2' : '-mr-2 text-ember-300/60 hover:text-ember-100'}
             onClick={onClose}
-            className={myth ? 'p-2 -mr-2 text-myth-ink-faint hover:text-myth-ink transition-colors' : 'p-2 -mr-2 text-ember-300/60 hover:text-ember-100 transition-colors'}
-            aria-label="Close menu"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         <nav className={myth ? 'flex-1 space-y-4 overflow-y-auto p-2' : 'flex-1 space-y-0.5 overflow-y-auto p-2'}>

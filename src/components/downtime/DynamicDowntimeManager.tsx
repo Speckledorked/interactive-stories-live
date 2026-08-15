@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Select } from '@/components/ui/select'
 import {
   Plus,
   Clock,
@@ -344,17 +345,16 @@ export function DynamicDowntimeManager({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <select
+              <Select
                 value={advanceDays}
                 onChange={(e) => setAdvanceDays(e.target.value)}
-                className="px-3 py-2 border border-myth-border bg-myth-surface text-myth-ink rounded-md"
               >
                 <option value="1">1 day</option>
                 <option value="3">3 days</option>
                 <option value="7">1 week</option>
                 <option value="14">2 weeks</option>
                 <option value="30">1 month</option>
-              </select>
+              </Select>
               <Button onClick={handleAdvanceTime}>
                 <Play className="w-4 h-4 mr-2" />
                 Advance Time

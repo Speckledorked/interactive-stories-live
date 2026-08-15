@@ -8,6 +8,7 @@ import { authenticatedFetch, isAuthenticated } from '@/lib/clientAuth'
 import { fontDisplay, fontSans } from '@/lib/fonts'
 import { TavernBackground } from '@/components/tavern/TavernBackground'
 import { TavernButton } from '@/components/tavern/ui'
+import { Button } from '@/components/ui/button'
 
 interface CampaignInfo {
   id: string
@@ -156,9 +157,9 @@ export default function JoinCampaignPage() {
                 {joining ? 'Joining…' : 'Join Campaign'}
               </TavernButton>
             ) : (
-              <button disabled className="w-full cursor-not-allowed rounded-lg border border-myth-border px-4 py-2.5 font-medium text-myth-ink-faint">
+              <Button variant="secondary" fullWidth disabled>
                 Cannot Join
-              </button>
+              </Button>
             )}
 
             <TavernButton theme="myth" variant="secondary" onClick={() => router.push('/campaigns')} className="w-full">

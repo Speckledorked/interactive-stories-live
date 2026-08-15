@@ -25,6 +25,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface Campaign {
   id: string
@@ -1139,11 +1140,11 @@ export default function AdminPage() {
                       whenToUse="You want a consistent narrative voice or a standing rule MythOS should never break."
                     />
                   </div>
-                  <textarea
+                  <Textarea
+                    wrapperClassName="mt-1 w-full"
                     value={campaign.aiSystemPrompt}
                     onChange={(e) => setCampaign({ ...campaign, aiSystemPrompt: e.target.value })}
                     rows={10}
-                    className="mt-1 block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                   />
                 </div>
 
@@ -1158,11 +1159,11 @@ export default function AdminPage() {
                       whenToUse="Correcting or expanding the campaign's founding premise before generating more of the world."
                     />
                   </div>
-                  <textarea
+                  <Textarea
+                    wrapperClassName="mt-1 w-full"
                     value={campaign.initialWorldSeed}
                     onChange={(e) => setCampaign({ ...campaign, initialWorldSeed: e.target.value })}
                     rows={6}
-                    className="mt-1 block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                   />
                 </div>
 
@@ -1177,17 +1178,18 @@ export default function AdminPage() {
                     instructions, credible threats). Strict blocks anything OpenAI's moderation
                     flags, including plain violence.
                   </p>
-                  <select
+                  <Select
+                    wrapperClassName="mt-1 w-full"
                     value={campaign.contentModerationLevel}
                     onChange={(e) => setCampaign({ ...campaign, contentModerationLevel: e.target.value })}
-                    className="mt-1 block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                   >
                     <option value="standard">Standard (default — allows genre-typical violence)</option>
                     <option value="strict">Strict (blocks all flagged content, including violence)</option>
-                  </select>
+                  </Select>
                 </div>
 
-                <Button variant="primary"
+                <Button
+                  variant="primary"
                   onClick={handleSaveAISettings}
                   disabled={saving}
                 >
@@ -1219,7 +1221,8 @@ export default function AdminPage() {
                       </div>
                     )
                   })()}
-                  <Button variant="primary"
+                  <Button
+                    variant="primary"
                     onClick={handleGenerateWorldExtras}
                     disabled={generatingExtras}
                   >
@@ -1324,8 +1327,8 @@ export default function AdminPage() {
                     </div>
                     <div className="mt-4 rounded-md border border-myth-border bg-myth-surface/50 p-3">
                       <label className="flex items-start gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
+                        <Checkbox
+                          wrapperClassName="mt-1 h-4 w-4"
                           checked={simulationSettings.mapGenerationEnabled}
                           onChange={(e) =>
                             setSimulationSettings({
@@ -1333,7 +1336,6 @@ export default function AdminPage() {
                               mapGenerationEnabled: e.target.checked,
                             })
                           }
-                          className="mt-1 h-4 w-4 rounded border-myth-border bg-myth-surface text-myth-accent focus:ring-myth-accent"
                         />
                         <span>
                           <span className="block text-sm font-medium text-myth-ink">Generate battle maps</span>
@@ -1348,8 +1350,8 @@ export default function AdminPage() {
 
                     <div className="mt-4 rounded-md border border-myth-border bg-myth-surface/50 p-3">
                       <label className="flex items-start gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
+                        <Checkbox
+                          wrapperClassName="mt-1 h-4 w-4"
                           checked={simulationSettings.sceneImageGenerationEnabled}
                           onChange={(e) =>
                             setSimulationSettings({
@@ -1357,7 +1359,6 @@ export default function AdminPage() {
                               sceneImageGenerationEnabled: e.target.checked,
                             })
                           }
-                          className="mt-1 h-4 w-4 rounded border-myth-border bg-myth-surface text-myth-accent focus:ring-myth-accent"
                         />
                         <span>
                           <span className="block text-sm font-medium text-myth-ink">Generate scene illustrations</span>
@@ -1378,7 +1379,8 @@ export default function AdminPage() {
                         Factions and NPCs move with story time, not per action — the off-screen world advances once
                         this many fictional hours have passed in play. Lower = a more restless world.
                       </p>
-                      <input
+                      <Input
+                        wrapperClassName="w-full max-w-xs"
                         type="number"
                         min={1}
                         placeholder={String(simulationSettings.defaultWorldTurnHours)}
@@ -1389,10 +1391,10 @@ export default function AdminPage() {
                             worldTurnHours: e.target.value === '' ? null : parseInt(e.target.value),
                           })
                         }
-                        className="block w-full max-w-xs rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                       />
                     </div>
-                    <Button variant="primary"
+                    <Button
+                      variant="primary"
                       className="mt-3"
                       onClick={handleSaveSimulationSettings}
                       disabled={saving}
@@ -1411,7 +1413,8 @@ export default function AdminPage() {
                   title="NPCs"
                   description="Non-player characters the world tick moves and grows on its own between scenes — goals, importance, and faction ties all shape what it does with them. Click 'Why?' on any NPC to see its actual next-tick decision, not a guess."
                 />
-                <Button variant="primary"
+                <Button
+                  variant="primary"
                   onClick={() => setCreatingNpc(true)}
                 >
                   + Create NPC
@@ -1519,12 +1522,10 @@ export default function AdminPage() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           name="isDiscovered"
                           id="npc-isDiscovered"
                           defaultChecked
-                          className="rounded border-myth-border bg-myth-surface"
                         />
                         <label htmlFor="npc-isDiscovered" className="text-sm text-myth-ink-muted">
                           Discovered by players — uncheck to build them in as hidden background lore until a scene actually reveals them
@@ -1538,13 +1539,15 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <Button variant="primary"
+                        <Button
+                          variant="primary"
                           type="submit"
                           disabled={saving}
                         >
                           {saving ? 'Creating...' : 'Create'}
                         </Button>
-                        <Button variant="secondary"
+                        <Button
+                          variant="secondary"
                           type="button"
                           onClick={() => setCreatingNpc(false)}
                         >
@@ -1568,13 +1571,13 @@ export default function AdminPage() {
                           onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, description: e.target.value } : n))}
                           rows={2}
                         />
-                        <input
+                        <Input
+                          wrapperClassName="w-32"
                           type="number"
                           min="1"
                           max="5"
                           value={npc.importance}
                           onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, importance: parseInt(e.target.value) } : n))}
-                          className="block w-32 rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                         />
                         <div className="flex space-x-4">
                           <div>
@@ -1602,22 +1605,22 @@ export default function AdminPage() {
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={npc.isDiscovered}
                             onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, isDiscovered: e.target.checked } : n))}
-                            className="rounded border-myth-border bg-myth-surface"
                           />
                           <label className="text-xs">Discovered by players</label>
                         </div>
                         <div className="flex space-x-2">
-                          <Button variant="primary" size="sm"
+                          <Button
+                            variant="primary" size="sm"
                             onClick={() => handleUpdateNPC(npc)}
                             disabled={saving}
                           >
                             Save
                           </Button>
-                          <Button variant="secondary" size="sm"
+                          <Button
+                            variant="secondary" size="sm"
                             onClick={() => setEditingNpc(null)}
                           >
                             Cancel
@@ -1645,13 +1648,15 @@ export default function AdminPage() {
                             )}
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="secondary" size="sm"
+                            <Button
+                              variant="secondary" size="sm"
                               onClick={() => handlePreviewNpcReasoning(npc.id)}
                               disabled={npcReasoningLoading[npc.id]}
                             >
                               {npcReasoningLoading[npc.id] ? 'Thinking…' : 'Why?'}
                             </Button>
-                            <Button variant="secondary" size="sm"
+                            <Button
+                              variant="secondary" size="sm"
                               onClick={() => setEditingNpc(npc.id)}
                             >
                               Edit
@@ -1685,7 +1690,8 @@ export default function AdminPage() {
                   title="Factions"
                   description="Organizations that pursue their own goals turn over turn — reassessing strategy from their own resources/stability/military, drifting in disposition from their own history, and going to war with rivals when it serves them. Click 'Why?' on any faction to see the actual next reassessment, not a guess."
                 />
-                <Button variant="primary"
+                <Button
+                  variant="primary"
                   onClick={() => setCreatingFaction(true)}
                 >
                   + Create Faction
@@ -1776,12 +1782,10 @@ export default function AdminPage() {
                         <p className="text-xs text-myth-ink-faint mt-1">If set, this faction's Simulation Goal is the player's call — the world tick won't reassess it automatically.</p>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           name="isDiscovered"
                           id="faction-isDiscovered"
                           defaultChecked
-                          className="rounded border-myth-border bg-myth-surface"
                         />
                         <label htmlFor="faction-isDiscovered" className="text-sm text-myth-ink-muted">
                           Discovered by players — uncheck to build them in as hidden background lore until a scene actually reveals them
@@ -1838,13 +1842,15 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <Button variant="primary"
+                        <Button
+                          variant="primary"
                           type="submit"
                           disabled={saving}
                         >
                           {saving ? 'Creating...' : 'Create'}
                         </Button>
-                        <Button variant="secondary"
+                        <Button
+                          variant="secondary"
                           type="button"
                           onClick={() => setCreatingFaction(false)}
                         >
@@ -1872,24 +1878,24 @@ export default function AdminPage() {
                         <div className="flex space-x-4">
                           <div>
                             <label className="text-xs">Threat Level</label>
-                            <input
+                            <Input
+                              wrapperClassName="w-20"
                               type="number"
                               min="1"
                               max="5"
                               value={faction.threatLevel}
                               onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, threatLevel: parseInt(e.target.value) } : f))}
-                              className="block w-20 rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             />
                           </div>
                           <div>
                             <label className="text-xs">Resources</label>
-                            <input
+                            <Input
+                              wrapperClassName="w-20"
                               type="number"
                               min="0"
                               max="100"
                               value={faction.resources}
                               onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, resources: parseInt(e.target.value) } : f))}
-                              className="block w-20 rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             />
                           </div>
                         </div>
@@ -1930,22 +1936,22 @@ export default function AdminPage() {
                           </Select>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={faction.isDiscovered}
                             onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, isDiscovered: e.target.checked } : f))}
-                            className="rounded border-myth-border bg-myth-surface"
                           />
                           <label className="text-xs">Discovered by players</label>
                         </div>
                         <div className="flex space-x-2">
-                          <Button variant="primary" size="sm"
+                          <Button
+                            variant="primary" size="sm"
                             onClick={() => handleUpdateFaction(faction)}
                             disabled={saving}
                           >
                             Save
                           </Button>
-                          <Button variant="secondary" size="sm"
+                          <Button
+                            variant="secondary" size="sm"
                             onClick={() => setEditingFaction(null)}
                           >
                             Cancel
@@ -1984,13 +1990,15 @@ export default function AdminPage() {
                             </p>
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="secondary" size="sm"
+                            <Button
+                              variant="secondary" size="sm"
                               onClick={() => handlePreviewFactionReasoning(faction.id)}
                               disabled={factionReasoningLoading[faction.id]}
                             >
                               {factionReasoningLoading[faction.id] ? 'Thinking…' : 'Why?'}
                             </Button>
-                            <Button variant="secondary" size="sm"
+                            <Button
+                              variant="secondary" size="sm"
                               onClick={() => setEditingFaction(faction.id)}
                             >
                               Edit
@@ -2086,7 +2094,8 @@ export default function AdminPage() {
                   title="Locations"
                   description="Places in the world — the environment tick ages each one on its own: an ongoing siege damages it, disputed rule strains it, and peacetime slowly recovers it. Click 'Why?' on any location to see that math for real."
                 />
-                <Button variant="primary"
+                <Button
+                  variant="primary"
                   onClick={() => setCreatingLocation(true)}
                 >
                   + Create Location
@@ -2148,12 +2157,10 @@ export default function AdminPage() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           name="isDiscovered"
                           id="location-isDiscovered"
                           defaultChecked
-                          className="rounded border-myth-border bg-myth-surface"
                         />
                         <label htmlFor="location-isDiscovered" className="text-sm text-myth-ink-muted">
                           Discovered by players — uncheck to place it on the map as hidden background lore until a scene actually reveals it
@@ -2167,13 +2174,15 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <Button variant="primary"
+                        <Button
+                          variant="primary"
                           type="submit"
                           disabled={saving}
                         >
                           {saving ? 'Creating...' : 'Create'}
                         </Button>
-                        <Button variant="secondary"
+                        <Button
+                          variant="secondary"
                           type="button"
                           onClick={() => setCreatingLocation(false)}
                         >
@@ -2221,11 +2230,9 @@ export default function AdminPage() {
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={location.isDiscovered}
                             onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, isDiscovered: e.target.checked } : l))}
-                            className="rounded border-myth-border bg-myth-surface"
                           />
                           <label className="text-xs">Discovered by players</label>
                         </div>
@@ -2236,13 +2243,15 @@ export default function AdminPage() {
                           rows={2}
                         />
                         <div className="flex space-x-2">
-                          <Button variant="primary" size="sm"
+                          <Button
+                            variant="primary" size="sm"
                             onClick={() => handleUpdateLocation(location)}
                             disabled={saving}
                           >
                             Save
                           </Button>
-                          <Button variant="secondary" size="sm"
+                          <Button
+                            variant="secondary" size="sm"
                             onClick={() => setEditingLocation(null)}
                           >
                             Cancel
@@ -2268,13 +2277,15 @@ export default function AdminPage() {
                             </p>
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="secondary" size="sm"
+                            <Button
+                              variant="secondary" size="sm"
                               onClick={() => handlePreviewLocationReasoning(location.id)}
                               disabled={locationReasoningLoading[location.id]}
                             >
                               {locationReasoningLoading[location.id] ? 'Thinking…' : 'Why?'}
                             </Button>
-                            <Button variant="secondary" size="sm"
+                            <Button
+                              variant="secondary" size="sm"
                               onClick={() => setEditingLocation(location.id)}
                             >
                               Edit
@@ -2306,7 +2317,8 @@ export default function AdminPage() {
                   title="Threads"
                   description="Countdowns the world tick advances on its own — ambitions, threats, and schemes moving toward a consequence whether or not anyone acts. A thread's pace comes from whatever it's actually tied to (a faction's own strength, a linked faction's instability, a joint NPC scheme) or, with no tie at all, its category and the campaign's current tension. Click 'Why?' on any thread for that math."
                 />
-                <Button variant="primary"
+                <Button
+                  variant="primary"
                   onClick={() => setCreatingClock(true)}
                 >
                   + Create Thread
@@ -2390,11 +2402,10 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
+                        <Checkbox
+                          wrapperClassName="h-4 w-4"
                           name="isHidden"
                           id="isHidden"
-                          className="h-4 w-4 rounded border-myth-border text-myth-accent focus:outline-none"
                         />
                         <label htmlFor="isHidden" className="block text-sm text-myth-ink-muted">
                           Hide from players
@@ -2406,13 +2417,15 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="flex space-x-2">
-                        <Button variant="primary"
+                        <Button
+                          variant="primary"
                           type="submit"
                           disabled={saving}
                         >
                           {saving ? 'Creating...' : 'Create'}
                         </Button>
-                        <Button variant="secondary"
+                        <Button
+                          variant="secondary"
                           type="button"
                           onClick={() => setCreatingClock(false)}
                         >
@@ -2441,19 +2454,22 @@ export default function AdminPage() {
                         }
                       />
                       <div className="mt-2 flex gap-2">
-                        <Button variant="secondary" size="sm" fullWidth
+                        <Button
+                          variant="secondary" size="sm" fullWidth
                           onClick={() => handleTickClock(clock.id, 'untick')}
                           disabled={clock.currentTicks <= 0}
                         >
                           - Remove Tick
                         </Button>
-                        <Button variant="secondary" size="sm" fullWidth
+                        <Button
+                          variant="secondary" size="sm" fullWidth
                           onClick={() => handleToggleClockVisibility(clock)}
                         >
                           {clock.isHidden ? 'Show' : 'Hide'}
                         </Button>
                       </div>
-                      <Button variant="secondary" size="sm" fullWidth
+                      <Button
+                        variant="secondary" size="sm" fullWidth
                         className="mt-2"
                         onClick={() => handlePreviewClockReasoning(clock.id)}
                         disabled={clockReasoningLoading[clock.id]}
@@ -2613,7 +2629,8 @@ export default function AdminPage() {
                   title="Invites"
                   description="Shareable join links for this campaign — set a use limit (or leave it unlimited) and share the link with whoever you want at the table."
                 />
-                <Button variant="primary"
+                <Button
+                  variant="primary"
                   onClick={handleCreateInvite}
                 >
                   Create New Invite
@@ -2631,7 +2648,8 @@ export default function AdminPage() {
                             {invite.isExhausted && ' (Exhausted)'}
                           </p>
                         </div>
-                        <Button variant="secondary" size="sm"
+                        <Button
+                          variant="secondary" size="sm"
                           onClick={() => {
                             navigator.clipboard.writeText(invite.joinUrl)
                             alert('Invite link copied!')
@@ -2681,16 +2699,17 @@ export default function AdminPage() {
                           </p>
                         </div>
                         <div className="flex gap-2">
-                          <select
+                          <Select
+                            className="disabled:opacity-50"
                             value={member.role}
                             onChange={(e) => handleChangeRole(member.user.id, e.target.value as 'ADMIN' | 'PLAYER')}
                             disabled={saving}
-                            className="px-3 py-1 rounded-md border border-myth-border text-sm bg-myth-surface text-myth-ink focus:border-myth-accent focus:outline-none disabled:opacity-50"
                           >
                             <option value="PLAYER">Player</option>
                             <option value="ADMIN">Admin</option>
-                          </select>
-                          <Button variant="danger" size="sm"
+                          </Select>
+                          <Button
+                            variant="danger" size="sm"
                             onClick={() => handleRemoveMember(member.user.id)}
                             disabled={saving}
                             title="Remove from campaign — they can rejoin with a new invite"
@@ -2698,7 +2717,8 @@ export default function AdminPage() {
                             Remove
                           </Button>
                           {member.role !== 'ADMIN' && (
-                            <Button variant="danger" size="sm"
+                            <Button
+                              variant="danger" size="sm"
                               onClick={() => handleBanMember(member.user.id)}
                               disabled={saving}
                               title="Ban — removes them and blocks rejoining via invite link"
@@ -2735,16 +2755,14 @@ export default function AdminPage() {
                     <div className="rounded-lg border border-myth-border p-4 space-y-4">
                       <div className="grid sm:grid-cols-2 gap-3">
                         <label className="flex items-center gap-2 text-sm text-myth-ink">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={safetySettings.xCardEnabled}
                             onChange={(e) => setSafetySettings({ ...safetySettings, xCardEnabled: e.target.checked })}
                           />
                           X-Card enabled
                         </label>
                         <label className="flex items-center gap-2 text-sm text-myth-ink">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={safetySettings.pauseOnXCard}
                             onChange={(e) => setSafetySettings({ ...safetySettings, pauseOnXCard: e.target.checked })}
                           />
@@ -2752,8 +2770,7 @@ export default function AdminPage() {
                         </label>
                         <div className="flex items-center gap-1.5">
                           <label className="flex items-center gap-2 text-sm text-myth-ink">
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={safetySettings.anonymousXCard}
                               onChange={(e) => setSafetySettings({ ...safetySettings, anonymousXCard: e.target.checked })}
                             />
@@ -2767,8 +2784,7 @@ export default function AdminPage() {
                         </div>
                         <div className="flex items-center gap-1.5">
                           <label className="flex items-center gap-2 text-sm text-myth-ink">
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={safetySettings.xCardNotifyGMOnly}
                               onChange={(e) => setSafetySettings({ ...safetySettings, xCardNotifyGMOnly: e.target.checked })}
                             />
@@ -2784,26 +2800,27 @@ export default function AdminPage() {
                       <div className="grid sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Lines (hard limits, one per line)</label>
-                          <textarea
+                          <Textarea
+                            wrapperClassName="w-full"
                             value={linesText}
                             onChange={(e) => setLinesText(e.target.value)}
                             placeholder={'e.g. sexual violence\nharm to children'}
-                            className="w-full px-3 py-2 bg-myth-surface border border-myth-border rounded-lg text-myth-ink placeholder-myth-ink-faint focus:outline-none focus:border-myth-accent resize-none text-sm"
                             rows={4}
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Veils (soft limits, one per line)</label>
-                          <textarea
+                          <Textarea
+                            wrapperClassName="w-full"
                             value={veilsText}
                             onChange={(e) => setVeilsText(e.target.value)}
                             placeholder={'e.g. torture\ngraphic injury detail'}
-                            className="w-full px-3 py-2 bg-myth-surface border border-myth-border rounded-lg text-myth-ink placeholder-myth-ink-faint focus:outline-none focus:border-myth-accent resize-none text-sm"
                             rows={4}
                           />
                         </div>
                       </div>
-                      <Button variant="primary"
+                      <Button
+                        variant="primary"
                         onClick={handleSaveSafetySettings}
                         disabled={savingSafetySettings}
                       >
@@ -2840,13 +2857,15 @@ export default function AdminPage() {
                               </p>
                             </div>
                             <div className="flex gap-2 flex-shrink-0">
-                              <Button variant="primary" size="sm"
+                              <Button
+                                variant="primary" size="sm"
                                 onClick={() => handleResolveReport(report.id)}
                                 disabled={saving}
                               >
                                 Resolve
                               </Button>
-                              <Button variant="secondary" size="sm"
+                              <Button
+                                variant="secondary" size="sm"
                                 onClick={() => handleDismissReport(report.id)}
                                 disabled={saving}
                               >
@@ -2896,7 +2915,8 @@ export default function AdminPage() {
                               {ban.isPermanent ? ' • permanent' : ban.expiresAt ? ` • until ${new Date(ban.expiresAt).toLocaleDateString()}` : ''}
                             </p>
                           </div>
-                          <Button variant="secondary" size="sm"
+                          <Button
+                            variant="secondary" size="sm"
                             onClick={() => handleUnbanMember(ban.userId)}
                             disabled={saving}
                           >

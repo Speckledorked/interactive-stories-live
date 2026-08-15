@@ -8,6 +8,9 @@ import { getToken } from '@/lib/clientAuth';
 import { subscribeToCampaignMessages, RealtimeNoteUpdate } from '@/lib/realtime/pusher-client';
 import { truncateWithEllipsis } from '@/lib/format';
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Select } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 
 interface NotesPanelProps {
   campaignId: string;
@@ -251,38 +254,38 @@ export default function NotesPanel({
       {/* Header */}
       <div className="p-4 border-b border-myth-border flex justify-between items-center">
         <h3 className="font-semibold text-myth-ink">Player Notes</h3>
-        <button
+        <Button
+          size="sm"
           onClick={() => setShowForm(!showForm)}
-          className="px-3 py-1 bg-success-600 text-myth-accent-ink rounded-md text-sm hover:bg-success-500"
         >
           {showForm ? 'Cancel' : 'New Note'}
-        </button>
+        </Button>
       </div>
 
       {/* Filters */}
       <div className="p-4 border-b border-myth-border">
         <div className="flex flex-wrap gap-2">
-          <select
+          <Select
+            className="focus:ring-1"
             value={filter.visibility || ''}
             onChange={(e) => setFilter(prev => ({ ...prev, visibility: e.target.value || undefined }))}
-            className="px-3 py-1 bg-myth-surface-sunken border border-myth-border text-myth-ink rounded-md text-sm focus:border-myth-border-strong focus:ring-1 focus:ring-myth-accent"
           >
             <option value="">All Visibility</option>
             <option value="PRIVATE">Private Only</option>
             <option value="SHARED">Shared Only</option>
-          </select>
+          </Select>
 
-          <select
+          <Select
+            className="focus:ring-1"
             value={filter.entityType || ''}
             onChange={(e) => setFilter(prev => ({ ...prev, entityType: e.target.value || undefined }))}
-            className="px-3 py-1 bg-myth-surface-sunken border border-myth-border text-myth-ink rounded-md text-sm focus:border-myth-border-strong focus:ring-1 focus:ring-myth-accent"
           >
             <option value="">All Types</option>
             <option value="character">Characters</option>
             <option value="npc">NPCs</option>
             <option value="faction">Factions</option>
             <option value="scene">Scenes</option>
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -291,77 +294,78 @@ export default function NotesPanel({
         <div className="p-4 border-b border-myth-border bg-myth-surface-sunken">
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <input
+              <Input
+                wrapperClassName="w-full" className="focus:ring-1"
                 type="text"
                 value={formData.title}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                 placeholder="Note title..."
-                className="w-full p-2 bg-myth-surface-sunken border border-myth-border text-myth-ink placeholder:text-myth-ink-faint rounded-md text-sm focus:border-myth-border-strong focus:ring-1 focus:ring-myth-accent"
                 required
               />
             </div>
 
             <div>
-              <textarea
+              <Textarea
+                wrapperClassName="w-full" className="focus:ring-1"
                 value={formData.content}
                 onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
                 placeholder="Note content..."
                 rows={4}
-                className="w-full p-2 bg-myth-surface-sunken border border-myth-border text-myth-ink placeholder:text-myth-ink-faint rounded-md text-sm focus:border-myth-border-strong focus:ring-1 focus:ring-myth-accent"
                 required
               />
             </div>
 
             <div className="flex gap-2 flex-wrap">
-              <select
+              <Select
+                className="focus:ring-1"
                 value={formData.visibility}
                 onChange={(e) => setFormData(prev => ({ ...prev, visibility: e.target.value as NoteVisibility }))}
-                className="p-2 bg-myth-surface-sunken border border-myth-border text-myth-ink rounded-md text-sm focus:border-myth-border-strong focus:ring-1 focus:ring-myth-accent"
               >
                 <option value="PRIVATE">Private</option>
                 <option value="SHARED">Shared with Campaign</option>
-              </select>
+              </Select>
 
-              <select
+              <Select
+                className="focus:ring-1"
                 value={formData.entityType}
                 onChange={(e) => setFormData(prev => ({ ...prev, entityType: e.target.value, entityId: '' }))}
-                className="p-2 bg-myth-surface-sunken border border-myth-border text-myth-ink rounded-md text-sm focus:border-myth-border-strong focus:ring-1 focus:ring-myth-accent"
               >
                 <option value="">General Note</option>
                 <option value="character">About Character</option>
                 <option value="npc">About NPC</option>
                 <option value="faction">About Faction</option>
                 <option value="scene">About Scene</option>
-              </select>
+              </Select>
 
               {formData.entityType && (
-                <select
+                <Select
+                  className="focus:ring-1"
                   value={formData.entityId}
                   onChange={(e) => setFormData(prev => ({ ...prev, entityId: e.target.value }))}
-                  className="p-2 bg-myth-surface-sunken border border-myth-border text-myth-ink rounded-md text-sm focus:border-myth-border-strong focus:ring-1 focus:ring-myth-accent"
                 >
                   <option value="">Select {formData.entityType}...</option>
                   {getEntityOptions().map(option => (
                     <option key={option.id} value={option.id}>{option.name}</option>
                   ))}
-                </select>
+                </Select>
               )}
             </div>
 
             <div className="flex gap-2">
-              <Button variant="danger"
+              <Button
+                variant="danger"
                 type="submit"
                 disabled={loading}
               >
                 {editingNote ? 'Update Note' : 'Save Note'}
               </Button>
-              <button
+              <Button
+                variant="secondary"
                 type="button"
                 onClick={resetForm}
-                className="px-4 py-2 bg-myth-surface-sunken text-myth-ink-muted rounded-md text-sm hover:bg-myth-surface-sunken"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -389,12 +393,14 @@ export default function NotesPanel({
                   </div>
                   {note.authorId === currentUserId && (
                     <div className="flex gap-1">
-                      <Button variant="primary" size="sm"
+                      <Button
+                        variant="primary" size="sm"
                         onClick={() => startEdit(note)}
                       >
                         Edit
                       </Button>
-                      <Button variant="danger" size="sm"
+                      <Button
+                        variant="danger" size="sm"
                         onClick={() => deleteNote(note.id, note.authorId)}
                       >
                         Delete

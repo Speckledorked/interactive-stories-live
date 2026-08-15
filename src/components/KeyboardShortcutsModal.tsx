@@ -3,6 +3,8 @@
 import { useEffect } from 'react'
 import { authenticatedFetch, getUser } from '@/lib/clientAuth'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
+import { IconButton } from '@/components/ui/icon-button'
+import { X } from 'lucide-react'
 
 interface ShortcutGroup {
   title: string
@@ -93,15 +95,7 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShor
             <h2 className="font-display text-2xl text-myth-ink">Keyboard Shortcuts</h2>
             <p className="text-sm text-myth-ink-muted mt-1">Speed up your workflow with these shortcuts</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-myth-ink-faint hover:text-myth-ink p-2 hover:bg-myth-surface-sunken rounded transition-colors"
-            aria-label="Close"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <IconButton icon={X} label="Close" size="lg" onClick={onClose} />
         </div>
 
         {/* Content */}

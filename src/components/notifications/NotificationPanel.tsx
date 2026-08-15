@@ -5,6 +5,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { getPusherClient } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
+import { Spinner } from '@/components/ui/spinner';
+import { Tabs } from '@/components/ui/tabs';
+import { IconButton } from '@/components/ui/icon-button';
+import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface Notification {
   id: string;
@@ -274,49 +279,34 @@ export default function NotificationPanel({
           </div>
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                className="text-sm text-myth-ink-muted hover:text-myth-ink transition-colors"
-              >
+              <Button variant="ghost" size="sm" onClick={markAllAsRead}>
                 Mark all read
-              </button>
+              </Button>
             )}
-            <button
-              onClick={onClose}
-              className="text-myth-ink-faint hover:text-myth-ink transition-colors text-xl"
-            >
-              ✕
-            </button>
+            <IconButton icon={X} label="Close notifications" onClick={onClose} />
           </div>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex border-b border-myth-border bg-myth-surface-sunken">
-          {[
+        <Tabs
+          variant="underline"
+          fullWidth
+          aria-label="Filter notifications"
+          value={filter}
+          onChange={(key) => setFilter(key as any)}
+          className="bg-myth-surface-sunken"
+          items={[
             { key: 'all', label: 'All' },
             { key: 'unread', label: 'Unread' },
             { key: 'mentions', label: 'Mentions' },
-            { key: 'turns', label: 'Turns' }
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setFilter(tab.key as any)}
-              className={`flex-1 py-2 px-1 text-sm font-medium border-b-2 transition-colors ${
-                filter === tab.key
-                  ? 'border-myth-accent text-myth-ink bg-myth-surface-sunken'
-                  : 'border-transparent text-myth-ink-muted hover:text-myth-ink-muted'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+            { key: 'turns', label: 'Turns' },
+          ]}
+        />
 
         {/* Notifications List */}
         <div className="flex-1 overflow-y-auto max-h-[calc(100vh-140px)]">
           {loading ? (
             <div className="flex items-center justify-center p-8">
-              <div className="spinner h-8 w-8"></div>
+              <Spinner className="h-8 w-8" />
             </div>
           ) : notifications.length === 0 ? (
             <div className="text-center p-8 text-myth-gold">
@@ -346,15 +336,15 @@ export default function NotificationPanel({
                         </h4>
                         <div className="flex items-center gap-1">
                           <div className={`w-2 h-2 rounded-full ${getPriorityColor(notification.priority)}`} />
-                          <button
+                          <Button
+                            variant="ghost" size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               dismissNotification(notification.id);
                             }}
-                            className="text-myth-ink-faint hover:text-myth-ink-muted text-xs transition-colors"
                           >
                             ✕
-                          </button>
+                          </Button>
                         </div>
                       </div>
                       <p className="text-sm text-myth-ink-faint mt-1 line-clamp-2">

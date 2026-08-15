@@ -7,6 +7,7 @@ import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import type { TutorialStepWithProgress, TutorialProgressResponse } from '@/types/api'
+import { Button } from '@/components/ui/button'
 
 type TutorialStep = TutorialStepWithProgress
 
@@ -214,12 +215,12 @@ export default function TutorialPage() {
 
                         <div className="flex items-center gap-3">
                           {status === 'NOT_STARTED' && step.isOptional && (
-                            <button
+                            <Button
+                              variant="secondary"
                               onClick={() => handleSkipStep(step.id)}
-                              className="rounded-lg border border-myth-border px-4 py-2 text-sm font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
                             >
                               Skip
-                            </button>
+                            </Button>
                           )}
 
                           {isCompleted && step.userProgress?.completedAt && (

@@ -6,6 +6,8 @@
 import { useState } from 'react'
 import type { AdherenceResult } from '@/lib/game/outcomeAdherence'
 import type { MoveVarietyResult } from '@/lib/game/moveVariety'
+import { IconButton } from '@/components/ui/icon-button'
+import { X } from 'lucide-react'
 
 export interface WorldStateChange {
   // 'roll' entries are the move-resolution receipts (see
@@ -140,12 +142,7 @@ export default function AITransparencyPanel({
           AI Changes {sceneNumber ? `(Scene ${sceneNumber})` : ''}
         </h3>
         {onClose && (
-          <button
-            onClick={onClose}
-            className="text-myth-ink-faint hover:text-myth-ink transition-colors"
-          >
-            ✕
-          </button>
+          <IconButton icon={X} label="Close AI changes" size="sm" onClick={onClose} />
         )}
       </div>
 

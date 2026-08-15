@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 interface BalanceDisplayProps {
   userId: string
@@ -84,7 +85,8 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
   return (
     <div className="relative">
       {/* Balance Display */}
-      <Button variant="secondary"
+      <Button
+        variant="secondary"
         onClick={() => setShowAddFunds(!showAddFunds)}
         title="Click to add funds"
       >
@@ -144,20 +146,21 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-myth-ink-faint">
                       $
                     </span>
-                    <input
+                    <Input
+                      wrapperClassName="w-full" className="pl-7 pr-4"
                       type="number"
                       min="0.50"
                       step="0.50"
                       value={addAmount}
                       onChange={(e) => setAddAmount(e.target.value)}
-                      className="w-full rounded-lg border border-myth-border bg-myth-surface py-2 pl-7 pr-4 text-myth-ink outline-none transition-colors focus:border-myth-accent"
                       disabled={isLoading}
                     />
                   </div>
                 </div>
                 <div className="mt-2 flex gap-2">
                   {['0.50', '1.00', '5.00', '10.00'].map((amount) => (
-                    <Button variant="secondary" size="sm"
+                    <Button
+                      variant="secondary" size="sm"
                       key={amount}
                       onClick={() => setAddAmount(amount)}
                       disabled={isLoading}
@@ -181,13 +184,15 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
               )}
 
               <div className="flex gap-3">
-                <Button variant="primary" fullWidth
+                <Button
+                  variant="primary" fullWidth
                   onClick={handleAddFunds}
                   disabled={isLoading}
                 >
                   {isLoading ? 'Processing...' : 'Add Funds'}
                 </Button>
-                <Button variant="secondary"
+                <Button
+                  variant="secondary"
                   onClick={() => setShowAddFunds(false)}
                   disabled={isLoading}
                 >

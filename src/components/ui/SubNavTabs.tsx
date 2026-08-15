@@ -54,7 +54,7 @@ export function SubNavTabs({ tabs, activeKey, onSelect, itemClassName = '', vari
         const inactiveClass = myth
           ? 'border-transparent text-myth-ink-faint hover:text-myth-ink-muted'
           : 'border-transparent text-ember-300/40 hover:text-ember-300/70'
-        const className = `flex items-center gap-1.5 px-2.5 py-2 border-b-2 transition-colors${itemClassName ? ` ${itemClassName}` : ''} ${
+        const className = `flex min-h-[44px] items-center gap-1.5 px-2.5 py-2 border-b-2 transition-colors touch-manipulation${itemClassName ? ` ${itemClassName}` : ''} ${
           isActive ? activeClass : inactiveClass
         }`
 

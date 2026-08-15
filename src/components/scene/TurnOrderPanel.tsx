@@ -8,6 +8,7 @@
 'use client'
 
 import TurnTracker from '@/components/turns/TurnTracker'
+import { Button } from '@/components/ui/button'
 
 interface TurnOrderPanelProps {
   currentScene: any
@@ -43,13 +44,13 @@ export function TurnOrderPanel({
           currentUserId={currentUserId}
           isHost={isHost}
         />
-        <button
+        <Button
+          variant="ghost" size="sm" className="w-full"
           onClick={onEndTurnOrder}
           disabled={endingTurnOrder}
-          className="w-full text-xs text-myth-ink-faint hover:text-myth-ink transition-colors disabled:opacity-50"
         >
           {endingTurnOrder ? 'Ending…' : 'End turn order'}
-        </button>
+        </Button>
       </div>
     )
   }
@@ -64,13 +65,13 @@ export function TurnOrderPanel({
       title="Play is freeform by default — anyone can act anytime. Turn order is just a visible queue and timer; submitting an action is never blocked by it."
     >
       <p className="text-xs text-myth-ink-faint">Play is freeform — anyone can act anytime.</p>
-      <button
+      <Button
+        variant="secondary" size="sm" className="shrink-0"
         onClick={onEnableTurnOrder}
         disabled={enablingTurnOrder}
-        className="shrink-0 rounded-md border border-myth-border px-3 py-1.5 text-xs font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
       >
         {enablingTurnOrder ? 'Enabling…' : 'Enable turn order'}
-      </button>
+      </Button>
     </div>
   )
 }

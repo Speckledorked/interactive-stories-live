@@ -15,6 +15,7 @@ import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { SectionHeader } from '@/components/ui/section-header'
 import { groupWikiEntriesByCategory } from '@/lib/wikiCategoryGrouping'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
 // RUMORS isn't a WikiEntryType — it's a separate feed (offscreen
@@ -227,12 +228,12 @@ export default function WikiPage() {
 
         {/* Search */}
         <div className="relative mb-6">
-          <input
+          <Input
+            wrapperClassName="w-full" className="pl-10"
             type="text"
             placeholder="Search wiki entries..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-myth-border bg-myth-surface px-4 py-2.5 pl-10 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
           />
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-myth-ink-faint" />
         </div>
@@ -356,15 +357,15 @@ export default function WikiPage() {
         <div className={`lg:col-span-2 ${selectedEntry ? 'block' : 'hidden lg:block'}`}>
           {selectedEntry ? (
             <div>
-              <button
+              <Button
+                variant="ghost" size="sm" className="-ml-3 mb-4 lg:hidden"
                 onClick={() => setSelectedEntry(null)}
-                className="mb-4 flex items-center gap-1 text-sm font-medium text-myth-ink-muted hover:text-myth-ink lg:hidden"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
                 Back to {tabs.find(t => t.key === selectedType)?.label}
-              </button>
+              </Button>
 
               <div className="mb-4 flex items-start justify-between">
                 <div>
@@ -443,7 +444,8 @@ export default function WikiPage() {
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">Connections</h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedEntry.relatedEntries.map((link: any, i: number) => (
-                      <Button variant="secondary" size="sm"
+                      <Button
+                        variant="secondary" size="sm"
                         key={i}
                         onClick={() => followRelatedLink(link)}
                       >

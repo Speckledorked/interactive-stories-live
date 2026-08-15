@@ -5,6 +5,7 @@ import { authenticatedFetch } from '@/lib/clientAuth'
 import { Badge } from '@/components/ui/badge'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 interface TickChange {
   entityName: string
@@ -109,7 +110,8 @@ export function DataAdvancedPanel({
         <SectionHeader title="Export & Backup" action={<Badge variant="recommended">Recommended</Badge>} />
         <div className="mt-3 rounded-lg border border-myth-border bg-myth-surface p-5">
           <p className="mb-4 text-sm text-myth-ink-muted">Download your campaign data for backup or to move to another platform.</p>
-          <Button variant="secondary"
+          <Button
+            variant="secondary"
             onClick={async () => {
               try {
                 const response = await authenticatedFetch(`/api/campaigns/${campaignId}/export`)
@@ -139,14 +141,14 @@ export function DataAdvancedPanel({
 
       {/* Debug — collapsed behind a disclosure */}
       <section>
-        <button
+        <Button
+          variant="ghost" size="sm" className="-ml-3"
           type="button"
           onClick={() => setShowAdvanced((v) => !v)}
-          className="flex items-center gap-2 text-sm text-myth-ink-muted hover:text-myth-ink"
         >
           {showAdvanced ? 'Hide advanced tools' : 'Show advanced tools'}
           <Badge variant="advanced">Advanced</Badge>
-        </button>
+        </Button>
 
         {showAdvanced && (
           <div className="mt-3 space-y-4">
@@ -156,7 +158,8 @@ export function DataAdvancedPanel({
                 Dry-runs the world tick against current state — shows exactly what would change and why, without
                 writing anything or advancing the turn.
               </p>
-              <Button variant="secondary"
+              <Button
+                variant="secondary"
                 onClick={onPreviewTick}
                 disabled={tickPreviewLoading}
               >
@@ -200,16 +203,17 @@ export function DataAdvancedPanel({
               <div className="mb-4 flex items-end gap-3">
                 <div>
                   <label className="mb-1 block text-sm text-myth-ink-muted">Turn</label>
-                  <input
+                  <Input
+                    wrapperClassName="w-28"
                     type="number"
                     min={1}
                     placeholder="latest"
                     value={worldEventsTurn ?? ''}
                     onChange={(e) => onWorldEventsTurnChange(e.target.value === '' ? null : parseInt(e.target.value))}
-                    className="block w-28 rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-myth-accent focus:outline-none"
                   />
                 </div>
-                <Button variant="secondary"
+                <Button
+                  variant="secondary"
                   onClick={onLoadWorldEvents}
                   disabled={worldEventsLoading}
                 >
@@ -253,21 +257,21 @@ export function DataAdvancedPanel({
               <div className="mb-4 flex items-end gap-3">
                 <div>
                   <label className="mb-1 block text-sm text-myth-ink-muted">Scene ID</label>
-                  <input
+                  <Input
+                    wrapperClassName="w-48"
                     type="text"
                     placeholder="all scenes"
                     value={auditLogSceneId}
                     onChange={(e) => onAuditLogSceneIdChange(e.target.value)}
-                    className="block w-48 rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-myth-accent focus:outline-none"
                   />
                 </div>
-                <button
+                <Button
+                  variant="secondary" className="disabled:opacity-50"
                   onClick={onLoadAuditLog}
                   disabled={auditLogLoading}
-                  className="rounded-md border border-myth-border px-4 py-2 text-sm text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
                 >
                   {auditLogLoading ? 'Loading...' : 'Load'}
-                </button>
+                </Button>
               </div>
 
               {auditLogLoading ? (
@@ -358,7 +362,8 @@ export function DataAdvancedPanel({
           </p>
 
           {!showDeleteConfirm ? (
-            <Button variant="danger"
+            <Button
+              variant="danger"
               onClick={() => setShowDeleteConfirm(true)}
             >
               Delete Campaign
@@ -368,21 +373,23 @@ export function DataAdvancedPanel({
               <label className="block text-sm text-myth-ink-muted">
                 Type <span className="font-mono font-medium text-myth-ink">{campaignTitle}</span> to confirm
               </label>
-              <input
+              <Input
+                wrapperClassName="w-full max-w-sm"
                 type="text"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                className="block w-full max-w-sm rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-myth-danger/40 focus:outline-none"
                 placeholder={campaignTitle}
               />
               <div className="flex gap-2">
-                <Button variant="danger"
+                <Button
+                  variant="danger"
                   onClick={onDeleteCampaign}
                   disabled={saving || confirmText !== campaignTitle}
                 >
                   {saving ? 'Deleting...' : 'Yes, Delete Campaign'}
                 </Button>
-                <Button variant="secondary"
+                <Button
+                  variant="secondary"
                   onClick={() => {
                     setShowDeleteConfirm(false)
                     setConfirmText('')

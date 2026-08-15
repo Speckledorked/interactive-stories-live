@@ -13,6 +13,8 @@ import ConsequenceBadge from './ConsequenceBadge'
 import { DynamicDowntimeManager } from '@/components/downtime/DynamicDowntimeManager'
 import { SectionHeader } from '@/components/ui/section-header'
 import { parseCorruptionTheme, corruptionStage, MAX_CORRUPTION } from '@/lib/game/corruption'
+import { Tabs } from '@/components/ui/tabs'
+import { Backpack, BarChart3, ClipboardList, HeartHandshake, Moon, Star } from 'lucide-react'
 
 interface CharacterSheetDisplayProps {
   character: any
@@ -203,30 +205,21 @@ export default function CharacterSheetDisplay({
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex flex-wrap gap-2 border-b border-myth-border pb-2">
-        {[
-          { key: 'overview', label: 'Overview', icon: '📋' },
-          { key: 'stats', label: 'Stats & Status', icon: '📊' },
-          { key: 'inventory', label: 'Inventory', icon: '🎒' },
-          { key: 'relationships', label: 'Ties & Consequences', icon: '💕' },
-          { key: 'advancement', label: 'Advancement', icon: '⭐' },
-          ...(showDowntimeTab ? [{ key: 'downtime', label: 'Downtime', icon: '🌙' }] : []),
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key as any)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === tab.key
-                ? 'bg-myth-accent text-myth-accent-ink'
-                : 'text-myth-ink-faint hover:bg-myth-surface-sunken hover:text-myth-ink'
-            }`}
-          >
-            <span className="mr-2">{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        variant="pill"
+        aria-label="Character sheet sections"
+        value={activeTab}
+        onChange={(key) => setActiveTab(key as any)}
+        className="mb-2"
+        items={[
+          { key: 'overview', label: 'Overview', icon: ClipboardList },
+          { key: 'stats', label: 'Stats & Status', icon: BarChart3 },
+          { key: 'inventory', label: 'Inventory', icon: Backpack },
+          { key: 'relationships', label: 'Ties & Consequences', icon: HeartHandshake },
+          { key: 'advancement', label: 'Advancement', icon: Star },
+          ...(showDowntimeTab ? [{ key: 'downtime', label: 'Downtime', icon: Moon }] : []),
+        ]}
+      />
 
       {/* Tab Content */}
       <div className="space-y-6">

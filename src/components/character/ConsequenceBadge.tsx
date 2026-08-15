@@ -3,6 +3,9 @@
 
 'use client'
 
+import { IconButton } from '@/components/ui/icon-button'
+import { X } from 'lucide-react'
+
 interface ConsequenceBadgeProps {
   type: 'promise' | 'debt' | 'enemy' | 'longTermThreat'
   description: string
@@ -68,13 +71,7 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
           </p>
         </div>
         {onRemove && (
-          <button
-            onClick={onRemove}
-            className="text-myth-ink-faint hover:text-myth-ink transition-colors"
-            title="Remove"
-          >
-            ✕
-          </button>
+          <IconButton icon={X} label="Remove" size="sm" onClick={onRemove} />
         )}
       </div>
     </div>

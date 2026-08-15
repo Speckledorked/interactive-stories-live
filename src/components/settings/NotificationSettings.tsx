@@ -5,6 +5,9 @@
 import { useState, useEffect } from 'react';
 import { isPushSupported, enablePush, disablePush } from '@/lib/notifications/push-client';
 import { getToken } from '@/lib/clientAuth';
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 
 interface NotificationSettings {
   // Email notifications
@@ -231,18 +234,7 @@ export default function NotificationSettings() {
           <div className="text-sm text-myth-ink-muted">{description}</div>
         )}
       </div>
-      <button
-        onClick={onChange}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-          enabled ? 'bg-myth-accent' : 'bg-myth-surface-sunken'
-        }`}
-      >
-        <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-myth-surface transition-transform ${
-            enabled ? 'translate-x-6' : 'translate-x-1'
-          }`}
-        />
-      </button>
+      <Switch checked={enabled} onCheckedChange={onChange} label={label} />
     </div>
   );
 
@@ -378,28 +370,21 @@ export default function NotificationSettings() {
               <div key={key} className="flex items-center justify-between py-1.5">
                 <div className="font-medium text-myth-ink text-sm">{label}</div>
                 <div className="flex items-center gap-3">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     type="button"
                     onClick={() => testSound(cueId)}
                     disabled={testingSound === cueId}
-                    className="text-myth-accent hover:text-myth-accent-hover text-xs disabled:opacity-50"
+                    className="text-myth-accent hover:text-myth-accent-hover"
                   >
-                    {testingSound === cueId ? '♪ playing' : 'Preview'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleToggle(key)}
-                    aria-label={label}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      settings[key] ? 'bg-myth-accent' : 'bg-myth-surface-sunken'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-myth-surface transition-transform ${
-                        settings[key] ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
+                    {testingSound === cueId ? 'Playing…' : 'Preview'}
+                  </Button>
+                  <Switch
+                    checked={settings[key]}
+                    onCheckedChange={() => handleToggle(key)}
+                    label={label}
+                  />
                 </div>
               </div>
             ))}
@@ -424,22 +409,22 @@ export default function NotificationSettings() {
               <label className="block text-sm font-medium text-myth-ink-muted mb-1">
                 Start Time
               </label>
-              <input
+              <Input
+                wrapperClassName="w-full"
                 type="time"
                 value={settings.quietHoursStart || '22:00'}
                 onChange={(e) => handleTimeChange('quietHoursStart', e.target.value)}
-                className="w-full p-2 bg-myth-surface border border-myth-border rounded-md text-myth-ink"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-myth-ink-muted mb-1">
                 End Time
               </label>
-              <input
+              <Input
+                wrapperClassName="w-full"
                 type="time"
                 value={settings.quietHoursEnd || '08:00'}
                 onChange={(e) => handleTimeChange('quietHoursEnd', e.target.value)}
-                className="w-full p-2 bg-myth-surface border border-myth-border rounded-md text-myth-ink"
               />
             </div>
           </div>

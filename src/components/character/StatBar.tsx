@@ -5,6 +5,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
+import { Button } from '@/components/ui/button'
 
 interface StatBarProps {
   name: string
@@ -42,16 +43,16 @@ function StatInfo({ description }: { description: string }) {
 
   return (
     <div ref={containerRef} className="relative inline-flex">
-      <button
+      <Button
+        variant="ghost" size="sm"
         type="button"
         aria-expanded={open}
         aria-controls={popoverId}
         aria-label="What this stat does"
         onClick={() => setOpen((v) => !v)}
-        className="text-xs text-myth-ink-faint hover:text-myth-ink-muted transition-colors touch-manipulation"
       >
         ⓘ
-      </button>
+      </Button>
       {open && (
         <div
           id={popoverId}

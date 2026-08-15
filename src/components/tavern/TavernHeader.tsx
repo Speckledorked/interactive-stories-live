@@ -16,6 +16,7 @@ import { getUser } from '@/lib/clientAuth'
 import { TavernMobileMenu } from './TavernMobileMenu'
 import { TavernSidebar } from './TavernSidebar'
 import NotificationPanel from '@/components/notifications/NotificationPanel'
+import { IconButton } from '@/components/ui/icon-button'
 
 export function TavernHeader({
   title,
@@ -48,9 +49,13 @@ export function TavernHeader({
   const user = getUser()
   const myth = variant === 'myth'
 
+  // min-h/min-w-[44px]: this is a Link, so it can't route through
+  // IconButton (which renders a <button>) — but it sits in the same row as
+  // two IconButtons and has to match their hit area, not just their look.
+  // At p-2.5 around a 20px glyph it was 40px, four short of comfortable.
   const iconButtonClass = myth
-    ? 'p-2.5 -m-0.5 rounded-lg text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink transition-colors touch-manipulation'
-    : 'p-2.5 -m-0.5 text-ember-300/80 hover:text-ember-200 transition-colors touch-manipulation'
+    ? 'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink transition-colors touch-manipulation'
+    : 'inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-ember-300/80 hover:text-ember-200 transition-colors touch-manipulation'
 
   return (
     <>
@@ -65,7 +70,7 @@ export function TavernHeader({
         {backHref ? (
           <Link
             href={backHref}
-            className={myth ? `p-2.5 -ml-2.5 rounded-lg text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink transition-colors flex-shrink-0 touch-manipulation` : 'p-2.5 -ml-2.5 text-ember-300/80 hover:text-ember-200 transition-colors flex-shrink-0 touch-manipulation'}
+            className={myth ? `inline-flex min-h-[44px] min-w-[44px] -ml-2.5 items-center justify-center rounded-lg text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink transition-colors flex-shrink-0 touch-manipulation` : 'inline-flex min-h-[44px] min-w-[44px] -ml-2.5 items-center justify-center text-ember-300/80 hover:text-ember-200 transition-colors flex-shrink-0 touch-manipulation'}
             aria-label="Back"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -104,12 +109,20 @@ export function TavernHeader({
         )}
 
         <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button onClick={() => setNotifOpen(true)} className={iconButtonClass} aria-label="Notifications">
-            <Bell className="w-5 h-5" />
-          </button>
-          <button onClick={() => setMenuOpen(true)} className={iconButtonClass} aria-label="Menu">
-            <Menu className="w-5 h-5" />
-          </button>
+          <IconButton
+            icon={Bell}
+            label="Notifications"
+            variant={myth ? 'ghost' : undefined}
+            className={myth ? undefined : 'text-ember-300/80 hover:text-ember-200'}
+            onClick={() => setNotifOpen(true)}
+          />
+          <IconButton
+            icon={Menu}
+            label="Menu"
+            variant={myth ? 'ghost' : undefined}
+            className={myth ? undefined : 'text-ember-300/80 hover:text-ember-200'}
+            onClick={() => setMenuOpen(true)}
+          />
           <Link href="/settings" className={iconButtonClass} aria-label="Profile">
             <UserCircle className="w-5 h-5" />
           </Link>

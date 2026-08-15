@@ -17,10 +17,21 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   error?: string
   /** Marks the field visually and via aria as required. */
   required?: boolean
+  /**
+   * Layout classes for the wrapping element, not the field itself.
+   *
+   * This exists because the primitive owns field *chrome* while the call
+   * site still owns *layout*, and the two used to live in one className.
+   * A control that needs `flex-1`, a fixed `w-28`, or a `mt-2` has to put
+   * that on the wrapper — putting it on the input would size the input
+   * inside a full-width wrapper and change nothing. Defaults to `w-full`,
+   * which is what the previous inline field chrome all used.
+   */
+  wrapperClassName?: string
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
-  { className = '', label, hint, error, id, required, ...props },
+  { className = '', wrapperClassName = 'w-full', label, hint, error, id, required, ...props },
   ref
 ) {
   const reactId = React.useId()
@@ -30,7 +41,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined
 
   return (
-    <div className="w-full">
+    <div className={wrapperClassName}>
       {label && (
         <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-myth-ink-muted">
           {label}

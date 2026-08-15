@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Menu, X, ChevronDown } from 'lucide-react'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
+import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 
 export type AdminTabKey =
   | 'overview'
@@ -106,7 +108,7 @@ function NavList({
               key={group.key}
               type="button"
               onClick={() => onSelect(item.key)}
-              className={`block w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
+              className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 isActive
                   ? 'bg-myth-accent/10 font-medium text-myth-accent'
                   : 'text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink'
@@ -122,7 +124,7 @@ function NavList({
             <button
               type="button"
               onClick={() => onToggleGroup(group.key)}
-              className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs font-mono uppercase tracking-wider transition-colors ${
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-mono uppercase tracking-wider transition-colors ${
                 isActiveGroup ? 'text-myth-ink' : 'text-myth-ink-faint hover:text-myth-ink-muted'
               }`}
               aria-expanded={expanded}
@@ -139,7 +141,7 @@ function NavList({
                       key={item.key}
                       type="button"
                       onClick={() => onSelect(item.key)}
-                      className={`block w-full rounded-md px-3 py-1.5 text-left text-sm transition-colors ${
+                      className={`block w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
                         isActive
                           ? 'bg-myth-accent/10 font-medium text-myth-accent'
                           : 'text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink'
@@ -190,14 +192,14 @@ export function AdminNav({ activeKey, onSelect }: { activeKey: AdminTabKey; onSe
       {/* Mobile: breadcrumb + drawer trigger, sticky within the content area */}
       <div className="mb-4 flex items-center justify-between border-b border-myth-border pb-3 md:hidden">
         <p className="font-mono text-xs uppercase tracking-wider text-myth-ink-muted">{breadcrumb}</p>
-        <button
+        <Button
+          variant="secondary" size="sm"
           type="button"
           onClick={() => setDrawerOpen(true)}
-          className="flex items-center gap-1.5 rounded-md border border-myth-border px-2.5 py-1.5 text-xs text-myth-ink-muted hover:border-myth-border-strong hover:text-myth-ink"
         >
           <Menu className="h-3.5 w-3.5" />
           Sections
-        </button>
+        </Button>
       </div>
 
       {drawerOpen && (
@@ -206,14 +208,12 @@ export function AdminNav({ activeKey, onSelect }: { activeKey: AdminTabKey; onSe
           <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] overflow-y-auto border-r border-myth-border bg-myth-surface-raised p-4 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
             <div className="mb-3 flex items-center justify-between">
               <p className="font-display text-sm font-semibold text-myth-ink">Admin Sections</p>
-              <button
-                type="button"
+              <IconButton
+                icon={X}
+                label="Close admin sections"
+                size="sm"
                 onClick={() => setDrawerOpen(false)}
-                className="p-1 text-myth-ink-faint hover:text-myth-ink"
-                aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              />
             </div>
             <NavList activeKey={activeKey} onSelect={handleSelect} expandedGroups={expandedGroups} onToggleGroup={toggleGroup} />
           </div>

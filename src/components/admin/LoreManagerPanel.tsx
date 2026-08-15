@@ -11,6 +11,10 @@ import { useEffect, useRef, useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Tabs } from '@/components/ui/tabs'
 
 type SourceType = 'PASTE' | 'URL' | 'WIKI'
 type JobStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
@@ -342,44 +346,36 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
           description="Reference material MythOS can draw on during play — a world bible, faction writeups, a wiki page, or an entire fan wiki. Wiki crawling only works for MediaWiki-based sites (Fandom, wiki.gg, Wikipedia, etc); give it any page URL on the wiki and it finds the rest itself."
         />
         <div className="mt-3 rounded-lg border border-myth-border bg-myth-surface p-4">
-        <div className="mb-3 flex gap-2">
-          {SOURCE_TABS.map(tab => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setSourceType(tab.value)}
-              className={`rounded-md border px-3 py-1.5 text-sm ${
-                sourceType === tab.value
-                  ? 'border-myth-accent bg-myth-accent/10 text-myth-accent'
-                  : 'border-myth-border text-myth-ink-muted hover:text-myth-ink'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          variant="pill"
+          aria-label="Lore source type"
+          value={sourceType}
+          onChange={(v) => setSourceType(v as typeof sourceType)}
+          className="mb-3"
+          items={SOURCE_TABS.map((tab) => ({ key: tab.value, label: tab.label }))}
+        />
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-myth-ink-muted">Title (optional)</label>
-            <input
+            <Input
+              wrapperClassName="w-full"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={sourceType === 'PASTE' ? 'e.g. Essence Magic Overview' : undefined}
-              className="block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
             />
           </div>
 
           {sourceType === 'PASTE' ? (
             <div>
               <label className="mb-1 block text-sm font-medium text-myth-ink-muted">Text *</label>
-              <textarea
+              <Textarea
+                wrapperClassName="w-full"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 rows={8}
                 placeholder="Paste any chunk of lore — history, factions, magic systems, character bios..."
-                className="block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
               />
             </div>
           ) : (
@@ -388,15 +384,16 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
                 {sourceType === 'WIKI' ? 'Any page URL on the wiki *' : 'URL *'}
               </label>
               <div className="flex gap-2">
-                <input
+                <Input
+                  wrapperClassName="w-full"
                   type="url"
                   value={url}
                   onChange={(e) => (sourceType === 'WIKI' ? handleUrlChange(e.target.value) : setUrl(e.target.value))}
                   placeholder={sourceType === 'WIKI' ? 'https://example.fandom.com/wiki/Main_Page' : 'https://example.com/article'}
-                  className="block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                 />
                 {sourceType === 'WIKI' && (
-                  <Button variant="secondary"
+                  <Button
+                    variant="secondary"
                     type="button"
                     onClick={handleFindCategories}
                     disabled={categoriesLoading || !url.trim()}
@@ -425,33 +422,32 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
                   Exclude categories ({excludedCategories.size} selected)
                 </label>
                 {excludedCategories.size > 0 && (
-                  <button
+                  <Button
+                    variant="ghost" size="sm"
                     type="button"
                     onClick={() => setExcludedCategories(new Set())}
-                    className="text-xs text-myth-ink-faint hover:text-myth-ink"
                   >
                     Clear
-                  </button>
+                  </Button>
                 )}
               </div>
               {wikiCategories.length === 0 ? (
                 <p className="text-xs text-myth-ink-muted">This wiki has no categories to exclude.</p>
               ) : (
                 <>
-                  <input
+                  <Input
+                    wrapperClassName="mb-2 w-full"
                     type="text"
                     value={categoryFilter}
                     onChange={(e) => setCategoryFilter(e.target.value)}
                     placeholder="Filter categories…"
-                    className="mb-2 block w-full rounded-md border border-myth-border bg-myth-surface px-3 py-1.5 text-sm text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none"
                   />
                   <div className="max-h-56 space-y-1 overflow-y-auto">
                     {wikiCategories
                       .filter(c => c.title.toLowerCase().includes(categoryFilter.trim().toLowerCase()))
                       .map(c => (
                         <label key={c.title} className="flex items-center gap-2 text-sm text-myth-ink-muted hover:text-myth-ink">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={excludedCategories.has(c.title)}
                             onChange={() => toggleExcludedCategory(c.title)}
                           />
@@ -467,7 +463,8 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
 
           {formError && <p className="text-sm text-myth-danger">{formError}</p>}
 
-          <Button variant="primary"
+          <Button
+            variant="primary"
             type="submit"
             disabled={submitting}
           >
@@ -485,11 +482,10 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
         />
         <div className="mt-3 rounded-lg border border-myth-border bg-myth-surface p-4">
         <label className="mb-3 flex items-start gap-2 text-xs text-myth-ink-muted">
-          <input
-            type="checkbox"
+          <Checkbox
+            wrapperClassName="mt-0.5"
             checked={forceStatLabels}
             onChange={(e) => setForceStatLabels(e.target.checked)}
-            className="mt-0.5"
           />
           <span>
             Also overwrite stat labels from canon, even if characters already exist. Stat labels are just display
@@ -497,7 +493,8 @@ export default function LoreManagerPanel({ campaignId }: { campaignId: string })
             aren&apos;t affected.
           </span>
         </label>
-        <Button variant="primary"
+        <Button
+          variant="primary"
           type="button"
           onClick={handleReseed}
           disabled={reseedInFlight || jobs.every(j => j.status !== 'COMPLETED')}
@@ -580,7 +577,8 @@ function LoreJobRow({ job, onDelete }: { job: LoreJob; onDelete: () => void }) {
           </p>
         )}
       </div>
-      <Button variant="danger" size="sm"
+      <Button
+        variant="danger" size="sm"
         onClick={onDelete}
       >
         Delete

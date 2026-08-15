@@ -90,6 +90,55 @@ describe('submitPlayerAction — active-membership filtering (open scene)', () =
   })
 })
 
+describe('submitPlayerAction — Taken-Out characters do not block an open scene (#278)', () => {
+  it('resolves on the able character alone when the other living character is Taken Out (harm 6)', async () => {
+    ;(prisma.character.findMany as any).mockResolvedValue([
+      { userId: 'userA', harm: 1, conditions: null },
+      { userId: 'userB', harm: 6, conditions: null }, // Taken Out — isAlive stays true, but cannot act
+    ])
+    ;(prisma.campaignMembership.findMany as any).mockResolvedValue([{ userId: 'userA' }, { userId: 'userB' }])
+    ;(prisma.playerAction.findMany as any).mockResolvedValue([{ userId: 'userA' }])
+
+    const participants: SceneParticipants = { characterIds: ['charA', 'charB'], userIds: ['userA', 'userB'], scoped: false }
+    await submitPlayerAction('camp1', 'userA', 'charA', 'I look around.', makeScene(), participants)
+
+    // userB is still alive but Taken Out, so is no longer "required" —
+    // the scene resolves on userA's action alone instead of stalling
+    // forever waiting for an action userB is structurally forbidden from
+    // submitting.
+    expect(enqueueSceneResolution).toHaveBeenCalledWith('camp1', 'scene1')
+  })
+
+  it('also excludes a living character under an incapacitating condition below harm 6, not just Taken Out', async () => {
+    ;(prisma.character.findMany as any).mockResolvedValue([
+      { userId: 'userA', harm: 1, conditions: null },
+      { userId: 'userB', harm: 2, conditions: { conditions: [{ id: 'c1', name: 'Bound', mechanicalEffect: 'Cannot take actions' }] } },
+    ])
+    ;(prisma.campaignMembership.findMany as any).mockResolvedValue([{ userId: 'userA' }, { userId: 'userB' }])
+    ;(prisma.playerAction.findMany as any).mockResolvedValue([{ userId: 'userA' }])
+
+    const participants: SceneParticipants = { characterIds: ['charA', 'charB'], userIds: ['userA', 'userB'], scoped: false }
+    await submitPlayerAction('camp1', 'userA', 'charA', 'I look around.', makeScene(), participants)
+
+    expect(enqueueSceneResolution).toHaveBeenCalledWith('camp1', 'scene1')
+  })
+
+  it('still waits on an ordinary living character who is simply not Taken Out', async () => {
+    ;(prisma.character.findMany as any).mockResolvedValue([
+      { userId: 'userA', harm: 1, conditions: null },
+      { userId: 'userB', harm: 0, conditions: null },
+    ])
+    ;(prisma.campaignMembership.findMany as any).mockResolvedValue([{ userId: 'userA' }, { userId: 'userB' }])
+    ;(prisma.playerAction.findMany as any).mockResolvedValue([{ userId: 'userA' }])
+
+    const participants: SceneParticipants = { characterIds: ['charA', 'charB'], userIds: ['userA', 'userB'], scoped: false }
+    await submitPlayerAction('camp1', 'userA', 'charA', 'I look around.', makeScene(), participants)
+
+    expect(enqueueSceneResolution).not.toHaveBeenCalled()
+    expect(prisma.scene.update).toHaveBeenCalledWith({ where: { id: 'scene1' }, data: { waitingOnUsers: ['userB'] } })
+  })
+})
+
 describe('submitPlayerAction — active-membership filtering (scoped/split-party scene)', () => {
   it("filters a departed member out of a scoped scene's fixed roster too", async () => {
     ;(prisma.campaignMembership.findMany as any).mockResolvedValue([{ userId: 'userA' }]) // userB departed

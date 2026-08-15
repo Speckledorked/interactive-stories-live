@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma'
 import type { Scene } from '@prisma/client'
 import { PusherServer } from '@/lib/realtime/pusher-server'
 import { recordEvent } from '@/lib/analytics/events'
+import { canAct, parseHarmState, HarmLevel } from './harm'
 
 export interface SceneParticipants {
   characterIds: string[]
@@ -147,11 +148,22 @@ export async function submitPlayerAction(
   if (hasDefinedParticipants) {
     participantUserIds = sceneParticipants.userIds || []
   } else {
+    // #278: Character.isAlive stays true at harm 6 (Taken Out) — unlike
+    // NPC.isAlive, which flips false the instant harm hits 6 — so
+    // `isAlive: true` alone still counts a Taken-Out character as
+    // required to act. canAct() is the actual gate on whether they may
+    // submit an action at all (the route itself blocks them with a 409
+    // before reaching here); without this filter, an open scene with a
+    // Critically Dying PC could stall forever waiting on an action nobody
+    // is permitted to submit.
     const livingCharacters = await prisma.character.findMany({
       where: { campaignId, isAlive: true },
-      select: { userId: true }
+      select: { userId: true, harm: true, conditions: true }
     })
-    participantUserIds = [...new Set(livingCharacters.map(c => c.userId))]
+    const ableCharacters = livingCharacters.filter(c =>
+      canAct(c.harm as HarmLevel, parseHarmState(c.conditions).conditions)
+    )
+    participantUserIds = [...new Set(ableCharacters.map(c => c.userId))]
   }
 
   // A removed or banned member's Character row isn't touched (removing

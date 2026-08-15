@@ -1,7 +1,37 @@
-import { describe, it, expect } from 'vitest'
-import { filterAndRankMemories } from '../memoryRetrieval'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// #293: retrieveRelevantHistory's own fail-open behavior (its try/catch
+// around the $queryRaw call and the embedding call ahead of it) had no
+// test coverage anywhere — only its pure post-filter (filterAndRankMemories,
+// below) was tested. A broken query or a down embedding provider must
+// degrade to "no memories this turn," never take down scene resolution.
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    $queryRaw: vi.fn(),
+    $executeRaw: vi.fn(),
+    worldMeta: { findUnique: vi.fn() },
+  },
+}))
+vi.mock('../embeddingService', () => ({
+  embedWithCostTracking: vi.fn(),
+}))
+
+import { filterAndRankMemories, retrieveRelevantHistory } from '../memoryRetrieval'
 import { generateEntityPairs, MAX_ENTITY_PAIRS } from '../crossEntityRecall'
-import type { RetrievedMemory } from '../memoryRetrieval'
+import type { RetrievedMemory, RetrievalContext } from '../memoryRetrieval'
+import { prisma } from '@/lib/prisma'
+import { embedWithCostTracking } from '../embeddingService'
+
+function makeContext(overrides: Partial<RetrievalContext> = {}): RetrievalContext {
+  return {
+    currentScene: { sceneIntroText: 'A quiet tavern.', stakes: null, location: null } as any,
+    playerActions: [],
+    characters: [],
+    npcs: [],
+    factions: [],
+    ...overrides,
+  }
+}
 
 function makeMemory(overrides: Partial<RetrievedMemory> = {}): RetrievedMemory {
   return {
@@ -64,6 +94,62 @@ describe('filterAndRankMemories', () => {
     const memories = [makeMemory({ id: 'unknown', similarity: 0.8, importance: 'SOMETHING_NEW' })]
     const result = filterAndRankMemories(memories, { minSimilarity: 0.7, importanceBoost: true, maxMemories: 10 })
     expect(result).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// retrieveRelevantHistory — fail-open behavior (#293)
+// ---------------------------------------------------------------------------
+// This function feeds directly into scene resolution's prompt-building
+// step — a thrown error here must degrade to "no memories this turn,"
+// never propagate and take down an otherwise-successful scene resolution.
+// The real pgvector query/blend itself is covered against live Postgres
+// in memoryRetrieval.liveDb.test.ts; this is the control-flow half only.
+
+describe('retrieveRelevantHistory — fail-open behavior (#293)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(embedWithCostTracking).mockResolvedValue('[0.1,0.2,0.3]')
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([])
+  })
+
+  it('returns an empty array, not a throw, when the $queryRaw call itself fails', async () => {
+    vi.mocked(prisma.$queryRaw).mockRejectedValue(new Error('connection reset'))
+
+    const result = await retrieveRelevantHistory('camp1', makeContext(), {})
+
+    expect(result).toEqual([])
+  })
+
+  it('returns an empty array, not a throw, when the embedding call itself fails', async () => {
+    vi.mocked(embedWithCostTracking).mockRejectedValue(new Error('OpenAI outage'))
+
+    const result = await retrieveRelevantHistory('camp1', makeContext(), {})
+
+    expect(result).toEqual([])
+    // Never even reaches the query it has no embedding to run.
+    expect(prisma.$queryRaw).not.toHaveBeenCalled()
+  })
+
+  it('short-circuits to an empty array without querying when the built search context is empty', async () => {
+    const emptyContext = makeContext({ currentScene: { sceneIntroText: null, stakes: null, location: null } as any })
+
+    const result = await retrieveRelevantHistory('camp1', emptyContext, {})
+
+    expect(result).toEqual([])
+    expect(embedWithCostTracking).not.toHaveBeenCalled()
+    expect(prisma.$queryRaw).not.toHaveBeenCalled()
+  })
+
+  it('still returns real results on the happy path once embedding and query both succeed', async () => {
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([
+      { id: 'mem-1', turnNumber: 1, title: 'A thing happened', summary: 's', memoryType: 'SCENE', importance: 'NORMAL', emotionalTone: null, similarity: 0.95 },
+    ] as any)
+
+    const result = await retrieveRelevantHistory('camp1', makeContext(), { minSimilarity: 0.5 })
+
+    expect(result).toHaveLength(1)
+    expect(result[0].title).toBe('A thing happened')
   })
 })
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getUser } from '@/lib/clientAuth'
+import { Input } from '@/components/ui/input'
 
 interface Command {
   id: string
@@ -262,12 +263,12 @@ export default function CommandPalette({
       <div className="w-full max-w-2xl mx-4 bg-myth-surface-raised border border-myth-border rounded-xl shadow-2xl overflow-hidden">
         {/* Search Input */}
         <div className="relative">
-          <input
+          <Input
+            wrapperClassName="w-full min-h-[44px]" className="border-b"
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Type a command or search..."
-            className="w-full px-4 py-4 min-h-[44px] bg-myth-surface-raised text-base sm:text-sm text-myth-ink placeholder:text-myth-ink-faint focus:outline-none border-b border-myth-border"
             autoFocus
           />
           <div className="absolute right-4 top-4 text-xs text-myth-ink-faint">

@@ -9,12 +9,15 @@ import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId, update
 import NotificationSettings from '@/components/settings/NotificationSettings'
 import { ThemeSetting } from '@/components/settings/ThemeSetting'
 import BalanceDisplay from '@/components/BalanceDisplay'
-import { Bell, User, Lock } from 'lucide-react'
+import { Bell, Lock, User, X } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 
 type TabKey = 'notifications' | 'profile' | 'privacy'
 
@@ -237,11 +240,11 @@ export default function SettingsPage() {
             <div className="space-y-5">
               <div>
                 <label className="block text-sm font-semibold text-myth-ink-muted mb-2">Email</label>
-                <input
+                <Input
+                  wrapperClassName="w-full"
                   type="email"
                   value={user.email}
                   disabled
-                  className="px-4 py-2.5 rounded-lg bg-myth-surface-sunken border border-myth-border text-myth-ink w-full cursor-not-allowed opacity-75"
                 />
                 <p className="text-xs text-myth-ink-faint mt-2 flex items-center gap-1">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -253,13 +256,13 @@ export default function SettingsPage() {
 
               <div>
                 <label className="block text-sm font-semibold text-myth-ink-muted mb-2">Display Name</label>
-                <input
+                <Input
+                  wrapperClassName="w-full"
                   type="text"
                   placeholder="Your display name (optional)"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   maxLength={100}
-                  className="px-4 py-2.5 rounded-lg bg-myth-surface border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent w-full"
                 />
                 <p className="text-xs text-myth-ink-faint mt-2 flex items-center gap-1">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -274,7 +277,8 @@ export default function SettingsPage() {
               </div>
 
               <div className="pt-4 border-t border-myth-border">
-                <Button variant="primary"
+                <Button
+                  variant="primary"
                   onClick={handleSaveProfile}
                   disabled={savingProfile}
                 >
@@ -326,7 +330,7 @@ export default function SettingsPage() {
                   <p className="text-sm text-myth-ink-muted">Let other players see when you're online</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" defaultChecked />
+                  <Checkbox className="sr-only peer" defaultChecked />
                   <div className="w-11 h-6 bg-myth-surface-sunken peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-myth-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-myth-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-myth-accent"></div>
                 </label>
               </div>
@@ -337,7 +341,7 @@ export default function SettingsPage() {
                   <p className="text-sm text-myth-ink-muted">Allow other players to send you whispers</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" defaultChecked />
+                  <Checkbox className="sr-only peer" defaultChecked />
                   <div className="w-11 h-6 bg-myth-surface-sunken peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-myth-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-myth-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-myth-accent"></div>
                 </label>
               </div>
@@ -348,7 +352,7 @@ export default function SettingsPage() {
                   <p className="text-sm text-myth-ink-muted">Make your profile visible to other players</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" defaultChecked />
+                  <Checkbox className="sr-only peer" defaultChecked />
                   <div className="w-11 h-6 bg-myth-surface-sunken peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-myth-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-myth-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-myth-accent"></div>
                 </label>
               </div>
@@ -395,7 +399,9 @@ export default function SettingsPage() {
           <div className="rounded-lg border border-myth-border bg-myth-surface-raised p-6 max-w-md w-full shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)]">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-myth-ink">Change Password</h3>
-              <button
+              <IconButton
+                icon={X}
+                label="Close change-password dialog"
                 onClick={() => {
                   setShowPasswordModal(false)
                   setPasswordMessage('')
@@ -403,42 +409,39 @@ export default function SettingsPage() {
                   setNewPassword('')
                   setConfirmPassword('')
                 }}
-                className="text-myth-ink-faint hover:text-myth-ink transition-colors text-xl"
-              >
-                ✕
-              </button>
+              />
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-myth-ink-muted mb-2">Current Password</label>
-                <input
+                <Input
+                  wrapperClassName="w-full"
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="px-4 py-2.5 rounded-lg bg-myth-surface border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent w-full"
                   placeholder="Enter current password"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-myth-ink-muted mb-2">New Password</label>
-                <input
+                <Input
+                  wrapperClassName="w-full"
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="px-4 py-2.5 rounded-lg bg-myth-surface border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent w-full"
                   placeholder="Enter new password (min 8 characters)"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-myth-ink-muted mb-2">Confirm New Password</label>
-                <input
+                <Input
+                  wrapperClassName="w-full"
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="px-4 py-2.5 rounded-lg bg-myth-surface border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent w-full"
                   placeholder="Confirm new password"
                 />
               </div>
@@ -452,7 +455,8 @@ export default function SettingsPage() {
               )}
 
               <div className="flex gap-3 pt-4">
-                <Button variant="primary" fullWidth
+                <Button
+                  variant="primary" fullWidth
                   onClick={handleChangePassword}
                   disabled={changingPassword}
                 >
@@ -465,7 +469,8 @@ export default function SettingsPage() {
                     'Change Password'
                   )}
                 </Button>
-                <Button variant="secondary"
+                <Button
+                  variant="secondary"
                   onClick={() => {
                     setShowPasswordModal(false)
                     setPasswordMessage('')
@@ -491,16 +496,15 @@ export default function SettingsPage() {
                 <span className="text-2xl">⚠️</span>
                 <h3 className="text-xl font-bold text-myth-danger">Delete Account</h3>
               </div>
-              <button
+              <IconButton
+                icon={X}
+                label="Close delete-account dialog"
                 onClick={() => {
                   setShowDeleteModal(false)
                   setDeleteMessage('')
                   setDeleteConfirmation('')
                 }}
-                className="text-myth-ink-faint hover:text-myth-ink transition-colors text-xl"
-              >
-                ✕
-              </button>
+              />
             </div>
 
             <div className="space-y-4">
@@ -523,11 +527,11 @@ export default function SettingsPage() {
                 <label className="block text-sm font-semibold text-myth-ink-muted mb-2">
                   Type <span className="text-myth-danger font-mono">DELETE MY ACCOUNT</span> to confirm:
                 </label>
-                <input
+                <Input
+                  wrapperClassName="w-full" className="font-mono"
                   type="text"
                   value={deleteConfirmation}
                   onChange={(e) => setDeleteConfirmation(e.target.value)}
-                  className="px-4 py-2.5 rounded-lg bg-myth-surface border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent w-full font-mono"
                   placeholder="DELETE MY ACCOUNT"
                 />
               </div>
@@ -541,7 +545,8 @@ export default function SettingsPage() {
               )}
 
               <div className="flex gap-3 pt-4">
-                <Button variant="danger" fullWidth
+                <Button
+                  variant="danger" fullWidth
                   onClick={handleDeleteAccount}
                   disabled={deletingAccount || deleteConfirmation !== 'DELETE MY ACCOUNT'}
                 >
@@ -554,7 +559,8 @@ export default function SettingsPage() {
                     'Delete My Account'
                   )}
                 </Button>
-                <Button variant="secondary"
+                <Button
+                  variant="secondary"
                   onClick={() => {
                     setShowDeleteModal(false)
                     setDeleteMessage('')

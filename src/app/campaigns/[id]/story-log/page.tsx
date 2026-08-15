@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronRight, BookOpen, MessageCircle, Share2 } from 'lucide-react'
+import { BookOpen, Check, ChevronRight, MessageCircle, Share2 } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import { displayFont } from '@/lib/tavernTheme'
 import { TavernPage } from '@/components/tavern/TavernPage'
@@ -11,6 +11,8 @@ import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { TavernCard, TavernEmptyState, TavernSpinner } from '@/components/tavern/ui'
 import { CalendarMonthGrid } from '@/components/tavern/CalendarMonthGrid'
+import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 
 interface CampaignLogEntry {
   id: string
@@ -196,14 +198,14 @@ export default function StoryLogPage() {
           </p>
           {isAdmin && logs.length > 0 && (
             <div className="flex flex-col items-end gap-1">
-              <button
+              <Button
+                variant="secondary" size="sm" className="disabled:opacity-50"
                 onClick={handleRegenerate}
                 disabled={regenerating}
-                className="text-xs px-3 py-1.5 rounded border border-myth-border bg-myth-surface-sunken text-myth-ink-muted hover:border-myth-border-strong transition-colors disabled:opacity-50"
                 title="Re-summarize existing entries with a fresh AI pass"
               >
                 {regenerating ? 'Regenerating…' : '🔄 Regenerate All'}
-              </button>
+              </Button>
               {regenerateResult && (
                 <p className="text-xs text-myth-gold text-right max-w-xs">{regenerateResult}</p>
               )}
@@ -281,12 +283,12 @@ export default function StoryLogPage() {
 
             {preCalendarLogs.length > 0 && (
               <div>
-                <button
+                <Button
+                  variant="ghost" size="sm" className="-ml-3 mb-3"
                   onClick={() => setShowPreCalendar((v) => !v)}
-                  className="text-xs text-myth-gold hover:text-myth-ink-muted transition-colors mb-3"
                 >
                   {showPreCalendar ? '▾' : '▸'} Before your calendar began ({preCalendarLogs.length})
-                </button>
+                </Button>
                 {showPreCalendar && (
                   <div className="space-y-4">
                     {preCalendarLogs.map((log) => (
@@ -352,13 +354,17 @@ function LogEntryCard({
             <h3 className={`${displayFont.className} text-lg text-myth-ink`}>{log.title}</h3>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <button
+            <IconButton
+              icon={copied ? Check : Share2}
+              size="sm"
+              label={
+                chronicleShare?.enabled
+                  ? 'Copy a shareable recap link'
+                  : 'Enable the public chronicle link to share a recap'
+              }
+              className={copied ? 'text-myth-good hover:text-myth-good' : undefined}
               onClick={handleShare}
-              title={chronicleShare?.enabled ? 'Copy a shareable recap link' : 'Enable the public chronicle link to share a recap'}
-              className="rounded p-1.5 text-myth-gold transition-colors hover:bg-myth-surface-sunken hover:text-myth-ink-muted"
-            >
-              {copied ? <span className="text-xs text-success-400">Copied!</span> : <Share2 className="h-4 w-4" />}
-            </button>
+            />
             <div className="text-xs text-myth-gold whitespace-nowrap">
               {new Date(log.createdAt).toLocaleDateString('en-US', {
                 month: 'short',

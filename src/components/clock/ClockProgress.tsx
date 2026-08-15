@@ -3,6 +3,8 @@
 
 'use client'
 
+import { Button } from '@/components/ui/button'
+
 interface ClockProgressProps {
   name: string
   current: number
@@ -142,12 +144,12 @@ export default function ClockProgress({
 
       {/* Action button (admin only) */}
       {onTick && current < max && (
-        <button
+        <Button
+          variant="danger" fullWidth className="mt-4"
           onClick={onTick}
-          className="w-full mt-4 px-4 py-2 bg-myth-danger hover:bg-myth-danger text-myth-ink rounded-lg transition-colors font-medium text-sm"
         >
           + Advance Thread
-        </button>
+        </Button>
       )}
 
       {/* Completion badge */}

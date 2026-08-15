@@ -156,7 +156,7 @@ export function TavernSidebar({
       <Link
         key={link.href}
         href={link.href}
-        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+        className={`flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
           active
             ? 'bg-myth-accent/10 text-myth-accent'
             : 'text-myth-ink-muted hover:bg-myth-surface-sunken hover:text-myth-ink'
@@ -209,7 +209,7 @@ export function TavernSidebar({
       <div className="border-t border-myth-border p-2">
         <button
           onClick={() => logout()}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-myth-danger transition-colors hover:bg-myth-danger/10"
+          className="flex min-h-[44px] w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-myth-danger transition-colors hover:bg-myth-danger/10"
         >
           <LogOut className="h-4 w-4 flex-shrink-0" />
           <span>Log Out</span>

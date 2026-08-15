@@ -11,6 +11,8 @@
 
 import Link from 'next/link'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
+import { IconButton } from '@/components/ui/icon-button'
+import { X } from 'lucide-react'
 
 export interface EntityStubModalProps {
   isOpen: boolean
@@ -54,15 +56,7 @@ export function EntityStubModal({
             <h2 className="font-display text-lg text-myth-ink">{title}</h2>
             {meta && <p className="text-xs text-myth-ink-muted mt-1">{meta}</p>}
           </div>
-          <button
-            onClick={onClose}
-            className="text-myth-ink-faint hover:text-myth-ink p-1.5 hover:bg-myth-surface-sunken rounded transition-colors flex-shrink-0"
-            aria-label="Close"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <IconButton icon={X} label="Close" className="flex-shrink-0" onClick={onClose} />
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">

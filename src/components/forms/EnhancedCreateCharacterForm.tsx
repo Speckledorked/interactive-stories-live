@@ -11,6 +11,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Tabs } from '@/components/ui/tabs'
+import { ArrowLeft, ArrowRight, Backpack, BookOpen, Coins, Swords, User, Zap } from 'lucide-react'
 
 // The final tab's submit button sits at the exact same screen position as
 // every other tab's "Next →" button. Tapping through tabs quickly, a tap
@@ -226,12 +228,12 @@ export default function EnhancedCreateCharacterForm({
   const [newEnemy, setNewEnemy] = useState('')
 
   const tabs = [
-    { key: 'basics' as TabKey, label: 'Basic Info', icon: '👤' },
-    { key: 'character' as TabKey, label: 'Personality & Background', icon: '📖' },
-    { key: 'stats' as TabKey, label: 'Stats & Abilities', icon: '⚡' },
-    { key: 'equipment' as TabKey, label: 'Equipment & Inventory', icon: '🎒' },
-    { key: 'resources' as TabKey, label: 'Resources & Contacts', icon: '💰' },
-    { key: 'consequences' as TabKey, label: 'Obligations & Rivals', icon: '⚔️' },
+    { key: 'basics' as TabKey, label: 'Basic Info', icon: User },
+    { key: 'character' as TabKey, label: 'Personality & Background', icon: BookOpen },
+    { key: 'stats' as TabKey, label: 'Stats & Abilities', icon: Zap },
+    { key: 'equipment' as TabKey, label: 'Equipment & Inventory', icon: Backpack },
+    { key: 'resources' as TabKey, label: 'Resources & Contacts', icon: Coins },
+    { key: 'consequences' as TabKey, label: 'Obligations & Rivals', icon: Swords },
   ]
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -424,26 +426,7 @@ export default function EnhancedCreateCharacterForm({
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="border-b border-myth-border">
-        <nav className="flex space-x-4 overflow-x-auto">
-          {tabs.map(tab => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={`py-3 px-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap flex items-center gap-2 ${
-                activeTab === tab.key
-                  ? 'border-myth-accent text-myth-accent'
-                  : 'border-transparent text-myth-ink-faint hover:text-myth-ink-muted hover:border-myth-border'
-              }`}
-            >
-              <span>{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </nav>
-      </div>
+      <Tabs items={tabs} value={activeTab} onChange={setActiveTab} aria-label="Character sections" />
 
       {/* Tab Content */}
       <div className="min-h-[400px]">
@@ -662,14 +645,14 @@ export default function EnhancedCreateCharacterForm({
                         <label htmlFor={stat} className={`text-sm font-medium text-myth-ink ${custom ? '' : 'capitalize'}`}>
                           {custom?.label || stat}
                         </label>
-                        <input
+                        <Input
+                          wrapperClassName="w-16" className="text-center font-bold"
                           type="number"
                           id={stat}
                           min="-1"
                           max="2"
                           value={value}
                           onChange={(e) => handleStatChange(stat, parseInt(e.target.value) || 0)}
-                          className="w-16 text-center rounded-md bg-myth-surface-sunken border-myth-border text-myth-ink shadow-sm focus:border-myth-accent focus:ring-myth-accent/40 sm:text-sm font-bold"
                         />
                       </div>
                       <p className="text-xs text-myth-ink-faint">
@@ -748,41 +731,41 @@ export default function EnhancedCreateCharacterForm({
               <div className="mb-4">
                 <p className="text-xs font-medium text-myth-ink-muted mb-2">Quick Add Common Items:</p>
                 <div className="flex flex-wrap gap-2">
-                  <button
+                  <Button
+                    variant="secondary" size="sm"
                     type="button"
                     onClick={() => addQuickItem('Rations', 3, ['consumable', 'food'])}
-                    className="btn-secondary text-xs"
-                  >
+                    >
                     + Rations (3)
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary" size="sm"
                     type="button"
                     onClick={() => addQuickItem('Rope (50ft)', 1, ['gear'])}
-                    className="btn-secondary text-xs"
-                  >
+                    >
                     + Rope
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary" size="sm"
                     type="button"
                     onClick={() => addQuickItem('Torch', 2, ['gear', 'light'])}
-                    className="btn-secondary text-xs"
-                  >
+                    >
                     + Torches (2)
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary" size="sm"
                     type="button"
                     onClick={() => addQuickItem('Health Potion', 2, ['consumable', 'healing'])}
-                    className="btn-secondary text-xs"
-                  >
+                    >
                     + Health Potions (2)
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary" size="sm"
                     type="button"
                     onClick={() => addQuickItem('Lockpicks', 1, ['tool'])}
-                    className="btn-secondary text-xs"
-                  >
+                    >
                     + Lockpicks
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -807,7 +790,8 @@ export default function EnhancedCreateCharacterForm({
                           </div>
                         )}
                       </div>
-                      <Button variant="danger"
+                      <Button
+                        variant="danger"
                         type="button"
                         onClick={() => handleRemoveItem(item.id)}
                       >
@@ -848,13 +832,13 @@ export default function EnhancedCreateCharacterForm({
                     placeholder="Tags (comma-separated, e.g., weapon, magical)"
                   />
                 </div>
-                <button
+                <Button
+                  fullWidth
                   type="button"
                   onClick={handleAddItem}
-                  className="btn-primary w-full"
                 >
                   Add Item
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -867,13 +851,13 @@ export default function EnhancedCreateCharacterForm({
               <label htmlFor="gold" className="block text-sm font-medium text-myth-ink mb-1">
                 Starting Gold / Currency
               </label>
-              <input
+              <Input
+                wrapperClassName="w-48"
                 type="number"
                 id="gold"
                 min="0"
                 value={formData.resources.gold}
                 onChange={(e) => setFormData({ ...formData, resources: { ...formData.resources, gold: parseInt(e.target.value) || 0 } })}
-                className="input-field w-48"
               />
               <p className="text-xs text-myth-ink-faint mt-1">Starting wealth for your character.</p>
             </div>
@@ -889,7 +873,8 @@ export default function EnhancedCreateCharacterForm({
                   {formData.resources.contacts.map((contact, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{contact}</span>
-                      <Button variant="danger"
+                      <Button
+                        variant="danger"
                         type="button"
                         onClick={() => removeContact(index)}
                       >
@@ -901,21 +886,20 @@ export default function EnhancedCreateCharacterForm({
               )}
 
               <div className="flex gap-2">
-                <input
+                <Input
+                  wrapperClassName="flex-1"
                   type="text"
                   value={newContact}
                   onChange={(e) => setNewContact(e.target.value)}
                   placeholder="e.g., Marcus the Fence, Elena the Informant"
-                  className="input-field flex-1"
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addContact())}
                 />
-                <button
+                <Button
                   type="button"
                   onClick={addContact}
-                  className="btn-primary"
                 >
                   Add Contact
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -942,7 +926,8 @@ export default function EnhancedCreateCharacterForm({
                   {formData.consequences.promises.map((promise, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{promise}</span>
-                      <Button variant="danger"
+                      <Button
+                        variant="danger"
                         type="button"
                         onClick={() => removePromise(index)}
                       >
@@ -954,21 +939,20 @@ export default function EnhancedCreateCharacterForm({
               )}
 
               <div className="flex gap-2">
-                <input
+                <Input
+                  wrapperClassName="flex-1"
                   type="text"
                   value={newPromise}
                   onChange={(e) => setNewPromise(e.target.value)}
                   placeholder="e.g., Promised to protect the village, Swore an oath to the King"
-                  className="input-field flex-1"
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addPromise())}
                 />
-                <button
+                <Button
                   type="button"
                   onClick={addPromise}
-                  className="btn-primary"
                 >
                   Add Promise
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -984,7 +968,8 @@ export default function EnhancedCreateCharacterForm({
                   {formData.consequences.debts.map((debt, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{debt}</span>
-                      <Button variant="danger"
+                      <Button
+                        variant="danger"
                         type="button"
                         onClick={() => removeDebt(index)}
                       >
@@ -996,21 +981,20 @@ export default function EnhancedCreateCharacterForm({
               )}
 
               <div className="flex gap-2">
-                <input
+                <Input
+                  wrapperClassName="flex-1"
                   type="text"
                   value={newDebt}
                   onChange={(e) => setNewDebt(e.target.value)}
                   placeholder="e.g., Owes 500 gold to the Thieves' Guild, Life debt to a mysterious wizard"
-                  className="input-field flex-1"
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addDebt())}
                 />
-                <button
+                <Button
                   type="button"
                   onClick={addDebt}
-                  className="btn-primary"
                 >
                   Add Debt
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -1026,7 +1010,8 @@ export default function EnhancedCreateCharacterForm({
                   {formData.consequences.enemies.map((enemy, index) => (
                     <div key={index} className="flex items-center justify-between bg-myth-surface-sunken p-2 rounded border border-myth-border">
                       <span className="text-sm text-myth-ink">{enemy}</span>
-                      <Button variant="danger"
+                      <Button
+                        variant="danger"
                         type="button"
                         onClick={() => removeEnemy(index)}
                       >
@@ -1038,21 +1023,20 @@ export default function EnhancedCreateCharacterForm({
               )}
 
               <div className="flex gap-2">
-                <input
+                <Input
+                  wrapperClassName="flex-1"
                   type="text"
                   value={newEnemy}
                   onChange={(e) => setNewEnemy(e.target.value)}
                   placeholder="e.g., The Shadow Guild, Lord Blackwood, Former mentor turned villain"
-                  className="input-field flex-1"
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addEnemy())}
                 />
-                <button
+                <Button
                   type="button"
                   onClick={addEnemy}
-                  className="btn-primary"
                 >
                   Add Enemy
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1063,48 +1047,50 @@ export default function EnhancedCreateCharacterForm({
       <div className="flex justify-between items-center pt-6 border-t border-myth-border">
         <div className="text-sm text-myth-ink-faint">
           {activeTab !== 'basics' && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={ArrowLeft}
               type="button"
               onClick={() => {
                 const currentIndex = tabs.findIndex(t => t.key === activeTab)
                 if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].key)
               }}
-              className="text-myth-ink-faint hover:text-myth-ink-muted"
             >
-              ← Previous
-            </button>
+              Previous
+            </Button>
           )}
         </div>
 
         <div className="flex space-x-3">
           {onCancel && (
-            <button
+            <Button
+              variant="secondary"
               type="button"
               onClick={onCancel}
-              className="btn-secondary"
             >
               Cancel
-            </button>
+            </Button>
           )}
           {activeTab !== 'consequences' ? (
-            <button
+            <Button
               type="button"
+              iconRight={ArrowRight}
               onClick={() => {
                 const currentIndex = tabs.findIndex(t => t.key === activeTab)
                 if (currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].key)
               }}
-              className="btn-primary"
             >
-              Next →
-            </button>
+              Next
+            </Button>
           ) : (
-            <button
+            <Button
               type="submit"
-              disabled={isSubmitting || !submitReady}
-              className="btn-primary disabled:opacity-50"
+              loading={isSubmitting}
+              disabled={!submitReady}
             >
-              {isSubmitting ? 'Creating Character...' : 'Create Character'}
-            </button>
+              {isSubmitting ? 'Creating Character…' : 'Create Character'}
+            </Button>
           )}
         </div>
       </div>

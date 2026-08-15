@@ -15,10 +15,13 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
   label?: string
   hint?: string
   error?: string
+  /** Layout classes for the wrapper, not the field. See Input's own
+   * `wrapperClassName` for why layout and chrome are separated. */
+  wrapperClassName?: string
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { className = '', label, hint, error, id, required, children, ...props },
+  { className = '', wrapperClassName = 'w-full', label, hint, error, id, required, children, ...props },
   ref
 ) {
   const reactId = React.useId()
@@ -28,7 +31,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined
 
   return (
-    <div className="w-full">
+    <div className={wrapperClassName}>
       {label && (
         <label htmlFor={selectId} className="mb-1.5 block text-sm font-medium text-myth-ink-muted">
           {label}

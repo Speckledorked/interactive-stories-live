@@ -34,6 +34,11 @@ import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Spinner } from '@/components/ui/spinner'
+import { IconButton } from '@/components/ui/icon-button'
 
 // Whether `characterId` may act in `scene` — participants is null for a
 // genuinely open scene (anyone can act; membership grows dynamically as
@@ -1073,13 +1078,12 @@ export default function StoryPage() {
             <div className="flex items-center gap-1 flex-shrink-0 pb-1.5">
               <SimpleXCard campaignId={campaignId} sceneId={currentScene?.id} />
               <ReportContentModal campaignId={campaignId} />
-              <button
+              <IconButton
+                icon={Keyboard}
+                label="Keyboard shortcuts"
+                size="sm"
                 onClick={() => setShowKeyboardShortcuts(true)}
-                className="p-1.5 text-myth-ink-faint hover:text-myth-ink transition-colors"
-                title="Keyboard shortcuts"
-              >
-                <Keyboard className="w-4 h-4" />
-              </button>
+              />
             </div>
           </div>
         }
@@ -1119,7 +1123,8 @@ export default function StoryPage() {
                   .map(({ label, characters }) => `${characters.map((c: any) => c.name).join(', ')} at ${label}`)
                   .join(' · ')}
               </p>
-              <Button variant="secondary"
+              <Button
+                variant="secondary"
                 onClick={handleStartSplitPartyScenes}
                 disabled={startingScene}
               >
@@ -1195,7 +1200,8 @@ export default function StoryPage() {
                         </span>
                         {scene.status === 'AWAITING_ACTIONS' && !scene.sceneResolutionText &&
                           (!scene.playerActions || scene.playerActions.length === 0) && (
-                          <Button variant="secondary" size="sm"
+                          <Button
+                            variant="secondary" size="sm"
                             onClick={() => handleRegenerateScene(scene.id)}
                             disabled={regeneratingSceneId === scene.id}
                             title="Regenerate this scene's opening — only available before anyone has acted"
@@ -1204,7 +1210,8 @@ export default function StoryPage() {
                           </Button>
                         )}
                         {isAdmin && (
-                          <Button variant="danger" size="sm"
+                          <Button
+                            variant="danger" size="sm"
                             onClick={() => handleDeleteScene(scene.id)}
                             disabled={deletingSceneId === scene.id}
                             title="Permanently delete this scene"
@@ -1213,7 +1220,8 @@ export default function StoryPage() {
                           </Button>
                         )}
                         {scene.status === 'RESOLVING' && isAdmin && (
-                          <Button variant="danger" size="sm"
+                          <Button
+                            variant="danger" size="sm"
                             onClick={() => handleResetScene(scene.id)}
                             title="Reset stuck scene"
                           >
@@ -1238,7 +1246,8 @@ export default function StoryPage() {
                           </p>
                         </div>
                         {isAdmin && (
-                          <Button variant="danger"
+                          <Button
+                            variant="danger"
                             onClick={() => handleResumeScene(scene.id)}
                           >
                             Resume Scene
@@ -1281,7 +1290,8 @@ export default function StoryPage() {
                             since (see generate-image/route.ts). */}
                         {isAdmin && campaign?.sceneImageGenerationEnabled && !sceneImageUrls[scene.id] && (
                           <div className="mt-4 flex items-center gap-3">
-                            <Button variant="secondary"
+                            <Button
+                              variant="secondary"
                               onClick={() => handleGenerateSceneImage(scene.id)}
                               disabled={generatingImageFor[scene.id]}
                             >
@@ -1423,16 +1433,17 @@ export default function StoryPage() {
                           <label className="block text-sm font-medium text-myth-ink-muted mb-2">
                             What do you do?
                           </label>
-                          <textarea
+                          <Textarea
+                            wrapperClassName="min-h-[100px]"
                             value={actionText[scene.id] || ''}
                             onChange={(e) => setActionText(prev => ({ ...prev, [scene.id]: e.target.value }))}
-                            className="px-4 py-2.5 rounded-lg bg-myth-surface-sunken border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent min-h-[100px]"
                             placeholder={`What does ${selectedCharacter?.name || 'your character'} do? Be specific about their actions, intentions, and approach...`}
                             required
                           />
                         </div>
 
-                        <Button variant="primary" fullWidth
+                        <Button
+                          variant="primary" fullWidth
                           type="submit"
                           disabled={submitting[scene.id]}
                         >
@@ -1495,15 +1506,16 @@ export default function StoryPage() {
                           )}
 
                           <form onSubmit={(e) => handleAskGm(e, scene.id)} className="flex gap-2">
-                            <input
+                            <Input
+                              wrapperClassName="flex-1"
                               type="text"
                               value={askGmText[scene.id] || ''}
                               onChange={(e) => setAskGmText(prev => ({ ...prev, [scene.id]: e.target.value }))}
-                              className="flex-1 px-3 py-2 rounded-lg bg-myth-surface-sunken border border-myth-border text-myth-ink placeholder:text-myth-ink-faint focus:outline-none focus:border-myth-accent text-sm"
                               placeholder="e.g. What can I see on this person?"
                               maxLength={500}
                             />
-                            <Button variant="secondary"
+                            <Button
+                              variant="secondary"
                               type="submit"
                               disabled={askingGm[scene.id] || !askGmText[scene.id]?.trim()}
                             >
@@ -1559,7 +1571,8 @@ export default function StoryPage() {
                                 it in that state left stuck scenes with no way
                                 out. */}
                             {isAdmin && (
-                              <Button variant="primary"
+                              <Button
+                                variant="primary"
                                 onClick={() => handleResolveScene(scene.id)}
                                 disabled={resolving}
                                 title={
@@ -1575,7 +1588,8 @@ export default function StoryPage() {
                                     : 'Force Resolve'}
                               </Button>
                             )}
-                            <Button variant="secondary"
+                            <Button
+                              variant="secondary"
                               onClick={() => handleEndScene(scene.id)}
                               disabled={endingScene}
                               title="Ends this scene for everyone. The player who ends a scene pays its AI cost."
@@ -1637,13 +1651,14 @@ export default function StoryPage() {
                 <div className="max-w-2xl mx-auto space-y-4">
                   {!showSceneOptions ? (
                     <>
-                      <Button variant="primary" size="lg" fullWidth
+                      <Button
+                        variant="primary" size="lg" fullWidth
                         onClick={handleContinueStory}
                         disabled={startingScene}
                       >
                         {startingScene ? (
                           <span className="flex items-center justify-center gap-2">
-                            <div className="spinner h-5 w-5"></div>
+                            <Spinner className="h-5 w-5" />
                             Generating scene...
                           </span>
                         ) : (
@@ -1654,12 +1669,12 @@ export default function StoryPage() {
                       </Button>
 
                       {resolvedScenes.length > 0 && campaign?.characters?.length > 0 && (
-                        <button
+                        <Button
+                          variant="ghost" size="sm" className="w-full"
                           onClick={() => setShowSceneOptions(true)}
-                          className="w-full text-sm text-myth-ink-muted hover:text-myth-ink transition-colors py-2"
                         >
                           ⚙️ More scene options...
-                        </button>
+                        </Button>
                       )}
 
                       {resolvedScenes.length > 0 && (
@@ -1672,20 +1687,21 @@ export default function StoryPage() {
                     <div className="bg-myth-surface-sunken rounded-lg border border-myth-border p-6 space-y-4">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="font-display text-myth-ink text-lg">Scene Creation Options</h3>
-                        <button
+                        <Button
+                          variant="ghost" size="sm"
                           onClick={() => {
                             setShowSceneOptions(false)
                             setSelectedSceneCharacters([])
                           }}
-                          className="text-myth-ink-faint hover:text-myth-ink"
                         >
                           ✕
-                        </button>
+                        </Button>
                       </div>
 
                       {/* Option 1: Continue Story */}
                       <div className="space-y-2">
-                        <Button variant="primary" fullWidth
+                        <Button
+                          variant="primary" fullWidth
                           onClick={handleContinueStory}
                           disabled={startingScene}
                         >
@@ -1702,7 +1718,8 @@ export default function StoryPage() {
                       {campaign?.characters?.length > 1 && (
                         <>
                           <div className="space-y-2">
-                            <Button variant="secondary" fullWidth
+                            <Button
+                              variant="secondary" fullWidth
                               onClick={handleFullPartyScene}
                               disabled={startingScene}
                             >
@@ -1738,11 +1755,10 @@ export default function StoryPage() {
                                   : 'bg-myth-surface-sunken border-myth-border hover:border-myth-border-strong'
                               }`}
                             >
-                              <input
-                                type="checkbox"
+                              <Checkbox
+                                wrapperClassName="w-4 h-4" className="accent-myth-accent"
                                 checked={selectedSceneCharacters.includes(character.id)}
                                 onChange={() => toggleCharacterSelection(character.id)}
-                                className="w-4 h-4 accent-myth-accent"
                               />
                               <div className="flex-1">
                                 <div className="font-medium text-myth-ink">{character.name}</div>
@@ -1754,7 +1770,8 @@ export default function StoryPage() {
                           ))}
                         </div>
 
-                        <Button variant="secondary" fullWidth
+                        <Button
+                          variant="secondary" fullWidth
                           onClick={handleCharacterFocusedScene}
                           disabled={startingScene || selectedSceneCharacters.length === 0}
                         >
@@ -1883,13 +1900,15 @@ export default function StoryPage() {
               )}
 
               <div className="flex gap-3">
-                <Button variant="primary" fullWidth
+                <Button
+                  variant="primary" fullWidth
                   onClick={handleAddFundsFromModal}
                   disabled={addFundsLoading}
                 >
                   {addFundsLoading ? 'Redirecting...' : 'Add Funds ($1.00)'}
                 </Button>
-                <Button variant="secondary"
+                <Button
+                  variant="secondary"
                   onClick={() => { setShowInsufficientFunds(false); setAddFundsError('') }}
                   disabled={addFundsLoading}
                 >

@@ -11,6 +11,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { displayFont } from '@/lib/tavernTheme'
 import { TavernCard, TavernSpinner } from './ui'
+import { IconButton } from '@/components/ui/icon-button'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface CalendarMonthData {
   year: number
@@ -82,23 +84,11 @@ export function CalendarMonthGrid({ campaignId, onSelectDay, selectedDayNumber }
   return (
     <TavernCard className="p-5">
       <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={goPrev}
-          aria-label="Previous month"
-          className="w-8 h-8 flex items-center justify-center rounded-lg border border-myth-border text-myth-ink-muted hover:border-myth-border-strong transition-colors"
-        >
-          ‹
-        </button>
+        <IconButton icon={ChevronLeft} label="Previous month" variant="secondary" size="sm" onClick={goPrev} />
         <h3 className={`${displayFont.className} text-lg text-myth-ink`}>
           {data.monthName}, Year {data.year}
         </h3>
-        <button
-          onClick={goNext}
-          aria-label="Next month"
-          className="w-8 h-8 flex items-center justify-center rounded-lg border border-myth-border text-myth-ink-muted hover:border-myth-border-strong transition-colors"
-        >
-          ›
-        </button>
+        <IconButton icon={ChevronRight} label="Next month" variant="secondary" size="sm" onClick={goNext} />
       </div>
 
       <div

@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { CampaignEntryCTA } from './CampaignEntryCTA'
+import { Button } from '@/components/ui/button'
 
 const POLL_INTERVAL_MS = 4000
 const MAX_POLLS = 15 // ~60s
@@ -137,13 +138,13 @@ export function CampaignHero({
             {status === 'PENDING' ? (
               <p className="text-sm text-myth-ink-faint">Generating hero art…</p>
             ) : (
-              <button
+              <Button
+                variant="secondary" size="sm"
                 type="button"
                 onClick={handleGenerate}
-                className="rounded-md border border-myth-border px-3 py-1.5 text-sm text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
               >
                 {status === 'FAILED' ? 'Couldn’t generate hero art — try again' : 'Generate hero art'}
-              </button>
+              </Button>
             )}
           </div>
         )}

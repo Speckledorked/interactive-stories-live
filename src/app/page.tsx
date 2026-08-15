@@ -7,6 +7,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { isAuthenticated } from '@/lib/clientAuth'
+import { Spinner } from '@/components/ui/spinner'
 
 export default function HomePage() {
   const router = useRouter()
@@ -23,7 +24,7 @@ export default function HomePage() {
   return (
     <div className="-mx-4 -my-8 min-h-screen flex items-center justify-center bg-myth-canvas">
       <div className="text-center">
-        <div className="spinner h-10 w-10 mx-auto" />
+        <Spinner className="mx-auto h-10 w-10" />
         <p className="mt-4 text-myth-ink-faint text-sm tracking-wide">Loading…</p>
       </div>
     </div>

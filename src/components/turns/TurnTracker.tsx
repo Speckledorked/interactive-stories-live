@@ -15,6 +15,7 @@
 import { useState, useEffect } from 'react';
 import { getPusherClient } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
+import { Button } from '@/components/ui/button';
 
 interface TurnInfo {
   currentPlayer: {
@@ -281,21 +282,20 @@ export default function TurnTracker({
           {/* Action Buttons */}
           <div className="flex gap-2">
             {showAdvanceButton && (
-              <button
+              <Button
                 onClick={advanceTurn}
-                className="rounded-md bg-myth-accent py-2 px-4 text-sm font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover"
               >
                 {isMyTurn ? 'End My Turn' : 'Advance Turn'}
-              </button>
+              </Button>
             )}
 
             {isHost && (
-              <button
+              <Button
+                variant="secondary"
                 onClick={skipTurn}
-                className="rounded-md border border-myth-border py-2 px-4 text-sm font-medium text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink"
               >
                 Skip Turn
-              </button>
+              </Button>
             )}
           </div>
         </div>

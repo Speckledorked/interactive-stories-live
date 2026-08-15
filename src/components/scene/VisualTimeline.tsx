@@ -5,6 +5,7 @@
 
 import { useState } from 'react'
 import SceneMoodTag, { detectSceneMood } from './SceneMoodTag'
+import { Button } from '@/components/ui/button'
 
 interface TimelineEvent {
   id: string
@@ -124,9 +125,9 @@ export default function VisualTimeline({ events, compact = false }: VisualTimeli
                 {/* Metadata */}
                 <div className="mt-4 flex items-center justify-between text-xs text-myth-gold">
                   <span>{new Date(event.createdAt).toLocaleDateString()} at {new Date(event.createdAt).toLocaleTimeString()}</span>
-                  <button className="text-myth-ink-muted hover:text-myth-ink">
+                  <Button variant="ghost" size="sm">
                     {isExpanded ? 'Show less ▲' : 'Show more ▼'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -156,7 +157,7 @@ export function CompactTimeline({ events, onSelectEvent }: { events: TimelineEve
           key={event.id}
           onClick={() => onSelectEvent?.(event)}
           disabled={!onSelectEvent}
-          className="flex w-full items-start gap-2 p-2 rounded hover:bg-myth-surface-sunken transition-colors text-left disabled:cursor-default"
+          className="flex w-full items-start gap-2 rounded-lg p-2 hover:bg-myth-surface-sunken transition-colors text-left disabled:cursor-default"
         >
           <div className="w-2 h-2 mt-2 rounded-full bg-myth-accent flex-shrink-0" />
           <div className="flex-1 min-w-0">

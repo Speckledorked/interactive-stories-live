@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Select } from '@/components/ui/select'
 
 interface ReportContentModalProps {
   campaignId: string
@@ -67,7 +69,8 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
 
   return (
     <>
-      <Button variant="secondary"
+      <Button
+        variant="secondary"
         onClick={() => setIsOpen(true)}
         title="Report content or behavior to the campaign host"
       >
@@ -87,37 +90,37 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-myth-ink-muted mb-2">What is this about?</label>
-                  <select
+                  <Select
+                    wrapperClassName="w-full"
                     value={contentType}
                     onChange={(e) => setContentType(e.target.value)}
-                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink focus:outline-none focus:border-myth-accent"
                   >
                     {CONTENT_TYPES.map(ct => (
                       <option key={ct.value} value={ct.value}>{ct.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-myth-ink-muted mb-2">
                     Quote or describe the content (optional)
                   </label>
-                  <textarea
+                  <Textarea
+                    wrapperClassName="w-full"
                     value={contentText}
                     onChange={(e) => setContentText(e.target.value)}
                     placeholder="Paste the message or describe what happened..."
-                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink placeholder-myth-ink-faint focus:outline-none focus:border-myth-accent resize-none"
                     rows={2}
                   />
                 </div>
 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-myth-ink-muted mb-2">Why are you reporting this?</label>
-                  <textarea
+                  <Textarea
+                    wrapperClassName="w-full"
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     placeholder="Explain what's wrong so the host can act on it..."
-                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink placeholder-myth-ink-faint focus:outline-none focus:border-myth-accent resize-none"
                     rows={3}
                   />
                 </div>
@@ -125,13 +128,15 @@ export default function ReportContentModal({ campaignId }: ReportContentModalPro
                 {error && <p className="text-sm text-myth-danger mb-3">{error}</p>}
 
                 <div className="flex gap-3">
-                  <Button variant="primary" fullWidth
+                  <Button
+                    variant="primary" fullWidth
                     onClick={submitReport}
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? 'Submitting...' : 'Submit Report'}
                   </Button>
-                  <Button variant="secondary"
+                  <Button
+                    variant="secondary"
                     onClick={() => {
                       setIsOpen(false)
                       setError('')

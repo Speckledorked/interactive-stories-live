@@ -18,6 +18,8 @@ import { TavernButton } from '@/components/tavern/ui'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { IconButton } from '@/components/ui/icon-button'
 
 interface Friend {
   id: string
@@ -268,7 +270,8 @@ export default function FriendsPage() {
                       </p>
                     </div>
                   </div>
-                  <Button variant="danger"
+                  <Button
+                    variant="danger"
                     onClick={() => removeFriend(friend.id)}
                     disabled={pendingActionId === friend.id}
                     aria-label="Remove friend"
@@ -296,15 +299,16 @@ export default function FriendsPage() {
                     >
                       <p className="truncate font-medium text-myth-ink">{req.sender.name || req.sender.email}</p>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <button
+                        <IconButton
+                          icon={Check}
+                          label="Accept friend request"
+                          size="sm"
+                          className="text-myth-good hover:text-myth-good"
                           onClick={() => respondToRequest(req.id, 'accept')}
                           disabled={pendingActionId === req.id}
-                          className="p-2 text-myth-good transition-colors hover:text-myth-good disabled:opacity-50 touch-manipulation"
-                          aria-label="Accept"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                        <Button variant="danger"
+                        />
+                        <Button
+                          variant="danger"
                           onClick={() => respondToRequest(req.id, 'reject')}
                           disabled={pendingActionId === req.id}
                           aria-label="Reject"
@@ -330,7 +334,8 @@ export default function FriendsPage() {
                       className="flex items-center justify-between gap-3 rounded-lg border border-myth-border bg-myth-surface p-4"
                     >
                       <p className="truncate font-medium text-myth-ink">{req.receiver.name || req.receiver.email}</p>
-                      <Button variant="danger" size="sm"
+                      <Button
+                        variant="danger" size="sm"
                         onClick={() => cancelRequest(req.id)}
                         disabled={pendingActionId === req.id}
                       >
@@ -348,12 +353,12 @@ export default function FriendsPage() {
           <div className="space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-myth-ink-faint" />
-              <input
+              <Input
+                wrapperClassName="w-full" className="pl-9 pr-4"
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by name or email…"
-                className="w-full rounded-lg border border-myth-border bg-myth-surface py-2.5 pl-9 pr-4 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
               />
             </div>
 

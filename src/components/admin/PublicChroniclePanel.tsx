@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 export function PublicChroniclePanel({
   chronicleShare,
@@ -24,14 +25,15 @@ export function PublicChroniclePanel({
         {chronicleShare?.enabled ? (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <input
+              <Input
+                wrapperClassName="flex-1" className="font-mono"
                 type="text"
                 readOnly
                 value={typeof window !== 'undefined' ? `${window.location.origin}/chronicle/${chronicleShare.token}` : ''}
-                className="flex-1 rounded-md border border-myth-border bg-myth-surface-sunken px-3 py-2 font-mono text-sm text-myth-ink"
                 onFocus={(e) => e.target.select()}
               />
-              <Button variant="secondary"
+              <Button
+                variant="secondary"
                 onClick={() => {
                   if (typeof window !== 'undefined') {
                     navigator.clipboard.writeText(`${window.location.origin}/chronicle/${chronicleShare.token}`)
@@ -41,7 +43,8 @@ export function PublicChroniclePanel({
                 Copy
               </Button>
             </div>
-            <Button variant="danger"
+            <Button
+              variant="danger"
               onClick={onDisable}
               disabled={chronicleShareLoading}
             >
@@ -49,7 +52,8 @@ export function PublicChroniclePanel({
             </Button>
           </div>
         ) : (
-          <Button variant="primary"
+          <Button
+            variant="primary"
             onClick={onEnable}
             disabled={chronicleShareLoading}
           >

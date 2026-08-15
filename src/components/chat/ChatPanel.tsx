@@ -7,6 +7,9 @@ import { Message } from '@prisma/client';
 import { getPusherClient, subscribeToCampaignMessages, subscribeToUserWhispers, RealtimeMessage, isPusherConfigured } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Tabs } from '@/components/ui/tabs'
 
 interface ChatPanelProps {
   campaignId: string;
@@ -307,73 +310,54 @@ export default function ChatPanel({
       <div className="p-4 border-t border-myth-border">
         {/* Message Type Controls - hide if IC only mode */}
         {!icOnly && (
-          <div className="flex flex-wrap gap-2 mb-3">
-            <button
-              onClick={() => setMessageType('OUT_OF_CHARACTER')}
-              className={`px-3 py-1 text-sm rounded-md ${
-                messageType === 'OUT_OF_CHARACTER'
-                  ? 'bg-myth-ink-muted text-myth-canvas'
-                  : 'bg-myth-surface-sunken text-myth-ink-faint hover:text-myth-ink-muted'
-              }`}
-            >
-              OOC
-            </button>
-            <button
-              onClick={() => setMessageType('IN_CHARACTER')}
-              className={`px-3 py-1 text-sm rounded-md ${
-                messageType === 'IN_CHARACTER'
-                  ? 'bg-myth-good text-myth-accent-ink'
-                  : 'bg-myth-surface-sunken text-myth-ink-faint hover:text-myth-ink-muted'
-              }`}
-            >
-              IC
-            </button>
-            <button
-              onClick={() => setMessageType('WHISPER')}
-              className={`px-3 py-1 text-sm rounded-md ${
-                messageType === 'WHISPER'
-                  ? 'bg-myth-info text-myth-accent-ink'
-                  : 'bg-myth-surface-sunken text-myth-ink-faint hover:text-myth-ink-muted'
-              }`}
-            >
-              Whisper
-            </button>
-          </div>
+          <Tabs
+            variant="pill"
+            aria-label="Message type"
+            value={messageType}
+            onChange={(v) => setMessageType(v as typeof messageType)}
+            className="mb-3 self-start"
+            items={[
+              { key: 'OUT_OF_CHARACTER', label: 'OOC' },
+              { key: 'IN_CHARACTER', label: 'IC' },
+              { key: 'WHISPER', label: 'Whisper' },
+            ]}
+          />
         )}
 
         {/* Character Selection for IC */}
         {(messageType === 'IN_CHARACTER' || icOnly) && (
-          <select
+          <Select
+            wrapperClassName="w-full mb-3"
             value={selectedCharacter}
             onChange={(e) => setSelectedCharacter(e.target.value)}
-            className="w-full p-2 mb-3 border border-myth-border rounded-md text-sm bg-myth-surface-sunken text-myth-ink"
             required
           >
             <option value="">Select Character...</option>
             {userCharacters.map(char => (
               <option key={char.id} value={char.id}>{char.name}</option>
             ))}
-          </select>
+          </Select>
         )}
 
         {/* Whisper Target Selection */}
         {messageType === 'WHISPER' && !icOnly && (
-          <select
+          <Select
+            wrapperClassName="w-full mb-3"
             value={whisperTarget}
             onChange={(e) => setWhisperTarget(e.target.value)}
-            className="w-full p-2 mb-3 border border-myth-border rounded-md text-sm bg-myth-surface-sunken text-myth-ink"
             required
           >
             <option value="">Whisper to...</option>
             {campaignMembers.filter(m => m.id !== currentUserId).map(member => (
               <option key={member.id} value={member.id}>{member.name}</option>
             ))}
-          </select>
+          </Select>
         )}
 
         {/* Message Input */}
         <form onSubmit={sendMessage} className="flex gap-2">
-          <input
+          <Input
+            wrapperClassName="flex-1"
             type="text"
             value={newMessage}
             onChange={(e) => handleInputChange(e.target.value)}
@@ -382,10 +366,10 @@ export default function ChatPanel({
               messageType === 'IN_CHARACTER' ? 'Say something in character...' :
               'Type your message...'
             }
-            className="flex-1 p-2 border border-myth-border rounded-md text-sm bg-myth-surface-sunken text-myth-ink placeholder-myth-ink-faint"
             disabled={loading}
           />
-          <Button variant="primary"
+          <Button
+            variant="primary"
             type="submit"
             disabled={loading || !newMessage.trim()}
           >

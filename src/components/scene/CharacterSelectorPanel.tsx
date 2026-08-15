@@ -6,6 +6,9 @@
 
 'use client'
 
+import { Select } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+
 interface CharacterSelectorPanelProps {
   userCharacters: any[]
   selectedCharacterId: string
@@ -26,10 +29,10 @@ export function CharacterSelectorPanel({
   return (
     <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
       <h3 className="text-sm font-medium uppercase tracking-wide text-myth-ink-faint mb-3">SELECT CHARACTER</h3>
-      <select
+      <Select
+        wrapperClassName="w-full"
         value={selectedCharacterId}
         onChange={(e) => onSelectCharacter(e.target.value)}
-        className="px-4 py-2.5 rounded-lg bg-myth-surface-sunken border border-myth-border text-myth-ink focus:outline-none focus:border-myth-accent w-full"
       >
         <option value="">Choose a character...</option>
         {userCharacters.map(char => (
@@ -37,7 +40,7 @@ export function CharacterSelectorPanel({
             {char.name}
           </option>
         ))}
-      </select>
+      </Select>
       {selectedCharacter && (
         <div className="mt-4 space-y-2">
           <div className="flex items-start justify-between gap-2">
@@ -45,13 +48,13 @@ export function CharacterSelectorPanel({
               <h4 className="font-display text-myth-ink text-lg">{selectedCharacter.name}</h4>
               <p className="text-sm text-myth-ink-muted">{selectedCharacter.concept}</p>
             </div>
-            <button
+            <Button
+              size="sm"
               onClick={onShowSnapshot}
-              className="px-2 py-1 bg-myth-accent hover:bg-myth-accent-hover text-myth-accent-ink rounded text-xs font-medium transition-colors"
               title="Quick Reference"
             >
               👁️ View
-            </button>
+            </Button>
           </div>
           {selectedCharacter.currentLocation && (
             <p className="text-xs text-myth-ink-faint">

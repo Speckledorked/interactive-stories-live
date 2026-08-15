@@ -1,3 +1,5 @@
+
+import { Button } from '@/components/ui/button'
 interface Membership {
   id: string
   role: 'ADMIN' | 'PLAYER'
@@ -26,9 +28,9 @@ export function PlayersPanel({
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-display text-lg font-semibold text-myth-ink">Players ({memberships.length})</h2>
         {isAdmin && (
-          <button id="invite-button" type="button" onClick={onInvite} className="text-sm text-myth-ink-muted hover:text-myth-ink" title="Invite players">
+          <Button variant="ghost" size="sm" className="-mr-3" id="invite-button" type="button" onClick={onInvite} title="Invite players">
             + Invite
-          </button>
+          </Button>
         )}
       </div>
       <div className="space-y-2">

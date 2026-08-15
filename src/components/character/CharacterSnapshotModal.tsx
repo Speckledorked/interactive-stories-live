@@ -10,6 +10,9 @@ import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
 import ConsequenceBadge from './ConsequenceBadge'
 import { Button } from '@/components/ui/button'
+import { Tabs } from '@/components/ui/tabs'
+import { Backpack, BarChart3, HeartHandshake, X } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 
 interface CharacterSnapshotModalProps {
   characterId: string
@@ -142,12 +145,7 @@ export default function CharacterSnapshotModal({
                 )}
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="text-myth-ink-faint hover:text-myth-ink transition-colors text-xl"
-            >
-              ✕
-            </button>
+            <IconButton icon={X} label="Close character snapshot" onClick={onClose} />
           </div>
 
           {/* Quick Info */}
@@ -177,27 +175,19 @@ export default function CharacterSnapshotModal({
             </div>
           ) : character ? (
             <>
-              {/* Tabs */}
-              <div className="flex border-b border-myth-border bg-myth-surface-sunken sticky top-0 z-10">
-                {[
-                  { key: 'stats', label: 'Stats & Status', icon: '📊' },
-                  { key: 'inventory', label: 'Inventory', icon: '🎒' },
-                  { key: 'relationships', label: 'Ties', icon: '💕' }
-                ].map(tab => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveTab(tab.key as any)}
-                    className={`flex-1 py-3 px-4 text-sm font-medium transition-colors border-b-2 ${
-                      activeTab === tab.key
-                        ? 'border-myth-accent text-myth-ink bg-myth-surface-sunken'
-                        : 'border-transparent text-myth-ink-faint hover:text-myth-ink-muted hover:bg-myth-surface-sunken'
-                    }`}
-                  >
-                    <span className="mr-1">{tab.icon}</span>
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+              <Tabs
+                variant="underline"
+                fullWidth
+                aria-label="Character snapshot sections"
+                value={activeTab}
+                onChange={(key) => setActiveTab(key as any)}
+                className="sticky top-0 z-10 bg-myth-surface-sunken"
+                items={[
+                  { key: 'stats', label: 'Stats & Status', icon: BarChart3 },
+                  { key: 'inventory', label: 'Inventory', icon: Backpack },
+                  { key: 'relationships', label: 'Ties', icon: HeartHandshake },
+                ]}
+              />
 
               {/* Tab Content */}
               <div className="p-4">
@@ -423,7 +413,8 @@ export default function CharacterSnapshotModal({
         {/* Footer */}
         <div className="p-4 border-t border-myth-border bg-myth-surface-sunken">
           <div className="flex items-center justify-between">
-            <Button variant="secondary"
+            <Button
+              variant="secondary"
               onClick={onClose}
             >
               Close

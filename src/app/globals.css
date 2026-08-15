@@ -295,52 +295,19 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Component classes.
+/* There is deliberately no @layer components block here anymore.
  *
- * Twelve classes were deleted from this block during the Phase 0
- * foundation pass — .card, .card-glass, .card-header, .modal-overlay,
- * .modal-content, .badge, .badge-primary/-success/-warning/-danger,
- * .divider, .btn-danger, .btn-ghost and .glow-on-hover. Every one was
- * still on the old ember/wine/tavern palette, and every one had zero
- * call sites (verified by grepping for both the quoted class name and
- * its use inside a className attribute — the only remaining matches were
- * the words appearing in prose comments). They are replaced by real
- * components under src/components/ui/, which is where a variant belongs:
- * a CSS class can't enforce a focus ring or a touch target, and the
- * absence of those was the app's most widespread UI defect.
+ * Sixteen component classes used to live at this point in the file, all
+ * still on the old ember/wine/tavern palette: .card, .card-glass,
+ * .card-header, .modal-overlay, .modal-content, .badge and its four
+ * colour variants, .divider, .glow-on-hover, .btn-danger, .btn-ghost,
+ * .btn-primary, .btn-secondary, .input-field and .spinner. The first
+ * twelve had zero call sites and were deleted outright during the Phase 0
+ * foundation pass; the last four went in the adoption sweep once their
+ * callers moved to <Button>, <Input> and <Spinner>.
  *
- * What's left below is the short list that still has real callers.
- * .btn-primary/.btn-secondary/.input-field are used only by
- * EnhancedCreateCharacterForm.tsx and .spinner by five files; both go
- * away in the Phase 0 adoption sweep, when those files move to <Button>,
- * <Input> and <Spinner>. Retokened here in the meantime so nothing
- * renders old-palette in the interim. */
-@layer components {
-  .btn-primary {
-    @apply relative bg-myth-accent hover:bg-myth-accent-hover
-           text-myth-accent-ink font-semibold py-2.5 px-5 rounded-lg shadow-sm
-           transition-all duration-200 hover:shadow-md
-           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
-  }
-
-  .btn-secondary {
-    @apply relative bg-myth-surface hover:bg-myth-surface-sunken text-myth-ink-muted font-semibold py-2.5 px-5 rounded-lg
-           border border-myth-border hover:border-myth-border-strong shadow-sm
-           transition-all duration-200 hover:shadow-md;
-  }
-
-  /* text-base on mobile: a smaller font makes iOS Safari zoom the
-     viewport on focus. Matches FIELD_BASE in src/components/ui/styles.ts. */
-  .input-field {
-    @apply w-full px-4 py-2.5 bg-myth-surface border border-myth-border
-           rounded-lg text-base sm:text-sm text-myth-ink placeholder:text-myth-ink-faint
-           focus:ring-2 focus:ring-myth-accent/40 focus:border-myth-accent
-           outline-none transition-all duration-200;
-  }
-
-  /* border-current rather than a fixed colour, so a spinner is legible on
-     an accent fill and on the canvas without per-call-site handling. */
-  .spinner {
-    @apply animate-spin rounded-full border-2 border-current border-t-transparent;
-  }
-}
+ * Nothing in this file styles a control now, and nothing should: a CSS
+ * class can't enforce a focus ring, an accessible name, or a 44px touch
+ * target, and the absence of the first and last of those was this app's
+ * most widespread UI defect. Controls are components, under
+ * src/components/ui/. */

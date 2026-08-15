@@ -18,7 +18,7 @@
 import { Pencil, Trash2, Users, BookOpen } from 'lucide-react'
 import { bannerIconFor, formatRelativeTime } from '@/lib/tavernUtils'
 import { pluralize } from '@/lib/format'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 
 export function CampaignChronicleCard({
   id,
@@ -79,28 +79,28 @@ export function CampaignChronicleCard({
 
       {userRole === 'ADMIN' && (
         <div className="absolute right-3 top-3 z-10 flex gap-1.5 opacity-80 transition-opacity group-hover:opacity-100">
-          <button
-            type="button"
+          <IconButton
+            icon={Pencil}
+            label="Edit campaign"
+            size="sm"
+            className="border border-myth-border/70 bg-myth-canvas/70 backdrop-blur-sm hover:border-myth-border-strong"
             onClick={(e) => {
               e.stopPropagation()
               onEdit()
             }}
-            aria-label="Edit campaign"
-            className="rounded-full border border-myth-border/70 bg-myth-canvas/70 p-1.5 text-myth-ink-muted backdrop-blur-sm transition-colors hover:border-myth-border-strong hover:text-myth-ink"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <Button variant="danger"
-            type="button"
+          />
+          <IconButton
+            icon={Trash2}
+            label="Delete campaign"
+            size="sm"
+            variant="danger"
+            className="border border-myth-border/70 bg-myth-canvas/70 backdrop-blur-sm hover:border-myth-danger"
+            disabled={deleting}
             onClick={(e) => {
               e.stopPropagation()
               onDelete()
             }}
-            disabled={deleting}
-            aria-label="Delete campaign"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          />
         </div>
       )}
 

@@ -12,12 +12,15 @@ export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextArea
   label?: string
   hint?: string
   error?: string
+  /** Layout classes for the wrapper, not the field. See Input's own
+   * `wrapperClassName` for why layout and chrome are separated. */
+  wrapperClassName?: string
   /** Renders a live `n / max` counter under the field. Requires maxLength. */
   showCount?: boolean
 }
 
 export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
-  { className = '', label, hint, error, showCount, maxLength, id, required, value, ...props },
+  { className = '', wrapperClassName = 'w-full', label, hint, error, showCount, maxLength, id, required, value, ...props },
   ref
 ) {
   const reactId = React.useId()
@@ -33,7 +36,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(fun
   const nearLimit = showCounter && count > maxLength * 0.9
 
   return (
-    <div className="w-full">
+    <div className={wrapperClassName}>
       {label && (
         <label htmlFor={textareaId} className="mb-1.5 block text-sm font-medium text-myth-ink-muted">
           {label}

@@ -70,6 +70,44 @@ sidebar's active-state pill), bring the equivalent mobile surface up to
 the same level in the same pass rather than treating desktop polish as
 sufficient on its own.
 
+## Controls are components, not classes
+
+Every interactive control comes from `src/components/ui/`: `Button`,
+`IconButton`, `Input`, `Textarea`, `Select`, `Checkbox`, `Switch`, `Tabs`,
+`Dialog`, `Spinner`. Do not hand-style a raw `<button>` or `<input>`, and
+do not add a `.btn-*`-style class to `globals.css` — that file has no
+component layer anymore, on purpose. A CSS class cannot enforce a focus
+ring, an accessible name, or a 44px touch target, and the absence of the
+first and last of those was this app's single most widespread UI defect
+(86 of 86 styled buttons had no focus ring before the Phase 0 sweep).
+
+Two rules the primitives enforce so call sites can't get them wrong:
+
+- **44px minimum hit area at every size**, including `size="sm"` — the
+  visual control shrinks, the tap target doesn't. `IconButton` exists
+  mainly so an icon-only control can't ship without an accessible `label`.
+- **`text-base` on inputs below `sm:`** — anything smaller makes iOS
+  Safari zoom the viewport on focus.
+
+### What deliberately stays a raw `<button>`
+
+Three categories are *not* buttons in the primitive sense, and forcing
+them through `Button` would add padding and a min-height their layouts
+don't want:
+
+- **Clickable cards** — campaign template cards, wiki entry rows,
+  archetype pickers, command-palette results, calendar day cells. The
+  whole surface is the target; it's already far past 44px.
+- **Disclosure headers** — a full-width row that expands the section
+  below it (the story page's collapsible panels, `AITransparencyPanel`).
+- **Nav rows** — `TavernSidebar` / `TavernMobileMenu` / `AdminNav` list
+  items, which own their own active-state treatment.
+
+All three still get a visible focus ring, because `globals.css`'s base
+layer draws one on `:focus-visible` for every focusable element rather
+than relying on each component to remember. That inversion is the point:
+forgetting yields a ring, not the absence of one.
+
 ## Component opt-in
 
 Shared chrome (`TavernPage`, `TavernBackground`, `TavernHeader`,

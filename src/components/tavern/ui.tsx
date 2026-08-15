@@ -3,6 +3,7 @@
 // reinventing the same gradient/border/shadow combo.
 
 import { displayFont } from '@/lib/tavernTheme'
+import { Spinner } from '@/components/ui/spinner'
 
 export function TavernButton({
   children,
@@ -87,7 +88,7 @@ export function TavernEmptyState({
 export function TavernSpinner({ className = 'h-10 w-10' }: { className?: string }) {
   return (
     <div className="flex justify-center py-16">
-      <div className={`spinner ${className}`} />
+      <Spinner className={className} />
     </div>
   )
 }

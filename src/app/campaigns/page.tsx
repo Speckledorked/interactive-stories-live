@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, ChevronRight, Scroll } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Scroll, X } from 'lucide-react'
 import { authenticatedFetch, isAuthenticated, getLastCampaignId } from '@/lib/clientAuth'
 import { fontDisplay } from '@/lib/fonts'
 import { TavernPage } from '@/components/tavern/TavernPage'
@@ -23,6 +23,9 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { CampaignChronicleCard } from '@/components/campaigns/CampaignChronicleCard'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
+import { IconButton } from '@/components/ui/icon-button'
 
 interface Campaign {
   id: string
@@ -137,7 +140,8 @@ export default function CampaignsPage() {
                 Every world you&rsquo;ve stepped into, remembered exactly as you left it.
               </p>
             </div>
-            <Button variant="primary"
+            <Button
+              variant="primary"
               onClick={() => setShowCreateModal(true)}
             >
               <Plus className="w-4 h-4" />
@@ -341,25 +345,13 @@ function CreateCampaignModal({
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-3">
               {step === 'details' && (
-                <button
-                  onClick={() => setStep('template')}
-                  className="rounded-lg p-1.5 text-myth-ink-faint transition-colors hover:bg-myth-surface-sunken hover:text-myth-ink"
-                >
-                  <ChevronRight className="h-5 w-5 rotate-180" />
-                </button>
+                <IconButton icon={ChevronLeft} label="Back to templates" onClick={() => setStep('template')} />
               )}
               <h2 className={`${fontDisplay.className} text-2xl font-semibold text-myth-ink`}>
                 {step === 'template' ? 'Choose a Starting Point' : 'Campaign Details'}
               </h2>
             </div>
-            <button
-              onClick={onClose}
-              className="rounded-lg p-2 text-myth-ink-faint transition-colors hover:bg-myth-surface-sunken hover:text-myth-ink"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <IconButton icon={X} label="Close" size="lg" onClick={onClose} />
           </div>
 
           {/* Step 1: Template selection */}
@@ -455,10 +447,10 @@ function CreateCampaignModal({
                 <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                   Description
                 </label>
-                <textarea
+                <Textarea
+                  wrapperClassName="min-h-[80px] w-full"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="min-h-[80px] w-full resize-none rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                   placeholder="What's this campaign about?"
                 />
               </div>
@@ -477,11 +469,9 @@ function CreateCampaignModal({
                   placeholder="e.g., https://coppermind.net — a wiki or article about your universe"
                 />
                 <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-myth-ink-muted">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={loreCrawlWiki}
                     onChange={(e) => setLoreCrawlWiki(e.target.checked)}
-                    className="rounded border-myth-border"
                   />
                   Crawl the whole wiki (works for MediaWiki sites: Fandom, wiki.gg, Wikipedia...)
                 </label>
@@ -513,10 +503,10 @@ function CreateCampaignModal({
                     <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                       MythOS Instructions <span className="text-myth-danger">*</span>
                     </label>
-                    <textarea
+                    <Textarea
+                      wrapperClassName="min-h-[120px] w-full" className="font-mono"
                       value={formData.aiSystemPrompt}
                       onChange={(e) => setFormData({ ...formData, aiSystemPrompt: e.target.value })}
-                      className="min-h-[120px] w-full resize-none rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 font-mono text-sm text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                       placeholder={`You are the Game Master for a [universe] campaign.\n\nCore Principles:\n- Fiction first\n- Be a fan of the characters\n...`}
                       required
                     />
@@ -527,10 +517,10 @@ function CreateCampaignModal({
                     <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">
                       World Seed
                     </label>
-                    <textarea
+                    <Textarea
+                      wrapperClassName="min-h-[80px] w-full"
                       value={formData.initialWorldSeed}
                       onChange={(e) => setFormData({ ...formData, initialWorldSeed: e.target.value })}
-                      className="min-h-[80px] w-full resize-none rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                       placeholder="The current state of the world — what's happening when the story begins?"
                     />
                   </div>
@@ -540,14 +530,14 @@ function CreateCampaignModal({
               {/* Advanced overrides for template campaigns */}
               {selectedTemplate !== null && (
                 <div>
-                  <button
+                  <Button
+                    variant="ghost" size="sm" className="-ml-3"
                     type="button"
                     onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="flex items-center gap-2 text-sm text-myth-ink-faint transition-colors hover:text-myth-ink"
                   >
                     <ChevronRight className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
                     Advanced — override template settings
-                  </button>
+                  </Button>
 
                   {showAdvanced && (
                     <div className="mt-4 space-y-4 border-l border-myth-border pl-4">
@@ -562,19 +552,19 @@ function CreateCampaignModal({
                       </div>
                       <div>
                         <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">MythOS Instructions</label>
-                        <textarea
+                        <Textarea
+                          wrapperClassName="min-h-[100px] w-full" className="font-mono"
                           value={formData.aiSystemPrompt}
                           onChange={(e) => setFormData({ ...formData, aiSystemPrompt: e.target.value })}
-                          className="min-h-[100px] w-full resize-none rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 font-mono text-sm text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                           placeholder="Leave blank to use template instructions"
                         />
                       </div>
                       <div>
                         <label className="mb-2 block text-sm font-semibold text-myth-ink-muted">World Seed</label>
-                        <textarea
+                        <Textarea
+                          wrapperClassName="min-h-[80px] w-full"
                           value={formData.initialWorldSeed}
                           onChange={(e) => setFormData({ ...formData, initialWorldSeed: e.target.value })}
-                          className="min-h-[80px] w-full resize-none rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                           placeholder="Leave blank to use template world seed"
                         />
                       </div>

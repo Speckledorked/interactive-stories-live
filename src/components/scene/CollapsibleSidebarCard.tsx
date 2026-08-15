@@ -11,6 +11,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 
 interface CollapsibleSidebarCardProps {
   title: string
@@ -25,12 +26,12 @@ export function CollapsibleSidebarCard({ title, defaultOpen = true, children }: 
     <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium uppercase tracking-wide text-myth-ink-faint">{title}</h3>
-        <button
+        <Button
+          variant="ghost" size="sm"
           onClick={() => setOpen(!open)}
-          className="text-xs text-myth-ink-faint hover:text-myth-ink transition-colors"
         >
           {open ? 'Hide' : 'Show'}
-        </button>
+        </Button>
       </div>
       {open && children}
     </div>

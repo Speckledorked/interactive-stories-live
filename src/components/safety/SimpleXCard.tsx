@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Select } from '@/components/ui/select'
 
 interface SimpleXCardProps {
   campaignId: string
@@ -49,7 +51,8 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
 
   return (
     <>
-      <Button variant="danger"
+      <Button
+        variant="danger"
         onClick={() => setIsOpen(true)}
         title="Use X-Card to pause/rewind uncomfortable content"
       >
@@ -75,10 +78,10 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
                   <label className="block text-sm font-medium text-myth-ink-muted mb-2">
                     What triggered this? (optional)
                   </label>
-                  <select
+                  <Select
+                    wrapperClassName="w-full"
                     value={trigger}
                     onChange={(e) => setTrigger(e.target.value)}
-                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink focus:outline-none focus:border-myth-danger"
                   >
                     <option value="GENERAL">General discomfort</option>
                     <option value="VIOLENCE">Violence</option>
@@ -91,30 +94,32 @@ export default function SimpleXCard({ campaignId, sceneId }: SimpleXCardProps) {
                     <option value="SUBSTANCE">Substance use</option>
                     <option value="MENTAL_HEALTH">Mental health</option>
                     <option value="OTHER">Other</option>
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-myth-ink-muted mb-2">
                     Additional details (optional, anonymous)
                   </label>
-                  <textarea
+                  <Textarea
+                    wrapperClassName="w-full"
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     placeholder="You don't need to explain, but you can if it helps..."
-                    className="w-full px-3 py-2 bg-myth-surface-sunken border border-myth-border rounded-lg text-myth-ink placeholder-myth-ink-faint focus:outline-none focus:border-myth-danger resize-none"
                     rows={3}
                   />
                 </div>
 
                 <div className="flex gap-3">
-                  <Button variant="danger" fullWidth
+                  <Button
+                    variant="danger" fullWidth
                     onClick={useXCard}
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? 'Using X-Card...' : 'Use X-Card'}
                   </Button>
-                  <Button variant="secondary"
+                  <Button
+                    variant="secondary"
                     onClick={() => {
                       setIsOpen(false)
                       setReason('')

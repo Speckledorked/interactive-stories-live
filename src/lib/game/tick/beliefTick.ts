@@ -115,7 +115,7 @@ function beliefVectorsEqual(a: BeliefVector, b: BeliefVector): boolean {
 }
 
 /** The one WorldEvent type/newValue/origin shape this handler reacts to, mapped to a BeliefDriftEvent — or null if it's not one of ours (stalemate, an unrelated field, etc). */
-function classifyWorldEvent(row: { type: string; newValue: string | null; origin: string }): BeliefDriftEvent | null {
+function classifyWorldEvent(row: { type: string; newValue: string | null; origin: string; wakeSourceType: string | null }): BeliefDriftEvent | null {
   if (row.type === 'faction.warResolved') {
     if (row.newValue === 'attacker') return { kind: 'WAR_WON' }
     if (row.newValue === 'defender') return { kind: 'WAR_LOST' }
@@ -129,7 +129,14 @@ function classifyWorldEvent(row: { type: string; newValue: string | null; origin
   if (row.type === 'faction.ambitionResolved') {
     return row.newValue === 'succeeded' ? { kind: 'AMBITION_SUCCEEDED' } : { kind: 'AMBITION_FAILED' }
   }
-  if (row.type === 'faction.stability' && row.origin === 'wake') {
+  // #310: origin: 'wake' alone doesn't distinguish a genuine
+  // death/collapse ripple (npcDispositionTick.ts's sibling classifier has
+  // the same fix, see its own comment) from economyTick.ts's
+  // FACTION_DEFAULT loan-default cascade, which writes the identical
+  // shape. A faction surviving its OWN neighborhood's collapse is a real
+  // belief-shaping event; absorbing a hit because an ally couldn't repay a
+  // loan isn't the same story.
+  if (row.type === 'faction.stability' && row.origin === 'wake' && (row.wakeSourceType === 'NPC' || row.wakeSourceType === 'FACTION')) {
     return { kind: 'COLLAPSE_RIPPLE_SURVIVED' }
   }
   return null
@@ -157,11 +164,11 @@ export async function tickBeliefDrift(ctx: TickContext): Promise<TickHandlerResu
         targetId: faction.id,
         type: { in: RELEVANT_EVENT_TYPES },
       },
-      select: { type: true, newValue: true, origin: true },
+      select: { type: true, newValue: true, origin: true, wakeSourceType: true },
     })
 
     const driftEvents = events
-      .map((row) => classifyWorldEvent({ type: row.type, newValue: row.newValue, origin: row.origin }))
+      .map((row) => classifyWorldEvent({ type: row.type, newValue: row.newValue, origin: row.origin, wakeSourceType: row.wakeSourceType }))
       .filter((e): e is BeliefDriftEvent => e !== null)
     if (driftEvents.length === 0) continue
 

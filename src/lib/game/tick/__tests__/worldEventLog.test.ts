@@ -69,6 +69,24 @@ describe('persistWorldEvents', () => {
     expect(call.data[0].newValue).toBe('47')
   })
 
+  // #310: wakeSourceType is the discriminator npcDispositionTick.ts/
+  // beliefTick.ts now read to tell a genuine death/collapse wake apart
+  // from economyTick.ts's FACTION_DEFAULT cascade — must actually reach
+  // the persisted row, not just live on the in-memory WorldChange.
+  it('passes wakeSourceType through for a wake-origin change', async () => {
+    vi.mocked(prisma.worldEvent.createManyAndReturn).mockResolvedValueOnce([{ id: 'e1', significant: true }] as any)
+    await persistWorldEvents('campaign-1', 5, [makeChange({ origin: 'wake', wakeSourceType: 'FACTION_DEFAULT' })])
+    const call = vi.mocked(prisma.worldEvent.createManyAndReturn).mock.calls[0][0] as any
+    expect(call.data[0].wakeSourceType).toBe('FACTION_DEFAULT')
+  })
+
+  it('defaults wakeSourceType to null when absent', async () => {
+    vi.mocked(prisma.worldEvent.createManyAndReturn).mockResolvedValueOnce([{ id: 'e1', significant: true }] as any)
+    await persistWorldEvents('campaign-1', 5, [makeChange({ origin: 'tick' })])
+    const call = vi.mocked(prisma.worldEvent.createManyAndReturn).mock.calls[0][0] as any
+    expect(call.data[0].wakeSourceType).toBeNull()
+  })
+
   it('persists every change, not just significant ones', async () => {
     vi.mocked(prisma.worldEvent.createManyAndReturn).mockResolvedValueOnce([
       { id: 'e1', significant: true },

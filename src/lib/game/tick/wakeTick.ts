@@ -232,6 +232,7 @@ export async function tickWake(ctx: TickContext): Promise<TickHandlerResult> {
         significant: true,
         importance: wasLeader ? 'MAJOR' : 'NORMAL',
         origin: 'wake',
+        wakeSourceType: 'NPC',
       })
     }
   }
@@ -307,6 +308,7 @@ export async function tickWake(ctx: TickContext): Promise<TickHandlerResult> {
           significant: true,
           importance: 'NORMAL',
           origin: 'wake',
+          wakeSourceType: 'FACTION',
         })
       }
     }

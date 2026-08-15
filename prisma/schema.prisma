@@ -3119,6 +3119,21 @@ model WorldEvent {
   // apart, not just "this field changed again."
   checkKey String?
 
+  // #310: set only for origin: "wake" events, to ActiveWake.sourceType
+  // ('NPC' | 'FACTION' | 'FACTION_DEFAULT') — without this, three
+  // independent handlers (wakeTick.ts's NPC-death ripple, its
+  // faction-collapse ripple, and economyTick.ts's loan-default cascade)
+  // all write the identical (targetType FACTION, field "stability",
+  // origin "wake") shape, so npcDispositionTick.ts/beliefTick.ts's
+  // institutional-memory-loss classifiers couldn't tell a genuine
+  // death/collapse from an ally merely defaulting on a bailout loan — the
+  // latter got misread as the same "the faction abandoned them" signal as
+  // the former. checkKey isn't reused for this: escalation.ts's own query
+  // (`WHERE checkKey IS NOT NULL`) assumes every non-null row is an
+  // integrity-repair candidate, so a wake-origin row parked there would
+  // silently corrupt that unrelated signal.
+  wakeSourceType String?
+
   campaign  Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   witnesses EventWitness[]
 

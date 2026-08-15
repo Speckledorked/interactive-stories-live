@@ -27,6 +27,8 @@ import { WorldChronicle } from '@/components/campaigns/lobby/WorldChronicle'
 import { CurrentObjective } from '@/components/campaigns/lobby/CurrentObjective'
 import { WorldGlance } from '@/components/campaigns/lobby/WorldGlance'
 import type { ChronicleGlance } from '@/lib/game/chronicleTypes'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 
 interface CampaignData {
   campaign: any
@@ -682,21 +684,19 @@ export default function CampaignLobbyPage() {
                   <div className="space-y-3">
                     <div>
                       <label className="mb-1 block text-sm text-myth-ink-muted">Map Name</label>
-                      <input
+                      <Input
                         type="text"
                         value={newMapName}
                         onChange={(e) => setNewMapName(e.target.value)}
-                        className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                         placeholder="e.g., Tavern Floor Plan, Dungeon Level 1"
                         required
                       />
                     </div>
                     <div>
                       <label className="mb-1 block text-sm text-myth-ink-muted">Description</label>
-                      <textarea
+                      <Textarea
                         value={newMapDescription}
                         onChange={(e) => setNewMapDescription(e.target.value)}
-                        className="w-full rounded-md border border-myth-border bg-myth-surface px-4 py-2.5 text-myth-ink placeholder:text-myth-ink-faint focus:border-myth-accent focus:outline-none"
                         rows={2}
                         placeholder="Optional description"
                       />

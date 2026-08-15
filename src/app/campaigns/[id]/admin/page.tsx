@@ -21,6 +21,9 @@ import type { SetupChecklistItem } from '@/components/admin/SetupChecklist'
 import { FieldHelp } from '@/components/ui/field-help'
 import { SectionHeader } from '@/components/ui/section-header'
 import { parseCorruptionTheme } from '@/lib/game/corruption'
+import { Textarea } from '@/components/ui/textarea'
+import { Select } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 
 interface Campaign {
   id: string
@@ -1257,7 +1260,7 @@ export default function AdminPage() {
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">
                           Faction cap (default {simulationSettings.defaultFactionCap})
                         </label>
-                        <input
+                        <Input
                           type="number"
                           min={1}
                           placeholder={String(simulationSettings.defaultFactionCap)}
@@ -1268,14 +1271,13 @@ export default function AdminPage() {
                               factionCap: e.target.value === '' ? null : parseInt(e.target.value),
                             })
                           }
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">
                           NPC cap (default {simulationSettings.defaultNpcCap})
                         </label>
-                        <input
+                        <Input
                           type="number"
                           min={1}
                           placeholder={String(simulationSettings.defaultNpcCap)}
@@ -1286,7 +1288,6 @@ export default function AdminPage() {
                               npcCap: e.target.value === '' ? null : parseInt(e.target.value),
                             })
                           }
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                     </div>
@@ -1410,28 +1411,25 @@ export default function AdminPage() {
                     >
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Name *</label>
-                        <input
+                        <Input
                           type="text"
                           name="name"
                           required
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Description</label>
-                        <textarea
+                        <Textarea
                           name="description"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Location</label>
-                          <input
+                          <Input
                             type="text"
                             name="currentLocation"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
@@ -1443,56 +1441,51 @@ export default function AdminPage() {
                               whenToUse="Mark your major recurring cast higher than one-off background characters."
                             />
                           </div>
-                          <input
+                          <Input
                             type="number"
                             name="importance"
                             min="1"
                             max="5"
                             defaultValue="1"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Goals</label>
-                        <textarea
+                        <Textarea
                           name="goals"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Relationship to Party</label>
-                        <input
+                        <Input
                           type="text"
                           name="relationship"
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Faction</label>
-                          <select
+                          <Select
                             name="factionId"
                             defaultValue=""
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           >
                             <option value="">None</option>
                             {factions.map((f) => (
                               <option key={f.id} value={f.id}>{f.name}</option>
                             ))}
-                          </select>
+                          </Select>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Role</label>
-                          <select
+                          <Select
                             name="factionRole"
                             defaultValue="MEMBER"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           >
                             <option value="MEMBER">Member</option>
                             <option value="LEADER">Leader</option>
-                          </select>
+                          </Select>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -1509,10 +1502,9 @@ export default function AdminPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
-                        <textarea
+                        <Textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex space-x-2">
@@ -1539,15 +1531,13 @@ export default function AdminPage() {
                   <div key={npc.id} className="rounded-lg border border-myth-border p-4">
                     {editingNpc === npc.id ? (
                       <div className="space-y-2">
-                        <input
+                        <Input
                           value={npc.name}
                           onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, name: e.target.value } : n))}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                         />
-                        <textarea
+                        <Textarea
                           value={npc.description || ''}
                           onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, description: e.target.value } : n))}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           rows={2}
                         />
                         <input
@@ -1561,28 +1551,26 @@ export default function AdminPage() {
                         <div className="flex space-x-4">
                           <div>
                             <label className="text-xs">Faction</label>
-                            <select
+                            <Select
                               value={npc.factionId || ''}
                               onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, factionId: e.target.value || null } : n))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             >
                               <option value="">None</option>
                               {factions.map((f) => (
                                 <option key={f.id} value={f.id}>{f.name}</option>
                               ))}
-                            </select>
+                            </Select>
                           </div>
                           <div>
                             <label className="text-xs">Role</label>
-                            <select
+                            <Select
                               value={npc.factionRole || 'MEMBER'}
                               onChange={(e) => setNpcs(npcs.map(n => n.id === npc.id ? { ...n, factionRole: e.target.value } : n))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                               disabled={!npc.factionId}
                             >
                               <option value="MEMBER">Member</option>
                               <option value="LEADER">Leader</option>
-                            </select>
+                            </Select>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -1705,69 +1693,63 @@ export default function AdminPage() {
                     >
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Name *</label>
-                        <input
+                        <Input
                           type="text"
                           name="name"
                           required
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Description</label>
-                        <textarea
+                        <Textarea
                           name="description"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Goals</label>
-                        <textarea
+                        <Textarea
                           name="goals"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Simulation Goal</label>
-                          <select
+                          <Select
                             name="goal"
                             defaultValue="CONSOLIDATE"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           >
                             {FACTION_GOALS.map((g) => (
                               <option key={g} value={g}>{g.replace('_', ' ')}</option>
                             ))}
-                          </select>
+                          </Select>
                           <p className="text-xs text-myth-ink-faint mt-1">Drives what this faction pursues in the background each turn.</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Archetype</label>
-                          <select
+                          <Select
                             name="archetype"
                             defaultValue="GENERIC"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           >
                             {FACTION_ARCHETYPES.map((a) => (
                               <option key={a.value} value={a.value}>{a.label}</option>
                             ))}
-                          </select>
+                          </Select>
                           <p className="text-xs text-myth-ink-faint mt-1">Shapes the flavor of ambitions this faction pursues (e.g. tournament vs. coup).</p>
                         </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Leader (Player Character)</label>
-                        <select
+                        <Select
                           name="leaderCharacterId"
                           defaultValue=""
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         >
                           <option value="">None (NPC-led)</option>
                           {characters.map((c) => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
-                        </select>
+                        </Select>
                         <p className="text-xs text-myth-ink-faint mt-1">If set, this faction's Simulation Goal is the player's call — the world tick won't reassess it automatically.</p>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -1784,10 +1766,9 @@ export default function AdminPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Current Plan</label>
-                        <textarea
+                        <Textarea
                           name="currentPlan"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
@@ -1800,13 +1781,12 @@ export default function AdminPage() {
                               whenToUse="Signal how dangerous or ambitious this faction should feel as the world moves on its own."
                             />
                           </div>
-                          <input
+                          <Input
                             type="number"
                             name="threatLevel"
                             min="1"
                             max="5"
                             defaultValue="1"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
@@ -1818,22 +1798,20 @@ export default function AdminPage() {
                               whenToUse="Reflect how well-funded or depleted a faction currently is."
                             />
                           </div>
-                          <input
+                          <Input
                             type="number"
                             name="resources"
                             min="0"
                             max="100"
                             defaultValue="50"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
-                        <textarea
+                        <Textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex space-x-2">
@@ -1860,16 +1838,14 @@ export default function AdminPage() {
                   <div key={faction.id} className={`rounded-lg border border-myth-border p-4 ${faction.isActive === false ? 'opacity-50' : ''}`}>
                     {editingFaction === faction.id ? (
                       <div className="space-y-2">
-                        <input
+                        <Input
                           value={faction.name}
                           onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, name: e.target.value } : f))}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                         />
-                        <textarea
+                        <Textarea
                           value={faction.currentPlan || ''}
                           onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, currentPlan: e.target.value } : f))}
                           placeholder="Current Plan"
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           rows={2}
                         />
                         <div className="flex space-x-4">
@@ -1899,41 +1875,38 @@ export default function AdminPage() {
                         <div className="flex space-x-4">
                           <div>
                             <label className="text-xs">Simulation Goal</label>
-                            <select
+                            <Select
                               value={faction.goal || 'CONSOLIDATE'}
                               onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, goal: e.target.value } : f))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             >
                               {FACTION_GOALS.map((g) => (
                                 <option key={g} value={g}>{g.replace('_', ' ')}</option>
                               ))}
-                            </select>
+                            </Select>
                           </div>
                           <div>
                             <label className="text-xs">Archetype</label>
-                            <select
+                            <Select
                               value={faction.archetype || 'GENERIC'}
                               onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, archetype: e.target.value } : f))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             >
                               {FACTION_ARCHETYPES.map((a) => (
                                 <option key={a.value} value={a.value}>{a.label}</option>
                               ))}
-                            </select>
+                            </Select>
                           </div>
                         </div>
                         <div>
                           <label className="text-xs">Leader (Player Character)</label>
-                          <select
+                          <Select
                             value={faction.leaderCharacterId || ''}
                             onChange={(e) => setFactions(factions.map(f => f.id === faction.id ? { ...f, leaderCharacterId: e.target.value || null } : f))}
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           >
                             <option value="">None (NPC-led)</option>
                             {characters.map((c) => (
                               <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
-                          </select>
+                          </Select>
                         </div>
                         <div className="flex items-center space-x-2">
                           <input
@@ -2123,43 +2096,39 @@ export default function AdminPage() {
                     >
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Name *</label>
-                        <input
+                        <Input
                           type="text"
                           name="name"
                           required
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Description</label>
-                        <textarea
+                        <Textarea
                           name="description"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Type</label>
-                          <input
+                          <Input
                             type="text"
                             name="locationType"
                             placeholder="town, dungeon, wilderness, inn..."
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Owner Faction</label>
-                          <select
+                          <Select
                             name="ownerFactionId"
                             defaultValue=""
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           >
                             <option value="">None</option>
                             {factions.map((f) => (
                               <option key={f.id} value={f.id}>{f.name}</option>
                             ))}
-                          </select>
+                          </Select>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -2176,10 +2145,9 @@ export default function AdminPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
-                        <textarea
+                        <Textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex space-x-2">
@@ -2206,40 +2174,36 @@ export default function AdminPage() {
                   <div key={location.id} className="rounded-lg border border-myth-border p-4">
                     {editingLocation === location.id ? (
                       <div className="space-y-2">
-                        <input
+                        <Input
                           value={location.name}
                           onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, name: e.target.value } : l))}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                         />
-                        <textarea
+                        <Textarea
                           value={location.description || ''}
                           onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, description: e.target.value } : l))}
                           placeholder="Description"
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           rows={2}
                         />
                         <div className="flex space-x-4">
                           <div className="flex-1">
                             <label className="text-xs">Type</label>
-                            <input
+                            <Input
                               type="text"
                               value={location.locationType || ''}
                               onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, locationType: e.target.value } : l))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             />
                           </div>
                           <div className="flex-1">
                             <label className="text-xs">Owner Faction</label>
-                            <select
+                            <Select
                               value={location.ownerFactionId || ''}
                               onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, ownerFactionId: e.target.value || null } : l))}
-                              className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                             >
                               <option value="">None</option>
                               {factions.map((f) => (
                                 <option key={f.id} value={f.id}>{f.name}</option>
                               ))}
-                            </select>
+                            </Select>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -2251,11 +2215,10 @@ export default function AdminPage() {
                           />
                           <label className="text-xs">Discovered by players</label>
                         </div>
-                        <textarea
+                        <Textarea
                           value={location.gmNotes || ''}
                           onChange={(e) => setLocations(locations.map(l => l.id === location.id ? { ...l, gmNotes: e.target.value } : l))}
                           placeholder="Host Notes"
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm"
                           rows={2}
                         />
                         <div className="flex space-x-2">
@@ -2362,40 +2325,36 @@ export default function AdminPage() {
                     >
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Name *</label>
-                        <input
+                        <Input
                           type="text"
                           name="name"
                           required
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Description</label>
-                        <textarea
+                        <Textarea
                           name="description"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Max Segments</label>
-                          <input
+                          <Input
                             type="number"
                             name="maxTicks"
                             min="1"
                             max="12"
                             defaultValue="4"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-myth-ink-muted mb-1">Category</label>
-                          <input
+                          <Input
                             type="text"
                             name="category"
                             placeholder="e.g., Threat, Progress"
-                            className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                           />
                         </div>
                       </div>
@@ -2408,19 +2367,17 @@ export default function AdminPage() {
                             whenToUse="Any thread where reaching full should trigger a specific narrative beat."
                           />
                         </div>
-                        <textarea
+                        <Textarea
                           name="consequence"
                           rows={2}
                           placeholder="What happens when this thread fills..."
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-myth-ink-muted mb-1">Host Notes</label>
-                        <textarea
+                        <Textarea
                           name="gmNotes"
                           rows={2}
-                          className="block w-full rounded-md border border-myth-border bg-myth-surface text-myth-ink shadow-sm focus:border-myth-accent focus:outline-none sm:text-sm px-3 py-2"
                         />
                       </div>
                       <div className="flex items-center gap-1.5">

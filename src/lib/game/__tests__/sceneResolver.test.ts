@@ -25,10 +25,11 @@ vi.mock('@/lib/prisma', () => ({
     // Looked up by the map-generation step (sceneResolver.ts) to find the
     // campaign's active map, if any — findFirst resolving to undefined
     // (the vi.fn() default) is fine, it just means "no active map yet".
+    // (#291: the actual generation — and pruneOldMaps — now run inside
+    // mapGenQueue.ts's worker, mocked as a black box below, so no other
+    // Map methods are needed here.)
     map: {
       findFirst: vi.fn(),
-      findMany: vi.fn(),
-      deleteMany: vi.fn(),
     },
     // Battle-map generation is opt-in per campaign (#9/#59) — the resolver
     // reads this flag before doing any map work.
@@ -104,10 +105,11 @@ vi.mock('../world-state-tracker', () => ({
   createCharacterProgressionNotifications: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/lib/ai/ai-visual-service', () => ({
-  AIVisualService: {
-    generateMapFromScene: vi.fn().mockResolvedValue({}),
-  },
+// #291: map generation is now an async job, mirroring how ../imageGenQueue
+// (scene illustration) is already mocked as a black box below — only the
+// enqueue call is asserted, never the actual generation.
+vi.mock('../mapGenQueue', () => ({
+  enqueueMapGeneration: vi.fn().mockResolvedValue({ jobId: 'map1', deduped: false }),
 }));
 
 vi.mock('@/lib/ai/memoryCreation', () => ({
@@ -134,7 +136,7 @@ import { prisma } from '@/lib/prisma';
 import { callAIGM } from '@/lib/ai/client';
 import { buildSceneResolutionRequest } from '@/lib/ai/worldState';
 import { applyWorldUpdates } from '../stateUpdater';
-import { AIVisualService } from '@/lib/ai/ai-visual-service';
+import { enqueueMapGeneration } from '../mapGenQueue';
 import { storeWorldStateChanges, detectWorldStateChanges } from '../world-state-tracker';
 import { buildScenePrompt } from '../../ai/imageGeneration';
 import { enqueueSceneImageGeneration } from '../imageGenQueue';
@@ -219,7 +221,6 @@ describe('Scene Resolver', () => {
       // Maps are opt-in per campaign and default OFF (#9/#59); this test
       // asserts the generation path, so enable them for this campaign.
       vi.mocked(prisma.campaign.findUnique).mockResolvedValue({ mapGenerationEnabled: true } as any);
-      vi.mocked(prisma.map.findMany).mockResolvedValue([] as any);
 
       // Execute
       const result = await resolveScene(mockCampaignId, mockSceneId);
@@ -267,8 +268,8 @@ describe('Scene Resolver', () => {
       });
 
       // mockScene.sceneResolutionText is null — this is the scene's first
-      // exchange, so a map should be generated.
-      expect(AIVisualService.generateMapFromScene).toHaveBeenCalled();
+      // exchange, so map generation should be enqueued.
+      expect(enqueueMapGeneration).toHaveBeenCalledWith(mockCampaignId, mockSceneId, mockAIResponse.scene_text, undefined);
     });
 
     // #91: client.ts's callAIGM stamps _outcomeAdherence onto its response
@@ -365,7 +366,7 @@ describe('Scene Resolver', () => {
       // The scene still resolves normally — maps are an optional extra, and
       // skipping them costs an AI call and a batch of zone/token writes.
       expect(result.success).toBe(true);
-      expect(AIVisualService.generateMapFromScene).not.toHaveBeenCalled();
+      expect(enqueueMapGeneration).not.toHaveBeenCalled();
     });
 
     it('still resolves the scene when the map-settings lookup itself fails', async () => {
@@ -384,7 +385,7 @@ describe('Scene Resolver', () => {
       // are even enabled — a failure there must never take down an
       // otherwise-successful scene resolution.
       expect(result.success).toBe(true);
-      expect(AIVisualService.generateMapFromScene).not.toHaveBeenCalled();
+      expect(enqueueMapGeneration).not.toHaveBeenCalled();
       // Same non-critical guarantee applies to the (separate) scene-image
       // settings lookup, which fails from the same rejected mock.
       expect(enqueueSceneImageGeneration).not.toHaveBeenCalled();

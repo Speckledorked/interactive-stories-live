@@ -55,7 +55,7 @@ interface JobModel {
  */
 export async function alertStuckJobs(
   model: JobModel,
-  context: 'resolution-job-stuck' | 'lore-import-job-stuck' | 'reseed-job-stuck' | 'scene-image-job-stuck',
+  context: 'resolution-job-stuck' | 'lore-import-job-stuck' | 'reseed-job-stuck' | 'scene-image-job-stuck' | 'map-gen-job-stuck',
   take = 25
 ): Promise<void> {
   try {

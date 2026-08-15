@@ -3430,6 +3430,41 @@ model SceneImage {
   @@index([campaignId, status])
 }
 
+// #291: async map generation, mirroring SceneImage's shape exactly (same
+// ResolutionJobStatus enum, same one-row-per-scene @@unique, same
+// plain-fields-no-@relation convention). Map generation used to run
+// synchronously inside resolveScene via a 30s Promise.race — this is the
+// job-tracking row that lets it run in its own worker invocation instead,
+// the same pattern scene illustration and hero-image generation already
+// established. Doesn't duplicate the generated content itself (that's
+// Map/Zone/Token, written directly by AIVisualService.generateMapFromScene)
+// — this row only tracks the job's own lifecycle.
+model MapGenerationJob {
+  id         String              @id @default(cuid())
+  campaignId String
+  sceneId    String              @unique
+  status     ResolutionJobStatus @default(PENDING)
+  // The scene text AIVisualService.generateMapFromScene analyzes — stored
+  // so a failed/retried generation can see exactly what was asked for,
+  // same reasoning as SceneImage.prompt.
+  sceneDescription String        @db.Text
+  // The campaign's active map at enqueue time, if any — generateMapFromScene
+  // reuses/replaces it rather than always creating a fresh one.
+  previousMapId String?
+  attempts   Int                 @default(0)
+  lastError  String?
+
+  // Same stuck-job-alert dedupe as SceneImage.alertedStuckAt.
+  alertedStuckAt DateTime?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@index([campaignId, status])
+}
+
 model AIValidationFailure {
   id           String   @id @default(cuid())
   campaignId   String

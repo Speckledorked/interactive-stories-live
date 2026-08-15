@@ -46,6 +46,10 @@ vi.mock('@/lib/game/resolutionQueue', () => ({
   enqueueSceneResolution: vi.fn().mockResolvedValue(undefined),
   recoverStaleJobs: vi.fn().mockResolvedValue(undefined),
 }))
+// #291: same opportunistic recovery pattern as resolutionQueue's above.
+vi.mock('@/lib/game/mapGenQueue', () => ({
+  recoverStaleMapJobs: vi.fn().mockResolvedValue(undefined),
+}))
 
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'

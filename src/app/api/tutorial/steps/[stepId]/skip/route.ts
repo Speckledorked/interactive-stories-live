@@ -21,7 +21,12 @@ export async function POST(
 
     return NextResponse.json(progress);
   } catch (error: any) {
-    console.error('Error skipping tutorial step:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // #318: a missing-step or required-step rejection from skipStep is a
+    // client error, not a server fault.
+    const isValidationError = typeof error?.message === 'string' && /^(Tutorial step not found|Cannot skip)/.test(error.message);
+    if (!isValidationError) {
+      console.error('Error skipping tutorial step:', error);
+    }
+    return NextResponse.json({ error: error.message }, { status: isValidationError ? 400 : 500 });
   }
 }

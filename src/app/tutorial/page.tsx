@@ -6,21 +6,9 @@ import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId } from 
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
+import type { TutorialStepWithProgress, TutorialProgressResponse } from '@/types/api'
 
-interface TutorialStep {
-  id: string
-  stepKey: string
-  title: string
-  description: string
-  category: string
-  orderIndex: number
-  isOptional: boolean
-  userProgress: {
-    status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED'
-    completedAt?: string
-    skippedAt?: string
-  } | null
-}
+type TutorialStep = TutorialStepWithProgress
 
 export default function TutorialPage() {
   const router = useRouter()
@@ -44,8 +32,12 @@ export default function TutorialPage() {
     try {
       const response = await authenticatedFetch('/api/tutorial/progress')
       if (response.ok) {
-        const data = await response.json()
-        setSteps(data.steps || [])
+        // #308: the route returns `progress`, not `steps` — this used to
+        // read a key that never existed, so `steps` stayed permanently
+        // empty and every category section (which renders null when its
+        // step list is empty) never showed up at all.
+        const data: TutorialProgressResponse = await response.json()
+        setSteps(data.progress || [])
         setCompletionPercentage(data.completionPercentage || 0)
       } else {
         setError('Failed to load tutorial progress')

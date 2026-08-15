@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TutorialService } from '@/lib/tutorial/tutorial-service';
 import { verifyAuth } from '@/lib/auth';
+import { TutorialProgressResponse } from '@/types/api';
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
     const nextStep = await TutorialService.getNextStep(user.userId);
     const completionPercentage = await TutorialService.getCompletionPercentage(user.userId);
 
-    return NextResponse.json({
+    return NextResponse.json<TutorialProgressResponse>({
       progress,
       nextStep,
       completionPercentage,

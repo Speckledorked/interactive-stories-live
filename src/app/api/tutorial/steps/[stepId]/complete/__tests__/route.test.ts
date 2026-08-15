@@ -46,4 +46,20 @@ describe('POST', () => {
     const response = await POST(req(), { params: { stepId: 'step1' } })
     expect(response.status).toBe(500)
   })
+
+  // #317: a prerequisite-not-met rejection from the service is a client
+  // error, not a server fault — must not read as a generic 500.
+  it('returns 400, not 500, when the service rejects an unmet prerequisite', async () => {
+    ;(TutorialService.completeStep as any).mockRejectedValue(
+      new Error('Cannot complete "create_character": prerequisite step(s) not yet completed or skipped')
+    )
+    const response = await POST(req(), { params: { stepId: 'step1' } })
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 400, not 500, when the step does not exist', async () => {
+    ;(TutorialService.completeStep as any).mockRejectedValue(new Error('Tutorial step not found'))
+    const response = await POST(req(), { params: { stepId: 'step1' } })
+    expect(response.status).toBe(400)
+  })
 })

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
+import { checkRateLimit, rateLimitExceededResponse, FRIEND_SEARCH_LIMIT } from '@/lib/rateLimit'
 
 // Force dynamic rendering for this route
 export const dynamic = 'force-dynamic'
@@ -12,6 +13,16 @@ export async function GET(request: NextRequest) {
     const user = await getUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const rateLimit = await checkRateLimit(
+      user.userId,
+      FRIEND_SEARCH_LIMIT.bucket,
+      FRIEND_SEARCH_LIMIT.limit,
+      FRIEND_SEARCH_LIMIT.windowSeconds
+    )
+    if (!rateLimit.allowed) {
+      return rateLimitExceededResponse(rateLimit)
     }
 
     const { searchParams } = new URL(request.url)

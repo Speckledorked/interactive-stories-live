@@ -54,6 +54,22 @@ export const RESET_PASSWORD_LIMIT = { bucket: 'reset-password', limit: 10, windo
 export const VERIFY_EMAIL_LIMIT = { bucket: 'verify-email', limit: 10, windowSeconds: 3600 } as const
 export const BALANCE_CHECKOUT_LIMIT = { bucket: 'balance-checkout', limit: 10, windowSeconds: 3600 } as const
 
+// #316: friend search returns full emails/names for up to 10 matching
+// users per call with a 2-char minimum query — exactly the shape a script
+// enumerates the user base with. Keyed by the authenticated userId (the
+// caller, since the target of abuse here is the whole user base rather
+// than one account) rather than IP, matching the gameplay buckets above.
+export const FRIEND_SEARCH_LIMIT = { bucket: 'friend-search', limit: 20, windowSeconds: 60 } as const
+
+// #324: the public recap view route unconditionally incremented
+// CampaignLog.recapViewCount on every hit, no dedup — a trivial scripted
+// loop could inflate it arbitrarily. Keyed by IP+logId (not just IP) so
+// one visitor viewing several different recaps isn't throttled by an
+// unrelated one; limit: 1 means "increment at most once per IP per recap
+// per window," not "reject repeat views" — the route itself never rejects
+// on this, it just gates the increment.
+export const RECAP_VIEW_LIMIT = { bucket: 'recap-view', limit: 1, windowSeconds: 3600 } as const
+
 const PRUNE_RETENTION_MS = 60 * 60 * 1000 // keep at most an hour of windows
 
 /**

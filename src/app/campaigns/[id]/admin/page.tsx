@@ -188,6 +188,15 @@ export default function AdminPage() {
   } | null>(null)
   const [worldEventsTurn, setWorldEventsTurn] = useState<number | null>(null)
   const [worldEventsLoading, setWorldEventsLoading] = useState(false)
+  // #289: StateMutation/LoreCitation/AIValidationFailure had real writers
+  // and no reader — same lazy-load-on-tab pattern as worldEvents above.
+  const [auditLog, setAuditLog] = useState<{
+    stateMutations: any[]
+    loreCitations: any[]
+    validationFailures: any[]
+  } | null>(null)
+  const [auditLogLoading, setAuditLogLoading] = useState(false)
+  const [auditLogSceneId, setAuditLogSceneId] = useState('')
   const [tickPreview, setTickPreview] = useState<any[] | null>(null)
   const [tickPreviewLoading, setTickPreviewLoading] = useState(false)
   // #94: per-entity "show your reasoning" previews for the faction/NPC
@@ -242,6 +251,9 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeTab === 'data' && worldEvents.length === 0 && !worldEventsLoading) {
       fetchWorldEvents(worldEventsTurn)
+    }
+    if (activeTab === 'data' && auditLog === null && !auditLogLoading) {
+      fetchAuditLog(auditLogSceneId)
     }
     if (activeTab === 'safety' && !safetyLoaded && !reportsLoading) {
       fetchSafetyData()
@@ -600,6 +612,26 @@ export default function AdminPage() {
       setError('Failed to load world events')
     } finally {
       setWorldEventsLoading(false)
+    }
+  }
+
+  const fetchAuditLog = async (sceneId?: string) => {
+    setAuditLogLoading(true)
+    try {
+      const qs = sceneId ? `?sceneId=${encodeURIComponent(sceneId)}` : ''
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/audit-log${qs}`)
+      if (response.ok) {
+        const data = await response.json()
+        setAuditLog({
+          stateMutations: data.stateMutations || [],
+          loreCitations: data.loreCitations || [],
+          validationFailures: data.validationFailures || [],
+        })
+      }
+    } catch (err) {
+      setError('Failed to load audit log')
+    } finally {
+      setAuditLogLoading(false)
     }
   }
 
@@ -2634,6 +2666,11 @@ export default function AdminPage() {
                 worldEventsTurn={worldEventsTurn}
                 onWorldEventsTurnChange={setWorldEventsTurn}
                 onLoadWorldEvents={() => fetchWorldEvents(worldEventsTurn)}
+                auditLog={auditLog}
+                auditLogLoading={auditLogLoading}
+                auditLogSceneId={auditLogSceneId}
+                onAuditLogSceneIdChange={setAuditLogSceneId}
+                onLoadAuditLog={() => fetchAuditLog(auditLogSceneId)}
                 saving={saving}
                 onDeleteCampaign={handleDeleteCampaign}
               />

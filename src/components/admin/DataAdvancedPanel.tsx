@@ -26,6 +26,40 @@ interface WorldEvent {
   origin: string
 }
 
+// #289: three audit tables with real writers and, until now, no reader.
+interface StateMutation {
+  id: string
+  sceneId: string | null
+  field: string
+  previousValue?: unknown
+  proposedValue?: unknown
+  result: 'ACCEPTED' | 'REJECTED' | 'REPAIRED'
+  repairedValue?: unknown
+  reason: string | null
+  createdAt: string
+}
+
+interface LoreCitation {
+  id: string
+  sceneId: string
+  loreEntryId: string
+  similarity: number
+  createdAt: string
+}
+
+interface AIValidationFailure {
+  id: string
+  sceneId: string | null
+  errorSummary: string
+  createdAt: string
+}
+
+interface AuditLog {
+  stateMutations: StateMutation[]
+  loreCitations: LoreCitation[]
+  validationFailures: AIValidationFailure[]
+}
+
 export function DataAdvancedPanel({
   campaignId,
   campaignTitle,
@@ -37,6 +71,11 @@ export function DataAdvancedPanel({
   worldEventsTurn,
   onWorldEventsTurnChange,
   onLoadWorldEvents,
+  auditLog,
+  auditLogLoading,
+  auditLogSceneId,
+  onAuditLogSceneIdChange,
+  onLoadAuditLog,
   saving,
   onDeleteCampaign,
 }: {
@@ -50,6 +89,11 @@ export function DataAdvancedPanel({
   worldEventsTurn: number | null
   onWorldEventsTurnChange: (turn: number | null) => void
   onLoadWorldEvents: () => void
+  auditLog: AuditLog | null
+  auditLogLoading: boolean
+  auditLogSceneId: string
+  onAuditLogSceneIdChange: (sceneId: string) => void
+  onLoadAuditLog: () => void
   saving: boolean
   onDeleteCampaign: () => void
 }) {
@@ -197,6 +241,109 @@ export function DataAdvancedPanel({
                       <p className="mt-1 text-xs italic text-myth-ink-faint">{event.reason}</p>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
+              <h3 className="font-medium text-myth-ink">Audit Log</h3>
+              <p className="mb-4 mt-1 text-xs text-myth-ink-faint">
+                Every AI-proposed field mutation (accepted, rejected, or repaired), lore citation, and response
+                validation failure the engine has recorded. Leave the scene blank for the most recent entries across
+                all scenes.
+              </p>
+              <div className="mb-4 flex items-end gap-3">
+                <div>
+                  <label className="mb-1 block text-sm text-myth-ink-muted">Scene ID</label>
+                  <input
+                    type="text"
+                    placeholder="all scenes"
+                    value={auditLogSceneId}
+                    onChange={(e) => onAuditLogSceneIdChange(e.target.value)}
+                    className="block w-48 rounded-md border border-myth-border bg-myth-surface px-3 py-2 text-sm text-myth-ink focus:border-myth-accent focus:outline-none"
+                  />
+                </div>
+                <button
+                  onClick={onLoadAuditLog}
+                  disabled={auditLogLoading}
+                  className="rounded-md border border-myth-border px-4 py-2 text-sm text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink disabled:opacity-50"
+                >
+                  {auditLogLoading ? 'Loading...' : 'Load'}
+                </button>
+              </div>
+
+              {auditLogLoading ? (
+                <p className="text-sm text-myth-ink-faint">Loading...</p>
+              ) : auditLog === null ? (
+                <p className="text-sm italic text-myth-ink-faint">Not loaded yet.</p>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="mb-2 text-xs font-mono uppercase tracking-wider text-myth-ink-faint">
+                      State Mutations ({auditLog.stateMutations.length})
+                    </h4>
+                    {auditLog.stateMutations.length === 0 ? (
+                      <p className="text-sm italic text-myth-ink-faint">None found.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {auditLog.stateMutations.map((m) => (
+                          <div key={m.id} className="rounded-md border border-myth-border p-3">
+                            <div className="mb-1 flex items-center justify-between">
+                              <span className="text-sm font-medium text-myth-ink">{m.field}</span>
+                              <span className="rounded-full bg-myth-ink/5 px-2 py-0.5 text-xs text-myth-ink-muted">
+                                {m.result}
+                              </span>
+                            </div>
+                            <p className="text-xs text-myth-ink-muted">
+                              <span className="text-myth-ink-faint">{JSON.stringify(m.previousValue) ?? '—'}</span>
+                              {' → '}
+                              <span className="text-myth-ink">
+                                {JSON.stringify(m.result === 'REPAIRED' ? m.repairedValue : m.proposedValue) ?? '—'}
+                              </span>
+                            </p>
+                            {m.reason && <p className="mt-1 text-xs italic text-myth-ink-faint">{m.reason}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="mb-2 text-xs font-mono uppercase tracking-wider text-myth-ink-faint">
+                      Lore Citations ({auditLog.loreCitations.length})
+                    </h4>
+                    {auditLog.loreCitations.length === 0 ? (
+                      <p className="text-sm italic text-myth-ink-faint">None found.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {auditLog.loreCitations.map((c) => (
+                          <div key={c.id} className="rounded-md border border-myth-border p-3">
+                            <span className="text-sm text-myth-ink">Lore entry {c.loreEntryId}</span>
+                            <span className="ml-2 text-xs text-myth-ink-faint">
+                              similarity {(c.similarity * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="mb-2 text-xs font-mono uppercase tracking-wider text-myth-ink-faint">
+                      Validation Failures ({auditLog.validationFailures.length})
+                    </h4>
+                    {auditLog.validationFailures.length === 0 ? (
+                      <p className="text-sm italic text-myth-ink-faint">None found.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {auditLog.validationFailures.map((f) => (
+                          <div key={f.id} className="rounded-md border border-myth-border p-3">
+                            <p className="text-sm text-myth-ink">{f.errorSummary}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

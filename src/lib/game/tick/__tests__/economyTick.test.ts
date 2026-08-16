@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    factionDebt: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
+    factionDebt: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
     faction: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     activeWake: { create: vi.fn() },
   },
@@ -351,5 +351,94 @@ describe('tickEconomy (DB handler)', () => {
     expect(prisma.factionDebt.create).not.toHaveBeenCalled()
     expect(prisma.faction.update).not.toHaveBeenCalled()
     expect(result.changes).toHaveLength(1)
+  })
+
+  // ---- #371: cancelling debt that runs in a circle -----------------------
+  //
+  // Netting is the only route by which a FactionDebt can leave this system
+  // without someone collapsing — nothing else in the codebase has ever
+  // written PAID.
+
+  it('settles a mutual debt against itself and marks the smaller one PAID', async () => {
+    vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([
+      { id: 'aOwesB', creditorFactionId: 'b', debtorFactionId: 'a', amount: 8 },
+      { id: 'bOwesA', creditorFactionId: 'a', debtorFactionId: 'b', amount: 3 },
+    ] as any)
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([
+        { id: 'b', name: 'Ashcrown' },
+        { id: 'a', name: 'Verdant Pact' },
+      ] as any) // creditor names for the netting changes
+      .mockResolvedValueOnce([]) // debtors lookup (nothing left to default)
+      .mockResolvedValueOnce([]) // broke-factions query (step 2)
+
+    const result = await tickEconomy(baseCtx())
+
+    // The smaller obligation is gone entirely...
+    expect(prisma.factionDebt.update).toHaveBeenCalledWith({
+      where: { id: 'bOwesA' },
+      data: expect.objectContaining({ status: 'PAID', amount: 0 }),
+    })
+    // ...and the larger one is reduced by the same amount, not settled.
+    expect(prisma.factionDebt.update).toHaveBeenCalledWith({
+      where: { id: 'aOwesB' },
+      data: { amount: 5 },
+    })
+    expect(result.changes).toHaveLength(2)
+  })
+
+  it('does not default a debt that netting already settled this pass', async () => {
+    // Ordering is the whole point: the debtor here is collapsed, so under
+    // the old sequence this debt would have defaulted and put a stability
+    // shockwave through its creditor. Netting runs first and cancels it
+    // against the circle instead, which is the outcome that costs nobody
+    // anything.
+    vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([
+      { id: 'aOwesB', creditorFactionId: 'b', debtorFactionId: 'a', amount: 10 },
+      { id: 'bOwesA', creditorFactionId: 'a', debtorFactionId: 'b', amount: 10 },
+    ] as any)
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([
+        { id: 'b', name: 'Ashcrown' },
+        { id: 'a', name: 'Verdant Pact' },
+      ] as any)
+      .mockResolvedValueOnce([]) // no debtors left to look up
+      .mockResolvedValueOnce([])
+
+    await tickEconomy(baseCtx())
+
+    // Both settled by netting, so nothing reaches the defaulting path.
+    expect(prisma.factionDebt.updateMany).not.toHaveBeenCalled()
+    expect(prisma.activeWake.create).not.toHaveBeenCalled()
+  })
+
+  it('leaves an acyclic debt graph untouched', async () => {
+    vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([
+      { id: 'd1', creditorFactionId: 'b', debtorFactionId: 'a', amount: 10 },
+      { id: 'd2', creditorFactionId: 'c', debtorFactionId: 'b', amount: 4 },
+    ] as any)
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([{ id: 'a', isActive: true, resources: 80 }, { id: 'b', isActive: true, resources: 80 }] as any)
+      .mockResolvedValueOnce([])
+
+    await tickEconomy(baseCtx())
+
+    expect(prisma.factionDebt.update).not.toHaveBeenCalled()
+  })
+
+  it('writes no netting in dry-run mode but still reports it', async () => {
+    vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([
+      { id: 'aOwesB', creditorFactionId: 'b', debtorFactionId: 'a', amount: 6 },
+      { id: 'bOwesA', creditorFactionId: 'a', debtorFactionId: 'b', amount: 6 },
+    ] as any)
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce([{ id: 'b', name: 'Ashcrown' }, { id: 'a', name: 'Verdant Pact' }] as any)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+
+    const result = await tickEconomy(baseCtx({ dryRun: true }))
+
+    expect(prisma.factionDebt.update).not.toHaveBeenCalled()
+    expect(result.changes).toHaveLength(2)
   })
 })

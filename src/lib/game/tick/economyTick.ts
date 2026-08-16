@@ -50,6 +50,7 @@
 import { TickContext, TickHandlerResult, WorldChange, clamp, findAllyIds } from './types'
 import { assessPayout, BROKE_THRESHOLD, GOLD_PER_RESOURCE_POINT, MAX_RESOURCE_COST_PER_PAYOUT } from '../factionPayout'
 import { isUniqueConstraintViolation } from '../worldUpdaters/uniqueConstraintGuard'
+import { planCycleNetting } from '../factionDebtGraph'
 
 // A lender needs a real buffer above BROKE_THRESHOLD before it's asked to
 // help someone else — comfortably healthy, not merely solvent.
@@ -126,24 +127,90 @@ export function decideDefaultCascade(defaultedDebtCount: number, roughness: numb
 export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> {
   const changes: WorldChange[] = []
 
-  // 1. Default outstanding debts whose debtor has collapsed or gone broke.
-  // Only debts created on a PRIOR turn are eligible — so a loan
-  // originated later in this same pass (step 2) never immediately
-  // defaults the instant it's created.
+  // 0. Cancel debt that runs in a circle (#371).
+  //
+  // Runs BEFORE defaulting, and the order is the point: netting is the
+  // only way an obligation can leave this system without someone
+  // collapsing. Nothing has ever written FactionDebtStatus.PAID — a debt
+  // sat OUTSTANDING until its debtor went broke, then DEFAULTED and put a
+  // stability shockwave through its creditor. Obligations could only
+  // accumulate. If A owes B, B owes C and C owes A, part of what each
+  // "owes" is owed back around the ring, and cancelling the common
+  // minimum settles real debt for all of them while moving no resources
+  // at all — which is precisely why it can rescue a faction too broke to
+  // pay anyone. Defaulting first would destroy exactly the debts most
+  // worth netting.
+  //
+  // One fetch serves both this step and the defaulting below — same
+  // campaign, same OUTSTANDING status, same `turnCreated < turnNumber`
+  // guard (so a loan originated in step 2 can't be created and then netted
+  // or defaulted inside the same pass).
   const outstandingDebts = await ctx.db.factionDebt.findMany({
     where: { campaignId: ctx.campaignId, status: 'OUTSTANDING', turnCreated: { lt: ctx.turnNumber } },
-    select: { id: true, creditorFactionId: true, debtorFactionId: true },
+    select: { id: true, creditorFactionId: true, debtorFactionId: true, amount: true },
   })
 
-  if (outstandingDebts.length > 0) {
-    const debtorIds = [...new Set(outstandingDebts.map((d) => d.debtorFactionId))]
+  const nettings = planCycleNetting(outstandingDebts)
+  // Anything netting just settled is gone; it must not also default below.
+  const settledByNetting = new Set(nettings.filter((n) => n.settled).map((n) => n.debtId))
+
+  if (nettings.length > 0) {
+    const involvedIds = [...new Set(outstandingDebts.map((d) => d.creditorFactionId))]
+    const involved = await ctx.db.faction.findMany({
+      where: { id: { in: involvedIds } },
+      select: { id: true, name: true },
+    })
+    const nameById = new Map(involved.map((f) => [f.id, f.name]))
+    const debtById = new Map(outstandingDebts.map((d) => [d.id, d]))
+
+    for (const netting of nettings) {
+      const debt = debtById.get(netting.debtId)
+      if (!debt) continue
+
+      if (!ctx.dryRun) {
+        await ctx.db.factionDebt.update({
+          where: { id: netting.debtId },
+          data: netting.settled
+            ? { amount: 0, status: 'PAID', resolvedAt: new Date(), turnResolved: ctx.turnNumber }
+            : { amount: netting.newAmount },
+        })
+      }
+
+      const creditorName = nameById.get(debt.creditorFactionId) ?? 'a faction'
+      changes.push({
+        entityType: 'FACTION',
+        entityId: debt.creditorFactionId,
+        entityName: creditorName,
+        campaignId: ctx.campaignId,
+        field: 'debt',
+        previousValue: netting.previousAmount,
+        newValue: netting.newAmount,
+        reason: netting.settled
+          ? `A debt owed to ${creditorName} is written off against what it owed in turn`
+          : `A debt owed to ${creditorName} is partly written off against what it owed in turn`,
+        // Settling an obligation outright is worth remembering; shaving one
+        // down is the routine half of the same bookkeeping.
+        significant: netting.settled,
+        importance: 'NORMAL',
+      })
+    }
+  }
+
+  // 1. Default outstanding debts whose debtor has collapsed or gone broke.
+  // Reads the same fetch step 0 used, minus anything netting already
+  // settled — a debt cancelled against a circle no longer exists to
+  // default.
+  const defaultableDebts = outstandingDebts.filter((d) => !settledByNetting.has(d.id))
+
+  if (defaultableDebts.length > 0) {
+    const debtorIds = [...new Set(defaultableDebts.map((d) => d.debtorFactionId))]
     const debtors = await ctx.db.faction.findMany({
       where: { id: { in: debtorIds } },
       select: { id: true, isActive: true, resources: true },
     })
     const debtorById = new Map(debtors.map((d) => [d.id, d]))
 
-    const defaultingDebts = outstandingDebts.filter((debt) => {
+    const defaultingDebts = defaultableDebts.filter((debt) => {
       const debtor = debtorById.get(debt.debtorFactionId)
       return !debtor || !debtor.isActive || debtor.resources < BROKE_THRESHOLD
     })

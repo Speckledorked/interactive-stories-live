@@ -176,8 +176,9 @@ Verified functional, end to end, as of this rewrite:
   incidentally covered through broader war-resolution tests.
 - Debt, faction standing, relationships, harm, and corruption — all real,
   persisted, and mechanically consumed by the roll engine, not labels.
-- The capability tree — real branching prerequisites, cycle-proof by
-  construction, actually gates unlocks.
+- The capability graph — real branching prerequisites (a DAG, so a node may
+  require several things at once), cycle-proof by construction, actually
+  gates unlocks.
 - Memory/RAG — real pgvector search, with consolidation bounding table
   growth.
 - Fog of war — enforced structurally, with a passing test suite that fails
@@ -370,7 +371,7 @@ the exact rule and entry format.
 | Relationships — player-facing visibility | — (decided) | Decided: they stay hidden. A relationship a player could see is a number they'd optimize instead of a private opinion someone has earned. Recorded beside the schema column. |
 | NPC harm/recovery | 4 | NPCs have a real, if deliberately thinner, recovery path through the same `healHarm` PCs use — no conditions or death saves, by design. |
 | World history as a decision input | 4 | Crisis targeting (`pickMostThreateningFaction`) reads a genuinely bounded, windowed slice of `WorldEvent` history, not the whole campaign. The war-outcome cooldown is real and exactly deterministic — `WAR_EXHAUSTION_TURNS=6` vs. `WAR_DEFEAT_EXHAUSTION_TURNS=12`, precisely 2x, not merely "roughly," and thoroughly unit-tested. `factionTick.ts`'s goal-commitment lookback query is now bounded too (`GOAL_HISTORY_LOOKBACK_TURNS = GOAL_COMMITMENT_TURNS * 10`, plus a `take: 500` row backstop) — the commitment check only ever needs to know whether the most recent goal change happened within the last `GOAL_COMMITMENT_TURNS`, so the window costs nothing behaviorally. Fixed — see the Fix Log (#202). `WorldEvent` still has no general pruning/archival job — every currently-known read path that touches it is now individually bounded, but a table-wide retention policy doesn't exist. |
-| Capability tree (branching prerequisites) | 4 | A real tree gates unlocks: same-domain, strictly-lower-tier links (`resolvePrerequisiteLinks`) make cycles structurally impossible, not just detected. Not a 5 — prerequisites are single-parent and depth is whatever generation produces. |
+| Capability graph (branching prerequisites) | 4 | A real DAG gates unlocks: same-domain, strictly-lower-tier links (`resolvePrerequisiteLinks`) make cycles structurally impossible, not just detected. The single-parent limitation this row used to name is fixed (#372): prerequisites are edge rows in `CapabilityPrerequisite`, a node may require several at once, and `prerequisiteUnlockBlocked` requires ALL of them — a node with more states than the character has rows is treated as blocked, so never having touched a prerequisite is not confusable with having mastered it. The reseed path (`reseedWorld.ts`) now links prerequisites too; before #372 it wrote nodes and stopped, so a reseeded world had a flat graph and the gate did nothing for anyone who had used the admin reseed button. Not a 5 — depth is still whatever generation produces, and nothing checks that a domain's graph is actually reachable end to end. |
 | Corruption as a content gate | 4 | Gates location entry, quest acquisition, and NPC leverage (`checkCorruptionGate`) — three real enforcement points at boundaries, never retroactive. Not a 5 — gates are authored by the fiction, not seeded at world generation. The three gates are not quite uniform, noted here 2026-08-13 (adversarial audit): location entry and quest acquisition persist real, lasting gate state, but the NPC-leverage gate persists nothing at all — its own code comment (`resolution.ts`) says so directly: "deliberately the one gate with no lasting state — nothing is written, so it stops applying the moment the gate does." A repeated leverage attempt a moment later, after anything nudges corruption, re-evaluates from scratch with no memory of the prior refusal. A defensible, already-reasoned design choice, not a bug — but distinct enough from the other two gates' behavior to name explicitly rather than describe all three as uniformly "enforced by the engine." |
 | Cross-system economy (faction wealth ↔ items ↔ downtime ↔ quests) | 4 | Quest/downtime payouts are real transfers out of a faction's resources (`assessPayout`); a broke faction pays partially and defaults on the rest (though see the Downtime rows above — this doesn't apply to downtime rewards). Debt moves the dice in both directions. Granted items merge through one genuinely shared path (`mergeGrantedItems`). The duplicated-floor fragility #223 named is fixed: `applyGoldDelta` (`economy.ts`) is now the single place the "gold can't go negative" guarantee lives — `Math.max(0, current + clampGoldDelta(delta))` — and all 3 call sites (`worldUpdaters/characters.ts`, `questRewards.ts`, `downtime/downtimeRewards.ts`) route through it instead of each re-implementing the floor inline. `clampGoldDelta` itself is unchanged and still the right tool wherever a caller needs a clamped delta on its own, not a balance. The gap #306 named is fixed: `assessPayout` (`factionPayout.ts`) used to cap `resourceCost` (what a faction loses, at `MAX_RESOURCE_COST_PER_PAYOUT`) independently of `paid` (what the player receives, capped only by raw capacity) — for any faction above `BROKE_THRESHOLD` and any reward over 1,500 gold, a well-under-the-100,000-clamp-ceiling reward paid out in full while the faction's tracked depletion reflected only a fraction of it. `paid` is now derived from the same `MAX_RESOURCE_COST_PER_PAYOUT` ceiling, so the two numbers stay consistent with this file's own "a payout is a TRANSFER" design. Not a 5 — this engine still has no canonical gold scale by design; the guardrail is a magnitude backstop against malformed values, not game balance. |
 | Outcome-band adherence (does the narration obey the roll?) | 4 | The narrator self-reports which band its prose depicts (`outcome_echo`); mismatches are logged (`checkOutcomeAdherence`), feed a consistency metric, and are now persisted per-exchange and surfaced in the transparency panel (`AITransparencyPanel`) that already shows dice receipts. A small backfill call (`outcomeEchoRepair.ts`/`repairUnreportedAdherence`) resolves residual unreported entries after the fact — one word, capped at 3 attempts per scene, fails open to "still unreported" rather than retrying forever. Deliberately still only observed, never enforced — rewriting prose to match a roll would be a worse product than an occasional, visible drift. Not a 5 — the mechanism is entirely self-report-based, with zero cross-check against the actual prose (`checkOutcomeAdherence` only compares the rolled band against `outcome_echo`, never against `scene_text`); a confidently-wrong-but-self-consistent report — the band matches the roll, but the prose depicts something else — is structurally invisible to this system. The code's own header comment already admits real prose-matching isn't available. See #204. |
@@ -432,6 +433,21 @@ Pass type: adversarial audit
 What was checked: <what was actually read/exercised, specifically>
 Result: 0 new defects found
 ```
+
+Renaming a row is declared separately, on its own line anywhere in this
+section:
+
+```
+- Renamed: "old row name" -> "new row name"
+```
+
+The renamed row then inherits the old row's score for comparison, so a
+rename that also raises the number still needs its own clean-pass entry
+above. A rename proves nothing about the system and is allowed to prove
+nothing; the declaration exists only so the checker can follow a row across
+a relabel instead of treating it as a brand-new, ungated row.
+
+- Renamed: "Capability tree (branching prerequisites)" -> "Capability graph (branching prerequisites)"
 
 ### 2026-08-13 — Resource infrastructure & logistics
 Pass type: adversarial audit

@@ -96,6 +96,36 @@ function parseCleanAuditEntries(content: string): Set<string> {
 }
 
 /**
+ * #372: declared renames. #397 made a renamed row fail unconditionally,
+ * which closed a real bypass (a rename used to carry any score across
+ * unchecked) but also made row names permanently frozen — a row whose
+ * subject genuinely changed shape could never be relabelled honestly.
+ *
+ * A rename is now declarable in the Audit Log:
+ *
+ *     - Renamed: "Old row name" -> "New row name"
+ *
+ * and the check still does the work: the new row inherits the OLD row's
+ * score for comparison, so a rename that also raises the number needs the
+ * same clean-adversarial-pass entry any other raise would. A rename alone
+ * proves nothing and is therefore allowed to prove nothing.
+ *
+ * Returns new name -> old name.
+ */
+function parseDeclaredRenames(content: string): Map<string, string> {
+  const renames = new Map<string, string>()
+  const sectionMatch = content.match(/## Scorecard Audit Log\n([\s\S]*?)(?=\n## |$)/)
+  if (!sectionMatch) return renames
+
+  const re = /^\s*[-*]\s*Renamed:\s*["“]([^"”]+)["”]\s*(?:->|→)\s*["“]([^"”]+)["”]\s*$/gm
+  let m: RegExpExecArray | null
+  while ((m = re.exec(sectionMatch[1]))) {
+    renames.set(m[2].trim(), m[1].trim())
+  }
+  return renames
+}
+
+/**
  * #397: distinguishes "no base to compare" from "the base is unreachable".
  * Only the former is a legitimate skip.
  */
@@ -138,11 +168,30 @@ function main() {
   const baseScores = parseScorecard(baseContent)
   const currentScores = parseScorecard(currentContent)
   const cleared = parseCleanAuditEntries(currentContent)
+  const renames = parseDeclaredRenames(currentContent)
 
   const violations: string[] = []
   for (const [system, currentScore] of currentScores) {
     if (currentScore === null) continue
-    const baseScore = baseScores.get(system)
+    let baseScore = baseScores.get(system)
+
+    // #372: a declared rename resolves to the OLD row's score, so the
+    // comparison below is the same one every other row gets. Only accepted
+    // when the old name is genuinely gone — declaring a rename while both
+    // rows still exist would be a way to give a brand-new row a score it
+    // never earned.
+    const oldName = renames.get(system)
+    if (baseScore === undefined && oldName !== undefined && !currentScores.has(oldName)) {
+      const inherited = baseScores.get(oldName)
+      if (inherited === undefined) {
+        violations.push(
+          `"${system}": declared as a rename of "${oldName}", but no row by that name exists in the base`
+        )
+        continue
+      }
+      baseScore = inherited
+    }
+
     if (baseScore === null) continue // was non-numeric — not a "raise"
     if (baseScore === undefined) {
       // #397: a row present now but absent from the base is either a
@@ -158,7 +207,8 @@ function main() {
         violations.push(
           `"${system}": not present under this name in the base, and no row was added ` +
           `(base had ${baseScores.size} rows, now ${currentScores.size}) — a renamed row cannot ` +
-          `carry its score across unchecked`
+          `carry its score across unchecked. If this IS a rename, declare it in the Audit Log ` +
+          `as: - Renamed: "old name" -> "${system}"`
         )
       }
       continue

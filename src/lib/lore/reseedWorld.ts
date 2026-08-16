@@ -46,7 +46,7 @@ import { generateWorldGraph } from '@/lib/ai/worldGraphGenerator'
 import { buildLoreDigest } from './loreDigest'
 import { retrieveRelevantLore } from '@/lib/ai/loreRetrieval'
 import { createFactionsForCampaign, createNPCsForCampaign, createLocationsForCampaign } from '@/lib/templates/campaign-templates'
-import { slugifyCapabilityKey } from '@/lib/game/capabilities'
+import { slugifyCapabilityKey, resolvePrerequisiteLinks } from '@/lib/game/capabilities'
 import { BASIC_MOVES } from '@/lib/pbta-moves'
 
 // The extras call already carries factions + capability keys, so it needs
@@ -267,6 +267,48 @@ export async function reseedWorldFromLore(campaignId: string, options: ReseedOpt
       })),
       skipDuplicates: true,
     })
+
+    // #372: link the prerequisites the generation named. Before this, every
+    // node a reseed added was born a root — a reseeded world had a FLAT
+    // capability graph while a freshly-created one had a layered one, so the
+    // prerequisite gate silently did nothing for anyone who reseeded.
+    //
+    // Resolution runs over the whole campaign's scaffold, not just the new
+    // rows: a new tier-2 art usually names a tier-1 art that already exists.
+    // Existing nodes contribute no `requires` of their own — their edges are
+    // already in the table and createMany's skipDuplicates makes a re-link
+    // free rather than an error.
+    const newByKey = new Map(newCaps.map(c => [slugifyCapabilityKey(c.name), c]))
+    const links = resolvePrerequisiteLinks([
+      ...existingCaps.map(c => ({ key: c.key, name: c.name, domain: c.domain, tier: c.tier })),
+      ...newCaps.map(c => ({
+        key: slugifyCapabilityKey(c.name),
+        name: c.name,
+        domain: c.domain,
+        tier: c.tier,
+        requires: c.requires,
+      })),
+    ]).filter(link => newByKey.has(link.key))
+
+    if (links.length > 0) {
+      const nodes = await prisma.campaignCapability.findMany({
+        where: { campaignId },
+        select: { id: true, key: true },
+      })
+      const idByKey = new Map(nodes.map(n => [n.key, n.id]))
+      const edges = links
+        .map(link => ({
+          capabilityId: idByKey.get(link.key),
+          prerequisiteCapabilityId: idByKey.get(link.prerequisiteKey),
+        }))
+        .filter((e): e is { capabilityId: string; prerequisiteCapabilityId: string } =>
+          Boolean(e.capabilityId && e.prerequisiteCapabilityId)
+        )
+      if (edges.length > 0) {
+        await prisma.capabilityPrerequisite.createMany({ data: edges, skipDuplicates: true })
+        console.log(`🌳 Linked ${edges.length} capability prerequisites on reseed`)
+      }
+    }
   }
 
   // --- Fronts: purely additive in both modes ---------------------------------

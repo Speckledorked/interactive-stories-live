@@ -65,7 +65,7 @@ describe('generateWorldFromTemplate', () => {
     expect(result?.statLabels?.cool.label).toBe('Composure')
   })
 
-  it('carries a declared capability prerequisite through, rejecting self-reference (#82)', async () => {
+  it('carries declared capability prerequisites through, rejecting self-reference (#82, #372)', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key')
     vi.stubGlobal('fetch', mockCompletion({
       world_seed: 'seed',
@@ -75,10 +75,19 @@ describe('generateWorldFromTemplate', () => {
           domain: 'Swordplay',
           capabilities: [
             { name: 'Bladework', description: 'x', tier: 1, is_secret: false },
+            { name: 'Footwork', description: 'w', tier: 1, is_secret: false },
+            // The older single-string form. Worlds generated before #372
+            // are not malformed, so the parser still reads it.
             { name: 'Riposte', description: 'y', tier: 2, is_secret: false, requires: '  Bladework ' },
             // A node naming itself would be permanently un-unlockable —
             // the one malformed prerequisite worth catching at parse time.
             { name: 'Ouroboros', description: 'z', tier: 2, is_secret: false, requires: 'Ouroboros' },
+            // #372: the form the DAG exists for. A node that names two
+            // prerequisites keeps both — under a tree one of them had to
+            // be silently discarded.
+            { name: 'Feint', description: 'v', tier: 2, is_secret: false, requires: ['Bladework', ' footwork ', 'Bladework'] },
+            // Self-reference mixed into a list drops only itself.
+            { name: 'Recoil', description: 'u', tier: 2, is_secret: false, requires: ['Recoil', 'Bladework'] },
           ],
         },
       ],
@@ -87,9 +96,13 @@ describe('generateWorldFromTemplate', () => {
     const result = await generateWorldFromTemplate('pbta-fantasy', 'Title', '')
 
     const byName = Object.fromEntries((result?.capabilities || []).map(c => [c.name, c]))
-    expect(byName['Riposte'].requires).toBe('Bladework')
+    expect(byName['Riposte'].requires).toEqual(['Bladework'])
     expect(byName['Bladework'].requires).toBeUndefined()
     expect(byName['Ouroboros'].requires).toBeUndefined()
+    // Deduped case-insensitively — the same name twice is one edge, and the
+    // join table's unique index would reject the second anyway.
+    expect(byName['Feint'].requires).toEqual(['Bladework', 'footwork'])
+    expect(byName['Recoil'].requires).toEqual(['Bladework'])
   })
 
   it('omits statLabels entirely when the response has none', async () => {

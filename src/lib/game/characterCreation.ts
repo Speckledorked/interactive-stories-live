@@ -105,9 +105,15 @@ export async function createCharacter(campaignId: string, userId: string, body: 
   try {
     const scaffold = await prisma.campaignCapability.findMany({
       where: { campaignId },
-      select: { id: true, tier: true, isSecret: true, parentId: true }
+      // #372: "is anything in front of this node" is a count now, not a
+      // parent id — a node may have several prerequisites, and seeding only
+      // ever asks whether it has any.
+      select: { id: true, tier: true, isSecret: true, _count: { select: { prerequisites: true } } }
     })
-    const seeds = decideSeedStates(originFamiliarity, scaffold)
+    const seeds = decideSeedStates(
+      originFamiliarity,
+      scaffold.map((c) => ({ ...c, prerequisiteCount: c._count.prerequisites }))
+    )
     if (seeds.length > 0) {
       await prisma.characterCapability.createMany({
         data: seeds.map(s => ({

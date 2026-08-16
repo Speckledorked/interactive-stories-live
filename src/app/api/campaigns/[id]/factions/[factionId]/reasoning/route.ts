@@ -14,6 +14,19 @@ import { explainFactionGoalReassessment } from '@/lib/game/tick/factionTick'
 import { explainWarMomentum } from '@/lib/game/tick/warTick'
 import { findRivalId, parseFactionRelationships } from '@/lib/game/tick/types'
 import { parseBeliefVector } from '@/lib/game/tick/beliefTick'
+import { applyWhatIf, STAT_BAND, type WhatIfSpec } from '@/lib/api/whatIf'
+
+/**
+ * #427: the stats an admin may perturb to ask "what would this faction do
+ * if…". Exactly the three `decideFactionGoalReassessment` reads — opening
+ * a field the decision never consults would render a control that changes
+ * nothing, which teaches the reader the preview is decorative.
+ */
+const FACTION_WHAT_IF: WhatIfSpec = {
+  resources: STAT_BAND,
+  stability: STAT_BAND,
+  military: STAT_BAND,
+}
 
 interface FactionForGoalReasoning {
   goal: string
@@ -85,15 +98,22 @@ export async function GET(
 
     const turnNumber = worldMeta.currentTurnNumber
 
+    // #427: overlay the what-if BEFORE any reasoning runs, so every
+    // downstream projection sees one consistent hypothetical rather than a
+    // mix of real and imagined state. Nothing below writes, and this route
+    // is a GET, so the hypothetical cannot escape the response.
+    const whatIf = applyWhatIf(faction, request.nextUrl.searchParams, FACTION_WHAT_IF)
+    const projected = whatIf.snapshot
+
     // A player-led faction's goal is the player's call, not the automatic
     // tick's (see factionTick.ts) — skip the reassessment inputs entirely
     // rather than compute a decision nothing would ever apply.
-    const goalReasoning = faction.leaderCharacterId
+    const goalReasoning = projected.leaderCharacterId
       ? {
-          goal: faction.goal,
+          goal: projected.goal,
           reasoning: ['A player character leads this faction — its goal is their call, not the automatic tick.'],
         }
-      : await loadGoalReasoning(campaignId, factionId, faction, turnNumber)
+      : await loadGoalReasoning(campaignId, factionId, projected, turnNumber)
 
     // Any war (as the original declarer or an ally pulled in later) this
     // faction is currently fighting — same participant aggregation
@@ -133,10 +153,19 @@ export async function GET(
     })
 
     return NextResponse.json({
-      faction: { id: faction.id, name: faction.name, goal: faction.goal },
+      faction: { id: faction.id, name: faction.name, goal: projected.goal },
       turnNumber,
       goalReasoning,
       wars,
+      // Always present, so a client can render the what-if state without
+      // having to infer it from whether it sent params.
+      whatIf: {
+        overridden: whatIf.overridden,
+        rejected: whatIf.rejected,
+        // The real values, so the UI can show what was replaced rather than
+        // making the admin remember.
+        actual: { resources: faction.resources, stability: faction.stability, military: faction.military },
+      },
     })
   } catch (error) {
     console.error('Faction reasoning preview error:', error)

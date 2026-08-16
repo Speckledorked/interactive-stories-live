@@ -10,6 +10,10 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { explainConditionDrift, deriveConditionTags } from '@/lib/game/tick/locationConditionTick'
+import { applyWhatIf, STAT_BAND, type WhatIfSpec } from '@/lib/api/whatIf'
+
+/** #427: the one stat explainConditionDrift actually reads. */
+const LOCATION_WHAT_IF: WhatIfSpec = { conditionScore: STAT_BAND }
 
 export async function GET(
   request: NextRequest,
@@ -43,15 +47,25 @@ export async function GET(
     })
     const warPresent = Boolean(warContestingThisLocation)
 
-    const { nextConditionScore, reasoning } = explainConditionDrift(location, warPresent, location.isContested)
+    // #427: overlaid before the projection runs, so the drift explained is
+    // the drift of the hypothetical rather than a blend of the two.
+    const whatIf = applyWhatIf(location, request.nextUrl.searchParams, LOCATION_WHAT_IF)
+    const projected = whatIf.snapshot
+
+    const { nextConditionScore, reasoning } = explainConditionDrift(projected, warPresent, projected.isContested)
 
     return NextResponse.json({
       location: { id: location.id, name: location.name },
-      currentConditionScore: location.conditionScore,
+      currentConditionScore: projected.conditionScore,
       projectedConditionScore: nextConditionScore,
-      currentTags: deriveConditionTags(location.conditionScore, location.isContested),
-      projectedTags: deriveConditionTags(nextConditionScore, location.isContested),
+      currentTags: deriveConditionTags(projected.conditionScore, projected.isContested),
+      projectedTags: deriveConditionTags(nextConditionScore, projected.isContested),
       reasoning,
+      whatIf: {
+        overridden: whatIf.overridden,
+        rejected: whatIf.rejected,
+        actual: { conditionScore: location.conditionScore },
+      },
     })
   } catch (error) {
     console.error('Location reasoning preview error:', error)

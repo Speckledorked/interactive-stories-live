@@ -22,8 +22,8 @@ import { GET } from '../route'
 
 const db = prisma as any
 
-function req() {
-  return new NextRequest('http://localhost/api/campaigns/camp1/factions/f1/reasoning')
+function req(query = '') {
+  return new NextRequest(`http://localhost/api/campaigns/camp1/factions/f1/reasoning${query}`)
 }
 
 beforeEach(() => {
@@ -128,5 +128,73 @@ describe('GET /campaigns/[id]/factions/[factionId]/reasoning', () => {
     expect(body.wars).toHaveLength(1)
     expect(body.wars[0]).toMatchObject({ warId: 'war1', name: 'Siege of Ore Hills', attackerName: 'Ashcrown', defenderName: 'Blackreach' })
     expect(Array.isArray(body.wars[0].reasoning)).toBe(true)
+  })
+})
+
+describe('what-if overrides (#427)', () => {
+  const FACTION = {
+    id: 'f1', name: 'The Rustwatch', goal: 'expand',
+    resources: 40, stability: 55, military: 45,
+    relationships: {}, beliefVector: {}, leaderCharacterId: null,
+  }
+
+  beforeEach(() => {
+    db.faction.findFirst.mockResolvedValue({ ...FACTION })
+    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 7 })
+    db.worldEvent.findFirst.mockResolvedValue(null)
+    db.warParticipant.findMany.mockResolvedValue([])
+  })
+
+  it('writes nothing — the property that makes this safe to expose', async () => {
+    // The one failure mode that would make a what-if worse than not having
+    // one: a "preview" that edits live campaign state. Asserted against
+    // every mutating method on the mocked client, not just the ones this
+    // route happens to touch today, so a future write is caught wherever
+    // it is added.
+    await GET(req('?resources=90&stability=10'), { params: { id: 'camp1', factionId: 'f1' } })
+
+    for (const model of Object.values(db)) {
+      for (const [name, fn] of Object.entries(model as Record<string, unknown>)) {
+        if (/^(create|update|upsert|delete)/.test(name)) {
+          expect(fn, `route called ${name} during a what-if`).not.toHaveBeenCalled()
+        }
+      }
+    }
+  })
+
+  it('projects reasoning from the overridden stats, not the real ones', async () => {
+    const real = await (await GET(req(), { params: { id: 'camp1', factionId: 'f1' } })).json()
+    const hypothetical = await (
+      await GET(req('?resources=95&military=95&stability=95'), { params: { id: 'camp1', factionId: 'f1' } })
+    ).json()
+
+    // A faction at 40/45/55 and one at 95/95/95 must not reassess the same
+    // way — if they do, the override never reached the decision.
+    expect(hypothetical.goalReasoning).not.toEqual(real.goalReasoning)
+  })
+
+  it('reports what was overridden alongside the real values', async () => {
+    const response = await GET(req('?resources=90'), { params: { id: 'camp1', factionId: 'f1' } })
+    const body = await response.json()
+
+    expect(body.whatIf.overridden).toEqual(['resources'])
+    // The admin should not have to remember what they replaced.
+    expect(body.whatIf.actual).toEqual({ resources: 40, stability: 55, military: 45 })
+  })
+
+  it('reports an out-of-range value as rejected and uses the real one', async () => {
+    const response = await GET(req('?resources=999'), { params: { id: 'camp1', factionId: 'f1' } })
+    const body = await response.json()
+
+    expect(body.whatIf.overridden).toEqual([])
+    expect(body.whatIf.rejected).toHaveLength(1)
+  })
+
+  it('is inert without params, so the existing preview is unchanged', async () => {
+    const response = await GET(req(), { params: { id: 'camp1', factionId: 'f1' } })
+    const body = await response.json()
+
+    expect(body.whatIf.overridden).toEqual([])
+    expect(body.whatIf.rejected).toEqual([])
   })
 })

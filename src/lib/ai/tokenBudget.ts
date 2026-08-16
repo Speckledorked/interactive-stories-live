@@ -108,22 +108,33 @@ export function applyTokenBudget(
   }
 
   // Tier 1 (lowest priority, trimmed first): world-summary macro detail.
-  // Ordered least-central-to-continuity first: imported reference lore and
-  // RAG-recalled history are recall AIDS, not the scene itself, so they go
-  // before anything the world state actually depends on. Each step also
-  // declares whether it has anything left to give — a step with nothing to
-  // trim is skipped (not applied, not logged) rather than counted as a
-  // no-op "trim" that didn't actually shrink anything.
+  // Each step declares whether it has anything left to give — a step with
+  // nothing to trim is skipped (not applied, not logged) rather than
+  // counted as a no-op "trim" that didn't actually shrink anything.
+  //
+  // #396 reordered this. The old order was "imported reference lore and
+  // RAG-recalled history are recall AIDS, not the scene itself", which put
+  // relevant_campaign_history SECOND — so long-term memory was the second
+  // thing evicted under pressure, and pressure correlates with campaign
+  // length. The long campaign, where nobody remembers what happened forty
+  // scenes ago and the RAG recall is the only thing that does, is exactly
+  // the campaign that dropped it first. It is also the component nothing
+  // else can reconstruct: live rosters are re-read from the database every
+  // scene, but a memory the retrieval did not surface is simply gone.
+  //
+  // Two principles now:
+  //
+  //   1. HALVE BEFORE DROPPING. A halved list keeps its highest-ranked
+  //      entries; a dropped field keeps nothing. Steps that halve run
+  //      before steps that clear.
+  //   2. RE-DERIVABLE BEFORE IRREPLACEABLE. Reference lore is static and
+  //      identical every scene. Live world state is re-read every scene.
+  //      Long-term recall and the rolling campaign summary are neither, so
+  //      they go last.
   const tier1Steps: Array<[string, () => boolean, () => void]> = [
     ['relevant_lore',
       () => (worldSummary.relevant_lore?.length ?? 0) > 0,
       () => { worldSummary = { ...worldSummary, relevant_lore: [] } }],
-    ['relevant_campaign_history',
-      () => (worldSummary.relevant_campaign_history?.length ?? 0) > 0,
-      () => { worldSummary = { ...worldSummary, relevant_campaign_history: [] } }],
-    ['_campaignSummary',
-      () => !!worldSummary._campaignSummary,
-      () => { worldSummary = { ...worldSummary, _campaignSummary: undefined } }],
     ['recent_timeline_events',
       () => worldSummary.recent_timeline_events.length > 1,
       () => { worldSummary = { ...worldSummary, recent_timeline_events: halved(worldSummary.recent_timeline_events) ?? [] } }],
@@ -144,6 +155,16 @@ export function applyTokenBudget(
     ['factions',
       () => worldSummary.factions.length > 1,
       () => { worldSummary = { ...worldSummary, factions: halved(worldSummary.factions) ?? worldSummary.factions } }],
+    // Last two, and in this order: recall the retrieval surfaced for THIS
+    // scene, then the rolling summary of the whole campaign. Both are the
+    // long-absence memory #396 is about, and neither is re-derivable from
+    // the next scene's queries.
+    ['relevant_campaign_history',
+      () => (worldSummary.relevant_campaign_history?.length ?? 0) > 0,
+      () => { worldSummary = { ...worldSummary, relevant_campaign_history: [] } }],
+    ['_campaignSummary',
+      () => !!worldSummary._campaignSummary,
+      () => { worldSummary = { ...worldSummary, _campaignSummary: undefined } }],
   ]
 
   for (const [name, hasContent, apply] of tier1Steps) {

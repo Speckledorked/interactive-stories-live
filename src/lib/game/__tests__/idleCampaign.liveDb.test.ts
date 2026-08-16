@@ -32,6 +32,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 import { runWorldTurn } from '../worldTurn'
+import { buildAbsenceJournal, describeJournalEntry, MAX_JOURNAL_ENTRIES } from '../absenceJournal'
 
 const RUN = process.env.RUN_DB_TESTS === '1'
 const describeIfDb = RUN ? describe : describe.skip
@@ -189,6 +190,42 @@ describeIfDb('an idle campaign — thirty world turns, no player (#401)', () => 
     const keys = rows.map((r) => r.dedupeKey)
 
     expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('lets a returning player reconstruct locations, clocks AND factions (#396)', async () => {
+    // The acceptance test #396 asked for, stated as it stated it: thirty
+    // world turns with no player, then assert the returning player's
+    // surface mentions at least one location change, one clock change and
+    // one faction change.
+    //
+    // Before the fix this could not pass on any surface. The away recap
+    // took the last 5 TimelineEvents (faction/NPC-scoped, AI-narrated); the
+    // digest covered faction ∪ NPC only; rumors capped at 50 of the same
+    // feed. Everything about locations, weather, clocks, quests and the
+    // economy was structurally unreachable — the durable record existed the
+    // whole time, in WorldEvent, and nothing player-facing read it.
+    const events = await prisma.worldEvent.findMany({
+      where: { campaignId },
+      select: {
+        id: true, turnNumber: true, createdAt: true, targetType: true,
+        targetId: true, targetName: true, field: true, significant: true, importance: true,
+      },
+    })
+
+    const journal = buildAbsenceJournal(events, MAX_JOURNAL_ENTRIES)
+    const categories = new Set(journal.entries.map((e) => e.category))
+
+    expect(categories, 'no location change survived into the reconstruction').toContain('places')
+    expect(categories, 'no clock change survived into the reconstruction').toContain('clocks')
+    expect(categories, 'no faction change survived into the reconstruction').toContain('factions')
+
+    // ...and every line is renderable without touching the GM-grade reason.
+    for (const entry of journal.entries) {
+      expect(describeJournalEntry(entry)).toContain(entry.targetName)
+    }
+
+    // The window spans the absence rather than collapsing to its last turn.
+    expect(journal.turnRange!.to - journal.turnRange!.from).toBeGreaterThan(1)
   })
 
   it('leaves the world-turn lease released', async () => {

@@ -51,6 +51,75 @@ describe('applyTokenBudget', () => {
     expect(result.worldSummary.relevant_lore).toEqual([])
   })
 
+  it('drops long-term memory LAST of the tier-1 steps (#396)', () => {
+    // The defect: relevant_campaign_history was evicted SECOND, right after
+    // imported lore. It is the one component that can summarise a long
+    // absence, and long absences happen on long campaigns — precisely where
+    // the budget is tightest. Live rosters are re-read from the database on
+    // the next scene; a memory the retrieval already surfaced and the
+    // budget then discarded is gone.
+    const npc = (i: number) => ({ id: `n${i}`, name: `NPC ${i}`, description: bigText(400) })
+    const faction = (i: number) => ({ id: `f${i}`, name: `Faction ${i}`, description: bigText(400) })
+    const history = [
+      { turn: 1, title: 'T', summary: bigText(200), type: 'x', importance: 'NORMAL', emotional_tone: null, relevance: '90%' },
+    ]
+
+    const worldSummary = makeWorldSummary({
+      npcs: Array.from({ length: 8 }, (_, i) => npc(i)),
+      factions: Array.from({ length: 8 }, (_, i) => faction(i)),
+      relevant_campaign_history: history,
+    } as never)
+
+    // Exactly the budget that halving both rosters reaches — so the run
+    // stops there, and whether history survives is decided purely by
+    // whether it sits before or after those two steps.
+    const afterHalving = makeWorldSummary({
+      npcs: Array.from({ length: 4 }, (_, i) => npc(i)),
+      factions: Array.from({ length: 4 }, (_, i) => faction(i)),
+      relevant_campaign_history: history,
+    } as never)
+
+    const result = applyTokenBudget(
+      { worldSummary, currentSceneIntro: '', participantCharacterIds: null },
+      estimate(afterHalving, '')
+    )
+
+    expect(result.stepsApplied).toContain('npcs')
+    expect(result.stepsApplied).toContain('factions')
+    expect(result.stepsApplied).not.toContain('relevant_campaign_history')
+    expect(result.worldSummary.relevant_campaign_history).toHaveLength(1)
+  })
+
+  it('orders the full tier-1 sequence re-derivable-first, halve-before-drop (#396)', () => {
+    const order = [
+      'relevant_lore',
+      'recent_timeline_events',
+      'wars_quests_locations_clocks',
+      'npcs',
+      'factions',
+      'relevant_campaign_history',
+      '_campaignSummary',
+    ]
+    const worldSummary = makeWorldSummary({
+      relevant_lore: [{ title: 'Lore', content: bigText(600), relevance: '90%' }],
+      recent_timeline_events: Array.from({ length: 6 }, (_, i) => ({ turn: i, title: `E${i}`, summary: bigText(300) })),
+      clocks: Array.from({ length: 6 }, (_, i) => ({ id: `k${i}`, name: `Clock ${i}`, description: bigText(300) })),
+      npcs: Array.from({ length: 6 }, (_, i) => ({ id: `n${i}`, name: `NPC ${i}`, description: bigText(300) })),
+      factions: Array.from({ length: 6 }, (_, i) => ({ id: `f${i}`, name: `Faction ${i}`, description: bigText(300) })),
+      relevant_campaign_history: [
+        { turn: 1, title: 'T', summary: bigText(300), type: 'x', importance: 'NORMAL', emotional_tone: null, relevance: '90%' },
+      ],
+      _campaignSummary: bigText(300),
+    } as never)
+
+    // Budget of 1 forces every tier-1 step to fire, so stepsApplied is the
+    // whole sequence and the order is directly observable.
+    const result = applyTokenBudget({ worldSummary, currentSceneIntro: '', participantCharacterIds: null }, 1)
+
+    const tier1 = result.stepsApplied.filter((s) => order.includes(s))
+    expect(tier1).toEqual(order)
+  })
+
   it('trims lore, history, and campaign summary in priority order before ever touching characters', () => {
     const worldSummary = makeWorldSummary({
       relevant_lore: [{ title: 'Lore', content: bigText(1000), relevance: '90%' }],

@@ -4,12 +4,14 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     worldEvent: {
       createManyAndReturn: vi.fn().mockResolvedValue([]),
+      // #377: read-back for rows a replay skipped.
+      findMany: vi.fn().mockResolvedValue([]),
     },
   },
 }))
 
 import { prisma } from '@/lib/prisma'
-import { persistWorldEvents } from '../worldEventLog'
+import { persistWorldEvents, worldEventDedupeKeys } from '../worldEventLog'
 import type { WorldChange } from '../types'
 
 function makeChange(overrides: Partial<WorldChange> = {}): WorldChange {
@@ -125,5 +127,88 @@ describe('persistWorldEvents', () => {
     vi.mocked(prisma.worldEvent.createManyAndReturn).mockRejectedValueOnce(new Error('db down'))
     const result = await persistWorldEvents('campaign-1', 5, [makeChange()])
     expect(result).toEqual({ count: 0, events: [] })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #377: replay identity
+// ---------------------------------------------------------------------------
+//
+// A world turn spans ~14 commit boundaries. A failure partway through
+// re-runs the WHOLE turn at the same turn number, and before this the
+// retry wrote ~40 duplicate rows — which are not inert, because
+// beliefTick/npcDispositionTick derive drift by COUNTING prior-turn rows.
+// A retry silently doubled the drift it fed back into the simulation.
+
+describe('worldEventDedupeKeys (#377)', () => {
+  it('gives the same change list the same keys on a replay', () => {
+    const changes = [makeChange(), makeChange({ entityId: 'faction-2', field: 'stability' })]
+
+    expect(worldEventDedupeKeys(5, changes)).toEqual(worldEventDedupeKeys(5, changes))
+  })
+
+  it('distinguishes two genuinely different writes to the same field in one turn', () => {
+    // Real case: seasonTick and economyTick both nudge faction.resources in
+    // the same turn. Collapsing those into one row would silently drop a
+    // real event, so the ordinal keeps them apart.
+    const [a, b] = worldEventDedupeKeys(5, [
+      makeChange({ previousValue: 50, newValue: 47 }),
+      makeChange({ previousValue: 50, newValue: 47 }),
+    ])
+
+    expect(a).not.toBe(b)
+  })
+
+  it('separates the same change in different turns', () => {
+    const [turn5] = worldEventDedupeKeys(5, [makeChange()])
+    const [turn6] = worldEventDedupeKeys(6, [makeChange()])
+
+    expect(turn5).not.toBe(turn6)
+  })
+
+  it('separates changes that differ only in their before/after values', () => {
+    const [down] = worldEventDedupeKeys(5, [makeChange({ previousValue: 50, newValue: 47 })])
+    const [up] = worldEventDedupeKeys(5, [makeChange({ previousValue: 47, newValue: 50 })])
+
+    expect(down).not.toBe(up)
+  })
+})
+
+describe('persistWorldEvents — replay safety (#377)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('writes a dedupeKey per row and asks the database to skip duplicates', async () => {
+    vi.mocked(prisma.worldEvent.createManyAndReturn).mockResolvedValueOnce([{ id: 'e1', significant: true }] as any)
+
+    const changes = [makeChange()]
+    await persistWorldEvents('campaign-1', 5, changes)
+
+    const call = vi.mocked(prisma.worldEvent.createManyAndReturn).mock.calls[0][0] as any
+    expect(call.skipDuplicates).toBe(true)
+    expect(call.data[0].dedupeKey).toBe(worldEventDedupeKeys(5, changes)[0])
+  })
+
+  it('still returns the events for rows a replay skipped', async () => {
+    // The first attempt may well have died BETWEEN writing the events and
+    // writing their EventWitness rows — which is exactly the partial state
+    // the replay exists to finish. Callers need the ids either way.
+    vi.mocked(prisma.worldEvent.createManyAndReturn).mockResolvedValueOnce([] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ id: 'already-there', significant: true }] as any)
+
+    const result = await persistWorldEvents('campaign-1', 5, [makeChange()])
+
+    expect(result.events).toEqual([{ id: 'already-there', significant: true }])
+    // count reports what this attempt actually inserted, which is nothing.
+    expect(result.count).toBe(0)
+  })
+
+  it('does not read back when every row was inserted', async () => {
+    vi.mocked(prisma.worldEvent.createManyAndReturn).mockResolvedValueOnce([{ id: 'e1', significant: true }] as any)
+
+    await persistWorldEvents('campaign-1', 5, [makeChange()])
+
+    expect(prisma.worldEvent.findMany).not.toHaveBeenCalled()
   })
 })

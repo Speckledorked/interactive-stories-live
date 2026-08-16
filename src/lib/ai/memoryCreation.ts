@@ -34,6 +34,31 @@ export interface MemoryData {
   importance: MemoryImportance;
   emotionalTone?: string;
   tags: string[];
+  /**
+   * #377: optional replay identity. Supply this from any caller that can
+   * be re-run for the same logical event — the world turn is ~14 commit
+   * boundaries, so a failure partway through re-runs the whole turn and
+   * used to re-pay for every embedding it had already bought AND leave
+   * duplicate rows competing in the RAG candidate pool.
+   *
+   * Omit it for genuinely one-shot writes; NULLs are distinct in a
+   * Postgres unique index, so an absent key never collides with anything.
+   */
+  dedupeKey?: string;
+}
+
+/**
+ * Build a stable replay key for a memory. Callers that can be replayed
+ * should use this rather than inventing a format, so the shape stays
+ * greppable and consistent across the four write paths.
+ */
+export function memoryDedupeKey(parts: {
+  memoryType: MemoryType;
+  sourceId: string;
+  turnNumber: number;
+  title: string;
+}): string {
+  return `${parts.memoryType}|${parts.sourceId}|${parts.turnNumber}|${parts.title}`;
 }
 
 /**
@@ -50,6 +75,22 @@ export interface MemoryData {
  */
 export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
   try {
+    // #377: check BEFORE embedding, not just at insert time. The ON
+    // CONFLICT below is what actually guarantees uniqueness, but by then
+    // the embedding call has already been made and billed — and the whole
+    // reason a replayed world turn is expensive is those calls, not the
+    // rows. One cheap indexed SELECT buys the saving.
+    if (data.dedupeKey) {
+      const existing = await prisma.campaignMemory.findFirst({
+        where: { campaignId: data.campaignId, dedupeKey: data.dedupeKey },
+        select: { id: true },
+      });
+      if (existing) {
+        console.log(`↩️  Memory already recorded (${data.title}) — replay, no embedding purchased`);
+        return true;
+      }
+    }
+
     // Generate embedding for the summary. One bounded retry: most
     // embedding failures are transient (a rate limit, a momentary network
     // blip), not permanent.
@@ -85,6 +126,7 @@ export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
         importance,
         "emotionalTone",
         tags,
+        "dedupeKey",
         "createdAt"
       ) VALUES (
         gen_random_uuid(),
@@ -103,8 +145,13 @@ export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
         ${data.importance}::\"MemoryImportance\",
         ${data.emotionalTone},
         ${data.tags}::text[],
+        ${data.dedupeKey ?? null},
         NOW()
       )
+      -- #377: the pre-check above races against a concurrent identical
+      -- write; this is what actually enforces uniqueness. NULL dedupeKeys
+      -- are distinct in Postgres, so opted-out callers never conflict.
+      ON CONFLICT ("campaignId", "dedupeKey") DO NOTHING
     `;
 
     console.log(`✓ Created memory: ${data.title} (${data.importance})`);

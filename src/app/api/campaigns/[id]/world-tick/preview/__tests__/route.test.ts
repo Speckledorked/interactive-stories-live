@@ -55,14 +55,16 @@ describe('POST', () => {
   })
 
   it('previews the tick with dryRun:true, never mutating real state', async () => {
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 5 })
     ;(runWorldTick as any).mockResolvedValue({ turnNumber: 6, changes: [{ entityType: 'FACTION' }] })
 
     const response = await POST(req(), { params: { id: 'camp1' } })
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(runWorldTick).toHaveBeenCalledWith('camp1', 5, { dryRun: true })
+    // #374: previews the turn that will actually run next — simulationTurn
+    // + 1, the same value runWorldTurn passes — not the scene counter.
+    expect(runWorldTick).toHaveBeenCalledWith('camp1', 6, { dryRun: true })
     expect(body).toEqual({ turnNumber: 6, changes: [{ entityType: 'FACTION' }] })
   })
 

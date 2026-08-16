@@ -42,6 +42,11 @@
 // get decayed the same turn it was born (the exact same-tick double-count
 // tickWake's own internal decay-before-create ordering exists to avoid).
 
+// roster-exempt: debts and loans are per-CONTRACT, not per-faction — a
+// creditor outside this tick's roster is still owed money, and a loan
+// maturing must default on schedule regardless of whose turn it is to be
+// simulated. Capping this would make repayment depend on rotation luck.
+
 import { TickContext, TickHandlerResult, WorldChange, clamp, findAllyIds } from './types'
 import { assessPayout, BROKE_THRESHOLD, GOLD_PER_RESOURCE_POINT, MAX_RESOURCE_COST_PER_PAYOUT } from '../factionPayout'
 import { isUniqueConstraintViolation } from '../worldUpdaters/uniqueConstraintGuard'

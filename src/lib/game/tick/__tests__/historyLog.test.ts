@@ -12,7 +12,13 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@/lib/ai/memoryCreation', () => ({ createCampaignMemory: vi.fn() }))
+vi.mock('@/lib/ai/memoryCreation', () => ({
+  createCampaignMemory: vi.fn(),
+  // #377: the real module's replay-key builder is a pure string join, so
+  // mirroring it here keeps the assertion below checking a real shape.
+  memoryDedupeKey: (p: { memoryType: string; sourceId: string; turnNumber: number; title: string }) =>
+    `${p.memoryType}|${p.sourceId}|${p.turnNumber}|${p.title}`,
+}))
 
 import { createCampaignMemory } from '@/lib/ai/memoryCreation'
 import { logSignificantChanges } from '../historyLog'

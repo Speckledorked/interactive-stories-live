@@ -23,7 +23,7 @@
 
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
-import { TICK_ROTATION_ORDER, markNpcsTicked } from './capOrdering'
+import { rosterNpcFilter } from './capOrdering'
 import { ConsequenceAction } from '@/lib/ai/consequenceExtraction'
 
 export interface NpcDisposition {
@@ -180,6 +180,9 @@ function classifyFactionEvent(row: { type: string; newValue: string | null; orig
   return null
 }
 
+/** See MAX_BELIEF_CATCHUP_TURNS — same bound, same reasoning. */
+export const MAX_DISPOSITION_CATCHUP_TURNS = 30
+
 const RELEVANT_OWN_EVENT_TYPES = ['npc.consequence', 'npc.goalCompleted']
 const RELEVANT_FACTION_EVENT_TYPES = ['faction.warResolved', 'faction.warEnded', 'faction.stability']
 
@@ -192,34 +195,51 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
   // so the exact same WorldEvent rows never get reclassified into fresh
   // drift a second time. See the watermark fields' own doc comment on
   // WorldMeta for the full picture.
+  // #375: the watermark is PER NPC, not per campaign — the exact
+  // counterpart of beliefTick's fix, for the same reason. A campaign-level
+  // watermark advanced past turn T after processing only the NPCs that won
+  // that tick's rotation, so everyone else lost that turn's drift
+  // permanently. See Faction.beliefDriftThroughTurn.
   const targetTurn = ctx.turnNumber - 1
-  const meta = await ctx.db.worldMeta.findUnique({
-    where: { campaignId: ctx.campaignId },
-    select: { dispositionDriftProcessedThroughTurn: true },
-  })
-  if (meta && meta.dispositionDriftProcessedThroughTurn !== null && meta.dispositionDriftProcessedThroughTurn >= targetTurn) {
-    return { changes: [] }
-  }
 
   const npcs = await ctx.db.nPC.findMany({
-    where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
-    // #283: importance desc is the intentional priority; the rotation key
-    // breaks ties among equally-important NPCs — see capOrdering.ts.
-    orderBy: [{ importance: 'desc' }, TICK_ROTATION_ORDER],
-    take: ctx.npcCap,
-    select: { id: true, name: true, factionId: true, disposition: true },
+    where: {
+      campaignId: ctx.campaignId,
+      isAlive: true,
+      importance: { gte: MAJOR_IMPORTANCE_THRESHOLD },
+      ...rosterNpcFilter(ctx),
+      OR: [
+        { dispositionDriftThroughTurn: null },
+        { dispositionDriftThroughTurn: { lt: targetTurn } },
+      ],
+    },
+    // Importance desc is the intentional priority; id breaks ties
+    // deterministically. Rotation itself is resolved once per tick — see
+    // capOrdering.ts.
+    orderBy: [{ importance: 'desc' }, { id: 'asc' }],
+    select: { id: true, name: true, factionId: true, disposition: true, dispositionDriftThroughTurn: true },
   })
   if (npcs.length === 0) return { changes: [] }
-  if (!ctx.dryRun) await markNpcsTicked(ctx.db, npcs.map((n) => n.id))
 
   const changes: WorldChange[] = []
 
   for (const npc of npcs) {
+    // Everything since this NPC last drifted, bounded — so an NPC that
+    // lost two rotations catches up on those turns rather than skipping
+    // them, and one returning after a long absence can't scan its whole
+    // history inside the shared tick transaction.
+    const turnWindow = {
+      gte: Math.max(
+        (npc.dispositionDriftThroughTurn ?? -1) + 1,
+        targetTurn - MAX_DISPOSITION_CATCHUP_TURNS
+      ),
+      lte: targetTurn,
+    }
     const [ownEvents, factionEvents] = await Promise.all([
       ctx.db.worldEvent.findMany({
         where: {
           campaignId: ctx.campaignId,
-          turnNumber: targetTurn,
+          turnNumber: turnWindow,
           targetType: 'NPC',
           targetId: npc.id,
           type: { in: RELEVANT_OWN_EVENT_TYPES },
@@ -230,7 +250,7 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
         ? ctx.db.worldEvent.findMany({
             where: {
               campaignId: ctx.campaignId,
-              turnNumber: targetTurn,
+              turnNumber: turnWindow,
               targetType: 'FACTION',
               targetId: npc.factionId,
               type: { in: RELEVANT_FACTION_EVENT_TYPES },
@@ -240,20 +260,31 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
         : Promise.resolve([] as { type: string; newValue: string | null; origin: string; wakeSourceType: string | null }[]),
     ])
 
+
     const driftEvents = [
       ...ownEvents.map((row) => classifyOwnEvent({ type: row.type, newValue: row.newValue })),
       ...factionEvents.map((row) => classifyFactionEvent({ type: row.type, newValue: row.newValue, origin: row.origin, wakeSourceType: row.wakeSourceType })),
     ].filter((e): e is DispositionDriftEvent => e !== null)
 
-    if (driftEvents.length === 0) continue
-
     const current = parseDisposition(npc.disposition) ?? NEUTRAL_DISPOSITION
-    const next = decideDispositionDrift(current, driftEvents)
-    if (dispositionsEqual(current, next)) continue
+    const next = driftEvents.length > 0 ? decideDispositionDrift(current, driftEvents) : current
+    const drifted = driftEvents.length > 0 && !dispositionsEqual(current, next)
 
+    // One write per NPC. The watermark advances whether or not anything
+    // drifted — an empty window is a real answer to "did anything happen
+    // in these turns" — and the drifted disposition rides along when there
+    // is one.
     if (!ctx.dryRun) {
-      await ctx.db.nPC.update({ where: { id: npc.id }, data: { disposition: next as object } })
+      await ctx.db.nPC.update({
+        where: { id: npc.id },
+        data: {
+          dispositionDriftThroughTurn: targetTurn,
+          ...(drifted ? { disposition: next as object } : {}),
+        },
+      })
     }
+
+    if (!drifted) continue
 
     changes.push({
       entityType: 'NPC',
@@ -269,19 +300,6 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
       // worth a history/RAG entry.
       significant: false,
       importance: 'NORMAL',
-    })
-  }
-
-  // Mark this turn as scanned regardless of whether any NPC actually
-  // drifted — an empty result is still a real answer to "did anything
-  // change in this window", not a reason to re-ask the same question
-  // next pass.
-  if (!ctx.dryRun) {
-    // updateMany (not update) — some campaigns in tests/older data may
-    // predate a WorldMeta row; degrade to a no-op rather than throwing.
-    await ctx.db.worldMeta.updateMany({
-      where: { campaignId: ctx.campaignId },
-      data: { dispositionDriftProcessedThroughTurn: targetTurn },
     })
   }
 

@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { checkAndResolveCompletedClocks } from './stateUpdater'
 import { runWorldTick } from './worldTick'
 import { consolidateOldMemories } from '@/lib/ai/memoryConsolidation'
-import { resolveWorldTurnHours, decideWorldTurnPacing } from './tick/pacing'
+import { resolveWorldTurnHours, decideWorldTurnPacing, leaseIsAvailable, staleLeaseCutoff } from './tick/pacing'
 import { advanceClocks, decideClockAdvancement } from './tick/clockTick'
 import type { FactionForClockAdvancement } from './tick/clockTick'
 import { resolveCompletedAmbitions } from './tick/ambitionResolution'
@@ -29,15 +29,33 @@ export type { FactionForClockAdvancement }
  * last one (see lib/game/tick/pacing.ts — default one fictional day).
  * This is what the resolution pipeline calls: rapid exchanges where mere
  * minutes pass in the fiction no longer advance factions, and a "three
- * days later" beat does. The accumulator reset is an atomic claim
- * (updateMany with a gte guard) so concurrent resolutions can't both run
- * a turn off the same banked hours. Admin force paths still call
- * runWorldTurn directly, bypassing the gate.
+ * days later" beat does. Admin force paths still call runWorldTurn
+ * directly, bypassing the gate.
+ *
+ * #376 — the claim is a LEASE, not a rewrite of the accumulator.
+ *
+ * This used to claim by rewriting hoursSinceWorldTurn under a
+ * `gte: threshold` guard, on the theory that spending the banked hours
+ * excludes the next claimer. It doesn't: decideWorldTurnPacing caps banked
+ * overflow at one threshold, so at acc >= 2*threshold the value written is
+ * EXACTLY the threshold and still satisfies `gte`. Since the heartbeat
+ * sweep re-banks ~24h/day and the accumulator parks on the boundary after
+ * every run, a duplicate concurrent turn was the STEADY STATE for an idle
+ * campaign, not a rare race.
+ *
+ * The two questions are now separate columns: hoursSinceWorldTurn answers
+ * "how much fiction time carries forward", worldTurnRunningSince answers
+ * "is a run in flight". Both are set in one updateMany, so the claim stays
+ * a single atomic compare-and-set — but now the post-state genuinely fails
+ * the pre-state predicate, because the lease is non-null.
+ *
+ * A lease rather than a flag because the holder can be killed (the cron
+ * sweep runs against a maxDuration budget); see WORLD_TURN_LEASE_TIMEOUT_MS.
  */
 export async function runWorldTurnIfDue(campaignId: string): Promise<{ ran: boolean }> {
   const worldMeta = await prisma.worldMeta.findUnique({
     where: { campaignId },
-    select: { hoursSinceWorldTurn: true, worldTurnHours: true }
+    select: { hoursSinceWorldTurn: true, worldTurnHours: true, worldTurnRunningSince: true }
   })
   if (!worldMeta) return { ran: false }
 
@@ -48,9 +66,26 @@ export async function runWorldTurnIfDue(campaignId: string): Promise<{ ran: bool
     return { ran: false }
   }
 
+  const now = new Date()
+  if (!leaseIsAvailable(worldMeta.worldTurnRunningSince, now)) {
+    console.log(`🌍 World turn already in flight for ${campaignId} (since ${worldMeta.worldTurnRunningSince?.toISOString()})`)
+    return { ran: false }
+  }
+
+  // The lease predicate is the same test as leaseIsAvailable above,
+  // expressed against the row as it is AT WRITE TIME rather than as it was
+  // when we read it — that re-check is the whole point of doing it in the
+  // update's WHERE rather than in application code.
   const claimed = await prisma.worldMeta.updateMany({
-    where: { campaignId, hoursSinceWorldTurn: { gte: threshold } },
-    data: { hoursSinceWorldTurn: decision.remainingHours }
+    where: {
+      campaignId,
+      hoursSinceWorldTurn: { gte: threshold },
+      OR: [
+        { worldTurnRunningSince: null },
+        { worldTurnRunningSince: { lt: staleLeaseCutoff(now) } },
+      ],
+    },
+    data: { hoursSinceWorldTurn: decision.remainingHours, worldTurnRunningSince: now },
   })
   if (claimed.count === 0) {
     return { ran: false }
@@ -59,22 +94,40 @@ export async function runWorldTurnIfDue(campaignId: string): Promise<{ ran: bool
   try {
     await runWorldTurn(campaignId)
   } catch (error) {
-    // Phase 3: runWorldTick's own writes now roll back cleanly on failure.
+    // runWorldTick's own writes roll back cleanly on failure, but
     // runWorldTurn does real work beyond it (offscreen AI narration,
-    // digests) that no transaction covers, and clock advancement (#229) is
-    // wrapped in its OWN separate transaction — internally all-or-nothing,
-    // but still a distinct commit from runWorldTick's, so a failure between
-    // the two still leaves this turn only partially applied. Either way,
-    // the claim above already spent the banked hours — restore exactly what
-    // this attempt consumed (not overwrite) so a concurrent resolution's
-    // own banked hours in the meantime aren't clobbered, and the next
-    // heartbeat retries this turn instead of the hours being silently lost.
+    // digests, clock advancement in its own transaction) that no single
+    // transaction covers — so a failure between commits leaves this turn
+    // partially applied. The turn is replay-safe rather than atomic: see
+    // WorldEvent.dedupeKey / CampaignMemory.dedupeKey (#377), which make
+    // the retry below skip whatever this attempt already wrote instead of
+    // duplicating it.
+    //
+    // The claim above already spent the banked hours — restore exactly
+    // what this attempt consumed (not overwrite) so a concurrent
+    // resolution's own banked hours in the meantime aren't clobbered, and
+    // the next heartbeat retries this turn rather than losing the hours.
     const consumedHours = worldMeta.hoursSinceWorldTurn - decision.remainingHours
     await prisma.worldMeta.update({
       where: { campaignId },
       data: { hoursSinceWorldTurn: { increment: consumedHours } },
     })
     throw error
+  } finally {
+    // Release only OUR lease. If this run overran the timeout and another
+    // process legitimately took the lease over, its stamp is different and
+    // this updateMany matches nothing — a slow run must not free the lease
+    // out from under its successor.
+    await prisma.worldMeta
+      .updateMany({
+        where: { campaignId, worldTurnRunningSince: now },
+        data: { worldTurnRunningSince: null },
+      })
+      .catch((err: unknown) => {
+        // A failed release is self-healing via the staleness timeout, so it
+        // must never mask the turn's own outcome.
+        console.error('⚠️ Failed to release world-turn lease (self-heals on timeout):', err)
+      })
   }
   return { ran: true }
 }
@@ -96,7 +149,23 @@ export async function runWorldTurn(campaignId: string) {
     throw new Error('WorldMeta not found')
   }
 
-  const currentTurn = worldMeta.currentTurnNumber
+  // #374: the SIMULATION's own clock, not the scene counter.
+  //
+  // This used to be `worldMeta.currentTurnNumber` — which is written only
+  // by sceneResolver.ts, i.e. it counts PLAYER SCENE RESOLUTIONS. This
+  // function read it and never wrote it, so a campaign with no players
+  // present ran every world turn at the identical turn number. Fourteen
+  // handlers consume it as elapsed simulation time, so the consequences
+  // were not subtle: weather pinned to a constant, NPC schedules froze or
+  // thrashed on `TIME_OF_DAY[turn % 4]`, `age = currentTurn - event.turn`
+  // never grew so information never propagated, loans could never mature
+  // into default, belief/disposition drift ran exactly once and then
+  // no-opped forever, and memory consolidation (gated on `turn % 10`)
+  // either never ran or ran on every single turn.
+  //
+  // simulationTurn advances here and is committed inside runWorldTick's
+  // transaction, so it moves if and only if a tick actually happened.
+  const currentTurn = worldMeta.simulationTurn + 1
   // Which in-game day this world turn's events happened on — see
   // lib/game/calendar.ts. Every writer below stamps its TimelineEvent/
   // CampaignLog rows with this same value so a background tick's events

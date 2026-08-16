@@ -25,6 +25,7 @@ import { applyLocationChanges } from './worldUpdaters/locations'
 import { applyQuestChanges } from './worldUpdaters/quests'
 import { applyBargainOffers } from './worldUpdaters/bargainOffers'
 import { storeGmNotesForTurn } from './worldUpdaters/worldMetaNotes'
+import { currentSimulationTurn } from './tick/simulationClock'
 import { persistWorldEvents } from './tick/worldEventLog'
 import type { WorldChange } from './tick/types'
 
@@ -220,7 +221,15 @@ export async function applyWorldUpdates(
     // failure here must not undo (or block) the world updates that just
     // committed; persistWorldEvents' own doc comment covers the tradeoff.
     if (worldChanges.length > 0) {
-      const { events } = await persistWorldEvents(campaignId, currentTurnNumber, worldChanges)
+      // #374: stamped on the SIMULATION clock, not currentTurnNumber (the
+      // scene counter this function is called with). WorldEvent.turnNumber
+      // is read as elapsed simulation time by informationTick's age
+      // arithmetic and by the per-turn event windows in beliefTick /
+      // npcDispositionTick; mixing the two counters into one column makes
+      // every window over it meaningless. Several scenes resolving between
+      // two world turns legitimately share one simulation turn.
+      const simulationTurn = await currentSimulationTurn(campaignId)
+      const { events } = await persistWorldEvents(campaignId, simulationTurn, worldChanges)
 
       // #101: everyone present in this scene WITNESSED whatever significant
       // things just happened in it — this is the scene's whole party, not

@@ -23,6 +23,7 @@
 // handler writes through `ctx.db` (never the bare `prisma` singleton), and
 // worldTurn.ts restores the pacing accumulator when this throws.
 
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { tickWeather } from './tick/weatherTick'
 import { tickSeasonalPressure } from './tick/seasonTick'
@@ -36,7 +37,7 @@ import { tickTerritoryLoyalty } from './tick/territoryLoyaltyTick'
 import { tickLocationCondition } from './tick/locationConditionTick'
 import { tickLogistics } from './tick/logisticsTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
-import { tickNpcs } from './tick/npcTick'
+import { tickNpcs, MAJOR_IMPORTANCE_THRESHOLD } from './tick/npcTick'
 import { tickMigration } from './tick/migrationTick'
 import { tickInformation } from './tick/informationTick'
 import { tickNpcSocialTies, tickNpcJointSchemes } from './tick/npcSocietyTick'
@@ -48,6 +49,7 @@ import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { TickContext, TickHandler, WorldChange, WorldTickResult, PendingAmbition } from './tick/types'
 import { resolveTickCaps } from './tick/caps'
+import { resolveTickRoster, markRosterTicked } from './tick/capOrdering'
 import { deriveSeason, GeneratedCalendar } from './calendar'
 
 // tickFactionRelationships runs BEFORE tickFactions on purpose: it reads
@@ -221,6 +223,40 @@ export async function runWorldTick(
     ? deriveSeason(worldMeta.totalElapsedGameHours, (worldMeta.campaign?.calendarConfig as unknown as GeneratedCalendar) || null)
     : undefined
 
+  // #375: WHICH entities this tick simulates is a tick-level decision, made
+  // exactly once, here — not eleven times inside eleven handlers.
+  //
+  // Each handler used to run its own capped+rotated query and bump
+  // lastTickedAt with the transaction client immediately afterwards. Prisma
+  // transactions read their own writes, so handler N+1 saw handler N's
+  // bump and selected a DIFFERENT slice: the same-tick chain this file's
+  // header comment exists to protect (relationships → goal reassessment →
+  // leadership → wars) ran on largely disjoint faction sets. It also made
+  // the tick nondeterministic (new Date() as a selection key) and made
+  // dry-run preview a different simulation than the real tick.
+  //
+  // Resolved BEFORE the transaction opens, so it reads committed state and
+  // cannot see anything the tick itself writes.
+  const roster = await resolveTickRoster(prisma, {
+    campaignId,
+    factionCap,
+    npcCap,
+    npcImportanceThreshold: MAJOR_IMPORTANCE_THRESHOLD,
+  })
+  if (roster.factionCapHit || roster.npcCapHit) {
+    // #410: a cap that silently drops entities is a simulation that
+    // silently stops happening. At minimum it is visible in the log; the
+    // admin surface reads TickCapReport (see caps.ts).
+    console.warn(
+      `⚠️  Tick roster capped for ${campaignId}: ${roster.factionIds.length}/${factionCap} factions, ${roster.npcIds.length}/${npcCap} NPCs — entities beyond the cap do not advance this turn`
+    )
+  }
+
+  // One timestamp for the whole tick's rotation bump, captured here rather
+  // than read inside a handler, so no wall-clock read can influence what
+  // the tick decides.
+  const tickStartedAt = new Date()
+
   const changes: WorldChange[] = []
   const pendingAmbitions: PendingAmbition[] = []
 
@@ -230,6 +266,7 @@ export async function runWorldTick(
       turnNumber,
       factionCap,
       npcCap,
+      roster,
       dryRun,
       db,
       // #103: same-tick scratch space tickFactions/tickFactionLeadership
@@ -243,6 +280,22 @@ export async function runWorldTick(
       const result = await handler(ctx)
       changes.push(...result.changes)
       if (result.pendingAmbitions) pendingAmbitions.push(...result.pendingAmbitions)
+    }
+
+    // #375: rotate ONCE, after every handler, inside the same transaction —
+    // so a tick that fails does not claim to have simulated anyone, and no
+    // handler can see another handler's bump.
+    //
+    // #374: and advance the simulation's own turn counter here, for exactly
+    // the same reason. This is the only place it moves: a world turn that
+    // rolled back did not happen, and must not leave the counter claiming
+    // it did.
+    if (!dryRun) {
+      await markRosterTicked(db as Prisma.TransactionClient, roster, tickStartedAt)
+      await db.worldMeta.updateMany({
+        where: { campaignId },
+        data: { simulationTurn: turnNumber },
+      })
     }
   }
 

@@ -40,7 +40,7 @@ import type { Prisma } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, parseFactionRelationships, stableHash } from './types'
 import { tickPairwiseTies } from './relationshipEngine'
 import { MAJOR_IMPORTANCE_THRESHOLD, isActingPhase } from './npcTick'
-import { TICK_ROTATION_ORDER, markNpcsTicked } from './capOrdering'
+import { rosterNpcFilter } from './capOrdering'
 
 export type NpcSocialTieType = 'ALLY' | 'RIVAL' | 'NEUTRAL'
 
@@ -92,16 +92,14 @@ export function decideUnaffiliatedTie(
 export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerResult> {
   const [npcs, locations] = await Promise.all([
     ctx.db.nPC.findMany({
-      where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
+      where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD }, ...rosterNpcFilter(ctx) },
       // #283: importance desc is the intentional priority; the rotation
       // key breaks ties among equally-important NPCs — see capOrdering.ts.
-      orderBy: [{ importance: 'desc' }, TICK_ROTATION_ORDER],
-      take: ctx.npcCap,
+      orderBy: [{ importance: 'desc' }, { id: 'asc' }],
       select: { id: true, name: true, factionId: true, threat: true, socialTies: true },
     }),
     ctx.db.location.findMany({ where: { campaignId: ctx.campaignId, isDiscovered: true }, select: { name: true } }),
   ])
-  if (!ctx.dryRun) await markNpcsTicked(ctx.db, npcs.map((n) => n.id))
   const sortedLocationNames = [...new Set(locations.map((l) => l.name))].sort()
 
   const factionIds = [...new Set(npcs.map((n) => n.factionId).filter((id): id is string => !!id))]
@@ -216,14 +214,12 @@ export function decideJointScheme(
 
 export async function tickNpcJointSchemes(ctx: TickContext): Promise<TickHandlerResult> {
   const npcs = await ctx.db.nPC.findMany({
-    where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
+    where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD }, ...rosterNpcFilter(ctx) },
     // #283: importance desc is the intentional priority; the rotation key
     // breaks ties among equally-important NPCs — see capOrdering.ts.
-    orderBy: [{ importance: 'desc' }, TICK_ROTATION_ORDER],
-    take: ctx.npcCap,
+      orderBy: [{ importance: 'desc' }, { id: 'asc' }],
     select: { id: true, name: true, goals: true, socialTies: true },
   })
-  if (!ctx.dryRun) await markNpcsTicked(ctx.db, npcs.map((n) => n.id))
 
   const changes: WorldChange[] = []
   const npcById = new Map(npcs.map((n) => [n.id, n]))

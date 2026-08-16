@@ -24,6 +24,12 @@
 // history; the underlying event already became that when it was
 // created. Returns { changes: [] } for the same reason.
 
+// roster-exempt: information spreads to WITNESSES, not to a simulated
+// subset. An NPC outside this tick's roster still hears what happened next
+// door — restricting propagation to the roster would make what a character
+// knows depend on which entities the cap happened to select. Note this
+// handler's cost is genuinely unbounded as a result; see #407.
+
 import { TickContext, TickHandlerResult, stableHash } from './types'
 import { AdjacencyEdge, graphDiameter, shortestPath } from '../worldGraph'
 import type { WorldEventTargetType, EventWitnessDistortion } from '@prisma/client'

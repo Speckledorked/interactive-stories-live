@@ -28,6 +28,11 @@
 // graph data covering the source location — adjacency-AWARE, not
 // adjacency-DEPENDENT, same convention as every other #108 consumer.
 
+// roster-exempt: population movement is location-driven. The NPC/faction
+// reads here identify who lives where, not who is being simulated this
+// turn — a rostered subset would move some inhabitants of a location and
+// leave others behind in the same emptying settlement.
+
 import { TickContext, TickHandlerResult, WorldChange } from './types'
 import { AdjacencyEdge, shortestPath } from '../worldGraph'
 import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'

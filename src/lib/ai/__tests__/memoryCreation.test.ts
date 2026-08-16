@@ -4,6 +4,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     $executeRaw: vi.fn().mockResolvedValue(undefined),
     memoryCreationFailure: { create: vi.fn().mockResolvedValue({}) },
+    // #377: the pre-embedding replay check.
+    campaignMemory: { findFirst: vi.fn().mockResolvedValue(null) },
   },
 }))
 
@@ -13,7 +15,7 @@ vi.mock('../embeddingService', () => ({
 
 import { prisma } from '@/lib/prisma'
 import { embedWithCostTracking } from '../embeddingService'
-import { createCampaignMemory, determineImportance, extractTags, type MemoryData } from '../memoryCreation'
+import { createCampaignMemory, determineImportance, extractTags, memoryDedupeKey, type MemoryData } from '../memoryCreation'
 import type { Scene } from '@prisma/client'
 
 function makeMemoryData(overrides: Partial<MemoryData> = {}): MemoryData {
@@ -242,5 +244,62 @@ describe('extractTags', () => {
   it('still tags scene type and keyword-derived tags from resolution text', () => {
     const tags = extractTags(makeScene({ sceneType: 'combat', sceneResolutionText: 'They draw steel and attack the guards.' }), { world_updates: {} })
     expect(tags).toContain('combat')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #377: replay identity
+// ---------------------------------------------------------------------------
+
+describe('createCampaignMemory — replay safety (#377)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(prisma.campaignMemory.findFirst).mockResolvedValue(null as any)
+    // Re-arm: an earlier suite leaves this rejecting, and clearAllMocks
+    // clears calls but keeps implementations.
+    vi.mocked(embedWithCostTracking).mockResolvedValue('[0.01,0.01]')
+    vi.mocked(prisma.$executeRaw).mockResolvedValue(undefined as any)
+  })
+
+  it('does not buy an embedding for a memory it has already recorded', async () => {
+    // This is the point of checking before embedding rather than relying on
+    // the ON CONFLICT alone: a replayed world turn's cost is the embedding
+    // calls, not the rows.
+    vi.mocked(prisma.campaignMemory.findFirst).mockResolvedValueOnce({ id: 'existing' } as any)
+
+    const ok = await createCampaignMemory(makeMemoryData({ dedupeKey: 'WORLD_EVENT|src|5|title' }))
+
+    expect(ok).toBe(true)
+    expect(embedWithCostTracking).not.toHaveBeenCalled()
+    expect(prisma.$executeRaw).not.toHaveBeenCalled()
+  })
+
+  it('does not look for a replay when no key was supplied', async () => {
+    await createCampaignMemory(makeMemoryData())
+
+    expect(prisma.campaignMemory.findFirst).not.toHaveBeenCalled()
+    expect(embedWithCostTracking).toHaveBeenCalled()
+  })
+
+  it('writes a genuinely new memory even when a key is supplied', async () => {
+    const ok = await createCampaignMemory(makeMemoryData({ dedupeKey: 'WORLD_EVENT|src|5|title' }))
+
+    expect(ok).toBe(true)
+    expect(embedWithCostTracking).toHaveBeenCalled()
+    expect(prisma.$executeRaw).toHaveBeenCalled()
+  })
+})
+
+describe('memoryDedupeKey', () => {
+  it('is stable for the same logical event', () => {
+    const parts = { memoryType: 'WORLD_EVENT' as const, sourceId: 'evt-1', turnNumber: 5, title: 'The siege breaks' }
+
+    expect(memoryDedupeKey(parts)).toBe(memoryDedupeKey({ ...parts }))
+  })
+
+  it('separates the same event in different turns', () => {
+    const parts = { memoryType: 'WORLD_EVENT' as const, sourceId: 'evt-1', turnNumber: 5, title: 'The siege breaks' }
+
+    expect(memoryDedupeKey(parts)).not.toBe(memoryDedupeKey({ ...parts, turnNumber: 6 }))
   })
 })

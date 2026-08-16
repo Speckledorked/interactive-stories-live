@@ -29,14 +29,19 @@ export async function POST(
 
     const worldMeta = await prisma.worldMeta.findUnique({
       where: { campaignId },
-      select: { currentTurnNumber: true },
+      select: { simulationTurn: true },
     })
 
     if (!worldMeta) {
       return NextResponse.json({ error: 'Campaign has no world state yet' }, { status: 404 })
     }
 
-    const result = await runWorldTick(campaignId, worldMeta.currentTurnNumber, { dryRun: true })
+    // #374: preview the turn that would ACTUALLY run next — simulationTurn
+    // + 1, exactly what runWorldTurn will pass. This used to preview at
+    // currentTurnNumber (the scene counter), which is a different clock
+    // entirely, so the preview's window arithmetic (information age, war
+    // duration, goal commitment) described a turn that would never happen.
+    const result = await runWorldTick(campaignId, worldMeta.simulationTurn + 1, { dryRun: true })
 
     return NextResponse.json({ turnNumber: result.turnNumber, changes: result.changes })
   } catch (error) {

@@ -14,7 +14,7 @@
 
 import { GeneratedCalendar, Season, deriveSeason } from '../calendar'
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
-import { TICK_ROTATION_ORDER, markFactionsTicked } from './capOrdering'
+import { rosterFactionFilter } from './capOrdering'
 
 export interface SeasonModifier {
   resourceRegenDelta: number
@@ -54,12 +54,8 @@ export async function tickSeasonalPressure(ctx: TickContext): Promise<TickHandle
   if (modifier.resourceRegenDelta === 0) return { changes: [] }
 
   const factions = await ctx.db.faction.findMany({
-    where: { campaignId: ctx.campaignId, isActive: true },
-    orderBy: TICK_ROTATION_ORDER,
-    take: ctx.factionCap,
+    where: { campaignId: ctx.campaignId, isActive: true, ...rosterFactionFilter(ctx) },
   })
-  // #283: rotates which factions win the cap across ticks — see capOrdering.ts.
-  if (!ctx.dryRun) await markFactionsTicked(ctx.db, factions.map((f) => f.id))
 
   const changes: WorldChange[] = []
 

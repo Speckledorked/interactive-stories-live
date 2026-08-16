@@ -26,7 +26,7 @@ import type { FactionGoal, FactionArchetype } from '@prisma/client'
 import { HIGH_BAND_MIN } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange, PendingAmbition, clamp, findRivalId, stableHash } from './types'
 import { BeliefVector } from './beliefTick'
-import { TICK_ROTATION_ORDER, markFactionsTicked } from './capOrdering'
+import { rosterFactionFilter } from './capOrdering'
 
 // The same HIGH cutoff the rest of the tick uses, referenced rather than
 // copied so a rebalance can't drift.
@@ -171,18 +171,17 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
     where: {
       campaignId: ctx.campaignId,
       isActive: true,
+      // #375: narrows this tick's roster further (only three goals are
+      // eligible for an ambition) — narrowing is fine, widening is not.
+      ...rosterFactionFilter(ctx),
       goal: { in: ['ENRICH', 'EXPAND', 'DESTABILIZE_RIVAL'] },
     },
-    orderBy: TICK_ROTATION_ORDER,
-    take: ctx.factionCap,
     include: {
       spawnedClocks: {
         select: { currentTicks: true, maxTicks: true },
       },
     },
   })
-  // #283: rotates which factions win the cap across ticks — see capOrdering.ts.
-  if (!ctx.dryRun) await markFactionsTicked(ctx.db, factions.map((f) => f.id))
 
   // A faction currently fighting a war sits ambitions out entirely — it's
   // already paying attrition every turn, and it shouldn't be throwing a

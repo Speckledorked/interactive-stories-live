@@ -10,6 +10,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 import type { Season } from '../calendar'
+import type { TickRoster } from './capOrdering'
 
 export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'LOCATION_CONDITION' | 'LOCATION_POPULATION' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT' | 'LOCATION'
 
@@ -88,6 +89,27 @@ export interface TickContext {
   /** World Sim Phase 8: resolved once per tick in worldTick.ts — see caps.ts. */
   factionCap: number
   npcCap: number
+  /**
+   * #375: WHICH factions and NPCs this tick simulates, resolved once in
+   * worldTick.ts before the handler pass (see tick/capOrdering.ts).
+   *
+   * Handlers filter with `id: { in: ctx.roster.factionIds }` and must NOT
+   * run their own capped/rotated query. They used to, and because each one
+   * bumped lastTickedAt with the TRANSACTION client immediately after its
+   * own query, every handler in a single transaction selected a different
+   * slice of the roster — dissolving the same-tick ordering chain, breaking
+   * determinism, and making dry-run preview a different simulation than the
+   * real tick.
+   *
+   * Optional so every existing single-handler test's literal TickContext
+   * fixture keeps compiling. When absent (unit tests only — runWorldTick
+   * always supplies it) rosterFactionFilter/rosterNpcFilter produce an
+   * empty predicate, so the handler simulates exactly what its mocked
+   * query returns. That is what a unit test wants and, crucially, is NOT
+   * a fallback to the old per-handler rotation: no handler may re-derive
+   * its own capped slice. capOrdering.convention.test.ts enforces that.
+   */
+  roster?: TickRoster
   /**
    * World Sim Phase 8: preview mode — handlers still read live DB state and
    * compute the same WorldChange list they normally would, but every write

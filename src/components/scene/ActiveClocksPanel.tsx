@@ -21,7 +21,7 @@ export function ActiveClocksPanel({ clocks, campaignId }: ActiveClocksPanelProps
   // fired (see Clock.resolvedAt's schema comment) or is about to on the
   // next tick, and nothing ever advances it further. Filtered before the
   // empty check below so a scene whose clocks are ALL complete shows no
-  // panel at all, instead of an empty "ACTIVE CLOCKS" header over nothing.
+  // panel at all, instead of an empty "ACTIVE THREADS" header over nothing.
   const visibleClocks = (clocks ?? []).filter(
     (clock: any) => !clock.isHidden && clock.currentTicks < clock.maxTicks
   )
@@ -29,7 +29,7 @@ export function ActiveClocksPanel({ clocks, campaignId }: ActiveClocksPanelProps
   if (visibleClocks.length === 0) return null
 
   return (
-    <CollapsibleSidebarCard title="ACTIVE CLOCKS">
+    <CollapsibleSidebarCard title="ACTIVE THREADS">
       <div className="space-y-2">
         {visibleClocks.map((clock: any) => (
           <button
@@ -55,7 +55,7 @@ export function ActiveClocksPanel({ clocks, campaignId }: ActiveClocksPanelProps
         body={
           [selectedClock?.description, selectedClock?.consequence ? `When complete: ${selectedClock.consequence}` : null]
             .filter(Boolean)
-            .join('\n\n') || 'No further details recorded for this clock yet.'
+            .join('\n\n') || 'No further details recorded for this thread yet.'
         }
         footerLinkHref={`/campaigns/${campaignId}/world?type=CLOCK`}
         footerLinkLabel="View all clocks in wiki"

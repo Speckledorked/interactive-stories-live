@@ -13,6 +13,22 @@ import { CONSUMED_CONDITION_NAME } from './corruption'
  */
 export type HarmLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6
 
+/** The full harm track. Exported so display code counts remaining health
+ * down from the same constant the engine fills up to, rather than each
+ * surface hardcoding its own `/6`. */
+export const MAX_HARM = 6
+
+/**
+ * Coerce anything (a stale row, a hand-edited value, a NaN) onto the
+ * track. Display surfaces all need this and were each doing their own
+ * inline `Math.max(0, Math.min(6, ...))`; one definition here keeps them
+ * from drifting apart the way the harm BANDS already did once — see
+ * getHarmStatus's own history in HarmTracker.
+ */
+export function clampHarm(value: number): HarmLevel {
+  return Math.max(0, Math.min(MAX_HARM, Math.trunc(value) || 0)) as HarmLevel
+}
+
 /**
  * Condition Categories
  */

@@ -120,11 +120,15 @@ export function EntityStatRow({ stats }: { stats: EntityStats }) {
             describeWeather(stats.weather, stats.weatherSeverity),
           ]}
         />
+        {/* Banded like every sibling meter in this file. This was the one
+            that printed a raw "72/100" — while already calling
+            stabilityTone() on the same value for its colour, so the 0-100
+            band function was one argument away. */}
         <Meter
           label="Condition"
           value={stats.conditionScore}
           max={100}
-          display={`${stats.conditionScore}/100`}
+          display={describeStability(stats.conditionScore)}
           tone={stabilityTone(stats.conditionScore)}
         />
       </div>

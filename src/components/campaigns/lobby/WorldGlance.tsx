@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { CloudSun, Shield, Swords, Sparkles, MessageCircle } from 'lucide-react'
 import { SectionHeader } from '@/components/ui/section-header'
 import type { ChronicleGlance } from '@/lib/game/chronicleTypes'
+import { describeThreat } from '@/lib/game/entityStats'
 
 // A row of icon-led glance tiles sitting above WorldChronicle's prose —
 // reference/glanceable content (A2's convention), so it stays bordered,
@@ -91,7 +92,11 @@ export function WorldGlance({
         <GlanceTile
           icon={Shield}
           label="Faction Activity"
-          value={glance.topFaction ? `${glance.topFaction.name} (threat ${glance.topFaction.threatLevel})` : 'Quiet'}
+          // Diegetic band, not the raw 1-5 integer — "House Vale (threat 4)"
+          // reads as a stat block on a screen whose whole job is in-world
+          // prose. describeThreat is the same helper EntityStatRow already
+          // uses for this exact field.
+          value={glance.topFaction ? `${glance.topFaction.name} — ${describeThreat(glance.topFaction.threatLevel)}` : 'Quiet'}
           href={worldHref('FACTION', glance.topFaction?.name)}
         />
         <GlanceTile

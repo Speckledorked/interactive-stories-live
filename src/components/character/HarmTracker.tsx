@@ -3,8 +3,28 @@
 
 'use client'
 
-import { getHarmStatus, HarmLevel } from '@/lib/game/harm'
+import { clampHarm, getHarmStatus, MAX_HARM } from '@/lib/game/harm'
 import { AlertTriangle } from 'lucide-react'
+
+/**
+ * Ink colour per harm status. Module scope, and exported, because the
+ * character sheet and the snapshot modal render the same health figure
+ * and were each hand-writing their own `harm >= 4 / >= 2` cutoffs — a
+ * fourth and fifth copy of the bands this component's own comment below
+ * says it consolidated. Keyed off getHarmStatus's status so a band moved
+ * in the engine moves everywhere at once.
+ */
+export const HARM_STATUS_COLORS: Record<string, string> = {
+  'Taken Out': 'text-myth-danger',
+  Impaired: 'text-myth-warn',
+  Fine: 'text-myth-good',
+}
+
+/** Health remaining out of the full track — the direction every
+ * player-facing surface reads (6/6 is untouched, 0/6 is taken out). */
+export function healthRemaining(harm: number): { remaining: number; max: number } {
+  return { remaining: MAX_HARM - clampHarm(harm), max: MAX_HARM }
+}
 
 interface HarmTrackerProps {
   current: number // Current harm (0-6)
@@ -47,17 +67,11 @@ export default function HarmTracker({
   // coincidentally the numbers being applied to their rolls. Move a band
   // in the engine and this component would have gone on reporting the old
   // one, confidently.
-  const STATUS_COLORS: Record<string, string> = {
-    'Taken Out': 'text-myth-danger',
-    Impaired: 'text-myth-warn',
-    Fine: 'text-myth-good',
-  }
-
-  const clampedHarm = Math.max(0, Math.min(6, Math.trunc(current) || 0)) as HarmLevel
+  const clampedHarm = clampHarm(current)
   const harmStatus = getHarmStatus(clampedHarm)
   const status = {
     text: harmStatus.status,
-    color: STATUS_COLORS[harmStatus.status] ?? 'text-myth-ink-muted',
+    color: HARM_STATUS_COLORS[harmStatus.status] ?? 'text-myth-ink-muted',
   }
 
   const sizeClasses = {

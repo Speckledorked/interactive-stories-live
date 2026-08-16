@@ -67,14 +67,73 @@ describe('applyQuestRewardGrant', () => {
 
   it('only grants to named recipients when character_names is set', async () => {
     const db = makeDb()
-    db.character.findFirst.mockResolvedValue({ id: 'c1', name: 'Jason', resources: { gold: 0 }, inventory: null })
+    // #387: recipients are resolved against the real roster by exact
+    // (case-insensitive) name, not by a per-name `contains` query.
+    db.character.findMany.mockResolvedValue([
+      { id: 'c1', name: 'Jason', resources: { gold: 0 }, inventory: null },
+      { id: 'c2', name: 'Mira', resources: { gold: 0 }, inventory: null },
+    ])
     const log = await applyQuestRewardGrant(db as any, 'camp1', 'A Personal Favor', {
-      character_names: ['Jason'],
+      character_names: ['jason'],
       gold: 100,
     })
-    expect(db.character.findMany).not.toHaveBeenCalled()
     expect(db.character.update).toHaveBeenCalledTimes(1)
+    expect(db.character.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'c1' } }))
     expect(log).toHaveLength(1)
+  })
+
+  it('never lets an AI-supplied name act as a SQL wildcard', async () => {
+    // #387: `contains` compiles to LIKE '%...%' and Prisma does not escape
+    // % or _, so "%" used to match the first living character in the
+    // campaign — a payout selector an attacker partially controls.
+    const db = makeDb()
+    db.character.findMany.mockResolvedValue([
+      { id: 'c1', name: 'Jason', resources: { gold: 0 }, inventory: null },
+    ])
+    const log = await applyQuestRewardGrant(db as any, 'camp1', 'A Personal Favor', {
+      character_names: ['%'],
+      gold: 100,
+    })
+    expect(db.character.update).not.toHaveBeenCalled()
+    expect(log).toEqual([])
+  })
+
+  it('does not pay a near-miss name', async () => {
+    // Substring matching is wrong here too: "Bob" must not collect a
+    // reward addressed to "Bobby".
+    const db = makeDb()
+    db.character.findMany.mockResolvedValue([
+      { id: 'c1', name: 'Bobby', resources: { gold: 0 }, inventory: null },
+    ])
+    const log = await applyQuestRewardGrant(db as any, 'camp1', 'A Personal Favor', {
+      character_names: ['Bob'],
+      gold: 100,
+    })
+    expect(db.character.update).not.toHaveBeenCalled()
+    expect(log).toEqual([])
+  })
+
+  it('bounds the total gold one scene may pay out across every entry', async () => {
+    // #383: quest_changes is an unbounded array and each completion pays
+    // every living member, so a per-entry clamp bounds nothing. The budget
+    // is shared by reference across a batch.
+    const db = makeDb()
+    db.character.findMany.mockResolvedValue([
+      { id: 'c1', name: 'Jason', resources: { gold: 0 }, inventory: null },
+      { id: 'c2', name: 'Mira', resources: { gold: 0 }, inventory: null },
+    ])
+    const budget = { remainingGold: 1000 }
+
+    await applyQuestRewardGrant(db as any, 'camp1', 'First', { gold: 400 }, null, null, budget)
+    // 400 each x 2 recipients = 800 drawn; 200 left.
+    expect(budget.remainingGold).toBe(200)
+
+    const log = await applyQuestRewardGrant(db as any, 'camp1', 'Second', { gold: 400 }, null, null, budget)
+    expect(budget.remainingGold).toBe(0)
+    expect(log.some((l) => l.includes('payout ceiling'))).toBe(true)
+
+    const third = await applyQuestRewardGrant(db as any, 'camp1', 'Third', { gold: 400 }, null, null, budget)
+    expect(third.some((l) => l.includes('maximum'))).toBe(true)
   })
 
   it('grants items via mergeGrantedItems semantics', async () => {
@@ -129,7 +188,7 @@ describe('applyQuestRewardGrant', () => {
 
   it('skips silently when named recipients cannot be resolved', async () => {
     const db = makeDb()
-    db.character.findFirst.mockResolvedValue(null)
+    db.character.findMany.mockResolvedValue([])
     const log = await applyQuestRewardGrant(db as any, 'camp1', 'The Missing Caravan', {
       character_names: ['Nobody'],
       gold: 50,

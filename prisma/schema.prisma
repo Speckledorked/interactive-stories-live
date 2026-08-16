@@ -654,6 +654,22 @@ model CampaignCapability {
   // prerequisite must orphan its children into roots, never delete the
   // deeper arts along with it.
   parentId    String?
+  // #386: PROVENANCE. Both unlock gates are opt-in restrictions with a
+  // permissive default — prerequisiteUnlockBlocked returns false when
+  // parentId is null, shadowUnlockBlocked returns false when isShadow is
+  // false — and their comments say why: a campaign generated before the
+  // tree existed has no parents, and a campaign with no corruption theme
+  // never sets isShadow. Those defaults are correct for LEGACY rows.
+  //
+  // They were also correct for a node the narrator invented mid-scene,
+  // which is created parentless and non-shadow — so an AI-declared
+  // capability was structurally exempt from both gates while a
+  // generator-authored one was subject to both. The AI could name a
+  // capability into existence and unlock it in the same breath.
+  //
+  // Recording where a node came from is what lets the permissive default
+  // apply only to the case it was written for.
+  isNarrated  Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   campaign        Campaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)

@@ -331,10 +331,39 @@ describe('applyCharacterChanges — harm and conditions', () => {
   })
 
   it('marks isAlive false and logs a legacy line on a heroic sacrifice', async () => {
-    const roster = [character()]
+    // #385: a sacrifice is a character already in mortal danger choosing to
+    // spend their life. SERIOUSLY WOUNDED (harm 4) clears that bar.
+    const roster = [character({ harm: 4 })]
     await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { heroic_sacrifice: { circumstances: 'Held the bridge alone', effect: 'The others escaped' } } } as PcChange,
     ], roster, npcRoster, noTheme, true)
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.isAlive).toBe(false)
+  })
+
+  // #385: the highest-stakes irreversible transition in the product, and it
+  // had NO precondition — no confirmation, no harm threshold, no isDying
+  // check — on a path reachable from player-authored prompt text. Compare
+  // death_save_result, which was always gated on isDying: the codebase
+  // already knew this needed a precondition; this path just never got one.
+  it('refuses a heroic sacrifice for a character in no danger', async () => {
+    const roster = [character({ harm: 0 })]
+
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { heroic_sacrifice: { circumstances: 'Nothing was happening', effect: 'None' } } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    const killed = tx.character.update.mock.calls.some((c: any) => c[0].data?.isAlive === false)
+    expect(killed).toBe(false)
+  })
+
+  it('allows a sacrifice from a character who is already dying', async () => {
+    const roster = [character({ harm: 6 })]
+
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { heroic_sacrifice: { circumstances: 'One last shove', effect: 'The door held' } } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
     const data = tx.character.update.mock.calls[0][0].data
     expect(data.isAlive).toBe(false)
   })

@@ -133,9 +133,43 @@ export type QuestStatus = 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'ABANDONED'
 // completing something already resolved as lost (COMPLETED can only ever
 // be reached from ACTIVE), and undoing a genuine completion at all —
 // COMPLETED is the one truly one-way mark.
+//
+// #383: an edge rule is not a path rule.
+//
+// The version above allowed FAILED -> ACTIVE and ABANDONED -> ACTIVE, on
+// the reasoning that a failed quest can legitimately be picked back up.
+// But `existing` is re-read from the transaction at the top of every loop
+// iteration, so two quest_changes entries in ONE batch —
+// {status:'ACTIVE'} then {status:'COMPLETED', reward_grant} — walked the
+// quest through both legal hops and granted the completion reward on top
+// of the failure cost already charged. Exactly the outcome the comment
+// above claims to close.
+//
+// Re-entry from a terminal status is now refused. If picking a failed
+// quest back up is wanted as a feature, it needs to be an explicit,
+// separately-gated action that clears the failure cost — not a side
+// effect of two status reports arriving in the same batch.
 export function isLegalQuestStatusTransition(from: QuestStatus, to: QuestStatus): boolean {
   if (from === to) return false
   if (from === 'COMPLETED') return false
   if (to === 'COMPLETED' && from !== 'ACTIVE') return false
+  if (to === 'ACTIVE' && isTerminalQuestStatus(from)) return false
   return true
 }
+
+/** A status a quest cannot come back from within one scene's updates. */
+export function isTerminalQuestStatus(status: QuestStatus): boolean {
+  return status === 'COMPLETED' || status === 'FAILED' || status === 'ABANDONED'
+}
+
+/**
+ * #383: the ceiling on what one scene's quest_changes may pay out, in
+ * total, across every entry.
+ *
+ * quest_changes is an unbounded array and each completion pays every
+ * living party member, so per-entry limits bound nothing that matters. The
+ * value is deliberately generous — this is a backstop against an
+ * AI-authored or prompt-injected payout storm, not a design ceiling on
+ * how rewarding a scene may be.
+ */
+export const MAX_QUEST_REWARD_GOLD_PER_SCENE = 10_000

@@ -79,3 +79,14 @@ UPDATE "NPC" n
  WHERE wm."campaignId" = n."campaignId"
    AND wm."dispositionDriftProcessedThroughTurn" IS NOT NULL
    AND n."dispositionDriftThroughTurn" IS NULL;
+
+-- ---------------------------------------------------------------------------
+-- #386: capability provenance.
+--
+-- Default false, and NOT backfilled to anything else: every existing row
+-- predates AI-minted nodes being distinguishable, and treating a
+-- generator-authored node as narrated would newly gate capabilities players
+-- already have. False is both the safe default and the accurate one for
+-- everything that exists today.
+-- ---------------------------------------------------------------------------
+ALTER TABLE "CampaignCapability" ADD COLUMN IF NOT EXISTS "isNarrated" BOOLEAN NOT NULL DEFAULT false;

@@ -21,14 +21,49 @@ const LONG_TEXT = 2000   // multi-sentence notes and plans
  * Define comprehensive Zod schemas for all AI GM responses
  */
 
+
+// ---------------------------------------------------------------------------
+// #384: bound the STEP, not just the result
+// ---------------------------------------------------------------------------
+//
+// The codebase already contains the right pattern, twice, and says why:
+// corruption_change.marks is +1 per scene with a hard max, standing_changes
+// is ±1 per scene with bounds ±3, and medical_attention/rest_quality let
+// the AI pick from a CLOSED SET while code chooses the magnitude. The
+// audit calls those exemplary, and they are.
+//
+// The fields below were the ones where the AI supplies a NUMBER and the
+// clamp was placed on the stored value instead of the increment. Clamping
+// the result bounds the state but not the rate — which is the property
+// that matters, because these arrive inside unbounded arrays and one scene
+// may contain many entries.
+//
+// These are backstops against a hallucinated or injected magnitude, not
+// design ceilings: each is far larger than any value real play produces.
+export const MAX_RELATIONSHIP_DELTA_PER_ENTRY = 25
+export const MAX_CLOCK_DELTA_PER_ENTRY = 4
+export const MAX_ITEM_QUANTITY_DELTA_PER_ENTRY = 100
+export const MAX_STAT_INCREASE_DELTA_PER_ENTRY = 1
+
+/**
+ * A bounded integer delta. `.catch()` is deliberate: an out-of-range
+ * magnitude is clamped to the bound rather than failing the whole section,
+ * because the ladder in validation.ts would otherwise drop every OTHER
+ * change in the same batch over one bad number.
+ */
+const boundedDelta = (max: number) => z.number().int().min(-max).max(max)
+
 // Relationship change schema
 export const RelationshipChangeSchema = z.object({
   entity_id: z.string(),
   entity_name: z.string(),
-  trust_delta: z.number().optional(),
-  tension_delta: z.number().optional(),
-  respect_delta: z.number().optional(),
-  fear_delta: z.number().optional(),
+  // #384: these feed relationshipModifier (±2 on the roll) and were
+  // bounded only by the absolute ±100 on the stored value — no per-scene
+  // or per-entry step limit at all.
+  trust_delta: boundedDelta(MAX_RELATIONSHIP_DELTA_PER_ENTRY).optional(),
+  tension_delta: boundedDelta(MAX_RELATIONSHIP_DELTA_PER_ENTRY).optional(),
+  respect_delta: boundedDelta(MAX_RELATIONSHIP_DELTA_PER_ENTRY).optional(),
+  fear_delta: boundedDelta(MAX_RELATIONSHIP_DELTA_PER_ENTRY).optional(),
   reason: z.string()
 })
 
@@ -231,7 +266,9 @@ export const PCChangesSchema = z.object({
       items_remove: z.array(z.string()).optional(),
       items_modify: z.array(z.object({
         id: z.string(),
-        quantity_delta: z.number()
+        // #384: this one had NO clamp anywhere — characters.ts applied
+        // `item.quantity += delta` directly.
+        quantity_delta: boundedDelta(MAX_ITEM_QUANTITY_DELTA_PER_ENTRY)
       })).optional()
     }).optional(),
     // contacts_add/remove is real, lightweight flavor — displayed on the
@@ -296,14 +333,16 @@ export const TimelineEventSchema = z.object({
 // Clock change schema
 export const ClockChangeSchema = z.object({
   clock_name_or_id: z.string(),
-  delta: z.number()
+  // #384: clocks.ts clamps the RESULT to [0, maxTicks], which bounds the
+  // state and not the rate — one entry could drive any clock from empty to
+  // full in a single scene, firing whatever it was counting down to.
+  // Clocks are meant to fill over several beats; four is already a large
+  // move on a typical 6- or 8-segment clock.
+  delta: boundedDelta(MAX_CLOCK_DELTA_PER_ENTRY)
 })
 
 // NPC changes schema
-export const NPCChangesSchema = z.object({
-  npc_name_or_id: z.string(),
-  is_new: z.boolean().optional(), // true when introducing a brand-new NPC mid-scene
-  changes: z.object({
+const NpcChangeFieldsSchema = z.object({
     description: z.string().max(MEDIUM_TEXT).optional(), // Short description for new NPCs
     notes_append: z.string().max(LONG_TEXT).optional(),
     // New or updated long-term goal. Set this for a new NPC's starting goal,
@@ -333,7 +372,35 @@ export const NPCChangesSchema = z.object({
     // Bounded 0-5 to match the corruption track.
     min_corruption: z.number().int().min(0).max(5).optional(),
     max_corruption: z.number().int().min(0).max(5).optional()
-  })
+})
+
+export const NPCChangesSchema = z.object({
+  npc_name_or_id: z.string(),
+  is_new: z.boolean().optional(), // true when introducing a brand-new NPC mid-scene
+  changes: NpcChangeFieldsSchema
+})
+
+// #385: the OFFSCREEN variant — the world turn's own NPC updates.
+//
+// pc_changes is correctly absent from WorldTurnUpdatesSchema entirely, so
+// the background simulation cannot touch player characters. That narrowing
+// was done by DOMAIN (PCs excluded) rather than by CAPABILITY (irreversible
+// transitions excluded), and NPC death is the same class of irreversible
+// change — it survived only because it lives inside a domain that was let
+// through wholesale.
+//
+// harm_damage is what sets isAlive = false (worldUpdaters/npcs.ts), and on
+// this path it fires with no player present, no witness rows, and nothing
+// in any player-facing surface to show it happened. Healing stays: nothing
+// irreversible about an NPC recovering offscreen.
+//
+// If an offscreen death is wanted narratively, it needs to be a proposal
+// that a live scene or an admin action confirms — not a field the
+// background narrator can set.
+export const OffscreenNPCChangesSchema = z.object({
+  npc_name_or_id: z.string(),
+  is_new: z.boolean().optional(),
+  changes: NpcChangeFieldsSchema.omit({ harm_damage: true, harm_damage_dealt_by: true })
 })
 
 // Faction changes schema
@@ -358,7 +425,9 @@ export const FactionChangesSchema = z.object({
 // Organic advancement schemas
 export const StatIncreaseSchema = z.object({
   stat_key: z.string(),
-  delta: z.number(),
+  // #384/#393: PbtA advancement moves one stat by one. Anything else is a
+  // hallucination, and advancement.ts's own budget assumes +1 steps.
+  delta: boundedDelta(MAX_STAT_INCREASE_DELTA_PER_ENTRY),
   reason: z.string()
 })
 
@@ -599,7 +668,8 @@ export const AmbitionPickSchema = z.object({
 })
 
 export const WorldTurnUpdatesSchema = z.object({
-  npc_changes: z.array(NPCChangesSchema).optional(),
+  // #385: the offscreen variant — no lethal fields. See its own comment.
+  npc_changes: z.array(OffscreenNPCChangesSchema).optional(),
   faction_changes: z.array(FactionChangesSchema).optional(),
   location_changes: z.array(LocationChangesSchema).optional()
 })
@@ -633,3 +703,71 @@ export type SceneProgress = z.infer<typeof SceneProgressSchema>
 export type PCChanges = z.infer<typeof PCChangesSchema>
 export type RelationshipChange = z.infer<typeof RelationshipChangeSchema>
 export type OrganicAdvancement = z.infer<typeof OrganicAdvancementSchema>
+
+// ---------------------------------------------------------------------------
+// #381: the action classifier
+// ---------------------------------------------------------------------------
+//
+// The classifier is a second AI call that decides every INPUT to the dice
+// roll: which move, which stat, which capability, which faction's standing
+// and which NPC's rapport apply, whether a bargain was accepted, and where
+// the character ends up standing. computeMechanics is then genuinely pure
+// and covered by exact golden vectors — but the arithmetic being honest
+// says nothing about the numbers fed into it.
+//
+// This surface had NO schema at all. parseClassifications was a hand-rolled
+// type filter that accepted `stat_key` as any string and silently fell back
+// to 'cool' downstream, so a hallucinated or injected value passed straight
+// through. Realistic swing is ~8 points on a 2-12 scale with bands at <=6 /
+// 7-9 / >=10; structural maximum is ~29.
+//
+// Every other AI-output surface in the codebase goes through this file.
+// This one was classified as "classification" rather than as "world
+// updates" and so was never brought in.
+//
+// The referential fields (faction_name, npc_name) are validated for SHAPE
+// here and re-verified against the real campaign roster by the caller —
+// shape alone cannot tell you whether a faction exists.
+//
+// Two different strictnesses on purpose, because the two failure modes are
+// not symmetric:
+//
+//   - Fields where a wrong value MOVES THE ROLL (stat_key) are a closed
+//     set with no coercion. An out-of-set value drops that classification
+//     entirely, so the action resolves freeform. That is a visible
+//     degradation; silently becoming 'cool' was a 6-point swing decided by
+//     a hallucination.
+//   - Fields where the conservative value is strictly safer than losing
+//     the roll (accepts_bargain, engagement, moves_to_zone, the nullable
+//     ids) use .catch(), so a malformed value becomes the neutral default
+//     rather than throwing the whole action away. Dropping a roll because
+//     a boolean arrived as the string "yes" would be a worse outcome for
+//     the player than treating the bargain as unaccepted.
+//
+// stat_key is optional here and required by parseClassifications for
+// anything other than "no_roll" — a no_roll classification has no stat to
+// name, and demanding one would drop exactly the classifications that are
+// least risky.
+export const ActionClassificationSchema = z.object({
+  action_index: z.number().int().min(0),
+  move_name: z.string().min(1),
+  stat_key: z.enum(['cool', 'hard', 'hot', 'sharp', 'weird']).optional(),
+  capability_key: z.string().nullable().optional().catch(null).default(null),
+  faction_name: z.string().nullable().optional().catch(null).default(null),
+  npc_name: z.string().nullable().optional().catch(null).default(null),
+  accepts_bargain: z.boolean().optional().catch(false).default(false),
+  matched_signature_id: z.string().nullable().optional().catch(null).default(null),
+  engagement: z.enum(['melee', 'ranged', 'social']).nullable().optional().catch(null).default(null),
+  moves_to_zone: z.enum(['close', 'near', 'far', 'distant']).nullable().optional().catch(null).default(null),
+})
+
+// The ENVELOPE only. Entries are validated one at a time by
+// parseClassifications, because z.array fails wholesale: one malformed
+// entry would throw away every other action's classification in the same
+// exchange, turning a single hallucinated field into a whole-party loss of
+// mechanics. Per-entry validation degrades one action to freeform instead.
+export const ActionClassificationResponseSchema = z.object({
+  classifications: z.array(z.unknown()),
+})
+
+export type ActionClassificationValidated = z.infer<typeof ActionClassificationSchema>

@@ -7,7 +7,7 @@
 // lands on is who pays for it and who remembers it failed.
 
 import { describe, it, expect } from 'vitest'
-import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData, isLegalQuestStatusTransition } from '../quests'
+import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData, isLegalQuestStatusTransition, isTerminalQuestStatus, type QuestStatus } from '../quests'
 
 const npc = (id: string, name: string) => ({ id, name })
 
@@ -134,5 +134,43 @@ describe('isLegalQuestStatusTransition (#281)', () => {
   it('treats reporting the same status again as not a transition at all', () => {
     expect(isLegalQuestStatusTransition('ACTIVE', 'ACTIVE')).toBe(false)
     expect(isLegalQuestStatusTransition('COMPLETED', 'COMPLETED')).toBe(false)
+  })
+
+  // #383: an edge rule is not a path rule.
+  //
+  // The #281 version allowed FAILED -> ACTIVE, and `existing` is re-read
+  // from the transaction at the top of every loop iteration — so two
+  // quest_changes entries in ONE batch ({status:'ACTIVE'} then
+  // {status:'COMPLETED', reward_grant}) walked the quest through both
+  // legal hops and granted the completion reward on top of the failure
+  // cost already charged. Precisely the outcome #281 documents closing.
+  it('refuses re-entry to ACTIVE from any terminal status', () => {
+    expect(isLegalQuestStatusTransition('FAILED', 'ACTIVE')).toBe(false)
+    expect(isLegalQuestStatusTransition('ABANDONED', 'ACTIVE')).toBe(false)
+    expect(isLegalQuestStatusTransition('COMPLETED', 'ACTIVE')).toBe(false)
+  })
+
+  it('leaves no two-hop path from a terminal status back to COMPLETED', () => {
+    // The property, stated directly rather than as a list of edges: from
+    // any terminal status, no sequence of legal transitions reaches
+    // COMPLETED.
+    const ALL: QuestStatus[] = ['ACTIVE', 'COMPLETED', 'FAILED', 'ABANDONED']
+    for (const start of ALL.filter(isTerminalQuestStatus)) {
+      const reachable = new Set<QuestStatus>([start])
+      let grew = true
+      while (grew) {
+        grew = false
+        for (const from of [...reachable]) {
+          for (const to of ALL) {
+            if (!reachable.has(to) && isLegalQuestStatusTransition(from, to)) {
+              reachable.add(to)
+              grew = true
+            }
+          }
+        }
+      }
+      reachable.delete(start)
+      expect(reachable.has('COMPLETED'), `${start} can still reach COMPLETED`).toBe(false)
+    }
   })
 })

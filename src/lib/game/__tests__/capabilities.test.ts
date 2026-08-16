@@ -171,6 +171,10 @@ describe('applyCapabilityChanges (writer)', () => {
     campaignCapability: {
       findFirst: vi.fn(),
       findUnique: vi.fn(async () => null),
+      // #386: an AI-minted node inherits its position and shadow-ness
+      // from the domain it claims to belong to, instead of being born
+      // parentless and non-shadow — i.e. born exempt from both gates.
+      findMany: vi.fn(async () => [] as any[]),
       create: vi.fn(async ({ data }: any) => ({ id: 'new-node', ...data })),
     },
     characterCapability: {
@@ -260,7 +264,7 @@ describe('applyCapabilityChanges (writer)', () => {
 
     expect(db.campaignCapability.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ key: 'blood-runes', domain: 'Forbidden Arts', isSecret: true }),
+        data: expect.objectContaining({ key: 'blood-runes', domain: 'Forbidden Arts', isSecret: true, isNarrated: true }),
       })
     )
     expect(log).toContain('New capability discovered in this world: Blood Runes')
@@ -521,5 +525,105 @@ describe('resolvePrerequisiteLinks (#82)', () => {
       node('b', 'D', 2),
       node('c', 'D', 3),
     ])).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #386: a narrated node must not be born exempt from the unlock gates
+// ---------------------------------------------------------------------------
+//
+// Created parentless and non-shadow, an AI-declared capability satisfied
+// prerequisiteUnlockBlocked (false with no parentId) and shadowUnlockBlocked
+// (false when not shadow) trivially — so the model could name a capability
+// into existence and unlock it in the same breath, while a
+// generator-authored one required groundwork and corruption. Those
+// permissive defaults were written for LEGACY rows and applied to new ones
+// by accident.
+
+describe('narrated capability nodes inherit their domain (#386)', () => {
+  const makeDb = () => ({
+    campaignCapability: {
+      findFirst: vi.fn(async () => null),
+      findUnique: vi.fn(async () => null),
+      findMany: vi.fn(async () => [] as any[]),
+      create: vi.fn(async ({ data }: any) => ({ id: 'new-node', ...data })),
+    },
+    characterCapability: {
+      findUnique: vi.fn(async () => null),
+      count: vi.fn(async () => 0),
+      create: vi.fn(async ({ data }: any) => data),
+      upsert: vi.fn(async ({ create }: any) => create),
+      update: vi.fn(async () => ({})),
+    },
+    character: { findUnique: vi.fn(async () => ({ corruption: 0 })) },
+  })
+
+  it('marks a node the narrator invented as narrated', async () => {
+    const db = makeDb()
+
+    await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'blood-runes', change: 'glimpse', is_new: true, name: 'Blood Runes', domain: 'Forbidden Arts', reason: 'saw it' },
+    ], 7)
+
+    expect(db.campaignCapability.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isNarrated: true }) })
+    )
+  })
+
+  it('inherits shadow-ness when every existing node in that domain is shadow', async () => {
+    // If this world's Blood Sorcery is a forbidden art, a newly-named
+    // branch of it is a forbidden art too — otherwise naming a new branch
+    // is a way to get the forbidden thing without the corruption.
+    const db = makeDb()
+    db.campaignCapability.findMany.mockResolvedValue([
+      { id: 'root', tier: 1, isShadow: true, parentId: null },
+    ])
+
+    await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'blood-runes', change: 'glimpse', is_new: true, name: 'Blood Runes', domain: 'Blood Sorcery', reason: 'saw it' },
+    ], 7)
+
+    expect(db.campaignCapability.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isShadow: true, parentId: 'root' }) })
+    )
+  })
+
+  it('does not guess a parent when the domain has several roots', async () => {
+    // Guessing a position in a branching tree would be worse than leaving
+    // it a root — the isNarrated gate covers the rootless case.
+    const db = makeDb()
+    db.campaignCapability.findMany.mockResolvedValue([
+      { id: 'a', tier: 1, isShadow: false, parentId: null },
+      { id: 'b', tier: 1, isShadow: false, parentId: null },
+    ])
+
+    await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'x', change: 'glimpse', is_new: true, name: 'X', domain: 'Swordplay', reason: 'saw it' },
+    ], 7)
+
+    expect(db.campaignCapability.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ parentId: null, isShadow: false }) })
+    )
+  })
+})
+
+describe('prerequisiteUnlockBlocked — narrated roots (#386)', () => {
+  it('leaves a generated root ungated, as it always was', () => {
+    // Every node in a campaign generated before the tree existed is a
+    // parentless root. Gating those would break existing campaigns.
+    expect(prerequisiteUnlockBlocked({ parentId: null }, null, 0)).toBe(false)
+  })
+
+  it('blocks a narrated root for a character with no footing in its domain', () => {
+    expect(prerequisiteUnlockBlocked({ parentId: null, isNarrated: true }, null, 0)).toBe(true)
+  })
+
+  it('allows a narrated root once the character has real footing in that domain', () => {
+    expect(prerequisiteUnlockBlocked({ parentId: null, isNarrated: true }, null, 1)).toBe(false)
+  })
+
+  it('is unchanged when no domain count is supplied', () => {
+    // Callers that predate this argument keep the exact pre-#386 behaviour.
+    expect(prerequisiteUnlockBlocked({ parentId: null, isNarrated: true }, null)).toBe(false)
   })
 })

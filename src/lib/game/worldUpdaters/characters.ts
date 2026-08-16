@@ -19,6 +19,7 @@ import { clamp } from '../tick/types'
 import type { Rng } from '../rng'
 import { rollD6 } from '../rng'
 import {
+  characterMaySacrifice,
   applyHarm,
   healHarm,
   markCondition,
@@ -576,7 +577,23 @@ export async function applyCharacterChanges(
       }
     }
 
-    if (character.isAlive && pcChange.changes.heroic_sacrifice) {
+    // #385: the highest-stakes irreversible transition in the product, and
+    // it was reachable from a single AI field with no precondition at all —
+    // no confirmation, no harm threshold, no isDying check. Contrast
+    // death_save_result immediately above, which IS gated on isDying: the
+    // codebase already knows this transition needs a precondition; this
+    // path just never got one.
+    //
+    // The gate is the character's own state, not a new UI flow: a sacrifice
+    // is something a character in mortal danger chooses. A character in no
+    // danger being narrated into one is the failure mode — whether that
+    // comes from a hallucination or from player text steering the model
+    // there.
+    if (character.isAlive && pcChange.changes.heroic_sacrifice && !characterMaySacrifice(currentConditions, character)) {
+      console.warn(
+        `  🚫 heroic_sacrifice refused for ${character.name}: only a character already at risk of death may choose it (harm ${character.harm ?? 0})`
+      )
+    } else if (character.isAlive && pcChange.changes.heroic_sacrifice) {
       const { circumstances, effect } = pcChange.changes.heroic_sacrifice
       const sacrifice = performHeroicSacrifice(character.id, character.name, circumstances, effect, currentTurnNumber)
       newIsAlive = false

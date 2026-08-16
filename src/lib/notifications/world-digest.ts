@@ -31,25 +31,35 @@ export const MAX_DIGEST_LINES = 3
 /**
  * #395: entity types that ARE subject to discovery.
  *
- * Only NPCs and factions have an isDiscovered flag — a location, a clock,
- * a quest, a war or a debt is not something the party "learns exists" in
- * the same modelled sense (visibility.ts gates four models; locations and
- * clocks are not among them).
+ * The gate below used to test `discoveredEntityIds.has(c.entityId)` for
+ * EVERY change against a set built from faction and NPC ids only — so a
+ * LOCATION_WEATHER or CLOCK or WAR id could never be in it, and every such
+ * change was structurally unreachable. weatherTick.ts emits severe storms
+ * flagged importance: 'MAJOR'; they were computed, written to WorldEvent,
+ * and then silently dropped. "This type has no discovery concept" was
+ * being read as "this entity is undiscovered".
  *
- * This distinction is the whole bug. The gate below used to test
- * `discoveredEntityIds.has(c.entityId)` for EVERY change, and the set was
- * built from faction and NPC ids only — so a LOCATION_WEATHER or CLOCK or
- * WAR id could never be in it, and every such change was structurally
- * unreachable. weatherTick.ts:144-153 emits storms explicitly flagged
- * importance: 'MAJOR'; they were computed, written to WorldEvent, and then
- * silently dropped with no player-visible record anywhere.
+ * That fix was right about the bug and wrong about the facts. It recorded
+ * that "locations and clocks are not among" visibility.ts's four fog-gated
+ * models — but they are exactly two of the four
+ * (`FogGatedModel = 'npc' | 'faction' | 'location' | 'clock'`), and
+ * `Location.isDiscovered` has existed all along. So LOCATION* changes went
+ * from never reaching players to reaching them UNGATED: a severe storm at
+ * a location the party had never found was broadcast by name to everyone.
  *
- * "This type has no discovery concept" was being read as "this entity is
- * undiscovered".
+ * Locations are gated here now, against discovered location ids. Clocks
+ * are gated the other way round (`isHidden`) and emit no MAJOR digest
+ * change today; if one is ever added it must be gated too, which is why
+ * this set is keyed on the type rather than on "does this id happen to be
+ * in the set".
  */
 export const DISCOVERY_GATED_ENTITY_TYPES: ReadonlySet<TickEntityType> = new Set<TickEntityType>([
   'NPC',
   'FACTION',
+  'LOCATION',
+  'LOCATION_WEATHER',
+  'LOCATION_CONDITION',
+  'LOCATION_POPULATION',
 ])
 
 /**
@@ -71,6 +81,11 @@ export function selectDigestChanges(
 ): WorldChange[] {
   return changes.filter((c) => {
     if (!c.significant || c.importance !== 'MAJOR') return false
+    // #432: MAJOR means "the tick thought this mattered", which is not the
+    // same as "this is something people would gossip about". An
+    // importance-5 NPC's routine movement is MAJOR every turn. Only fields
+    // with an authored rumor phrasing get through — see LINE_GENERATORS.
+    if (!isRumorWorthy(c)) return false
     if (DISCOVERY_GATED_ENTITY_TYPES.has(c.entityType)) return discoveredEntityIds.has(c.entityId)
     return true
   })
@@ -173,15 +188,136 @@ function leadershipLines(names: string[]): string[] {
   ]
 }
 
-function defaultLines(names: string[]): string[] {
+// #432: the seven MAJOR-emitting fields that had no template at all.
+//
+// Every one of them fell through to a two-sentence generic fallback, and
+// the most narratively interesting events in the simulation — a faction
+// seizing ground, a scheme paying off, an NPC finishing what they set out
+// to do — all came out as "Something is shifting around X".
+
+function goalCompletedLines(names: string[]): string[] {
   const who = joinNames(names)
+  const verb = names.length === 1 ? 'has' : 'have'
+  const possessive = names.length === 1 ? 'their' : 'their'
   return [
-    `There's talk of upheaval around ${who}.`,
-    `Something is shifting around ${who} — the details are still unclear.`,
+    `${who} ${verb} finished what ${names.length === 1 ? 'they' : 'they'} set out to do.`,
+    `Whatever ${who} ${names.length === 1 ? 'was' : 'were'} working toward, it is done.`,
+    `${who} ${verb} seen ${possessive} plans through to the end.`,
   ]
 }
 
-const LINE_GENERATORS: Record<string, (names: string[]) => string[]> = {
+function ambitionCommittedLines(names: string[]): string[] {
+  const who = joinNames(names)
+  const verb = names.length === 1 ? 'is' : 'are'
+  return [
+    `${who} ${verb} putting real weight behind something new.`,
+    `There is movement inside ${who} — a scheme taking shape.`,
+    `Something is being set in motion within ${who}.`,
+  ]
+}
+
+/**
+ * The one generator that reads the change's own values rather than only
+ * its entity names: `newValue` is 'succeeded' or 'failed', which is the
+ * difference between a triumph and a debacle. A single phrasing for both
+ * would be worse than no rumor.
+ */
+function ambitionResolvedLines(names: string[], changes: WorldChange[]): string[] {
+  const who = joinNames(names)
+  const verb = names.length === 1 ? 'has' : 'have'
+  const possessive = names.length === 1 ? 'its' : 'their'
+  const succeeded = changes.every(c => c.newValue === 'succeeded')
+  if (succeeded) {
+    return [
+      `${possessive === 'its' ? 'The' : 'The'} scheme ${who} ${verb} been running has paid off.`,
+      `${who} ${verb} got what ${possessive} manoeuvring was for.`,
+      `Whatever ${who} ${verb} been arranging, it worked.`,
+    ]
+  }
+  const failed = changes.every(c => c.newValue === 'failed')
+  if (failed) {
+    return [
+      `${possessive === 'its' ? 'The' : 'The'} scheme ${who} ${verb} been running has come apart.`,
+      `${who} overreached, and it shows.`,
+      `Whatever ${who} ${verb} been arranging has failed.`,
+    ]
+  }
+  // A mixed group — some succeeded, some failed. Saying either would be
+  // false for half of them.
+  return [
+    `Schemes involving ${who} have run their course, with mixed results.`,
+    `The manoeuvring around ${who} has settled — not everyone came out ahead.`,
+  ]
+}
+
+/**
+ * Territory changes name the entity that GAINED or LOST ground, never the
+ * counterparty or the location. `previousValue` is the other faction's
+ * name and `newValue` is the location's — both may be undiscovered, and
+ * naming either here would be the exact leak the module doc warns about.
+ */
+function territoryClaimedLines(names: string[]): string[] {
+  const who = joinNames(names)
+  const verb = names.length === 1 ? 'holds' : 'hold'
+  const hasVerb = names.length === 1 ? 'has' : 'have'
+  return [
+    `${who} ${verb} ground ${names.length === 1 ? 'it' : 'they'} did not hold before.`,
+    `${who} ${hasVerb} taken territory, and someone else ${hasVerb} lost it.`,
+    `The map has changed in ${who}'s favour.`,
+  ]
+}
+
+function territoryContestedLines(names: string[]): string[] {
+  const who = joinNames(names)
+  const possessive = names.length === 1 ? 'its' : 'their'
+  const isVerb = names.length === 1 ? 'is' : 'are'
+  return [
+    `${who} ${isVerb} losing ${possessive} grip on land ${names.length === 1 ? 'it' : 'they'} used to hold uncontested.`,
+    `Someone is pressing ${who} where ${names.length === 1 ? 'it' : 'they'} used to be unchallenged.`,
+    `${possessive === 'its' ? 'Its' : 'Their'} hold slipping, ${who} ${isVerb} being tested on ${possessive} own ground.`,
+  ]
+}
+
+function importanceLines(names: string[]): string[] {
+  const who = joinNames(names)
+  const isVerb = names.length === 1 ? 'is' : 'are'
+  const nameWord = names.length === 1 ? 'a name' : 'names'
+  return [
+    `${who} ${isVerb} becoming ${nameWord} people repeat.`,
+    `More people know who ${who} ${isVerb} than did a while ago.`,
+    `${who} ${isVerb} being spoken of far past where ${names.length === 1 ? 'they' : 'they'} started.`,
+  ]
+}
+
+function weatherLines(names: string[]): string[] {
+  const who = joinNames(names)
+  const isVerb = names.length === 1 ? 'is' : 'are'
+  return [
+    `The weather has turned hard against ${who}.`,
+    `Travellers are warning each other away from ${who}.`,
+    `${who} ${isVerb} taking the worst of the weather.`,
+  ]
+}
+
+/**
+ * #432: an ALLOWLIST, not a fallback table.
+ *
+ * There used to be a `defaultLines` catch-all here, and it was the whole
+ * problem. `importance: 'MAJOR'` is not a judgement about newsworthiness —
+ * npcTick sets it from `npc.importance >= 5`, so an importance-5 NPC's
+ * routine daily movement (`currentLocation`) and plan-phase advance
+ * (`currentPlan`) were MAJOR every single turn. Neither had a template, so
+ * both rendered as the generic sentence, turn after turn, for the same
+ * NPC. That is the "recycled" feeling: not a phrasing shortage, a firehose
+ * of non-events wearing one phrase.
+ *
+ * A field with no entry here is not a rumor. Someone walking to the market
+ * is not word on the street, and no amount of phrasing variety would make
+ * it so. This also fails safe as the simulation grows: a newly added MAJOR
+ * field stays out of the digest until somebody decides what it should
+ * SOUND like, instead of silently joining the generic pile.
+ */
+const LINE_GENERATORS: Record<string, (names: string[], changes: WorldChange[]) => string[]> = {
   warDeclared: warDeclaredLines,
   warJoined: warJoinedLines,
   warResolved: warResolvedLines,
@@ -191,6 +327,19 @@ const LINE_GENERATORS: Record<string, (names: string[]) => string[]> = {
   leader: leadershipLines,
   leadership: leadershipLines,
   factionRole: leadershipLines,
+  goalCompleted: goalCompletedLines,
+  ambitionCommitted: ambitionCommittedLines,
+  ambitionResolved: ambitionResolvedLines,
+  territoryClaimed: territoryClaimedLines,
+  territoryContested: territoryContestedLines,
+  importance: importanceLines,
+  weather: weatherLines,
+}
+
+/** Whether this change has an authored rumor phrasing — i.e. whether it is
+ * a rumor at all. See LINE_GENERATORS for why this is an allowlist. */
+export function isRumorWorthy(change: WorldChange): boolean {
+  return change.field in LINE_GENERATORS
 }
 
 /**
@@ -201,17 +350,25 @@ const LINE_GENERATORS: Record<string, (names: string[]) => string[]> = {
  * set of changes always renders the same way (reproducible, testable) —
  * this is not random, it just isn't the single fixed sentence it used to be.
  */
-export function formatDigestGroupLine(changes: WorldChange[]): string {
+export function formatDigestGroupLine(changes: WorldChange[], turnNumber = 0): string {
   if (changes.length === 0) return ''
+  const generator = LINE_GENERATORS[changes[0].field]
+  if (!generator) return ''
   const names = changes.map(c => c.entityName)
-  const variants = (LINE_GENERATORS[changes[0].field] ?? defaultLines)(names)
-  const seed = changes.map(c => c.entityId).sort().join('|')
+  const variants = generator(names, changes)
+  // #432: the TURN is part of the seed. It used to be the entity ids
+  // alone, which made the phrasing a pure function of who was involved —
+  // so a recurring event about the same faction produced a byte-identical
+  // sentence every turn forever. Still deterministic (same turn, same
+  // entities, same text: reproducible and testable), it just no longer
+  // reads as a copy-paste when the world repeats itself.
+  const seed = `${turnNumber}|${changes.map(c => c.entityId).sort().join('|')}`
   return variants[stableHash(seed) % variants.length]
 }
 
 /** Convenience for a single change — see formatDigestGroupLine for the real logic. */
-export function formatDigestLine(change: WorldChange): string {
-  return formatDigestGroupLine([change])
+export function formatDigestLine(change: WorldChange, turnNumber = 0): string {
+  return formatDigestGroupLine([change], turnNumber)
 }
 
 /**
@@ -238,7 +395,26 @@ export function titleForDigestChange(change: WorldChange): string {
     case 'leadership':
     case 'factionRole':
       return 'New Leadership'
+    case 'goalCompleted':
+      return 'A Purpose Fulfilled'
+    case 'ambitionCommitted':
+      return 'Something Set in Motion'
+    case 'ambitionResolved':
+      return 'A Scheme Runs Its Course'
+    case 'territoryClaimed':
+      return 'The Map Redrawn'
+    case 'territoryContested':
+      return 'A Hold Slipping'
+    case 'importance':
+      return 'A Name People Repeat'
+    case 'weather':
+      return 'Foul Weather'
     default:
+      // #432: no longer reachable from the digest — selectDigestChanges
+      // drops any field without an authored phrasing, and every field with
+      // one has a title above. Kept as a real title rather than a throw
+      // because this function is exported and a caller outside the digest
+      // should get something renderable, not an exception.
       return 'Word on the Street'
   }
 }
@@ -287,7 +463,7 @@ export async function sendWorldDigest(
     // combined line and frees the remaining digest budget for whatever
     // else actually happened this turn.
     const groups = groupDigestChangesByField(selected)
-    const lines = groups.map(formatDigestGroupLine)
+    const lines = groups.map(group => formatDigestGroupLine(group, currentTurn))
     const message = lines.join('\n')
 
     // Journal: independent try/catch — a journal-write failure must not
@@ -298,7 +474,7 @@ export async function sendWorldDigest(
         campaignId,
         turnNumber: currentTurn,
         title: titleForDigestChange(group[0]),
-        summaryPublic: formatDigestGroupLine(group),
+        summaryPublic: formatDigestGroupLine(group, currentTurn),
         isOffscreen: true,
         visibility: 'PUBLIC' as EventVisibility,
         eventType: 'WORLD_EVENT' as EventType,

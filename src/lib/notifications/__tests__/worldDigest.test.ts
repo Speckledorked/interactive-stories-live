@@ -52,7 +52,10 @@ describe('formatDigestLine', () => {
     }
   })
 
-  it('falls back to a generic upheaval line for unknown fields', () => {
-    expect(formatDigestLine(change({ field: 'mystery' }))).toContain('Thieves Guild')
+  it('renders nothing for a field with no authored phrasing (#432)', () => {
+    // Was: "falls back to a generic upheaval line". The fallback is gone —
+    // it was what made every unmapped MAJOR field, including an important
+    // NPC's routine movement, read as the same sentence every turn.
+    expect(formatDigestLine(change({ field: 'mystery' }))).toBe('')
   })
 })

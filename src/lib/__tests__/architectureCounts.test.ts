@@ -92,7 +92,19 @@ describe('ARCHITECTURE.md numeric claims are derived, not asserted (#397)', () =
     // with itself and both numbers were wrong. A guard that checks only
     // the marked number would have passed.
     const routeCount = claimed('apiRouteCount')
-    const otherRouteClaims = [...ARCHITECTURE.matchAll(/(?:all|All)\s+(\d{2,4})\s+routes/g)].map((m) => Number(m[1]))
+    // The pattern started as /all N routes/ and promptly missed two live
+    // stale counts — "every one of the 111 routes" in the Current State
+    // list, and "(104/104, ...)" in the Priority List. A guard narrower
+    // than its name is exactly what #400 was about, and this one was mine.
+    //
+    // Widened to any determiner-or-none before the number, plus the N/N
+    // ratio form the doc also uses. Over-matching is the safe direction:
+    // a false positive is one prose edit, a false negative is the stale
+    // number this file exists to prevent.
+    const otherRouteClaims = [
+      ...ARCHITECTURE.matchAll(/(?:all|All|the|every one of the)\s+(\d{2,4})\s+routes/g),
+      ...ARCHITECTURE.matchAll(/\((\d{2,4})\/\d{2,4}[,)]/g),
+    ].map((m) => Number(m[1]))
 
     for (const claim of otherRouteClaims) {
       expect(claim, `prose says "${claim} routes" but the derived count is ${routeCount}`).toBe(routeCount)

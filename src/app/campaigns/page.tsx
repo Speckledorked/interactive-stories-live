@@ -137,8 +137,16 @@ export default function CampaignsPage() {
             <div>
               <h1 className="font-display text-3xl font-semibold text-myth-ink sm:text-5xl">Your Campaigns</h1>
               <div className="mt-3 h-px w-16 bg-myth-gold/50" />
+              {/* This line promised the opposite of the product: "remembered
+                  exactly as you left it" describes a save file, and MythOS's
+                  whole thesis is that it isn't one. The README opens with
+                  "The world doesn't wait for you," the masthead says "THE
+                  WORLD REMEMBERS," and the simulation really does keep
+                  running — wars resolve, factions fall, clocks advance while
+                  nobody is at the table (#396). A returning player who was
+                  told nothing changed would read every one of those as a bug. */}
               <p className="mt-3 max-w-sm text-sm italic text-myth-ink-muted">
-                Every world you&rsquo;ve stepped into, remembered exactly as you left it.
+                Every world you&rsquo;ve stepped into. None of them waited.
               </p>
             </div>
             <Button

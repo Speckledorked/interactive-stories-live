@@ -1,8 +1,8 @@
 // src/lib/game/worldUpdaters/quests.ts
 // Domain applier for world_updates.quest_changes (former "7a": quest
 // lifecycle — open/progress/close named undertakings from the fiction,
-// matched by name like NPCs/factions). See README Known Bugs P1
-// (stateUpdater decomposition, #4/#41).
+// matched by name like NPCs/factions). See #4/#41
+// (stateUpdater decomposition).
 
 import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'

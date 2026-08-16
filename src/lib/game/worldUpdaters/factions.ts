@@ -1,6 +1,6 @@
 // src/lib/game/worldUpdaters/factions.ts
-// Domain applier for world_updates.faction_changes. See README Known Bugs
-// P1 (stateUpdater decomposition, #4/#41).
+// Domain applier for world_updates.faction_changes. See #4/#41
+// (stateUpdater decomposition).
 
 import { Prisma, Faction } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'

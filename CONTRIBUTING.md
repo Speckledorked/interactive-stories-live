@@ -38,6 +38,8 @@ a future reader to wonder whether it's safe to change.
 See `docs/ARCHITECTURE.md` for the project's actual architecture, current
 state, Fix Log and Priority List — this file is intentionally just the one
 convention above, not a general engineering guide. (`README.md` is setup and
-quickstart only; it has never held any of those, which is how #424's 22
-dangling "README Known Bugs" citations came about — this line used to point
-there.)
+quickstart only; it has never held any of those, which is how the 22
+dangling citations in #424 came about — this line used to point there, and
+so did the list of sanctioned targets above. `docReferences.test.ts` now
+checks that every target named here, and every doc section cited from
+`src/`, resolves to a real heading.)

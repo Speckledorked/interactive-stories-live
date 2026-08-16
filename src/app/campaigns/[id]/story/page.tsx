@@ -213,7 +213,7 @@ export default function StoryPage() {
     // characters whose location text merely differs in casing/wording
     // ("the Docks" vs "The Docks District") but share the same resolved
     // Location row are still recognized as being in the same place. See
-    // README Known Bugs P1 — Location stored as free text, not an FK.
+    // #425 — Location stored as free text alongside the FK.
     const groups = new Map<string, { label: string; characters: any[] }>()
     for (const c of campaign?.characters || []) {
       if (c.isAlive === false || busyIds.has(c.id)) continue

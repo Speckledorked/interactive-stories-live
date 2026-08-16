@@ -73,24 +73,66 @@ describe('PATCH', () => {
     expect(db.campaign.update).toHaveBeenCalledWith({ where: { id: 'camp1' }, data: { title: 'New Title' } })
   })
 
-  it('rejects a lone empty-string description as "no field provided" (falsy, not undefined-checked like universe)', async () => {
-    // A real quirk of the validation gate: title/description are checked
-    // with `!value` (empty string is falsy) while universe is checked with
-    // `=== undefined` — an empty-string description alone can never clear
-    // the field through this gate, unlike an explicit universe change.
+  // #370: these three used to pin the quirk rather than the intent — the
+  // gate mixed `!value` for title/description with `=== undefined` for
+  // universe, and the assignments below it used `!== undefined` for all
+  // three. Presence and emptiness are separate checks now, so each field
+  // states its own rule and these assert that rule.
+  it('clears a description, which used to be impossible', async () => {
     ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
-    const response = await PATCH(patchRequest({ description: '' }), { params: { id: 'camp1' } })
-    expect(response.status).toBe(400)
-    expect(db.campaign.update).not.toHaveBeenCalled()
+    db.campaign.update.mockResolvedValue({ id: 'camp1' })
+
+    await PATCH(patchRequest({ description: '' }), { params: { id: 'camp1' } })
+
+    expect(db.campaign.update).toHaveBeenCalledWith({ where: { id: 'camp1' }, data: { description: '' } })
   })
 
-  it('allows clearing universe to an empty string since it is checked against undefined, not falsiness', async () => {
+  it('allows clearing universe to an empty string', async () => {
     ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
     db.campaign.update.mockResolvedValue({ id: 'camp1' })
 
     await PATCH(patchRequest({ universe: '' }), { params: { id: 'camp1' } })
 
     expect(db.campaign.update).toHaveBeenCalledWith({ where: { id: 'camp1' }, data: { universe: '' } })
+  })
+
+  it('rejects an empty title with a message that says why', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
+
+    const response = await PATCH(patchRequest({ title: '   ' }), { params: { id: 'camp1' } })
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    // Not "At least one field must be provided" — that misreported WHY.
+    expect(body.error).toBe('Title cannot be empty')
+    expect(db.campaign.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects an empty title even when another field carries the request (#370)', async () => {
+    // The hole the issue missed. The old gate was one `&&` chain: a truthy
+    // description short-circuited it, and the assignment below only checked
+    // for undefined — so an empty title was unreachable alone and reachable
+    // in company. A campaign could be silently renamed to "".
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
+
+    const response = await PATCH(
+      patchRequest({ title: '', description: 'still here' }),
+      { params: { id: 'camp1' } }
+    )
+
+    expect(response.status).toBe(400)
+    expect(db.campaign.update).not.toHaveBeenCalled()
+  })
+
+  it('still rejects a request that names no field at all', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
+
+    const response = await PATCH(patchRequest({}), { params: { id: 'camp1' } })
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('At least one field must be provided')
+    expect(db.campaign.update).not.toHaveBeenCalled()
   })
 })
 

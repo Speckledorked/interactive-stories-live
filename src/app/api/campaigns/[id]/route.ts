@@ -163,15 +163,46 @@ export async function PATCH(
     const body = await request.json()
     const { title, description, universe } = body
 
-    // Validate at least one field is provided
-    if (!title && !description && universe === undefined) {
+    // #370: "is this field present" and "is this field allowed to be empty"
+    // are two different questions, and this gate used to answer both with
+    // one expression — falsiness for title/description, `=== undefined` for
+    // universe — while the assignments below all used `!== undefined`. Two
+    // bugs fell out of the mismatch:
+    //
+    //   1. `{ description: '' }` was rejected as "nothing to update", so a
+    //      description could never be cleared. `{ universe: '' }` cleared
+    //      fine. Nothing said that difference was intended, because it
+    //      wasn't — it was a `!` and a `=== undefined` sitting next to
+    //      each other.
+    //   2. Less obvious, and not in the issue: `{ title: '', description:
+    //      'x' }` PASSED the gate (description is truthy, so the `&&` chain
+    //      short-circuits) and then wrote `title = ''`, because the
+    //      assignment only checked for undefined. An empty title was
+    //      unreachable alone and reachable in company.
+    //
+    // Presence and emptiness are now separate checks, so each field states
+    // its own rule.
+    const provided = { title, description, universe }
+    if (Object.values(provided).every((v) => v === undefined)) {
       return NextResponse.json<ErrorResponse>(
         { error: 'At least one field must be provided' },
         { status: 400 }
       )
     }
 
-    // Build update object with only provided fields
+    // A campaign needs a name. Rejected with its own message rather than
+    // the generic "nothing to update", which misreported WHY the request
+    // failed even when it happened to reject the right request.
+    if (title !== undefined && (typeof title !== 'string' || title.trim() === '')) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Title cannot be empty' },
+        { status: 400 }
+      )
+    }
+
+    // Build update object with only provided fields. description and
+    // universe may be cleared; both are optional prose about the campaign,
+    // and "I deleted this and it silently didn't save" is the worse failure.
     const updateData: any = {}
     if (title !== undefined) updateData.title = title
     if (description !== undefined) updateData.description = description

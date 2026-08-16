@@ -231,7 +231,7 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
   // `locations` fetch, so the id is always known here — keeps
   // NPC.locationId in sync with currentLocation the moment the tick moves
   // someone, the same as the AI write-back path does for PCs (see
-  // README Known Bugs P1 — Location stored as free text, not an FK).
+  // #425 — Location stored as free text alongside the FK).
   const locationIdByName = new Map(locations.map((l) => [l.name, l.id]))
   const locationGraph = { idByName: locationIdByName, edges: adjacencyRows as AdjacencyEdge[] }
   const changes: WorldChange[] = []

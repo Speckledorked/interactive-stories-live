@@ -8,8 +8,8 @@
 // same pass must still land in the same updateData the earlier
 // harm-damage step started), and splitting that thread across files would
 // risk a subtle ordering bug for no real testability gain — the whole
-// thing is still directly unit-tested as one function. See README Known
-// Bugs P1 (stateUpdater decomposition, #4/#41).
+// thing is still directly unit-tested as one function. See #4/#41
+// (stateUpdater decomposition).
 
 import { Prisma, Character } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
@@ -312,8 +312,8 @@ export async function applyCharacterChanges(
     // Update location. Also resolves/creates the matching Location row and
     // links it via locationId — the same auto-register-on-movement
     // behavior a separate later pass used to do, now done inline since we
-    // need the id anyway (see README Known Bugs P1 — Location stored as
-    // free text, not an FK).
+    // need the id anyway (see #425 — Location stored as
+    // free text alongside the FK).
     if (pcChange.changes.location) {
       // Corruption gate on ENTRY (#83). Checked only for a MOVE, never
       // against where the character already is: marks are irreversible, so

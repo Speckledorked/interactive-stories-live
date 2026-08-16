@@ -6,7 +6,7 @@
 // report about "Bob" landing on "Bobby's Assistant"), and it could fail to
 // match on a trivial AI-side typo/case/whitespace variance, silently
 // auto-creating a duplicate stub NPC instead of updating the real one.
-// Known Bugs P0 — see README.
+// See the Fix Log in docs/ARCHITECTURE.md.
 //
 // Resolution order: exact id -> exact name (case/whitespace-insensitive) ->
 // a single, sufficiently-confident fuzzy match. Multiple ambiguous fuzzy

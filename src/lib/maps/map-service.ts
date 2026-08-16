@@ -304,7 +304,7 @@ export const MapService = {
   },
 
   /**
-   * Keep a campaign's map count bounded (README Known Bugs #9/#59 — "no
+   * Keep a campaign's map count bounded (#9/#59 — "no
    * cleanup path").
    *
    * Map generation creates a new Map+Zone+Token set whenever the AI decides

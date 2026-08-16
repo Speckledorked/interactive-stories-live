@@ -6,8 +6,8 @@
 // entity rosters once (see entityResolution.ts) and calls one domain
 // applier per world_updates field, in the same order the original
 // monolithic implementation did. Each domain applier lives in
-// ./worldUpdaters/ and is independently unit-tested — see README Known
-// Bugs P1 (stateUpdater decomposition, #4/#41) for why this file used to
+// ./worldUpdaters/ and is independently unit-tested — see #4/#41
+// (stateUpdater decomposition) for why this file used to
 // be ~1,400 lines with no direct test coverage.
 
 import { Clock } from '@prisma/client'
@@ -124,7 +124,7 @@ export async function applyWorldUpdates(
       // query — see entityResolution.ts. `contains` could both cross-match
       // an unrelated entity whose name merely contained the search string,
       // and fail on a trivial AI-side typo, silently auto-creating a
-      // duplicate stub instead of updating the real one. Known Bugs P0.
+      // duplicate stub instead of updating the real one. See the Fix Log in docs/ARCHITECTURE.md.
       const clocksForResolution = world_updates.clock_changes?.length
         ? await tx.clock.findMany({ where: { campaignId } })
         : []

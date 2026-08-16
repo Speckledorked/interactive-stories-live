@@ -36,7 +36,7 @@
 
 import { describe, it, expect } from 'vitest'
 import * as ts from 'typescript'
-import { readFileSync } from 'fs'
+import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 
 const AI_ROOT = join(__dirname, '..')
@@ -50,7 +50,24 @@ const AI_ROOT = join(__dirname, '..')
  * correctness-critical roster-resolution file here without re-reading the
  * header comment above first.
  */
+//
+// #400: this was TWO files, and the escape hatch was "add a third". A
+// guard whose scope is a list of the files that had the bug is a
+// regression test wearing the name of an invariant.
+//
+// It is now every file under src/lib/ai — the whole directory IS the
+// prompt/context-building layer, so scoping to it needs no list to
+// maintain, and a new prompt builder is in scope the moment it exists.
 const PROMPT_CONTEXT_FILES = ['worldSummary.ts', 'contextManager.ts']
+
+/** Every non-test .ts file under src/lib/ai, recursively. */
+function promptLayerFiles(dir: string = AI_ROOT): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) return entry.name === '__tests__' ? [] : promptLayerFiles(full)
+    return entry.name.endsWith('.ts') && !entry.name.includes('.test.') ? [full] : []
+  })
+}
 
 const GROWTH_MODELS = new Set(['scene', 'timelineEvent', 'nPC', 'faction'])
 const BOUNDED_METHODS = new Set(['findMany', 'groupBy'])
@@ -136,10 +153,10 @@ describe('prompt/context-building queries stay bounded (#297, #326)', () => {
     }
   })
 
-  it('every campaign-scoped NPC/faction/scene/timeline read in these files has a take bound', () => {
+  it('every campaign-scoped NPC/faction/scene/timeline read in the prompt layer has a take bound', () => {
     const violations: string[] = []
-    for (const file of PROMPT_CONTEXT_FILES) {
-      const full = join(AI_ROOT, file)
+    for (const full of promptLayerFiles()) {
+      const file = full.slice(AI_ROOT.length + 1)
       const src = readFileSync(full, 'utf8')
       for (const v of findUnboundedCampaignQueries(full, src)) {
         violations.push(`${file}:${v.line} — ${v.model}.${v.method} has no take bound`)
@@ -152,7 +169,7 @@ describe('prompt/context-building queries stay bounded (#297, #326)', () => {
       `take bound — this either reintroduces #297's unbounded-growth query ` +
       `cost, or (if it's now a correctness-critical full-roster read rather ` +
       `than a prompt-relevance read) belongs in a file NOT on this test's ` +
-      `PROMPT_CONTEXT_FILES list, not with an unbounded query left here.\n  ${violations.join('\n  ')}`
+      `prompt layer at all, not with an unbounded query left here.\n  ${violations.join('\n  ')}`
     ).toEqual([])
   })
 })

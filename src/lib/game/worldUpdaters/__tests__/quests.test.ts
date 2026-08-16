@@ -62,7 +62,12 @@ describe('applyQuestChanges — new quest', () => {
     })
   })
 
-  it('pays out a reward grant if a brand-new quest is registered already-completed', async () => {
+  // #383: the highest-value AI bypass in the audit. A single quest_changes
+  // entry naming a quest nobody had ever heard of, with status COMPLETED
+  // and a reward_grant, used to mint the row and pay it out — no
+  // acquisition gate, no transition gate, `is_new` never consulted. Quest
+  // names are free text, so it was one payout per unique name, unbounded.
+  it('never pays out for a quest invented already-completed', async () => {
     tx.quest.findFirst.mockResolvedValue(null)
     const change: QuestChange = {
       name: 'Clear the Warrens',
@@ -71,9 +76,22 @@ describe('applyQuestChanges — new quest', () => {
 
     await applyQuestChanges(tx as any, 'camp1', 3, [change])
 
-    // Trailing args: the quest's resolved giver faction (funds the payout
-    // when the grant names no payer) and the turn, for the rarity budget.
-    expect(applyQuestRewardGrant).toHaveBeenCalledWith(tx, 'camp1', 'Clear the Warrens', { gold: 50 }, null, 3)
+    expect(applyQuestRewardGrant).not.toHaveBeenCalled()
+  })
+
+  it('registers an invented terminal quest as ACTIVE so a later completion goes through the gates', async () => {
+    tx.quest.findFirst.mockResolvedValue(null)
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'Clear the Warrens', changes: { status: 'COMPLETED' } } as QuestChange,
+    ])
+
+    expect(tx.quest.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'ACTIVE' }) })
+    )
+    // resolvedAt must not be stamped either — the quest is not resolved.
+    const created = (tx.quest.create.mock.calls as any[])[0][0] as any
+    expect(created.data.resolvedAt).toBeUndefined()
   })
 
   it('skips a malformed change with no name', async () => {

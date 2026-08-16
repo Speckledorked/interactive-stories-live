@@ -799,3 +799,124 @@ describe('locationConditionPenalty (#109)', () => {
     expect(locationConditionPenalty(10)).toBe(contestedPenalty(true))
   })
 })
+
+// ---------------------------------------------------------------------------
+// #381: the classifier decides every input to the roll
+// ---------------------------------------------------------------------------
+//
+// computeMechanics is pure and pinned by exact golden vectors, but honest
+// arithmetic over dishonest inputs is still a dishonest result. This
+// surface had no schema at all: stat_key was accepted as any string and
+// silently became 'cool' downstream — a 6-point swing on a 2-12 scale,
+// decided by a hallucination, with no signal anywhere.
+
+describe('parseClassifications — validation of the roll inputs (#381)', () => {
+  it('refuses a stat outside the closed set instead of silently using cool', () => {
+    const parsed = parseClassifications(
+      { classifications: [{ action_index: 0, move_name: 'Act Under Fire', stat_key: 'charisma' }] },
+      1
+    )
+
+    // Dropped, not coerced. The action resolves freeform, which is a
+    // visible degradation; quietly rolling +cool is not.
+    expect(parsed).toEqual([])
+  })
+
+  it('refuses a real move that names no stat at all', () => {
+    const parsed = parseClassifications(
+      { classifications: [{ action_index: 0, move_name: 'Act Under Fire' }] },
+      1
+    )
+
+    expect(parsed).toEqual([])
+  })
+
+  it('still accepts no_roll without a stat — there is nothing to roll', () => {
+    const parsed = parseClassifications({ classifications: [{ action_index: 0, move_name: 'no_roll' }] }, 1)
+
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0].move_name).toBe('no_roll')
+  })
+
+  it('drops only the malformed entry, never the whole exchange', () => {
+    // z.array fails wholesale; one hallucinated field must not cost every
+    // other player at the table their mechanics.
+    const parsed = parseClassifications(
+      {
+        classifications: [
+          { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool' },
+          { move_name: 'Act Under Fire', stat_key: 'cool' }, // no index
+          { action_index: 2, move_name: 'Act Under Fire', stat_key: 'hard' },
+        ],
+      },
+      3
+    )
+
+    expect(parsed.map((c) => c.action_index)).toEqual([0, 2])
+  })
+
+  it('takes a conservative default rather than dropping the roll for a soft field', () => {
+    const parsed = parseClassifications(
+      {
+        classifications: [
+          { action_index: 0, move_name: 'Act Under Fire', stat_key: 'cool', accepts_bargain: 'yes', engagement: 'telepathic' },
+        ],
+      },
+      1
+    )
+
+    // The roll survives; the fields that could not be trusted take their
+    // neutral value. Losing the roll entirely would be worse for the
+    // player than treating an unparseable bargain as unaccepted.
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0].accepts_bargain).toBe(false)
+    expect(parsed[0].engagement).toBeNull()
+  })
+})
+
+describe('parseClassifications — referential fields are re-verified (#381)', () => {
+  // faction_name and npc_name feed the standing (~4 points) and rapport
+  // (~6 points) modifiers. A shape check cannot tell you whether a faction
+  // exists, so naming one that doesn't was the cheapest way to move a roll.
+  it('ignores a faction this campaign does not have', () => {
+    const parsed = parseClassifications(
+      { classifications: [{ action_index: 0, move_name: 'Act Under Fire', stat_key: 'hot', faction_name: 'The Invented Cabal' }] },
+      1,
+      { factionNames: ['The Rustwatch'], npcNames: [] }
+    )
+
+    expect(parsed[0].faction_name).toBeNull()
+  })
+
+  it('ignores an NPC this campaign does not have', () => {
+    const parsed = parseClassifications(
+      { classifications: [{ action_index: 0, move_name: 'Act Under Fire', stat_key: 'hot', npc_name: 'Nobody At All' }] },
+      1,
+      { factionNames: [], npcNames: ['Marek'] }
+    )
+
+    expect(parsed[0].npc_name).toBeNull()
+  })
+
+  it('keeps the rosters spelling, not the models', () => {
+    const parsed = parseClassifications(
+      { classifications: [{ action_index: 0, move_name: 'Act Under Fire', stat_key: 'hot', faction_name: 'the rustwatch' }] },
+      1,
+      { factionNames: ['The Rustwatch'], npcNames: [] }
+    )
+
+    // Matched case-insensitively, because that is how the prompt lists
+    // them — but the value carried forward is the real one, since every
+    // downstream lookup is exact.
+    expect(parsed[0].faction_name).toBe('The Rustwatch')
+  })
+
+  it('leaves names alone when no roster was supplied', () => {
+    const parsed = parseClassifications(
+      { classifications: [{ action_index: 0, move_name: 'Act Under Fire', stat_key: 'hot', faction_name: 'Anything' }] },
+      1
+    )
+
+    expect(parsed[0].faction_name).toBe('Anything')
+  })
+})

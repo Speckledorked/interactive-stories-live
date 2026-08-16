@@ -208,24 +208,83 @@ describe('POST', () => {
 // of whether its entry is listed.
 describe('GET entity stats', () => {
   it('attaches faction stats matched by name, case-insensitively', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'ADMIN' })
     db.wikiEntry.findMany.mockResolvedValue([
       { id: 'w1', entryType: 'FACTION', name: 'The Ashen Court', summary: 's', importance: 'normal' },
     ])
     db.faction.findMany.mockResolvedValue([
-      { name: 'the ashen court', threatLevel: 4, stability: 20, influence: 60, military: 70, isActive: true },
+      { name: 'the ashen court', threatLevel: 4, stability: 20, isActive: true },
     ])
 
     const response = await GET(getRequest('?type=FACTION'), { params: { id: 'camp1' } })
     const { entries } = await response.json()
 
+    // An admin sees the simulation as it is — the admin panel already
+    // shows these numerically and debugging the tick needs them.
     expect(entries[0].stats).toEqual({
       kind: 'FACTION',
       threatLevel: 4,
       stability: 20,
-      influence: 60,
-      military: 70,
       isActive: true,
     })
+  })
+
+  // #389: fog of war has two independent properties — WHICH entities you
+  // may see, and HOW EXACTLY. This route respected the first (visibleTo)
+  // and shipped raw integers for the second, giving players a precision
+  // that wikiSync.ts, entitySummaries.ts and worldSummaryMappers.ts all
+  // deliberately withhold — the last of those from the GM MODEL itself.
+  it('bands faction stats for a PLAYER instead of shipping the exact figures', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([
+      { id: 'w1', entryType: 'FACTION', name: 'The Ashen Court', summary: 's', importance: 'normal' },
+    ])
+    db.faction.findMany.mockResolvedValue([
+      { name: 'the ashen court', threatLevel: 4, stability: 63, isActive: true },
+    ])
+
+    const response = await GET(getRequest('?type=FACTION'), { params: { id: 'camp1' } })
+    const { entries } = await response.json()
+
+    // 63 falls in the "Steady" band (50-74) and is reported as its
+    // midpoint — the meter still renders, the exact figure never leaves
+    // the server.
+    expect(entries[0].stats.stability).not.toBe(63)
+    expect(entries[0].stats.stability).toBe(62)
+  })
+
+  it('never sends influence or military to anyone', async () => {
+    // Not rendered by EntityStatRow at all — pure over-fetch on top of
+    // being a precision leak.
+    db.wikiEntry.findMany.mockResolvedValue([
+      { id: 'w1', entryType: 'FACTION', name: 'The Ashen Court', summary: 's', importance: 'normal' },
+    ])
+    db.faction.findMany.mockResolvedValue([
+      { name: 'the ashen court', threatLevel: 4, stability: 63, isActive: true },
+    ])
+
+    const response = await GET(getRequest('?type=FACTION'), { params: { id: 'camp1' } })
+    const { entries } = await response.json()
+
+    expect(entries[0].stats.influence).toBeUndefined()
+    expect(entries[0].stats.military).toBeUndefined()
+    // And not even selected from the database.
+    const selected = db.faction.findMany.mock.calls[0][0].select
+    expect(selected.influence).toBeUndefined()
+    expect(selected.military).toBeUndefined()
+  })
+
+  it('bands a location condition for a PLAYER', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([
+      { id: 'w1', entryType: 'LOCATION', name: 'Kel Marsh', summary: 's', importance: 'normal' },
+    ])
+    db.location.findMany.mockResolvedValue([
+      { name: 'Kel Marsh', conditionScore: 63, isContested: false, weather: 'CLEAR', weatherSeverity: 1 },
+    ])
+
+    const response = await GET(getRequest('?type=LOCATION'), { params: { id: 'camp1' } })
+    const { entries } = await response.json()
+
+    expect(entries[0].stats.conditionScore).toBe(62)
   })
 
   it('derives location condition tags with the same helper the tick uses', async () => {

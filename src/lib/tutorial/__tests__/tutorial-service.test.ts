@@ -21,7 +21,16 @@ const {
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    tutorialStep: { findUnique: stepFindUniqueMock, findMany: stepFindManyMock },
+    tutorialStep: {
+      findUnique: stepFindUniqueMock,
+      findMany: stepFindManyMock,
+      // #411: reads now ensure the (global, upsert-seeded) step content
+      // exists first — initializeTutorialSteps had zero callers, so
+      // TutorialStep was never populated and every piece of machinery
+      // around it tracked progress through an empty set.
+      count: vi.fn().mockResolvedValue(1),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
     userTutorialProgress: { findMany: progressFindManyMock, upsert: progressUpsertMock },
   },
 }))

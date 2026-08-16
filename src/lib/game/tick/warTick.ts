@@ -39,7 +39,7 @@ import type { Prisma } from '@prisma/client'
 import { HIGH_BAND_MIN } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, parseFactionRelationships } from './types'
 import { decideArcDelta, decideArcResolution } from '../arc'
-import { TICK_ROTATION_ORDER, markFactionsTicked } from './capOrdering'
+import { rosterFactionFilter } from './capOrdering'
 
 // Both sides must be genuinely strong — the same HIGH cutoff the rest of
 // the tick uses, referenced rather than copied so a rebalance can't drift.
@@ -604,12 +604,8 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
   const changes: WorldChange[] = []
 
   const factions = await ctx.db.faction.findMany({
-    where: { campaignId: ctx.campaignId, isActive: true },
-    orderBy: TICK_ROTATION_ORDER,
-    take: ctx.factionCap,
+    where: { campaignId: ctx.campaignId, isActive: true, ...rosterFactionFilter(ctx) },
   })
-  // #283: rotates which factions win the cap across ticks — see capOrdering.ts.
-  if (!ctx.dryRun) await markFactionsTicked(ctx.db, factions.map((f) => f.id))
 
   const locations = await ctx.db.location.findMany({
     where: { campaignId: ctx.campaignId },

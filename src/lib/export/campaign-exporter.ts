@@ -5,7 +5,8 @@
  * Supports JSON format for full data export
  */
 
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/prisma'
+import { isUniqueConstraintViolation } from '@/lib/game/worldUpdaters/uniqueConstraintGuard';
 import { extractWorldStateChanges } from '@/lib/game/worldStateChanges';
 import { sanitizeMoveOutcomes } from '@/lib/game/resolution';
 
@@ -323,7 +324,35 @@ export class CampaignExporter {
   }
 
   private static async importNPCs(campaignId: string, npcs: any[]) {
+    // #405: location lives in TWO columns — currentLocation (free text) and
+    // locationId (the real FK) — and this wrote only the string. A nullable
+    // FK plus a name-based fallback at every reader means a writer that
+    // forgets it produces no error at any layer: the system silently
+    // degrades to the pre-FK behaviour, and three roll modifiers (weather,
+    // contested, location condition) quietly drop to neutral for that
+    // entity. Resolved against the real Location rows here, the same way
+    // characterCreation.ts does.
+    const locations = await prisma.location.findMany({
+      where: { campaignId },
+      select: { id: true, name: true },
+    })
+    const locationIdByName = new Map(locations.map((l) => [l.name.trim().toLowerCase(), l.id]))
+
     for (const npc of npcs) {
+      const locationId = npc.currentLocation
+        ? locationIdByName.get(String(npc.currentLocation).trim().toLowerCase()) ?? null
+        : null
+      if (npc.currentLocation && !locationId) {
+        console.warn(`  ❓ imported NPC "${npc.name}": location "${npc.currentLocation}" matched no Location row — FK left null`)
+      }
+
+      // #400: an export can legitimately contain two entities whose names
+      // differ only in case, and Phase 1b's constraint is
+      // case-INSENSITIVE — so an import that used to succeed now throws
+      // P2002 partway through and leaves a half-imported campaign. Skip
+      // the duplicate and keep going: a partial import is worse than a
+      // slightly smaller one.
+      try {
       await prisma.nPC.create({
         data: {
           campaignId,
@@ -331,6 +360,7 @@ export class CampaignExporter {
           pronouns: npc.pronouns,
           description: npc.description,
           currentLocation: npc.currentLocation,
+          locationId,
           goals: npc.goals,
           relationship: npc.relationship,
           isAlive: npc.isAlive,
@@ -341,11 +371,17 @@ export class CampaignExporter {
           moves: npc.moves,
         },
       });
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) throw error
+        console.warn(`  ⚠️ imported NPC "${npc.name}" collides with one already in this campaign — skipped`)
+      }
     }
   }
 
   private static async importFactions(campaignId: string, factions: any[]) {
     for (const faction of factions) {
+      // #400: same reasoning as importNPCs above.
+      try {
       await prisma.faction.create({
         data: {
           campaignId,
@@ -360,6 +396,10 @@ export class CampaignExporter {
           gmNotes: faction.gmNotes,
         },
       });
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) throw error
+        console.warn(`  ⚠️ imported faction "${faction.name}" collides with one already in this campaign — skipped`)
+      }
     }
   }
 

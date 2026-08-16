@@ -252,10 +252,31 @@ export function shadowUnlockBlocked(
  * deeper art EXISTS. Only doing it requires the groundwork.
  */
 export function prerequisiteUnlockBlocked(
-  node: { parentId?: string | null },
-  parentState: { state: CapabilityState } | null | undefined
+  node: { parentId?: string | null; isNarrated?: boolean },
+  parentState: { state: CapabilityState } | null | undefined,
+  // #386: how many capabilities the character has already UNLOCKED in this
+  // node's domain. Only consulted for a parentless NARRATED node — see
+  // below. Omitted means "not checked", which preserves the exact
+  // pre-#386 behaviour for every caller that doesn't supply it.
+  domainUnlockedCount?: number
 ): boolean {
-  if (!node.parentId) return false
+  if (!node.parentId) {
+    // A parentless GENERATED node is a root, and roots are ungated by
+    // design — that is what the comment above describes, and it is true of
+    // every node in a campaign generated before the tree existed.
+    //
+    // A parentless NARRATED node is a different animal: it is parentless
+    // because the AI just invented it, not because the world's designers
+    // placed it at the foundation. Ungating it means the model can name a
+    // deep art into existence and hand it over in the same scene, which is
+    // exactly the bypass. It needs the same shape of groundwork a real
+    // deeper art needs — some genuine footing in its own domain — without
+    // requiring a specific parent it doesn't have.
+    if (node.isNarrated && domainUnlockedCount !== undefined) {
+      return domainUnlockedCount === 0
+    }
+    return false
+  }
   return parentState?.state !== 'UNLOCKED'
 }
 
@@ -322,16 +343,47 @@ export async function applyCapabilityChanges(
       // the race a plain check-then-create can't close. Every sibling
       // applier (NPC, Faction, Quest) already guards this same shape;
       // capabilities was the one that hadn't adopted it.
+      // #386: a node the narrator invents must not be BORN exempt from the
+      // gates a generated node is subject to.
+      //
+      // Created parentless and non-shadow, it satisfied
+      // prerequisiteUnlockBlocked (returns false with no parentId) and
+      // shadowUnlockBlocked (returns false when not shadow) trivially — so
+      // the AI could name a capability into existence and unlock it in the
+      // same breath, while an authored one required groundwork and
+      // corruption. The defaults were written for LEGACY rows and applied
+      // to new ones by accident.
+      //
+      // Inherit what the domain already establishes rather than inventing
+      // a position in the tree: if this world's Blood Sorcery is a shadow
+      // art, a newly-named branch of it is a shadow art too.
+      const domain = change.domain || 'General'
+      const siblings = await db.campaignCapability.findMany({
+        where: { campaignId, domain },
+        select: { id: true, tier: true, isShadow: true, parentId: true },
+        orderBy: { tier: 'asc' },
+      })
+      const inheritedShadow = siblings.length > 0 && siblings.every((n) => n.isShadow)
+      // Attach under the domain's root only when there is exactly one
+      // unambiguous candidate — guessing a position in a branching tree
+      // would be worse than leaving it a root, and isNarrated below is
+      // what gates a root that has no parent to require.
+      const roots = siblings.filter((n) => !n.parentId)
+      const inheritedParentId = roots.length === 1 ? roots[0].id : null
+
       try {
         node = await db.campaignCapability.create({
           data: {
             campaignId,
             key,
             name: change.name || change.capability_key,
-            domain: change.domain || 'General',
+            domain,
             // Nodes born mid-story were unknown to everyone — secret until
             // each character glimpses them through the fiction.
             isSecret: true,
+            isShadow: inheritedShadow,
+            parentId: inheritedParentId,
+            isNarrated: true,
           },
         })
         log.push(`New capability discovered in this world: ${node.name}`)
@@ -369,17 +421,29 @@ export async function applyCapabilityChanges(
       // Prerequisite gate (#82): a deeper art needs the art it grows out
       // of. Checked before the shadow gate because it's the cheaper and
       // more common refusal, and because a node can be both.
-      if (node.parentId) {
-        const parentState = await db.characterCapability.findUnique({
-          where: { characterId_capabilityId: { characterId, capabilityId: node.parentId } },
-          select: { state: true },
-        })
-        if (prerequisiteUnlockBlocked(node, parentState)) {
-          const parent = await db.campaignCapability.findUnique({
-            where: { id: node.parentId },
-            select: { name: true },
-          })
-          const parentName = parent?.name || 'its foundation'
+      if (node.parentId || node.isNarrated) {
+        const parentState = node.parentId
+          ? await db.characterCapability.findUnique({
+              where: { characterId_capabilityId: { characterId, capabilityId: node.parentId } },
+              select: { state: true },
+            })
+          : null
+        // #386: only needed for the parentless-narrated case, so it is only
+        // paid for there.
+        const domainUnlockedCount =
+          !node.parentId && node.isNarrated
+            ? await db.characterCapability.count({
+                where: { characterId, state: 'UNLOCKED', capability: { domain: node.domain } },
+              })
+            : undefined
+        if (prerequisiteUnlockBlocked(node, parentState, domainUnlockedCount)) {
+          const parent = node.parentId
+            ? await db.campaignCapability.findUnique({
+                where: { id: node.parentId },
+                select: { name: true },
+              })
+            : null
+          const parentName = parent?.name || `the basics of ${node.domain}`
           // Same shape as the shadow refusal: remember that it exists,
           // unlock nothing. The log line goes into the resolution summary,
           // so the narrator learns the prerequisite for future turns rather

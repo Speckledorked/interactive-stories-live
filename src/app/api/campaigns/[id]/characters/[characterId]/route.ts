@@ -155,7 +155,14 @@ export async function PATCH(
 
     // Validate stats if being updated (admin path only, given the check above)
     if (body.stats) {
-      const validation = validateStats(body.stats as Record<string, number>)
+      // #393: the budget is the starting total PLUS what this character
+      // has already earned. Validating an advanced character's sheet
+      // against the creation invariant rejected every legitimate edit to
+      // a character who had ever grown — the same conflation that made
+      // organic growth unreachable in the first place.
+      const grantedIncreases =
+        ((character.advancementLog as { totalStatIncreases?: number } | null)?.totalStatIncreases) ?? 0
+      const validation = validateStats(body.stats as Record<string, number>, grantedIncreases)
       if (!validation.valid) {
         return NextResponse.json(
           { error: `Invalid stats: ${validation.error}` },

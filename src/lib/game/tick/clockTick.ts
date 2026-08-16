@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { band } from './factionTick'
 import { stableHash } from './types'
 import { TENSION_BASELINE, tensionClockBonus, refreshCampaignTension } from './tension'
+import { persistWorldEvents } from './worldEventLog'
 import { SEASON_MODIFIERS } from './seasonTick'
 import { GeneratedCalendar, deriveSeason } from '../calendar'
 
@@ -163,7 +164,7 @@ export function decideClockAdvancement(
  * steady progress for joint NPC schemes, and category pacing only as a
  * last resort for clocks with no such link. See decideClockAdvancement.
  */
-export async function advanceClocks(campaignId: string) {
+export async function advanceClocks(campaignId: string, simulationTurn?: number) {
   console.log('  Fetching active clocks...')
 
   const clocks = await prisma.clock.findMany({
@@ -189,12 +190,28 @@ export async function advanceClocks(campaignId: string) {
   const worldMeta = await prisma.worldMeta.findUnique({
     where: { campaignId },
     select: {
-      currentTurnNumber: true,
+      simulationTurn: true,
       totalElapsedGameHours: true,
       campaign: { select: { calendarConfig: true } },
     },
   })
-  const turnNumber = worldMeta?.currentTurnNumber ?? 0
+
+  // #374, one function further out than the original fix reached.
+  //
+  // This read `currentTurnNumber` — the SCENE counter — and every use of
+  // turnNumber below is a simulation concern: the stableHash roll that
+  // paces unattached clocks, the tension refresh, and (now) the turn each
+  // clock event is stamped with. On an idle campaign the scene counter
+  // never moves, so `stableHash(clock.id:turnNumber:salt)` was CONSTANT:
+  // every category-paced clock either advanced every single turn forever
+  // or never advanced at all, decided once by its id. The urgent and
+  // faction-driven branches hid it, because neither consults the roll.
+  //
+  // runWorldTurn already computes the real value (simulationTurn + 1) and
+  // passes it to runWorldTick; it passes it here too now. The fallback
+  // read exists for the admin/force paths that call advanceClocks
+  // directly, and reads the simulation clock rather than the scene one.
+  const turnNumber = simulationTurn ?? worldMeta?.simulationTurn ?? 0
 
   // #118: unattached-GM-clock speed. Computed here (not passed in) since
   // advanceClocks runs outside TICK_HANDLERS — this is the only place that
@@ -244,6 +261,43 @@ export async function advanceClocks(campaignId: string) {
       newTicks,
       category: clock.category
     })
+  }
+
+  // #396: a clock advancing is a change to the world and left NO durable
+  // record of itself. `Clock.currentTicks` was overwritten in place, the
+  // return value above lives only for the rest of this function's caller,
+  // and the only WorldEvent rows with targetType CLOCK came from clock
+  // RESOLUTION (clockResolutionEffects.ts) or an integrity repair.
+  //
+  // So a countdown that moved from 1/6 to 5/6 across a player's absence —
+  // the single most tension-carrying thing the simulation does offscreen —
+  // was unreconstructible from any surface, because nothing had written it
+  // down. The absence journal reads WorldEvent; this is the writer it was
+  // missing. Same omission shape as #395, one layer earlier: there the
+  // reader filtered out types that could never appear, here the type never
+  // appeared at all.
+  //
+  // Written through persistWorldEvents like every other change, so it picks
+  // up the #377 dedupe key and stays a no-op on a replayed turn.
+  if (clockUpdates.length > 0) {
+    await persistWorldEvents(
+      campaignId,
+      turnNumber,
+      clockUpdates.map(({ clock, newTicks }) => ({
+        entityType: 'CLOCK' as const,
+        entityId: clock.id,
+        entityName: clock.name,
+        campaignId,
+        field: 'currentTicks',
+        previousValue: clock.currentTicks,
+        newValue: newTicks,
+        reason: `${clock.name} advances to ${newTicks}/${clock.maxTicks}`,
+        // A clock reaching its last tick is the beat worth surfacing; the
+        // steps toward it are texture, same tier as weather severity.
+        significant: newTicks >= clock.maxTicks,
+        importance: (newTicks >= clock.maxTicks ? 'MAJOR' : 'NORMAL') as 'MAJOR' | 'NORMAL',
+      }))
+    )
   }
 
   console.log(`  Advanced ${advancedClocks.length} clock(s)`)

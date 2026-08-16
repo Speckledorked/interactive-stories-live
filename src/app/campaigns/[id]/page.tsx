@@ -89,6 +89,15 @@ export default function CampaignLobbyPage() {
   const [regenerateLogsResult, setRegenerateLogsResult] = useState('')
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [awayRecap, setAwayRecap] = useState<{ awayLabel: string; events: Array<{ id: string; title: string; summary: string }> } | null>(null)
+  // #396: the durable half of the recap, read off WorldEvent. The narrated
+  // feed above can only ever carry faction/NPC beats; this is where a
+  // returning player learns a clock advanced, a place changed, or a war
+  // ended while they were gone.
+  const [awayJournal, setAwayJournal] = useState<{
+    turnRange: { from: number; to: number } | null
+    totalEvents: number
+    entries: Array<{ id: string; turnNumber: number; category: string; categoryLabel: string; line: string }>
+  } | null>(null)
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([])
   const [blockingUserId, setBlockingUserId] = useState<string | null>(null)
 
@@ -107,7 +116,10 @@ export default function CampaignLobbyPage() {
     // before a returning player ever saw it.
     authenticatedFetch(`/api/campaigns/${campaignId}/away-recap`)
       .then(res => (res.ok ? res.json() : null))
-      .then(json => setAwayRecap(json?.recap ?? null))
+      .then(json => {
+        setAwayRecap(json?.recap ?? null)
+        setAwayJournal(json?.journal ?? null)
+      })
       .catch(() => {})
   }, [campaignId])
 
@@ -439,6 +451,43 @@ export default function CampaignLobbyPage() {
                 ? `See all ${awayRecap.events.length} in the story log`
                 : 'See everything that\u2019s happened'}
             </Link>
+          </div>
+        )}
+
+        {/* #396: what the narrated feed structurally cannot carry. Grouped
+            by category rather than listed flat, because the point of the
+            coverage-first selection is that the player can see WHICH KINDS
+            of thing moved — a flat list of twelve lines would bury that. */}
+        {awayJournal && awayJournal.entries.length > 0 && (
+          <div className="space-y-3">
+            <SectionHeader
+              as="h2"
+              title="What Changed"
+              description={
+                awayJournal.turnRange
+                  ? `${awayJournal.totalEvents} recorded changes across world turns ${awayJournal.turnRange.from}\u2013${awayJournal.turnRange.to}`
+                  : 'Recorded changes since your last visit'
+              }
+            />
+            <div className="space-y-4">
+              {Array.from(new Set(awayJournal.entries.map((e) => e.category))).map((category) => {
+                const inCategory = awayJournal.entries.filter((e) => e.category === category)
+                return (
+                  <div key={category}>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">
+                      {inCategory[0].categoryLabel}
+                    </p>
+                    <ul className="mt-1 space-y-1">
+                      {inCategory.map((entry) => (
+                        <li key={entry.id} className="text-sm leading-relaxed text-myth-ink-muted">
+                          {entry.line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 

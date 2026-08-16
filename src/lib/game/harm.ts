@@ -1189,3 +1189,31 @@ export function stabilizeCharacter(
     message: 'Character is stabilized but still critically injured (harm 6)'
   }
 }
+
+
+/**
+ * #385: may this character choose a heroic sacrifice right now?
+ *
+ * A sacrifice is a character in real danger choosing to spend their life
+ * on something. It is not a state the narrator may put an unthreatened
+ * character into, and before this there was no precondition on it at all —
+ * a single AI field killed a PC outright, with no confirmation, no harm
+ * threshold and no isDying check, on a path reachable from player-authored
+ * prompt text.
+ *
+ * The bar is deliberately the fiction's own: SERIOUSLY WOUNDED or worse.
+ * Requiring full Taken Out (harm 6) would be too narrow — the classic
+ * sacrifice is someone still standing who chooses not to be — and
+ * requiring nothing was the defect.
+ */
+export const SACRIFICE_MIN_HARM: HarmLevel = 4 as HarmLevel
+
+export function characterMaySacrifice(
+  conditions: Condition[],
+  character: { harm?: number | null }
+): boolean {
+  const harm = (Number(character.harm) || 0) as HarmLevel
+  // Already dying counts regardless of the threshold below.
+  if (isDying(harm, conditions)) return true
+  return harm >= SACRIFICE_MIN_HARM
+}

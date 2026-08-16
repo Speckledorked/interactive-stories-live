@@ -15,6 +15,7 @@ import type { NPC, Faction } from '@prisma/client'
 import { extractConsequences, ExtractedConsequence, ConsequenceAction } from '@/lib/ai/consequenceExtraction'
 import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
+import { currentSimulationTurn } from './tick/simulationClock'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './tick/npcTick'
 import { WorldChange, clamp } from './tick/types'
@@ -271,9 +272,18 @@ export async function extractAndApplyConsequences(
   }
 
   const changes = await applyConsequences(campaignId, consequences)
-  await persistWorldEvents(campaignId, turnNumber, changes)
-  const historyEntriesCreated = await logSignificantChanges(campaignId, turnNumber, changes)
-  await syncWikiEntriesForChanges(campaignId, turnNumber, changes)
+
+  // #374: world-history rows are stamped on the SIMULATION clock, not the
+  // scene counter this function is called with. WorldEvent.turnNumber is
+  // read as elapsed simulation time by informationTick's age arithmetic
+  // and by beliefTick/npcDispositionTick's per-turn event windows — if
+  // scene-driven rows carried the scene counter and tick-driven rows
+  // carried the simulation turn, that column would hold two different
+  // units and every window over it would be meaningless.
+  const simulationTurn = await currentSimulationTurn(campaignId)
+  await persistWorldEvents(campaignId, simulationTurn, changes)
+  const historyEntriesCreated = await logSignificantChanges(campaignId, simulationTurn, changes)
+  await syncWikiEntriesForChanges(campaignId, simulationTurn, changes)
 
   return { consequencesFound: consequences.length, changes, historyEntriesCreated }
 }

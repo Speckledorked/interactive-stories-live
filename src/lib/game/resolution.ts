@@ -1,4 +1,6 @@
 import { openaiFetch } from '@/lib/ai/openaiCompat'
+import { ActionClassificationResponseSchema, ActionClassificationSchema } from '@/lib/ai/schema'
+import { delimitPlayerText, PLAYER_TEXT_PROMPT_RULE } from '@/lib/ai/playerText'
 // src/lib/game/resolution.ts
 // The mechanical spine: server-rolled PbtA move resolution.
 //
@@ -22,7 +24,7 @@ import { openaiFetch } from '@/lib/ai/openaiCompat'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { BASIC_MOVES, calculateOutcome } from '@/lib/pbta-moves'
-import { MAX_CORRUPTION, CORRUPTION_SURGE_BONUS } from './corruption'
+import { MAX_CORRUPTION, CORRUPTION_SURGE_BONUS, hasCorruptionTheme } from './corruption'
 import { proficiencyBand, ProficiencyBand } from './capabilities'
 import { effectiveStandingModifier } from './standing'
 import { checkCorruptionGate } from './corruptionGates'
@@ -610,30 +612,108 @@ export function computeMechanics(
 
 const MOVE_LIST_FOR_PROMPT = BASIC_MOVES.map(m => `- "${m.name}": ${m.trigger}`).join('\n')
 
-export function parseClassifications(raw: any, actionCount: number): ActionClassification[] {
-  if (!raw || !Array.isArray(raw.classifications)) return []
+/**
+ * #381: validate the classifier's output.
+ *
+ * This is the AI surface that decides every INPUT to the roll — move,
+ * stat, which capability applies, which faction's standing and which NPC's
+ * rapport are in play, whether a bargain was taken, where the character
+ * ends up standing. computeMechanics below it is genuinely pure and pinned
+ * by exact golden vectors, but honest arithmetic over dishonest inputs is
+ * still a dishonest result.
+ *
+ * It previously had no schema: `stat_key` was accepted as any string and
+ * silently became 'cool' downstream, which is a 6-point swing on a 2-12
+ * scale decided by a hallucination. Now it goes through Zod like every
+ * other AI output in the codebase, AND the two referential fields are
+ * re-verified against the real campaign roster — a shape check cannot tell
+ * you whether a faction exists.
+ *
+ * Still fail-open per entry: one malformed classification drops that
+ * action to freeform rather than failing the whole exchange.
+ */
+export function parseClassifications(
+  raw: any,
+  actionCount: number,
+  // The real rosters this campaign has. Omitted means "don't re-verify",
+  // which is the right degradation for callers with no roster to check
+  // against — never the live path, which always has them.
+  known?: { factionNames?: string[]; npcNames?: string[] }
+): ActionClassification[] {
+  const parsed = ActionClassificationResponseSchema.safeParse(raw)
+  if (!parsed.success) {
+    // The envelope itself is wrong (not an object, classifications not an
+    // array). Nothing salvageable.
+    console.warn('Action classification response failed schema validation — resolving freeform:', parsed.error.issues[0]?.message)
+    return []
+  }
+
   const validMoves = new Set([...BASIC_MOVES.map(m => m.name), 'no_roll'])
-  return raw.classifications
-    .filter(
-      (c: any) =>
-        Number.isInteger(c?.action_index) &&
-        c.action_index >= 0 &&
-        c.action_index < actionCount &&
-        typeof c?.move_name === 'string' &&
-        validMoves.has(c.move_name)
-    )
-    .map((c: any) => ({
+  // Matched case-insensitively because that is how the prompt lists them
+  // and how every other entity resolver in the codebase compares names,
+  // but the value KEPT is the roster's, not the model's — downstream
+  // lookups are exact.
+  const factionByName = new Map((known?.factionNames ?? []).map(n => [n.toLowerCase(), n]))
+  const npcByName = new Map((known?.npcNames ?? []).map(n => [n.toLowerCase(), n]))
+
+  const out: ActionClassification[] = []
+  for (const raw of parsed.data.classifications) {
+    // Per entry, so one malformed classification costs that action its
+    // mechanics rather than the whole exchange's.
+    const entry = ActionClassificationSchema.safeParse(raw)
+    if (!entry.success) {
+      console.warn('Dropping a malformed action classification — that action resolves freeform:', entry.error.issues[0]?.message)
+      continue
+    }
+    const c = entry.data
+    if (c.action_index >= actionCount) continue
+    if (!validMoves.has(c.move_name)) {
+      console.warn(`Classifier named a move that does not exist ("${c.move_name}") — that action resolves freeform`)
+      continue
+    }
+
+    // A real move needs a real stat. "no_roll" has nothing to roll, so it
+    // legitimately names none — requiring one there would drop exactly the
+    // classifications that carry no mechanical risk.
+    if (c.move_name !== 'no_roll' && !c.stat_key) {
+      console.warn(`Classifier returned "${c.move_name}" with no stat — that action resolves freeform rather than defaulting to a stat nobody chose`)
+      continue
+    }
+
+    // A faction/NPC the campaign does not have is dropped, not applied.
+    // These two feed standing and rapport modifiers worth ~4 and ~6 points
+    // respectively; inventing one is the cheapest way to move a roll.
+    let factionName = c.faction_name
+    if (factionName && known?.factionNames) {
+      const real = factionByName.get(factionName.toLowerCase())
+      if (!real) {
+        console.warn(`Classifier named faction "${factionName}", which this campaign does not have — ignored`)
+      }
+      factionName = real ?? null
+    }
+    let npcName = c.npc_name
+    if (npcName && known?.npcNames) {
+      const real = npcByName.get(npcName.toLowerCase())
+      if (!real) {
+        console.warn(`Classifier named NPC "${npcName}", which this campaign does not have — ignored`)
+      }
+      npcName = real ?? null
+    }
+
+    out.push({
       action_index: c.action_index,
       move_name: c.move_name,
-      stat_key: typeof c.stat_key === 'string' ? c.stat_key : 'cool',
-      capability_key: typeof c.capability_key === 'string' && c.capability_key ? c.capability_key : null,
-      faction_name: typeof c.faction_name === 'string' && c.faction_name ? c.faction_name : null,
-      npc_name: typeof c.npc_name === 'string' && c.npc_name ? c.npc_name : null,
-      accepts_bargain: c.accepts_bargain === true,
-      matched_signature_id: typeof c.matched_signature_id === 'string' && c.matched_signature_id ? c.matched_signature_id : null,
+      stat_key: c.stat_key ?? 'cool',
+      capability_key: c.capability_key || null,
+      faction_name: factionName,
+      npc_name: npcName,
+      accepts_bargain: c.accepts_bargain,
+      matched_signature_id: c.matched_signature_id || null,
       engagement: isEngagement(c.engagement) ? c.engagement : null,
       moves_to_zone: isZonePosition(c.moves_to_zone) ? c.moves_to_zone : null,
-    }))
+    })
+  }
+  return out
 }
 
 async function classifyActions(
@@ -659,11 +739,17 @@ async function classifyActions(
         ?.map(s => `${s.id} (${s.name}: ${s.trigger})`)
         .join('; ')
       const band = character ? parseZone(character.currentZone) : DEFAULT_ZONE
-      return `${i}. ${character?.name || 'Unknown'} [currently ${band}]: "${a.actionText}"${knownCaps ? ` [known abilities: ${knownCaps}]` : ''}${signatures ? ` [perks/signature abilities: ${signatures}]` : ''}${character?.pendingBargainOffer ? ` [OPEN BARGAIN: ${character.pendingBargainOffer}]` : ''}`
+      // #382: fenced, not quoted. A quote pair looks like a delimiter and
+      // isn't one — closing the quote and continuing was the whole
+      // escape. delimitPlayerText also strips the fence from the input,
+      // so a player cannot emit a closing marker.
+      return `${i}. ${character?.name || 'Unknown'} [currently ${band}]${knownCaps ? ` [known abilities: ${knownCaps}]` : ''}${signatures ? ` [perks/signature abilities: ${signatures}]` : ''}${character?.pendingBargainOffer ? ` [OPEN BARGAIN: ${character.pendingBargainOffer}]` : ''}\n${delimitPlayerText(a.actionText)}`
     })
     .join('\n')
 
   const prompt = `Classify each tabletop RPG player action to the move it triggers.
+
+${PLAYER_TEXT_PROMPT_RULE}
 
 MOVES:
 ${MOVE_LIST_FOR_PROMPT}
@@ -726,7 +812,7 @@ Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fi
       responseTimeMs: Date.now() - startTime,
       success: true,
     }).catch(console.error)
-    return parseClassifications(JSON.parse(content), actions.length)
+    return parseClassifications(JSON.parse(content), actions.length, { factionNames, npcNames })
   } catch (error) {
     // Fail open: unclassified actions resolve freeform, as they always did.
     console.error('Action classification failed (failing open):', error)
@@ -840,7 +926,8 @@ export async function resolveActionMechanics(
         take: 300,
       }),
     ])
-    const hasCorruptionTheme = Boolean(campaignRow?.corruptionTheme)
+    // #404: one predicate, one meaning — see corruption.ts.
+    const campaignHasCorruptionTheme = hasCorruptionTheme(campaignRow?.corruptionTheme)
     const debtsByCharacter = new Map<string, typeof debtRows>()
     for (const row of debtRows) {
       const list = debtsByCharacter.get(row.characterId)
@@ -947,7 +1034,7 @@ export async function resolveActionMechanics(
           // rapport no weight. Deliberately the one gate with no lasting
           // state — nothing is written, so it stops applying the moment the
           // gate does, and it can never trap anyone.
-          const gate = checkCorruptionGate(npc, character.corruption ?? 0, hasCorruptionTheme)
+          const gate = checkCorruptionGate(npc, character.corruption ?? 0, campaignHasCorruptionTheme)
           if (gate.allowed) {
             relationshipForRoll = {
               npcName: npc.name,
@@ -992,6 +1079,16 @@ export async function resolveActionMechanics(
       // README Known Bugs P1 — Location stored as free text, not an FK).
       const locationId = locationIdByCharacter.get(character.id)
       const currentLocation = currentLocationByCharacter.get(character.id)
+      // #405: the name fallback exists for rows whose FK hasn't resolved
+      // yet, and it MISSES silently on any name drift ("The Ashen Gate" vs
+      // "Ashen Gate") — at which point weather, contested-location and
+      // condition modifiers all quietly drop to neutral and the character
+      // rolls without the penalties the fiction says apply. Log when it is
+      // load-bearing, so the drift is observable instead of inferred from
+      // dice that feel wrong.
+      if (!locationId && currentLocation) {
+        console.warn(`  ⚠️ ${character.name} has no locationId — falling back to name match on "${currentLocation}"; location roll modifiers may be missed if the name has drifted`)
+      }
       const weatherForRoll: WeatherForRoll | null =
         (locationId ? weatherByLocationId.get(locationId) : undefined) ??
         (currentLocation ? weatherByLocationName.get(currentLocation.toLowerCase()) : undefined) ??

@@ -27,6 +27,7 @@
 import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
+import { deriveResourceSlots } from '../resourceSlots'
 import { sceneWorldChange } from './sceneWorldEvents'
 import { resolveEntityByNameOrId } from '../entityResolution'
 import type { WorldChange } from '../tick/types'
@@ -114,6 +115,14 @@ export async function applyLocationChanges(
           name: locChange.name,
           description: locChange.description || null,
           locationType: locChange.location_type || null,
+          // #378: a location born mid-story produces something too. The
+          // whole logistics subsystem gates on this being non-empty, and
+          // it had no writer anywhere — see game/resourceSlots.ts.
+          resourceSlots: deriveResourceSlots({
+            name: locChange.name,
+            locationType: locChange.location_type ?? null,
+            description: locChange.description ?? null,
+          }),
           gmNotes: locChange.gm_notes_append || null,
           // Corruption gates (#83) — these were dropped on the create path
           // while the update path above wrote them, so a location born
@@ -192,7 +201,16 @@ export async function resolveOrCreateLocationId(
     }
 
     const created = await tx.location.create({
-      data: { campaignId, name, isDiscovered: sceneOrigin },
+      data: {
+        campaignId,
+        name,
+        isDiscovered: sceneOrigin,
+        // #378: same reasoning as the richer create path above — this is
+        // the MAIN way real new places appear (a character moving
+        // somewhere), so it is the one that most needs to produce a
+        // location the logistics tick can actually see.
+        resourceSlots: deriveResourceSlots({ name }),
+      },
     })
     return created.id
   } catch {

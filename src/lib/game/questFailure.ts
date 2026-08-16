@@ -33,6 +33,11 @@
 // feed `relationshipModifier` independently. Using them says something
 // true about the fiction instead of just scaling a number.
 
+// The -3..+3 track bounds live in standing.ts, which owns the track. #413:
+// they were duplicated here, so a widening there would silently not apply
+// to quest failure — the one place that pushes standing DOWN hardest.
+import { STANDING_MIN, STANDING_MAX } from '@/lib/game/standing'
+
 /** The two ways a quest ends badly. COMPLETED is handled by questRewards. */
 export type QuestFailureStatus = 'FAILED' | 'ABANDONED'
 
@@ -110,10 +115,6 @@ interface Db {
     upsert: (args: unknown) => Promise<unknown>
   }
 }
-
-/** Faction standing is a -3..+3 track; the same bound applyStandingChanges uses. */
-const STANDING_MIN = -3
-const STANDING_MAX = 3
 
 /** Rapport meters run -100..100, matching the pc_changes relationship writer. */
 const clampRapport = (value: number) => Math.max(-100, Math.min(100, value))

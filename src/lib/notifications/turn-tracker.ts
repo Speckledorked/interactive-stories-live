@@ -10,6 +10,18 @@ export interface TurnOrder {
   isNPC?: boolean;
 }
 
+/**
+ * #418: how many overdue-turn notifications one cron run may send.
+ *
+ * notifyOverdueTurns scans TurnTracker GLOBALLY — every campaign on the
+ * platform — and then loops admins with a sequential createNotification,
+ * inside the same cron invocation as the world-tick sweep. Bounded so a
+ * platform-wide backlog cannot consume the sweep's duration budget.
+ * overdueNotifiedAt makes the pass idempotent, so the remainder is simply
+ * picked up on the next run.
+ */
+const MAX_OVERDUE_NOTIFICATIONS_PER_RUN = 100
+
 export class TurnTracker {
 
   // Initialize turn tracking for a scene
@@ -302,7 +314,19 @@ export class TurnTracker {
       },
       include: {
         campaign: { select: { title: true } }
-      }
+      },
+      // #418: bounded. This is a GLOBAL scan — every campaign on the
+      // platform, not one — and it runs inside the same cron invocation as
+      // the world-tick sweep, which already has a maxDuration budget it can
+      // exhaust. An unbounded scan followed by a sequential per-admin
+      // notification loop is the kind of thing that works fine until the
+      // day it doesn't, and then takes the world sweep down with it.
+      //
+      // Oldest deadline first so the most overdue campaigns are the ones
+      // that get through; anything past the cap is picked up next run,
+      // since overdueNotifiedAt keeps this pass idempotent.
+      orderBy: { turnDeadline: 'asc' },
+      take: MAX_OVERDUE_NOTIFICATIONS_PER_RUN
     });
 
     let notified = 0;
@@ -450,11 +474,27 @@ export class TurnTracker {
       newCurrentTurn = newCurrentTurn % turnOrder.length;
     }
 
+    // #418: whoever is current now inherits a deadline that belonged to
+    // the player who left — frequently one already in the past, so the new
+    // current player arrives to an expired clock and an immediate overdue
+    // notification for a turn they were never given time to take. Removing
+    // a player starts the next player's turn; give them the same window
+    // anyone else would get.
+    const deadlineForNextPlayer =
+      turnOrder.length > 0 && turnTracker.turnTimeoutMinutes
+        ? new Date(Date.now() + turnTracker.turnTimeoutMinutes * 60 * 1000)
+        : null;
+
     await prisma.turnTracker.update({
       where: { id: turnTracker.id },
       data: {
         turnOrder: turnOrder as unknown as any,
-        currentTurn: newCurrentTurn
+        currentTurn: newCurrentTurn,
+        turnStartedAt: turnOrder.length > 0 ? new Date() : null,
+        turnDeadline: deadlineForNextPlayer,
+        // A fresh deadline is a fresh turn: this pass must be eligible to
+        // notify again if it too goes overdue.
+        overdueNotifiedAt: null
       }
     });
 

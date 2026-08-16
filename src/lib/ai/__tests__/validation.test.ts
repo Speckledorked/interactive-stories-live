@@ -398,13 +398,37 @@ describe('validateWorldTurnResponse (#66)', () => {
     expect(result.data.offscreen_events[0].summary_gm).toBe('')
   })
 
+  // #385: harm_damage is no longer part of the offscreen schema at all —
+  // it is what sets isAlive = false, and on this path it fires with no
+  // player present, no witness rows, and nothing in any player-facing
+  // surface to show it happened. pc_changes was already excluded from this
+  // schema; that narrowing was by DOMAIN rather than by CAPABILITY, and NPC
+  // death is the same class of irreversible change.
+  it('strips a lethal NPC field from the offscreen path rather than applying it', () => {
+    const result = validateWorldTurnResponse({
+      offscreen_events: [validEvent],
+      gm_notes: 'notes',
+      world_updates: {
+        npc_changes: [{ npc_name_or_id: 'Duke', changes: { harm_damage: 5, goals: 'Regroup' } }],
+      },
+    })
+
+    // The batch still applies — the rest of the update is legitimate — but
+    // the damage never reaches the writer.
+    expect(result.level).toBe('full')
+    if (result.level !== 'full') throw new Error('expected full')
+    const npc = (result.data as any).world_updates.npc_changes[0]
+    expect(npc.changes.harm_damage).toBeUndefined()
+    expect(npc.changes.goals).toBe('Regroup')
+  })
+
   it('degrades to narrative-only when world_updates is malformed, DROPPING the bad updates', () => {
     const result = validateWorldTurnResponse({
       offscreen_events: [validEvent],
       gm_notes: 'notes',
       world_updates: {
-        // harm_damage is bounded 0-6 by NPCChangesSchema; 9000 must not reach the writer
-        npc_changes: [{ npc_name_or_id: 'Duke', changes: { harm_damage: 9000 } }],
+        // harm_healing is bounded 0-6; 9000 must not reach the writer
+        npc_changes: [{ npc_name_or_id: 'Duke', changes: { harm_healing: 9000 } }],
       },
     })
     expect(result.level).toBe('narrative')

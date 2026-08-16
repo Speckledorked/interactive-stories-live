@@ -10,6 +10,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 import type { Season } from '../calendar'
+import type { TickRoster } from './capOrdering'
 
 export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'LOCATION_CONDITION' | 'LOCATION_POPULATION' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT' | 'LOCATION'
 
@@ -89,6 +90,27 @@ export interface TickContext {
   factionCap: number
   npcCap: number
   /**
+   * #375: WHICH factions and NPCs this tick simulates, resolved once in
+   * worldTick.ts before the handler pass (see tick/capOrdering.ts).
+   *
+   * Handlers filter with `id: { in: ctx.roster.factionIds }` and must NOT
+   * run their own capped/rotated query. They used to, and because each one
+   * bumped lastTickedAt with the TRANSACTION client immediately after its
+   * own query, every handler in a single transaction selected a different
+   * slice of the roster — dissolving the same-tick ordering chain, breaking
+   * determinism, and making dry-run preview a different simulation than the
+   * real tick.
+   *
+   * Optional so every existing single-handler test's literal TickContext
+   * fixture keeps compiling. When absent (unit tests only — runWorldTick
+   * always supplies it) rosterFactionFilter/rosterNpcFilter produce an
+   * empty predicate, so the handler simulates exactly what its mocked
+   * query returns. That is what a unit test wants and, crucially, is NOT
+   * a fallback to the old per-handler rotation: no handler may re-derive
+   * its own capped slice. capOrdering.convention.test.ts enforces that.
+   */
+  roster?: TickRoster
+  /**
    * World Sim Phase 8: preview mode — handlers still read live DB state and
    * compute the same WorldChange list they normally would, but every write
    * call is skipped. Defaults to false (the normal, persisting tick).
@@ -130,6 +152,16 @@ export interface TickContext {
    * season-blind pick.
    */
   season?: Season
+  /**
+   * #402: the in-fiction clock, resolved once per tick in worldTick.ts.
+   *
+   * npcTick derives time of day from this rather than from turnNumber % 4
+   * — those were two unreconciled notions of "what time is it", so an
+   * NPC's working day ran on a clock unrelated to the date the player is
+   * shown. Optional so existing single-handler test fixtures keep
+   * compiling; absent falls back to the old turn-derived value.
+   */
+  totalElapsedGameHours?: number
 }
 
 /**
@@ -206,16 +238,74 @@ export function parseFactionRelationships(value: unknown): Record<string, Factio
   return value as Record<string, FactionRelationshipEntry>
 }
 
-/** First faction id on record as a RIVAL, if any. */
+/**
+ * The faction most plausibly meant by "their rival", if any.
+ *
+ * #403: this used to be `Object.entries(...).find(...)` — whichever RIVAL
+ * key JavaScript happened to yield first, i.e. insertion order in a JSON
+ * column. warTick.ts:630 uses the result to decide WHO a war ignites
+ * against, so a load-bearing decision was being made by object key order.
+ *
+ * Now deterministic: the longest-standing rivalry wins (the grudge with
+ * the most history behind it is the one a war is about), ties broken by
+ * id so the result is stable across runs and across two factions whose
+ * rivalries began on the same turn.
+ */
 export function findRivalId(relationships: unknown): string | undefined {
-  return Object.entries(parseFactionRelationships(relationships)).find(([, r]) => r.type === 'RIVAL')?.[0]
+  return findRivalIds(relationships)[0]
 }
 
-/** Every faction id on record as a RIVAL. */
+/**
+ * Every faction id on record as a RIVAL, oldest rivalry first.
+ *
+ * Ordering is part of the contract — see findRivalId.
+ */
 export function findRivalIds(relationships: unknown): string[] {
   return Object.entries(parseFactionRelationships(relationships))
     .filter(([, r]) => r.type === 'RIVAL')
+    .sort(([idA, a], [idB, b]) => {
+      // `since` may be absent on rows written before it existed; treat
+      // those as the oldest, which is what an unknown start date implies.
+      const sinceA = typeof a.since === 'number' ? a.since : -1
+      const sinceB = typeof b.since === 'number' ? b.since : -1
+      if (sinceA !== sinceB) return sinceA - sinceB
+      return idA.localeCompare(idB)
+    })
     .map(([id]) => id)
+}
+
+/**
+ * #403: is this relationship map symmetric with its counterpart?
+ *
+ * Faction.relationships is written symmetrically by relationshipEngine.ts
+ * (it sets both aTies[b.id] and bTies[a.id]) and read one-sidedly
+ * everywhere else. Symmetry is therefore a property of the DATA enforced
+ * only by the one writer that happens to do it — any other path (an admin
+ * route, an integrity repair, an AI-driven change, an import) can produce
+ * a legal-looking asymmetric map that no reader detects.
+ *
+ * Exposed so the integrity engine can check it rather than assume it. A
+ * grep for "symmetr"/"reciproc" across the repo used to return nothing.
+ */
+export function relationshipAsymmetries(
+  factions: Array<{ id: string; relationships: unknown }>
+): Array<{ factionId: string; otherId: string; type: string; otherType: string | null }> {
+  const byId = new Map(factions.map((f) => [f.id, parseFactionRelationships(f.relationships)]))
+  const problems: Array<{ factionId: string; otherId: string; type: string; otherType: string | null }> = []
+
+  for (const [factionId, ties] of byId) {
+    for (const [otherId, entry] of Object.entries(ties)) {
+      const otherTies = byId.get(otherId)
+      // A faction we don't have in hand can't be checked — that's a
+      // missing row, not an asymmetry.
+      if (!otherTies) continue
+      const mirrored = otherTies[factionId]
+      if (mirrored?.type !== entry.type) {
+        problems.push({ factionId, otherId, type: entry.type, otherType: mirrored?.type ?? null })
+      }
+    }
+  }
+  return problems
 }
 
 /**

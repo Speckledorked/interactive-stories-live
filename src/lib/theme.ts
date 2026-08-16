@@ -64,13 +64,6 @@ export function setTheme(theme: Theme): void {
   applyTheme(theme)
 }
 
-/** What the user actually sees right now, resolving 'system'. */
-export function resolveTheme(theme: Theme): 'light' | 'dark' {
-  if (theme !== 'system') return theme
-  if (typeof window === 'undefined' || !window.matchMedia) return 'light'
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
 /**
  * Runs in <head> before first paint, so a dark-mode user never sees a
  * flash of the light parchment palette (or vice versa) while React

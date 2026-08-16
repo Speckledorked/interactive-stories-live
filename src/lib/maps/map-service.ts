@@ -276,24 +276,16 @@ export const MapService = {
     }
   },
 
-  async moveToken(tokenId: string, x: number, y: number): Promise<void> {
-    await prisma.token.update({
-      where: { id: tokenId },
-      data: { x, y }
-    })
-  },
-
-  async deleteToken(tokenId: string): Promise<void> {
-    await prisma.token.delete({
-      where: { id: tokenId }
-    })
-  },
-
-  async deleteZone(zoneId: string): Promise<void> {
-    await prisma.zone.delete({
-      where: { id: zoneId }
-    })
-  },
+  // NOTE (#412): there is deliberately no single-token move/delete API
+  // here. Maps in MythOS are ILLUSTRATIVE — generated per scene, read-only
+  // for players (PlayerMapViewer), and replaced wholesale by
+  // clearMapContents when a scene reuses a location. Per-token mutation
+  // only ever existed to serve AIVisualService's token-movement methods,
+  // which had no callers of their own and were removed with them. Grid
+  // combat is parked, not in progress; if it is ever picked up, this is
+  // where its mutation surface goes, alongside the authorization and
+  // realtime-broadcast story a player-driven token needs and these
+  // functions never had.
 
   // Wipes a map's zones/tokens before regenerating them for a new scene
   // that's reusing the same location — without this, generateZones/

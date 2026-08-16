@@ -29,8 +29,8 @@ import { prisma } from '@/lib/prisma'
 // levels actually produce now.
 export type ValidationResult =
   | { success: true; data: AIGMResponseValidated; level: 'full' }
-  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates>; time_passage?: TimePassage; scene_progress?: SceneProgress }; level: 'partial' }
-  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates>; time_passage?: TimePassage; scene_progress?: SceneProgress }; level: 'emergency'; template: string }
+  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates>; time_passage?: TimePassage; scene_progress?: SceneProgress }; level: 'partial'; degradation?: z.ZodError }
+  | { success: true; data: { scene_text: string; world_updates: Partial<WorldUpdates>; time_passage?: TimePassage; scene_progress?: SceneProgress }; level: 'emergency'; template: string; degradation?: z.ZodError }
   | { success: false; error: string; rawData?: any }
 
 /**
@@ -88,7 +88,17 @@ export function buildRepairPrompt(zodError: z.ZodError): string {
 export async function validateAIResponseWithRepair(
   rawResponse: any,
   sceneContext: string | undefined,
-  repair: (repairPrompt: string) => Promise<any>
+  repair: (repairPrompt: string) => Promise<any>,
+  // #388: who this response was for. Supplied so a degraded result can be
+  // RECORDED, not just logged to a console nobody reads after the fact.
+  //
+  // logValidationFailure has existed since the AIValidationFailure model
+  // did and had zero callers — while an admin route reads that table and
+  // renders it. The product shipped a reader, a route and a UI panel for a
+  // table that could never contain a row. Degradation is designed to be
+  // invisible to the player, which is correct, and that is exactly why it
+  // has to be visible to whoever maintains the thing.
+  context?: { campaignId: string; sceneId: string }
 ): Promise<ValidationResult> {
   const firstAttempt = AIGMResponseSchema.safeParse(rawResponse)
   if (firstAttempt.success) {
@@ -112,7 +122,17 @@ export async function validateAIResponseWithRepair(
   }
 
   console.log('Falling back to progressive degradation...')
-  return validateAIResponse(rawResponse, sceneContext)
+  const result = validateAIResponse(rawResponse, sceneContext)
+
+  // Best-effort and deliberately not awaited into the scene's critical
+  // path: an observability write must never cost a player their turn.
+  if (context && result.success && result.level !== 'full' && 'degradation' in result && result.degradation) {
+    void logValidationFailure(context.campaignId, context.sceneId, rawResponse, result.degradation).catch(
+      (err: unknown) => console.error('Failed to record validation failure (non-critical):', err)
+    )
+  }
+
+  return result
 }
 
 /**
@@ -121,6 +141,13 @@ export async function validateAIResponseWithRepair(
  */
 export function validateAIResponse(rawResponse: any, sceneContext?: string): ValidationResult {
   console.log('🔍 Validating AI response...')
+
+  // #388: the ZodError that caused the degradation is carried out with the
+  // result so the caller can persist it. This ladder is synchronous and
+  // has no campaignId/sceneId, which is exactly why logValidationFailure
+  // was written and then never called from here — the write belongs where
+  // the context is.
+  let degradation: z.ZodError | undefined
 
   // Level 1: Try full schema validation
   try {
@@ -135,6 +162,7 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
     if (error instanceof z.ZodError) {
       console.warn('⚠️ Full schema validation failed:', error.errors)
       console.log('Attempting partial extraction...')
+      degradation = error
     } else {
       console.error('❌ Unexpected validation error:', error)
     }
@@ -168,11 +196,13 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
         // world-turn clock. See extractValidSceneProgress.
         scene_progress: extractValidSceneProgress((rawResponse as any)?.scene_progress)
       },
-      level: 'partial'
+      level: 'partial',
+      degradation
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.warn('⚠️ Partial validation failed:', error.errors)
+      degradation = degradation ?? error
     }
   }
 
@@ -188,7 +218,8 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
         time_passage: extractValidTimePassage((rawResponse as any)?.time_passage),
         scene_progress: extractValidSceneProgress((rawResponse as any)?.scene_progress)
       },
-      level: 'partial'
+      level: 'partial',
+      degradation
     }
   }
 
@@ -201,14 +232,24 @@ export function validateAIResponse(rawResponse: any, sceneContext?: string): Val
     data: {
       scene_text: template,
       world_updates: {},
-      // Still worth salvaging even here: the response was unusable as
-      // prose, but if it happened to carry a valid time_passage, the
-      // world-turn clock shouldn't stall just because the narration did.
-      time_passage: extractValidTimePassage((rawResponse as any)?.time_passage),
+      // #388: time_passage does NOT survive an emergency parse.
+      //
+      // It used to, on the reasoning that the world-turn clock shouldn't
+      // stall just because the narration did. But at this level the
+      // response was unusable as prose — the scene the player sees is a
+      // canned template, and no fiction actually happened. Banking
+      // world-turn hours off it advances factions, ages information and
+      // matures loans on the strength of a response too malformed to read.
+      // A stalled clock is recoverable; time that passed in a scene that
+      // didn't happen is not.
+      //
+      // Level 3 (loose extraction) still salvages it: there, the model
+      // produced real prose and merely mis-shaped the envelope.
       scene_progress: extractValidSceneProgress((rawResponse as any)?.scene_progress)
     },
     level: 'emergency',
-    template: 'default'
+    template: 'default',
+    degradation
   }
 }
 
@@ -450,7 +491,7 @@ export async function logValidationFailure(
  *   none      — neither parsed; caller falls back to its empty result.
  *
  * Pure and synchronous: failure logging is the caller's business (it has
- * the campaignId), matching how logValidationFailure is already used.
+ * the campaignId), matching how logValidationFailure is called from validateAIResponseWithRepair (#388 — it had zero callers until then, while an admin route already read the table it writes).
  */
 export type WorldTurnValidationResult =
   | { level: 'full'; data: WorldTurnResponseValidated }

@@ -12,6 +12,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 import { tickBeliefDrift } from '../beliefTick'
+import { resolveTickRoster, markRosterTicked } from '../capOrdering'
+import { MAJOR_IMPORTANCE_THRESHOLD } from '../npcTick'
 import type { TickContext } from '../types'
 
 const RUN = process.env.RUN_DB_TESTS === '1'
@@ -130,7 +132,17 @@ describeIfDb('tickBeliefDrift — real database', () => {
   // capOrdering.ts rotation mechanism every other capped faction handler
   // uses, so proving it here against real Postgres verifies the shared
   // mechanism, not just this one handler.
-  it('#283: rotates every faction through the cap across consecutive ticks, not just the oldest N forever', async () => {
+  //
+  // #375 moved WHERE that mechanism lives, and this test moved with it.
+  // The rotation key used to be bumped by each handler, mid-pass, with the
+  // transaction client — which meant eleven handlers each selected a
+  // DIFFERENT roster inside one transaction. Now the roster is resolved
+  // once by resolveTickRoster before the pass and stamped once by
+  // markRosterTicked after it, so driving this through a single handler
+  // would no longer exercise rotation at all (the handler doesn't bump
+  // anything any more, by design). Driving it through capOrdering directly
+  // tests the shared mechanism this test always claimed to be testing.
+  it('#283/#375: rotates every faction through the cap across consecutive ticks, not just the oldest N forever', async () => {
     const campaign = await prisma.campaign.create({
       data: { title: 'Faction Cap Rotation Live Test', aiSystemPrompt: 'test', initialWorldSeed: 'test' },
     })
@@ -150,20 +162,18 @@ describeIfDb('tickBeliefDrift — real database', () => {
 
     const selectedEachTick: string[][] = []
     for (let turn = 2; turn <= 4; turn++) {
-      const ctx: TickContext = {
-        campaignId: rotationCampaignId, turnNumber: turn, factionCap: 5, npcCap: 20, dryRun: false, db: prisma as any,
-      }
-      await tickBeliefDrift(ctx)
-
-      const rows = await prisma.faction.findMany({
-        where: { campaignId: rotationCampaignId, lastTickedAt: { not: null } },
-        select: { id: true },
+      const roster = await resolveTickRoster(prisma as never, {
+        campaignId: rotationCampaignId,
+        factionCap: 5,
+        npcCap: 20,
+        npcImportanceThreshold: MAJOR_IMPORTANCE_THRESHOLD,
       })
-      const tickedSoFar = new Set(rows.map((r) => r.id))
-      const newlyTicked = factionIds.filter(
-        (id) => tickedSoFar.has(id) && !selectedEachTick.flat().includes(id)
-      )
-      selectedEachTick.push(newlyTicked)
+      // Distinct, increasing timestamps per tick — the rotation key is
+      // ordered by lastTickedAt, so three bumps inside the same millisecond
+      // would make the ordering depend on the id tiebreak alone and the
+      // test would pass for the wrong reason.
+      await markRosterTicked(prisma as never, roster, new Date(Date.now() + turn * 60_000))
+      selectedEachTick.push(roster.factionIds)
     }
 
     // Real rotation: tick 1 and tick 2 must select different factions, not

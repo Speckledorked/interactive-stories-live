@@ -1,5 +1,6 @@
 // src/app/api/campaigns/[id]/factions/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { isUniqueConstraintViolation } from '@/lib/game/worldUpdaters/uniqueConstraintGuard'
 import { prisma } from '@/lib/prisma'
 import { visibleTo, isCampaignAdmin } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
@@ -74,8 +75,15 @@ export async function POST(
       )
     }
 
-    // Create faction
-    const faction = await prisma.faction.create({
+    // #400: guarded like every other creator of a name-unique model.
+    // Phase 1b gave Faction.name a real case-insensitive DB constraint, and
+    // this route checks nothing before creating — so an admin adding a
+    // faction while the AI mints one with the same name mid-scene got a
+    // raw 500. This guard was previously enforced only across a hardcoded
+    // seven-file allowlist, and this route was file #8.
+    let faction
+    try {
+      faction = await prisma.faction.create({
       data: {
         campaignId,
         name: body.name,
@@ -91,8 +99,12 @@ export async function POST(
         gmNotes: body.gmNotes || null,
         leaderCharacterId: body.leaderCharacterId || null,
         isDiscovered: body.isDiscovered !== undefined ? body.isDiscovered : true,
-      },
-    })
+        },
+      })
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error
+      return NextResponse.json({ error: 'A faction with that name already exists' }, { status: 409 })
+    }
 
     return NextResponse.json({ faction }, { status: 201 })
   } catch (error) {

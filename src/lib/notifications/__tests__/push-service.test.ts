@@ -160,22 +160,50 @@ describe('sendPushToUser', () => {
 })
 
 describe('savePushSubscription', () => {
+  const VALID = 'https://fcm.googleapis.com/fcm/send/abc123'
+
   it('upserts on endpoint so re-subscribing never duplicates', async () => {
     const { savePushSubscription } = await import('../push-service')
-    await savePushSubscription({ userId: 'u1', endpoint: 'e1', p256dh: 'k', auth: 'a' })
+    await savePushSubscription({ userId: 'u1', endpoint: VALID, p256dh: 'k', auth: 'a' })
 
     const call = (prisma.pushSubscription.upsert as any).mock.calls[0][0]
-    expect(call.where).toEqual({ endpoint: 'e1' })
+    expect(call.where).toEqual({ endpoint: VALID })
   })
 
   it('re-points an endpoint at whoever owns it now', async () => {
     // Browsers get shared. A stale row would otherwise deliver one user's
     // notifications to someone else's device.
     const { savePushSubscription } = await import('../push-service')
-    await savePushSubscription({ userId: 'u2', endpoint: 'e1', p256dh: 'k', auth: 'a' })
+    await savePushSubscription({ userId: 'u2', endpoint: VALID, p256dh: 'k', auth: 'a' })
 
     const call = (prisma.pushSubscription.upsert as any).mock.calls[0][0]
     expect(call.update.userId).toBe('u2')
+  })
+
+  // #418: the SSRF validator is sound — it survived every bypass the audit
+  // attempted. What it lacked was COVERAGE: it was called at exactly one
+  // route, and this function wrote whatever it was handed. A guard at the
+  // request boundary protects the routes that existed when it was written;
+  // a guard at the persistence boundary protects the data, which is what
+  // the send path actually trusts.
+  it('refuses to persist an endpoint that fails validation', async () => {
+    const { savePushSubscription } = await import('../push-service')
+
+    await expect(
+      savePushSubscription({ userId: 'u1', endpoint: 'http://169.254.169.254/latest/meta-data', p256dh: 'k', auth: 'a' })
+    ).rejects.toThrow(/Refusing to store push endpoint/)
+
+    expect(prisma.pushSubscription.upsert).not.toHaveBeenCalled()
+  })
+
+  it('refuses a private-range endpoint even over https', async () => {
+    const { savePushSubscription } = await import('../push-service')
+
+    await expect(
+      savePushSubscription({ userId: 'u1', endpoint: 'https://127.0.0.1/push', p256dh: 'k', auth: 'a' })
+    ).rejects.toThrow(/Refusing to store push endpoint/)
+
+    expect(prisma.pushSubscription.upsert).not.toHaveBeenCalled()
   })
 })
 

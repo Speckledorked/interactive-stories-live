@@ -110,3 +110,58 @@ describe('explainClockAdvancement — reasoning text', () => {
     expect(reasoning.join(' ')).toMatch(/roll threshold/i)
   })
 })
+
+describe('the pacing roll actually depends on the turn (#374)', () => {
+  // This is the property a frozen turn counter destroys, and the reason
+  // #374 reached one function further than its original fix.
+  //
+  // advanceClocks read WorldMeta.currentTurnNumber — the SCENE counter —
+  // and fed it into `stableHash(clock.id:turnNumber:salt)`. On an idle
+  // campaign that counter never moves, so the hash was constant and every
+  // category-paced clock either advanced EVERY turn forever or NEVER
+  // advanced, decided once and permanently by its id.
+  //
+  // Nothing caught it because the branches that don't consult the roll —
+  // 'urgent', and any clock with a faction or NPC driver — behaved
+  // identically either way, and they are the branches fixtures reach for.
+  const unattached = (id: string) => ({
+    id,
+    category: 'default' as string | null,
+    sourceFactionId: null,
+    relatedFactionId: null,
+    participantNpcIds: [] as string[],
+  })
+
+  it('does not return the same answer for every turn of a given clock', () => {
+    const clock = unattached('clock-1')
+    const decisions = Array.from({ length: 40 }, (_, turn) =>
+      decideClockAdvancement(clock, new Map(), turn)
+    )
+
+    // Both outcomes have to be reachable for the same clock across turns.
+    // With a frozen turn number this set has exactly one member.
+    expect(new Set(decisions).size).toBeGreaterThan(1)
+  })
+
+  it('is still deterministic for a given (clock, turn) pair', () => {
+    // The fix is "vary with the turn", not "become random" — a dry-run
+    // preview and the real turn must still agree.
+    const clock = unattached('clock-1')
+    for (const turn of [0, 1, 7, 30]) {
+      expect(decideClockAdvancement(clock, new Map(), turn)).toBe(
+        decideClockAdvancement(clock, new Map(), turn)
+      )
+    }
+  })
+
+  it('does not move every clock in lockstep on the same turn', () => {
+    // The salt includes the clock id, so two clocks on the same turn are
+    // independent — otherwise a campaign's whole clock board would advance
+    // or stall together.
+    const onTurn7 = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((id) =>
+      decideClockAdvancement(unattached(id), new Map(), 7)
+    )
+
+    expect(new Set(onTurn7).size).toBeGreaterThan(1)
+  })
+})

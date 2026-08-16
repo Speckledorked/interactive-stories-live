@@ -239,7 +239,7 @@ export async function buildSceneResolutionRequest(
   }
 
   // Phase 16.4: Add narrative flow guidance
-  const flowGuidance = NarrativeFlowManager.generateFlowGuidance(scene.playerActions)
+  const flowGuidance = NarrativeFlowManager.generateFlowGuidance(scene.playerActions, mechanicsByActionId)
   const specialCases = NarrativeFlowManager.detectSpecialCases(scene.playerActions)
 
   let additionalGuidance = flowGuidance

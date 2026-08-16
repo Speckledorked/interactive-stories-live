@@ -20,6 +20,7 @@
 
 import webpush from 'web-push'
 import { prisma } from '@/lib/prisma'
+import { validatePushEndpoint } from './pushEndpointValidation'
 
 export interface PushPayload {
   title: string
@@ -155,6 +156,20 @@ export async function savePushSubscription(params: {
   auth: string
   userAgent?: string | null
 }): Promise<void> {
+  // #418: validated at the PERSISTENCE boundary, not only the request one.
+  //
+  // The SSRF validator itself is sound — it survived every bypass the audit
+  // attempted (userinfo tricks, IDN/punycode, trailing-dot FQDNs,
+  // decimal/octal IPv4, IPv6). What it didn't have was coverage: it was
+  // called at exactly one route, and this function wrote whatever it was
+  // handed. A guard at the request boundary protects the routes that
+  // existed when it was written; a guard here protects the DATA, which is
+  // what the send path actually trusts.
+  const verdict = validatePushEndpoint(params.endpoint)
+  if (!verdict.valid) {
+    throw new Error(`Refusing to store push endpoint: ${verdict.reason}`)
+  }
+
   await prisma.pushSubscription.upsert({
     where: { endpoint: params.endpoint },
     create: {

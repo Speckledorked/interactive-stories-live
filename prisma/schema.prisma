@@ -654,6 +654,22 @@ model CampaignCapability {
   // prerequisite must orphan its children into roots, never delete the
   // deeper arts along with it.
   parentId    String?
+  // #386: PROVENANCE. Both unlock gates are opt-in restrictions with a
+  // permissive default — prerequisiteUnlockBlocked returns false when
+  // parentId is null, shadowUnlockBlocked returns false when isShadow is
+  // false — and their comments say why: a campaign generated before the
+  // tree existed has no parents, and a campaign with no corruption theme
+  // never sets isShadow. Those defaults are correct for LEGACY rows.
+  //
+  // They were also correct for a node the narrator invented mid-scene,
+  // which is created parentless and non-shadow — so an AI-declared
+  // capability was structurally exempt from both gates while a
+  // generator-authored one was subject to both. The AI could name a
+  // capability into existence and unlock it in the same breath.
+  //
+  // Recording where a node came from is what lets the permissive default
+  // apply only to the case it was written for.
+  isNarrated  Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   campaign        Campaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)
@@ -1045,6 +1061,10 @@ model NPC {
   // importance-tied subset winning forever.
   lastTickedAt DateTime?
 
+  // #375: per-NPC disposition-drift watermark — the exact counterpart of
+  // Faction.beliefDriftThroughTurn, for the same reason. See that field.
+  dispositionDriftThroughTurn Int?
+
   // Real uniqueness enforced by a case-insensitive functional index
   // (migration 20260729030000_phase1b_schema_invariants) — not expressible
   // as a Prisma @@unique, which can't target lower(name). Case-insensitive
@@ -1056,6 +1076,11 @@ model NPC {
   @@index([campaignId])
   @@index([factionId])
   @@index([locationId])
+  // #375: lastTickedAt is the rotation sort key for every capped NPC
+  // query (4 handlers per tick). The migration that added the column
+  // added no index, so each of those queries sorted the whole campaign
+  // roster in memory.
+  @@index([campaignId, lastTickedAt])
 }
 
 model Faction {
@@ -1187,10 +1212,23 @@ model Faction {
   // tick/capOrdering.ts.
   lastTickedAt DateTime?
 
+  // #375: the last simulation turn whose events this faction's belief
+  // drift has consumed. PER-FACTION, replacing the campaign-level
+  // WorldMeta.beliefDriftProcessedThroughTurn (see its comment): with a
+  // capped, rotating roster a campaign-level watermark permanently
+  // discards drift for whichever factions lost that tick's rotation.
+  // tickBeliefDrift processes the window (this, targetTurn] for each
+  // faction it actually selects, so drift is exactly-once per faction no
+  // matter which ticks it wins. Null = never processed.
+  beliefDriftThroughTurn Int?
+
   // Real uniqueness enforced by a case-insensitive functional index
   // (migration 20260729030000_phase1b_schema_invariants) — see NPC's
   // identical comment for why this can't be a plain Prisma @@unique.
   @@index([campaignId])
+  // #375: rotation sort key for 7 capped faction queries per tick — see
+  // NPC's identical index.
+  @@index([campaignId, lastTickedAt])
 }
 
 // #103: a temporary, decaying stability penalty rippling out from an NPC's
@@ -1913,6 +1951,50 @@ model WorldMeta {
   hoursSinceWorldTurn Float @default(0)
   worldTurnHours      Int?
 
+  // #374: the SIMULATION's own loop counter — how many world turns this
+  // campaign has actually run. Distinct from currentTurnNumber above,
+  // which counts PLAYER SCENE RESOLUTIONS and is written only by
+  // sceneResolver.ts.
+  //
+  // Before this column, every tick handler read currentTurnNumber as if
+  // it were elapsed simulation time. It isn't: runWorldTurn read it and
+  // never wrote it, so an idle campaign ticked 100 times with an
+  // identical turn number. Weather pinned to a constant, NPC schedules
+  // froze or thrashed, information never propagated (age = turn − event
+  // turn never grew), loans could never default, belief drift ran exactly
+  // once, and consolidation either never ran or ran every single turn.
+  //
+  // Incremented inside runWorldTick's transaction, so it advances if and
+  // only if a tick actually committed. See tick/types.ts TickContext.
+  simulationTurn Int @default(0)
+
+  // #376: world-turn lease. The accumulator above cannot double as the
+  // exclusion mechanism — decideWorldTurnPacing caps banked overflow at
+  // one threshold, so a claim leaves hoursSinceWorldTurn at EXACTLY the
+  // threshold, which still satisfies the `gte` claim predicate. That made
+  // a duplicate concurrent turn the steady state for an idle campaign,
+  // not a rare race.
+  //
+  // Set to now() when a run claims the turn, cleared when it finishes.
+  // A lease older than WORLD_TURN_LEASE_TIMEOUT_MS (tick/pacing.ts) is
+  // treated as abandoned so a process killed mid-turn — the cron sweep's
+  // maxDuration is a real risk here — can't wedge a campaign forever.
+  worldTurnRunningSince DateTime?
+
+  // #410: what the last world tick could NOT simulate.
+  //
+  // factionCap/npcCap bound how many entities a tick considers, and when
+  // they bite the excluded entities simply do not advance that turn —
+  // their state goes stale, not partial. Every cap in the engine was
+  // silent about this except the integrity engine's, which reports
+  // unrepaired items and fails safe. ARCHITECTURE.md conceded the gap in
+  // as many words: "no error, no log, no UI anywhere".
+  //
+  // A resource control that changes what is TRUE IN THE FICTION — a war
+  // whose participants missed the page does not progress — has to be
+  // observable. Shape: TickCapReport (game/tick/caps.ts).
+  lastTickCapReport Json?
+
   // Durable, monotonically-increasing total in-game hours since campaign
   // epoch (hour 0 = campaign creation) — unlike hoursSinceWorldTurn above,
   // this NEVER resets (that field is a pacing accumulator that zeroes out
@@ -1957,6 +2039,19 @@ model WorldMeta {
   // query — so a genuinely-frozen turnNumber naturally stops reprocessing
   // after the first pass, while a real turn advance (scene resolution
   // eventually happens) still runs the window fresh, exactly as before.
+  //
+  // DEPRECATED (#375). A CAMPAIGN-level watermark is wrong once the tick
+  // caps and rotates its roster: a pass advanced this past turn T after
+  // processing only the capped subset, so every faction/NPC that lost that
+  // tick's rotation never received turn T's drift and the watermark
+  // guaranteed it never would. Pre-rotation that lost a stable (if unfair)
+  // subset; rotation spread the loss across the whole roster.
+  //
+  // Superseded by the per-entity Faction.beliefDriftThroughTurn /
+  // NPC.dispositionDriftThroughTurn, which make drift exactly-once PER
+  // ENTITY regardless of which tick it happens to win. Retained only as
+  // the backfill source for those columns (migration
+  // 20260816090000_world_turn_integrity) — no code reads them.
   beliefDriftProcessedThroughTurn      Int?
   dispositionDriftProcessedThroughTurn Int?
 
@@ -2916,8 +3011,33 @@ model CampaignMemory {
   retrievalCount    Int  @default(0)
   lastRetrievedTurn Int?
 
-  createdAt DateTime @default(now())
+  // #377: replay identity, same purpose as WorldEvent.dedupeKey — but the
+  // stakes here are money, not just row count. Every memory costs an
+  // embedding call, so a retried world turn used to re-pay for N
+  // embeddings AND leave N duplicate rows competing in the RAG candidate
+  // pool. memoryCreation.ts checks this key BEFORE embedding, so a replay
+  // costs one cheap SELECT instead of an API call.
+  dedupeKey String?
 
+  // #392: consolidation is a compaction of the INDEX, not destruction of
+  // the RECORD.
+  //
+  // It used to DELETE the originals after writing an era summary, which
+  // irreversibly destroyed per-memory fullContext, emotionalTone,
+  // importance, memoryType, sourceId, retrievalCount, tags and turnNumber
+  // — and unioned entity attribution across the whole bucket, so "who was
+  // in what" became "who was in this decade". None of that is derivable
+  // from the summary, and there was no path back.
+  //
+  // What actually costs space and pollutes the candidate pool is the
+  // 1536-dimension embedding, not the text. So an archived memory keeps
+  // every field and loses only its embedding: it stops competing in
+  // retrieval, and the record survives.
+  archivedAt         DateTime?
+  consolidatedIntoId String?
+
+  @@unique([campaignId, dedupeKey])
+  @@index([campaignId, archivedAt])
   @@index([campaignId, turnNumber])
   @@index([campaignId, memoryType])
   @@index([campaignId, importance])
@@ -3190,9 +3310,28 @@ model WorldEvent {
   // silently corrupt that unrelated signal.
   wakeSourceType String?
 
+  // #377: replay identity. A world turn is ~14 commit boundaries, so a
+  // failure partway through re-runs the WHOLE turn at the same turn
+  // number — and before this column that re-run wrote ~40 duplicate rows.
+  // The duplicates are not merely noise: beliefTick/npcDispositionTick
+  // derive drift by COUNTING prior-turn rows, so a retry silently doubled
+  // the drift it fed back into the simulation.
+  //
+  // Derived deterministically in worldEventLog.ts from the turn number,
+  // the change's identity, its before→after values, and an ordinal that
+  // disambiguates two genuinely distinct writes to the same field in one
+  // turn (e.g. seasonTick and economyTick both nudging faction.resources).
+  // Same tick input ⇒ same key ⇒ skipDuplicates drops the replay.
+  //
+  // Nullable, and Postgres treats NULLs as distinct in a unique index, so
+  // every pre-migration row and any future writer that opts out coexist
+  // without a backfill.
+  dedupeKey String?
+
   campaign  Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   witnesses EventWitness[]
 
+  @@unique([campaignId, dedupeKey])
   @@index([campaignId, turnNumber])
   @@index([campaignId, targetType, targetId])
   @@index([campaignId, type])

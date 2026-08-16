@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
 import { pluralize, truncateWithEllipsis } from '@/lib/format'
+import { acceptsPlayerActions } from '@/lib/game/sceneLifecycle'
 import type { MapData } from '@/lib/maps/map-service'
 import AILoadingState from '@/components/scene/AILoadingState'
 import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
@@ -519,21 +520,12 @@ export default function StoryPage() {
       }
     })
 
-    channel.bind('ai-character-moved', (data: any) => {
-      console.log('Character moved:', data)
-      // Reload map to get updated token positions
-      loadData()
-    })
-
-    channel.bind('ai-element-added', (data: any) => {
-      console.log('Element added to map:', data)
-      loadData()
-    })
-
-    channel.bind('ai-element-removed', (data: any) => {
-      console.log('Element removed from map:', data)
-      loadData()
-    })
+    // NOTE (#412): the ai-character-moved / ai-element-added /
+    // ai-element-removed listeners lived here, each triggering a full
+    // loadData(). Nothing ever published them — AIVisualService's
+    // token-movement methods were their only producers and had zero
+    // callers themselves — so they were three subscriptions to an event
+    // stream that did not exist. Removed with the producers.
 
     // Safety pause (X-Card). The safety service has always published these
     // and nothing has ever listened, so hitting the X-Card stopped the
@@ -1463,7 +1455,9 @@ export default function StoryPage() {
                       (it used to require clicking "Continue the scene" first,
                       which read as a dead end since neither button looked like
                       "take your turn"). */}
-                  {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && !userHasSubmitted && selectedCharacterId && (
+                  {/* #406: one predicate rather than each caller re-deriving the
+                      combination of status and isPaused — see lib/game/sceneLifecycle.ts */}
+                  {acceptsPlayerActions(scene) && !userHasSubmitted && selectedCharacterId && (
                     <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
                       <div className="flex items-center justify-between gap-3 mb-4">
                         <h3 className="font-display text-lg font-semibold text-myth-ink">Your Action</h3>
@@ -1642,7 +1636,7 @@ export default function StoryPage() {
                       human GM, the AI narrates and the table drives pacing.
                       Only force-resolve (a rescue tool for a lost
                       auto-resolve) stays host-only. */}
-                  {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && (() => {
+                  {acceptsPlayerActions(scene) && (() => {
                     const participants = scene.participants as any
                     const hasDefinedParticipants = participants?.scoped === true
                     const submittedUserIds = new Set((scene.playerActions || []).map((a: any) => a.userId))

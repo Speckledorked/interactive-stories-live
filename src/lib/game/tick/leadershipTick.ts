@@ -18,7 +18,7 @@
 
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
 import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
-import { TICK_ROTATION_ORDER, markFactionsTicked } from './capOrdering'
+import { rosterFactionFilter } from './capOrdering'
 
 /** One living, affiliated NPC considered for promotion. */
 export interface SuccessionCandidate {
@@ -230,9 +230,7 @@ function compareCandidates(a: SuccessionCandidate, b: SuccessionCandidate): numb
 
 export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandlerResult> {
   const factions = await ctx.db.faction.findMany({
-    where: { campaignId: ctx.campaignId, isActive: true },
-    orderBy: TICK_ROTATION_ORDER,
-    take: ctx.factionCap,
+    where: { campaignId: ctx.campaignId, isActive: true, ...rosterFactionFilter(ctx) },
     include: {
       members: {
         where: { isAlive: true },
@@ -246,8 +244,6 @@ export async function tickFactionLeadership(ctx: TickContext): Promise<TickHandl
     // only because decideSuccession's roughness computation now depends on
     // it reaching that call unchanged.
   })
-  // #283: rotates which factions win the cap across ticks — see capOrdering.ts.
-  if (!ctx.dryRun) await markFactionsTicked(ctx.db, factions.map((f) => f.id))
 
   const changes: WorldChange[] = []
 

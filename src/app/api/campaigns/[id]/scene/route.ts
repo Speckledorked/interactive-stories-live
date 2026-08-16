@@ -4,6 +4,8 @@
 // POST - Submit player action
 
 import { NextRequest, NextResponse } from 'next/server'
+import { validateActionText } from '@/lib/ai/playerText'
+import { acceptsPlayerActions, sceneLifecycle } from '@/lib/game/sceneLifecycle'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
@@ -155,15 +157,30 @@ export async function POST(
     const campaignId = params.id
     const body: SubmitActionRequest = await request.json()
 
-    const { sceneId, characterId, actionText } = body
+    const { sceneId, characterId, actionText: rawActionText } = body
 
     // Validate input
-    if (!sceneId || !characterId || !actionText) {
+    if (!sceneId || !characterId) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Scene ID, character ID, and action text are required' },
         { status: 400 }
       )
     }
+
+    // #382: player text is untrusted input to an interpreter (the model)
+    // that then emits privileged state changes. This checked only that the
+    // string was non-empty — no length cap at all, so one request could
+    // fill the model's context window on a paid endpoint, and no
+    // sanitisation, so the text reached both prompts verbatim.
+    //
+    // Rejected rather than truncated: silently cutting an action in half
+    // changes what the player asked for. The fencing itself lives in
+    // lib/ai/playerText.ts and is applied at both prompt builders.
+    const validated = validateActionText(rawActionText)
+    if (!validated.ok) {
+      return NextResponse.json<ErrorResponse>({ error: validated.error }, { status: 400 })
+    }
+    const actionText = validated.text
 
     // Rate limit before any DB/AI work — action submission can trigger a
     // full scene resolution (an LLM call) inline.
@@ -224,19 +241,24 @@ export async function POST(
       include: { playerActions: true }
     })
 
-    if (!scene || scene.status !== 'AWAITING_ACTIONS') {
+    // #406: one predicate decides WHETHER, the branch below only decides
+    // what to say about it. This used to be two independent checks with no
+    // shared notion of a lifecycle — status here, isPaused there — which is
+    // how three orthogonal signals ended up with as many effective states
+    // as there were call sites combining them. See lib/game/sceneLifecycle.ts.
+    if (!scene || !acceptsPlayerActions(scene)) {
+      // A paused scene is not "not accepting actions" in the same sense as
+      // a resolved one — it is resumable, and the distinct status code and
+      // message matter to the client.
+      if (scene && sceneLifecycle(scene) === 'paused') {
+        return NextResponse.json<ErrorResponse>(
+          { error: 'This scene is paused for a safety check-in. The campaign host must resume it before play continues.' },
+          { status: 423 }
+        )
+      }
       return NextResponse.json<ErrorResponse>(
         { error: 'Scene is not accepting actions' },
         { status: 400 }
-      )
-    }
-
-    // X-Card pause (see lib/safety/safety-service.ts) blocks new actions
-    // until a GM/admin resumes the scene.
-    if (scene.isPaused) {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'This scene is paused for a safety check-in. The campaign host must resume it before play continues.' },
-        { status: 423 }
       )
     }
 

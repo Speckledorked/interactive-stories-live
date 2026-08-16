@@ -20,12 +20,33 @@ import { readFileSync } from 'fs'
 
 const DOC_PATH = 'docs/ARCHITECTURE.md'
 
+/**
+ * #397: compare against the MERGE BASE, not HEAD^1.
+ *
+ * HEAD^1 is the previous commit, so splitting a raise across two commits
+ * defeated this entirely: commit A raises the score, commit B is a no-op,
+ * and neither single diff shows an increase against its own parent. The
+ * merge base is the point the branch diverged, so the comparison covers
+ * the whole branch however many commits it took.
+ */
 function resolveBaseRef(): string {
   if (process.env.GITHUB_EVENT_NAME === 'pull_request') {
     const base = process.env.GITHUB_BASE_REF
-    if (base) return `origin/${base}`
+    if (base) {
+      try {
+        return execSync(`git merge-base origin/${base} HEAD`, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+      } catch {
+        return `origin/${base}`
+      }
+    }
   }
-  return 'HEAD^1'
+  // On a push to main, the merge base with the previous tip of main is the
+  // right comparison for a --no-ff merge commit AND for a plain commit.
+  try {
+    return execSync('git merge-base HEAD^1 HEAD', { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  } catch {
+    return 'HEAD^1'
+  }
 }
 
 function loadFileAt(ref: string, path: string): string | null {
@@ -74,12 +95,43 @@ function parseCleanAuditEntries(content: string): Set<string> {
   return cleared
 }
 
+/**
+ * #397: distinguishes "no base to compare" from "the base is unreachable".
+ * Only the former is a legitimate skip.
+ */
+function isFirstCommitTouchingDoc(): boolean {
+  try {
+    const history = execSync(`git log --format=%H -- ${DOC_PATH}`, {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    return history.trim().split('\n').filter(Boolean).length <= 1
+  } catch {
+    return false
+  }
+}
+
 function main() {
   const baseRef = resolveBaseRef()
   const baseContent = loadFileAt(baseRef, DOC_PATH)
   if (baseContent === null) {
-    console.log(`Could not read ${DOC_PATH} at ${baseRef} (shallow history, or first commit touching it) — nothing to compare against, skipping.`)
-    process.exit(0)
+    // #397: this used to `process.exit(0)` — so a shallow clone silently
+    // disabled the check entirely, and CI reported green for a run that
+    // examined nothing. A gate that cannot run has not passed.
+    //
+    // The one legitimate case is the first commit ever to touch the file,
+    // which has no base to compare against. Everything else is a
+    // misconfigured checkout, and the fix is `fetch-depth: 0`.
+    if (isFirstCommitTouchingDoc()) {
+      console.log(`${DOC_PATH} has no prior version — first commit to touch it, nothing to compare.`)
+      process.exit(0)
+    }
+    console.error(
+      `Could not read ${DOC_PATH} at ${baseRef}. This is almost always a shallow clone — ` +
+      `set fetch-depth: 0 on the checkout step. Failing rather than skipping: a gate that ` +
+      `cannot run has not passed.`
+    )
+    process.exit(1)
   }
 
   const currentContent = readFileSync(DOC_PATH, 'utf-8')
@@ -91,7 +143,26 @@ function main() {
   for (const [system, currentScore] of currentScores) {
     if (currentScore === null) continue
     const baseScore = baseScores.get(system)
-    if (baseScore === null || baseScore === undefined) continue // new row, or was non-numeric — not a "raise"
+    if (baseScore === null) continue // was non-numeric — not a "raise"
+    if (baseScore === undefined) {
+      // #397: a row present now but absent from the base is either a
+      // genuinely NEW row, or a RENAMED one — and renaming was a real
+      // bypass, because `baseScores.get(system)` returned undefined and
+      // the check simply `continue`d past any score it carried.
+      //
+      // Distinguished by counting: if the base had the same number of rows
+      // or more, nothing was added, so a row appearing here means one
+      // disappeared — a rename. That needs a human to confirm the score
+      // came along honestly.
+      if (baseScores.size >= currentScores.size) {
+        violations.push(
+          `"${system}": not present under this name in the base, and no row was added ` +
+          `(base had ${baseScores.size} rows, now ${currentScores.size}) — a renamed row cannot ` +
+          `carry its score across unchecked`
+        )
+      }
+      continue
+    }
     if (currentScore > baseScore && !cleared.has(system)) {
       violations.push(`"${system}": ${baseScore} -> ${currentScore}, no matching "0 new defects found" entry`)
     }

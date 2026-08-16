@@ -23,6 +23,7 @@
 // handler writes through `ctx.db` (never the bare `prisma` singleton), and
 // worldTurn.ts restores the pacing accumulator when this throws.
 
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { tickWeather } from './tick/weatherTick'
 import { tickSeasonalPressure } from './tick/seasonTick'
@@ -36,7 +37,7 @@ import { tickTerritoryLoyalty } from './tick/territoryLoyaltyTick'
 import { tickLocationCondition } from './tick/locationConditionTick'
 import { tickLogistics } from './tick/logisticsTick'
 import { tickFactionAmbitions } from './tick/ambitionTick'
-import { tickNpcs } from './tick/npcTick'
+import { tickNpcs, MAJOR_IMPORTANCE_THRESHOLD } from './tick/npcTick'
 import { tickMigration } from './tick/migrationTick'
 import { tickInformation } from './tick/informationTick'
 import { tickNpcSocialTies, tickNpcJointSchemes } from './tick/npcSocietyTick'
@@ -47,7 +48,8 @@ import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { TickContext, TickHandler, WorldChange, WorldTickResult, PendingAmbition } from './tick/types'
-import { resolveTickCaps } from './tick/caps'
+import { resolveTickCaps, DEFAULT_FACTION_CAP, DEFAULT_NPC_CAP, type TickCapReport } from './tick/caps'
+import { resolveTickRoster, markRosterTicked } from './tick/capOrdering'
 import { deriveSeason, GeneratedCalendar } from './calendar'
 
 // tickFactionRelationships runs BEFORE tickFactions on purpose: it reads
@@ -173,7 +175,7 @@ import { deriveSeason, GeneratedCalendar } from './calendar'
 // last turn's. See its own file for what it does and doesn't repair.
 const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickNpcDisposition, tickFactions, tickFactionLeadership, tickWars, tickTerritoryLoyalty, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickInformation, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickEconomy, tickIntegrity]
 
-// Prisma's interactive-transaction default is 5s; this tick runs 10
+// Prisma's interactive-transaction default is 5s; this tick runs 20
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well
 // past what that default budgets for. 20s leaves real headroom under the
 // cron sweep's per-invocation budget while still failing fast if a handler
@@ -186,6 +188,37 @@ const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFac
 // real pressure on this fixed timeout, rather than this file silently
 // depending on caps.ts staying small forever.
 const TICK_TRANSACTION_TIMEOUT_MS = 20_000
+
+/**
+ * #407: the transaction budget scales with the roster it has to get
+ * through.
+ *
+ * The 20s above was flat, while caps.ts allows an admin to raise
+ * factionCap/npcCap to 5x the defaults — and caps.ts's own comment already
+ * identifies that mismatch as the problem: a campaign whose caps are raised
+ * far enough blows the budget and the ENTIRE world turn is lost (it fails
+ * safe, but the turn does not happen).
+ *
+ * Scaled against the defaults so a default campaign is unchanged, and
+ * clamped so a raised cap cannot buy an unbounded transaction — the point
+ * is to keep a legitimately larger roster inside its budget, not to let a
+ * stuck handler hang the whole cron sweep.
+ */
+function tickTimeoutFor(factionCap: number, npcCap: number): number {
+  const rosterRatio = Math.max(
+    1,
+    (factionCap + npcCap) / (DEFAULT_FACTION_CAP + DEFAULT_NPC_CAP)
+  )
+  return Math.min(TICK_TRANSACTION_TIMEOUT_MS * rosterRatio, MAX_TICK_TRANSACTION_TIMEOUT_MS)
+}
+
+/**
+ * Hard ceiling regardless of caps. The cron sweep's own per-invocation
+ * budget is what this must stay well inside — a tick allowed to run longer
+ * than the sweep can wait would be killed mid-turn anyway, which is
+ * strictly worse than failing fast.
+ */
+const MAX_TICK_TRANSACTION_TIMEOUT_MS = 60_000
 
 /**
  * Run one deterministic world tick for a campaign.
@@ -221,6 +254,40 @@ export async function runWorldTick(
     ? deriveSeason(worldMeta.totalElapsedGameHours, (worldMeta.campaign?.calendarConfig as unknown as GeneratedCalendar) || null)
     : undefined
 
+  // #375: WHICH entities this tick simulates is a tick-level decision, made
+  // exactly once, here — not eleven times inside eleven handlers.
+  //
+  // Each handler used to run its own capped+rotated query and bump
+  // lastTickedAt with the transaction client immediately afterwards. Prisma
+  // transactions read their own writes, so handler N+1 saw handler N's
+  // bump and selected a DIFFERENT slice: the same-tick chain this file's
+  // header comment exists to protect (relationships → goal reassessment →
+  // leadership → wars) ran on largely disjoint faction sets. It also made
+  // the tick nondeterministic (new Date() as a selection key) and made
+  // dry-run preview a different simulation than the real tick.
+  //
+  // Resolved BEFORE the transaction opens, so it reads committed state and
+  // cannot see anything the tick itself writes.
+  const roster = await resolveTickRoster(prisma, {
+    campaignId,
+    factionCap,
+    npcCap,
+    npcImportanceThreshold: MAJOR_IMPORTANCE_THRESHOLD,
+  })
+  if (roster.factionCapHit || roster.npcCapHit) {
+    // #410: a cap that silently drops entities is a simulation that
+    // silently stops happening. At minimum it is visible in the log; the
+    // admin surface reads TickCapReport (see caps.ts).
+    console.warn(
+      `⚠️  Tick roster capped for ${campaignId}: ${roster.factionIds.length}/${factionCap} factions, ${roster.npcIds.length}/${npcCap} NPCs — entities beyond the cap do not advance this turn`
+    )
+  }
+
+  // One timestamp for the whole tick's rotation bump, captured here rather
+  // than read inside a handler, so no wall-clock read can influence what
+  // the tick decides.
+  const tickStartedAt = new Date()
+
   const changes: WorldChange[] = []
   const pendingAmbitions: PendingAmbition[] = []
 
@@ -230,8 +297,12 @@ export async function runWorldTick(
       turnNumber,
       factionCap,
       npcCap,
+      roster,
       dryRun,
       db,
+      // #402: the in-fiction clock. npcTick reads this for time of day
+      // instead of turnNumber % 4 — see calendar.ts's timeOfDayFromHours.
+      totalElapsedGameHours: worldMeta?.totalElapsedGameHours,
       // #103: same-tick scratch space tickFactions/tickFactionLeadership
       // write into and tickWake reads back out of — see its own comment
       // on TickContext for why.
@@ -244,6 +315,39 @@ export async function runWorldTick(
       changes.push(...result.changes)
       if (result.pendingAmbitions) pendingAmbitions.push(...result.pendingAmbitions)
     }
+
+    // #375: rotate ONCE, after every handler, inside the same transaction —
+    // so a tick that fails does not claim to have simulated anyone, and no
+    // handler can see another handler's bump.
+    //
+    // #374: and advance the simulation's own turn counter here, for exactly
+    // the same reason. This is the only place it moves: a world turn that
+    // rolled back did not happen, and must not leave the counter claiming
+    // it did.
+    if (!dryRun) {
+      await markRosterTicked(db as Prisma.TransactionClient, roster, tickStartedAt)
+
+      // #410: record what this tick could NOT simulate, alongside the
+      // turn it did. A cap that silently drops entities is a simulation
+      // that silently stops happening for them — see TickCapReport.
+      const capReport: TickCapReport = {
+        at: tickStartedAt.toISOString(),
+        simulationTurn: turnNumber,
+        factionCap,
+        npcCap,
+        factionsSimulated: roster.factionIds.length,
+        npcsSimulated: roster.npcIds.length,
+        factionCapHit: roster.factionCapHit,
+        npcCapHit: roster.npcCapHit,
+      }
+      await db.worldMeta.updateMany({
+        where: { campaignId },
+        data: {
+          simulationTurn: turnNumber,
+          lastTickCapReport: capReport as unknown as Prisma.InputJsonValue,
+        },
+      })
+    }
   }
 
   if (dryRun) {
@@ -255,7 +359,7 @@ export async function runWorldTick(
     // The real tick: one transaction across every handler, so a failure
     // partway through (a thrown error, a violated constraint) leaves no
     // partial state instead of committing whatever ran before the failure.
-    await prisma.$transaction(runHandlers, { timeout: TICK_TRANSACTION_TIMEOUT_MS })
+    await prisma.$transaction(runHandlers, { timeout: tickTimeoutFor(factionCap, npcCap) })
   }
 
   // Dry run (World Sim Phase 8 debug tooling): every handler above already

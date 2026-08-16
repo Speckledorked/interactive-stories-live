@@ -9,11 +9,18 @@
 // enough from neutral, becomes a real input into decideFactionGoalReassessment
 // (factionTick.ts) alongside stability/resources/military.
 //
-// Deliberately reads only the IMMEDIATELY PRECEDING turn's events (not full
-// history) — "recent events," not "everything that ever happened" — so
-// nothing needs a separate "already processed" marker the way tickWake's
-// ActiveWake rows do: an event is only ever eligible on the one turn right
-// after it happened, then ages out on its own.
+// Reads a bounded window of RECENT events, not full history — "recent
+// events," not "everything that ever happened."
+//
+// #375: that window is per-faction, spanning (Faction.beliefDriftThroughTurn,
+// targetTurn]. It used to be exactly one turn, on the theory that an event
+// is eligible only on the turn right after it happened and therefore needs
+// no "already processed" marker. That reasoning breaks against a CAPPED,
+// ROTATING roster: a faction that lost this tick's rotation was never
+// looked at on the one turn its events were eligible, and the
+// campaign-level watermark then advanced past that turn on its behalf — so
+// its drift was discarded permanently. Each faction now carries its own
+// high-water mark and catches up on every turn it missed.
 //
 // Scope note on war attribution: warTick.ts's 'faction.warResolved' event is
 // only ever logged against the ATTACKER's faction id (see warTick.ts's
@@ -25,7 +32,7 @@
 // rather than silently narrowed.
 
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
-import { TICK_ROTATION_ORDER, markFactionsTicked } from './capOrdering'
+import { rosterFactionFilter } from './capOrdering'
 
 export interface BeliefVector {
   aggression: number
@@ -145,41 +152,65 @@ function classifyWorldEvent(row: { type: string; newValue: string | null; origin
 
 const RELEVANT_EVENT_TYPES = ['faction.warResolved', 'faction.warEnded', 'faction.ambitionResolved', 'faction.stability']
 
+/**
+ * How far back a faction that has missed several rotations may catch up in
+ * one tick. Without a bound, a faction re-entering the roster after a long
+ * absence would scan its entire event history in one pass — inside the
+ * shared 20s tick transaction.
+ *
+ * Drift older than this is genuinely forgotten, which is the honest
+ * behaviour for a belief model: an event nobody reacted to for 30 turns
+ * has stopped being news.
+ */
+export const MAX_BELIEF_CATCHUP_TURNS = 30
+
 export async function tickBeliefDrift(ctx: TickContext): Promise<TickHandlerResult> {
-  // #276: idle-cron ticking can invoke this handler with the SAME
-  // turnNumber over and over (WorldMeta.currentTurnNumber only advances
-  // via scene resolution — nothing else ever moves it, despite this
-  // file's own window looking like it should). Short-circuit once this
-  // campaign's watermark already covers the turn this pass would query,
-  // so the exact same WorldEvent rows never get reclassified into fresh
-  // drift a second time. See the watermark fields' own doc comment on
-  // WorldMeta for the full picture.
+  // #375: the watermark is PER FACTION, not per campaign.
+  //
+  // It used to be WorldMeta.beliefDriftProcessedThroughTurn: one value for
+  // the whole campaign, advanced past turn T after processing only the
+  // capped subset of factions that won that tick's rotation. Every faction
+  // that lost the rotation never received turn T's drift, and the
+  // campaign-level watermark guaranteed it never would. Pre-rotation that
+  // lost a stable (if unfair) subset; rotation spread the loss across the
+  // whole roster.
+  //
+  // Now each faction carries its own high-water mark and processes the
+  // window (its watermark, targetTurn] whenever it is selected — so drift
+  // is exactly-once per faction regardless of which ticks it wins, and a
+  // faction that missed three rotations catches up on all three.
   const targetTurn = ctx.turnNumber - 1
-  const meta = await ctx.db.worldMeta.findUnique({
-    where: { campaignId: ctx.campaignId },
-    select: { beliefDriftProcessedThroughTurn: true },
-  })
-  if (meta && meta.beliefDriftProcessedThroughTurn !== null && meta.beliefDriftProcessedThroughTurn >= targetTurn) {
-    return { changes: [] }
-  }
 
   const factions = await ctx.db.faction.findMany({
-    where: { campaignId: ctx.campaignId, isActive: true },
-    orderBy: TICK_ROTATION_ORDER,
-    take: ctx.factionCap,
-    select: { id: true, name: true, beliefVector: true },
+    where: {
+      campaignId: ctx.campaignId,
+      isActive: true,
+      ...rosterFactionFilter(ctx),
+      // Nothing to do for a faction already current — cheaper to exclude
+      // in SQL than to fetch and skip.
+      OR: [
+        { beliefDriftThroughTurn: null },
+        { beliefDriftThroughTurn: { lt: targetTurn } },
+      ],
+    },
+    select: { id: true, name: true, beliefVector: true, beliefDriftThroughTurn: true },
   })
   if (factions.length === 0) return { changes: [] }
-  // #283: rotates which factions win the cap across ticks — see capOrdering.ts.
-  if (!ctx.dryRun) await markFactionsTicked(ctx.db, factions.map((f) => f.id))
 
   const changes: WorldChange[] = []
 
   for (const faction of factions) {
+    // Everything since this faction last drifted, bounded — not just
+    // targetTurn, so a faction that lost two rotations doesn't silently
+    // skip those turns' events.
+    const fromTurn = Math.max(
+      (faction.beliefDriftThroughTurn ?? -1) + 1,
+      targetTurn - MAX_BELIEF_CATCHUP_TURNS
+    )
     const events = await ctx.db.worldEvent.findMany({
       where: {
         campaignId: ctx.campaignId,
-        turnNumber: targetTurn,
+        turnNumber: { gte: fromTurn, lte: targetTurn },
         targetType: 'FACTION',
         targetId: faction.id,
         type: { in: RELEVANT_EVENT_TYPES },
@@ -190,15 +221,26 @@ export async function tickBeliefDrift(ctx: TickContext): Promise<TickHandlerResu
     const driftEvents = events
       .map((row) => classifyWorldEvent({ type: row.type, newValue: row.newValue, origin: row.origin, wakeSourceType: row.wakeSourceType }))
       .filter((e): e is BeliefDriftEvent => e !== null)
-    if (driftEvents.length === 0) continue
 
     const current = parseBeliefVector(faction.beliefVector) ?? NEUTRAL_BELIEF
-    const next = decideBeliefDrift(current, driftEvents)
-    if (beliefVectorsEqual(current, next)) continue
+    const next = driftEvents.length > 0 ? decideBeliefDrift(current, driftEvents) : current
+    const drifted = driftEvents.length > 0 && !beliefVectorsEqual(current, next)
 
+    // One write per faction. The watermark advances whether or not
+    // anything drifted — an empty window is a real answer to "did
+    // anything happen in these turns", not a reason to re-ask next tick —
+    // and the drifted vector rides along when there is one.
     if (!ctx.dryRun) {
-      await ctx.db.faction.update({ where: { id: faction.id }, data: { beliefVector: next as object } })
+      await ctx.db.faction.update({
+        where: { id: faction.id },
+        data: {
+          beliefDriftThroughTurn: targetTurn,
+          ...(drifted ? { beliefVector: next as object } : {}),
+        },
+      })
     }
+
+    if (!drifted) continue
 
     changes.push({
       entityType: 'FACTION',
@@ -213,19 +255,6 @@ export async function tickBeliefDrift(ctx: TickContext): Promise<TickHandlerResu
       // severity wobbles — not on its own worth a history/RAG entry.
       significant: false,
       importance: 'NORMAL',
-    })
-  }
-
-  // Mark this turn as scanned regardless of whether any faction actually
-  // drifted — an empty result is still a real answer to "did anything
-  // change in this window", not a reason to re-ask the same question
-  // next pass.
-  if (!ctx.dryRun) {
-    // updateMany (not update) — some campaigns in tests/older data may
-    // predate a WorldMeta row; degrade to a no-op rather than throwing.
-    await ctx.db.worldMeta.updateMany({
-      where: { campaignId: ctx.campaignId },
-      data: { beliefDriftProcessedThroughTurn: targetTurn },
     })
   }
 

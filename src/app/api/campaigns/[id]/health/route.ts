@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { capReportIsNoteworthy, type TickCapReport } from '@/lib/game/tick/caps'
 import { getUser } from '@/lib/auth'
 import { needsIntervention, healthBand } from '@/lib/game/campaignHealthBands'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
@@ -42,6 +43,9 @@ export async function GET(
         lastHealthCheck: true,
         campaignHealthHistory: true,
         currentTurnNumber: true,
+        simulationTurn: true,
+        // #410: what the last world tick could NOT simulate.
+        lastTickCapReport: true,
       },
     })
 
@@ -54,6 +58,9 @@ export async function GET(
         score: null,
         lastCheckedAt: null,
         currentTurnNumber: worldMeta?.currentTurnNumber ?? null,
+        simulationTurn: worldMeta?.simulationTurn ?? null,
+        simulationCapped: capReportIsNoteworthy(worldMeta?.lastTickCapReport as TickCapReport | null),
+        lastTickCapReport: worldMeta?.lastTickCapReport ?? null,
         issues: [],
         recommendations: [],
         // Never assessed is not a crisis. Reported explicitly so the client
@@ -83,6 +90,16 @@ export async function GET(
       score: worldMeta.currentHealthScore,
       lastCheckedAt: worldMeta.lastHealthCheck,
       currentTurnNumber: worldMeta.currentTurnNumber,
+      // #374: the simulation's own clock, distinct from the scene counter
+      // above — a campaign can have run many world turns with no scenes
+      // resolved, and vice versa.
+      simulationTurn: worldMeta.simulationTurn,
+      // #410: the entity caps used to be entirely silent. An entity beyond
+      // the cap does not advance that turn at all — its state goes stale,
+      // not partial — so a war whose participants missed the page simply
+      // does not progress, with no error, no log and no UI anywhere.
+      simulationCapped: capReportIsNoteworthy(worldMeta.lastTickCapReport as TickCapReport | null),
+      lastTickCapReport: worldMeta.lastTickCapReport ?? null,
       issues,
       recommendations: Array.isArray(latest?.recommendations) ? latest.recommendations : [],
       needsIntervention: needsIntervention(summary),

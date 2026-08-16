@@ -10,6 +10,7 @@
 // extraction, not a rewrite of any prompt content.
 
 import type { AIGMRequest } from './client'
+import { delimitPlayerText, PLAYER_TEXT_PROMPT_RULE } from './playerText'
 import { selectPrimaryOutcomeBand, type ActionMechanics } from '@/lib/game/resolution'
 import { parseHarmState, getHarmStatus } from '@/lib/game/harm'
 
@@ -876,7 +877,11 @@ function buildPlayerActionsSection(playerActions: AIGMRequest['player_actions'])
     // the whole submitted action as if it were spoken visually primed the
     // model to treat a player's real-world rationale within it ("...
     // because I'm bored") as something their character says out loud.
-    const lines = [`${a.character_name}'s submitted action: ${a.action_text}`]
+    // #382: fenced. Not quote-wrapped, for the reason above AND because a
+    // quote pair is not a delimiter — see lib/ai/playerText.ts. The fence
+    // is stripped from the input, so the player cannot close it early and
+    // continue with instructions of their own.
+    const lines = [`${a.character_name}'s submitted action:`, delimitPlayerText(a.action_text)]
     if (a.mechanics) {
       lines.push(`  → MECHANICAL OUTCOME (binding, already rolled): ${a.mechanics.move_name} — ${a.mechanics.outcome === 'strongHit' ? 'STRONG HIT' : a.mechanics.outcome === 'weakHit' ? 'WEAK HIT' : 'MISS'}. ${a.mechanics.outcome_text}`)
       if (a.mechanics.position) lines.push(`  → POSITION (binding): they acted from ${a.mechanics.position}. Narrate them there`)
@@ -978,6 +983,8 @@ ${current_scene_intro}
 </current_scene>
 
 <player_actions>
+${PLAYER_TEXT_PROMPT_RULE}
+
 ${buildPlayerActionsSection(player_actions)}
 </player_actions>
 

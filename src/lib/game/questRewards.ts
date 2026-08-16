@@ -104,7 +104,17 @@ export async function applyQuestRewardGrant(
   // which is the right degradation for a caller with no turn context —
   // refusing rewards against a turn number we had to invent would be worse
   // than not budgeting.
-  currentTurn?: number | null
+  currentTurn?: number | null,
+  // #383: the remaining per-SCENE gold budget, shared across every entry
+  // in one batch of quest_changes. Per-delta clamps bound nothing here:
+  // quest_changes is an unbounded array and each completion pays every
+  // living party member, so N entries multiply freely. Mutated in place so
+  // sequential calls in one batch draw down the same pool.
+  //
+  // Omitted means unbudgeted — the right degradation for callers outside a
+  // scene batch (admin tools, tests), which are not the injection surface
+  // this bounds.
+  budget?: { remainingGold: number }
 ): Promise<string[]> {
   const log: string[] = []
   const hasGold = (grant.gold ?? 0) !== 0
@@ -114,22 +124,37 @@ export async function applyQuestRewardGrant(
 
   const names = (grant.character_names || []).map(n => n.trim()).filter(Boolean)
 
+  // #387: WHO gets paid is an authorization decision, so it is resolved
+  // against the real roster by exact (case-insensitive) name — never by a
+  // `contains` query on an AI-supplied string.
+  //
+  // The old form was `name: { contains: name, mode: 'insensitive' }`.
+  // Prisma compiles that to LIKE '%...%' and does NOT escape % or _, so a
+  // recipient name of "%" matched the first living character in the
+  // campaign and "_" matched any single-character name — a selector an
+  // attacker partially controls, reachable through the same prompt surface
+  // as every other AI field. Substring matching is also simply wrong here:
+  // "Bob" should not collect a reward addressed to "Bobby".
+  //
+  // A near-miss now logs and pays nobody. Silently paying the wrong
+  // character is worse than paying no one.
+  const roster: RecipientCharacter[] = await db.character.findMany({
+    where: { campaignId, isAlive: true },
+    select: { id: true, name: true, resources: true, inventory: true },
+  })
+
   let recipients: RecipientCharacter[]
   if (names.length > 0) {
-    const matches = await Promise.all(
-      names.map(name =>
-        db.character.findFirst({
-          where: { campaignId, isAlive: true, name: { contains: name, mode: 'insensitive' } },
-          select: { id: true, name: true, resources: true, inventory: true },
-        })
-      )
-    )
-    recipients = matches.filter((r): r is RecipientCharacter => r !== null)
+    const byName = new Map(roster.map(c => [c.name.trim().toLowerCase(), c]))
+    const matched = new Map<string, RecipientCharacter>()
+    for (const name of names) {
+      const hit = byName.get(name.toLowerCase())
+      if (hit) matched.set(hit.id, hit)
+      else console.warn(`  ❓ reward_grant for "${questName}": "${name}" matched no living character — not paid`)
+    }
+    recipients = [...matched.values()]
   } else {
-    recipients = await db.character.findMany({
-      where: { campaignId, isAlive: true },
-      select: { id: true, name: true, resources: true, inventory: true },
-    })
+    recipients = roster
   }
 
   if (recipients.length === 0) {
@@ -139,7 +164,24 @@ export async function applyQuestRewardGrant(
 
   // A reward is always a payout, never a debit — floor at 0 on top of the
   // shared magnitude clamp (see economy.ts).
-  const promisedEach = Math.max(0, clampGoldDelta(grant.gold))
+  let promisedEach = Math.max(0, clampGoldDelta(grant.gold))
+
+  // #383: draw against the scene's shared pool before anything is paid.
+  // Assessed as a TOTAL across recipients, the same way the faction payer
+  // assesses it below — a five-person party each paid 200 is a thousand
+  // gold entering the campaign, not two hundred.
+  if (budget && promisedEach > 0) {
+    const requested = promisedEach * recipients.length
+    if (budget.remainingGold <= 0) {
+      log.push(`Reward for "${questName}" withheld — this scene has already paid out its maximum.`)
+      promisedEach = 0
+    } else if (requested > budget.remainingGold) {
+      promisedEach = Math.floor(budget.remainingGold / recipients.length)
+      log.push(`Reward for "${questName}" reduced to ${promisedEach} each — this scene's payout ceiling.`)
+    }
+    budget.remainingGold = Math.max(0, budget.remainingGold - promisedEach * recipients.length)
+  }
+  const hasPayableGold = promisedEach > 0
 
   // Faction-funded payouts are TRANSFERS: what the faction pays, it stops
   // having, and a faction that can't afford its promise defaults on part
@@ -152,7 +194,7 @@ export async function applyQuestRewardGrant(
   const itemsCost = inventoryValue(grant.items) * recipients.length
 
   let goldEach = promisedEach
-  if ((hasGold && promisedEach > 0) || itemsCost > 0) {
+  if (hasPayableGold || itemsCost > 0) {
     const payer = await resolvePayingFaction(db, campaignId, grant.paid_by_faction, giverFactionId)
     if (payer) {
       // Assessed as a TOTAL across recipients: a five-person party each

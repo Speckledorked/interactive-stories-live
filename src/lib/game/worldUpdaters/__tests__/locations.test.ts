@@ -129,7 +129,16 @@ describe('resolveOrCreateLocationId', () => {
     tx.location.findMany.mockResolvedValue([])
     const id = await resolveOrCreateLocationId(tx as any, 'camp1', 'The Rookery', true)
     expect(tx.location.create).toHaveBeenCalledWith({
-      data: { campaignId: 'camp1', name: 'The Rookery', isDiscovered: true },
+      data: {
+        campaignId: 'camp1',
+        name: 'The Rookery',
+        isDiscovered: true,
+        // #378: the input the whole logistics subsystem gates on, which
+        // had no writer anywhere — so its extraction and route-creation
+        // passes skipped every row in every real campaign. This is the
+        // main path new places actually appear on.
+        resourceSlots: ['grain'],
+      },
     })
     expect(id).toBe('new-loc')
   })

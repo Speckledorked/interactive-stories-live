@@ -10,6 +10,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { MEMORY_SEARCH_COLUMNS } from './campaignMemoryColumns';
+import { MEMORY_FOG_PREDICATE, MEMORY_LIVE_PREDICATE } from './memoryFogPredicate';
 import type { RetrievedMemory } from './memoryRetrieval';
 
 /**
@@ -82,7 +83,20 @@ export async function retrieveCrossEntityHistory(
     const memories = await prisma.$queryRaw<RetrievedMemory[]>`
       SELECT
         ${MEMORY_SEARCH_COLUMNS},
-        1.0 as similarity
+        -- #390: NULL, not 1.0.
+        --
+        -- This query is a structural intersection ordered by recency, not
+        -- a semantic search — there is no query embedding here, so there
+        -- is no similarity to report. Reporting a hardcoded 1.0 made these
+        -- rows bypass the minSimilarity floor entirely AND carry the
+        -- maximum possible base score into the importance-boosted re-sort,
+        -- so they won every ranking against memories that were genuinely
+        -- similar.
+        --
+        -- NULL says what is true: unscored. filterAndRankMemories exempts
+        -- unscored rows from the floor (they earned their place
+        -- structurally) and ranks them after scored ones rather than ahead.
+        NULL::float as similarity
       FROM campaign_memories
       WHERE
         "campaignId" = ${campaignId}
@@ -96,15 +110,17 @@ export async function retrieveCrossEntityHistory(
           OR ${entityIdB} = ANY("involvedFactionIds")
           OR ${entityIdB} = ANY("involvedCharacterIds")
         )
-        -- #285/#327: same independent fog-of-war guard as
-        -- memoryRetrieval.ts. Either id might be an NPC, faction, or
-        -- character — a character id simply won't match either table
-        -- below, so NOT EXISTS passes it through harmlessly; an NPC/faction
-        -- id only passes when actually discovered.
-        AND NOT EXISTS (SELECT 1 FROM "NPC" WHERE "NPC"."id" = ${entityIdA} AND "NPC"."isDiscovered" = false)
-        AND NOT EXISTS (SELECT 1 FROM "Faction" WHERE "Faction"."id" = ${entityIdA} AND "Faction"."isDiscovered" = false)
-        AND NOT EXISTS (SELECT 1 FROM "NPC" WHERE "NPC"."id" = ${entityIdB} AND "NPC"."isDiscovered" = false)
-        AND NOT EXISTS (SELECT 1 FROM "Faction" WHERE "Faction"."id" = ${entityIdB} AND "Faction"."isDiscovered" = false)
+        -- #285/#327/#390: the SHARED fog predicate. This used to check
+        -- only the two ids it was queried with, so a memory involving
+        -- discovered A and B plus an undiscovered C was returned straight
+        -- into the GM prompt. memoryRetrieval.ts has always excluded a
+        -- memory if ANY involved entity is undiscovered; the rule now
+        -- lives in one place so the two cannot disagree again.
+        AND ${MEMORY_FOG_PREDICATE}
+        -- #392: consolidation retires a memory from retrieval without
+        -- destroying it; this path doesn't go through the embedding-gated
+        -- CTE, so it has to say so itself.
+        AND ${MEMORY_LIVE_PREDICATE}
       ORDER BY "turnNumber" DESC
       LIMIT ${limit}
     `;

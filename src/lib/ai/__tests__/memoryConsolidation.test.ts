@@ -13,7 +13,7 @@ vi.mock('../memoryCreation', () => ({
   // it didn't. Defaults to true (the common case) so every existing test
   // below that doesn't care about the failure path keeps behaving as it
   // did before this return value existed.
-  createCampaignMemory: vi.fn().mockResolvedValue(true),
+  createCampaignMemory: vi.fn().mockResolvedValue('era-1'),
 }))
 
 import { prisma } from '@/lib/prisma'
@@ -224,9 +224,16 @@ describe('consolidateOldMemories (DB wrapper)', () => {
     const result = await consolidateOldMemories('campaign-1', 25)
 
     expect(result).toEqual({ bucketsConsolidated: 1, memoriesRemoved: 3 })
-    // The exempt memory 'a' must never appear among the deleted ids.
-    const deletedIds = vi.mocked(prisma.$executeRaw).mock.calls[0][1] as string[]
-    expect(deletedIds.sort()).toEqual(['b', 'c', 'd'])
+    // The exempt memory 'a' must never appear among the archived ids.
+    // #392: the interpolated args shifted by one when this became an
+    // UPDATE ... SET consolidatedIntoId = $1 WHERE id = ANY($2).
+    // args[0] is the template-strings array; the interpolated values
+    // follow it, so skip it and take the first real string[] argument.
+    const [, ...archiveArgs] = vi.mocked(prisma.$executeRaw).mock.calls[0] as unknown[]
+    const archivedIds = archiveArgs.find(
+      (a): a is string[] => Array.isArray(a) && a.every((x) => typeof x === 'string')
+    )!
+    expect([...archivedIds].sort()).toEqual(['b', 'c', 'd'])
   })
 
   // #216: MAJOR/CRITICAL memories used to be permanently exempt from
@@ -295,12 +302,64 @@ describe('consolidateOldMemories (DB wrapper)', () => {
         makeRow({ id: 'c', turnNumber: 8 }),
       ]
       vi.mocked(prisma.$queryRaw).mockResolvedValueOnce(rows)
-      vi.mocked(createCampaignMemory).mockResolvedValueOnce(false)
+      vi.mocked(createCampaignMemory).mockResolvedValueOnce(null)
 
       const result = await consolidateOldMemories('campaign-1', 25)
 
       expect(result).toEqual({ bucketsConsolidated: 0, memoriesRemoved: 0 })
       expect(prisma.$executeRaw).not.toHaveBeenCalled()
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #392: consolidation compacts the index, it does not destroy the record
+// ---------------------------------------------------------------------------
+//
+// It used to DELETE the originals, irreversibly destroying each memory's
+// fullContext, emotionalTone, importance, memoryType, sourceId,
+// retrievalCount, tags and its own turnNumber — and unioning entity
+// attribution across the bucket, so "who was in what" became "who was in
+// this decade". None of that is derivable from the summary, which is a
+// list of headlines, and there was no path back.
+
+describe('consolidateOldMemories — archival, not deletion (#392)', () => {
+  it('never issues a DELETE against campaign_memories', async () => {
+    vi.clearAllMocks()
+    vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
+      makeRow({ id: 'a', turnNumber: 1 }),
+      makeRow({ id: 'b', turnNumber: 4 }),
+      makeRow({ id: 'c', turnNumber: 8 }),
+      makeRow({ id: 'd', turnNumber: 10 }),
+    ])
+    vi.mocked(createCampaignMemory).mockResolvedValue('era-1')
+
+    await consolidateOldMemories('campaign-1', 25)
+
+    const sql = vi.mocked(prisma.$executeRaw).mock.calls
+      .map((call) => (call[0] as unknown as string[]).join(''))
+      .join('\n')
+    expect(sql).not.toMatch(/DELETE\s+FROM\s+campaign_memories/i)
+  })
+
+  it('drops only the embedding and marks the row archived', async () => {
+    // The 1536-dimension vector is the bulk of the row and the only part
+    // that competes in the RAG candidate pool. Everything else is small
+    // and irreplaceable.
+    vi.clearAllMocks()
+    vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
+      makeRow({ id: 'a', turnNumber: 1 }),
+      makeRow({ id: 'b', turnNumber: 4 }),
+      makeRow({ id: 'c', turnNumber: 8 }),
+      makeRow({ id: 'd', turnNumber: 10 }),
+    ])
+    vi.mocked(createCampaignMemory).mockResolvedValue('era-1')
+
+    await consolidateOldMemories('campaign-1', 25)
+
+    const sql = (vi.mocked(prisma.$executeRaw).mock.calls[0][0] as unknown as string[]).join('')
+    expect(sql).toMatch(/embedding = NULL/)
+    expect(sql).toMatch(/"archivedAt" = NOW\(\)/)
+    expect(sql).toMatch(/"consolidatedIntoId"/)
   })
 })

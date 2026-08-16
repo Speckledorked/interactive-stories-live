@@ -36,6 +36,7 @@
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { hasCorruptionTheme } from '@/lib/game/corruption'
 import { isConfidentFuzzyMatch } from '@/lib/game/entityResolution'
 import { generateWorldFromTemplate } from '@/lib/ai/worldGenerator'
 import { generateWorldExtras } from '@/lib/ai/worldExtras'
@@ -392,7 +393,8 @@ export async function reseedWorldFromLore(campaignId: string, options: ReseedOpt
   let locationsAdded: string[] = []
   // What the campaign's theme ends up being after this pass (used for the
   // shadow-branch invariant below). Starts as the current value.
-  let finalHasTheme = Boolean(campaign.corruptionTheme)
+  // #404: the shared predicate — a partially-filled theme is not a theme.
+  let finalHasTheme = hasCorruptionTheme(campaign.corruptionTheme)
 
   {
     // Unlike archetypes/theme, NPCs/locations are always worth attempting

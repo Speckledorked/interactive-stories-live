@@ -77,9 +77,19 @@
 #      revert either. See the revert-regression job below.
 #   3. Scope is a decided-in-advance boundary, not a per-fix judgment call.
 #      A checkKey with no entry in escalationSourceMap.ts never reaches
-#      this workflow at all (check-escalations.ts filters it out upstream)
-#      — the agent can only ever touch files someone already registered as
-#      fixable, never anywhere else in the repo.
+#      this workflow at all (check-escalations.ts filters it out upstream).
+#
+#      #394: this clause used to end "— the agent can only ever touch
+#      files someone already registered as fixable, never anywhere else in
+#      the repo", and that was FALSE. escalationSourceMap decides which
+#      checkKeys are eligible and names suspected files, but it named them
+#      as PROSE IN THE PROMPT, while `--allowedTools` granted unscoped
+#      Edit/Write. Prose is not a permission boundary. The only real gates
+#      were `tsc --noEmit` and `vitest run` — both of which an agent that
+#      just wrote the tests can satisfy.
+#
+#      Edit/Write are now scoped to src/lib/game/** at the tool grant, so
+#      the sentence is true because a mechanism makes it true.
 #   4. Tool access is restricted at the mechanism level, not by asking
 #      nicely: claude-code-action's `--allowedTools` grant below omits
 #      `git push` and any `gh`/GitHub-API command, so the agent is
@@ -96,10 +106,32 @@
 name: Integrity auto-fix
 
 on:
-  # The manual-verification prerequisite this comment used to require is
-  # done — see the header above for exactly what's proven vs. reasoned-safe.
-  schedule:
-    - cron: '0 8 * * *'  # daily, offset from the app's own 06:00 UTC world-tick sweep (vercel.json)
+  # #394: back to manual until this has earned the schedule.
+  #
+  # Enabling `schedule:` converted a documented residual gap into a DAILY
+  # UNATTENDED one. Three things have to be true before it goes back, and
+  # two of them are now:
+  #
+  #   Gap A (CLOSED) — the escalation evidence spliced into the agent
+  #     prompt below carried `entityName` and `description` from
+  #     Violation, i.e. NPC/faction/character names written by PLAYERS in
+  #     real campaigns. Any self-signed-up user could name an NPC to plant
+  #     text in a daily unattended agent that ends in `gh pr merge --auto
+  #     --squash`. check-escalations.ts now emits counts and identifiers
+  #     only, with no free text at all.
+  #
+  #   Gap B (CLOSED) — the header's guardrail #3 claimed "the agent can
+  #     only ever touch files someone already registered as fixable", and
+  #     nothing enforced it: escalationSourceMap decided which checkKeys
+  #     were eligible and supplied suspected files as PROSE, while
+  #     --allowedTools granted unscoped Edit/Write. Now scoped.
+  #
+  #   Gap C (OPEN) — the revert path has never actually fired. It is
+  #     agent-free and files an issue on conflict, which is the right
+  #     design, but "the safety net is correct by construction" is exactly
+  #     the class of claim this audit keeps finding to be false. Run this
+  #     manually, let the revert path trigger at least once for real, and
+  #     then restore the schedule.
   workflow_dispatch: {}
 
 # #226: the triage job's dedup check (gh pr list --label "fix:${CHECK_KEY}")
@@ -388,6 +420,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # verify-oracle-technique.ts diffs against origin/main
+          # #394: this job executes AGENT-AUTHORED TEST FILES (that is the
+          # whole point of the verification step). checkout persists
+          # GITHUB_TOKEN into .git/config by default, so leaving it on
+          # means running code the agent just wrote with a repo credential
+          # sitting on disk beside it. Nothing in this job needs to push.
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -426,7 +464,18 @@ jobs:
           # That boundary is enforced here, not left to the prompt alone.
           claude_args: |
             --model claude-sonnet-5
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npx vitest run:*),Bash(npx tsc --noEmit),Bash(git add:*),Bash(git commit:*),Bash(git status),Bash(git diff:*)"
+            # #394: Edit/Write are SCOPED. They used to be unscoped, while
+            # this file's own header claimed "the agent can only ever touch
+            # files someone already registered as fixable" — nothing
+            # enforced that. escalationSourceMap.ts decides which checkKeys
+            # are eligible and names suspected files, but it did so as
+            # prose in the prompt, and prose is not a permission boundary.
+            #
+            # src/lib/game/integrity/** and the test trees are what a fix
+            # for an integrity escalation legitimately touches. Note the
+            # deliberate absence of .github/** — `permissions:` already
+            # withholds workflow-write scope, and this is the second layer.
+            --allowedTools "Read,Glob,Grep,Edit(src/lib/game/**),Write(src/lib/game/**),Edit(src/lib/game/integrity/**),Write(src/lib/game/integrity/**),Bash(npx vitest run:*),Bash(npx tsc --noEmit),Bash(git add:*),Bash(git commit:*),Bash(git status),Bash(git diff:*)"
             # Run #8 hit error_max_turns at the 30-turn cap before finishing
             # (partly after losing a turn to a denied Bash call containing
             # command substitution — a built-in Claude Code safety

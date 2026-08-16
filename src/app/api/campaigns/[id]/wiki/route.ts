@@ -6,7 +6,7 @@ import { visibleTo } from '@/lib/api/visibility'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { summarizeNpcRelationship, type NpcRelationshipValues } from '@/lib/game/npcRelationship'
 import { deriveConditionTags } from '@/lib/game/tick/locationConditionTick'
-import type { EntityStats } from '@/lib/game/entityStats'
+import { factionStatsFor, locationStatsFor, type EntityStats } from '@/lib/game/entityStats'
 
 // Fog of war: WikiEntry rows are matched to their source entity by name, not
 // a real FK, so there's no isDiscovered column to filter on directly here.
@@ -216,7 +216,9 @@ async function attachEntityStats<T extends { entryType: string; name: string }>(
     present('FACTION')
       ? prisma.faction.findMany({
           where: { campaignId, ...visibleTo('faction', role) },
-          select: { name: true, threatLevel: true, stability: true, influence: true, military: true, isActive: true },
+          // #389: influence/military are not selected at all — not
+          // rendered, not banded, not sent.
+          select: { name: true, threatLevel: true, stability: true, isActive: true },
         })
       : [],
     present('LOCATION')
@@ -241,27 +243,18 @@ async function attachEntityStats<T extends { entryType: string; name: string }>(
     const key = entry.name.toLowerCase()
     if (entry.entryType === 'FACTION') {
       const f = factionByName.get(key)
-      return f
-        ? {
-            ...entry,
-            stats: {
-              kind: 'FACTION' as const,
-              threatLevel: f.threatLevel,
-              stability: f.stability,
-              influence: f.influence,
-              military: f.military,
-              isActive: f.isActive,
-            },
-          }
-        : entry
+      // #389: banded for a PLAYER, exact for an ADMIN. influence and
+      // military are gone entirely — EntityStatRow renders only Threat and
+      // Stability, so they were pure over-fetch in the JSON on top of
+      // being a precision leak.
+      return f ? { ...entry, stats: factionStatsFor(role, f) } : entry
     }
     if (entry.entryType === 'LOCATION') {
       const l = locationByName.get(key)
       return l
         ? {
             ...entry,
-            stats: {
-              kind: 'LOCATION' as const,
+            stats: locationStatsFor(role, {
               conditionScore: l.conditionScore,
               // Derived by the same helper the tick uses, so the card can
               // never disagree with the simulation about what "RUINED"
@@ -269,7 +262,7 @@ async function attachEntityStats<T extends { entryType: string; name: string }>(
               conditionTags: deriveConditionTags(l.conditionScore, l.isContested),
               weather: l.weather,
               weatherSeverity: l.weatherSeverity,
-            },
+            }),
           }
         : entry
     }

@@ -18,7 +18,7 @@ import { clearPendingWorldSeed } from './reseedWorld'
 import { kickReseedJob } from './reseedQueue'
 import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
 import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
-import { classifyStaleJob as classifyStaleJobCore } from '@/lib/jobs/staleJobRecovery'
+import { classifyStaleJob as classifyStaleJobCore, runStaleJobRecovery } from '@/lib/jobs/staleJobRecovery'
 
 export const MAX_ATTEMPTS = 3
 // A wiki crawl can legitimately run for minutes; a RUNNING job older than
@@ -166,50 +166,19 @@ export function classifyStaleLoreJob(job: JobForRecovery, nowMs: number): Recove
  * is the retry loop). Never throws.
  */
 export async function recoverStaleLoreJobs(campaignId: string): Promise<void> {
-  try {
-    const live = await prisma.loreImportJob.findMany({
-      where: { campaignId, status: { in: ['PENDING', 'RUNNING'] } },
-      select: { id: true, status: true, attempts: true, updatedAt: true, startedAt: true, autoReseedOnComplete: true },
-      take: 5,
-    })
-    const now = Date.now()
-
-    for (const job of live) {
-      const decision = classifyStaleLoreJob(job, now)
-      if (decision === 'wait') continue
-
-      if (decision === 'fail') {
-        await prisma.loreImportJob.update({
-          where: { id: job.id },
-          data: { status: 'FAILED', finishedAt: new Date(), lastError: 'Abandoned after repeated stalls' },
-        })
-        console.warn(`⚠️ Lore import job ${job.id} abandoned (stale RUNNING, out of attempts)`)
-        await reportError('lore-import-job-abandoned', new Error('Stale RUNNING job out of attempts'), {
-          jobId: job.id, campaignId,
-        })
-        // An abandoned creation-time import must release the play lock.
-        if (job.autoReseedOnComplete) {
-          await clearPendingWorldSeed(campaignId).catch(e =>
-            console.error('Failed to clear pendingWorldSeed after abandoned import:', e)
-          )
-        }
-        continue
-      }
-
-      if (decision === 'reset_and_kick') {
-        const reset = await prisma.loreImportJob.updateMany({
-          where: { id: job.id, status: 'RUNNING' },
-          data: { status: 'PENDING' },
-        })
-        if (reset.count === 0) continue
-        console.warn(`🔁 Lore import job ${job.id} reset from stale RUNNING`)
-      }
-
-      await kickLoreImportJob(job.id)
-    }
-  } catch (error) {
-    console.error('Stale lore job recovery failed (non-critical):', error)
-  }
+  await runStaleJobRecovery<JobForRecovery & { autoReseedOnComplete: boolean }>(campaignId, {
+    model: prisma.loreImportJob,
+    thresholds: { pendingStaleMs: PENDING_STALE_MS, runningStaleMs: RUNNING_STALE_MS, maxAttempts: MAX_ATTEMPTS },
+    label: 'Lore import job',
+    abandonContext: 'lore-import-job-abandoned',
+    kick: kickLoreImportJob,
+    extraSelect: { autoReseedOnComplete: true },
+    // An abandoned creation-time job must release the play lock, or
+    // the campaign stays unplayable with nothing left running.
+    onAbandon: async (job) => {
+      if (job.autoReseedOnComplete) await clearPendingWorldSeed(campaignId)
+    },
+  })
 }
 
 /**

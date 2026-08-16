@@ -24,8 +24,14 @@
 // history; the underlying event already became that when it was
 // created. Returns { changes: [] } for the same reason.
 
+// roster-exempt: information spreads to WITNESSES, not to a simulated
+// subset. An NPC outside this tick's roster still hears what happened next
+// door — restricting propagation to the roster would make what a character
+// knows depend on which entities the cap happened to select. Note this
+// handler's cost is genuinely unbounded as a result; see #407.
+
 import { TickContext, TickHandlerResult, stableHash } from './types'
-import { AdjacencyEdge, graphDiameter, shortestPath } from '../worldGraph'
+import { AdjacencyEdge, graphDiameter, distancesFrom } from '../worldGraph'
 import type { WorldEventTargetType, EventWitnessDistortion } from '@prisma/client'
 
 const BASE_PROPAGATION_DELAY_TURNS = 1
@@ -51,7 +57,7 @@ const WINDOW_SAFETY_MARGIN_TURNS = 5
 // margin. Above it, fall back to a generous fixed window rather than
 // paying the O(V^2) cost.
 const MAX_LOCATIONS_FOR_DIAMETER = 50
-const FALLBACK_MAX_WINDOW_TURNS = 60
+export const FALLBACK_MAX_WINDOW_TURNS = 60
 
 /**
  * Pure — how many turns back tickInformation should look for candidate
@@ -97,15 +103,51 @@ export interface InformationSpreadDecision {
   npcId?: string
 }
 
-function propagationDelay(
-  originLocationId: string | null,
-  witnessLocationId: string | null,
+/**
+ * #407: one traversal per DISTINCT origin, memoized for the caller's
+ * lifetime.
+ *
+ * Several events in a turn routinely share a location — a war's contested
+ * site, a busy settlement — so this saves on top of the per-pair saving.
+ * Both the decision pass and the write pass go through the same resolver,
+ * because they ask the same question about the same events.
+ */
+export function createDistanceResolver(
   edges: AdjacencyEdge[]
+): (originLocationId: string | null) => Map<string, number> | null {
+  const byOrigin = new Map<string, Map<string, number>>()
+  return (originLocationId) => {
+    if (!originLocationId) return null
+    let cached = byOrigin.get(originLocationId)
+    if (!cached) {
+      cached = distancesFrom(edges, originLocationId)
+      byOrigin.set(originLocationId, cached)
+    }
+    return cached
+  }
+}
+
+/**
+ * #407: distances from one origin, computed once and reused.
+ *
+ * This used to be a per-(event, witness) shortestPath call — a full
+ * Dijkstra AND a rebuild of the neighbour map from the edge list, inside a
+ * nested loop over events x (characters + NPCs) with neither dimension
+ * bounded by npcCap. Under a frozen turn counter the event window never
+ * shrank either, which made this the handler most likely to exhaust the
+ * shared 20s tick transaction and take the entire world turn down.
+ *
+ * One single-source traversal per DISTINCT origin location answers every
+ * witness for every event at that origin.
+ */
+function propagationDelayFrom(
+  distances: Map<string, number> | null,
+  witnessLocationId: string | null
 ): number {
-  if (!originLocationId || !witnessLocationId) return FLAT_FALLBACK_DELAY_TURNS
-  const result = shortestPath(edges, originLocationId, witnessLocationId)
-  if (!result) return FLAT_FALLBACK_DELAY_TURNS
-  return BASE_PROPAGATION_DELAY_TURNS + result.distance * TURNS_PER_DISTANCE_UNIT
+  if (!distances || !witnessLocationId) return FLAT_FALLBACK_DELAY_TURNS
+  const distance = distances.get(witnessLocationId)
+  if (distance === undefined) return FLAT_FALLBACK_DELAY_TURNS
+  return BASE_PROPAGATION_DELAY_TURNS + distance * TURNS_PER_DISTANCE_UNIT
 }
 
 /**
@@ -131,12 +173,15 @@ export function decideInformationSpread(input: {
   const { currentTurn, events, characters, npcs = [], coveredPairs, edges } = input
   const decisions: InformationSpreadDecision[] = []
 
+  const distancesFor = createDistanceResolver(edges)
+
   for (const event of events) {
     const age = currentTurn - event.turnNumber
+    const distances = distancesFor(event.originLocationId)
     for (const character of characters) {
       const pairKey = `${event.worldEventId}:${character.characterId}`
       if (coveredPairs.has(pairKey)) continue
-      const delay = propagationDelay(event.originLocationId, character.locationId, edges)
+      const delay = propagationDelayFrom(distances, character.locationId)
       if (age >= delay) {
         decisions.push({ worldEventId: event.worldEventId, characterId: character.characterId })
       }
@@ -144,7 +189,7 @@ export function decideInformationSpread(input: {
     for (const npc of npcs) {
       const pairKey = `${event.worldEventId}:npc:${npc.npcId}`
       if (coveredPairs.has(pairKey)) continue
-      const delay = propagationDelay(event.originLocationId, npc.locationId, edges)
+      const delay = propagationDelayFrom(distances, npc.locationId)
       if (age >= delay) {
         decisions.push({ worldEventId: event.worldEventId, npcId: npc.npcId })
       }
@@ -267,12 +312,16 @@ export async function tickInformation(ctx: TickContext): Promise<TickHandlerResu
       ...characters.map((c) => [c.id, c.locationId] as const),
       ...npcs.map((n) => [n.id, n.locationId] as const),
     ])
+    // #407: same memoized resolver as the decision pass above — the write
+    // pass asks the same question about the same events, and used to
+    // answer it with a fresh full Dijkstra per row.
+    const distancesForWrite = createDistanceResolver(edges)
     await ctx.db.eventWitness.createMany({
       data: decisions.map((d) => {
         const witnessId = d.npcId ?? d.characterId!
         const witnessKey = d.npcId ? `npc:${d.npcId}` : d.characterId!
         const event = eventById.get(d.worldEventId)!
-        const delay = propagationDelay(event.originLocationId, locationById.get(witnessId) ?? null, edges)
+        const delay = propagationDelayFrom(distancesForWrite(event.originLocationId), locationById.get(witnessId) ?? null)
         const { distorted, flavor } = decideDistortion(d.worldEventId, witnessKey, ctx.turnNumber, delay)
         return {
           campaignId: ctx.campaignId,

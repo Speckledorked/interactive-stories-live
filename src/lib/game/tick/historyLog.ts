@@ -6,7 +6,7 @@
 // retrieved exactly the same way as scene memories: embedded, searchable by
 // entity ID, and pulled into the AI GM prompt via retrieveRelevantHistory.
 
-import { createCampaignMemory } from '@/lib/ai/memoryCreation'
+import { createCampaignMemory, memoryDedupeKey } from '@/lib/ai/memoryCreation'
 import { WorldChange, TickEntityType } from './types'
 
 const MEMORY_TYPE_BY_ENTITY: Record<TickEntityType, 'WORLD_EVENT' | 'FACTION_EVENT' | 'LOCATION_EVENT'> = {
@@ -62,13 +62,32 @@ export async function logSignificantChanges(
   const significant = changes.filter((c) => c.significant)
   let created = 0
 
+  // #377: each of these costs a paid embedding call, and a world turn that
+  // fails after this point re-runs the whole turn — so without a replay
+  // key the retry re-bought every embedding it had already paid for and
+  // left duplicate memories competing in the RAG candidate pool. The
+  // ordinal disambiguates two significant changes that would otherwise
+  // produce an identical title in one turn.
+  const dedupeOrdinals = new Map<string, number>()
+
   for (const change of significant) {
+    const title = `${change.entityName}: ${change.field} changed`
+    const identity = `${change.entityId}|${title}`
+    const ordinal = dedupeOrdinals.get(identity) ?? 0
+    dedupeOrdinals.set(identity, ordinal + 1)
+
     const ok = await createCampaignMemory({
       campaignId,
       memoryType: memoryTypeFor(change),
       sourceId: change.entityId,
       turnNumber,
-      title: `${change.entityName}: ${change.field} changed`,
+      dedupeKey: `${memoryDedupeKey({
+        memoryType: memoryTypeFor(change),
+        sourceId: change.entityId,
+        turnNumber,
+        title,
+      })}#${ordinal}`,
+      title,
       summary: change.reason,
       fullContext: change.reason,
       involvedCharacterIds: [],

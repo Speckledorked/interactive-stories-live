@@ -21,6 +21,10 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: vi.fn(async (fn: any) => fn(tx)),
     eventWitness: { createMany: vi.fn(async () => ({ count: 0 })) },
+    // #374: world-history rows are stamped on the SIMULATION clock, not
+    // the scene counter this function is called with — see
+    // tick/simulationClock.ts.
+    worldMeta: { findUnique: vi.fn(async () => ({ simulationTurn: 7 })) },
   },
 }))
 

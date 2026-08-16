@@ -278,6 +278,11 @@ describe('tickEconomy (DB handler)', () => {
         OR: [
           { status: 'OUTSTANDING' },
           { status: 'DEFAULTED', turnResolved: { gte: 5 } }, // turnNumber(10) - cooldown(5)
+          // #418: a DEFAULTED row with a NULL turnResolved was silently
+          // excluded — SQL comparisons against NULL are never true — so a
+          // legacy defaulter re-qualified for a bailout loan immediately,
+          // the opposite of what a cooldown is for.
+          { status: 'DEFAULTED', turnResolved: null },
         ],
       },
       select: { id: true },

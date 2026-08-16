@@ -51,6 +51,14 @@ export default function SettingsPage() {
 
   // Delete account state
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+
+  // #415: session revocation had a backend, a route and a test, and ZERO
+  // client callers — so the mitigation cited for the 30-day JWT lifetime
+  // was one a user could not actually invoke. Backend-first delivery with
+  // nothing tracking the client half: tsc is clean and the route has a
+  // test, so every automated signal reported the feature as done.
+  const [revokingSessions, setRevokingSessions] = useState(false)
+  const [revokeMessage, setRevokeMessage] = useState<StatusMessage>(null)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [deleteMessage, setDeleteMessage] = useState<StatusMessage>(null)
@@ -100,6 +108,28 @@ export default function SettingsPage() {
   }
 
   // Handler: Change password
+  const handleRevokeSessions = async () => {
+    setRevokingSessions(true)
+    setRevokeMessage(null)
+    try {
+      const response = await authenticatedFetch('/api/auth/logout-all', { method: 'POST' })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        setRevokeMessage({ ok: false, text: data.error || 'Could not sign out everywhere. Please try again.' })
+        return
+      }
+      // The request's own token is now invalid too — that is the point.
+      // Send them to sign in again rather than leaving the page in a state
+      // where every subsequent call 401s.
+      localStorage.clear()
+      router.push('/login?signedOutEverywhere=1')
+    } catch {
+      setRevokeMessage({ ok: false, text: 'Could not sign out everywhere. Please try again.' })
+    } finally {
+      setRevokingSessions(false)
+    }
+  }
+
   const handleChangePassword = async () => {
     setPasswordMessage(null)
 
@@ -379,6 +409,35 @@ export default function SettingsPage() {
                 Change Password
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* #415: "Sign out everywhere" — the user-facing half of session
+            revocation. Tokens are stateless JWTs with a 30-day life, so
+            this is the only answer to "I think my token leaked" and to
+            "does changing my password end sessions someone else already
+            has?" (it doesn't, on its own). Sits above the Danger Zone
+            rather than inside it: this is a recovery action, not a
+            destructive one. */}
+        {activeTab === 'privacy' && (
+          <div className="mb-6 rounded-lg border border-myth-border bg-myth-surface-raised p-6">
+            <h3 className="text-xl font-bold text-myth-ink mb-2">Sign out everywhere</h3>
+            <p className="text-sm text-myth-ink-muted mb-6 leading-relaxed">
+              Ends every signed-in session on every device, including this one. Use this if you
+              think someone else has access to your account — changing your password alone does
+              not end sessions that are already signed in.
+            </p>
+            {revokeMessage && (
+              <p
+                className={`mb-4 text-sm ${revokeMessage.ok ? 'text-myth-good' : 'text-myth-danger'}`}
+                role="status"
+              >
+                {revokeMessage.text}
+              </p>
+            )}
+            <Button variant="secondary" onClick={handleRevokeSessions} disabled={revokingSessions}>
+              {revokingSessions ? 'Signing out…' : 'Sign out of all devices'}
+            </Button>
           </div>
         )}
 

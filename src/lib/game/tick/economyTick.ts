@@ -42,6 +42,11 @@
 // get decayed the same turn it was born (the exact same-tick double-count
 // tickWake's own internal decay-before-create ordering exists to avoid).
 
+// roster-exempt: debts and loans are per-CONTRACT, not per-faction — a
+// creditor outside this tick's roster is still owed money, and a loan
+// maturing must default on schedule regardless of whose turn it is to be
+// simulated. Capping this would make repayment depend on rotation luck.
+
 import { TickContext, TickHandlerResult, WorldChange, clamp, findAllyIds } from './types'
 import { assessPayout, BROKE_THRESHOLD, GOLD_PER_RESOURCE_POINT, MAX_RESOURCE_COST_PER_PAYOUT } from '../factionPayout'
 import { isUniqueConstraintViolation } from '../worldUpdaters/uniqueConstraintGuard'
@@ -233,6 +238,14 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
         OR: [
           { status: 'OUTSTANDING' },
           { status: 'DEFAULTED', turnResolved: { gte: ctx.turnNumber - LOAN_DEFAULT_COOLDOWN_TURNS } },
+          // #418: a DEFAULTED row with a NULL turnResolved was silently
+          // excluded by the comparison above — SQL comparisons against
+          // NULL are never true — so a legacy defaulter (or any row
+          // written before turnResolved existed) re-qualified for a bailout
+          // loan immediately, which is the opposite of what a cooldown is
+          // for. An unknown default date is not evidence the cooldown has
+          // elapsed; treat it as still in force.
+          { status: 'DEFAULTED', turnResolved: null },
         ],
       },
       select: { id: true },

@@ -105,8 +105,12 @@ describeIfDb('retrieveRelevantHistory — real pgvector search', () => {
       importance: 'NORMAL',
       tags: [],
     })
-    expect(closeCreated).toBe(true)
-    expect(farCreated).toBe(true)
+    // #377 changed createCampaignMemory's contract from `boolean` to the
+    // created row's id (or null) — the dedupe path needs the id of the row
+    // that already existed, not just "did something happen". Asserting the
+    // id is a string is a strictly stronger check than the old `toBe(true)`.
+    expect(typeof closeCreated).toBe('string')
+    expect(typeof farCreated).toBe('string')
 
     const scene = await prisma.scene.create({
       data: { campaignId, sceneNumber: 1, sceneIntroText: 'x' },
@@ -143,7 +147,7 @@ describeIfDb('retrieveRelevantHistory — real pgvector search', () => {
     expect(result.length).toBeGreaterThanOrEqual(2)
     // The genuinely close one must rank first, not just be present.
     expect(result[0].title).toBe('Close memory')
-    expect(result[0].similarity).toBeGreaterThan(result[1].similarity)
+    expect(result[0].similarity!).toBeGreaterThan(result[1].similarity!)
   })
 
   it('gracefully returns an empty array for a campaign with no memories yet', async () => {

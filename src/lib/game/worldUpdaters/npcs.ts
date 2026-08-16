@@ -99,17 +99,30 @@ export async function applyNpcChanges(
       // dealt in the same batch, so a scene that both wounds and patches up
       // the same NPC nets out correctly rather than dropping one of them.
       if (npcChange.changes.harm_healing && npcChange.changes.harm_healing > 0) {
-        const startingHarm = (updateData.harm ?? (npc.harm as number) ?? 0) as HarmLevel
-        const healResult = healHarm(startingHarm, npcChange.changes.harm_healing)
-        updateData.harm = healResult.newHarm
-        // An NPC below the Taken Out threshold is on their feet again.
-        // isAlive is only ever flipped back true here, never by the damage
-        // path — recovering from a wound is not resurrection, and an NPC
-        // already marked dead stays dead.
-        if (healResult.newHarm < 6 && npc.isAlive) {
-          updateData.isAlive = true
+        // #417: harm and isAlive are not independent fields.
+        //
+        // This wrote the healed harm UNCONDITIONALLY and guarded only the
+        // isAlive flip — and guarded it on the STALE npc.isAlive at that.
+        // So a dead NPC healed for 3 became isAlive=false, harm=3: a state
+        // that means nothing in either the PC or the NPC death model, that
+        // no integrity check repairs, and that reads as "wounded but fine"
+        // to every consumer looking at harm rather than isAlive.
+        //
+        // A dead NPC is not a wounded one. Healing does not apply.
+        const deadBeforeThisBatch = !npc.isAlive
+        const killedInThisBatch = updateData.isAlive === false
+        if (deadBeforeThisBatch || killedInThisBatch) {
+          console.warn(`  🚫 harm_healing ignored for ${npc.name}: they are dead — recovery is not resurrection`)
+        } else {
+          const startingHarm = (updateData.harm ?? (npc.harm as number) ?? 0) as HarmLevel
+          const healResult = healHarm(startingHarm, npcChange.changes.harm_healing)
+          updateData.harm = healResult.newHarm
+          // An NPC below the Taken Out threshold is on their feet again.
+          if (healResult.newHarm < 6) {
+            updateData.isAlive = true
+          }
+          console.log(`  💚 ${npc.name}: ${healResult.message}`)
         }
-        console.log(`  💚 ${npc.name}: ${healResult.message}`)
       }
 
       // Fog of war: the party witnessing this NPC in a live scene is

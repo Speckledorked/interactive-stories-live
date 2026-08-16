@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Message } from '@prisma/client';
-import { getPusherClient, subscribeToCampaignMessages, subscribeToUserWhispers, RealtimeMessage, isPusherConfigured } from '@/lib/realtime/pusher-client';
+import { getPusherClient, subscribeToCampaignMessages, subscribeToUserWhispers, unsubscribeFromChannel, RealtimeMessage, isPusherConfigured } from '@/lib/realtime/pusher-client';
 import { getToken } from '@/lib/clientAuth';
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -97,11 +97,13 @@ export default function ChatPanel({
       return () => {
         campaignChannel.unbind_all();
         whisperChannel.unbind_all();
-        const pusher = getPusherClient();
-        if (pusher) {
-          pusher.unsubscribe(`campaign-${campaignId}`);
-          pusher.unsubscribe(`user-${currentUserId}`);
-        }
+        // #413: goes through the helper rather than re-doing the
+        // getPusherClient dance inline. unsubscribeFromChannel had zero
+        // callers while this hand-rolled equivalent sat right here — an
+        // uncalled cleanup function usually means a leak, and the honest
+        // answer here was "no leak, just two ways to do one thing".
+        unsubscribeFromChannel(`campaign-${campaignId}`);
+        unsubscribeFromChannel(`user-${currentUserId}`);
       };
     } catch (error) {
       console.error('Failed to initialize Pusher:', error);

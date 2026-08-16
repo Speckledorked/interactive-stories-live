@@ -18,6 +18,10 @@
 // "who is contesting this location" column, so this reuses the existing
 // rival-relationship convention rather than inventing a new field.
 
+// roster-exempt: loyalty is a property of a LOCATION and its owner/rival
+// pair. The faction reads resolve those two parties; a location whose
+// owner missed this tick's roster still has a contested territory.
+
 import { TickContext, TickHandlerResult, WorldChange, findRivalId } from './types'
 import { decideArcDelta, applyArcDelta, decideArcResolution, ArcResolution } from '../arc'
 

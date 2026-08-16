@@ -76,7 +76,7 @@ vi.mock('../logisticsTick', () => ({ tickLogistics: h.stub('logistics') }))
 vi.mock('../ambitionTick', () => ({
   tickFactionAmbitions: h.stub('ambitions', { pendingAmbitions: [h.pendingAmbition] }),
 }))
-vi.mock('../npcTick', () => ({ tickNpcs: h.stub('npcs') }))
+vi.mock('../npcTick', () => ({ tickNpcs: h.stub('npcs'), MAJOR_IMPORTANCE_THRESHOLD: 4 }))
 vi.mock('../migrationTick', () => ({ tickMigration: h.stub('migration') }))
 vi.mock('../informationTick', () => ({ tickInformation: h.stub('information') }))
 vi.mock('../npcSocietyTick', () => ({
@@ -93,11 +93,22 @@ vi.mock('../wikiSync', () => ({ syncWikiEntriesForChanges: h.syncWikiEntriesForC
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    worldMeta: { findUnique: vi.fn(async () => ({ factionCap: 12, npcCap: 30 })) },
+    worldMeta: { findUnique: vi.fn(async () => ({ factionCap: 12, npcCap: 30 })), updateMany: vi.fn() },
+    // #375: the tick resolves its entity roster once, before the
+    // transaction opens (see capOrdering.ts) — these back that query.
+    faction: { findMany: vi.fn(async () => []), updateMany: vi.fn() },
+    nPC: { findMany: vi.fn(async () => []), updateMany: vi.fn() },
     // Phase 3: runWorldTick wraps every handler in one transaction on a
     // real (non-dry-run) tick. The stub handlers above never touch `tx`
-    // themselves, so a bare pass-through is enough here.
-    $transaction: vi.fn(async (fn: any) => fn({})),
+    // themselves, but the tick itself now bumps the rotation key and the
+    // simulation turn through it at the end of the pass.
+    $transaction: vi.fn(async (fn: any) =>
+      fn({
+        faction: { updateMany: vi.fn() },
+        nPC: { updateMany: vi.fn() },
+        worldMeta: { updateMany: vi.fn() },
+      })
+    ),
   },
 }))
 

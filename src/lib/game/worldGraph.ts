@@ -208,3 +208,53 @@ export function graphDiameter(edges: AdjacencyEdge[]): number {
   }
   return diameter
 }
+
+
+/**
+ * #407: every distance from ONE origin, in a single pass.
+ *
+ * informationTick used to call shortestPath once per (event, witness)
+ * pair, inside a nested loop over events x (characters + NPCs) — and each
+ * call rebuilt the neighbour map from the edge list AND ran a full
+ * Dijkstra. Neither loop dimension is bounded by npcCap, and under a
+ * frozen turn counter the event window never shrank, so this was the
+ * handler most likely to exhaust the shared 20s tick transaction and take
+ * the whole world turn down with it.
+ *
+ * Single-source Dijkstra answers every witness for one event at once. The
+ * neighbour map is built once here rather than per query, and callers
+ * memoize per origin — so a tick over E events and W witnesses does at
+ * most (distinct origins) traversals instead of E x W.
+ *
+ * Returns distances only; nothing that needed the path itself calls this.
+ */
+export function distancesFrom(edges: AdjacencyEdge[], fromLocationId: string): Map<string, number> {
+  const neighbors = buildNeighborMap(edges)
+  const distances = new Map<string, number>([[fromLocationId, 0]])
+  const visited = new Set<string>()
+  const heap = new MinHeap<string>()
+  heap.push(0, fromLocationId)
+
+  while (heap.size > 0) {
+    const popped = heap.pop()!
+    const current = popped.value
+    const currentDistance = popped.priority
+
+    // Same stale-entry skip as shortestPath — see its comment for the
+    // decrease-key-avoidance tradeoff.
+    if (currentDistance > (distances.get(current) ?? Infinity)) continue
+    if (visited.has(current)) continue
+    visited.add(current)
+
+    for (const { neighborId, distance } of neighbors.get(current) ?? []) {
+      if (visited.has(neighborId)) continue
+      const candidateDistance = currentDistance + distance
+      if (candidateDistance < (distances.get(neighborId) ?? Infinity)) {
+        distances.set(neighborId, candidateDistance)
+        heap.push(candidateDistance, neighborId)
+      }
+    }
+  }
+
+  return distances
+}

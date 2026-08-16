@@ -8,8 +8,9 @@ import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { applyQuestRewardGrant } from '../questRewards'
 import { appendBounded, QUEST_PROGRESS_BOUNDS } from '../textAppend'
-import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData, isLegalQuestStatusTransition, type QuestStatus } from '../quests'
+import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData, isLegalQuestStatusTransition, MAX_QUEST_REWARD_GOLD_PER_SCENE, type QuestStatus } from '../quests'
 import { checkCorruptionGate, hasCorruptionGate } from '../corruptionGates'
+import { hasCorruptionTheme } from '../corruption'
 import { checkConditionGate } from '../conditionGates'
 import { applyQuestFailureCost, type QuestFailureStatus } from '../questFailure'
 import { isUniqueConstraintViolation } from './uniqueConstraintGuard'
@@ -27,6 +28,12 @@ export async function applyQuestChanges(
 ): Promise<{ worldChanges: WorldChange[] }> {
   console.log(`🎯 Applying ${questChanges.length} quest change(s)`)
   const worldChanges: WorldChange[] = []
+
+  // #383: one gold pool for the whole batch. quest_changes is an unbounded
+  // array and each completion pays every living party member, so a
+  // per-entry clamp bounds nothing — N entries multiply freely. Shared by
+  // reference across every applyQuestRewardGrant call below.
+  const rewardBudget = { remainingGold: MAX_QUEST_REWARD_GOLD_PER_SCENE }
 
   // Quest-giver rosters, fetched once per batch rather than per change —
   // the same discipline resolveEntityByNameOrId enforces for pc_changes.
@@ -79,7 +86,13 @@ export async function applyQuestChanges(
         tx.character.findMany({ where: { campaignId, isAlive: true }, select: { corruption: true } }),
       ])
       gateContext = {
-        hasTheme: Boolean(campaign?.corruptionTheme),
+        // #404: the SAME predicate every other caller uses. This used to be
+        // `Boolean(campaign?.corruptionTheme)`, true for any non-null JSON
+        // including `{}` — so a partially-filled theme gated quests while
+        // being invisible in the prompt, the stages display and the marks
+        // path. Quests refused themselves for a reason that did not exist
+        // in the fiction.
+        hasTheme: hasCorruptionTheme(campaign?.corruptionTheme),
         partyCorruption: characters.reduce((max, c) => Math.max(max, c.corruption || 0), 0),
       }
     }
@@ -270,7 +283,7 @@ export async function applyQuestChanges(
         const payerFactionId =
           (updateData.givenByFactionId as string | null | undefined) ?? existing.givenByFactionId
         const rewardLog = await applyQuestRewardGrant(
-          tx, campaignId, existing.name, changes.reward_grant, payerFactionId, currentTurnNumber
+          tx, campaignId, existing.name, changes.reward_grant, payerFactionId, currentTurnNumber, rewardBudget
         )
         for (const line of rewardLog) console.log(`  🎁 ${line}`)
       }
@@ -327,24 +340,35 @@ export async function applyQuestChanges(
             reward: changes.reward || null,
             minCorruption: changes.min_corruption ?? null,
             maxCorruption: changes.max_corruption ?? null,
-            status: changes.status || 'ACTIVE',
+            // #383: a quest that has never existed cannot already be
+            // over. The old form was `changes.status || 'ACTIVE'`, and the
+            // branch below then paid out unconditionally for a COMPLETED
+            // one — so a single quest_changes entry naming a quest nobody
+            // had ever heard of, with status COMPLETED and a reward_grant,
+            // minted the row and paid it. Quest names are free text, so
+            // that was one payout per unique name, unbounded, reachable
+            // through the same prompt surface as every other AI field.
+            //
+            // The acquisition and transition gates both live in the
+            // `existing` branch, and neither can meaningfully run against a
+            // row being created in the same breath. So creation refuses a
+            // terminal status outright: register it ACTIVE, and let the
+            // NEXT report complete it through the gated path like any other
+            // quest.
+            status: 'ACTIVE',
             progressLog: progressLine,
-            ...(changes.status && changes.status !== 'ACTIVE' ? { resolvedAt: new Date() } : {})
           }
         })
+        if (changes.status && changes.status !== 'ACTIVE') {
+          console.warn(
+            `  🚫 quest "${questChange.name}" was reported as ${changes.status} on the turn it was introduced — registered ACTIVE instead; a reward for it must come through a real completion`
+          )
+        }
         console.log(`  🎯 Registered quest: ${questChange.name}`)
       } catch (error) {
         if (!isUniqueConstraintViolation(error)) throw error
         console.warn(`  ⚠️ Quest "${questChange.name}" collided with an existing quest at write time — skipping registration rather than aborting the scene`)
         continue
-      }
-      // A quest can (rarely) be registered already-resolved in the same
-      // turn it's introduced — same deterministic payout either way.
-      if (changes.status === 'COMPLETED' && changes.reward_grant) {
-        const rewardLog = await applyQuestRewardGrant(
-          tx, campaignId, questChange.name, changes.reward_grant, giverData.givenByFactionId, currentTurnNumber
-        )
-        for (const line of rewardLog) console.log(`  🎁 ${line}`)
       }
     }
   }

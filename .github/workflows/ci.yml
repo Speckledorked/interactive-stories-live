@@ -129,12 +129,23 @@ jobs:
 
   # Runs the *.liveDb.test.ts / *.faultInjection.test.ts files the `check`
   # job's RUN_DB_TESTS-less `npx vitest run` always skips (see that job's
-  # header comment) — warTick.faultInjection, logisticsTick.liveDb,
-  # npcDispositionTick.liveDb, characters.stress.liveDb as of this writing;
-  # any future file gated the same way picks this job up automatically,
-  # nothing here needs updating per-file. Same pgvector service + migration
-  # setup as schema-deploy, since these tests write real rows through the
-  # real schema, not a mock.
+  # header comment). Any file gated the same way picks this job up
+  # automatically, nothing here needs updating per-file. Same pgvector
+  # service + migration setup as schema-deploy, since these tests write
+  # real rows through the real schema, not a mock.
+  #
+  # #401: this job is why the adversarial audit's "every test that touches
+  # a real Postgres is skipped in the default run" is a statement about the
+  # LOCAL default, not about coverage — but it is worth stating plainly,
+  # because a local `npx vitest run` reporting 4,000 green while the entire
+  # integration surface sits skipped is exactly the kind of signal that
+  # reads as more assurance than it is.
+  #
+  # The most important file here is idleCampaign.liveDb: thirty world turns
+  # with no player input, asserting the world actually changed. Both audit
+  # passes concluded that single test would have caught their deepest
+  # findings, and it would have — because every one of those is a
+  # COMPOSITION defect, invisible to a unit test by construction.
   db-tests:
     runs-on: ubuntu-latest
 

@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { callAIForWorldTurn } from '@/lib/ai/client'
 import { buildWorldSummaryForAI } from '@/lib/ai/worldState'
 import { applyWorldUpdates } from './stateUpdater'
-import { createCampaignMemory } from '@/lib/ai/memoryCreation'
+import { createCampaignMemory, memoryDedupeKey } from '@/lib/ai/memoryCreation'
 import { EventVisibility, FactionGoal } from '@prisma/client'
 import { PendingAmbition } from './tick/types'
 import { AMBITION_CATEGORY_OPTIONS } from './tick/ambitionTick'
@@ -169,6 +169,15 @@ export async function generateOffscreenEvents(
         memoryType: 'WORLD_EVENT',
         sourceId: event.id,
         turnNumber: currentTurn,
+        // #377: a replayed world turn must not re-buy this embedding.
+        // event.id is a real persisted row id, so it is stable across the
+        // replay in a way the AI-authored title isn't.
+        dedupeKey: memoryDedupeKey({
+          memoryType: 'WORLD_EVENT',
+          sourceId: event.id,
+          turnNumber: currentTurn,
+          title: event.title,
+        }),
         title: event.title,
         summary: event.summary_gm,
         fullContext: event.summary_gm,

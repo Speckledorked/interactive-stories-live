@@ -799,7 +799,10 @@ async function attemptAIGM(
         }
 
         return JSON.parse(repairContent)
-      }
+      },
+      // #388: so a degraded response is RECORDED, not just warned about.
+      // See validateAIResponseWithRepair's own comment.
+      campaignId && sceneId ? { campaignId, sceneId } : undefined
     )
 
     if (!validationResult.success) {

@@ -226,7 +226,15 @@ function readsGatedModel(source: string): boolean {
 const files = routeFiles(API_ROOT)
 const gatedRoutes = files.filter(f => readsGatedModel(readFileSync(f, 'utf8')))
 
-const usesHelper = (src: string) => src.includes("from '@/lib/api/visibility'")
+// #400: an IMPORT is not a call.
+//
+// This was `src.includes("from '@/lib/api/visibility'")` — so a route that
+// imported visibleTo and never called it passed. The guard's whole claim
+// is that fog of war is enforced "structurally, not by memory", and an
+// import-string match is precisely enforcement by memory: it checks that
+// someone remembered the module exists.
+const usesHelper = (src: string) =>
+  src.includes("from '@/lib/api/visibility'") && /\b(visibleTo|visibleToMany)\s*\(/.test(src)
 const isAdminOnly = (src: string) =>
   /role\s*!==\s*(?:'ADMIN'|UserRole\.ADMIN)/.test(src) || /requireCampaignAdmin\(/.test(src)
 

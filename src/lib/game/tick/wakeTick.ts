@@ -31,6 +31,11 @@
 // double-applying decay: only the NPC's death creates a wake row; the
 // succession that followed it is read, never re-triggered.
 
+// roster-exempt: a wake ripples to everyone the death or collapse actually
+// touched. Restricting the ripple to the roster would mean a faction's
+// grief depends on rotation, and ActiveWake's decay schedule (its own
+// @@unique idempotency) assumes every affected party got a row.
+
 import { TickContext, TickHandlerResult, WorldChange, clamp, parseFactionRelationships } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
 import { isUniqueConstraintViolation } from '../worldUpdaters/uniqueConstraintGuard'

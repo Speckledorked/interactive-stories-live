@@ -314,12 +314,45 @@ export function computeOrganicGrowth(
 }
 
 /**
- * Validate character stats according to PbtA rules
- * - Each stat must be between -2 and +3
- * - Sum of all stats must equal +2
- * - At most one stat can be >= 2
+ * The point-buy total a character is CREATED with.
  */
-export function validateStats(stats: Record<string, number>): { valid: boolean; error?: string } {
+export const STARTING_STAT_TOTAL = 2
+
+/**
+ * Validate character stats according to PbtA rules.
+ *
+ * - Each stat must be between -2 and +3
+ * - The sum must equal STARTING_STAT_TOTAL plus however many increases the
+ *   character has legitimately earned since
+ * - At most one stat may be >= 2 at CREATION
+ *
+ * #393: this function used to enforce `sum === 2` unconditionally, at both
+ * of its call sites — and one of them is the advancement path, where
+ * growth ADDS to the total by design.
+ *
+ * applyOrganicGrowth builds `proposedStats` by adding the increase and
+ * then validates the result. A legal character starts at sum 2, so any +1
+ * makes the proposal sum 3, which failed. EVERY stat increase was
+ * rejected, always, for every character, since the feature shipped — with
+ * a console.warn as the only signal. The machinery around it is real
+ * (computeUsageGain, advancementVersion optimistic locking, statUsage, the
+ * arc budget) and all of it fed a path that could never commit.
+ *
+ * Two different rules were sharing one function: a CREATION constraint
+ * (point-buy totals exactly 2) and an ADVANCEMENT invariant (totals 2 plus
+ * what you have earned). Callers now say which they mean.
+ *
+ * The "at most one stat >= 2" rule is likewise a creation constraint —
+ * enforcing it after advancement would stall a character permanently at
+ * their second increase. The per-stat -2..+3 bound still applies always,
+ * and is what actually caps a single stat.
+ */
+export function validateStats(
+  stats: Record<string, number>,
+  // How many stat increases this character has already earned. 0 (the
+  // default) means "validate this as a starting array".
+  grantedIncreases: number = 0
+): { valid: boolean; error?: string } {
   if (!stats || Object.keys(stats).length === 0) {
     return { valid: false, error: 'Stats are required and cannot be empty' }
   }
@@ -336,16 +369,28 @@ export function validateStats(stats: Record<string, number>): { valid: boolean; 
     }
   }
 
-  // Check sum equals +2
+  // Check the sum matches the character's earned budget
+  const expectedSum = STARTING_STAT_TOTAL + grantedIncreases
   const sum = statValues.reduce((acc, val) => acc + val, 0)
-  if (sum !== 2) {
-    return { valid: false, error: `Total sum of stats must equal +2 (got ${sum})` }
+  if (sum !== expectedSum) {
+    return {
+      valid: false,
+      error:
+        grantedIncreases > 0
+          ? `Total sum of stats must equal +${expectedSum} (+${STARTING_STAT_TOTAL} starting, +${grantedIncreases} earned) — got ${sum}`
+          : `Total sum of stats must equal +${STARTING_STAT_TOTAL} (got ${sum})`,
+    }
   }
 
-  // Check at most one stat >= 2
-  const highStats = statValues.filter(v => v >= 2)
-  if (highStats.length > 1) {
-    return { valid: false, error: 'At most one stat can be +2 or higher' }
+  // Check at most one stat >= 2 — a CREATION constraint only. An advanced
+  // character is supposed to have more than one strong stat eventually;
+  // keeping this rule past creation would refuse every increase after the
+  // second one.
+  if (grantedIncreases === 0) {
+    const highStats = statValues.filter(v => v >= 2)
+    if (highStats.length > 1) {
+      return { valid: false, error: 'At most one stat can be +2 or higher' }
+    }
   }
 
   return { valid: true }
@@ -372,14 +417,23 @@ export function applyOrganicGrowth(
   const skippedMoves: Array<{ move: Move; reason: GrantSkipReason }> = []
 
   // Apply stat increases
+  //
+  // #393: the budget grows with what the character has already earned.
+  // Validating a post-growth array against the pre-growth invariant is
+  // what made every increase unreachable.
+  const priorLog = (character.advancementLog as any as AdvancementLog) || null
+  let grantedIncreases = priorLog?.totalStatIncreases ?? 0
+
   for (const statIncrease of instructions.statIncreases) {
     const proposedStats = { ...stats }
     proposedStats[statIncrease.statKey] = (proposedStats[statIncrease.statKey] || 0) + statIncrease.delta
 
-    // Validate the proposed change
-    const validation = validateStats(proposedStats)
+    // Validate the proposed change against the budget this increase would
+    // put the character on.
+    const validation = validateStats(proposedStats, grantedIncreases + statIncrease.delta)
     if (validation.valid) {
       stats = proposedStats
+      grantedIncreases += statIncrease.delta
       console.log(`✅ Applied stat increase: ${statIncrease.statKey} +${statIncrease.delta} (${statIncrease.reason})`)
     } else {
       console.warn(`⚠️ Skipped stat increase for ${statIncrease.statKey}: ${validation.error}`)
@@ -544,22 +598,7 @@ export function logMoveLearned(
   }
 }
 
-/**
- * Get recent advancement entries (last N)
- */
-export function getRecentAdvancements(log: AdvancementLog, limit: number = 10): AdvancementLogEntry[] {
-  return log.entries.slice(-limit)
-}
 
-/**
- * Get all advancements of a specific type
- */
-export function getAdvancementsByType(
-  log: AdvancementLog,
-  type: 'stat_increase' | 'perk_gained' | 'move_learned'
-): AdvancementLogEntry[] {
-  return log.entries.filter(entry => entry.type === type)
-}
 
 /**
  * Format advancement log entry for display

@@ -3,6 +3,9 @@
 // Pre-built system modules for quick campaign creation
 
 import { slugifyCapabilityKey, resolvePrerequisiteLinks } from '@/lib/game/capabilities'
+import { deriveResourceSlots } from '@/lib/game/resourceSlots'
+import { isUniqueConstraintViolation } from '@/lib/game/worldUpdaters/uniqueConstraintGuard'
+import { buildDefaultAdjacency } from '@/lib/game/defaultAdjacency'
 
 export interface CampaignTemplate {
   id: string
@@ -384,18 +387,28 @@ export async function createFactionsForCampaign(
   factions: GeneratedFactionOverride[]
 ): Promise<void> {
   for (const faction of factions) {
-    await prisma.faction.create({
-      data: {
-        campaignId,
-        name: faction.name,
-        description: faction.description,
-        goals: faction.goals,
-        currentPlan: faction.currentPlan ?? null,
-        resources: faction.resources,
-        influence: faction.influence,
-        threatLevel: faction.threatLevel
-      }
-    })
+    // #400: these names are AI-GENERATED, and this same function is what
+    // reseedWorld.ts calls to ADD factions to an existing campaign — so a
+    // generator producing a name the campaign already has threw P2002 out
+    // of the whole creation/reseed. Skip the duplicate: a campaign with
+    // one fewer generated faction beats a campaign that failed to create.
+    try {
+      await prisma.faction.create({
+        data: {
+          campaignId,
+          name: faction.name,
+          description: faction.description,
+          goals: faction.goals,
+          currentPlan: faction.currentPlan ?? null,
+          resources: faction.resources,
+          influence: faction.influence,
+          threatLevel: faction.threatLevel
+        }
+      })
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error
+      console.warn(`  ⚠️ generated faction "${faction.name}" already exists in this campaign — skipped`)
+    }
   }
 }
 
@@ -436,18 +449,24 @@ export async function createNPCsForCampaign(
       })
       factionId = faction?.id
     }
-    await prisma.nPC.create({
-      data: {
-        campaignId,
-        name: npc.name,
-        description: npc.description,
-        pronouns: npc.pronouns ?? null,
-        importance: npc.importance,
-        goals: npc.goals ?? null,
-        factionId,
-        factionRole: factionId ? 'MEMBER' : undefined,
-      }
-    })
+    // #400: same reasoning as createFactionsForCampaign above.
+    try {
+      await prisma.nPC.create({
+        data: {
+          campaignId,
+          name: npc.name,
+          description: npc.description,
+          pronouns: npc.pronouns ?? null,
+          importance: npc.importance,
+          goals: npc.goals ?? null,
+          factionId,
+          factionRole: factionId ? 'MEMBER' : undefined,
+        }
+      })
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error
+      console.warn(`  ⚠️ generated NPC "${npc.name}" already exists in this campaign — skipped`)
+    }
   }
 }
 
@@ -477,9 +496,53 @@ export async function createLocationsForCampaign(
         description: location.description,
         locationType: location.locationType ?? null,
         ownerFactionId,
+        // #378: the input the whole logistics subsystem gates on. It had
+        // no writer anywhere, so logisticsTick's extraction and
+        // supply-route passes both `continue`d for 100% of rows in every
+        // real campaign. Derived rather than authored — see
+        // game/resourceSlots.ts.
+        resourceSlots: deriveResourceSlots(location),
       }
     })
   }
+
+  // #379: give this campaign a world graph.
+  //
+  // LocationAdjacency had exactly one writer — reseedWorld.ts, reachable
+  // only through the lore-import pipeline — so every campaign created any
+  // other way had an EMPTY table while five subsystems read it
+  // (informationTick, npcTick, migrationTick, logisticsTick,
+  // ambitionResolution). All five fall back silently, so the feature
+  // appeared to work while being structurally absent.
+  //
+  // Never overwrites: skipDuplicates plus the canonical id ordering means
+  // an authored graph from imported lore wins, and a reseed that adds new
+  // locations extends the existing one instead of replacing it.
+  await ensureDefaultAdjacency(campaignId, prisma)
+}
+
+/**
+ * Build the default location graph for a campaign, if it doesn't have one
+ * that already covers its locations. Idempotent.
+ */
+export async function ensureDefaultAdjacency(campaignId: string, prisma: any): Promise<number> {
+  const locations = await prisma.location.findMany({
+    where: { campaignId },
+    // Stable order in, stable graph out — see buildDefaultAdjacency.
+    orderBy: { id: 'asc' },
+    select: { id: true },
+  })
+  const edges = buildDefaultAdjacency(locations.map((l: { id: string }) => l.id))
+  if (edges.length === 0) return 0
+
+  const created = await prisma.locationAdjacency.createMany({
+    data: edges.map((e) => ({ campaignId, ...e })),
+    skipDuplicates: true,
+  })
+  if (created.count > 0) {
+    console.log(`  🗺️  Seeded ${created.count} adjacency edge(s) for campaign ${campaignId}`)
+  }
+  return created.count
 }
 
 /**

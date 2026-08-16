@@ -13,6 +13,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 import { tickNpcDisposition } from '../npcDispositionTick'
+import { resolveTickRoster, markRosterTicked } from '../capOrdering'
+import { MAJOR_IMPORTANCE_THRESHOLD } from '../npcTick'
 import type { TickContext } from '../types'
 
 const RUN = process.env.RUN_DB_TESTS === '1'
@@ -166,7 +168,13 @@ describeIfDb('tickNpcDisposition — real database', () => {
   // the cap every single tick forever. npcDispositionTick.ts now appends
   // the shared capOrdering.ts rotation key as a tiebreaker, so equally-
   // important NPCs rotate through instead.
-  it('#283: rotates equally-important NPCs through the cap across consecutive ticks', async () => {
+  // #375 moved the rotation out of the handlers: the key is now stamped
+  // once by markRosterTicked after the whole pass, not by each handler
+  // mid-pass with the transaction client. Driving this through
+  // tickNpcDisposition would no longer exercise rotation at all, so it
+  // drives capOrdering directly — the shared mechanism, which is what this
+  // test was always about.
+  it('#283/#375: rotates equally-important NPCs through the cap across consecutive ticks', async () => {
     const campaign = await prisma.campaign.create({
       data: { title: 'NPC Cap Rotation Live Test', aiSystemPrompt: 'test', initialWorldSeed: 'test' },
     })
@@ -184,18 +192,17 @@ describeIfDb('tickNpcDisposition — real database', () => {
 
     const selectedEachTick: string[][] = []
     for (let turn = 2; turn <= 4; turn++) {
-      const ctx: TickContext = {
-        campaignId: rotationCampaignId, turnNumber: turn, factionCap: 10, npcCap: 5, dryRun: false, db: prisma as any,
-      }
-      await tickNpcDisposition(ctx)
-
-      const rows = await prisma.nPC.findMany({
-        where: { campaignId: rotationCampaignId, lastTickedAt: { not: null } },
-        select: { id: true },
+      const roster = await resolveTickRoster(prisma as never, {
+        campaignId: rotationCampaignId,
+        factionCap: 10,
+        npcCap: 5,
+        npcImportanceThreshold: MAJOR_IMPORTANCE_THRESHOLD,
       })
-      const tickedSoFar = new Set(rows.map((r) => r.id))
-      const newlyTicked = npcIds.filter((id) => tickedSoFar.has(id) && !selectedEachTick.flat().includes(id))
-      selectedEachTick.push(newlyTicked)
+      // Distinct, increasing timestamps per tick — see the sibling test in
+      // beliefTick.liveDb for why same-millisecond bumps would make this
+      // pass for the wrong reason.
+      await markRosterTicked(prisma as never, roster, new Date(Date.now() + turn * 60_000))
+      selectedEachTick.push(roster.npcIds)
     }
 
     expect(new Set(selectedEachTick[0])).not.toEqual(new Set(selectedEachTick[1]))

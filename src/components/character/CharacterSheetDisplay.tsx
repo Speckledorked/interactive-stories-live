@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { SpendPanel } from './SpendPanel'
 import HarmTracker from './HarmTracker'
 import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
@@ -659,6 +660,21 @@ export default function CharacterSheetDisplay({
                   <p className="text-sm">No items or equipment</p>
                   <p className="mt-1 text-xs">Your inventory is empty</p>
                 </div>
+              </Card>
+            )}
+
+            {/* #416: where gold actually goes. The economy modelled earning,
+                owing and defaulting and had no modelled way to spend, so
+                gold accumulated and only ever left through an AI-narrated
+                delta. Fetches its own prices — see SpendPanel. */}
+            {campaignId && character?.id && (
+              <Card className="md:col-span-2">
+                <CardLabel>Spend</CardLabel>
+                <SpendPanel
+                  campaignId={campaignId}
+                  characterId={character.id}
+                  currencyPlural={currency.plural}
+                />
               </Card>
             )}
           </div>

@@ -82,3 +82,55 @@ skipping the resolve step against the real database would have done.
 is `true` in `vercel.json`, so a merge triggers a deploy immediately, and an
 unresolved baseline means that deploy hits the same `P3005` the control run
 did.
+
+## Backfills
+
+Across the first 50 migrations there was **not one data backfill**. Every
+added column relied on a schema default or on a nullable column read as
+"neutral", and `docs/MIGRATIONS.md` did not contain the word "backfill".
+
+That convention is fine for a display field. It is not fine where the
+default is consumed inside a **decision**, and in several places it was:
+
+| Column | Consumer | What the default did |
+|---|---|---|
+| `Faction.beliefVector` | `factionTick`'s goal redirect, `?? NEUTRAL_BELIEF` | Pre-existing factions never redirected, indistinguishable from genuinely neutral ones |
+| `Location.conditionScore` | `resolution.ts`'s `locationConditionPenalty` returns 0 for null | Missing data silently became "no penalty" inside a dice roll |
+| `Location.resourceSlots` | `logisticsTick`'s two `if (length === 0) continue` gates | The entire logistics subsystem skipped 100% of rows, forever |
+| `Debt.turnResolved` | `economyTick`'s `{ gte: turn - COOLDOWN }` | SQL comparisons against NULL are never true, so legacy defaulters re-qualified for loans immediately |
+| `Faction.lastTickedAt` | 11 capped tick queries | Added as a sort key with no index and no backfill |
+
+The failure mode is always the same: **`?? DEFAULT` collapses "this value
+is genuinely neutral" and "this row predates the column" into one answer**,
+and it does so at the *read* site — inside the decision — rather than at
+the migration boundary where it could be resolved once and for all.
+
+### The rule
+
+> Any column read inside a simulation decision must be backfilled in the
+> same migration that adds it, or be explicitly modelled as tri-state with
+> the "unknown" branch handled at every read site.
+
+"Read inside a decision" means: a tick handler branches on it, a roll
+modifier derives from it, a gate consults it, or a query filters on it.
+Display fields and audit columns are exempt.
+
+### Writing one
+
+- **Say what the default means.** A backfill's comment should state what
+  the value would have been and why that is the accurate answer for
+  existing rows — not just what the SQL does.
+- **Derive from what the row already knows.** `20260816090000`'s
+  `resourceSlots` backfill mirrors `deriveResourceSlots`' own hints against
+  `locationType`/`name`/`description`; the `simulationTurn` backfill seeds
+  from `currentTurnNumber` so existing `WorldEvent` rows stay in the past
+  where they belong.
+- **Prefer "still in force" over "already elapsed"** for anything
+  time-based. An unknown default date is not evidence a cooldown expired.
+- **Guard for re-runs.** `WHERE cardinality(...) = 0`, `WHERE ... IS NULL`,
+  `ON CONFLICT DO NOTHING` — a migration that is safe to re-apply is safe
+  to reason about.
+- **Never backfill a permissive flag onto existing rows.**
+  `CampaignCapability.isNarrated` defaults false and is deliberately NOT
+  backfilled: marking generator-authored nodes as narrated would newly gate
+  capabilities players already have.

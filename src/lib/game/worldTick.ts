@@ -48,7 +48,7 @@ import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { TickContext, TickHandler, WorldChange, WorldTickResult, PendingAmbition } from './tick/types'
-import { resolveTickCaps } from './tick/caps'
+import { resolveTickCaps, type TickCapReport } from './tick/caps'
 import { resolveTickRoster, markRosterTicked } from './tick/capOrdering'
 import { deriveSeason, GeneratedCalendar } from './calendar'
 
@@ -295,9 +295,26 @@ export async function runWorldTick(
     // it did.
     if (!dryRun) {
       await markRosterTicked(db as Prisma.TransactionClient, roster, tickStartedAt)
+
+      // #410: record what this tick could NOT simulate, alongside the
+      // turn it did. A cap that silently drops entities is a simulation
+      // that silently stops happening for them — see TickCapReport.
+      const capReport: TickCapReport = {
+        at: tickStartedAt.toISOString(),
+        simulationTurn: turnNumber,
+        factionCap,
+        npcCap,
+        factionsSimulated: roster.factionIds.length,
+        npcsSimulated: roster.npcIds.length,
+        factionCapHit: roster.factionCapHit,
+        npcCapHit: roster.npcCapHit,
+      }
       await db.worldMeta.updateMany({
         where: { campaignId },
-        data: { simulationTurn: turnNumber },
+        data: {
+          simulationTurn: turnNumber,
+          lastTickCapReport: capReport as unknown as Prisma.InputJsonValue,
+        },
       })
     }
   }

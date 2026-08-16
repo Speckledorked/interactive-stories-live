@@ -41,7 +41,14 @@ function makeMockPrisma() {
       update: vi.fn().mockResolvedValue({}),
     },
     nPC: { create: vi.fn().mockResolvedValue({}) },
-    location: { create: vi.fn().mockResolvedValue({}) },
+    location: {
+      create: vi.fn().mockResolvedValue({}),
+      // #379: createLocationsForCampaign seeds a default world graph after
+      // writing the rows — every campaign not built from imported lore had
+      // an EMPTY LocationAdjacency table while five subsystems read it.
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    locationAdjacency: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
   }
 }
 
@@ -137,6 +144,26 @@ describe('createNPCsForCampaign', () => {
 })
 
 describe('createLocationsForCampaign', () => {
+  it('seeds a default adjacency graph so the five graph consumers have one', async () => {
+    // #379: LocationAdjacency's only writer was reseedWorld.ts, reachable
+    // only through the lore-import pipeline. informationTick, npcTick,
+    // migrationTick, logisticsTick and ambitionResolution all read it and
+    // all fall back SILENTLY, so the feature appeared to work while being
+    // structurally absent.
+    const prisma = makeMockPrisma()
+    prisma.location.findMany.mockResolvedValue([{ id: 'a' }, { id: 'b' }, { id: 'c' }])
+
+    await createLocationsForCampaign('camp1', prisma, [makeLocation({ name: 'A' })])
+
+    expect(prisma.locationAdjacency.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // Never overwrites an authored graph — an imported-lore map wins,
+        // and a reseed extends rather than replaces.
+        skipDuplicates: true,
+      })
+    )
+  })
+
   it('creates one Location row per given location', async () => {
     const prisma = makeMockPrisma()
     await createLocationsForCampaign('camp1', prisma, [makeLocation({ name: 'A' }), makeLocation({ name: 'B' })])

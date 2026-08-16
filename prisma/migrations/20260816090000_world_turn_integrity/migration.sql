@@ -102,3 +102,106 @@ ALTER TABLE "campaign_memories" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(
 ALTER TABLE "campaign_memories" ADD COLUMN IF NOT EXISTS "consolidatedIntoId" TEXT;
 CREATE INDEX IF NOT EXISTS "campaign_memories_campaignId_archivedAt_idx"
   ON "campaign_memories" ("campaignId", "archivedAt");
+
+-- ---------------------------------------------------------------------------
+-- #378: backfill Location.resourceSlots.
+--
+-- This column is the input the ENTIRE logistics/supply/extraction subsystem
+-- gates on (logisticsTick's extraction and route-creation passes both open
+-- with `if (resourceSlots.length === 0) continue`), and it had zero writers
+-- anywhere in the repository. Both passes therefore skipped 100% of rows in
+-- every real campaign, on every tick, since the feature shipped.
+--
+-- Code now derives slots at every creation path (see game/resourceSlots.ts),
+-- but new campaigns alone would leave every EXISTING one permanently inert —
+-- exactly the "nullable-means-neutral, no backfill" pattern #380 is about.
+-- The SQL below mirrors deriveResourceSlots' hints; a location matching no
+-- hint gets 'grain', the same settlement default, because the failure mode
+-- being fixed is a world where nothing produces anything.
+-- ---------------------------------------------------------------------------
+UPDATE "Location"
+   SET "resourceSlots" =
+     CASE
+       WHEN COALESCE("locationType", '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(description, '')
+            ~* '(ruin|wasteland|wilds|wilderness|badlands|swamp|desert|tomb|crypt)' THEN ARRAY[]::text[]
+       WHEN COALESCE("locationType", '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(description, '')
+            ~* '(mine|quarry|forge|foundry|smelt)' THEN ARRAY['ore']
+       WHEN COALESCE("locationType", '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(description, '')
+            ~* '(farm|field|orchard|vineyard|granary|pasture)' THEN ARRAY['grain']
+       WHEN COALESCE("locationType", '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(description, '')
+            ~* '(forest|wood|lumber|grove|timber)' THEN ARRAY['timber']
+       WHEN COALESCE("locationType", '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(description, '')
+            ~* '(port|harbor|harbour|market|bazaar|caravan|trade|dock)' THEN ARRAY['trade']
+       WHEN COALESCE("locationType", '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(description, '')
+            ~* '(librar|archive|academy|temple|monaster|scriptorium|college)' THEN ARRAY['lore']
+       WHEN COALESCE("locationType", '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(description, '')
+            ~* '(city|capital)' THEN ARRAY['trade', 'grain']
+       ELSE ARRAY['grain']
+     END
+ WHERE cardinality("resourceSlots") = 0;
+
+-- ---------------------------------------------------------------------------
+-- #379: backfill LocationAdjacency for campaigns with no world graph.
+--
+-- Its only writer was reseedWorld.ts, reachable only through the
+-- lore-import pipeline, so every campaign created any other way had an
+-- EMPTY table while five subsystems read it — informationTick (hop distance
+-- for latency and distortion), npcTick (work-location selection),
+-- migrationTick, logisticsTick (supply routes) and ambitionResolution. All
+-- five fall back silently, so the absence was invisible.
+--
+-- Mirrors buildDefaultAdjacency: a connected ring plus chords at stride 3.
+-- A ring (not a full mesh) because collapsing every distance to one hop
+-- would make informationTick's latency model constant and its distortion
+-- tiers unreachable; chords (not a bare chain) so the diameter stays small
+-- enough for news to cross.
+--
+-- Only campaigns with NO edges at all are touched — an authored graph from
+-- imported lore is never overwritten or extended by this.
+-- ---------------------------------------------------------------------------
+WITH ordered AS (
+  SELECT
+    l."campaignId",
+    l.id,
+    ROW_NUMBER() OVER (PARTITION BY l."campaignId" ORDER BY l.id) - 1 AS idx,
+    COUNT(*) OVER (PARTITION BY l."campaignId") AS n
+  FROM "Location" l
+  WHERE NOT EXISTS (
+    SELECT 1 FROM "LocationAdjacency" a WHERE a."campaignId" = l."campaignId"
+  )
+),
+pairs AS (
+  -- Ring: every location to the next, wrapping.
+  SELECT a."campaignId", a.id AS id_a, b.id AS id_b, 1 AS distance
+    FROM ordered a
+    JOIN ordered b ON b."campaignId" = a."campaignId" AND b.idx = (a.idx + 1) % a.n
+   WHERE a.n >= 2 AND a.id <> b.id
+  UNION
+  -- Chords, only once the ring is long enough for them to shorten anything.
+  SELECT a."campaignId", a.id AS id_a, b.id AS id_b, 2 AS distance
+    FROM ordered a
+    JOIN ordered b ON b."campaignId" = a."campaignId" AND b.idx = (a.idx + 3) % a.n
+   WHERE a.n > 4 AND a.id <> b.id
+)
+INSERT INTO "LocationAdjacency" (id, "campaignId", "locationAId", "locationBId", distance, "createdAt")
+SELECT
+  gen_random_uuid(),
+  "campaignId",
+  -- Canonical ordering: locationAId is always the lexicographically
+  -- smaller id, matching the model's @@unique convention.
+  LEAST(id_a, id_b),
+  GREATEST(id_a, id_b),
+  MIN(distance),
+  NOW()
+FROM pairs
+GROUP BY "campaignId", LEAST(id_a, id_b), GREATEST(id_a, id_b)
+ON CONFLICT ("locationAId", "locationBId") DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- #410: make the entity caps observable.
+--
+-- Null means "no tick has reported yet", which is accurate for every
+-- existing row — there is nothing to backfill, because the information was
+-- never recorded anywhere to recover.
+-- ---------------------------------------------------------------------------
+ALTER TABLE "WorldMeta" ADD COLUMN IF NOT EXISTS "lastTickCapReport" JSONB;

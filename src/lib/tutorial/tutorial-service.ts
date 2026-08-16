@@ -352,9 +352,42 @@ export class TutorialService {
   }
 
   /**
+   * #411: make sure the tutorial's CONTENT exists before reading it.
+   *
+   * initializeTutorialSteps had ZERO callers — no seed script, no
+   * migration, nothing at campaign creation. So TutorialStep was never
+   * populated, and every piece of machinery around it (persisted
+   * completion tracking, prerequisites, the gates, the components) was
+   * tracking progress through an empty set. The render bug got fixed and
+   * the feature still had no content.
+   *
+   * Seeded lazily on read rather than from a deploy hook: the steps are
+   * GLOBAL (TutorialStep.stepKey is @unique with no campaignId), the
+   * initializer is upsert-based and therefore idempotent, and this way the
+   * tutorial self-heals on any environment — including ones already
+   * deployed with an empty table — without anyone remembering to run
+   * something.
+   *
+   * Cached per process so the common case is one boolean check, not a
+   * count query on every read.
+   */
+  private static stepsSeeded = false
+
+  static async ensureTutorialSteps(): Promise<void> {
+    if (TutorialService.stepsSeeded) return
+    const existing = await prisma.tutorialStep.count()
+    if (existing === 0) {
+      console.log('📚 Seeding tutorial steps (none found)')
+      await TutorialService.initializeTutorialSteps()
+    }
+    TutorialService.stepsSeeded = true
+  }
+
+  /**
    * Get user's tutorial progress
    */
   static async getUserProgress(userId: string) {
+    await TutorialService.ensureTutorialSteps();
     const allSteps = await prisma.tutorialStep.findMany({
       orderBy: { orderIndex: 'asc' },
       include: {
@@ -567,6 +600,9 @@ export class TutorialService {
    * Handle tutorial trigger events (e.g., "character_created", "action_submitted")
    */
   static async handleTriggerEvent(userId: string, trigger: string, metadata?: Record<string, any>) {
+    // #411: a trigger firing before anyone has opened the tutorial must
+    // still find its step.
+    await TutorialService.ensureTutorialSteps();
     // Find steps with this completion trigger
     const steps = await prisma.tutorialStep.findMany({
       where: { completionTrigger: trigger },

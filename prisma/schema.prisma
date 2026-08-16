@@ -1981,6 +1981,20 @@ model WorldMeta {
   // maxDuration is a real risk here — can't wedge a campaign forever.
   worldTurnRunningSince DateTime?
 
+  // #410: what the last world tick could NOT simulate.
+  //
+  // factionCap/npcCap bound how many entities a tick considers, and when
+  // they bite the excluded entities simply do not advance that turn —
+  // their state goes stale, not partial. Every cap in the engine was
+  // silent about this except the integrity engine's, which reports
+  // unrepaired items and fails safe. ARCHITECTURE.md conceded the gap in
+  // as many words: "no error, no log, no UI anywhere".
+  //
+  // A resource control that changes what is TRUE IN THE FICTION — a war
+  // whose participants missed the page does not progress — has to be
+  // observable. Shape: TickCapReport (game/tick/caps.ts).
+  lastTickCapReport Json?
+
   // Durable, monotonically-increasing total in-game hours since campaign
   // epoch (hour 0 = campaign creation) — unlike hoursSinceWorldTurn above,
   // this NEVER resets (that field is a pacing accumulator that zeroes out

@@ -114,6 +114,59 @@ describe('POST', () => {
     )
   })
 
+  // #399: what this route WRITES, asserted.
+  //
+  // $transaction was mocked as a bare vi.fn() and every existing test
+  // asserted only that it was or wasn't called — so `role: 'PLAYER'` in
+  // the route was asserted by NO test in 325 test files. Changing it to
+  // 'ADMIN' passed CI, and every invite link in the product became a
+  // privilege escalation. `increment: 1` had the same hole: flipping it to
+  // `decrement: 1` makes every invite infinitely reusable, silently.
+  //
+  // The general lesson is about the mock, not this route: an opaque
+  // $transaction makes the operations it wraps unobservable, so tests
+  // naturally end up asserting THAT it was called rather than WHAT it was
+  // asked to do — and the highest-blast-radius write path in the product
+  // happened to sit behind exactly that mock.
+  it('grants PLAYER, never a role the caller could pick or inherit', async () => {
+    db.campaignInvite.findUnique.mockResolvedValue(validInvite)
+    db.$transaction.mockResolvedValue([{ id: 'membership1' }])
+    db.campaignMembership.findMany.mockResolvedValue([])
+
+    await POST(postRequest(), { params: { token: 'tok123' } })
+
+    expect(db.campaignMembership.create).toHaveBeenCalledWith({
+      data: { userId: 'newplayer1', campaignId: 'camp1', role: 'PLAYER' },
+    })
+  })
+
+  it('increments the invite use count rather than decrementing it', async () => {
+    db.campaignInvite.findUnique.mockResolvedValue(validInvite)
+    db.$transaction.mockResolvedValue([{ id: 'membership1' }])
+    db.campaignMembership.findMany.mockResolvedValue([])
+
+    await POST(postRequest(), { params: { token: 'tok123' } })
+
+    expect(db.campaignInvite.update).toHaveBeenCalledWith({
+      where: { id: validInvite.id },
+      data: { uses: { increment: 1 } },
+    })
+  })
+
+  it('performs both writes inside ONE transaction', async () => {
+    // A membership created without the use count moving is a
+    // permanently-reusable invite; a use count moving without a membership
+    // is a burned invite that granted nothing.
+    db.campaignInvite.findUnique.mockResolvedValue(validInvite)
+    db.$transaction.mockResolvedValue([{ id: 'membership1' }])
+    db.campaignMembership.findMany.mockResolvedValue([])
+
+    await POST(postRequest(), { params: { token: 'tok123' } })
+
+    expect(db.$transaction).toHaveBeenCalledTimes(1)
+    expect(db.$transaction.mock.calls[0][0]).toHaveLength(2)
+  })
+
   it('does not notify the joiner themselves even if they somehow have admin role', async () => {
     db.campaignInvite.findUnique.mockResolvedValue(validInvite)
     db.$transaction.mockResolvedValue([{ id: 'membership1' }])

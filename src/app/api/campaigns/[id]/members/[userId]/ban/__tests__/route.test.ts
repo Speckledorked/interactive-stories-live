@@ -49,9 +49,19 @@ describe('POST (ban)', () => {
   })
 
   it('rejects a non-admin', async () => {
-    ;(requireCampaignAdmin as any).mockResolvedValue({ response: new Response(null, { status: 403 }) })
+    // #426, found by mutation audit: this used to assert only `status === 403`
+    // plus "the destructive call wasn't made". Deleting the admin gate
+    // entirely still passed BOTH — execution fell through to the
+    // "target is not a member" branch, which also returns 403 and also
+    // never reaches the write. The test could not tell an authorization
+    // failure from a target-not-found.
+    //
+    // Asserting identity with the gate's own Response object closes that:
+    // only a short-circuit at the gate can return this exact instance.
+    const denial = new Response(null, { status: 403 })
+    ;(requireCampaignAdmin as any).mockResolvedValue({ response: denial })
     const response = await POST(postRequest({ reason: 'trolling' }), { params: { id: 'camp1', userId: 'user2' } })
-    expect(response.status).toBe(403)
+    expect(response).toBe(denial)
     expect(SafetyService.banUserFromCampaign).not.toHaveBeenCalled()
   })
 
@@ -102,9 +112,19 @@ describe('POST (ban)', () => {
 
 describe('DELETE (unban)', () => {
   it('rejects a non-admin', async () => {
-    ;(requireCampaignAdmin as any).mockResolvedValue({ response: new Response(null, { status: 403 }) })
+    // #426, found by mutation audit: this used to assert only `status === 403`
+    // plus "the destructive call wasn't made". Deleting the admin gate
+    // entirely still passed BOTH — execution fell through to the
+    // "target is not a member" branch, which also returns 403 and also
+    // never reaches the write. The test could not tell an authorization
+    // failure from a target-not-found.
+    //
+    // Asserting identity with the gate's own Response object closes that:
+    // only a short-circuit at the gate can return this exact instance.
+    const denial = new Response(null, { status: 403 })
+    ;(requireCampaignAdmin as any).mockResolvedValue({ response: denial })
     const response = await DELETE(deleteRequest(), { params: { id: 'camp1', userId: 'user2' } })
-    expect(response.status).toBe(403)
+    expect(response).toBe(denial)
     expect(SafetyService.unbanUserFromCampaign).not.toHaveBeenCalled()
   })
 

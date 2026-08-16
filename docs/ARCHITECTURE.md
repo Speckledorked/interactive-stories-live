@@ -251,15 +251,25 @@ means a weakness that was measured and consciously taken, with the date and
 the reasoning; those are closed, and re-litigating one needs a new argument,
 not a new issue. An entry with neither tag is a bug in this list.
 
-- **Open (#426)** — API route test coverage now covers <!-- derived:apiRouteCount=112 -->all 112 routes (#135's final
+- **Open (#426)** — API route test coverage covers <!-- derived:apiRouteCount=112 -->all 112 routes (#135's final
   batches closed out the base list/create endpoints — campaigns,
   characters, factions, locations, members, notes, npcs, scenes,
-  friends, friends/requests — plus admin/analytics). Coverage depth is
-  still uneven: the highest-risk routes (fog-of-war reads, money/state/
-  access-mutating writes) got the most scrutiny, while the last tiers
-  covered mostly gate + shape assertions rather than exhaustive
-  behavior. 100% file coverage is not the same claim as 100% behavior
-  coverage — see the Scorecard row for what's actually asserted.
+  friends, friends/requests — plus admin/analytics). Depth is no longer
+  a prose caveat: `routeCoverageTier.test.ts` derives it.
+  <!-- derived:highRiskRouteCount=48 -->48 routes are HIGH RISK — they
+  mutate, and touch money, access control, or state owned by someone other
+  than the caller — and every one of them is checked to assert something
+  beyond its status code, because an auth gate proves nobody anonymous got
+  in and nothing about what the route wrote. That check is #399 turned into
+  a mechanism: the invite-join route granted a role no test looked at, so
+  `'ADMIN'` would have shipped green.
+  <!-- derived:behavioralRouteCount=108 -->108 of the 112 carry a
+  behavioral assertion. This entry's own earlier wording — "the last tiers
+  covered mostly gate + shape assertions" — was PESSIMISTIC rather than
+  merely vague; only four routes are gate-and-shape only, and none of them
+  are high-risk. Still Open because the risk predicate is a heuristic over
+  route source, and "asserts more than a status code" is a floor, not a
+  guarantee of exhaustive behavior.
 - **Open (#427)** — Admin tooling was mostly thin CRUD; every world-entity tab (NPCs,
   Factions, Locations, Clocks, Wars) now extends the tick dry-run
   preview's "show your reasoning" pattern (#94/#126) — a per-entity

@@ -20,8 +20,8 @@ import { GET } from '../route'
 
 const db = prisma as any
 
-function req() {
-  return new NextRequest('http://localhost/api/campaigns/camp1/wars/reasoning')
+function req(query = '') {
+  return new NextRequest(`http://localhost/api/campaigns/camp1/wars/reasoning${query}`)
 }
 
 beforeEach(() => {
@@ -130,5 +130,73 @@ describe('GET /campaigns/[id]/wars/reasoning', () => {
     const body = await response.json()
 
     expect(body.wars.map((w: any) => w.warId)).toEqual(['war1', 'war2'])
+  })
+})
+
+describe('what-if overrides (#427)', () => {
+  const TWO_WARS = [
+    {
+      id: 'war1', name: 'The Border Dispute', momentum: 10, startedTurn: 5,
+      attacker: { name: 'Ironveil Guild' }, defender: { name: 'Free Merchants' },
+      participants: [
+        { side: 'ATTACKER', faction: { military: 60, isActive: true } },
+        { side: 'DEFENDER', faction: { military: 40, isActive: true } },
+      ],
+    },
+    {
+      id: 'war2', name: 'The Siege', momentum: -20, startedTurn: 2,
+      attacker: { name: 'A' }, defender: { name: 'B' },
+      participants: [
+        { side: 'ATTACKER', faction: { military: 30, isActive: true } },
+        { side: 'DEFENDER', faction: { military: 70, isActive: true } },
+      ],
+    },
+  ]
+
+  beforeEach(() => {
+    db.war.findMany.mockResolvedValue(TWO_WARS)
+  })
+
+  it('writes nothing', async () => {
+    await GET(req('?warId=war1&momentum=90'), { params: { id: 'camp1' } })
+
+    for (const model of Object.values(db)) {
+      for (const [name, fn] of Object.entries(model as Record<string, unknown>)) {
+        if (/^(create|update|upsert|delete)/.test(name)) {
+          expect(fn, `route called ${name} during a what-if`).not.toHaveBeenCalled()
+        }
+      }
+    }
+  })
+
+  it('applies the override ONLY to the war that was named', async () => {
+    // This route is campaign-wide. Without the warId scope an admin asking
+    // about one siege would get every war on the board rewritten, with
+    // nothing saying which answers were fiction.
+    const body = await (await GET(req('?warId=war1&attackerMilitaryTotal=500'), { params: { id: 'camp1' } })).json()
+
+    const war1 = body.wars.find((w: { warId: string }) => w.warId === 'war1')
+    const war2 = body.wars.find((w: { warId: string }) => w.warId === 'war2')
+
+    expect(war1.attackerMilitaryTotal).toBe(500)
+    expect(war1.whatIf.overridden).toEqual(['attackerMilitaryTotal'])
+    expect(war2.attackerMilitaryTotal).toBe(30)
+    expect(war2.whatIf.overridden).toEqual([])
+  })
+
+  it('accepts a negative momentum, matching the DB CHECK range', async () => {
+    // War_momentum_range is -100..100. A stat-band 0..100 would have
+    // rejected exactly half the legal values.
+    const body = await (await GET(req('?warId=war1&momentum=-80'), { params: { id: 'camp1' } })).json()
+
+    expect(body.wars.find((w: { warId: string }) => w.warId === 'war1').whatIf.overridden).toEqual(['momentum'])
+  })
+
+  it('ignores overrides when no war was named', async () => {
+    const body = await (await GET(req('?momentum=90'), { params: { id: 'camp1' } })).json()
+
+    for (const war of body.wars) {
+      expect(war.whatIf.overridden).toEqual([])
+    }
   })
 })

@@ -22,8 +22,8 @@ import { GET } from '../route'
 
 const db = prisma as any
 
-function req() {
-  return new NextRequest('http://localhost/api/campaigns/camp1/npcs/npc1/reasoning')
+function req(query = '') {
+  return new NextRequest(`http://localhost/api/campaigns/camp1/npcs/npc1/reasoning${query}`)
 }
 
 beforeEach(() => {
@@ -97,5 +97,48 @@ describe('GET /campaigns/[id]/npcs/[npcId]/reasoning', () => {
     if (body.decision.nextLocation) {
       expect(['Home', 'Work']).toContain(body.decision.nextLocation)
     }
+  })
+})
+
+describe('what-if overrides (#427)', () => {
+  const NPC = {
+    id: 'npc1', name: 'Elder Rowan', goals: 'Rebuild the shrine',
+    relationship: null, currentLocation: null, goalProgress: 10, faction: null,
+  }
+
+  beforeEach(() => {
+    db.nPC.findFirst.mockResolvedValue({ ...NPC })
+    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.location.findMany.mockResolvedValue([])
+    db.locationAdjacency.findMany.mockResolvedValue([])
+  })
+
+  it('writes nothing', async () => {
+    await GET(req('?goalProgress=90'), { params: { id: 'camp1', npcId: 'npc1' } })
+
+    for (const model of Object.values(db)) {
+      for (const [name, fn] of Object.entries(model as Record<string, unknown>)) {
+        if (/^(create|update|upsert|delete)/.test(name)) {
+          expect(fn, `route called ${name} during a what-if`).not.toHaveBeenCalled()
+        }
+      }
+    }
+  })
+
+  it('projects from an overridden goal progress', async () => {
+    // goalProgress accumulates from the tick itself, so "is this NPC about
+    // to finish?" previously needed the turn that answers it.
+    const early = await (await GET(req('?goalProgress=0'), { params: { id: 'camp1', npcId: 'npc1' } })).json()
+    const late = await (await GET(req('?goalProgress=95'), { params: { id: 'camp1', npcId: 'npc1' } })).json()
+
+    expect(late.decision.newGoalProgress).toBeGreaterThan(early.decision.newGoalProgress)
+    expect(late.whatIf.overridden).toEqual(['goalProgress'])
+    expect(late.whatIf.actual.goalProgress).toBe(10)
+  })
+
+  it('is inert without params', async () => {
+    const body = await (await GET(req(), { params: { id: 'camp1', npcId: 'npc1' } })).json()
+
+    expect(body.whatIf.overridden).toEqual([])
   })
 })

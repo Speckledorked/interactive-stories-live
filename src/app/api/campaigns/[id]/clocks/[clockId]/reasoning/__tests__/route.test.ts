@@ -21,8 +21,8 @@ import { GET } from '../route'
 
 const db = prisma as any
 
-function req() {
-  return new NextRequest('http://localhost/api/campaigns/camp1/clocks/clock1/reasoning')
+function req(query = '') {
+  return new NextRequest(`http://localhost/api/campaigns/camp1/clocks/clock1/reasoning${query}`)
 }
 
 function baseClock(overrides: Record<string, unknown> = {}) {
@@ -108,5 +108,53 @@ describe('GET /campaigns/[id]/clocks/[clockId]/reasoning', () => {
     await GET(req(), { params: { id: 'camp1', clockId: 'clock1' } })
 
     expect(db.faction.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('what-if overrides (#427)', () => {
+  const CLOCK = {
+    id: 'clock1', name: 'The Siege', category: 'default', currentTicks: 2, maxTicks: 8,
+    sourceFactionId: null, relatedFactionId: null, participantNpcIds: [],
+  }
+
+  beforeEach(() => {
+    db.clock.findFirst.mockResolvedValue({ ...CLOCK })
+  })
+
+  it('writes nothing', async () => {
+    await GET(req('?tension=95'), { params: { id: 'camp1', clockId: 'clock1' } })
+
+    for (const model of Object.values(db)) {
+      for (const [name, fn] of Object.entries(model as Record<string, unknown>)) {
+        if (/^(create|update|upsert|delete)/.test(name)) {
+          expect(fn, `route called ${name} during a what-if`).not.toHaveBeenCalled()
+        }
+      }
+    }
+  })
+
+  it('projects from an overridden tension', async () => {
+    // Tension is the only explainClockAdvancement input a GM cannot set
+    // anywhere in the app — it is derived from live state. "Would this move
+    // faster if the campaign were tenser?" was unanswerable before this.
+    const calm = await (await GET(req('?tension=0'), { params: { id: 'camp1', clockId: 'clock1' } })).json()
+    const dire = await (await GET(req('?tension=100'), { params: { id: 'camp1', clockId: 'clock1' } })).json()
+
+    expect(dire.projectedAdvance).toBeGreaterThanOrEqual(calm.projectedAdvance)
+    expect(dire.whatIf.overridden).toEqual(['tension'])
+  })
+
+  it('projects ticks from an overridden currentTicks', async () => {
+    const body = await (await GET(req('?currentTicks=7'), { params: { id: 'camp1', clockId: 'clock1' } })).json()
+
+    expect(body.clock.currentTicks).toBe(7)
+    expect(body.whatIf.actual.currentTicks).toBe(2)
+  })
+
+  it('rejects an out-of-range override and keeps the real value', async () => {
+    const body = await (await GET(req('?tension=500'), { params: { id: 'camp1', clockId: 'clock1' } })).json()
+
+    expect(body.whatIf.overridden).toEqual([])
+    expect(body.whatIf.rejected).toHaveLength(1)
   })
 })

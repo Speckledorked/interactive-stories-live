@@ -12,6 +12,15 @@ import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { decideNpcTick } from '@/lib/game/tick/npcTick'
 import type { AdjacencyEdge } from '@/lib/game/worldGraph'
 import { visibleTo } from '@/lib/api/visibility'
+import { applyWhatIf, type WhatIfSpec } from '@/lib/api/whatIf'
+
+/**
+ * #427: goalProgress is the one numeric input decideNpcTick reads that a
+ * GM has no direct control over — it accumulates from the tick itself. "Is
+ * this NPC about to finish what they're doing?" was unanswerable without
+ * waiting for the turn that answers it.
+ */
+const NPC_WHAT_IF: WhatIfSpec = { goalProgress: { min: 0, max: 100 } }
 
 export async function GET(
   request: NextRequest,
@@ -61,12 +70,21 @@ export async function GET(
     const locationGraph = { idByName: locationIdByName, edges: adjacencyRows as AdjacencyEdge[] }
     const factionContext = npc.faction?.isActive ? { name: npc.faction.name, goal: npc.faction.goal } : null
 
-    const decision = decideNpcTick(npc, worldMeta.currentTurnNumber, discoveredLocationNames, factionContext, locationGraph)
+    // #427: overlaid before the decision runs.
+    const whatIf = applyWhatIf(npc, request.nextUrl.searchParams, NPC_WHAT_IF)
+    const projected = whatIf.snapshot
+
+    const decision = decideNpcTick(projected, worldMeta.currentTurnNumber, discoveredLocationNames, factionContext, locationGraph)
 
     return NextResponse.json({
       npc: { id: npc.id, name: npc.name },
       turnNumber: worldMeta.currentTurnNumber,
       decision,
+      whatIf: {
+        overridden: whatIf.overridden,
+        rejected: whatIf.rejected,
+        actual: { goalProgress: npc.goalProgress },
+      },
     })
   } catch (error) {
     console.error('NPC reasoning preview error:', error)

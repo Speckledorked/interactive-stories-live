@@ -11,6 +11,27 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { explainWarMomentum } from '@/lib/game/tick/warTick'
+import { applyWhatIf, type WhatIfSpec } from '@/lib/api/whatIf'
+
+/**
+ * #427: war what-ifs, scoped to ONE war by `warId`.
+ *
+ * This route is campaign-wide, so a bare override would silently apply to
+ * every war at once — an admin asking about one siege would get four
+ * rewritten answers and no signal that three of them were fiction. The
+ * `warId` param is what keeps the hypothetical addressable.
+ *
+ * The military figures are SUMS over each side's active participants, so
+ * they are not stat-band values and get their own ceiling. Momentum matches
+ * the DB CHECK (`War_momentum_range`, -100..100) rather than a guess — a
+ * preview of a momentum the column could never hold is a preview of
+ * nothing.
+ */
+const WAR_WHAT_IF: WhatIfSpec = {
+  momentum: { min: -100, max: 100 },
+  attackerMilitaryTotal: { min: 0, max: 10_000 },
+  defenderMilitaryTotal: { min: 0, max: 10_000 },
+}
 
 // #224: a hard backstop, not a tuned precision cap — realistic campaign
 // scale (10-20 factions per the app's real tick caps) makes anywhere near
@@ -55,17 +76,32 @@ export async function GET(
       take: ESCALATING_WARS_ROW_CAP,
     })
 
+    const whatIfWarId = request.nextUrl.searchParams.get('warId')
+
     const wars = escalatingWars.map((war) => {
       const attackerSide = war.participants.filter((p) => p.side === 'ATTACKER' && p.faction.isActive)
       const defenderSide = war.participants.filter((p) => p.side === 'DEFENDER' && p.faction.isActive)
       const attackerMilitaryTotal = attackerSide.reduce((sum, p) => sum + p.faction.military, 0)
       const defenderMilitaryTotal = defenderSide.reduce((sum, p) => sum + p.faction.military, 0)
+
+      // Only the war the admin actually named. Every other war on the board
+      // keeps its real numbers, so a hypothetical can never be mistaken for
+      // a campaign-wide change.
+      const targeted = whatIfWarId === war.id
+      const projection = targeted
+        ? applyWhatIf(
+            { momentum: war.momentum, attackerMilitaryTotal, defenderMilitaryTotal },
+            request.nextUrl.searchParams,
+            WAR_WHAT_IF
+          )
+        : null
+
       const explanation = explainWarMomentum(
-        { id: war.id, momentum: war.momentum, startedTurn: war.startedTurn },
+        { id: war.id, momentum: projection?.snapshot.momentum ?? war.momentum, startedTurn: war.startedTurn },
         war.attacker.name,
-        attackerMilitaryTotal,
+        projection?.snapshot.attackerMilitaryTotal ?? attackerMilitaryTotal,
         war.defender.name,
-        defenderMilitaryTotal,
+        projection?.snapshot.defenderMilitaryTotal ?? defenderMilitaryTotal,
         turnNumber
       )
       return {
@@ -73,9 +109,14 @@ export async function GET(
         name: war.name,
         attackerName: war.attacker.name,
         defenderName: war.defender.name,
-        attackerMilitaryTotal,
-        defenderMilitaryTotal,
+        attackerMilitaryTotal: projection?.snapshot.attackerMilitaryTotal ?? attackerMilitaryTotal,
+        defenderMilitaryTotal: projection?.snapshot.defenderMilitaryTotal ?? defenderMilitaryTotal,
         ...explanation,
+        whatIf: {
+          overridden: projection?.overridden ?? [],
+          rejected: projection?.rejected ?? [],
+          actual: { momentum: war.momentum, attackerMilitaryTotal, defenderMilitaryTotal },
+        },
       }
     })
 

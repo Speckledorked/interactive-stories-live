@@ -4,8 +4,8 @@
 
 The simulation core (`src/lib/game/tick/*`, `src/lib/game/integrity/*`, and
 anywhere else a decision isn't self-evident from the code around it) already
-does this informally: comments referencing "World Sim Phase N," a README
-Priority List item number, or a GitHub issue ("fixes #86"). This section
+does this informally: comments referencing "World Sim Phase N," a Priority
+List item number, or a GitHub issue ("fixes #86"). This section
 makes that convention explicit rather than leaving it to be picked up by
 osmosis from existing comments.
 
@@ -18,7 +18,8 @@ came from, in whichever form is actually traceable:
 - A commit that fixed something: `fixes #92` (matches this repo's existing
   commit-message convention, so `git log --grep` finds both at once)
 - A named phase from the project plan: `Phase 0`, `Phase 1d`, `Phase 4`
-- A README Priority List or Known Bugs entry, if there's no issue for it
+- A `docs/ARCHITECTURE.md` Priority List or Fix Log entry, if there's no
+  issue for it
 
 Do **not** invent a new ticket-numbering scheme (e.g. `MYTH-076`) — this repo
 tracks work in GitHub Issues already, and a second, parallel ID space would
@@ -34,6 +35,9 @@ a future reader to wonder whether it's safe to change.
 
 ## Everything else
 
-See `README.md` for the project's actual architecture, current state, and
-priority list — this file is intentionally just the one convention above,
-not a general engineering guide.
+See `docs/ARCHITECTURE.md` for the project's actual architecture, current
+state, Fix Log and Priority List — this file is intentionally just the one
+convention above, not a general engineering guide. (`README.md` is setup and
+quickstart only; it has never held any of those, which is how #424's 22
+dangling "README Known Bugs" citations came about — this line used to point
+there.)

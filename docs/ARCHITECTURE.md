@@ -264,8 +264,14 @@ of the three tags is a bug in this list.
   `CapabilityPrerequisite` edge rows, backfilled from every existing
   `parentId` before the column was dropped. Acyclicity needed no new cycle
   check: `resolvePrerequisiteLinks` only links a strictly-lower-tier
-  prerequisite, so every edge decreases tier, which holds for many
-  prerequisites exactly as it did for one. Still not deep: tier depth is
+  prerequisite, so every edge IT creates decreases tier, which holds for
+  many prerequisites exactly as it did for one. That was originally written
+  as though it covered the whole graph, and it does not — the narrated-node
+  path in `applyCapabilityChanges` creates an edge with no tier comparison.
+  Acyclicity holds there by a second, equally structural property: the edge
+  is created in the same statement as the node, and a node that did not
+  exist a moment ago has no incoming edges, so an edge out of it cannot
+  close a cycle. Both are now stated and tested. Still not deep: tier depth is
   whatever generation produces, and nothing checks that a domain's graph is
   reachable end to end.
 - **Resolved (#373)** — `NPC.socialTies` and `Faction.relationships` were

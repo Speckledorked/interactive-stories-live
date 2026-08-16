@@ -53,14 +53,39 @@ export const MAX_DIGEST_LINES = 3
  * this set is keyed on the type rather than on "does this id happen to be
  * in the set".
  */
-export const DISCOVERY_GATED_ENTITY_TYPES: ReadonlySet<TickEntityType> = new Set<TickEntityType>([
-  'NPC',
-  'FACTION',
-  'LOCATION',
-  'LOCATION_WEATHER',
-  'LOCATION_CONDITION',
-  'LOCATION_POPULATION',
-])
+/**
+ * Each gated entity type, and the model whose discovered rows supply the
+ * ids it is checked against.
+ *
+ * The gate and the id set are derived from this ONE table on purpose. They
+ * used to be two independent lists, and #432 changed one without the
+ * other: it added the LOCATION* types to the gate and left the id set
+ * built from factions and NPCs only, so every location change began
+ * failing a check against a set that could never contain it. That inverted
+ * the leak into a total blackout, and made the weatherLines generator
+ * written in the same commit unreachable.
+ *
+ * Adding a type here now brings its id source with it, because there is
+ * only one place to add it.
+ */
+const DISCOVERY_SOURCE_BY_ENTITY_TYPE = {
+  NPC: 'nPC',
+  FACTION: 'faction',
+  LOCATION: 'location',
+  LOCATION_WEATHER: 'location',
+  LOCATION_CONDITION: 'location',
+  LOCATION_POPULATION: 'location',
+} as const satisfies Partial<Record<TickEntityType, 'nPC' | 'faction' | 'location'>>
+
+/** The models to query for discovered ids — deduplicated, since the four
+ * LOCATION* types all resolve through Location. */
+export const DISCOVERY_SOURCE_MODELS = [
+  ...new Set(Object.values(DISCOVERY_SOURCE_BY_ENTITY_TYPE)),
+] as Array<'nPC' | 'faction' | 'location'>
+
+export const DISCOVERY_GATED_ENTITY_TYPES: ReadonlySet<TickEntityType> = new Set(
+  Object.keys(DISCOVERY_SOURCE_BY_ENTITY_TYPE) as TickEntityType[]
+)
 
 /**
  * Pure: which tick changes are digest-worthy. MAJOR + significant only
@@ -437,21 +462,23 @@ export async function sendWorldDigest(
     // those two types model discovery at all — see
     // DISCOVERY_GATED_ENTITY_TYPES for why building this set was not the
     // bug, and testing every change against it was.
-    const [factions, npcs, members] = await Promise.all([
-      prisma.faction.findMany({
-        where: { campaignId, isDiscovered: true },
-        select: { id: true },
-      }),
-      prisma.nPC.findMany({
-        where: { campaignId, isDiscovered: true },
-        select: { id: true },
-      }),
+    // Driven off DISCOVERY_SOURCE_MODELS rather than a hand-written list,
+    // so a type added to the gate cannot be missing its ids here.
+    const [idSets, members] = await Promise.all([
+      Promise.all(
+        DISCOVERY_SOURCE_MODELS.map(model =>
+          (prisma[model] as { findMany: (args: unknown) => Promise<Array<{ id: string }>> }).findMany({
+            where: { campaignId, isDiscovered: true },
+            select: { id: true },
+          })
+        )
+      ),
       prisma.campaignMembership.findMany({
         where: { campaignId },
         select: { userId: true },
       }),
     ])
-    const discovered = new Set([...factions.map(f => f.id), ...npcs.map(n => n.id)])
+    const discovered = new Set(idSets.flat().map(row => row.id))
 
     const selected = selectDigestChanges(changes, discovered)
     if (selected.length === 0 || members.length === 0) return 0

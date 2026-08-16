@@ -724,3 +724,103 @@ describe('prerequisiteUnlockBlocked — narrated roots (#386)', () => {
     expect(prerequisiteUnlockBlocked({ prerequisiteIds: [], isNarrated: true }, [])).toBe(false)
   })
 })
+
+
+describe('capabilityEdgeAcyclicity — both invariants, stated (C-15)', () => {
+  // The audit's finding: the repo claimed ONE property ("every edge
+  // strictly decreases tier") and relied on TWO. The second was real but
+  // unstated and untested, which makes it exactly the kind of thing a
+  // later refactor removes without noticing.
+
+  it('resolvePrerequisiteLinks never emits an edge that does not decrease tier', () => {
+    // Property one, over a deliberately adversarial scaffold: equal tiers,
+    // inverted tiers, and a self-reference all present.
+    const nodes = [
+      { key: 'a', name: 'A', domain: 'D', tier: 1 },
+      { key: 'b', name: 'B', domain: 'D', tier: 1, requires: 'A' },       // equal tier
+      { key: 'c', name: 'C', domain: 'D', tier: 2, requires: 'A' },       // legal
+      { key: 'd', name: 'D2', domain: 'D', tier: 1, requires: 'C' },      // higher tier
+      { key: 'e', name: 'E', domain: 'D', tier: 3, requires: 'E' },       // itself
+    ]
+    const tierByKey = new Map(nodes.map(n => [n.key, n.tier]))
+
+    for (const link of resolvePrerequisiteLinks(nodes)) {
+      expect(tierByKey.get(link.prerequisiteKey)!).toBeLessThan(tierByKey.get(link.key)!)
+    }
+  })
+
+  it('the narrated path only ever creates an edge OUT of the node it just minted', async () => {
+    // Property two — the one that actually carries acyclicity for narrated
+    // nodes, since they take the schema default tier and their inherited
+    // prerequisite is a domain root that may sit at the same tier. A node
+    // that did not exist a moment ago has no incoming edges, so an edge
+    // out of it cannot close a cycle.
+    const db = {
+      campaignCapability: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        findUnique: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'root-1', tier: 1, isShadow: false, _count: { prerequisites: 0 } },
+        ]),
+        create: vi.fn(async ({ data }: any) => ({ id: 'brand-new', ...data })),
+      },
+      characterCapability: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+        create: vi.fn().mockResolvedValue({}),
+        upsert: vi.fn().mockResolvedValue({}),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      capabilityPrerequisite: { findMany: vi.fn().mockResolvedValue([]) },
+      character: { findUnique: vi.fn().mockResolvedValue({ corruption: 0 }) },
+    }
+
+    await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'blood-runes', change: 'glimpse', is_new: true, name: 'Blood Runes', domain: 'Forbidden Arts', reason: 'saw it' },
+    ], 3)
+
+    const created = db.campaignCapability.create.mock.calls[0][0] as any
+    const edges = created.data.prerequisites?.create ?? []
+    expect(edges.length).toBeGreaterThan(0)
+    // Every edge is nested under the new node's own create, so the new node
+    // is necessarily the dependent side. Nothing here can point INTO it.
+    for (const edge of edges) {
+      expect(edge).toHaveProperty('prerequisiteCapabilityId')
+      expect(edge).not.toHaveProperty('capabilityId')
+    }
+  })
+
+  it('declines to inherit a prerequisite when the domain root is ambiguous', async () => {
+    // Two roots means no unambiguous footing, and guessing one would be
+    // inventing a position in the graph. It stays a root instead.
+    const db = {
+      campaignCapability: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        findUnique: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'root-1', tier: 1, isShadow: false, _count: { prerequisites: 0 } },
+          { id: 'root-2', tier: 1, isShadow: false, _count: { prerequisites: 0 } },
+        ]),
+        create: vi.fn(async ({ data }: any) => ({ id: 'brand-new', ...data })),
+      },
+      characterCapability: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+        create: vi.fn().mockResolvedValue({}),
+        upsert: vi.fn().mockResolvedValue({}),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      capabilityPrerequisite: { findMany: vi.fn().mockResolvedValue([]) },
+      character: { findUnique: vi.fn().mockResolvedValue({ corruption: 0 }) },
+    }
+
+    await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'blood-runes', change: 'glimpse', is_new: true, name: 'Blood Runes', domain: 'Forbidden Arts', reason: 'saw it' },
+    ], 3)
+
+    const created = db.campaignCapability.create.mock.calls[0][0] as any
+    expect(created.data.prerequisites).toBeUndefined()
+  })
+})

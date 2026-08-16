@@ -244,7 +244,14 @@ Verified functional, end to end, as of this rewrite:
 
 Partial or weak, and honestly so:
 
-- API route test coverage now covers <!-- derived:apiRouteCount=112 -->all 112 routes (#135's final
+Two kinds of entry live here and they are not the same thing, so each is
+tagged. **Open** means real, unfinished work with an issue tracking it —
+this list is not where such work goes to be quietly accepted. **Decided**
+means a weakness that was measured and consciously taken, with the date and
+the reasoning; those are closed, and re-litigating one needs a new argument,
+not a new issue. An entry with neither tag is a bug in this list.
+
+- **Open (#426)** — API route test coverage now covers <!-- derived:apiRouteCount=112 -->all 112 routes (#135's final
   batches closed out the base list/create endpoints — campaigns,
   characters, factions, locations, members, notes, npcs, scenes,
   friends, friends/requests — plus admin/analytics). Coverage depth is
@@ -253,16 +260,22 @@ Partial or weak, and honestly so:
   covered mostly gate + shape assertions rather than exhaustive
   behavior. 100% file coverage is not the same claim as 100% behavior
   coverage — see the Scorecard row for what's actually asserted.
-- Admin tooling was mostly thin CRUD; every world-entity tab (NPCs,
+- **Open (#427)** — Admin tooling was mostly thin CRUD; every world-entity tab (NPCs,
   Factions, Locations, Clocks, Wars) now extends the tick dry-run
   preview's "show your reasoning" pattern (#94/#126) — a per-entity
   `/reasoning` route (or, for Wars, one campaign-wide route) backed by
   the same pure decide/explain functions the real tick uses. Reasoning
   previews are still read-only projections, not an editable simulator.
-- AI response validation has a bounded repair round-trip and a
-  section-by-section salvage ladder. The contract stays basic JSON mode —
-  decided against switching to strict structured outputs (2026-08-02),
-  rather than leave it open pending a live API check.
+- **Decided (2026-08-02)** — AI response validation has a bounded repair
+  round-trip and a section-by-section salvage ladder. The contract stays
+  basic JSON mode: `response_format: { type: 'json_object' }` guarantees
+  parseable JSON, not schema conformance, which is weaker than strict
+  structured outputs and is why the repair ladder exists at all. Switching
+  was considered and declined rather than left open pending a live API
+  check. Listed here because the weakness is real and a reader should know
+  the contract; NOT listed as work, because the ladder is the mitigation and
+  it is tested (`validation.ts`, and #388's emergency-tier rules on what
+  does and does not survive a salvage).
 
 ## Scorecard
 
@@ -590,7 +603,7 @@ tick dry-run preview's reasoning pattern to the faction/NPC tabs, checking
 whether `computeTension` should weight Environmental aging/Economic
 Contagion, the individual NPC/faction/location PATCH/DELETE + friend-
 request + turn-order test-coverage gap, broadening API route test
-coverage to every route (104/104, #93/#134/#135), and the dynamic-downtime
+coverage to every route (#93/#134/#135), and the dynamic-downtime
 ownership gap that same sweep surfaced — that used to be items 2, 6, 7, 4,
 3, 2, 5, 3, 3, part of 2, 2 again, and 2 a third time here — are all
 resolved (the admin-tooling item only partially — see its Scorecard row
@@ -704,7 +717,7 @@ Partial implementation exists in the codebase today.
   Scene illustration (#96, a separate per-campaign toggle) shares the same
   underlying image model and Blob storage path but has not been
   independently tested — likely also resolved, not yet confirmed.
-- **API route test coverage** — every one of the 111 routes now has a
+- **API route test coverage** — every one of the 112 routes now has a
   dedicated test file (#93 → #134 → #135, ending with the base
   list/create endpoints and admin/analytics). File-complete, not
   behavior-complete: the highest-risk routes got real behavioral

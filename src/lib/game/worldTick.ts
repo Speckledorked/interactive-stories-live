@@ -48,7 +48,7 @@ import { logSignificantChanges } from './tick/historyLog'
 import { syncWikiEntriesForChanges } from './tick/wikiSync'
 import { persistWorldEvents } from './tick/worldEventLog'
 import { TickContext, TickHandler, WorldChange, WorldTickResult, PendingAmbition } from './tick/types'
-import { resolveTickCaps, type TickCapReport } from './tick/caps'
+import { resolveTickCaps, DEFAULT_FACTION_CAP, DEFAULT_NPC_CAP, type TickCapReport } from './tick/caps'
 import { resolveTickRoster, markRosterTicked } from './tick/capOrdering'
 import { deriveSeason, GeneratedCalendar } from './calendar'
 
@@ -190,6 +190,37 @@ const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFac
 const TICK_TRANSACTION_TIMEOUT_MS = 20_000
 
 /**
+ * #407: the transaction budget scales with the roster it has to get
+ * through.
+ *
+ * The 20s above was flat, while caps.ts allows an admin to raise
+ * factionCap/npcCap to 5x the defaults — and caps.ts's own comment already
+ * identifies that mismatch as the problem: a campaign whose caps are raised
+ * far enough blows the budget and the ENTIRE world turn is lost (it fails
+ * safe, but the turn does not happen).
+ *
+ * Scaled against the defaults so a default campaign is unchanged, and
+ * clamped so a raised cap cannot buy an unbounded transaction — the point
+ * is to keep a legitimately larger roster inside its budget, not to let a
+ * stuck handler hang the whole cron sweep.
+ */
+function tickTimeoutFor(factionCap: number, npcCap: number): number {
+  const rosterRatio = Math.max(
+    1,
+    (factionCap + npcCap) / (DEFAULT_FACTION_CAP + DEFAULT_NPC_CAP)
+  )
+  return Math.min(TICK_TRANSACTION_TIMEOUT_MS * rosterRatio, MAX_TICK_TRANSACTION_TIMEOUT_MS)
+}
+
+/**
+ * Hard ceiling regardless of caps. The cron sweep's own per-invocation
+ * budget is what this must stay well inside — a tick allowed to run longer
+ * than the sweep can wait would be killed mid-turn anyway, which is
+ * strictly worse than failing fast.
+ */
+const MAX_TICK_TRANSACTION_TIMEOUT_MS = 60_000
+
+/**
  * Run one deterministic world tick for a campaign.
  *
  * Cadence: paced by IN-GAME time — runWorldTurnIfDue only invokes
@@ -328,7 +359,7 @@ export async function runWorldTick(
     // The real tick: one transaction across every handler, so a failure
     // partway through (a thrown error, a violated constraint) leaves no
     // partial state instead of committing whatever ran before the failure.
-    await prisma.$transaction(runHandlers, { timeout: TICK_TRANSACTION_TIMEOUT_MS })
+    await prisma.$transaction(runHandlers, { timeout: tickTimeoutFor(factionCap, npcCap) })
   }
 
   // Dry run (World Sim Phase 8 debug tooling): every handler above already

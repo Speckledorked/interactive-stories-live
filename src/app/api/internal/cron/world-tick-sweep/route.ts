@@ -7,6 +7,7 @@
 // Vercel invokes this route with `Authorization: Bearer $CRON_SECRET`.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { pruneCampaignHistory } from '@/lib/game/retention'
 import { sweepWorldTurnsForAllCampaigns } from '@/lib/game/worldTurnSweep'
 import { sweepGloballyStuckResolutionJobs } from '@/lib/game/resolutionQueue'
 import { TurnTracker } from '@/lib/notifications/turn-tracker'
@@ -67,5 +68,35 @@ export async function GET(request: NextRequest) {
     `${result.failed} failed, ${result.skippedAtCap} deferred to tomorrow`
   )
 
-  return NextResponse.json(result)
+  // #408: prune the oldest event history for whatever this sweep actually
+  // ticked.
+  //
+  // Eighteen append-only tables had zero delete sites between them, and
+  // WorldEvent is not merely storage — beliefTick/npcDispositionTick derive
+  // drift by COUNTING prior-turn rows, so it is a hot read path whose cost
+  // grows monotonically for the life of a campaign.
+  //
+  // Scoped to campaigns that ticked, and bounded per campaign, so pruning
+  // rides the same cadence as the growth it offsets instead of becoming a
+  // second unbounded pass inside a cron invocation that already has a
+  // duration budget. Best-effort throughout: retention must never be the
+  // reason a world turn's own result is lost.
+  let prunedRows = 0
+  for (const campaignId of result.tickedCampaignIds) {
+    try {
+      const pruned = await pruneCampaignHistory(campaignId)
+      prunedRows +=
+        pruned.worldEventsDeleted +
+        pruned.eventWitnessesDeleted +
+        pruned.diceRollsDeleted +
+        pruned.aiCostEntriesDeleted
+    } catch (err) {
+      console.error(`Cron: retention pass failed for campaign ${campaignId} (non-fatal):`, err)
+    }
+  }
+  if (prunedRows > 0) {
+    console.log(`🧹 Cron: pruned ${prunedRows} row(s) of aged history`)
+  }
+
+  return NextResponse.json({ ...result, prunedRows })
 }

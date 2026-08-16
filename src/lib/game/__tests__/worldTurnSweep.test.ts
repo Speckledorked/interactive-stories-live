@@ -104,7 +104,14 @@ describe('sweepWorldTurnsForAllCampaigns', () => {
     expect(runWorldTurnIfDue).toHaveBeenCalledTimes(2)
   })
 
-  it('defers turns past the per-sweep cap without skipping the banking step', async () => {
+  // #409: the cap counts TURNS RUN, not campaigns examined. It used to
+  // increment before the call, and runWorldTurnIfDue returns
+  // { ran: false } whenever a campaign isn't due — so a sweep whose first
+  // 25 candidates were all not-yet-due burned the whole cap on no-ops and
+  // ticked nothing, while genuinely overdue campaigns further down were
+  // skipped. The cap exists to bound EXPENSIVE work (a 20s transaction
+  // plus 2-3 AI completions); a campaign that isn't due costs one read.
+  it('does not spend the per-sweep cap on campaigns that were not due', async () => {
     const campaigns = Array.from({ length: 27 }, (_, i) => ({
       id: `c${i}`,
       worldMeta: { lastRealTimeTickAt: null },
@@ -116,7 +123,22 @@ describe('sweepWorldTurnsForAllCampaigns', () => {
 
     expect(result.campaignsChecked).toBe(27)
     expect(db.worldMeta.update).toHaveBeenCalledTimes(27) // every campaign still gets banked
-    expect(runWorldTurnIfDue).toHaveBeenCalledTimes(25) // capped
+    // Every one was examined, none was due, so nothing was capped out.
+    expect(runWorldTurnIfDue).toHaveBeenCalledTimes(27)
+    expect(result.skippedAtCap).toBe(0)
+  })
+
+  it('still caps the number of turns it actually runs', async () => {
+    const campaigns = Array.from({ length: 27 }, (_, i) => ({
+      id: `c${i}`,
+      worldMeta: { lastRealTimeTickAt: null },
+    }))
+    db.campaign.findMany.mockResolvedValue(campaigns)
+    ;(runWorldTurnIfDue as any).mockResolvedValue({ ran: true })
+
+    const result = await sweepWorldTurnsForAllCampaigns()
+
+    expect(result.ticked).toBe(25)
     expect(result.skippedAtCap).toBe(2)
   })
 
@@ -124,15 +146,26 @@ describe('sweepWorldTurnsForAllCampaigns', () => {
   // order every sweep, so the same first MAX_TURNS_PER_SWEEP always win
   // the cap and everything past that position is permanently starved, not
   // just delayed.
-  it('orders campaigns by most-overdue-first for the cap to actually rotate through', async () => {
-    db.campaign.findMany.mockResolvedValue([{ id: 'c1', worldMeta: { lastRealTimeTickAt: null } }])
-    ;(runWorldTurnIfDue as any).mockResolvedValue({ ran: false })
+  // #409: and the ordering must be read from the POST-banking value. The
+  // banking loop increments hoursSinceWorldTurn for every campaign, and a
+  // campaign that missed several sweeps banks the most — so an ordering
+  // computed in the initial query is computed from values the sweep itself
+  // is about to change, and a campaign can end up more overdue than ones
+  // ranked above it.
+  it('orders campaigns by most-overdue-first, measured after banking', async () => {
+    // 'catching-up' has been dark for days: it banks a large gap here and
+    // ends up the most overdue, even though it starts lowest.
+    // 'steady' was ticked recently and banks nothing.
+    const longAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
+    db.campaign.findMany.mockResolvedValue([
+      { id: 'catching-up', worldMeta: { lastRealTimeTickAt: longAgo, hoursBankedSinceLastHeartbeat: 0, hoursSinceWorldTurn: 1 } },
+      { id: 'steady', worldMeta: { lastRealTimeTickAt: new Date(), hoursBankedSinceLastHeartbeat: 0, hoursSinceWorldTurn: 20 } },
+    ])
+    ;(runWorldTurnIfDue as any).mockResolvedValue({ ran: true })
 
     await sweepWorldTurnsForAllCampaigns()
 
-    expect(db.campaign.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ orderBy: { worldMeta: { hoursSinceWorldTurn: 'desc' } } })
-    )
+    expect((runWorldTurnIfDue as any).mock.calls[0][0]).toBe('catching-up')
   })
 
   // #297: banking now runs in bounded-parallel batches rather than one

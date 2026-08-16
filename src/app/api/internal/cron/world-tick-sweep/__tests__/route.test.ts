@@ -10,6 +10,9 @@ import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/game/worldTurnSweep', () => ({ sweepWorldTurnsForAllCampaigns: vi.fn() }))
 vi.mock('@/lib/game/resolutionQueue', () => ({ sweepGloballyStuckResolutionJobs: vi.fn() }))
+// #408: the sweep now prunes the history it just added to, scoped to the
+// campaigns that actually ticked.
+vi.mock('@/lib/game/retention', () => ({ pruneCampaignHistory: vi.fn() }))
 vi.mock('@/lib/notifications/turn-tracker', () => ({
   TurnTracker: { sendPeriodicReminders: vi.fn(), checkExpiredTurns: vi.fn(), notifyOverdueTurns: vi.fn() },
 }))
@@ -34,7 +37,7 @@ beforeEach(() => {
   ;(TurnTracker.sendPeriodicReminders as any).mockResolvedValue(undefined)
   ;(TurnTracker.checkExpiredTurns as any).mockResolvedValue(0)
   ;(TurnTracker.notifyOverdueTurns as any).mockResolvedValue(0)
-  ;(sweepWorldTurnsForAllCampaigns as any).mockResolvedValue({ ticked: 0, campaignsChecked: 0, failed: 0, skippedAtCap: 0 })
+  ;(sweepWorldTurnsForAllCampaigns as any).mockResolvedValue({ ticked: 0, campaignsChecked: 0, failed: 0, skippedAtCap: 0, tickedCampaignIds: [] })
 })
 
 afterEach(() => {
@@ -60,11 +63,11 @@ describe('GET', () => {
   })
 
   it('runs the sweep and returns its result for the correct secret', async () => {
-    ;(sweepWorldTurnsForAllCampaigns as any).mockResolvedValue({ ticked: 2, campaignsChecked: 5, failed: 0, skippedAtCap: 3 })
+    ;(sweepWorldTurnsForAllCampaigns as any).mockResolvedValue({ ticked: 2, campaignsChecked: 5, failed: 0, skippedAtCap: 3, tickedCampaignIds: [] })
     const response = await GET(req('sweep-secret'))
     const body = await response.json()
     expect(response.status).toBe(200)
-    expect(body).toEqual({ ticked: 2, campaignsChecked: 5, failed: 0, skippedAtCap: 3 })
+    expect(body).toEqual({ ticked: 2, campaignsChecked: 5, failed: 0, skippedAtCap: 3, tickedCampaignIds: [], prunedRows: 0 })
   })
 
   it('does not abort the sweep when a maintenance step throws', async () => {

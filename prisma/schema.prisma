@@ -217,6 +217,24 @@ model User {
   // follows the user to another device.
   themePreference String?
 
+  // When this user finished (or dismissed) the orientation overlay.
+  //
+  // Null means never seen, which is what makes the overlay fire for
+  // EXISTING accounts and not just new signups: the column is added
+  // nullable with no backfill, so every account that predates it reads as
+  // "hasn't seen this yet" and gets shown it once on next load. That is
+  // the intended behaviour, not an accident of the migration.
+  //
+  // A timestamp rather than a boolean so a future revision of the
+  // orientation content can decide to re-show it to people who last saw
+  // it before some date, without another migration.
+  //
+  // Same shape and reasoning as themePreference above: the durable record
+  // lives here so it follows the user to another device, while
+  // localStorage carries a fast-path copy so a returning user never sees
+  // a flash of the overlay while the fetch is in flight.
+  orientationSeenAt DateTime?
+
   // Account security: email verification + password reset.
   // Tokens are UUIDs looked up via findFirst on plain indexes — not
   // @unique, because prisma db push conservatively flags adding a unique

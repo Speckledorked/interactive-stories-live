@@ -85,8 +85,53 @@ describe('PATCH', () => {
     expect(db.user.update).toHaveBeenCalledWith({
       where: { id: 'user1' },
       data: { name: 'Alex' },
-      select: { id: true, email: true, name: true, themePreference: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        themePreference: true,
+        orientationSeenAt: true,
+        createdAt: true,
+      },
     })
+  })
+
+  // The orientation overlay's persistence. The contract is deliberately
+  // boolean-in/timestamp-out: the client says WHETHER it has been seen,
+  // the server decides WHEN. See the route's own comment.
+  it('stamps orientationSeenAt server-side when told it has been seen', async () => {
+    db.user.update.mockResolvedValue({ id: 'user1', email: 'user1@example.com' })
+    const response = await PATCH(patchRequest({ orientationSeenAt: true }))
+    expect(response.status).toBe(200)
+
+    const call = db.user.update.mock.calls[0][0]
+    expect(call.data.orientationSeenAt).toBeInstanceOf(Date)
+  })
+
+  it('clears orientationSeenAt on false, which re-arms the overlay', async () => {
+    db.user.update.mockResolvedValue({ id: 'user1', email: 'user1@example.com' })
+    await PATCH(patchRequest({ orientationSeenAt: false }))
+    expect(db.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { orientationSeenAt: null } })
+    )
+  })
+
+  // The whole point of the boolean contract: a caller must not be able to
+  // write its own (skewed, future, or fabricated) timestamp into a column
+  // whose job is answering "has this person been shown the intro yet".
+  it('refuses a caller-supplied timestamp rather than storing it', async () => {
+    const response = await PATCH(
+      patchRequest({ orientationSeenAt: '2030-01-01T00:00:00.000Z' })
+    )
+    expect(response.status).toBe(400)
+    expect(db.user.update).not.toHaveBeenCalled()
+  })
+
+  it('leaves orientationSeenAt untouched when the key is absent', async () => {
+    db.user.update.mockResolvedValue({ id: 'user1', email: 'user1@example.com', name: 'Alex' })
+    await PATCH(patchRequest({ name: 'Alex' }))
+    const call = db.user.update.mock.calls[0][0]
+    expect(call.data).not.toHaveProperty('orientationSeenAt')
   })
 
   it('clears the name to null on an empty string rather than storing an empty string', async () => {

@@ -105,8 +105,12 @@ describeIfDb('retrieveRelevantHistory — real pgvector search', () => {
       importance: 'NORMAL',
       tags: [],
     })
-    expect(closeCreated).toBe(true)
-    expect(farCreated).toBe(true)
+    // #377 changed createCampaignMemory's contract from `boolean` to the
+    // created row's id (or null) — the dedupe path needs the id of the row
+    // that already existed, not just "did something happen". Asserting the
+    // id is a string is a strictly stronger check than the old `toBe(true)`.
+    expect(typeof closeCreated).toBe('string')
+    expect(typeof farCreated).toBe('string')
 
     const scene = await prisma.scene.create({
       data: { campaignId, sceneNumber: 1, sceneIntroText: 'x' },

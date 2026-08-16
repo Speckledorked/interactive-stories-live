@@ -97,6 +97,25 @@ describeIfDb('an idle campaign — thirty world turns, no player (#401)', () => 
       )
     )
 
+    // A countdown the world is running on its own. 'urgent' advances every
+    // turn deterministically (see explainClockAdvancement), and maxTicks is
+    // set well beyond IDLE_TURNS so it is still live at the end rather than
+    // completing and dropping out of advanceClocks partway through.
+    //
+    // This is not incidental fixture dressing: a clock moving while nobody
+    // is playing is the single most tension-carrying thing the simulation
+    // does offscreen, and #396's acceptance criterion names it explicitly.
+    await prisma.clock.create({
+      data: {
+        campaignId,
+        name: 'The Siege of Cinderhold',
+        description: 'Something is closing in whether anyone is watching or not.',
+        category: 'urgent',
+        currentTicks: 0,
+        maxTicks: IDLE_TURNS + 10,
+      },
+    })
+
     // A world graph, so information has hops to travel across (#379).
     for (let i = 0; i < locations.length; i++) {
       const a = locations[i].id
@@ -216,6 +235,11 @@ describeIfDb('an idle campaign — thirty world turns, no player (#401)', () => 
     const categories = new Set(journal.entries.map((e) => e.category))
 
     expect(categories, 'no location change survived into the reconstruction').toContain('places')
+    // This one was UNREACHABLE when first written, and the live-DB run is
+    // what proved it: clock advancement wrote Clock.currentTicks in place
+    // and emitted no WorldEvent at all, so the durable record the journal
+    // reads had never heard of it. Only clock RESOLUTION logged an event.
+    // Fixed in clockTick.ts — the reader was never the missing half.
     expect(categories, 'no clock change survived into the reconstruction').toContain('clocks')
     expect(categories, 'no faction change survived into the reconstruction').toContain('factions')
 

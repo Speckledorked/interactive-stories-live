@@ -182,7 +182,7 @@ export async function runWorldTurn(campaignId: string) {
 
     // 1. Advance clocks based on faction tags
     console.log('⏰ Advancing clocks...')
-    const advancedClocks = await advanceClocks(campaignId)
+    const advancedClocks = await advanceClocks(campaignId, currentTurn)
 
     // 2. Check for completed clocks
     console.log('🔍 Checking completed clocks...')

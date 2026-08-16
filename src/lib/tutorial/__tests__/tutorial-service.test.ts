@@ -10,11 +10,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { TutorialStatus } from '@prisma/client'
 
 const {
-  stepFindUniqueMock, stepFindManyMock,
+  stepFindUniqueMock, stepFindManyMock, stepCountMock, stepUpsertMock,
   progressFindManyMock, progressUpsertMock,
 } = vi.hoisted(() => ({
   stepFindUniqueMock: vi.fn(),
   stepFindManyMock: vi.fn(),
+  stepCountMock: vi.fn(),
+  stepUpsertMock: vi.fn(),
   progressFindManyMock: vi.fn(),
   progressUpsertMock: vi.fn(),
 }))
@@ -28,8 +30,8 @@ vi.mock('@/lib/prisma', () => ({
       // exists first — initializeTutorialSteps had zero callers, so
       // TutorialStep was never populated and every piece of machinery
       // around it tracked progress through an empty set.
-      count: vi.fn().mockResolvedValue(1),
-      upsert: vi.fn().mockResolvedValue({}),
+      count: stepCountMock,
+      upsert: stepUpsertMock,
     },
     userTutorialProgress: { findMany: progressFindManyMock, upsert: progressUpsertMock },
   },
@@ -40,6 +42,14 @@ import { TutorialService } from '../tutorial-service'
 beforeEach(() => {
   vi.clearAllMocks()
   progressUpsertMock.mockResolvedValue({ status: TutorialStatus.COMPLETED })
+  stepCountMock.mockResolvedValue(1)
+  stepUpsertMock.mockResolvedValue({})
+  stepFindManyMock.mockResolvedValue([])
+  progressFindManyMock.mockResolvedValue([])
+  // #411: the seeded-once flag is process-wide by design (see
+  // ensureTutorialSteps). Reset between tests so each one starts from a
+  // cold process rather than inheriting whatever the previous test left.
+  ;(TutorialService as unknown as { stepsSeeded: boolean }).stepsSeeded = false
 })
 
 function step(overrides: Record<string, unknown> = {}) {
@@ -210,5 +220,97 @@ describe('getNextStep — still finds the first eligible required step after the
 
     const next = await TutorialService.getNextStep('u1')
     expect(next).toBeNull()
+  })
+})
+
+
+describe('ensureTutorialSteps (#411)', () => {
+  // The defect this guards was not a broken function — it was a function
+  // with ZERO CALLERS. `initializeTutorialSteps` held the only copy of the
+  // tutorial's content and nothing ever ran it, so `TutorialStep` stayed
+  // empty and every piece of machinery around it (persisted completion
+  // tracking, prerequisites, the gates, the components) tracked progress
+  // through an empty set.
+  //
+  // That is precisely the shape a test suite misses by default: nothing
+  // FAILS when content is absent, the tutorial just quietly has nothing in
+  // it. So what these assert is the wiring itself — that the read paths
+  // reach the seeder at all. Without them, deleting `ensureTutorialSteps`
+  // outright would leave this suite green, which is the state #411 was
+  // filed about in the first place.
+
+  it('seeds the step content when the table is empty', async () => {
+    stepCountMock.mockResolvedValue(0)
+
+    await TutorialService.getUserProgress('u1')
+
+    expect(stepUpsertMock).toHaveBeenCalled()
+  })
+
+  it('does not re-seed when content already exists', async () => {
+    stepCountMock.mockResolvedValue(7)
+
+    await TutorialService.getUserProgress('u1')
+
+    expect(stepUpsertMock).not.toHaveBeenCalled()
+  })
+
+  it('checks only once per process, not on every read', async () => {
+    // The cache is why this is affordable on a hot read path — without it
+    // every progress fetch would pay a COUNT.
+    stepCountMock.mockResolvedValue(3)
+
+    await TutorialService.getUserProgress('u1')
+    await TutorialService.getUserProgress('u1')
+    await TutorialService.getUserProgress('u2')
+
+    expect(stepCountMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('seeds from a trigger firing before anyone has opened the tutorial', async () => {
+    // The trigger path is reachable without any prior read — a character
+    // gets created before the player ever visits /tutorial — so it cannot
+    // rely on getUserProgress having seeded first.
+    stepCountMock.mockResolvedValue(0)
+
+    await TutorialService.handleTriggerEvent('u1', 'character_created')
+
+    expect(stepUpsertMock).toHaveBeenCalled()
+  })
+
+  it('upserts rather than inserts, so seeding twice is harmless', async () => {
+    // Idempotence is what makes lazy seeding safe against two concurrent
+    // cold processes, and against an environment that already has content.
+    stepCountMock.mockResolvedValue(0)
+
+    await TutorialService.initializeTutorialSteps()
+
+    expect(stepUpsertMock).toHaveBeenCalled()
+    for (const call of stepUpsertMock.mock.calls as unknown as any[][]) {
+      expect(call[0]).toHaveProperty('where.stepKey')
+      expect(call[0]).toHaveProperty('create')
+    }
+  })
+
+  it('seeds a non-empty, prerequisite-consistent step set', async () => {
+    // The content is the feature — an empty seed would satisfy every
+    // assertion above while leaving the tutorial exactly as broken. Every
+    // prerequisite must also name a step that actually exists, or
+    // getNextStep can never return the step that depends on it.
+    stepCountMock.mockResolvedValue(0)
+
+    await TutorialService.initializeTutorialSteps()
+
+    const seeded = (stepUpsertMock.mock.calls as unknown as any[][]).map((c) => c[0].create)
+    expect(seeded.length).toBeGreaterThan(0)
+
+    const keys = new Set(seeded.map((s) => s.stepKey))
+    for (const step of seeded) {
+      for (const prerequisite of step.prerequisites ?? []) {
+        expect(keys.has(prerequisite)).toBe(true)
+      }
+    }
+    // At least one entry point, or nothing is ever reachable.
+    expect(seeded.some((s) => (s.prerequisites ?? []).length === 0)).toBe(true)
   })
 })

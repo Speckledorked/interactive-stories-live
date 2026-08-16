@@ -45,6 +45,12 @@ import { join } from 'path'
  * list.
  */
 const DELIBERATELY_ABSENT: Record<string, string> = {
+  // #372: CampaignCapability.parentId. The docs name it because what the
+  // limitation WAS is the useful part of that list — a single nullable
+  // parent column made prerequisites a TREE, so a node could never require
+  // two things. Replaced by CapabilityPrerequisite edge rows.
+  parentId: 'the single-parent column #372 replaced with CapabilityPrerequisite edges',
+
   // Removed with the manual world-turn trigger — the admin tick preview
   // is intentionally read-only.
   getWorldTurnSummary: 'world-turn trigger removed on purpose',

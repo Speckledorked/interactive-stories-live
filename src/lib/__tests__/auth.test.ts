@@ -114,9 +114,39 @@ describe('isTokenRevoked', () => {
     expect(await isTokenRevoked({ userId: 'u1', email: 'a@example.com', tokenVersion: 1 })).toBe(false)
   })
 
-  it('treats a missing user as unrevoked rather than as evidence', async () => {
+  // This case used to assert the opposite, and that assertion was the bug.
+  //
+  // A signed token naming a user who no longer exists was treated as fine,
+  // so it authenticated and every user-scoped query then returned nothing:
+  // a 200 with an empty app. Campaigns vanished; notification preferences
+  // came back blank because that route creates defaults when a user has
+  // none, which reads as a brand-new account rather than an error. From
+  // the outside it is indistinguishable from "you have no data" — so the
+  // user concludes they lost everything. It reached production twice.
+  //
+  // A successful query returning no row is positive evidence. The reason
+  // the old comment gave ("not evidence") is true of an unreadable user,
+  // which is the test above, and it stays true there.
+  it('refuses a token whose user no longer exists', async () => {
     findUnique.mockResolvedValue(null)
-    expect(await isTokenRevoked({ userId: 'gone', email: 'a@example.com', tokenVersion: 1 })).toBe(false)
+    expect(await isTokenRevoked({ userId: 'gone', email: 'a@example.com', tokenVersion: 1 })).toBe(true)
+  })
+
+  it('refuses a versionless token whose user no longer exists', async () => {
+    // The regression that actually bit: the versionless early-return used
+    // to sit ABOVE the lookup, so a legacy token naming a deleted user was
+    // never checked at all. Passing the version question must not mean
+    // skipping the existence question.
+    findUnique.mockResolvedValue(null)
+    expect(await isTokenRevoked({ userId: 'gone', email: 'a@example.com' })).toBe(true)
+    expect(findUnique).toHaveBeenCalled()
+  })
+
+  it('still fails open when the user is unreadable, not absent', async () => {
+    // The distinction the whole function turns on: a thrown query proves
+    // nothing, a successful empty one proves the user is gone.
+    findUnique.mockRejectedValue(new Error('connection refused'))
+    expect(await isTokenRevoked({ userId: 'gone', email: 'a@example.com' })).toBe(false)
   })
 
   it('does not query at all for a null payload', async () => {

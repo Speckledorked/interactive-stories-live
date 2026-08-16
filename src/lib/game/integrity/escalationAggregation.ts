@@ -20,7 +20,7 @@
 // An earlier version of this function walked every report in the
 // lookback window, which meant an already-merged fix could be
 // "rediscovered" from a stale, pre-fix report still inside the window —
-// confirmed and fixed here (see README Known Bugs). This also matters for
+// confirmed and fixed here (see the Fix Log in docs/ARCHITECTURE.md). This also matters for
 // regressionDetection.ts: a genuine recurrence has to be read from
 // current state, not replayed from history that predates the fix.
 

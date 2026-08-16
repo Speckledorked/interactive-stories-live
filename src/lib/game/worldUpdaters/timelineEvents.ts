@@ -1,7 +1,7 @@
 // src/lib/game/worldUpdaters/timelineEvents.ts
 // Domain applier for world_updates.new_timeline_events — one of the
 // per-domain appliers split out of the former monolithic stateUpdater.ts.
-// See README Known Bugs P1 (stateUpdater decomposition, #4/#41).
+// See #4/#41 (stateUpdater decomposition).
 
 import { Prisma, EventVisibility } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'

@@ -8,7 +8,8 @@
 // of the app, not just the stuck one), and fires reportError so a solo
 // operator's phone buzzes even if nobody is looking at the stuck scene.
 //
-// No cron on this deployment target (see README Phase 9), so this is
+// No cron on this deployment target (see docs/ARCHITECTURE.md's
+// World Simulation notes on the traffic-driven recovery model), so this is
 // best-effort and opportunistic like everything else here — it runs a bit
 // late on a quiet app, never not at all.
 

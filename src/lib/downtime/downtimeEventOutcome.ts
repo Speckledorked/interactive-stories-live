@@ -1,6 +1,6 @@
 // src/lib/downtime/downtimeEventOutcome.ts
 // Deterministic downtime day-event outcomes (depth audit follow-up, see
-// README's Known Issues).
+// the Fix Log in docs/ARCHITECTURE.md).
 //
 // Downtime's entry costs (gold/items/favor/quest) are genuinely enforced,
 // but its day-by-day events were 100% freeform AI prose: whether a day even

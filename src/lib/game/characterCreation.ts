@@ -70,8 +70,8 @@ export async function createCharacter(campaignId: string, userId: string, body: 
       : 'NATIVE'
 
   // Resolve/create the matching Location row and link it via locationId
-  // alongside the free-text field (see README Known Bugs P1 — Location
-  // stored as free text, not an FK) — same helper the AI write-back path
+  // alongside the free-text field (see #425 — Location
+  // stored as free text alongside the FK) — same helper the AI write-back path
   // uses for a PC's reported movement.
   const locationId = await resolveOrCreateLocationId(prisma, campaignId, body.currentLocation, true)
 

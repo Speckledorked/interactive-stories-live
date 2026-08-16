@@ -535,7 +535,7 @@ async function performResolution(
     // Gated on the per-campaign opt-in as well as the first-exchange check:
     // this is a second AI call plus a batch of zone/token writes per
     // qualifying scene, which is real recurring cost for a feature many
-    // campaigns never look at (README Known Bugs #9/#59).
+    // campaigns never look at (#9/#59).
     //
     // #291: this used to run synchronously here via a 30s Promise.race,
     // architecturally inconsistent with scene illustration/hero-image

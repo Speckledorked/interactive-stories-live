@@ -5,7 +5,7 @@
 // character/NPC creation and admin edits) uses to keep the new
 // Character.locationId / NPC.locationId FK in sync with the free-text
 // currentLocation string. Both operate on Location and match by name.
-// See README Known Bugs P1 (stateUpdater decomposition, #4/#41; Location
+// See #4/#41 (stateUpdater decomposition) (stateUpdater decomposition, #4/#41; Location
 // stored as free text, not an FK).
 //
 // #235 (adversarial audit): this was previously the one AI write-back

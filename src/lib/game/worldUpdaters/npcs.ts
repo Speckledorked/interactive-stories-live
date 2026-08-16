@@ -1,6 +1,6 @@
 // src/lib/game/worldUpdaters/npcs.ts
-// Domain applier for world_updates.npc_changes. See README Known Bugs P1
-// (stateUpdater decomposition, #4/#41).
+// Domain applier for world_updates.npc_changes. See #4/#41
+// (stateUpdater decomposition).
 
 import { Prisma, NPC, Character } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'

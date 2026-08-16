@@ -1,6 +1,6 @@
 // src/lib/game/worldUpdaters/worldMetaNotes.ts
 // Domain applier for world_updates.notes_for_gm (former "8": store GM
-// notes in WorldMeta). See README Known Bugs P1 (stateUpdater
+// notes in WorldMeta). See #4/#41 (stateUpdater decomposition) (stateUpdater
 // decomposition, #4/#41).
 
 import { Prisma } from '@prisma/client'

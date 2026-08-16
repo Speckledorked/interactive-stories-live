@@ -24,8 +24,8 @@ export async function PATCH(
     if ('response' in adminCheck) return adminCheck.response
 
     // Resolve/create the matching Location row and link it via locationId
-    // alongside the free-text field (see README Known Bugs P1 — Location
-    // stored as free text, not an FK) — only when currentLocation is
+    // alongside the free-text field (see #425 — Location
+    // stored as free text alongside the FK) — only when currentLocation is
     // actually part of this PATCH; `undefined` here means "leave as is",
     // matching every other field's semantics in this same update. A blank
     // currentLocation resolves to null, clearing the FK along with the

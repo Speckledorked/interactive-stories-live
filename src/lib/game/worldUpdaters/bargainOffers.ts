@@ -1,8 +1,8 @@
 // src/lib/game/worldUpdaters/bargainOffers.ts
 // Domain applier for world_updates.bargain_offers (former "7a-bis"):
 // persists a corruption bargain so the character's NEXT action can
-// mechanically invoke it (see resolution.ts surge). See README Known Bugs
-// P1 (stateUpdater decomposition, #4/#41).
+// mechanically invoke it (see resolution.ts surge). See #4/#41
+// (stateUpdater decomposition).
 
 import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'

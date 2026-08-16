@@ -79,8 +79,8 @@ export async function POST(
 
     const isDiscovered = body.isDiscovered !== undefined ? body.isDiscovered : true
     // Resolve/create the matching Location row and link it via locationId
-    // alongside the free-text field (see README Known Bugs P1 — Location
-    // stored as free text, not an FK). Mirrors this NPC's own discovery
+    // alongside the free-text field (see #425 — Location
+    // stored as free text alongside the FK). Mirrors this NPC's own discovery
     // intent rather than assuming true: an admin building in an
     // undiscovered NPC as background lore shouldn't force-reveal the
     // location either.

@@ -970,8 +970,8 @@ export async function resolveActionMechanics(
     // locationId is the stable join — resolveOrCreateLocationId keeps it
     // in sync with currentLocation on every write. The name-string map
     // stays as a fallback for a character whose locationId hasn't
-    // resolved yet (see README Known Bugs P1 — Location stored as free
-    // text, not an FK).
+    // resolved yet (see #425 — Location stored as free
+    // text alongside the FK).
     const locationIdByCharacter = new Map(characterRows.map(c => [c.id, c.locationId]))
     const weatherByLocationId = new Map(
       locationRows.map(l => [l.id, { condition: l.weather as string, severity: l.weatherSeverity }])
@@ -1076,7 +1076,7 @@ export async function resolveActionMechanics(
       // ("the Docks" vs "The Docks District") that made the name-string
       // match silently miss a real location. Fall back to the name match
       // only for a character whose locationId hasn't resolved yet (see
-      // README Known Bugs P1 — Location stored as free text, not an FK).
+      // #425 — Location stored as free text alongside the FK).
       const locationId = locationIdByCharacter.get(character.id)
       const currentLocation = currentLocationByCharacter.get(character.id)
       // #405: the name fallback exists for rows whose FK hasn't resolved

@@ -1,6 +1,6 @@
 // src/app/api/campaigns/[id]/health/__tests__/route.test.ts
 // #135 (cont.) — the campaign health read side had no test coverage: the
-// Known Bugs fix ("fetchData now calls this endpoint") only verified the
+// Fix Log entry ("fetchData now calls this endpoint") only verified the
 // admin panel calls it, never that the route itself behaves correctly —
 // notably the "never assessed yet" case, which must read as neutral, not
 // as a crisis.

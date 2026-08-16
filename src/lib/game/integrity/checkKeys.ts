@@ -20,6 +20,7 @@ export type CheckKey =
   | 'character.relationships.keys.resolve'
   | 'npc.socialTies.keys.resolve'
   | 'faction.relationships.keys.resolve'
+  | 'faction.relationships.symmetric'
   | 'character.resources.reputation.keys.resolve'
   | 'war.contestedLocationId.resolves'
   | 'clock.participantNpcIds.resolve'

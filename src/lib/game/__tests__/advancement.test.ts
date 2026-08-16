@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 import {
   computeOrganicGrowth,
   applyOrganicGrowth,
+  validateStats,
   buildMoveFromAI,
   buildPerkFromAI,
   countGrantsInArc,
@@ -337,5 +338,94 @@ describe('advancement log — stat increase stamping', () => {
     const log = logStatIncrease(createAdvancementLog(), 'cool', 0, 1, 'Consistent successful use', 12, 'scene-1')
     expect(log.totalStatIncreases).toBe(1)
     expect(log.entries[0].details).toMatchObject({ statKey: 'cool', oldValue: 0, newValue: 1 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #393: stat advancement has never worked
+// ---------------------------------------------------------------------------
+//
+// validateStats enforced `sum === 2` unconditionally, at both call sites —
+// and one of them is the advancement path, where growth ADDS to the total
+// by design. applyOrganicGrowth builds proposedStats by adding the
+// increase and then validates the RESULT, so any +1 made the proposal sum
+// 3 and failed. Every stat increase was rejected, for every character,
+// since the feature shipped, with a console.warn as the only signal.
+
+describe('validateStats — creation vs advancement (#393)', () => {
+  const starting = { cool: 1, hard: 1, hot: 0, sharp: 0, weird: 0 }
+
+  it('still enforces the point-buy total at creation', () => {
+    expect(validateStats(starting).valid).toBe(true)
+    expect(validateStats({ ...starting, cool: 2 }).valid).toBe(false)
+  })
+
+  it('accepts a sum raised by exactly the increases earned', () => {
+    // The whole defect in one assertion: this array is a legal advanced
+    // character and was rejected outright.
+    expect(validateStats({ ...starting, cool: 2 }, 1).valid).toBe(true)
+    expect(validateStats({ ...starting, cool: 2, hard: 2 }, 2).valid).toBe(true)
+  })
+
+  it('still refuses a sum that exceeds what was earned', () => {
+    expect(validateStats({ ...starting, cool: 3 }, 1).valid).toBe(false)
+  })
+
+  it('keeps the per-stat ceiling regardless of how much was earned', () => {
+    // -2..+3 is what actually caps a single stat, and it always applies.
+    expect(validateStats({ cool: 4, hard: 1, hot: 0, sharp: 0, weird: 0 }, 3).valid).toBe(false)
+  })
+
+  it('drops the one-high-stat rule once a character has advanced', () => {
+    // A creation constraint. Enforcing it past creation would stall every
+    // character permanently at their second increase.
+    expect(validateStats({ ...starting, cool: 2, hard: 2 }, 2).valid).toBe(true)
+  })
+})
+
+describe('applyOrganicGrowth — a stat increase can actually land (#393)', () => {
+  const character = (over: Record<string, unknown> = {}) =>
+    ({
+      stats: { cool: 1, hard: 1, hot: 0, sharp: 0, weird: 0 },
+      perks: [],
+      moves: [],
+      advancementLog: null,
+      ...over,
+    }) as never
+
+  it('applies the increase instead of skipping it', () => {
+    const result = applyOrganicGrowth(
+      character(),
+      { statIncreases: [{ statKey: 'cool', delta: 1, reason: 'earned it' }], newPerks: [], newMoves: [] } as never,
+      10
+    )
+
+    expect((result.updatedStats as Record<string, number>).cool).toBe(2)
+  })
+
+  it('accumulates across a character who has already advanced', () => {
+    const result = applyOrganicGrowth(
+      character({
+        stats: { cool: 2, hard: 1, hot: 0, sharp: 0, weird: 0 },
+        advancementLog: { entries: [], totalStatIncreases: 1, totalPerksGained: 0, totalMovesLearned: 0 },
+      }),
+      { statIncreases: [{ statKey: 'hard', delta: 1, reason: 'earned it again' }], newPerks: [], newMoves: [] } as never,
+      10
+    )
+
+    expect((result.updatedStats as Record<string, number>).hard).toBe(2)
+  })
+
+  it('still refuses an increase that would breach the per-stat ceiling', () => {
+    const result = applyOrganicGrowth(
+      character({
+        stats: { cool: 3, hard: 1, hot: 0, sharp: 0, weird: -2 },
+        advancementLog: { entries: [], totalStatIncreases: 0, totalPerksGained: 0, totalMovesLearned: 0 },
+      }),
+      { statIncreases: [{ statKey: 'cool', delta: 1, reason: 'too far' }], newPerks: [], newMoves: [] } as never,
+      10
+    )
+
+    expect((result.updatedStats as Record<string, number>).cool).toBe(3)
   })
 })

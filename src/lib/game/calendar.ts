@@ -205,3 +205,45 @@ export function parseLegacyInGameDate(raw: string | null): { totalHours: number 
 
   return null
 }
+
+
+// ---------------------------------------------------------------------------
+// #402: ONE authority for time of day
+// ---------------------------------------------------------------------------
+//
+// There were two, and nothing reconciled them:
+//
+//   - npcTick.ts's `TIME_OF_DAY[turnNumber % 4]`, and
+//   - this file's `hourOfDay = totalElapsedGameHours % 24`, which is what
+//     the player actually sees.
+//
+// So NPC commutes ran on a clock unrelated to the date and time in the
+// fiction: the narration could say late evening while the tick believed it
+// was morning and relocated the whole cast to their work locations.
+//
+// It compounded badly with the frozen turn counter (#374) — `turn % 4` is
+// constant on an idle campaign, so the NPC clock was not merely wrong, it
+// was STOPPED: evening/night froze every major NPC in place forever,
+// morning/afternoon relocated every NPC on every single tick forever.
+//
+// This is the authority. Anything asking "what time is it in the fiction"
+// derives it from elapsed hours.
+
+export const TIMES_OF_DAY = ['morning', 'afternoon', 'evening', 'night'] as const
+export type TimeOfDay = (typeof TIMES_OF_DAY)[number]
+
+/**
+ * Time of day from the in-fiction clock.
+ *
+ * Six-hour quarters starting at midnight: night 0-5, morning 6-11,
+ * afternoon 12-17, evening 18-23. Chosen so the labels line up with the
+ * hour the calendar already displays, rather than inventing a third
+ * scheme.
+ */
+export function timeOfDayFromHours(totalElapsedGameHours: number): TimeOfDay {
+  const hour = Math.floor(((totalElapsedGameHours % 24) + 24) % 24)
+  if (hour < 6) return 'night'
+  if (hour < 12) return 'morning'
+  if (hour < 18) return 'afternoon'
+  return 'evening'
+}

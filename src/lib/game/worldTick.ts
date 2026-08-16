@@ -269,6 +269,9 @@ export async function runWorldTick(
       roster,
       dryRun,
       db,
+      // #402: the in-fiction clock. npcTick reads this for time of day
+      // instead of turnNumber % 4 — see calendar.ts's timeOfDayFromHours.
+      totalElapsedGameHours: worldMeta?.totalElapsedGameHours,
       // #103: same-tick scratch space tickFactions/tickFactionLeadership
       // write into and tickWake reads back out of — see its own comment
       // on TickContext for why.

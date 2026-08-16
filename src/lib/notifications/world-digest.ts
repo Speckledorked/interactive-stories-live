@@ -21,7 +21,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { NotificationService } from './notification-service'
-import type { WorldChange } from '@/lib/game/tick/types'
+import type { WorldChange, TickEntityType } from '@/lib/game/tick/types'
 import { stableHash } from '@/lib/game/tick/types'
 import type { EventType, EventVisibility } from '@prisma/client'
 
@@ -29,22 +29,51 @@ import type { EventType, EventVisibility } from '@prisma/client'
 export const MAX_DIGEST_LINES = 3
 
 /**
+ * #395: entity types that ARE subject to discovery.
+ *
+ * Only NPCs and factions have an isDiscovered flag — a location, a clock,
+ * a quest, a war or a debt is not something the party "learns exists" in
+ * the same modelled sense (visibility.ts gates four models; locations and
+ * clocks are not among them).
+ *
+ * This distinction is the whole bug. The gate below used to test
+ * `discoveredEntityIds.has(c.entityId)` for EVERY change, and the set was
+ * built from faction and NPC ids only — so a LOCATION_WEATHER or CLOCK or
+ * WAR id could never be in it, and every such change was structurally
+ * unreachable. weatherTick.ts:144-153 emits storms explicitly flagged
+ * importance: 'MAJOR'; they were computed, written to WorldEvent, and then
+ * silently dropped with no player-visible record anywhere.
+ *
+ * "This type has no discovery concept" was being read as "this entity is
+ * undiscovered".
+ */
+export const DISCOVERY_GATED_ENTITY_TYPES: ReadonlySet<TickEntityType> = new Set<TickEntityType>([
+  'NPC',
+  'FACTION',
+])
+
+/**
  * Pure: which tick changes are digest-worthy. MAJOR + significant only
- * (the tick already curates importance), and only for entities in the
- * discovered set — the party can't hear street talk about a faction
- * whose existence they haven't learned. Deliberately NOT capped here —
- * see groupDigestChangesByField, which caps groups instead of raw
- * changes so a burst of same-field changes (e.g. several factions
- * settling new leadership the same tick — leadershipTick.ts runs against
- * every faction missing a living leader, so this happens easily early in
- * a campaign) can't crowd out other, more varied digest-worthy changes
- * from the same turn.
+ * (the tick already curates importance).
+ *
+ * Discovery is checked per ENTITY TYPE, not per id: types that model
+ * discovery must be discovered; types that don't pass through. Deliberately
+ * NOT capped here — see groupDigestChangesByField, which caps groups
+ * instead of raw changes so a burst of same-field changes (e.g. several
+ * factions settling new leadership the same tick — leadershipTick.ts runs
+ * against every faction missing a living leader, so this happens easily
+ * early in a campaign) can't crowd out other, more varied digest-worthy
+ * changes from the same turn.
  */
 export function selectDigestChanges(
   changes: WorldChange[],
   discoveredEntityIds: Set<string>
 ): WorldChange[] {
-  return changes.filter(c => c.significant && c.importance === 'MAJOR' && discoveredEntityIds.has(c.entityId))
+  return changes.filter((c) => {
+    if (!c.significant || c.importance !== 'MAJOR') return false
+    if (DISCOVERY_GATED_ENTITY_TYPES.has(c.entityType)) return discoveredEntityIds.has(c.entityId)
+    return true
+  })
 }
 
 /**
@@ -228,8 +257,10 @@ export async function sendWorldDigest(
   try {
     if (changes.length === 0) return 0
 
-    // Discovery gate: the union of discovered factions and NPCs is the
-    // only world the players know to hear rumors about.
+    // Discovery gate: the union of discovered factions and NPCs. Only
+    // those two types model discovery at all — see
+    // DISCOVERY_GATED_ENTITY_TYPES for why building this set was not the
+    // bug, and testing every change against it was.
     const [factions, npcs, members] = await Promise.all([
       prisma.faction.findMany({
         where: { campaignId, isDiscovered: true },

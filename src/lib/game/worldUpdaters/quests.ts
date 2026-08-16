@@ -10,6 +10,7 @@ import { applyQuestRewardGrant } from '../questRewards'
 import { appendBounded, QUEST_PROGRESS_BOUNDS } from '../textAppend'
 import { questObjectiveKey, resolveQuestGiver, questGiverUpdateData, isLegalQuestStatusTransition, MAX_QUEST_REWARD_GOLD_PER_SCENE, type QuestStatus } from '../quests'
 import { checkCorruptionGate, hasCorruptionGate } from '../corruptionGates'
+import { hasCorruptionTheme } from '../corruption'
 import { checkConditionGate } from '../conditionGates'
 import { applyQuestFailureCost, type QuestFailureStatus } from '../questFailure'
 import { isUniqueConstraintViolation } from './uniqueConstraintGuard'
@@ -85,7 +86,13 @@ export async function applyQuestChanges(
         tx.character.findMany({ where: { campaignId, isAlive: true }, select: { corruption: true } }),
       ])
       gateContext = {
-        hasTheme: Boolean(campaign?.corruptionTheme),
+        // #404: the SAME predicate every other caller uses. This used to be
+        // `Boolean(campaign?.corruptionTheme)`, true for any non-null JSON
+        // including `{}` — so a partially-filled theme gated quests while
+        // being invisible in the prompt, the stages display and the marks
+        // path. Quests refused themselves for a reason that did not exist
+        // in the fiction.
+        hasTheme: hasCorruptionTheme(campaign?.corruptionTheme),
         partyCorruption: characters.reduce((max, c) => Math.max(max, c.corruption || 0), 0),
       }
     }

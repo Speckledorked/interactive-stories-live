@@ -238,6 +238,14 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
         OR: [
           { status: 'OUTSTANDING' },
           { status: 'DEFAULTED', turnResolved: { gte: ctx.turnNumber - LOAN_DEFAULT_COOLDOWN_TURNS } },
+          // #418: a DEFAULTED row with a NULL turnResolved was silently
+          // excluded by the comparison above — SQL comparisons against
+          // NULL are never true — so a legacy defaulter (or any row
+          // written before turnResolved existed) re-qualified for a bailout
+          // loan immediately, which is the opposite of what a cooldown is
+          // for. An unknown default date is not evidence the cooldown has
+          // elapsed; treat it as still in force.
+          { status: 'DEFAULTED', turnResolved: null },
         ],
       },
       select: { id: true },

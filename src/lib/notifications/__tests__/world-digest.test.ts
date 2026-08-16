@@ -282,3 +282,62 @@ describe('sendWorldDigest', () => {
     expect(prisma.timelineEvent.createMany).not.toHaveBeenCalled()
   })
 })
+
+// ---------------------------------------------------------------------------
+// #395: types with no discovery concept were being treated as undiscovered
+// ---------------------------------------------------------------------------
+//
+// The gate tested `discoveredEntityIds.has(c.entityId)` for every change,
+// and the set was built from faction and NPC ids only — so LOCATION_WEATHER,
+// LOCATION_CONDITION, LOCATION_POPULATION, CLOCK, QUEST, WAR, CHARACTER,
+// DEBT and LOCATION ids could never be in it. Nine entity types were
+// STRUCTURALLY unreachable: weatherTick emits storms flagged MAJOR, and
+// they were computed, logged to WorldEvent, and silently dropped.
+
+describe('selectDigestChanges — discovery is per entity TYPE (#395)', () => {
+  const change = (over: Partial<WorldChange>): WorldChange => ({
+    entityType: 'FACTION', entityId: 'f1', entityName: 'The Rustwatch',
+    campaignId: 'c1', field: 'stability', previousValue: 50, newValue: 20,
+    reason: 'r', significant: true, importance: 'MAJOR', ...over,
+  })
+
+  it('surfaces a MAJOR location weather change nobody has to discover', () => {
+    const selected = selectDigestChanges(
+      [change({ entityType: 'LOCATION_WEATHER', entityId: 'loc1', field: 'weather' })],
+      new Set<string>()
+    )
+
+    expect(selected).toHaveLength(1)
+  })
+
+  it.each(['CLOCK', 'QUEST', 'WAR', 'DEBT', 'LOCATION', 'LOCATION_CONDITION'] as const)(
+    'surfaces a MAJOR %s change with an empty discovered set',
+    (entityType) => {
+      const selected = selectDigestChanges(
+        [change({ entityType, entityId: 'x1' })],
+        new Set<string>()
+      )
+
+      expect(selected).toHaveLength(1)
+    }
+  )
+
+  it('still hides an undiscovered faction', () => {
+    // The gate is narrower, not gone: types that DO model discovery are
+    // still checked.
+    const selected = selectDigestChanges([change({ entityType: 'FACTION', entityId: 'f1' })], new Set<string>())
+
+    expect(selected).toEqual([])
+  })
+
+  it('still hides an undiscovered NPC', () => {
+    const selected = selectDigestChanges([change({ entityType: 'NPC', entityId: 'n1' })], new Set<string>())
+
+    expect(selected).toEqual([])
+  })
+
+  it('still requires MAJOR and significant', () => {
+    expect(selectDigestChanges([change({ entityType: 'CLOCK', importance: 'NORMAL' })], new Set())).toEqual([])
+    expect(selectDigestChanges([change({ entityType: 'CLOCK', significant: false })], new Set())).toEqual([])
+  })
+})

@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from '@/lib/clientAuth'
 import { pusherClient } from '@/lib/pusher'
 import { pluralize, truncateWithEllipsis } from '@/lib/format'
+import { acceptsPlayerActions } from '@/lib/game/sceneLifecycle'
 import type { MapData } from '@/lib/maps/map-service'
 import AILoadingState from '@/components/scene/AILoadingState'
 import SceneMoodTag, { detectSceneMood } from '@/components/scene/SceneMoodTag'
@@ -1463,7 +1464,9 @@ export default function StoryPage() {
                       (it used to require clicking "Continue the scene" first,
                       which read as a dead end since neither button looked like
                       "take your turn"). */}
-                  {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && !userHasSubmitted && selectedCharacterId && (
+                  {/* #406: one predicate rather than each caller re-deriving the
+                      combination of status and isPaused — see lib/game/sceneLifecycle.ts */}
+                  {acceptsPlayerActions(scene) && !userHasSubmitted && selectedCharacterId && (
                     <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
                       <div className="flex items-center justify-between gap-3 mb-4">
                         <h3 className="font-display text-lg font-semibold text-myth-ink">Your Action</h3>
@@ -1642,7 +1645,7 @@ export default function StoryPage() {
                       human GM, the AI narrates and the table drives pacing.
                       Only force-resolve (a rescue tool for a lost
                       auto-resolve) stays host-only. */}
-                  {scene.status === 'AWAITING_ACTIONS' && !scene.isPaused && (() => {
+                  {acceptsPlayerActions(scene) && (() => {
                     const participants = scene.participants as any
                     const hasDefinedParticipants = participants?.scoped === true
                     const submittedUserIds = new Set((scene.playerActions || []).map((a: any) => a.userId))

@@ -13,6 +13,7 @@ import {
   repairFactionLeadershipConflict,
 } from './checks/factionLeadership'
 import { DUPLICATE_NAME_CHECKS } from './checks/duplicateNames'
+import { factionRelationshipsAreSymmetric } from './checks/factionRelationshipSymmetry'
 import { IntegrityCheck, RepairFn } from './types'
 
 export const INTEGRITY_CHECKS: IntegrityCheck[] = [
@@ -20,6 +21,9 @@ export const INTEGRITY_CHECKS: IntegrityCheck[] = [
   factionHasOneLivingLeader,
   factionHasAtMostOneLivingLeader,
   ...DUPLICATE_NAME_CHECKS,
+  // #403: detect-only. Repairing an asymmetry means choosing which side
+  // is right, and there is no general answer — see the check's own header.
+  factionRelationshipsAreSymmetric,
 ]
 
 /** checkKey -> repair function. A check with no entry is detect-only by

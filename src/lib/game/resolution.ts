@@ -24,7 +24,7 @@ import { delimitPlayerText, PLAYER_TEXT_PROMPT_RULE } from '@/lib/ai/playerText'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { BASIC_MOVES, calculateOutcome } from '@/lib/pbta-moves'
-import { MAX_CORRUPTION, CORRUPTION_SURGE_BONUS } from './corruption'
+import { MAX_CORRUPTION, CORRUPTION_SURGE_BONUS, hasCorruptionTheme } from './corruption'
 import { proficiencyBand, ProficiencyBand } from './capabilities'
 import { effectiveStandingModifier } from './standing'
 import { checkCorruptionGate } from './corruptionGates'
@@ -926,7 +926,8 @@ export async function resolveActionMechanics(
         take: 300,
       }),
     ])
-    const hasCorruptionTheme = Boolean(campaignRow?.corruptionTheme)
+    // #404: one predicate, one meaning — see corruption.ts.
+    const campaignHasCorruptionTheme = hasCorruptionTheme(campaignRow?.corruptionTheme)
     const debtsByCharacter = new Map<string, typeof debtRows>()
     for (const row of debtRows) {
       const list = debtsByCharacter.get(row.characterId)
@@ -1033,7 +1034,7 @@ export async function resolveActionMechanics(
           // rapport no weight. Deliberately the one gate with no lasting
           // state — nothing is written, so it stops applying the moment the
           // gate does, and it can never trap anyone.
-          const gate = checkCorruptionGate(npc, character.corruption ?? 0, hasCorruptionTheme)
+          const gate = checkCorruptionGate(npc, character.corruption ?? 0, campaignHasCorruptionTheme)
           if (gate.allowed) {
             relationshipForRoll = {
               npcName: npc.name,
@@ -1078,6 +1079,16 @@ export async function resolveActionMechanics(
       // README Known Bugs P1 — Location stored as free text, not an FK).
       const locationId = locationIdByCharacter.get(character.id)
       const currentLocation = currentLocationByCharacter.get(character.id)
+      // #405: the name fallback exists for rows whose FK hasn't resolved
+      // yet, and it MISSES silently on any name drift ("The Ashen Gate" vs
+      // "Ashen Gate") — at which point weather, contested-location and
+      // condition modifiers all quietly drop to neutral and the character
+      // rolls without the penalties the fiction says apply. Log when it is
+      // load-bearing, so the drift is observable instead of inferred from
+      // dice that feel wrong.
+      if (!locationId && currentLocation) {
+        console.warn(`  ⚠️ ${character.name} has no locationId — falling back to name match on "${currentLocation}"; location roll modifiers may be missed if the name has drifted`)
+      }
       const weatherForRoll: WeatherForRoll | null =
         (locationId ? weatherByLocationId.get(locationId) : undefined) ??
         (currentLocation ? weatherByLocationName.get(currentLocation.toLowerCase()) : undefined) ??

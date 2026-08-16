@@ -323,7 +323,28 @@ export class CampaignExporter {
   }
 
   private static async importNPCs(campaignId: string, npcs: any[]) {
+    // #405: location lives in TWO columns — currentLocation (free text) and
+    // locationId (the real FK) — and this wrote only the string. A nullable
+    // FK plus a name-based fallback at every reader means a writer that
+    // forgets it produces no error at any layer: the system silently
+    // degrades to the pre-FK behaviour, and three roll modifiers (weather,
+    // contested, location condition) quietly drop to neutral for that
+    // entity. Resolved against the real Location rows here, the same way
+    // characterCreation.ts does.
+    const locations = await prisma.location.findMany({
+      where: { campaignId },
+      select: { id: true, name: true },
+    })
+    const locationIdByName = new Map(locations.map((l) => [l.name.trim().toLowerCase(), l.id]))
+
     for (const npc of npcs) {
+      const locationId = npc.currentLocation
+        ? locationIdByName.get(String(npc.currentLocation).trim().toLowerCase()) ?? null
+        : null
+      if (npc.currentLocation && !locationId) {
+        console.warn(`  ❓ imported NPC "${npc.name}": location "${npc.currentLocation}" matched no Location row — FK left null`)
+      }
+
       await prisma.nPC.create({
         data: {
           campaignId,
@@ -331,6 +352,7 @@ export class CampaignExporter {
           pronouns: npc.pronouns,
           description: npc.description,
           currentLocation: npc.currentLocation,
+          locationId,
           goals: npc.goals,
           relationship: npc.relationship,
           isAlive: npc.isAlive,

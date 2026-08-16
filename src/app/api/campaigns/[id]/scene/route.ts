@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { validateActionText } from '@/lib/ai/playerText'
+import { acceptsPlayerActions, sceneLifecycle } from '@/lib/game/sceneLifecycle'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { SubmitActionRequest, ErrorResponse } from '@/types/api'
@@ -240,19 +241,24 @@ export async function POST(
       include: { playerActions: true }
     })
 
-    if (!scene || scene.status !== 'AWAITING_ACTIONS') {
+    // #406: one predicate decides WHETHER, the branch below only decides
+    // what to say about it. This used to be two independent checks with no
+    // shared notion of a lifecycle — status here, isPaused there — which is
+    // how three orthogonal signals ended up with as many effective states
+    // as there were call sites combining them. See lib/game/sceneLifecycle.ts.
+    if (!scene || !acceptsPlayerActions(scene)) {
+      // A paused scene is not "not accepting actions" in the same sense as
+      // a resolved one — it is resumable, and the distinct status code and
+      // message matter to the client.
+      if (scene && sceneLifecycle(scene) === 'paused') {
+        return NextResponse.json<ErrorResponse>(
+          { error: 'This scene is paused for a safety check-in. The campaign host must resume it before play continues.' },
+          { status: 423 }
+        )
+      }
       return NextResponse.json<ErrorResponse>(
         { error: 'Scene is not accepting actions' },
         { status: 400 }
-      )
-    }
-
-    // X-Card pause (see lib/safety/safety-service.ts) blocks new actions
-    // until a GM/admin resumes the scene.
-    if (scene.isPaused) {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'This scene is paused for a safety check-in. The campaign host must resume it before play continues.' },
-        { status: 423 }
       )
     }
 

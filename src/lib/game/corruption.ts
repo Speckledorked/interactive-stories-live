@@ -90,6 +90,29 @@ export function parseCorruptionTheme(raw: unknown): CorruptionTheme | null {
   }
 }
 
+/**
+ * #404: does this campaign have a USABLE corruption theme?
+ *
+ * There were two answers in the codebase and they disagreed:
+ *
+ *   - worldUpdaters/quests.ts asked `Boolean(campaign?.corruptionTheme)`,
+ *     true for any non-null JSON including `{}`;
+ *   - stateUpdater.ts and sceneResolutionRequest.ts asked
+ *     `parseCorruptionTheme(...) !== null`, which requires a name, a
+ *     description and non-empty stages.
+ *
+ * So a campaign with a partially-filled theme had corruption GATING ITS
+ * QUESTS while the theme was invisible everywhere else — no prompt
+ * mention, no stages displayed, no marks applied. From the player's side,
+ * quests refused themselves for a reason that did not exist in the fiction.
+ *
+ * The same question asked at two fidelities, with nothing preventing a
+ * third caller from inventing a fourth. This is the one answer.
+ */
+export function hasCorruptionTheme(raw: unknown): boolean {
+  return parseCorruptionTheme(raw) !== null
+}
+
 export interface CorruptionMarkResult {
   newValue: number
   applied: number // 0 or 1 — clamped to one mark per scene

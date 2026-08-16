@@ -23,6 +23,7 @@
 import type { NPC } from '@prisma/client'
 import { TickContext, TickHandlerResult, WorldChange, stableHash } from './types'
 import { AdjacencyEdge, directNeighborsOf } from '../worldGraph'
+import { TIMES_OF_DAY, timeOfDayFromHours, type TimeOfDay as CalendarTimeOfDay } from '../calendar'
 import { rosterNpcFilter } from './capOrdering'
 
 // Exported so other systems that touch NPC.importance (e.g. consequence-driven
@@ -30,14 +31,32 @@ import { rosterNpcFilter } from './capOrdering'
 // "major" rather than redefining it.
 export const MAJOR_IMPORTANCE_THRESHOLD = 4
 
-const TIME_OF_DAY = ['morning', 'afternoon', 'evening', 'night'] as const
-type TimeOfDay = (typeof TIME_OF_DAY)[number]
+// #402: the vocabulary and the derivation both live in calendar.ts now —
+// see timeOfDayFromHours. This file used to define its own, keyed to the
+// turn counter, which is a different clock entirely.
+type TimeOfDay = CalendarTimeOfDay
 
 const PLAN_PHASES = ['observing', 'preparing', 'acting', 'resting'] as const
 type PlanPhase = (typeof PLAN_PHASES)[number]
 
-export function deriveTimeOfDay(turnNumber: number): TimeOfDay {
-  return TIME_OF_DAY[((turnNumber % TIME_OF_DAY.length) + TIME_OF_DAY.length) % TIME_OF_DAY.length]
+/**
+ * #402: derived from the in-fiction clock, not from the turn counter.
+ *
+ * This was `TIME_OF_DAY[turnNumber % 4]`, a second, independent notion of
+ * time of day that nothing reconciled with the date the player is shown.
+ * An NPC's working day ran on a clock unrelated to the fiction's own — and
+ * with a frozen turn counter it did not run at all: evening/night froze
+ * every major NPC in place forever, morning/afternoon relocated every NPC
+ * on every tick forever.
+ *
+ * `totalElapsedGameHours` is the durable source of truth the calendar
+ * itself reads (see calendar.ts's header). Falls back to a turn-derived
+ * value only when a caller genuinely has no hours to offer, which is unit
+ * tests — the real tick always does.
+ */
+export function deriveTimeOfDay(turnNumber: number, totalElapsedGameHours?: number): TimeOfDay {
+  if (totalElapsedGameHours !== undefined) return timeOfDayFromHours(totalElapsedGameHours)
+  return TIMES_OF_DAY[((turnNumber % TIMES_OF_DAY.length) + TIMES_OF_DAY.length) % TIMES_OF_DAY.length]
 }
 
 // Each NPC gets a stable "tempo" (2-4 ticks per phase) so schedules feel
@@ -113,9 +132,12 @@ export function decideNpcTick(
   // differently while that faction is pursuing EXPAND vs. DEFEND — the
   // affiliation isn't just a foreign key, it colors the NPC's own flavor text.
   faction: { name: string; goal: string } | null = null,
-  locationGraph?: NpcLocationGraph
+  locationGraph?: NpcLocationGraph,
+  // #402: the in-fiction clock. Time of day comes from here, not from the
+  // turn counter — see deriveTimeOfDay.
+  totalElapsedGameHours?: number
 ): NpcTickDecision {
-  const timeOfDay = deriveTimeOfDay(turnNumber)
+  const timeOfDay = deriveTimeOfDay(turnNumber, totalElapsedGameHours)
   const phaseIndex = phaseIndexAt(npc.id, turnNumber)
   const prevPhaseIndex = turnNumber > 0 ? phaseIndexAt(npc.id, turnNumber - 1) : -1
   const phase = PLAN_PHASES[phaseIndex]
@@ -216,7 +238,7 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
 
   for (const npc of npcs) {
     const factionContext = npc.faction?.isActive ? { name: npc.faction.name, goal: npc.faction.goal } : null
-    const decision = decideNpcTick(npc, ctx.turnNumber, discoveredLocationNames, factionContext, locationGraph)
+    const decision = decideNpcTick(npc, ctx.turnNumber, discoveredLocationNames, factionContext, locationGraph, ctx.totalElapsedGameHours)
 
     const updateData: { currentPlan: string; currentLocation?: string; locationId?: string; goalProgress: number } = {
       currentPlan: decision.currentPlan,

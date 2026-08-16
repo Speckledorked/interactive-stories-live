@@ -10,7 +10,14 @@
 // hypothetical: the `#60/#61/#90` entry said `getWorldStateChanges()` "is
 // restored as a real accessor" while the dead-export sweep twenty lines
 // below explained why it had been removed. The file contradicted itself,
-// tsc was clean, and 1346 tests passed.
+// tsc was clean, and the suite passed.
+//
+// #397: this line used to name a specific test count, which then sat stale
+// for thousands of tests — a doc-integrity guard whose own comment had
+// drifted. The number is dropped rather than corrected: a count in a
+// comment is a claim nothing checks, which is the exact failure this file
+// exists to prevent elsewhere. See architectureCounts.test.ts for the
+// numbers that ARE checked, by deriving them from source.
 //
 // So: every camelCase symbol either doc names in backticks must either
 // exist in the codebase, or be listed below as deliberately gone.

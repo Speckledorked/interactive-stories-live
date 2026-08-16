@@ -24,6 +24,30 @@ function writeOutput(name: string, value: string): void {
   }
 }
 
+/**
+ * #394: counts and identifiers only — no player- or AI-authored text.
+ *
+ * checkKey and oracleTechnique are drawn from closed registries
+ * (integrity/checkKeys.ts, oracleTechnique.ts). sourceFiles come from
+ * escalationSourceMap.ts, a hardcoded map. Ids are cuids. Nothing here can
+ * carry a sentence somebody wrote.
+ */
+function sanitizeEvidence(escalation: {
+  checkKey: string
+  oracleTechnique: string
+  sourceFiles: readonly string[]
+  campaignIds: readonly string[]
+  totalOccurrences: number
+}): Record<string, unknown> {
+  return {
+    checkKey: escalation.checkKey,
+    oracleTechnique: escalation.oracleTechnique,
+    sourceFiles: [...escalation.sourceFiles],
+    campaignCount: escalation.campaignIds.length,
+    totalOccurrences: escalation.totalOccurrences,
+  }
+}
+
 async function main() {
   const escalations = await findActionableEscalations(prisma)
 
@@ -45,7 +69,26 @@ async function main() {
   writeOutput('source_files', next.sourceFiles.join(','))
   writeOutput('campaign_count', String(next.campaignIds.length))
   writeOutput('total_occurrences', String(next.totalOccurrences))
-  writeOutput('evidence', JSON.stringify(next))
+  // #394: the evidence payload is NOT free-text-safe.
+  //
+  // `next.sample` is a Violation carrying entityName and description —
+  // i.e. NPC, faction and character names written by PLAYERS and by the AI
+  // in real campaigns. That string is spliced with ${{ }} straight into
+  // the agent prompt in integrity-autofix.yml, which now runs daily with
+  // no human gate and ends in `gh pr merge --auto --squash`. Any
+  // self-signed-up user could name an NPC to plant text there.
+  //
+  // The workflow header describes at length how the SHELL injection of
+  // this same data was fixed by routing it through `env:`; the PROMPT
+  // injection was untouched. Shell-escaping the value never addressed the
+  // problem, because the model is an interpreter too.
+  //
+  // The fix is not to escape it better — it is that entity names buy the
+  // agent nothing an id doesn't. What a diagnosing agent needs is WHICH
+  // check fired, HOW OFTEN, and WHERE; all of that is already emitted
+  // above as separate, structurally-constrained outputs. So the evidence
+  // is reduced to counts and identifiers with no free text at all.
+  writeOutput('evidence', JSON.stringify(sanitizeEvidence(next)))
 }
 
 main()

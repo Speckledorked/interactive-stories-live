@@ -36,7 +36,7 @@
 
 import { describe, it, expect } from 'vitest'
 import * as ts from 'typescript'
-import { readFileSync } from 'fs'
+import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..')
@@ -49,6 +49,17 @@ const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..')
  * naming which model actually has the collision risk, or this check
  * degrades into exactly the blanket rule the header above says not to be.
  */
+//
+// #400: this was a hardcoded seven-file allowlist, and the escape hatch
+// was "write it in file #8". A guard whose scope is a list of the files
+// that had the bug last time is a regression test wearing the name of an
+// invariant — the next occurrence lands one directory over and the guard
+// reports green.
+//
+// It is now a DIRECTORY WALK: every file under src/ is scanned for a
+// create against one of GUARDED_MODELS, so the eighth file is in scope the
+// moment it exists. The list below is retained only as documentation of
+// where this shape is currently known to live.
 const GUARDED_WRITE_FILES = [
   'src/lib/game/worldUpdaters/npcs.ts',
   'src/lib/game/worldUpdaters/quests.ts',
@@ -58,6 +69,24 @@ const GUARDED_WRITE_FILES = [
   'src/lib/game/capabilities.ts',
   'src/app/api/friends/requests/route.ts',
 ]
+
+/** Every .ts file under src/, excluding tests. */
+function allSourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) return entry.name === '__tests__' ? [] : allSourceFiles(full)
+    return entry.name.endsWith('.ts') && !entry.name.includes('.test.') ? [full] : []
+  })
+}
+
+/**
+ * #400: the real scope — every source file, not a list of the seven that
+ * had the bug. Returns repo-relative paths so failures read the same way
+ * the old allowlist did.
+ */
+function filesToScan(): string[] {
+  return allSourceFiles(join(REPO_ROOT, 'src')).map((f) => f.slice(REPO_ROOT.length + 1))
+}
 
 /**
  * The specific Prisma model property names known to sit behind a real
@@ -127,9 +156,11 @@ describe('check-then-create writes against a real @@unique constraint stay guard
     }
   })
 
-  it('every guarded-model create in these files is wrapped in isUniqueConstraintViolation', () => {
+  it('every guarded-model create ANYWHERE under src/ is wrapped in isUniqueConstraintViolation', () => {
+    // #400: scans the whole tree, not seven named files. The old escape
+    // hatch was "write it in file #8".
     const violations: string[] = []
-    for (const file of GUARDED_WRITE_FILES) {
+    for (const file of filesToScan()) {
       const full = join(REPO_ROOT, file)
       const src = readFileSync(full, 'utf8')
       for (const v of findUnguardedCreates(full, src)) {
@@ -149,12 +180,16 @@ describe('check-then-create writes against a real @@unique constraint stay guard
   })
 
   it('does not carry exemptions for file/model pairs no longer in scope', () => {
-    const validKeys = new Set<string>()
-    for (const file of GUARDED_WRITE_FILES) {
-      for (const model of GUARDED_MODELS) validKeys.add(`${file}#${model}`)
-    }
-    const missing = Object.keys(EXEMPT).filter((k) => !validKeys.has(k))
+    const inScope = new Set(filesToScan())
+    const missing = Object.keys(EXEMPT).filter((k) => !inScope.has(k.split('#')[0]))
     expect(missing, `Stale EXEMPT entries:\n  ${missing.join('\n  ')}`).toEqual([])
+  })
+
+  it('scans materially more than the old seven-file allowlist', () => {
+    // Guards the fix itself: if filesToScan ever silently narrows back to
+    // a handful of files, the invariant quietly stops being enforced
+    // everywhere and nothing else would notice.
+    expect(filesToScan().length).toBeGreaterThan(GUARDED_WRITE_FILES.length * 10)
   })
 })
 

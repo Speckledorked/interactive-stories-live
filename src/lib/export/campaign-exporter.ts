@@ -5,7 +5,8 @@
  * Supports JSON format for full data export
  */
 
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/prisma'
+import { isUniqueConstraintViolation } from '@/lib/game/worldUpdaters/uniqueConstraintGuard';
 import { extractWorldStateChanges } from '@/lib/game/worldStateChanges';
 import { sanitizeMoveOutcomes } from '@/lib/game/resolution';
 
@@ -345,6 +346,13 @@ export class CampaignExporter {
         console.warn(`  ❓ imported NPC "${npc.name}": location "${npc.currentLocation}" matched no Location row — FK left null`)
       }
 
+      // #400: an export can legitimately contain two entities whose names
+      // differ only in case, and Phase 1b's constraint is
+      // case-INSENSITIVE — so an import that used to succeed now throws
+      // P2002 partway through and leaves a half-imported campaign. Skip
+      // the duplicate and keep going: a partial import is worse than a
+      // slightly smaller one.
+      try {
       await prisma.nPC.create({
         data: {
           campaignId,
@@ -363,11 +371,17 @@ export class CampaignExporter {
           moves: npc.moves,
         },
       });
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) throw error
+        console.warn(`  ⚠️ imported NPC "${npc.name}" collides with one already in this campaign — skipped`)
+      }
     }
   }
 
   private static async importFactions(campaignId: string, factions: any[]) {
     for (const faction of factions) {
+      // #400: same reasoning as importNPCs above.
+      try {
       await prisma.faction.create({
         data: {
           campaignId,
@@ -382,6 +396,10 @@ export class CampaignExporter {
           gmNotes: faction.gmNotes,
         },
       });
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) throw error
+        console.warn(`  ⚠️ imported faction "${faction.name}" collides with one already in this campaign — skipped`)
+      }
     }
   }
 

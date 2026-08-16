@@ -4,6 +4,7 @@
 
 import { slugifyCapabilityKey, resolvePrerequisiteLinks } from '@/lib/game/capabilities'
 import { deriveResourceSlots } from '@/lib/game/resourceSlots'
+import { isUniqueConstraintViolation } from '@/lib/game/worldUpdaters/uniqueConstraintGuard'
 import { buildDefaultAdjacency } from '@/lib/game/defaultAdjacency'
 
 export interface CampaignTemplate {
@@ -386,18 +387,28 @@ export async function createFactionsForCampaign(
   factions: GeneratedFactionOverride[]
 ): Promise<void> {
   for (const faction of factions) {
-    await prisma.faction.create({
-      data: {
-        campaignId,
-        name: faction.name,
-        description: faction.description,
-        goals: faction.goals,
-        currentPlan: faction.currentPlan ?? null,
-        resources: faction.resources,
-        influence: faction.influence,
-        threatLevel: faction.threatLevel
-      }
-    })
+    // #400: these names are AI-GENERATED, and this same function is what
+    // reseedWorld.ts calls to ADD factions to an existing campaign — so a
+    // generator producing a name the campaign already has threw P2002 out
+    // of the whole creation/reseed. Skip the duplicate: a campaign with
+    // one fewer generated faction beats a campaign that failed to create.
+    try {
+      await prisma.faction.create({
+        data: {
+          campaignId,
+          name: faction.name,
+          description: faction.description,
+          goals: faction.goals,
+          currentPlan: faction.currentPlan ?? null,
+          resources: faction.resources,
+          influence: faction.influence,
+          threatLevel: faction.threatLevel
+        }
+      })
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error
+      console.warn(`  ⚠️ generated faction "${faction.name}" already exists in this campaign — skipped`)
+    }
   }
 }
 
@@ -438,18 +449,24 @@ export async function createNPCsForCampaign(
       })
       factionId = faction?.id
     }
-    await prisma.nPC.create({
-      data: {
-        campaignId,
-        name: npc.name,
-        description: npc.description,
-        pronouns: npc.pronouns ?? null,
-        importance: npc.importance,
-        goals: npc.goals ?? null,
-        factionId,
-        factionRole: factionId ? 'MEMBER' : undefined,
-      }
-    })
+    // #400: same reasoning as createFactionsForCampaign above.
+    try {
+      await prisma.nPC.create({
+        data: {
+          campaignId,
+          name: npc.name,
+          description: npc.description,
+          pronouns: npc.pronouns ?? null,
+          importance: npc.importance,
+          goals: npc.goals ?? null,
+          factionId,
+          factionRole: factionId ? 'MEMBER' : undefined,
+        }
+      })
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error
+      console.warn(`  ⚠️ generated NPC "${npc.name}" already exists in this campaign — skipped`)
+    }
   }
 }
 

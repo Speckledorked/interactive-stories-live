@@ -24,7 +24,18 @@
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
 import { rosterNpcFilter } from './capOrdering'
-import { ConsequenceAction } from '@/lib/ai/consequenceExtraction'
+// #419: `import type`, not a value import.
+//
+// ConsequenceAction is used only as a type here, and consequenceExtraction
+// transitively imports openaiFetch — so the tick's "zero AI calls across
+// everything it transitively imports" claim was being upheld by TypeScript
+// ERASURE rather than by anything a reader or a linter could see. Adding a
+// single value usage to that import would have silently pulled an AI
+// client into the tick closure.
+//
+// zeroAiBoundary.test.ts now enforces the property structurally; this
+// import is written the way the property requires.
+import type { ConsequenceAction } from '@/lib/ai/consequenceExtraction'
 
 export interface NpcDisposition {
   selfPreservation: number

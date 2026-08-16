@@ -491,7 +491,7 @@ export async function logValidationFailure(
  *   none      — neither parsed; caller falls back to its empty result.
  *
  * Pure and synchronous: failure logging is the caller's business (it has
- * the campaignId), matching how logValidationFailure is already used.
+ * the campaignId), matching how logValidationFailure is called from validateAIResponseWithRepair (#388 — it had zero callers until then, while an admin route already read the table it writes).
  */
 export type WorldTurnValidationResult =
   | { level: 'full'; data: WorldTurnResponseValidated }

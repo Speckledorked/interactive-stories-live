@@ -1,5 +1,6 @@
 // src/app/api/campaigns/[id]/npcs/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { isUniqueConstraintViolation } from '@/lib/game/worldUpdaters/uniqueConstraintGuard'
 import { prisma } from '@/lib/prisma'
 import { visibleTo, isCampaignAdmin } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
@@ -97,8 +98,14 @@ export async function POST(
       }
     }
 
-    // Create NPC
-    const npc = await prisma.nPC.create({
+    // #400: guarded like every other creator of a name-unique model. Phase
+    // 1b gave NPC.name a real case-insensitive DB constraint; an admin
+    // adding an NPC while the AI mints a stub with the same name mid-scene
+    // got a raw 500. This convention was previously enforced only across a
+    // hardcoded seven-file allowlist, and this route was file #8.
+    let npc
+    try {
+      npc = await prisma.nPC.create({
       data: {
         campaignId,
         name: body.name,
@@ -117,8 +124,12 @@ export async function POST(
         factionId: body.factionId || null,
         factionRole,
         isDiscovered,
-      },
-    })
+        },
+      })
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) throw error
+      return NextResponse.json({ error: 'An NPC with that name already exists' }, { status: 409 })
+    }
 
     return NextResponse.json({ npc }, { status: 201 })
   } catch (error) {

@@ -22,6 +22,7 @@ import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, hasAct
 import { BeliefVector, parseBeliefVector } from './beliefTick'
 import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
 import { rosterFactionFilter } from './capOrdering'
+import { isUniqueConstraintViolation } from '../worldUpdaters/uniqueConstraintGuard'
 
 interface FactionDelta {
   resources: number
@@ -571,7 +572,16 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
         successorName = successor.name
 
         if (!ctx.dryRun) {
-          const createdSuccessor = await ctx.db.faction.create({
+          // #400: decideFactionFounding derives the successor's name from
+          // the predecessor's, so two collapses of similarly-named factions
+          // — or a re-run of a partially-applied turn — can genuinely
+          // collide with Phase 1b's case-insensitive Faction.name
+          // constraint. Uncaught, that P2002 rolls back the ENTIRE tick
+          // transaction: every other handler's work for that turn, lost
+          // because one faction's remnant needed a different name.
+          let createdSuccessor
+          try {
+            createdSuccessor = await ctx.db.faction.create({
             data: {
               campaignId: ctx.campaignId,
               name: successor.name,
@@ -585,8 +595,16 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
               // A player still leads the remnant if they led the predecessor —
               // the collapse is a setback for their leadership, not the end of it.
               leaderCharacterId: faction.leaderCharacterId,
-            },
-          })
+              },
+            })
+          } catch (error) {
+            if (!isUniqueConstraintViolation(error)) throw error
+            createdSuccessor = await ctx.db.faction.findFirst({
+              where: { campaignId: ctx.campaignId, name: { equals: successor.name, mode: 'insensitive' } },
+            })
+            if (!createdSuccessor) throw error
+            console.warn(`  ⚠️ successor faction "${successor.name}" already exists — the remnant merges into it rather than aborting the tick`)
+          }
 
           // Members carry over to the remnant with their existing roles —
           // it's the same people, just organized smaller.

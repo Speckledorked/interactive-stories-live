@@ -337,15 +337,30 @@ If the request seems impossible, suggest a viable alternative.`
     }
 
     if (costs.requiresQuest) {
-      const quest = await prisma.quest.create({
-        data: {
-          campaignId: character.campaignId,
-          name: costs.requiresQuest.name,
-          description: costs.requiresQuest.description,
-          givenBy: costs.requiresQuest.givenBy || null,
-          status: 'ACTIVE',
-        },
-      })
+      // #400: Quest.name has a real case-insensitive DB constraint, and
+      // this name is AI-authored — so a downtime activity naming a quest
+      // that already exists threw a raw P2002 out of the whole downtime
+      // resolution. Reuse the existing quest instead: the fiction asked
+      // for that quest to be a requirement, and it already is one.
+      let quest
+      try {
+        quest = await prisma.quest.create({
+          data: {
+            campaignId: character.campaignId,
+            name: costs.requiresQuest.name,
+            description: costs.requiresQuest.description,
+            givenBy: costs.requiresQuest.givenBy || null,
+            status: 'ACTIVE',
+          },
+        })
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) throw error
+        quest = await prisma.quest.findFirst({
+          where: { campaignId: character.campaignId, name: { equals: costs.requiresQuest.name, mode: 'insensitive' } },
+        })
+        if (!quest) throw error
+        console.warn(`  ⚠️ downtime named an existing quest "${costs.requiresQuest.name}" as a requirement — linking to it rather than creating a duplicate`)
+      }
       linkedQuestId = quest.id
       extraRequirements.push(`Requires completing the quest: "${costs.requiresQuest.name}"`)
     }

@@ -175,7 +175,7 @@ import { deriveSeason, GeneratedCalendar } from './calendar'
 // last turn's. See its own file for what it does and doesn't repair.
 const TICK_HANDLERS: TickHandler[] = [tickWeather, tickSeasonalPressure, tickFactionRelationships, tickBeliefDrift, tickNpcDisposition, tickFactions, tickFactionLeadership, tickWars, tickTerritoryLoyalty, tickLocationCondition, tickLogistics, tickFactionAmbitions, tickNpcs, tickMigration, tickInformation, tickNpcSocialTies, tickNpcJointSchemes, tickWake, tickEconomy, tickIntegrity]
 
-// Prisma's interactive-transaction default is 5s; this tick runs 10
+// Prisma's interactive-transaction default is 5s; this tick runs 20
 // handlers' worth of queries against real (if capped-at-10/20) rosters, well
 // past what that default budgets for. 20s leaves real headroom under the
 // cron sweep's per-invocation budget while still failing fast if a handler

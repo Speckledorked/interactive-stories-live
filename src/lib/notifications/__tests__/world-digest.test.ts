@@ -124,8 +124,15 @@ describe('formatDigestLine', () => {
     expect(formatDigestLine(makeChange({ field: 'leadership', entityName: 'X' }))).toContain('new leadership')
   })
 
-  it('falls back to the generic line for an unrecognized field', () => {
-    expect(formatDigestLine(makeChange({ field: 'somethingElse', entityName: 'X' }))).toContain('X')
+  it('renders nothing for a field with no authored phrasing', () => {
+    // #432: this used to assert a generic fallback line, and the fallback
+    // was the defect. `importance: 'MAJOR'` is set by npcTick from
+    // `npc.importance >= 5`, so an important NPC's routine movement was
+    // MAJOR every turn and rendered as the same generic sentence forever.
+    // A field nobody has written a rumor for is not a rumor.
+    expect(formatDigestLine(makeChange({ field: 'somethingElse', entityName: 'X' }))).toBe('')
+    expect(formatDigestLine(makeChange({ field: 'currentLocation', entityName: 'X' }))).toBe('')
+    expect(formatDigestLine(makeChange({ field: 'currentPlan', entityName: 'X' }))).toBe('')
   })
 
   it('varies phrasing across different entities so the same event type does not read identically every time', () => {
@@ -301,20 +308,50 @@ describe('selectDigestChanges — discovery is per entity TYPE (#395)', () => {
     reason: 'r', significant: true, importance: 'MAJOR', ...over,
   })
 
-  it('surfaces a MAJOR location weather change nobody has to discover', () => {
+  it('surfaces a MAJOR weather change at a location the party HAS found', () => {
     const selected = selectDigestChanges(
       [change({ entityType: 'LOCATION_WEATHER', entityId: 'loc1', field: 'weather' })],
-      new Set<string>()
+      new Set(['loc1'])
     )
 
     expect(selected).toHaveLength(1)
   })
 
-  it.each(['CLOCK', 'QUEST', 'WAR', 'DEBT', 'LOCATION', 'LOCATION_CONDITION'] as const)(
-    'surfaces a MAJOR %s change with an empty discovered set',
+  it('hides that same storm when the location is undiscovered', () => {
+    // #432: this test used to assert the OPPOSITE — that a location change
+    // surfaces "nobody has to discover". #395 fixed a real bug (LOCATION*
+    // changes were structurally unreachable) on a false premise: it
+    // recorded that visibility.ts does not gate locations, when locations
+    // are one of its four fog-gated models and `Location.isDiscovered` has
+    // existed all along. The result was a severe storm at a location the
+    // party had never found, broadcast to every player by name.
+    const selected = selectDigestChanges(
+      [change({ entityType: 'LOCATION_WEATHER', entityId: 'loc1', field: 'weather' })],
+      new Set<string>()
+    )
+
+    expect(selected).toHaveLength(0)
+  })
+
+  it.each(['LOCATION', 'LOCATION_CONDITION', 'LOCATION_POPULATION'] as const)(
+    'hides a MAJOR %s change at an undiscovered location',
     (entityType) => {
       const selected = selectDigestChanges(
-        [change({ entityType, entityId: 'x1' })],
+        [change({ entityType, entityId: 'x1', field: 'weather' })],
+        new Set<string>()
+      )
+
+      expect(selected).toHaveLength(0)
+    }
+  )
+
+  it.each(['CLOCK', 'QUEST', 'WAR', 'DEBT'] as const)(
+    'still surfaces a MAJOR %s change with an empty discovered set',
+    (entityType) => {
+      // These four genuinely have no per-entity discovery for the digest to
+      // check — #395's actual finding, and it stands.
+      const selected = selectDigestChanges(
+        [change({ entityType, entityId: 'x1', field: 'warDeclared' })],
         new Set<string>()
       )
 
@@ -339,5 +376,106 @@ describe('selectDigestChanges — discovery is per entity TYPE (#395)', () => {
   it('still requires MAJOR and significant', () => {
     expect(selectDigestChanges([change({ entityType: 'CLOCK', importance: 'NORMAL' })], new Set())).toEqual([])
     expect(selectDigestChanges([change({ entityType: 'CLOCK', significant: false })], new Set())).toEqual([])
+  })
+})
+
+
+describe('rumor variety (#432)', () => {
+  const makeNpc = (over: Partial<WorldChange> = {}): WorldChange => ({
+    entityType: 'NPC', entityId: 'npc-jason', entityName: 'Jason Asano',
+    campaignId: 'c1', field: 'goalCompleted', previousValue: 'a goal', newValue: '(awaiting new direction)',
+    reason: 'r', significant: true, importance: 'MAJOR', ...over,
+  })
+
+  it('does not repeat the same sentence for the same entity turn after turn', () => {
+    // The reported symptom, exactly: one NPC, one recurring event, and a
+    // rumor feed reading "Something is shifting around Jason Asano — the
+    // details are still unclear." over and over. The variant seed used to
+    // be the entity ids alone, so it was a pure function of WHO — the same
+    // entity could only ever produce one sentence, forever.
+    const lines = new Set(
+      Array.from({ length: 12 }, (_, turn) => formatDigestLine(makeNpc(), turn))
+    )
+    expect(lines.size).toBeGreaterThan(1)
+  })
+
+  it('is still deterministic for a given turn', () => {
+    // Varied is not the same as random: a rerun of the same turn must
+    // produce the same feed, or nothing about this is reproducible.
+    expect(formatDigestLine(makeNpc(), 7)).toBe(formatDigestLine(makeNpc(), 7))
+  })
+
+  it('gives every rumor-worthy field its own voice, not one shared sentence', () => {
+    const fields = [
+      'goalCompleted', 'ambitionCommitted', 'ambitionResolved',
+      'territoryClaimed', 'territoryContested', 'importance', 'weather',
+    ]
+    const lines = fields.map(field => formatDigestLine(makeNpc({ field }), 3))
+
+    expect(new Set(lines).size).toBe(fields.length)
+    for (const line of lines) expect(line).not.toBe('')
+  })
+
+  it('gives every rumor-worthy field its own title, so the feed is not a wall of one heading', () => {
+    const fields = [
+      'warDeclared', 'warJoined', 'warResolved', 'collapsed', 'founded', 'leadership',
+      'goalCompleted', 'ambitionCommitted', 'ambitionResolved',
+      'territoryClaimed', 'territoryContested', 'importance', 'weather',
+    ]
+    const titles = fields.map(field => titleForDigestChange(makeNpc({ field })))
+
+    expect(titles).not.toContain('Word on the Street')
+  })
+
+  it('tells a scheme that paid off apart from one that collapsed', () => {
+    // The only generator that reads the change's own values. A single
+    // phrasing covering both would be worse than no rumor: it would report
+    // a debacle as news of a triumph.
+    const won = formatDigestLine(makeNpc({ field: 'ambitionResolved', newValue: 'succeeded' }), 5)
+    const lost = formatDigestLine(makeNpc({ field: 'ambitionResolved', newValue: 'failed' }), 5)
+
+    expect(won).not.toBe(lost)
+    expect(won).toMatch(/paid off|got what|worked/)
+    expect(lost).toMatch(/come apart|overreached|failed/)
+  })
+
+  it('claims neither outcome for a mixed group', () => {
+    const mixed = formatDigestGroupLine([
+      makeNpc({ field: 'ambitionResolved', entityId: 'f1', entityName: 'A', newValue: 'succeeded' }),
+      makeNpc({ field: 'ambitionResolved', entityId: 'f2', entityName: 'B', newValue: 'failed' }),
+    ], 5)
+
+    expect(mixed).toMatch(/mixed results|not everyone came out ahead/)
+  })
+
+  it('never names the counterparty or the location on a territory change', () => {
+    // previousValue is the other faction's name and newValue is the
+    // location's — both may be undiscovered, and both are right there in
+    // the change waiting to be leaked.
+    for (const turn of [0, 1, 2, 3, 4, 5]) {
+      const line = formatDigestLine(makeNpc({
+        field: 'territoryClaimed', entityName: 'The Rustwatch',
+        previousValue: 'The Hidden Court', newValue: 'Secret Vault',
+      }), turn)
+      expect(line).not.toContain('Hidden Court')
+      expect(line).not.toContain('Secret Vault')
+      expect(line).toContain('The Rustwatch')
+    }
+  })
+
+  it('keeps an important NPC\'s routine movement out of the feed entirely', () => {
+    // npcTick marks currentLocation/currentPlan MAJOR for any NPC at
+    // importance >= 5, so these fire most turns. They are not news.
+    const selected = selectDigestChanges(
+      [
+        makeNpc({ field: 'currentLocation' }),
+        makeNpc({ field: 'currentPlan' }),
+        makeNpc({ field: 'goalCompleted' }),
+      ],
+      new Set(['npc-jason'])
+    )
+
+    expect(selected).toHaveLength(1)
+    expect(selected[0].field).toBe('goalCompleted')
   })
 })

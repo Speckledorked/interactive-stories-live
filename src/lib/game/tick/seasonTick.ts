@@ -24,6 +24,18 @@ export interface SeasonModifier {
 // Harvest (autumn) boosts faction income and quickens the world's pace;
 // winter slows both. Spring/summer sit at the neutral baseline between the
 // two — this is a fixed, closed table, not something a campaign configures.
+//
+// #420, stated plainly rather than left to be rediscovered: spring and
+// summer are byte-identical to each other and to doing nothing, so THIS
+// HANDLER IS A NO-OP FOR HALF THE IN-FICTION YEAR and the table is
+// three-valued (neutral / harvest / winter), not four. That is the
+// intended design — the 2026-08-02 decision was that seasonal pressure
+// means scarcity and plenty, and the two seasons between them are the
+// baseline those are measured against, not two more knobs. It is recorded
+// here because "four seasons" reads as four behaviours, and a reader
+// checking whether spring does anything should find the answer in the
+// table rather than by instrumenting a tick. seasonTick.test.ts pins it,
+// so making spring or summer mechanical becomes a deliberate act.
 export const SEASON_MODIFIERS: Record<Season, SeasonModifier> = {
   spring: { resourceRegenDelta: 0, clockSpeedMultiplier: 1 },
   summer: { resourceRegenDelta: 0, clockSpeedMultiplier: 1 },

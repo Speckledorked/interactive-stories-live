@@ -19,6 +19,28 @@
 //     tensionClockBonus below: in a tense campaign, GM-authored threats
 //     with no faction driving them close faster. Without that, this would
 //     be another well-named number nothing reads.
+//
+// #420 called this "191 lines of nuance collapsed to one bit", counting
+// tensionClockBonus as the only consumer. Stated precisely, because the
+// shape matters more than the count:
+//
+//   MECHANICAL — exactly one bit. tensionClockBonus (>= 75 → +1 tick on
+//     unattached clocks), read once at clockTick.ts:121. Deliberately one
+//     bit: the comment on that function records why a bigger number would
+//     create a runaway loop (tense → faster clocks → tenser), and that
+//     decision stands.
+//   NARRATIVE — five bands and four phases. describeTension feeds
+//     `dramatic_tension` and derivePhase feeds `story_phase` into every
+//     world summary the narrator reads (worldSummary.ts:309-310, 497-498),
+//     and phase is persisted on WorldMeta and rendered in the chronicle.
+//
+// So the computation's resolution is genuinely used — just mostly on the
+// prose side of the engine, which is the honest thing to say rather than
+// implying a mechanical depth that isn't there. What the audit found that
+// was straightforwardly true: this file had NO TESTS. A weighted sum whose
+// output is read as five bands and four phases, with nothing pinning where
+// those boundaries fall, is one careless retune away from a campaign that
+// never leaves 'simmering'. tension.test.ts pins them now.
 
 import { prisma } from '@/lib/prisma'
 import { clamp } from './types'

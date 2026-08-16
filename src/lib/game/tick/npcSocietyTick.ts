@@ -19,17 +19,24 @@
 //                   logic needed, same as faction ambition clocks.
 //
 // Unaffiliated NPCs (no faction — a lone wolf, an independent operator)
-// get a second, independent signal: their deterministic "home" location
-// (the same stableHash(id) % locations formula npcTick.ts already uses for
-// the day/night commute, re-derived here rather than stored, so it needs
-// no new field). Two unaffiliated NPCs who share a home turf are grounded
-// in something real about the fiction — sharing territory — which reads as
-// community (ALLY) between ordinary NPCs, or turf rivalry (RIVAL) between
-// two PbtA-style "threats" (NPC.threat set — predators competing for the
-// same ground). One threat, one not: no clean signal, stays NEUTRAL. This
-// is a second opinion, not a fallback guess — it only ever fires when the
-// faction-derived signal (decideNpcSocialTie) has nothing to say, i.e. at
-// least one side has no faction.
+// get a second, independent signal: their home turf. Two unaffiliated NPCs
+// who share it are grounded in something real about the fiction — sharing
+// territory — which reads as community (ALLY) between ordinary NPCs, or
+// turf rivalry (RIVAL) between two PbtA-style "threats" (NPC.threat set —
+// predators competing for the same ground). One threat, one not: no clean
+// signal, stays NEUTRAL. This is a second opinion, not a fallback guess —
+// it only ever fires when the faction-derived signal (decideNpcSocialTie)
+// has nothing to say, i.e. at least one side has no faction.
+//
+// #420 changed where "home turf" comes from. It used to be
+// `stableHash(id) % locations` and nothing else, described here as the
+// formula npcTick.ts uses — which was wrong: npcTick reads
+// `npc.currentLocation` first and only hashes when the NPC is anchored
+// nowhere. So this file placed NPCs somewhere the rest of the engine
+// didn't, and "shared turf" was usually a modular-arithmetic coincidence.
+// deriveHomeLocation now prefers the NPC's real location and marks whether
+// it had to fall back; sharesTurf trusts two real locations unconditionally
+// and requires MIN_LOCATIONS_FOR_TURF_SIGNAL before believing two hashes.
 //
 // Runs immediately after tickNpcs in the handler order (worldTick.ts):
 // joint schemes read the ties this file just wrote in the same pass (no
@@ -59,16 +66,64 @@ export function decideNpcSocialTie(
   return factionRelationship
 }
 
+export interface HomeLocation {
+  name: string
+  /**
+   * True when this is the NPC's REAL anchored location, false when it is
+   * the hash fallback. The distinction is load-bearing — see sharesTurf.
+   */
+  anchored: boolean
+}
+
 /**
- * Deterministic "home" location for tie-forming purposes — the exact same
- * formula npcTick.ts uses for the day/night commute (stableHash(id) %
- * sortedLocations.length), re-derived here rather than read off
- * NPC.currentLocation, which reflects wherever they happen to be THIS
- * turn's time-of-day, not their stable home base.
+ * The NPC's home turf for tie-forming purposes.
+ *
+ * #420: this used to be `stableHash(id) % sortedLocations.length` and
+ * nothing else, with a doc comment claiming it was "the exact same formula
+ * npcTick.ts uses". It was not. npcTick prefers `npc.currentLocation` and
+ * only falls back to the hash when the NPC is not anchored anywhere
+ * (`npcTick.ts:156`), so the two files disagreed about where the same NPC
+ * lived — and this one disagreed with the database, which has been
+ * carrying `NPC.locationId`/`currentLocation` all along.
+ *
+ * That is the real defect behind the audit's "hash-collision home
+ * locations". Two NPCs sharing a home is not itself a bug; it is the whole
+ * signal. The bug is that the shared home was frequently a hash
+ * coincidence over a handful of locations rather than a fact about the
+ * world, and nothing distinguished the two.
  */
-export function deriveHomeLocation(npcId: string, sortedLocationNames: string[]): string | null {
+export function deriveHomeLocation(
+  npc: { id: string; currentLocation?: string | null },
+  sortedLocationNames: string[]
+): HomeLocation | null {
+  const anchored = npc.currentLocation?.trim()
+  if (anchored && sortedLocationNames.includes(anchored)) {
+    return { name: anchored, anchored: true }
+  }
   if (sortedLocationNames.length === 0) return null
-  return sortedLocationNames[stableHash(npcId) % sortedLocationNames.length]
+  return { name: sortedLocationNames[stableHash(npc.id) % sortedLocationNames.length], anchored: false }
+}
+
+/**
+ * Below this many discovered locations, a shared HASH-DERIVED home is not
+ * evidence of anything: with two locations any pair shares turf half the
+ * time, and with one they always do. A real anchored location is exempt —
+ * standing in the same place is a fact regardless of how small the map is.
+ */
+export const MIN_LOCATIONS_FOR_TURF_SIGNAL = 3
+
+/**
+ * Pure decision: do these two NPCs actually share turf, in the sense the
+ * unaffiliated tie is meant to capture?
+ */
+export function sharesTurf(
+  a: HomeLocation | null,
+  b: HomeLocation | null,
+  locationCount: number
+): boolean {
+  if (!a || !b || a.name !== b.name) return false
+  if (a.anchored && b.anchored) return true
+  return locationCount >= MIN_LOCATIONS_FOR_TURF_SIGNAL
 }
 
 /**
@@ -96,7 +151,7 @@ export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerRe
       // #283: importance desc is the intentional priority; the rotation
       // key breaks ties among equally-important NPCs — see capOrdering.ts.
       orderBy: [{ importance: 'desc' }, { id: 'asc' }],
-      select: { id: true, name: true, factionId: true, threat: true, socialTies: true },
+      select: { id: true, name: true, factionId: true, threat: true, socialTies: true, currentLocation: true },
     }),
     ctx.db.location.findMany({ where: { campaignId: ctx.campaignId, isDiscovered: true }, select: { name: true } }),
   ])
@@ -134,9 +189,9 @@ export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerRe
       // no faction, so decideNpcSocialTie already returned NEUTRAL).
       let viaTerritory = false
       if (freshType === 'NEUTRAL' && !a.factionId && !b.factionId) {
-        const homeA = deriveHomeLocation(a.id, sortedLocationNames)
-        const homeB = deriveHomeLocation(b.id, sortedLocationNames)
-        const unaffiliatedType = decideUnaffiliatedTie(a, b, homeA !== null && homeA === homeB)
+        const homeA = deriveHomeLocation(a, sortedLocationNames)
+        const homeB = deriveHomeLocation(b, sortedLocationNames)
+        const unaffiliatedType = decideUnaffiliatedTie(a, b, sharesTurf(homeA, homeB, sortedLocationNames.length))
         if (unaffiliatedType !== 'NEUTRAL') {
           freshType = unaffiliatedType
           viaTerritory = true

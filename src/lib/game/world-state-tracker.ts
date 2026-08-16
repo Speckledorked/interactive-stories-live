@@ -12,34 +12,88 @@ interface WorldStateSnapshot {
   factions: Record<string, any>
   clocks: Record<string, any>
   characters: Record<string, any>
+  /** Categories whose read hit ENTITY_READ_CAP — see fetchCampaignEntities. */
+  truncated?: Partial<Record<'npcs' | 'factions' | 'clocks' | 'characters', boolean>>
 }
 
 /**
+ * Per-table ceiling on the diff read (#420).
+ *
+ * This whole module is a DISPLAY-ONLY transparency panel, and it ran four
+ * unprojected, unbounded `findMany` calls twice per scene resolution — the
+ * full NPC, faction, clock and character rows of the campaign, including
+ * every long text column the diff never looks at, on the request path of
+ * the single hottest operation in the app. A campaign large enough to hurt
+ * is exactly the campaign where the panel matters least.
+ *
+ * Generous rather than tight: the cap is a backstop against a pathological
+ * campaign, not a paging strategy. When it is hit, removal detection for
+ * that category is suppressed (see diffSection) — outside the window, an
+ * entity that fell off the end is indistinguishable from one that was
+ * deleted, and inventing "NPC removed from the campaign" out of a LIMIT is
+ * worse than saying nothing.
+ */
+export const ENTITY_READ_CAP = 500
+
+/**
+ * The exact columns the diff below reads, and nothing else. Projecting is
+ * half the fix — `findMany({ where })` selects every column, so this used
+ * to drag NPC/Faction/Character description and plan text through the
+ * request twice per resolution to compare four scalars.
+ */
+const NPC_DIFF_SELECT = {
+  id: true, name: true, description: true, currentLocation: true, goals: true, isAlive: true,
+} as const
+const FACTION_DIFF_SELECT = {
+  id: true, name: true, description: true, resources: true, influence: true, threatLevel: true, currentPlan: true,
+} as const
+const CLOCK_DIFF_SELECT = {
+  id: true, name: true, description: true, currentTicks: true, maxTicks: true,
+} as const
+const CHARACTER_DIFF_SELECT = {
+  id: true, name: true, stats: true, perks: true, harm: true, consequences: true,
+} as const
+
+/**
  * The same 4-table read used both to snapshot state before AI resolution
- * and to read it back after, for diffing.
+ * and to read it back after, for diffing. Ordered by id so the before and
+ * after windows are the same window whenever nothing changed.
  */
 async function fetchCampaignEntities(campaignId: string) {
+  const page = { where: { campaignId }, orderBy: { id: 'asc' as const }, take: ENTITY_READ_CAP }
   const [npcs, factions, clocks, characters] = await Promise.all([
-    prisma.nPC.findMany({ where: { campaignId } }),
-    prisma.faction.findMany({ where: { campaignId } }),
-    prisma.clock.findMany({ where: { campaignId } }),
-    prisma.character.findMany({ where: { campaignId } })
+    prisma.nPC.findMany({ ...page, select: NPC_DIFF_SELECT }),
+    prisma.faction.findMany({ ...page, select: FACTION_DIFF_SELECT }),
+    prisma.clock.findMany({ ...page, select: CLOCK_DIFF_SELECT }),
+    prisma.character.findMany({ ...page, select: CHARACTER_DIFF_SELECT }),
   ])
 
-  return { npcs, factions, clocks, characters }
+  return {
+    npcs,
+    factions,
+    clocks,
+    characters,
+    truncated: {
+      npcs: npcs.length === ENTITY_READ_CAP,
+      factions: factions.length === ENTITY_READ_CAP,
+      clocks: clocks.length === ENTITY_READ_CAP,
+      characters: characters.length === ENTITY_READ_CAP,
+    },
+  }
 }
 
 /**
  * Capture the current world state before AI resolution
  */
 export async function captureWorldStateSnapshot(campaignId: string): Promise<WorldStateSnapshot> {
-  const { npcs, factions, clocks, characters } = await fetchCampaignEntities(campaignId)
+  const { npcs, factions, clocks, characters, truncated } = await fetchCampaignEntities(campaignId)
 
   return {
     npcs: Object.fromEntries(npcs.map(n => [n.id, n])),
     factions: Object.fromEntries(factions.map(f => [f.id, f])),
     clocks: Object.fromEntries(clocks.map(c => [c.id, c])),
-    characters: Object.fromEntries(characters.map(c => [c.id, c]))
+    characters: Object.fromEntries(characters.map(c => [c.id, c])),
+    truncated,
   }
 }
 
@@ -54,7 +108,11 @@ export async function detectWorldStateChanges(
   const changes: WorldStateChange[] = []
 
   // Get current state
-  const { npcs, factions, clocks, characters } = await fetchCampaignEntities(campaignId)
+  const { npcs, factions, clocks, characters, truncated } = await fetchCampaignEntities(campaignId)
+
+  // An id missing from a truncated window fell off a LIMIT, not out of the
+  // fiction. Reporting it as a removal would be a fabricated world event.
+  const npcWindowIsComplete = !truncated.npcs && !beforeSnapshot.truncated?.npcs
 
   // Detect NPC changes
   for (const npc of npcs) {
@@ -98,8 +156,9 @@ export async function detectWorldStateChanges(
   }
 
   // Detect removed NPCs
-  for (const beforeId of Object.keys(beforeSnapshot.npcs)) {
-    if (!npcs.find(n => n.id === beforeId)) {
+  const npcIds = new Set(npcs.map(n => n.id))
+  for (const beforeId of npcWindowIsComplete ? Object.keys(beforeSnapshot.npcs) : []) {
+    if (!npcIds.has(beforeId)) {
       const removed = beforeSnapshot.npcs[beforeId]
       changes.push({
         category: 'npc',

@@ -35,7 +35,8 @@ export interface TokenPayload {
    * Optional because tokens issued before session revocation existed do not
    * carry one, and those must keep working — shipping a security
    * improvement by logging out the entire userbase is its own outage. See
-   * isTokenRevoked for how an absent version is treated.
+   * isTokenRevoked for how an absent version is treated (it still passes
+   * the version check, but no longer skips the user-exists check with it).
    */
   tokenVersion?: number
 }
@@ -67,30 +68,53 @@ export function verifyToken(token: string): TokenPayload | null {
 }
 
 /**
- * Has this token been revoked since it was issued? (#98)
+ * Should this token be refused? (#98)
  *
  * A JWT is stateless, which is why it needed no database — and also why a
  * leaked one was valid for its full 30 days with no way to cut it off. This
  * is the one database read that buys revocation back, keyed on the user's
  * primary key.
  *
- * **Fails open on a read failure, and on a token with no version.** That is
- * a deliberate trade, not an oversight:
+ * Two distinct reasons to refuse, and the difference between them matters:
  *
- *  - A token minted before this existed has no version. Rejecting those
- *    would log out every current session on deploy.
- *  - A database blip must not sign the whole userbase out. The request was
- *    going to fail anyway if the DB is down — every route needs it — so
- *    failing closed here buys no real safety and costs a much worse
- *    outage mode.
+ *  1. **The version was bumped.** Once "log out everywhere" or a password
+ *     reset raises User.tokenVersion, every token minted before it is
+ *     refused on its next request.
+ *  2. **The user does not exist.** A signed token outlives the row it
+ *     names — an account deleted and recreated, restored from a different
+ *     database, or otherwise replaced. The signature still verifies, so
+ *     this used to authenticate happily and every user-scoped query then
+ *     returned nothing. The result was a 200 with an empty app: campaigns
+ *     gone, notification preferences blank (that route CREATES defaults
+ *     when a user has none, so it looks like a fresh account rather than
+ *     an error). Indistinguishable, from the outside, from "you have no
+ *     data" — the failure mode that makes someone think they lost
+ *     everything. Reported twice in production before it was chased down;
+ *     the workaround both times was logging out and back in, which only
+ *     helps if you already suspect the cause.
  *
- * What it does guarantee is the case that matters: once a version has been
- * bumped, every token minted before it is refused on its next request.
+ * **Still fails open on a read FAILURE.** That distinction is the whole
+ * design of this function: an absent user and an unreadable one are not
+ * the same evidence.
+ *
+ *  - A successful query returning no row is positive proof the user is
+ *    gone. Refuse, so the client gets a 401 and redirects to login
+ *    instead of rendering an empty account.
+ *  - A thrown query proves nothing. A database blip must never sign the
+ *    whole userbase out — the request was going to fail anyway if the DB
+ *    is down, so failing closed buys no safety and costs a far worse
+ *    outage.
+ *
+ * Note the lookup now runs for versionless tokens too, which it did not
+ * before: that early return sat above the query, so a legacy token naming
+ * a deleted user was never checked at all. Tokens predating session
+ * revocation still pass on the VERSION question — rejecting those would
+ * log out every current session on deploy — they just no longer skip the
+ * existence question with it. Cost is one primary-key lookup on requests
+ * that already needed the database for whatever they were doing.
  */
 export async function isTokenRevoked(payload: TokenPayload | null): Promise<boolean> {
   if (!payload?.userId) return false
-  // Tokens predating session revocation carry no version.
-  if (typeof payload.tokenVersion !== 'number') return false
 
   try {
     const { prisma } = await import('@/lib/prisma')
@@ -98,10 +122,19 @@ export async function isTokenRevoked(payload: TokenPayload | null): Promise<bool
       where: { id: payload.userId },
       select: { tokenVersion: true },
     })
-    // An unreadable or absent user is not positive evidence of revocation.
-    if (!user || typeof user.tokenVersion !== 'number') return false
+
+    // Query succeeded, no such user — positive evidence, refuse.
+    if (!user) return true
+
+    // Tokens predating session revocation carry no version; nothing to
+    // compare, and the user demonstrably exists.
+    if (typeof payload.tokenVersion !== 'number') return false
+    // Neither does a user row predating the column's backfill.
+    if (typeof user.tokenVersion !== 'number') return false
+
     return user.tokenVersion !== payload.tokenVersion
   } catch {
+    // Unreadable is not absent. Fail open.
     return false
   }
 }

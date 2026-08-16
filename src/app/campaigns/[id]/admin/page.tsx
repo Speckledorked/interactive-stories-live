@@ -44,6 +44,13 @@ const CLOCK_WHAT_IF_FIELDS: WhatIfField[] = [
   { key: 'tension', label: 'Tension', min: 0, max: 100 },
   { key: 'currentTicks', label: 'Ticks', min: 0, max: 100 },
 ]
+const WAR_WHAT_IF_FIELDS: WhatIfField[] = [
+  // -100..100 matches the War_momentum_range DB CHECK, not the 0..100 stat
+  // band — half the legal values are negative.
+  { key: 'momentum', label: 'Momentum', min: -100, max: 100 },
+  { key: 'attackerMilitaryTotal', label: 'Attacker military', min: 0, max: 10000 },
+  { key: 'defenderMilitaryTotal', label: 'Defender military', min: 0, max: 10000 },
+]
 const NPC_WHAT_IF_FIELDS: WhatIfField[] = [
   { key: 'goalProgress', label: 'Goal progress', min: 0, max: 100 },
 ]
@@ -755,10 +762,20 @@ export default function AdminPage() {
     }
   }
 
-  const fetchWarsReasoning = async () => {
+  const fetchWarsReasoning = async (warId?: string, overrides: Record<string, number> = {}) => {
     setWarsReasoningLoading(true)
     try {
-      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/wars/reasoning`)
+      // #427: the wars route is campaign-wide, so a what-if has to name its
+      // war. Without `warId` an override would rewrite every war on the
+      // board and give the admin four answers with no signal which were
+      // hypothetical.
+      const params = new URLSearchParams()
+      if (warId) params.set('warId', warId)
+      for (const [key, value] of Object.entries(overrides)) params.set(key, String(value))
+      const query = params.toString()
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/wars/reasoning${query ? `?${query}` : ''}`
+      )
       if (response.ok) {
         const data = await response.json()
         setWarsReasoning(data.wars)
@@ -2125,6 +2142,15 @@ export default function AdminPage() {
                               <p key={i} className="mt-1 text-myth-ink-muted">{line}</p>
                             ))}
                           </div>
+                          <WhatIfControls
+                            fields={WAR_WHAT_IF_FIELDS}
+                            actual={war.whatIf?.actual ?? {}}
+                            overridden={war.whatIf?.overridden}
+                            rejected={war.whatIf?.rejected}
+                            busy={warsReasoningLoading}
+                            onApply={(o) => fetchWarsReasoning(war.warId, o)}
+                            onReset={() => fetchWarsReasoning()}
+                          />
                         </div>
                       )
                     })}

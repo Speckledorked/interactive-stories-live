@@ -13,6 +13,18 @@ import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { explainClockAdvancement, FactionForClockAdvancement } from '@/lib/game/tick/clockTick'
 import { TENSION_BASELINE } from '@/lib/game/tick/tension'
 import { SEASON_MODIFIERS } from '@/lib/game/tick/seasonTick'
+import { applyWhatIf, STAT_BAND, type WhatIfSpec } from '@/lib/api/whatIf'
+
+/**
+ * #427: what an admin may perturb on a clock preview.
+ *
+ * `tension` is the interesting one — it is the ONLY input to
+ * explainClockAdvancement that a GM cannot set directly anywhere in the
+ * app, because it is derived from live state (clocks near firing, wars,
+ * party harm). "Would this clock move faster if the campaign were tenser?"
+ * had no way to be asked before this.
+ */
+const CLOCK_WHAT_IF: WhatIfSpec = { tension: STAT_BAND, currentTicks: { min: 0, max: 100 } }
 import { GeneratedCalendar, deriveSeason } from '@/lib/game/calendar'
 
 export async function GET(
@@ -68,22 +80,36 @@ export async function GET(
       : null
     const season = deriveSeason(worldMeta.totalElapsedGameHours ?? 0, calendar)
     const clockSpeedMultiplier = SEASON_MODIFIERS[season].clockSpeedMultiplier
-    const tension = worldMeta.tension ?? TENSION_BASELINE
+    const actualTension = worldMeta.tension ?? TENSION_BASELINE
+
+    // #427: overlaid before the projection, so the reasoning explains the
+    // hypothetical rather than blending it with live state.
+    const whatIf = applyWhatIf(
+      { ...clock, tension: actualTension },
+      request.nextUrl.searchParams,
+      CLOCK_WHAT_IF
+    )
+    const projected = whatIf.snapshot
 
     const { advanceAmount, reasoning } = explainClockAdvancement(
-      clock,
+      projected,
       factionById,
       worldMeta.currentTurnNumber,
-      tension,
+      projected.tension,
       clockSpeedMultiplier
     )
 
     return NextResponse.json({
-      clock: { id: clock.id, name: clock.name, currentTicks: clock.currentTicks, maxTicks: clock.maxTicks },
+      clock: { id: clock.id, name: clock.name, currentTicks: projected.currentTicks, maxTicks: clock.maxTicks },
       turnNumber: worldMeta.currentTurnNumber,
       projectedAdvance: advanceAmount,
-      projectedTicks: Math.min(clock.currentTicks + advanceAmount, clock.maxTicks),
+      projectedTicks: Math.min(projected.currentTicks + advanceAmount, clock.maxTicks),
       reasoning,
+      whatIf: {
+        overridden: whatIf.overridden,
+        rejected: whatIf.rejected,
+        actual: { tension: actualTension, currentTicks: clock.currentTicks },
+      },
     })
   } catch (error) {
     console.error('Clock reasoning preview error:', error)

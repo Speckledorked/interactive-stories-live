@@ -21,11 +21,16 @@ import { CheckKey } from './checkKeys'
 export const ESCALATION_SOURCE_FILES: Readonly<Partial<Record<CheckKey, readonly string[]>>> = {
   // Phase 0's original bug, and the shape every other id-keyed-JSON-blob
   // check shares (1d: "same technique covers every other id-keyed JSON
-  // blob"). All three write through resolveEntityByNameOrId today; a
-  // recurrence means some new write path started skipping it again.
+  // blob"). Writes through resolveEntityByNameOrId today; a recurrence
+  // means some new write path started skipping it again.
+  //
+  // #373: npc.socialTies and faction.relationships used to be listed here
+  // too. Attribution implies "this can recur after a real fix", and those
+  // two cannot recur from application code any more — they are FK'd edge
+  // rows, so a recurrence would mean the CONSTRAINT regressed, not that a
+  // handler started writing bad keys. Attributing them to a tick handler
+  // would point an admin at the wrong file.
   'character.relationships.keys.resolve': ['src/lib/game/worldUpdaters/characters.ts'],
-  'npc.socialTies.keys.resolve': ['src/lib/game/tick/npcSocietyTick.ts'],
-  'faction.relationships.keys.resolve': ['src/lib/game/tick/relationshipTick.ts'],
 
   // Phase 0's other original bug. The FK (Phase 0 migration) makes this
   // structurally impossible today, so a recurrence would mean the

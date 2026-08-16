@@ -394,6 +394,9 @@ model Campaign {
   characters       Character[]
   npcs             NPC[]
   factions         Faction[]
+  // #373: social ties as edges rather than per-node JSON blobs.
+  npcTies          NpcTie[]
+  factionTies      FactionTie[]
   locations        Location[]
   clocks           Clock[]
   scenes           Scene[]
@@ -648,12 +651,13 @@ model CampaignCapability {
   // from isSecret because mid-story is_new nodes are born secret without
   // being forbidden.
   isShadow    Boolean  @default(false)
-  // Prerequisite: the node that must be UNLOCKED before this one can be.
-  // Null for roots, which is every node in a campaign generated without
-  // prerequisites. onDelete: SetNull rather than Cascade — deleting a
-  // prerequisite must orphan its children into roots, never delete the
-  // deeper arts along with it.
-  parentId    String?
+  // #372: prerequisites are a DAG, not a tree — see CapabilityPrerequisite
+  // below. The single `parentId` this used to carry could express "Battle
+  // Alchemy requires Alchemy" but never "requires Alchemy AND Swordplay",
+  // and convergent branches are usually the most interesting nodes in a
+  // skill tree. The column is gone rather than kept alongside the join
+  // table: it would have been a pure subset of it, and #425 is a standing
+  // reminder of what redundant storage costs.
   // #386: PROVENANCE. Both unlock gates are opt-in restrictions with a
   // permissive default — prerequisiteUnlockBlocked returns false when
   // parentId is null, shadowUnlockBlocked returns false when isShadow is
@@ -673,13 +677,45 @@ model CampaignCapability {
   createdAt   DateTime @default(now())
 
   campaign        Campaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  parent          CampaignCapability?   @relation("CapabilityTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children        CampaignCapability[]  @relation("CapabilityTree")
   characterStates CharacterCapability[]
+  // Edges where this node is the one being gated…
+  prerequisites   CapabilityPrerequisite[] @relation("CapabilityNeeds")
+  // …and edges where it is the thing standing in front of something else.
+  unlocks         CapabilityPrerequisite[] @relation("CapabilityUnlocks")
 
   @@unique([campaignId, key])
   @@index([campaignId])
-  @@index([parentId])
+}
+
+// #372: one edge of the capability prerequisite DAG — "capability requires
+// prerequisite".
+//
+// Acyclicity is guaranteed the same way it was for the tree, and it is
+// worth restating because it is the reason there is no cycle detection
+// anywhere: resolvePrerequisiteLinks only ever links a prerequisite whose
+// tier is STRICTLY LOWER than the node's. Every edge therefore decreases
+// tier, so no path can return to where it started. That invariant does the
+// same work for many-prerequisites as it did for one, which is what made
+// this conversion cheap.
+//
+// Cascade on BOTH sides, which differs from the old parentId's SetNull and
+// means the same thing: deleting a prerequisite deletes the EDGE, orphaning
+// the deeper art into a root rather than deleting it along with its
+// prerequisite. With a column, "orphan the child" meant nulling the field;
+// with an edge table it means dropping the row.
+model CapabilityPrerequisite {
+  id                       String @id @default(cuid())
+  capabilityId             String
+  prerequisiteCapabilityId String
+
+  capability   CampaignCapability @relation("CapabilityNeeds", fields: [capabilityId], references: [id], onDelete: Cascade)
+  prerequisite CampaignCapability @relation("CapabilityUnlocks", fields: [prerequisiteCapabilityId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([capabilityId, prerequisiteCapabilityId])
+  @@index([capabilityId])
+  @@index([prerequisiteCapabilityId])
 }
 
 //
@@ -1031,12 +1067,16 @@ model NPC {
 
   // Phase 9: NPC society — individual-level relationships between major
   // NPCs, derived from faction affiliation (same faction = ALLY; rival/ally
-  // factions per Faction.relationships = inherited). Shape mirrors
-  // Faction.relationships: Record<otherNpcId, { type: 'RIVAL' | 'ALLY';
-  // since: number }>. Written by npcSocietyTick.ts; distinct from the
-  // `relationship` field above, which is this NPC's stance toward the
-  // PLAYER CHARACTERS, not toward other NPCs.
-  socialTies Json?
+  // factions per FactionTie = inherited). Written by npcSocietyTick.ts;
+  // distinct from the `relationship` field above, which is this NPC's
+  // stance toward the PLAYER CHARACTERS, not toward other NPCs.
+  //
+  // #373: this was a `socialTies Json?` column — an id-keyed map stored on
+  // each NPC. That is graph data (pairwise weighted edges) held per node,
+  // which made every question except "who does THIS one NPC know" either
+  // impossible or a full table scan. It is an edge table now; see NpcTie.
+  tiesAsA NpcTie[] @relation("NpcTieA")
+  tiesAsB NpcTie[] @relation("NpcTieB")
 
   // Corruption gate (#83). min = only the marked may pass; max = the
   // marked are turned away. Null on both (the default) means ungated.
@@ -1083,6 +1123,96 @@ model NPC {
   @@index([campaignId, lastTickedAt])
 }
 
+// #373: social ties as a real graph.
+//
+// NPC.socialTies and Faction.relationships were id-keyed JSON blobs — each
+// entity carrying its own map of who it knows. That is genuinely graph data
+// (pairwise weighted edges) stored per node, and the ceiling was sharp:
+// "who does this ONE entity know" was cheap and *everything else* was
+// unavailable. No social distance, no alliance chains, no brokers. Rumour
+// propagation (informationTick.ts) was borrowing PHYSICAL distance from
+// WorldGraph as a stand-in for social distance, because social distance was
+// not computable — rumours spread by geography rather than by who talks to
+// whom.
+//
+// Three things become structural rather than maintained by convention:
+//
+//  1. Referential integrity. A key inside a JSON blob could point at a
+//     deleted entity and only an integrity CHECK would notice; a foreign
+//     key cannot. `npc.socialTies.keys.resolve` and
+//     `faction.relationships.keys.resolve` became regression guards for
+//     the same reason `war.contestedLocationId.resolves` did once its FK
+//     existed.
+//
+//  2. Symmetry. The blobs stored each tie TWICE, once per side, and only
+//     relationshipEngine.ts happened to write both — an admin route, an
+//     import, or a repair could produce a legal-looking asymmetric map
+//     that no reader detected (which is exactly what
+//     `faction.relationships.symmetric` was added to catch). One row per
+//     pair, canonically ordered so aId < bId, makes asymmetry
+//     unrepresentable rather than merely detectable.
+//
+//  3. NEUTRAL. It is the absence of a row, not a third stored value, so
+//     "no tie" has exactly one representation.
+//
+// The canonical ordering is enforced by a DB CHECK constraint, not just by
+// the writer — see the migration.
+enum TieType {
+  RIVAL
+  ALLY
+}
+
+model NpcTie {
+  id         String  @id @default(cuid())
+  campaignId String
+  // INVARIANT: npcAId < npcBId (DB CHECK NpcTie_canonical_order). The tie
+  // is undirected; ordering the endpoints is what makes the unique index
+  // able to say "one row per pair".
+  npcAId     String
+  npcBId     String
+  type       TieType
+  // The turn the tie formed. Read by findRivalIds to make "their rival"
+  // deterministic (longest-standing rivalry wins) rather than whichever
+  // key a JSON object happened to yield first.
+  since      Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  npcA     NPC      @relation("NpcTieA", fields: [npcAId], references: [id], onDelete: Cascade)
+  npcB     NPC      @relation("NpcTieB", fields: [npcBId], references: [id], onDelete: Cascade)
+
+  @@unique([npcAId, npcBId])
+  @@index([campaignId])
+  // Both directions indexed: an undirected edge is looked up from either
+  // endpoint, so "who does this NPC know" is `OR: [{npcAId}, {npcBId}]`.
+  @@index([npcAId])
+  @@index([npcBId])
+}
+
+model FactionTie {
+  id         String  @id @default(cuid())
+  campaignId String
+  /// INVARIANT: factionAId < factionBId (DB CHECK FactionTie_canonical_order).
+  factionAId String
+  factionBId String
+  type       TieType
+  since      Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaign  Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  factionA  Faction  @relation("FactionTieA", fields: [factionAId], references: [id], onDelete: Cascade)
+  factionB  Faction  @relation("FactionTieB", fields: [factionBId], references: [id], onDelete: Cascade)
+
+  @@unique([factionAId, factionBId])
+  @@index([campaignId])
+  @@index([factionAId])
+  @@index([factionBId])
+}
+
 model Faction {
   id            String   @id @default(cuid())
   campaignId    String
@@ -1093,12 +1223,15 @@ model Faction {
   influence     Int      @default(50)
   currentPlan   String?
   threatLevel   Int      @default(1)
-  // World Sim Phase 3: written and read by relationshipTick.ts. Shape:
-  // Record<otherFactionId, { type: 'RIVAL' | 'ALLY'; since: number }>.
-  // Absence of an entry for a given faction means NEUTRAL. Recomputed each
-  // tick from both factions' goals/stability, so it evolves on its own as
+  // World Sim Phase 3: written and read by relationshipTick.ts. Absence of
+  // an edge between two factions means NEUTRAL. Recomputed each tick from
+  // both factions' goals/stability, so it evolves on its own as
   // circumstances change rather than being a one-time GM-authored fact.
-  relationships Json?
+  //
+  // #373: this was a `relationships Json?` column — an id-keyed map stored
+  // on each faction. See NpcTie/FactionTie below for why it moved.
+  tiesAsA FactionTie[] @relation("FactionTieA")
+  tiesAsB FactionTie[] @relation("FactionTieB")
   gmNotes       String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

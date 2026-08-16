@@ -12,7 +12,8 @@ import { getUser } from '@/lib/auth'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { explainFactionGoalReassessment } from '@/lib/game/tick/factionTick'
 import { explainWarMomentum } from '@/lib/game/tick/warTick'
-import { findRivalId, parseFactionRelationships } from '@/lib/game/tick/types'
+import { findRivalId } from '@/lib/game/tick/types'
+import { TIE_INCLUDE, factionTies, type FactionTieRow } from '@/lib/game/tieGraph'
 import { parseBeliefVector } from '@/lib/game/tick/beliefTick'
 import { applyWhatIf, STAT_BAND, type WhatIfSpec } from '@/lib/api/whatIf'
 
@@ -33,7 +34,9 @@ interface FactionForGoalReasoning {
   resources: number
   stability: number
   military: number
-  relationships: unknown
+  id: string
+  tiesAsA?: FactionTieRow[] | null
+  tiesAsB?: FactionTieRow[] | null
   beliefVector: unknown
 }
 
@@ -48,7 +51,7 @@ async function loadGoalReasoning(campaignId: string, factionId: string, faction:
   })
   const turnsOnCurrentGoal = lastGoalChange ? turnNumber - lastGoalChange.turnNumber : undefined
 
-  const rivalId = findRivalId(parseFactionRelationships(faction.relationships))
+  const rivalId = findRivalId(factionTies(faction))
   const rival = rivalId ? await prisma.faction.findUnique({ where: { id: rivalId }, select: { isActive: true } }) : null
   const hasRival = !!rival?.isActive
 
@@ -83,7 +86,7 @@ export async function GET(
         where: { id: factionId, campaignId },
         select: {
           id: true, name: true, goal: true, resources: true, stability: true, military: true,
-          relationships: true, beliefVector: true, leaderCharacterId: true,
+          beliefVector: true, leaderCharacterId: true, ...TIE_INCLUDE,
         },
       }),
       prisma.worldMeta.findUnique({ where: { campaignId }, select: { currentTurnNumber: true } }),

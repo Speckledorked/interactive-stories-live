@@ -13,14 +13,14 @@ vi.mock('@/lib/auth', () => ({ requireAuth: vi.fn() }))
 vi.mock('@/lib/db/campaignAccess', () => ({ getCampaignMembership: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    campaign: { update: vi.fn(), delete: vi.fn() },
+    campaign: { update: vi.fn(), delete: vi.fn(), findUnique: vi.fn() },
   },
 }))
 
 import { requireAuth } from '@/lib/auth'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { prisma } from '@/lib/prisma'
-import { PATCH, DELETE } from '../route'
+import { GET, PATCH, DELETE } from '../route'
 
 const db = prisma as any
 
@@ -30,6 +30,10 @@ function patchRequest(body: unknown) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+}
+
+function getRequest() {
+  return new NextRequest('http://localhost/api/campaigns/camp1')
 }
 
 function deleteRequest() {
@@ -170,5 +174,41 @@ describe('DELETE', () => {
     expect(response.status).toBe(500)
     const body = await response.json()
     expect(body.error).toBe('Internal server error')
+  })
+})
+
+// #426, found by mutation audit: inverting GET's membership guard from
+// `if (!membership)` to `if (membership)` — so that MEMBERS are refused and
+// NON-MEMBERS are let through to read the whole campaign — did not fail a
+// single one of this file's 13 tests. Both other handlers had their gates
+// covered; GET's was never executed at all, and GET is the one that returns
+// the campaign's entire contents.
+describe('GET', () => {
+  it('rejects a non-member', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue(null)
+
+    const response = await GET(getRequest(), { params: { id: 'camp1' } })
+
+    expect(response.status).toBe(403)
+    // The read must not happen at all — a 403 body with the campaign
+    // already fetched would still be a leak waiting for the next refactor.
+    expect(db.campaign.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('returns the campaign to a member', async () => {
+    ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
+    // GET redacts GM notes across every relation before responding, so the
+    // fixture needs them present — a bare {id,title} 500s inside
+    // redactGmNotesList rather than exercising the gate this test is about.
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'A Campaign', worldMeta: null,
+      characters: [], npcs: [], factions: [], locations: [], clocks: [], timeline: [],
+    })
+
+    const response = await GET(getRequest(), { params: { id: 'camp1' } })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.campaign.id).toBe('camp1')
   })
 })

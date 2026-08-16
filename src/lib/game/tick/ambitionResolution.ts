@@ -9,6 +9,7 @@
 import { FactionGoal } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { WorldChange, clamp, findRivalIds } from './types'
+import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import { decideAmbitionOutcome, decideAgendaContinuation, buildAgendaContinuationName, AMBITION_SHAPES } from './ambitionTick'
 import { parseBeliefVector } from './beliefTick'
 import { decideTerritoryClaim } from './territory'
@@ -25,7 +26,7 @@ export async function resolveCompletedAmbitions(
   const changes: WorldChange[] = []
 
   for (const clock of completedAmbitionClocks) {
-    const faction = await prisma.faction.findUnique({ where: { id: clock.sourceFactionId! } })
+    const faction = await prisma.faction.findUnique({ where: { id: clock.sourceFactionId! }, include: TIE_INCLUDE })
     // A faction that collapsed before its ambition resolved is no longer
     // around to receive the outcome — nothing to apply it to.
     if (!faction || !faction.isActive) continue
@@ -125,7 +126,7 @@ export async function resolveCompletedAmbitions(
           where: { campaignId },
           select: { id: true, name: true, ownerFactionId: true, isContested: true },
         }),
-        findRivalIds(faction.relationships),
+        findRivalIds(factionTies(faction)),
         prisma.locationAdjacency.findMany({
           where: { campaignId },
           select: { locationAId: true, locationBId: true, distance: true },

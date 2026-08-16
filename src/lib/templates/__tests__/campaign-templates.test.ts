@@ -40,6 +40,8 @@ function makeMockPrisma() {
       findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue({}),
     },
+    // #372: prerequisites are edge rows, not a parentId column.
+    capabilityPrerequisite: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
     nPC: { create: vi.fn().mockResolvedValue({}) },
     location: {
       create: vi.fn().mockResolvedValue({}),
@@ -258,7 +260,7 @@ describe('applyCampaignTemplate', () => {
     expect(data.some((c: any) => c.name === 'Blood Rites' && c.isSecret === true)).toBe(true)
   })
 
-  it('links the template scaffold into a real prerequisite tree (#82)', async () => {
+  it('links the template scaffold into a real prerequisite graph (#82, #372)', async () => {
     const prisma = makeMockPrisma()
     // Stand in for the rows createMany just wrote.
     prisma.campaignCapability.findMany.mockResolvedValue(
@@ -270,19 +272,26 @@ describe('applyCampaignTemplate', () => {
 
     await applyCampaignTemplate('camp1', 'pbta-fantasy', prisma, undefined, false)
 
-    const updates = prisma.campaignCapability.update.mock.calls.map((c: any) => c[0])
-    const link = (child: string) =>
-      updates.find((u: any) => u.where.id === `id-${slugifyCapabilityKey(child)}`)?.data.parentId
+    const edges: Array<{ capabilityId: string; prerequisiteCapabilityId: string }> =
+      prisma.capabilityPrerequisite.createMany.mock.calls[0][0].data
+    const needs = (child: string) =>
+      edges
+        .filter((e) => e.capabilityId === `id-${slugifyCapabilityKey(child)}`)
+        .map((e) => e.prerequisiteCapabilityId)
 
-    expect(link('Riposte')).toBe('id-bladework')
-    expect(link('Ritual Casting')).toBe('id-cantrips')
+    expect(needs('Riposte')).toEqual(['id-bladework'])
+    expect(needs('Ritual Casting')).toEqual(['id-cantrips'])
     // Depth 3: the forbidden art sits behind the ritual art, not behind the
     // domain's entry-level one.
-    expect(link('Blood Rites')).toBe('id-ritual-casting')
-    // Every tier-1 node stays a root.
-    expect(link('Bladework')).toBeUndefined()
-    expect(link('Cantrips')).toBeUndefined()
-    expect(link('Tracking')).toBeUndefined()
+    expect(needs('Blood Rites')).toEqual(['id-ritual-casting'])
+    // Every tier-1 node stays a root — no edge at all, rather than an edge
+    // to nothing. A self-edge or a dangling one would make the node
+    // permanently un-unlockable instead of freely available.
+    expect(needs('Bladework')).toEqual([])
+    expect(needs('Cantrips')).toEqual([])
+    expect(needs('Tracking')).toEqual([])
+    // No node is ever its own prerequisite.
+    expect(edges.every((e) => e.capabilityId !== e.prerequisiteCapabilityId)).toBe(true)
   })
 
   it('skips the template capability scaffold when AI already generated one', async () => {

@@ -12,6 +12,7 @@ vi.mock('@/lib/prisma', () => ({
 import { prisma } from '@/lib/prisma'
 import { decideTerritoryLoyaltyPush, tickTerritoryLoyalty } from '../territoryLoyaltyTick'
 import type { TickContext } from '../types'
+import { factionTieRows } from './tieFixtures'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
   return { campaignId: 'campaign-1', turnNumber: 10, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
@@ -88,7 +89,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
       { id: 'loc1', name: 'Ore Hills', ownerFactionId: 'f1', loyaltyArc: null },
     ] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f1', name: 'Ashcrown', military: 50, relationships: {} },
+      { id: 'f1', name: 'Ashcrown', military: 50, ...factionTieRows('f1', {}) },
     ] as any)
 
     const result = await tickTerritoryLoyalty(baseCtx())
@@ -102,7 +103,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
       { id: 'loc1', name: 'Ore Hills', ownerFactionId: 'f1', loyaltyArc: null },
     ] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f1', name: 'Ashcrown', military: 50, relationships: { f2: { type: 'RIVAL', since: 1 } } },
+      { id: 'f1', name: 'Ashcrown', military: 50, ...factionTieRows('f1', { f2: { type: 'RIVAL', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 40, isActive: false } as any)
 
@@ -117,7 +118,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
       { id: 'loc1', name: 'Ore Hills', ownerFactionId: 'f1', loyaltyArc: null },
     ] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f1', name: 'Ashcrown', military: 50, relationships: { f2: { type: 'RIVAL', since: 1 } } },
+      { id: 'f1', name: 'Ashcrown', military: 50, ...factionTieRows('f1', { f2: { type: 'RIVAL', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 30, isActive: true } as any)
     vi.mocked(prisma.arc.create).mockResolvedValueOnce({ id: 'arc1', value: 5 } as any)
@@ -136,7 +137,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
       { id: 'loc1', name: 'Ore Hills', ownerFactionId: 'f1', loyaltyArc: { id: 'arc1', value: 10, startedTurn: 5 } },
     ] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f1', name: 'Ashcrown', military: 50, relationships: { f2: { type: 'RIVAL', since: 1 } } },
+      { id: 'f1', name: 'Ashcrown', military: 50, ...factionTieRows('f1', { f2: { type: 'RIVAL', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 50, isActive: true } as any)
 
@@ -151,7 +152,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
       { id: 'loc1', name: 'Ore Hills', ownerFactionId: 'f1', loyaltyArc: { id: 'arc1', value: -55, startedTurn: 1 } },
     ] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f1', name: 'Ashcrown', military: 10, relationships: { f2: { type: 'RIVAL', since: 1 } } },
+      { id: 'f1', name: 'Ashcrown', military: 10, ...factionTieRows('f1', { f2: { type: 'RIVAL', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 90, isActive: true } as any)
 
@@ -168,7 +169,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
       { id: 'loc1', name: 'Ore Hills', ownerFactionId: 'f1', loyaltyArc: { id: 'arc1', value: 55, startedTurn: 1 } },
     ] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f1', name: 'Ashcrown', military: 90, relationships: { f2: { type: 'RIVAL', since: 1 } } },
+      { id: 'f1', name: 'Ashcrown', military: 90, ...factionTieRows('f1', { f2: { type: 'RIVAL', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 10, isActive: true } as any)
 
@@ -183,7 +184,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
       { id: 'loc1', name: 'Ore Hills', ownerFactionId: 'f1', loyaltyArc: { id: 'arc1', value: 5, startedTurn: 1 } },
     ] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f1', name: 'Ashcrown', military: 50, relationships: { f2: { type: 'RIVAL', since: 1 } } },
+      { id: 'f1', name: 'Ashcrown', military: 50, ...factionTieRows('f1', { f2: { type: 'RIVAL', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 50, isActive: true } as any)
 
@@ -198,7 +199,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
       { id: 'loc1', name: 'Ore Hills', ownerFactionId: 'f1', loyaltyArc: { id: 'arc1', value: -55, startedTurn: 1 } },
     ] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f1', name: 'Ashcrown', military: 10, relationships: { f2: { type: 'RIVAL', since: 1 } } },
+      { id: 'f1', name: 'Ashcrown', military: 10, ...factionTieRows('f1', { f2: { type: 'RIVAL', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 90, isActive: true } as any)
 
@@ -215,8 +216,8 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
       { id: 'loc2', name: 'Timber Vale', ownerFactionId: 'f3', loyaltyArc: null },
     ] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f1', name: 'Ashcrown', military: 50, relationships: { f2: { type: 'RIVAL', since: 1 } } },
-      { id: 'f3', name: 'Redgate', military: 50, relationships: {} },
+      { id: 'f1', name: 'Ashcrown', military: 50, ...factionTieRows('f1', { f2: { type: 'RIVAL', since: 1 } }) },
+      { id: 'f3', name: 'Redgate', military: 50, ...factionTieRows('f3', {}) },
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 50, isActive: true } as any)
     vi.mocked(prisma.arc.create).mockResolvedValueOnce({ id: 'arc1', value: 0 } as any)
@@ -249,7 +250,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
       { id: 'loc1', name: 'Ore Hills', ownerFactionId: 'f1', loyaltyArc: null },
     ] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f1', name: 'Ashcrown', military: 50, relationships: { f2: { type: 'RIVAL', since: 1 } } },
+      { id: 'f1', name: 'Ashcrown', military: 50, ...factionTieRows('f1', { f2: { type: 'RIVAL', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 30, isActive: true } as any)
     // The war query itself only ever asks for status: 'ESCALATING', so a
@@ -275,7 +276,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
     ] as any)
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([{ contestedLocationId: 'loc1' }] as any)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f3', name: 'Redgate', military: 50, relationships: { f4: { type: 'RIVAL', since: 1 } } },
+      { id: 'f3', name: 'Redgate', military: 50, ...factionTieRows('f3', { f4: { type: 'RIVAL', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f4', name: 'Ninefold', military: 50, isActive: true } as any)
     vi.mocked(prisma.arc.create).mockResolvedValueOnce({ id: 'arc2', value: 0 } as any)

@@ -19,16 +19,16 @@ export async function loadIntegritySnapshot(
   campaignId: string,
   turnNumber: number
 ): Promise<IntegritySnapshot> {
-  const [campaign, locations, npcs, factions, characters, clocks, debts, wars, quests] = await Promise.all([
+  const [campaign, locations, npcs, factions, characters, clocks, debts, wars, quests, npcTieRows, factionTieRows] = await Promise.all([
     db.campaign.findUnique({ where: { id: campaignId }, select: { worldRules: true } }),
     db.location.findMany({ where: { campaignId }, select: { id: true } }),
     db.nPC.findMany({
       where: { campaignId },
-      select: { id: true, name: true, isAlive: true, factionId: true, factionRole: true, importance: true, socialTies: true },
+      select: { id: true, name: true, isAlive: true, factionId: true, factionRole: true, importance: true },
     }),
     db.faction.findMany({
       where: { campaignId },
-      select: { id: true, name: true, isActive: true, leaderCharacterId: true, relationships: true },
+      select: { id: true, name: true, isActive: true, leaderCharacterId: true },
     }),
     db.character.findMany({
       where: { campaignId },
@@ -47,6 +47,17 @@ export async function loadIntegritySnapshot(
       select: { id: true, name: true, status: true, contestedLocationId: true },
     }),
     db.quest.findMany({ where: { campaignId }, select: { id: true, name: true } }),
+    // #373: the tie edges themselves. Loaded uncapped like everything else
+    // here — an orphaned or wrongly-ordered edge between two NPCs outside
+    // this turn's roster is exactly as real as one inside it.
+    db.npcTie.findMany({
+      where: { campaignId },
+      select: { npcAId: true, npcBId: true, type: true, since: true },
+    }),
+    db.factionTie.findMany({
+      where: { campaignId },
+      select: { factionAId: true, factionBId: true, type: true, since: true },
+    }),
   ])
 
   return {
@@ -60,6 +71,8 @@ export async function loadIntegritySnapshot(
     debts,
     wars,
     quests,
+    npcTies: npcTieRows.map((r) => ({ aId: r.npcAId, bId: r.npcBId, type: r.type, since: r.since })),
+    factionTies: factionTieRows.map((r) => ({ aId: r.factionAId, bId: r.factionBId, type: r.type, since: r.since })),
     worldRules: parseWorldRules(campaign?.worldRules),
   }
 }

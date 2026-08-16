@@ -104,16 +104,16 @@ describe('decideSeedStates', () => {
     // cheap art gated behind another art isn't something you've heard of
     // just by arriving.
     const tree = [
-      { id: 'root', tier: 1, isSecret: false, parentId: null },
-      { id: 'child', tier: 1, isSecret: false, parentId: 'root' },
+      { id: 'root', tier: 1, isSecret: false, prerequisiteCount: 0 },
+      { id: 'child', tier: 1, isSecret: false, prerequisiteCount: 1 },
     ]
     expect(decideSeedStates('NEWCOMER', tree).map(s => s.capabilityId)).toEqual(['root'])
   })
 
   it('NATIVE sees the whole tree regardless of depth', () => {
     const tree = [
-      { id: 'root', tier: 1, isSecret: false, parentId: null },
-      { id: 'deep', tier: 3, isSecret: false, parentId: 'root' },
+      { id: 'root', tier: 1, isSecret: false, prerequisiteCount: 0 },
+      { id: 'deep', tier: 3, isSecret: false, prerequisiteCount: 1 },
     ]
     expect(decideSeedStates('NATIVE', tree).map(s => s.capabilityId).sort()).toEqual(['deep', 'root'])
   })
@@ -179,9 +179,20 @@ describe('applyCapabilityChanges (writer)', () => {
     },
     characterCapability: {
       findUnique: vi.fn(),
+      // #372: the prerequisite gate reads every prerequisite's state in one
+      // query rather than one per edge, so the writer's cost is the same
+      // for a node with three prerequisites as for a node with one.
+      findMany: vi.fn(async () => [] as any[]),
+      count: vi.fn(async () => 0),
       create: vi.fn(async ({ data }: any) => data),
       upsert: vi.fn(async ({ create }: any) => create),
       update: vi.fn(async () => ({})),
+    },
+    // #372: prerequisites live in their own edge table now — a node can
+    // require more than one thing, so there is no single parentId column
+    // to read off the node itself.
+    capabilityPrerequisite: {
+      findMany: vi.fn(async () => [] as Array<{ prerequisiteCapabilityId: string }>),
     },
     character: {
       findUnique: vi.fn(async () => ({ corruption: 0 })),
@@ -338,15 +349,18 @@ describe('applyCapabilityChanges (writer)', () => {
     expect(log).toEqual(['Unlocked: Void Binding'])
   })
 
-  it('prerequisite gate: unlocking a child of an un-unlocked parent downgrades to a glimpse', async () => {
+  it('prerequisite gate: unlocking a node whose prerequisite is un-unlocked downgrades to a glimpse', async () => {
     db.campaignCapability.findFirst.mockResolvedValue({
-      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false, parentId: 'cap-blade',
+      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false,
     })
-    // The character's own row for Riposte, then the parent's row.
-    db.characterCapability.findUnique
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ state: 'GLIMPSED' })
-    db.campaignCapability.findUnique.mockResolvedValue({ name: 'Bladework' } as any)
+    db.characterCapability.findUnique.mockResolvedValue(null)
+    db.capabilityPrerequisite.findMany.mockResolvedValue([{ prerequisiteCapabilityId: 'cap-bladework' }])
+    // States of the prerequisites, then the unlocked subset used to work
+    // out which ones are still missing.
+    db.characterCapability.findMany
+      .mockResolvedValueOnce([{ state: 'GLIMPSED' }])
+      .mockResolvedValueOnce([])
+    db.campaignCapability.findMany.mockResolvedValueOnce([{ name: 'Bladework' }])
 
     const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
       { capability_key: 'riposte', change: 'unlock', reason: 'improvised in a duel' },
@@ -362,13 +376,13 @@ describe('applyCapabilityChanges (writer)', () => {
     expect(log[0]).toContain('Bladework')
   })
 
-  it('prerequisite gate: an unlocked parent lets the child through', async () => {
+  it('prerequisite gate: an unlocked prerequisite lets the node through', async () => {
     db.campaignCapability.findFirst.mockResolvedValue({
-      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false, parentId: 'cap-blade',
+      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false,
     })
-    db.characterCapability.findUnique
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ state: 'UNLOCKED' })
+    db.characterCapability.findUnique.mockResolvedValue(null)
+    db.capabilityPrerequisite.findMany.mockResolvedValue([{ prerequisiteCapabilityId: 'cap-bladework' }])
+    db.characterCapability.findMany.mockResolvedValueOnce([{ state: 'UNLOCKED' }])
 
     const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
       { capability_key: 'riposte', change: 'unlock', reason: 'earned it' },
@@ -380,32 +394,82 @@ describe('applyCapabilityChanges (writer)', () => {
     expect(log).toEqual(['Unlocked: Riposte'])
   })
 
-  it('prerequisite gate: a root node never triggers a parent lookup', async () => {
+  // #372: the behaviour a tree could not express. Under parentId this node
+  // could only ever name one requirement, so "Riposte needs Bladework AND
+  // Footwork" had to be written as one of the two and hoped for.
+  it('prerequisite gate: a node with two prerequisites stays shut while either is missing', async () => {
     db.campaignCapability.findFirst.mockResolvedValue({
-      id: 'cap6', name: 'Bladework', tier: 1, isShadow: false, parentId: null,
+      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false,
     })
     db.characterCapability.findUnique.mockResolvedValue(null)
+    db.capabilityPrerequisite.findMany.mockResolvedValue([
+      { prerequisiteCapabilityId: 'cap-bladework' },
+      { prerequisiteCapabilityId: 'cap-footwork' },
+    ])
+    db.characterCapability.findMany
+      .mockResolvedValueOnce([{ state: 'UNLOCKED' }, { state: 'GLIMPSED' }])
+      .mockResolvedValueOnce([{ capabilityId: 'cap-bladework' }])
+    db.campaignCapability.findMany.mockResolvedValueOnce([{ name: 'Footwork' }])
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'riposte', change: 'unlock', reason: 'improvised in a duel' },
+    ], 9)
+
+    expect(db.characterCapability.upsert).not.toHaveBeenCalled()
+    // Names only what is actually still missing. Repeating "Bladework and
+    // Footwork" at a character who already has Bladework reads as a bug to
+    // the player and gives the narrator nothing to act on.
+    expect(log[0]).toContain('Footwork')
+    expect(log[0]).not.toContain('Bladework')
+  })
+
+  it('prerequisite gate: a node with two prerequisites opens once both are unlocked', async () => {
+    db.campaignCapability.findFirst.mockResolvedValue({
+      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false,
+    })
+    db.characterCapability.findUnique.mockResolvedValue(null)
+    db.capabilityPrerequisite.findMany.mockResolvedValue([
+      { prerequisiteCapabilityId: 'cap-bladework' },
+      { prerequisiteCapabilityId: 'cap-footwork' },
+    ])
+    db.characterCapability.findMany.mockResolvedValueOnce([{ state: 'UNLOCKED' }, { state: 'UNLOCKED' }])
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'riposte', change: 'unlock', reason: 'earned both halves of it' },
+    ], 9)
+
+    expect(log).toEqual(['Unlocked: Riposte'])
+  })
+
+  it('prerequisite gate: a root node never looks up prerequisite states', async () => {
+    db.campaignCapability.findFirst.mockResolvedValue({
+      id: 'cap6', name: 'Bladework', tier: 1, isShadow: false,
+    })
+    db.characterCapability.findUnique.mockResolvedValue(null)
+    db.capabilityPrerequisite.findMany.mockResolvedValue([])
 
     const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
       { capability_key: 'bladework', change: 'unlock', reason: 'trained' },
     ], 9)
 
-    expect(db.campaignCapability.findUnique).not.toHaveBeenCalled()
+    expect(db.characterCapability.findMany).not.toHaveBeenCalled()
     expect(log).toEqual(['Unlocked: Bladework'])
   })
 
   it('prerequisite gate: glimpsing a gated node is never blocked', async () => {
     // Same rule as the shadow gate — anyone may learn a deeper art exists.
     db.campaignCapability.findFirst.mockResolvedValue({
-      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false, parentId: 'cap-blade',
+      id: 'cap5', name: 'Riposte', tier: 2, isShadow: false,
     })
     db.characterCapability.findUnique.mockResolvedValue(null)
+
+    db.capabilityPrerequisite.findMany.mockResolvedValue([{ prerequisiteCapabilityId: 'cap-bladework' }])
 
     const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
       { capability_key: 'riposte', change: 'glimpse', reason: 'saw it used' },
     ], 9)
 
-    expect(db.campaignCapability.findUnique).not.toHaveBeenCalled()
+    expect(db.capabilityPrerequisite.findMany).not.toHaveBeenCalled()
     expect(log).toEqual(['Glimpsed: Riposte'])
   })
 
@@ -447,25 +511,50 @@ describe('shadowUnlockBlocked', () => {
   })
 })
 
-describe('prerequisiteUnlockBlocked (#82)', () => {
+describe('prerequisiteUnlockBlocked (#82, #372)', () => {
   it('never gates a root', () => {
-    expect(prerequisiteUnlockBlocked({ parentId: null }, null)).toBe(false)
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: [] }, [])).toBe(false)
     expect(prerequisiteUnlockBlocked({}, null)).toBe(false)
   })
 
   it('blocks when the character has never met the prerequisite', () => {
-    expect(prerequisiteUnlockBlocked({ parentId: 'p' }, null)).toBe(true)
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: ['p'] }, [])).toBe(true)
   })
 
   it('blocks when the prerequisite is only glimpsed', () => {
     // Knowing the foundation EXISTS is not the same as being able to do it.
-    expect(prerequisiteUnlockBlocked({ parentId: 'p' }, { state: 'GLIMPSED' })).toBe(true)
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: ['p'] }, [{ state: 'GLIMPSED' }])).toBe(true)
   })
 
   it('allows once the prerequisite is unlocked, at any proficiency', () => {
     // Deliberately not a proficiency threshold: a numeric bar would stall a
     // branch behind the per-arc growth cap for a number no player can see.
-    expect(prerequisiteUnlockBlocked({ parentId: 'p' }, { state: 'UNLOCKED' })).toBe(false)
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: ['p'] }, [{ state: 'UNLOCKED' }])).toBe(false)
+  })
+
+  // #372: the whole point of the DAG. "Requires Alchemy AND Swordplay" has
+  // to mean AND — a node that opened on the first prerequisite would make
+  // every additional one decorative.
+  it('requires ALL prerequisites, not just one', () => {
+    expect(
+      prerequisiteUnlockBlocked({ prerequisiteIds: ['a', 'b'] }, [{ state: 'UNLOCKED' }, { state: 'GLIMPSED' }])
+    ).toBe(true)
+  })
+
+  it('allows once every prerequisite is unlocked', () => {
+    expect(
+      prerequisiteUnlockBlocked({ prerequisiteIds: ['a', 'b'] }, [{ state: 'UNLOCKED' }, { state: 'UNLOCKED' }])
+    ).toBe(false)
+  })
+
+  it('treats a MISSING state as not-unlocked rather than absent', () => {
+    // A prerequisite the character has never touched has no row at all, so
+    // the caller passes fewer states than the node has prerequisites. If
+    // that were read as "nothing to check", never touching a prerequisite
+    // would be indistinguishable from having mastered it — the gate would
+    // be strictest against players who had done the MOST.
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: ['a', 'b'] }, [{ state: 'UNLOCKED' }])).toBe(true)
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: ['a', 'b', 'c'] }, [])).toBe(true)
   })
 })
 
@@ -478,7 +567,7 @@ describe('resolvePrerequisiteLinks (#82)', () => {
     expect(resolvePrerequisiteLinks([
       node('bladework', 'Swordplay', 1),
       node('riposte', 'Swordplay', 2, 'bladework'),
-    ])).toEqual([{ key: 'riposte', parentKey: 'bladework' }])
+    ])).toEqual([{ key: 'riposte', prerequisiteKey: 'bladework' }])
   })
 
   it('matches the prerequisite name case- and whitespace-insensitively', () => {
@@ -486,7 +575,7 @@ describe('resolvePrerequisiteLinks (#82)', () => {
       { key: 'cantrips', name: 'Cantrips', domain: 'Essence Magic', tier: 1 },
       { key: 'ritual', name: 'Ritual Casting', domain: 'Essence Magic', tier: 2, requires: '  cantrips ' },
     ])
-    expect(links).toEqual([{ key: 'ritual', parentKey: 'cantrips' }])
+    expect(links).toEqual([{ key: 'ritual', prerequisiteKey: 'cantrips' }])
   })
 
   it('drops a prerequisite that reaches into another domain', () => {
@@ -512,7 +601,7 @@ describe('resolvePrerequisiteLinks (#82)', () => {
       node('a', 'D', 1, 'b'),
       node('b', 'D', 2, 'a'),
     ])
-    expect(links).toEqual([{ key: 'b', parentKey: 'a' }])
+    expect(links).toEqual([{ key: 'b', prerequisiteKey: 'a' }])
   })
 
   it('drops a prerequisite naming something that does not exist', () => {
@@ -576,7 +665,7 @@ describe('narrated capability nodes inherit their domain (#386)', () => {
     // is a way to get the forbidden thing without the corruption.
     const db = makeDb()
     db.campaignCapability.findMany.mockResolvedValue([
-      { id: 'root', tier: 1, isShadow: true, parentId: null },
+      { id: 'root', tier: 1, isShadow: true, _count: { prerequisites: 0 } },
     ])
 
     await applyCapabilityChanges(db as any, 'camp1', 'char1', [
@@ -584,7 +673,15 @@ describe('narrated capability nodes inherit their domain (#386)', () => {
     ], 7)
 
     expect(db.campaignCapability.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ isShadow: true, parentId: 'root' }) })
+      expect.objectContaining({
+        data: expect.objectContaining({
+          isShadow: true,
+          // #372: the inherited prerequisite is written as an EDGE in the
+          // same create, so the node is never briefly a root — a window in
+          // which the gate would have let it through ungated.
+          prerequisites: { create: [{ prerequisiteCapabilityId: 'root' }] },
+        }),
+      })
     )
   })
 
@@ -593,8 +690,8 @@ describe('narrated capability nodes inherit their domain (#386)', () => {
     // it a root — the isNarrated gate covers the rootless case.
     const db = makeDb()
     db.campaignCapability.findMany.mockResolvedValue([
-      { id: 'a', tier: 1, isShadow: false, parentId: null },
-      { id: 'b', tier: 1, isShadow: false, parentId: null },
+      { id: 'a', tier: 1, isShadow: false, _count: { prerequisites: 0 } },
+      { id: 'b', tier: 1, isShadow: false, _count: { prerequisites: 0 } },
     ])
 
     await applyCapabilityChanges(db as any, 'camp1', 'char1', [
@@ -602,28 +699,28 @@ describe('narrated capability nodes inherit their domain (#386)', () => {
     ], 7)
 
     expect(db.campaignCapability.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ parentId: null, isShadow: false }) })
+      expect.objectContaining({ data: expect.objectContaining({ isShadow: false }) })
     )
   })
 })
 
 describe('prerequisiteUnlockBlocked — narrated roots (#386)', () => {
   it('leaves a generated root ungated, as it always was', () => {
-    // Every node in a campaign generated before the tree existed is a
-    // parentless root. Gating those would break existing campaigns.
-    expect(prerequisiteUnlockBlocked({ parentId: null }, null, 0)).toBe(false)
+    // Every node in a campaign generated before the graph existed has no
+    // prerequisites. Gating those would break existing campaigns.
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: [] }, [], 0)).toBe(false)
   })
 
   it('blocks a narrated root for a character with no footing in its domain', () => {
-    expect(prerequisiteUnlockBlocked({ parentId: null, isNarrated: true }, null, 0)).toBe(true)
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: [], isNarrated: true }, [], 0)).toBe(true)
   })
 
   it('allows a narrated root once the character has real footing in that domain', () => {
-    expect(prerequisiteUnlockBlocked({ parentId: null, isNarrated: true }, null, 1)).toBe(false)
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: [], isNarrated: true }, [], 1)).toBe(false)
   })
 
   it('is unchanged when no domain count is supplied', () => {
     // Callers that predate this argument keep the exact pre-#386 behaviour.
-    expect(prerequisiteUnlockBlocked({ parentId: null, isNarrated: true }, null)).toBe(false)
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: [], isNarrated: true }, [])).toBe(false)
   })
 })

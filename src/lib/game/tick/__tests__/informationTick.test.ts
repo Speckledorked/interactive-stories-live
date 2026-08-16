@@ -12,6 +12,9 @@ vi.mock('@/lib/prisma', () => ({
     worldEvent: { findMany: vi.fn() },
     character: { findMany: vi.fn() },
     nPC: { findMany: vi.fn() },
+    // #373: the social channel — word also travels through who an NPC
+    // knows, not only through the map.
+    npcTie: { findMany: vi.fn(async () => []) },
     eventWitness: { findMany: vi.fn(), createMany: vi.fn() },
     locationAdjacency: { findMany: vi.fn() },
   },
@@ -32,6 +35,84 @@ const db = prisma as any
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
   return { campaignId: 'campaign-1', turnNumber: 20, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
+
+describe('decideInformationSpread — the social channel (#373)', () => {
+  // Two islands with no road between them. Physically, 'far' can only ever
+  // get the flat fallback delay (3). Socially, its NPC is one hop from
+  // someone who was standing where it happened.
+  const edges = [{ locationAId: 'a', locationBId: 'b', distance: 1 }]
+  const event = { worldEventId: 'e1', turnNumber: 10, originLocationId: 'a' }
+  const witness = { npcId: 'n-far', locationId: 'far' }
+  const bystander = { npcId: 'n-there', locationId: 'a' }
+
+  it('lets word reach an NPC through an ally faster than the map would', () => {
+    // Physical: unreachable -> flat fallback 3. Social: 1 hop -> 1 + 1 = 2.
+    const npcTies = [{ aId: 'n-far', bId: 'n-there', type: 'ALLY' as const, since: 1 }]
+
+    expect(decideInformationSpread({
+      currentTurn: 12, events: [event], characters: [], npcs: [bystander, witness],
+      coveredPairs: new Set(), edges, npcTies,
+    })).toContainEqual({ worldEventId: 'e1', npcId: 'n-far' })
+
+    // Without the ties it is still waiting on the flat fallback at age 2.
+    expect(decideInformationSpread({
+      currentTurn: 12, events: [event], characters: [], npcs: [bystander, witness],
+      coveredPairs: new Set(), edges,
+    })).not.toContainEqual({ worldEventId: 'e1', npcId: 'n-far' })
+  })
+
+  it('does not carry word along a rivalry', () => {
+    const npcTies = [{ aId: 'n-far', bId: 'n-there', type: 'RIVAL' as const, since: 1 }]
+
+    expect(decideInformationSpread({
+      currentTurn: 12, events: [event], characters: [], npcs: [bystander, witness],
+      coveredPairs: new Set(), edges, npcTies,
+    })).not.toContainEqual({ worldEventId: 'e1', npcId: 'n-far' })
+  })
+
+  it('never makes word arrive LATER than the map alone would', () => {
+    // The social term is a minimum, so a campaign with ties can only ever
+    // be faster. An NPC standing next door with no ties at all still hears
+    // it on the same turn it always did.
+    const nextDoor = { npcId: 'n-next', locationId: 'b' }
+    const npcTies = [{ aId: 'n-far', bId: 'n-there', type: 'ALLY' as const, since: 1 }]
+
+    const withTies = decideInformationSpread({
+      currentTurn: 12, events: [event], characters: [], npcs: [bystander, nextDoor],
+      coveredPairs: new Set(), edges, npcTies,
+    })
+    const withoutTies = decideInformationSpread({
+      currentTurn: 12, events: [event], characters: [], npcs: [bystander, nextDoor],
+      coveredPairs: new Set(), edges,
+    })
+    expect(withTies).toEqual(withoutTies)
+  })
+
+  it('gives no social channel when nobody was there to carry it', () => {
+    // Seeds are the NPCs standing where it happened. With none, an ally
+    // graph is a graph of people who also do not know.
+    const npcTies = [{ aId: 'n-far', bId: 'n-other', type: 'ALLY' as const, since: 1 }]
+
+    expect(decideInformationSpread({
+      currentTurn: 12, events: [event], characters: [], npcs: [witness, { npcId: 'n-other', locationId: 'elsewhere' }],
+      coveredPairs: new Set(), edges, npcTies,
+    })).toEqual([])
+  })
+
+  it('leaves CHARACTER propagation on the map alone', () => {
+    // Characters are players. They have no NpcTie rows and no social graph
+    // of their own — giving them one would be a different feature, and
+    // silently routing their knowledge through NPC alliances would change
+    // what a player knows without any fiction behind it.
+    const npcTies = [{ aId: 'n-far', bId: 'n-there', type: 'ALLY' as const, since: 1 }]
+    const character = { characterId: 'n-far', locationId: 'far' }
+
+    expect(decideInformationSpread({
+      currentTurn: 12, events: [event], characters: [character], npcs: [bystander],
+      coveredPairs: new Set(), edges, npcTies,
+    })).not.toContainEqual({ worldEventId: 'e1', characterId: 'n-far' })
+  })
+})
 
 describe('decideInformationSpread (#101)', () => {
   const edges = [{ locationAId: 'a', locationBId: 'b', distance: 1 }]

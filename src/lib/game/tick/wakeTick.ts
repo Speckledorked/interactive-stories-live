@@ -36,7 +36,8 @@
 // grief depends on rotation, and ActiveWake's decay schedule (its own
 // @@unique idempotency) assumes every affected party got a row.
 
-import { TickContext, TickHandlerResult, WorldChange, clamp, parseFactionRelationships } from './types'
+import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
+import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
 import { isUniqueConstraintViolation } from '../worldUpdaters/uniqueConstraintGuard'
 
@@ -249,7 +250,7 @@ export async function tickWake(ctx: TickContext): Promise<TickHandlerResult> {
   // reads to find a rival absorber.
   const collapsedFactions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: false },
-    select: { id: true, name: true, relationships: true },
+    select: { id: true, name: true, ...TIE_INCLUDE },
   })
 
   if (collapsedFactions.length > 0) {
@@ -265,7 +266,7 @@ export async function tickWake(ctx: TickContext): Promise<TickHandlerResult> {
     for (const collapsed of collapsedFactions) {
       if (alreadyProcessedFactionIds.has(collapsed.id)) continue
 
-      const relatedIds = Object.keys(parseFactionRelationships(collapsed.relationships))
+      const relatedIds = Object.keys(factionTies(collapsed))
       if (relatedIds.length === 0) continue
 
       const relatedFactions = await ctx.db.faction.findMany({

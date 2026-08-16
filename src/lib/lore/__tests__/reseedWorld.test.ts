@@ -17,6 +17,7 @@ const db = vi.hoisted(() => ({
   character: { count: vi.fn() },
   faction: { findMany: vi.fn(), updateMany: vi.fn() },
   campaignCapability: { deleteMany: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), updateMany: vi.fn() },
+  capabilityPrerequisite: { createMany: vi.fn() },
   clock: { findMany: vi.fn() },
   campaignArchetype: { count: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   nPC: { findMany: vi.fn() },
@@ -579,5 +580,102 @@ describe('planFrontMerge — fuzzy reconciliation (#84)', () => {
 
   it('adds a genuinely new front', () => {
     expect(planFrontMerge(['The Long Winter'], ['The Iron Tide'])).toEqual(['The Iron Tide'])
+  })
+})
+
+describe('reseedWorldFromLore — capability prerequisites (#372)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'Test', description: '', universe: 'Original',
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null,
+    })
+    db.character.count.mockResolvedValue(2) // live mode — no scaffold wipe
+    db.faction.findMany.mockResolvedValue([])
+    db.faction.updateMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.deleteMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.createMany.mockResolvedValue({ count: 0 })
+    db.campaignCapability.updateMany.mockResolvedValue({ count: 0 })
+    db.capabilityPrerequisite.createMany.mockResolvedValue({ count: 0 })
+    db.clock.findMany.mockResolvedValue([])
+    db.nPC.findMany.mockResolvedValue([])
+    db.location.findMany.mockResolvedValue([])
+    db.move.findMany.mockResolvedValue(BASIC_MOVES.map(m => ({ baseMoveKey: m.key })))
+    db.move.deleteMany.mockResolvedValue({ count: 0 })
+    db.move.createMany.mockResolvedValue({ count: 0 })
+    db.campaignArchetype.count.mockResolvedValue(4)
+    db.campaignArchetype.deleteMany.mockResolvedValue({ count: 0 })
+    db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
+    db.$transaction.mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops))
+  })
+
+  const cap = (name: string, tier: number, requires?: string | string[]) => ({
+    name, description: '', domain: 'Swordplay', tier, isSecret: false, requires,
+  })
+
+  // Before #372 the reseed path wrote nodes and stopped. A reseeded world
+  // therefore had a completely FLAT capability graph — every node a root —
+  // so the prerequisite gate did nothing at all for anyone who had ever
+  // used the admin reseed button, while a freshly-created world was gated
+  // normally. Same data, two different rulesets.
+  it('links the prerequisites a reseed generation names', async () => {
+    db.campaignCapability.findMany
+      .mockResolvedValueOnce([]) // existing scaffold: empty
+      .mockResolvedValueOnce([
+        { id: 'id-bladework', key: 'bladework' },
+        { id: 'id-footwork', key: 'footwork' },
+        { id: 'id-feint', key: 'feint' },
+      ])
+    vi.mocked(generateWorldFromTemplate).mockResolvedValue({
+      factions: [], statLabels: undefined, fronts: [],
+      capabilities: [cap('Bladework', 1), cap('Footwork', 1), cap('Feint', 2, ['Bladework', 'Footwork'])],
+    } as any)
+
+    await reseedWorldFromLore('camp1')
+
+    expect(db.capabilityPrerequisite.createMany).toHaveBeenCalledWith({
+      data: [
+        { capabilityId: 'id-feint', prerequisiteCapabilityId: 'id-bladework' },
+        { capabilityId: 'id-feint', prerequisiteCapabilityId: 'id-footwork' },
+      ],
+      skipDuplicates: true,
+    })
+  })
+
+  it('links a new node onto a prerequisite that already existed before the reseed', async () => {
+    // The common live-mode shape: the reseed adds a deeper art to a domain
+    // whose entry-level art the campaign has had all along. Resolving only
+    // over the NEW rows would leave it a root.
+    db.campaignCapability.findMany
+      .mockResolvedValueOnce([
+        { key: 'bladework', name: 'Bladework', description: null, domain: 'Swordplay', tier: 1, isSecret: false },
+      ])
+      .mockResolvedValueOnce([
+        { id: 'id-bladework', key: 'bladework' },
+        { id: 'id-riposte', key: 'riposte' },
+      ])
+    vi.mocked(generateWorldFromTemplate).mockResolvedValue({
+      factions: [], statLabels: undefined, fronts: [],
+      capabilities: [cap('Bladework', 1), cap('Riposte', 2, 'Bladework')],
+    } as any)
+
+    await reseedWorldFromLore('camp1')
+
+    expect(db.capabilityPrerequisite.createMany).toHaveBeenCalledWith({
+      data: [{ capabilityId: 'id-riposte', prerequisiteCapabilityId: 'id-bladework' }],
+      skipDuplicates: true,
+    })
+  })
+
+  it('writes no edges when the generation names no prerequisites', async () => {
+    db.campaignCapability.findMany.mockResolvedValue([])
+    vi.mocked(generateWorldFromTemplate).mockResolvedValue({
+      factions: [], statLabels: undefined, fronts: [],
+      capabilities: [cap('Bladework', 1), cap('Footwork', 1)],
+    } as any)
+
+    await reseedWorldFromLore('camp1')
+
+    expect(db.capabilityPrerequisite.createMany).not.toHaveBeenCalled()
   })
 })

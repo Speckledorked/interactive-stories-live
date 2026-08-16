@@ -27,6 +27,40 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
+import { WhatIfControls, type WhatIfField } from '@/components/admin/WhatIfControls'
+
+// #427: which inputs each preview lets an admin perturb. Mirrors the
+// WhatIfSpec each route declares — a field the route doesn't open would
+// render a control that silently changes nothing.
+const FACTION_WHAT_IF_FIELDS: WhatIfField[] = [
+  { key: 'resources', label: 'Resources', min: 0, max: 100 },
+  { key: 'stability', label: 'Stability', min: 0, max: 100 },
+  { key: 'military', label: 'Military', min: 0, max: 100 },
+]
+const LOCATION_WHAT_IF_FIELDS: WhatIfField[] = [
+  { key: 'conditionScore', label: 'Condition', min: 0, max: 100 },
+]
+const CLOCK_WHAT_IF_FIELDS: WhatIfField[] = [
+  { key: 'tension', label: 'Tension', min: 0, max: 100 },
+  { key: 'currentTicks', label: 'Ticks', min: 0, max: 100 },
+]
+const WAR_WHAT_IF_FIELDS: WhatIfField[] = [
+  // -100..100 matches the War_momentum_range DB CHECK, not the 0..100 stat
+  // band — half the legal values are negative.
+  { key: 'momentum', label: 'Momentum', min: -100, max: 100 },
+  { key: 'attackerMilitaryTotal', label: 'Attacker military', min: 0, max: 10000 },
+  { key: 'defenderMilitaryTotal', label: 'Defender military', min: 0, max: 10000 },
+]
+const NPC_WHAT_IF_FIELDS: WhatIfField[] = [
+  { key: 'goalProgress', label: 'Goal progress', min: 0, max: 100 },
+]
+
+/** Turn an override map into the query string the reasoning routes read. */
+function whatIfQuery(overrides: Record<string, number>): string {
+  const entries = Object.entries(overrides)
+  if (entries.length === 0) return ''
+  return '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&')
+}
 
 interface Campaign {
   id: string
@@ -660,10 +694,10 @@ export default function AdminPage() {
     }
   }
 
-  const handlePreviewFactionReasoning = async (factionId: string) => {
+  const handlePreviewFactionReasoning = async (factionId: string, overrides: Record<string, number> = {}) => {
     setFactionReasoningLoading(prev => ({ ...prev, [factionId]: true }))
     try {
-      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/factions/${factionId}/reasoning`)
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/factions/${factionId}/reasoning${whatIfQuery(overrides)}`)
       if (response.ok) {
         const data = await response.json()
         setFactionReasoning(prev => ({ ...prev, [factionId]: data }))
@@ -677,10 +711,10 @@ export default function AdminPage() {
     }
   }
 
-  const handlePreviewNpcReasoning = async (npcId: string) => {
+  const handlePreviewNpcReasoning = async (npcId: string, overrides: Record<string, number> = {}) => {
     setNpcReasoningLoading(prev => ({ ...prev, [npcId]: true }))
     try {
-      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/npcs/${npcId}/reasoning`)
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/npcs/${npcId}/reasoning${whatIfQuery(overrides)}`)
       if (response.ok) {
         const data = await response.json()
         setNpcReasoning(prev => ({ ...prev, [npcId]: data }))
@@ -694,10 +728,10 @@ export default function AdminPage() {
     }
   }
 
-  const handlePreviewLocationReasoning = async (locationId: string) => {
+  const handlePreviewLocationReasoning = async (locationId: string, overrides: Record<string, number> = {}) => {
     setLocationReasoningLoading(prev => ({ ...prev, [locationId]: true }))
     try {
-      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/locations/${locationId}/reasoning`)
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/locations/${locationId}/reasoning${whatIfQuery(overrides)}`)
       if (response.ok) {
         const data = await response.json()
         setLocationReasoning(prev => ({ ...prev, [locationId]: data }))
@@ -711,10 +745,10 @@ export default function AdminPage() {
     }
   }
 
-  const handlePreviewClockReasoning = async (clockId: string) => {
+  const handlePreviewClockReasoning = async (clockId: string, overrides: Record<string, number> = {}) => {
     setClockReasoningLoading(prev => ({ ...prev, [clockId]: true }))
     try {
-      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/clocks/${clockId}/reasoning`)
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/clocks/${clockId}/reasoning${whatIfQuery(overrides)}`)
       if (response.ok) {
         const data = await response.json()
         setClockReasoning(prev => ({ ...prev, [clockId]: data }))
@@ -728,10 +762,20 @@ export default function AdminPage() {
     }
   }
 
-  const fetchWarsReasoning = async () => {
+  const fetchWarsReasoning = async (warId?: string, overrides: Record<string, number> = {}) => {
     setWarsReasoningLoading(true)
     try {
-      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/wars/reasoning`)
+      // #427: the wars route is campaign-wide, so a what-if has to name its
+      // war. Without `warId` an override would rewrite every war on the
+      // board and give the admin four answers with no signal which were
+      // hypothetical.
+      const params = new URLSearchParams()
+      if (warId) params.set('warId', warId)
+      for (const [key, value] of Object.entries(overrides)) params.set(key, String(value))
+      const query = params.toString()
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/wars/reasoning${query ? `?${query}` : ''}`
+      )
       if (response.ok) {
         const data = await response.json()
         setWarsReasoning(data.wars)
@@ -1675,6 +1719,15 @@ export default function AdminPage() {
                               Goal progress: {npcReasoning[npc.id].decision.newGoalProgress}/100
                               {npcReasoning[npc.id].decision.goalCompleted && ' — completes this tick'}
                             </p>
+                            <WhatIfControls
+                              fields={NPC_WHAT_IF_FIELDS}
+                              actual={npcReasoning[npc.id].whatIf?.actual ?? {}}
+                              overridden={npcReasoning[npc.id].whatIf?.overridden}
+                              rejected={npcReasoning[npc.id].whatIf?.rejected}
+                              busy={npcReasoningLoading[npc.id]}
+                              onApply={(o) => handlePreviewNpcReasoning(npc.id, o)}
+                              onReset={() => handlePreviewNpcReasoning(npc.id)}
+                            />
                           </div>
                         )}
                       </div>
@@ -2028,6 +2081,15 @@ export default function AdminPage() {
                                 </ul>
                               </div>
                             ))}
+                            <WhatIfControls
+                              fields={FACTION_WHAT_IF_FIELDS}
+                              actual={factionReasoning[faction.id].whatIf?.actual ?? {}}
+                              overridden={factionReasoning[faction.id].whatIf?.overridden}
+                              rejected={factionReasoning[faction.id].whatIf?.rejected}
+                              busy={factionReasoningLoading[faction.id]}
+                              onApply={(o) => handlePreviewFactionReasoning(faction.id, o)}
+                              onReset={() => handlePreviewFactionReasoning(faction.id)}
+                            />
                           </div>
                         )}
                       </div>
@@ -2080,6 +2142,15 @@ export default function AdminPage() {
                               <p key={i} className="mt-1 text-myth-ink-muted">{line}</p>
                             ))}
                           </div>
+                          <WhatIfControls
+                            fields={WAR_WHAT_IF_FIELDS}
+                            actual={war.whatIf?.actual ?? {}}
+                            overridden={war.whatIf?.overridden}
+                            rejected={war.whatIf?.rejected}
+                            busy={warsReasoningLoading}
+                            onApply={(o) => fetchWarsReasoning(war.warId, o)}
+                            onReset={() => fetchWarsReasoning()}
+                          />
                         </div>
                       )
                     })}
@@ -2302,6 +2373,15 @@ export default function AdminPage() {
                             {locationReasoning[location.id].reasoning.map((line: string, i: number) => (
                               <p key={i} className="mt-1 text-myth-ink-muted">{line}</p>
                             ))}
+                            <WhatIfControls
+                              fields={LOCATION_WHAT_IF_FIELDS}
+                              actual={locationReasoning[location.id].whatIf?.actual ?? {}}
+                              overridden={locationReasoning[location.id].whatIf?.overridden}
+                              rejected={locationReasoning[location.id].whatIf?.rejected}
+                              busy={locationReasoningLoading[location.id]}
+                              onApply={(o) => handlePreviewLocationReasoning(location.id, o)}
+                              onReset={() => handlePreviewLocationReasoning(location.id)}
+                            />
                           </div>
                         )}
                       </div>
@@ -2486,6 +2566,15 @@ export default function AdminPage() {
                           {clockReasoning[clock.id].reasoning.map((line: string, i: number) => (
                             <p key={i} className="mt-1 text-myth-ink-muted">{line}</p>
                           ))}
+                          <WhatIfControls
+                            fields={CLOCK_WHAT_IF_FIELDS}
+                            actual={clockReasoning[clock.id].whatIf?.actual ?? {}}
+                            overridden={clockReasoning[clock.id].whatIf?.overridden}
+                            rejected={clockReasoning[clock.id].whatIf?.rejected}
+                            busy={clockReasoningLoading[clock.id]}
+                            onApply={(o) => handlePreviewClockReasoning(clock.id, o)}
+                            onReset={() => handlePreviewClockReasoning(clock.id)}
+                          />
                         </div>
                       )}
                     </div>

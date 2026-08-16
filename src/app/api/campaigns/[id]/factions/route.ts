@@ -6,6 +6,7 @@ import { visibleTo, isCampaignAdmin } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
 import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
+import { TIE_INCLUDE, factionTies } from '@/lib/game/tieGraph'
 
 // GET /api/campaigns/:id/factions - List all factions for a campaign
 export async function GET(
@@ -37,9 +38,19 @@ export async function GET(
     const factions = await prisma.faction.findMany({
       where: { campaignId, ...visibleTo('faction', membership.role) },
       orderBy: { createdAt: 'desc' },
+      include: TIE_INCLUDE,
     })
 
-    return NextResponse.json({ factions: redactGmNotesList(factions, isAdmin) })
+    // #373: ties are edges now. The response keeps the `relationships`
+    // shape the admin faction map already renders — that map wants "who
+    // does this faction know", which is exactly the per-node projection —
+    // while the raw edge rows stay off the wire.
+    const withTies = factions.map(({ tiesAsA: _a, tiesAsB: _b, ...faction }) => ({
+      ...faction,
+      relationships: factionTies({ id: faction.id, tiesAsA: _a, tiesAsB: _b }),
+    }))
+
+    return NextResponse.json({ factions: redactGmNotesList(withTies, isAdmin) })
   } catch (error) {
     console.error('Get factions error:', error)
     return NextResponse.json(
@@ -95,7 +106,12 @@ export async function POST(
         influence: body.influence !== undefined ? body.influence : 50,
         currentPlan: body.currentPlan || null,
         threatLevel: body.threatLevel || 1,
-        relationships: body.relationships || null,
+        // #373: `relationships: body.relationships` used to sit here — a
+        // raw JSON passthrough no client ever sent, and one of the "any
+        // other path can write a legal-looking asymmetric map" holes the
+        // symmetry integrity check existed to catch. Ties are formed by
+        // relationshipTick from goals and stability; there is no
+        // hand-authored version of them to accept.
         gmNotes: body.gmNotes || null,
         leaderCharacterId: body.leaderCharacterId || null,
         isDiscovered: body.isDiscovered !== undefined ? body.isDiscovered : true,

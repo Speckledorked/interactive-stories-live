@@ -48,6 +48,7 @@
 // simulated. Capping this would make repayment depend on rotation luck.
 
 import { TickContext, TickHandlerResult, WorldChange, clamp, findAllyIds } from './types'
+import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import { assessPayout, BROKE_THRESHOLD, GOLD_PER_RESOURCE_POINT, MAX_RESOURCE_COST_PER_PAYOUT } from '../factionPayout'
 import { isUniqueConstraintViolation } from '../worldUpdaters/uniqueConstraintGuard'
 import { planCycleNetting } from '../factionDebtGraph'
@@ -289,7 +290,7 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
   // (at most one loan in flight per debtor at a time).
   const brokeFactions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true, resources: { lt: BROKE_THRESHOLD } },
-    select: { id: true, name: true, resources: true, relationships: true },
+    select: { id: true, name: true, resources: true, ...TIE_INCLUDE },
   })
 
   for (const broke of brokeFactions) {
@@ -319,7 +320,7 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
     })
     if (existingDebt) continue
 
-    const allyIds = findAllyIds(broke.relationships)
+    const allyIds = findAllyIds(factionTies(broke))
     if (allyIds.length === 0) continue
 
     const allies = await ctx.db.faction.findMany({

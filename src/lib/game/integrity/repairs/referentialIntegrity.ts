@@ -89,39 +89,21 @@ export const repairCharacterRelationships: RepairFn = (violation, snapshot): Rep
   }
 }
 
-export const repairNpcSocialTies: RepairFn = (violation, snapshot): Repair | null => {
-  const npc = snapshot.npcs.find((n) => n.id === violation.entityId)
-  if (!npc) return null
-  const otherNpcs = snapshot.npcs.filter((n) => n.id !== npc.id)
-  const { map, changed } = repairIdKeyedMap(npc.socialTies, otherNpcs)
-  if (!changed) return null
-
-  return {
-    violation,
-    field: 'socialTies',
-    previousValue: Object.keys(idKeyedMap(npc.socialTies)).length,
-    newValue: Object.keys(map).length,
-    description: `Cleaned up ${npc.name}'s social ties — orphan NPC references dropped or recovered by name`,
-    write: { model: 'nPC', id: npc.id, data: { socialTies: map } },
-  }
-}
-
-export const repairFactionRelationships: RepairFn = (violation, snapshot): Repair | null => {
-  const faction = snapshot.factions.find((f) => f.id === violation.entityId)
-  if (!faction) return null
-  const otherFactions = snapshot.factions.filter((f) => f.id !== faction.id)
-  const { map, changed } = repairIdKeyedMap(faction.relationships, otherFactions)
-  if (!changed) return null
-
-  return {
-    violation,
-    field: 'relationships',
-    previousValue: Object.keys(idKeyedMap(faction.relationships)).length,
-    newValue: Object.keys(map).length,
-    description: `Cleaned up ${faction.name}'s relationships — orphan faction references dropped or recovered by name`,
-    write: { model: 'faction', id: faction.id, data: { relationships: map } },
-  }
-}
+// #373: repairNpcSocialTies and repairFactionRelationships used to live
+// here. Both walked an id-keyed JSON blob and dropped (or name-recovered)
+// keys pointing at deleted entities. Ties are FK'd edge rows now, so an
+// orphan endpoint cannot exist at rest — Postgres cascades the edge away
+// with the entity. The checks stay as regression guards (see
+// checks/referentialIntegrity.ts); the repairs do not, and both keys are
+// deliberately absent from the registry below.
+//
+// If the constraints were ever dropped and a dangling edge did appear, the
+// repair would be a row DELETE, which this file's write shape ({ model,
+// id, data }) does not express. Building delete plumbing for a case a
+// foreign key already makes impossible would be inventing a mechanism to
+// handle a state the schema forbids — the violation is reported to admin
+// instead, which is the same posture the engine takes for every other
+// detect-only check.
 
 export const repairCharacterReputation: RepairFn = (violation, snapshot): Repair | null => {
   const character = snapshot.characters.find((c) => c.id === violation.entityId)
@@ -161,8 +143,6 @@ export const REFERENTIAL_INTEGRITY_REPAIRS: Record<string, RepairFn> = {
   'war.contestedLocationId.resolves': repairWarContestedLocation,
   'clock.participantNpcIds.resolve': repairClockParticipants,
   'character.relationships.keys.resolve': repairCharacterRelationships,
-  'npc.socialTies.keys.resolve': repairNpcSocialTies,
-  'faction.relationships.keys.resolve': repairFactionRelationships,
   'character.resources.reputation.keys.resolve': repairCharacterReputation,
   'debt.counterpartyId.resolves': repairDebtCounterparty,
 }

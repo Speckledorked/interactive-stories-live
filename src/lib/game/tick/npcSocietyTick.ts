@@ -43,9 +43,9 @@
 // lag needed — unlike relationshipTick/factionTick, this isn't a circular
 // dependency, just ties-then-consequences).
 
-import type { Prisma } from '@prisma/client'
-import { TickContext, TickHandlerResult, WorldChange, parseFactionRelationships, stableHash } from './types'
+import { TickContext, TickHandlerResult, WorldChange, stableHash } from './types'
 import { tickPairwiseTies } from './relationshipEngine'
+import { edgesFromFactionRows, edgesFromNpcRows, indexTies, tiesOf } from '../tieGraph'
 import { MAJOR_IMPORTANCE_THRESHOLD, isActingPhase } from './npcTick'
 import { rosterNpcFilter } from './capOrdering'
 
@@ -151,31 +151,45 @@ export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerRe
       // #283: importance desc is the intentional priority; the rotation
       // key breaks ties among equally-important NPCs — see capOrdering.ts.
       orderBy: [{ importance: 'desc' }, { id: 'asc' }],
-      select: { id: true, name: true, factionId: true, threat: true, socialTies: true, currentLocation: true },
+      select: { id: true, name: true, factionId: true, threat: true, currentLocation: true },
     }),
     ctx.db.location.findMany({ where: { campaignId: ctx.campaignId, isDiscovered: true }, select: { name: true } }),
   ])
   const sortedLocationNames = [...new Set(locations.map((l) => l.name))].sort()
 
   const factionIds = [...new Set(npcs.map((n) => n.factionId).filter((id): id is string => !!id))]
-  const factions = factionIds.length > 0
-    ? await ctx.db.faction.findMany({ where: { id: { in: factionIds } }, select: { id: true, relationships: true } })
+  // #373: faction stances read as edges. A pair is one row, so this reads
+  // every tie among the factions these NPCs belong to in a single query
+  // instead of one JSON blob per faction.
+  const factionTieRows = factionIds.length > 0
+    ? await ctx.db.factionTie.findMany({
+        where: { campaignId: ctx.campaignId, factionAId: { in: factionIds }, factionBId: { in: factionIds } },
+        select: { factionAId: true, factionBId: true, type: true, since: true },
+      })
     : []
-  const factionRelById = new Map(factions.map((f) => [f.id, parseFactionRelationships(f.relationships)]))
+  const factionRelById = indexTies(edgesFromFactionRows(factionTieRows))
 
   const factionRelationshipBetween = (aFactionId: string, bFactionId: string): 'RIVAL' | 'ALLY' | 'NEUTRAL' => {
     if (aFactionId === bFactionId) return 'NEUTRAL' // same-faction case handled separately by decideNpcSocialTie
-    return factionRelById.get(aFactionId)?.[bFactionId]?.type ?? 'NEUTRAL'
+    return tiesOf(factionRelById, aFactionId)[bFactionId]?.type ?? 'NEUTRAL'
   }
 
   const aliveNpcIds = new Set(npcs.map((n) => n.id))
 
-  const { changes, working, dirty } = tickPairwiseTies({
+  // Campaign-scoped, not roster-scoped: the expire pass below has to be
+  // able to SEE an edge pointing out of this tick's roster in order to end
+  // it.
+  const existingRows = await ctx.db.npcTie.findMany({
+    where: { campaignId: ctx.campaignId },
+    select: { npcAId: true, npcBId: true, type: true, since: true },
+  })
+
+  const { changes, upserts, deletes } = tickPairwiseTies({
     campaignId: ctx.campaignId,
     entityType: 'NPC',
     entities: npcs,
     turnNumber: ctx.turnNumber,
-    getRawTies: (n) => n.socialTies,
+    existingEdges: edgesFromNpcRows(existingRows),
     // Expire ties whose other NPC died, dropped below major importance, or
     // was otherwise removed from this tick's roster — without this a tie
     // to a dead NPC stays on record forever, since nothing else ever visits it.
@@ -221,8 +235,21 @@ export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerRe
   })
 
   if (!ctx.dryRun) {
-    for (const npcId of dirty) {
-      await ctx.db.nPC.update({ where: { id: npcId }, data: { socialTies: working.get(npcId) as unknown as Prisma.InputJsonValue } })
+    for (const pair of deletes) {
+      await ctx.db.npcTie.deleteMany({ where: { npcAId: pair.aId, npcBId: pair.bId } })
+    }
+    for (const edge of upserts) {
+      await ctx.db.npcTie.upsert({
+        where: { npcAId_npcBId: { npcAId: edge.aId, npcBId: edge.bId } },
+        update: { type: edge.type, since: edge.since },
+        create: {
+          campaignId: ctx.campaignId,
+          npcAId: edge.aId,
+          npcBId: edge.bId,
+          type: edge.type,
+          since: edge.since,
+        },
+      })
     }
   }
 
@@ -273,7 +300,7 @@ export async function tickNpcJointSchemes(ctx: TickContext): Promise<TickHandler
     // #283: importance desc is the intentional priority; the rotation key
     // breaks ties among equally-important NPCs — see capOrdering.ts.
       orderBy: [{ importance: 'desc' }, { id: 'asc' }],
-    select: { id: true, name: true, goals: true, socialTies: true },
+    select: { id: true, name: true, goals: true },
   })
 
   const changes: WorldChange[] = []
@@ -281,18 +308,25 @@ export async function tickNpcJointSchemes(ctx: TickContext): Promise<TickHandler
 
   // Every ALLY pair on record among this turn's roster (ties were just
   // written by tickNpcSocialTies above in the same pass).
-  const allyPairs: Array<[string, string]> = []
-  const seen = new Set<string>()
-  for (const n of npcs) {
-    const ties = parseFactionRelationships(n.socialTies)
-    for (const [otherId, tie] of Object.entries(ties)) {
-      if (tie.type !== 'ALLY' || !npcById.has(otherId)) continue
-      const key = [n.id, otherId].sort().join(':')
-      if (seen.has(key)) continue
-      seen.add(key)
-      allyPairs.push([n.id, otherId])
-    }
-  }
+  //
+  // #373: one query for the pairs themselves, rather than reading every
+  // NPC's blob and de-duplicating the two copies of each pair. An edge IS
+  // the pair, so `seen` is gone — there was never a second copy to skip.
+  const allyRows = await ctx.db.npcTie.findMany({
+    where: { campaignId: ctx.campaignId, type: 'ALLY' },
+    select: { npcAId: true, npcBId: true },
+  })
+  // An edge is stored in id order, but a scheme is NAMED after its pair
+  // ("X and Y Join Forces"), so the pair is re-ordered by roster position:
+  // the more important NPC leads, exactly as when this walked the roster
+  // and read each NPC's own blob. Storage order is not narrative order.
+  const rosterIndex = new Map(npcs.map((n, i) => [n.id, i]))
+  const allyPairs: Array<[string, string]> = allyRows
+    .filter((r) => npcById.has(r.npcAId) && npcById.has(r.npcBId))
+    .map((r): [string, string] =>
+      rosterIndex.get(r.npcAId)! <= rosterIndex.get(r.npcBId)! ? [r.npcAId, r.npcBId] : [r.npcBId, r.npcAId]
+    )
+    .sort((x, y) => rosterIndex.get(x[0])! - rosterIndex.get(y[0])! || rosterIndex.get(x[1])! - rosterIndex.get(y[1])!)
   if (allyPairs.length === 0) return { changes }
 
   const activeSchemeClocks = await ctx.db.clock.findMany({

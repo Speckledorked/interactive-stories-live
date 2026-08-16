@@ -26,12 +26,14 @@ export interface GeneratedCapability {
   description: string
   tier: number // 1 = entry knowledge, 3 = deep art
   isSecret: boolean // hidden even from natives until the fiction reveals it
-  // Prerequisite tree (#82): the NAME of the capability in this same domain
-  // that must be unlocked before this one can be. Undefined for roots. The
-  // AI names it; the campaign create resolves names to parentId after the
-  // nodes exist, so a name it invented or got slightly wrong simply leaves
-  // the node a root instead of breaking generation.
-  requires?: string
+  // Prerequisite graph (#82, #372): the NAME(s) of capabilities in this same
+  // domain that must be unlocked before this one can be. Undefined for roots.
+  // A list, not a single name, because prerequisites are a DAG — an art that
+  // genuinely sits behind two others should say so rather than pick one.
+  // The AI names them; the campaign create resolves names to edges after the
+  // nodes exist, so a name it invented or got slightly wrong simply drops
+  // that edge instead of breaking generation.
+  requires?: string | string[]
 }
 
 // Fiction-flavored display name for one of the 5 fixed PbtA stat keys.
@@ -172,7 +174,7 @@ Return JSON with this structure:
     {
       "domain": "Name of a learnable system in this world (a magic tradition, a fighting style, a political art...)",
       "capabilities": [
-        { "name": "A specific learnable ability/art within the domain", "description": "1 sentence", "tier": 1, "is_secret": false, "requires": "exact name of the tier-below capability in THIS domain that must be learned first — omit entirely for tier 1" }
+        { "name": "A specific learnable ability/art within the domain", "description": "1 sentence", "tier": 1, "is_secret": false, "requires": ["exact name of a lower-tier capability in THIS domain that must be learned first — omit entirely for tier 1"] }
       ]
     }
   ],
@@ -204,7 +206,7 @@ Rules:
 - current_plan: 1-2 sentences, specific and active (e.g. "Bribing city guards to look the other way while they move contraband through the docks")
 - Do NOT reuse names from generic fantasy/superhero tropes (no "The Dark Brotherhood", "League of Shadows", etc.)
 - capability_domains: 3-5 domains, the learnable SYSTEMS of this world (its magic/powers/martial/social arts). 2-4 capabilities per domain. tier 1 = what any practitioner starts with, tier 2-3 = deeper arts. Mark 1-2 capabilities is_secret: true (forbidden or lost arts nobody openly knows)
-- requires: every tier 2-3 capability must name, EXACTLY, one lower-tier capability in its OWN domain as its prerequisite — the thing a student of this art learns before it. Tier 1 capabilities must omit "requires". Never point a capability at itself or at one in another domain
+- requires: every tier 2-3 capability must name, EXACTLY, one or two lower-tier capabilities in its OWN domain as its prerequisites — what a student of this art learns before it. Use two only when the art genuinely draws on both; one is the normal case. Tier 1 capabilities must omit "requires". Never point a capability at itself or at one in another domain
 - stat_labels: rename all 5 stats to fit this world's own vocabulary (e.g. a cultivation setting might call "weird" something like "Essence Sense"; a hard sci-fi setting might not use mystical language at all).${loreDigest ? ' If the canon lore names a real stat/attribute system for this universe (a progression-fantasy series\' own attributes, a game-like power system, etc.): first count how many distinct named stats/attributes canon actually states, up to 5. This is a HARD REQUIREMENT, not a suggestion — your 5 stat_labels MUST include EVERY one of those exact canon names, verbatim, with none skipped or swapped for an invented synonym. Using only some of them (e.g. 3 of 4) is WRONG. Only invent a new label for a slot beyond what canon names — e.g. canon names 4 stats: use all 4 of those exact names, plus exactly 1 invented one to fill the 5th slot.' : ''} Keep each label 1-3 words, in-fiction, never the literal PbtA name. The underlying meaning (what each stat measures) must stay the same — only the name and flavor change
 - fronts: 1-3 concrete, escalating dangers already in motion — the kind of thing that gets visibly worse if nobody intervenes (not vague "evil is out there" flavor text). ${loreDigest ? 'Ground these in canon where the lore describes a real brewing conflict, threat, or crisis; invent only to fill gaps.' : ''}At least one should name a real source_faction_name from the factions list when the threat is that faction's own doing; others may be faction-free (a natural disaster, a supernatural phenomenon, a slow-building crisis nobody's causing on purpose)
 - category: "urgent" ticks forward reliably every world turn, "slow" only occasionally, "social" is the default pace — pick whichever fits how fast this danger should visibly escalate
@@ -287,22 +289,32 @@ Rules:
         if (!domain || !Array.isArray(d.capabilities)) continue
         for (const c of d.capabilities) {
           if (!c?.name) continue
-          const requires = typeof c.requires === 'string' ? c.requires.trim() : ''
+          // #372: prerequisites are a list. A model that answers the older
+          // single-string form is still read correctly — the schema changed
+          // under it, and a world generated an hour before this deploy is
+          // not malformed.
+          const declared = Array.isArray(c.requires) ? c.requires : [c.requires]
+          const selfName = String(c.name).trim().toLowerCase()
+          const requires: string[] = []
+          for (const raw of declared) {
+            const name = typeof raw === 'string' ? raw.trim() : ''
+            // Self-reference is the one malformed prerequisite worth
+            // rejecting here rather than at resolution time — it's a
+            // plausible model slip and it would produce a node that can
+            // never be unlocked. Everything else (a name from another
+            // domain, a name that doesn't exist) simply fails to resolve
+            // and drops that edge.
+            if (!name || name.toLowerCase() === selfName) continue
+            if (requires.some((r) => r.toLowerCase() === name.toLowerCase())) continue
+            requires.push(name)
+          }
           capabilities.push({
             domain,
             name: String(c.name),
             description: String(c.description || ''),
             tier: Math.max(1, Math.min(3, Number(c.tier) || 1)),
             isSecret: Boolean(c.is_secret),
-            // Self-reference is the one malformed prerequisite worth
-            // rejecting here rather than at resolution time — it's a
-            // plausible model slip and it would produce a node that can
-            // never be unlocked. Everything else (a name from another
-            // domain, a name that doesn't exist) simply fails to resolve
-            // and leaves the node a root.
-            requires: requires && requires.toLowerCase() !== String(c.name).trim().toLowerCase()
-              ? requires
-              : undefined,
+            requires: requires.length > 0 ? requires : undefined,
           })
         }
       }

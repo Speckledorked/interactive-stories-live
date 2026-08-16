@@ -9,13 +9,13 @@ import { emptySnapshot } from './testHelpers'
 import { Violation } from '../types'
 
 function npc(overrides: Record<string, any>) {
-  return { id: 'npc-x', name: 'X', isAlive: true, factionId: 'f1', factionRole: null, importance: 1, socialTies: null, ...overrides }
+  return { id: 'npc-x', name: 'X', isAlive: true, factionId: 'f1', factionRole: null, importance: 1, ...overrides }
 }
 
 describe('factionHasOneLivingLeader', () => {
   it('flags an active faction with living members but no living LEADER', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       npcs: [npc({ id: 'npc1', name: 'Kessler', importance: 3 })],
     })
     const violations = factionHasOneLivingLeader.run(snapshot)
@@ -25,7 +25,7 @@ describe('factionHasOneLivingLeader', () => {
 
   it('does not flag a faction that already has a living leader', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       npcs: [npc({ id: 'npc1', name: 'Kessler', factionRole: 'LEADER' })],
     })
     expect(factionHasOneLivingLeader.run(snapshot)).toHaveLength(0)
@@ -33,7 +33,7 @@ describe('factionHasOneLivingLeader', () => {
 
   it('does not flag an inactive (collapsed) faction', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: false, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: false, leaderCharacterId: null }],
       npcs: [npc({ id: 'npc1', name: 'Kessler' })],
     })
     expect(factionHasOneLivingLeader.run(snapshot)).toHaveLength(0)
@@ -41,7 +41,7 @@ describe('factionHasOneLivingLeader', () => {
 
   it('does not flag a faction with no living members at all', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       npcs: [npc({ id: 'npc1', name: 'Kessler', isAlive: false })],
     })
     expect(factionHasOneLivingLeader.run(snapshot)).toHaveLength(0)
@@ -49,7 +49,7 @@ describe('factionHasOneLivingLeader', () => {
 
   it('does not flag a faction led by a player character, even with no NPC LEADER', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'char1', relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'char1' }],
       npcs: [npc({ id: 'npc1', name: 'Kessler' })],
     })
     expect(factionHasOneLivingLeader.run(snapshot)).toHaveLength(0)
@@ -59,7 +59,7 @@ describe('factionHasOneLivingLeader', () => {
     const leaderlessSnapshot = (worldRules: any) =>
       emptySnapshot({
         turnNumber: 100,
-        factions: [{ id: 'f1', name: 'The Free Assembly', isActive: true, leaderCharacterId: null, relationships: {} }],
+        factions: [{ id: 'f1', name: 'The Free Assembly', isActive: true, leaderCharacterId: null }],
         npcs: [npc({ id: 'npc1', name: 'Kessler', importance: 3 })],
         worldRules,
       })
@@ -101,7 +101,7 @@ describe('factionHasOneLivingLeader', () => {
 describe('repairFactionLeadership', () => {
   it('promotes the most important living member', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       npcs: [
         npc({ id: 'npc1', name: 'Kessler', importance: 2 }),
         npc({ id: 'npc2', name: 'Vashti', importance: 5 }),
@@ -137,7 +137,7 @@ describe('repairFactionLeadership', () => {
 describe('factionHasAtMostOneLivingLeader', () => {
   it('does not flag a faction with exactly one living NPC LEADER and no PC leader', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       npcs: [npc({ id: 'npc1', name: 'Kessler', factionRole: 'LEADER' })],
     })
     expect(factionHasAtMostOneLivingLeader.run(snapshot)).toHaveLength(0)
@@ -145,7 +145,7 @@ describe('factionHasAtMostOneLivingLeader', () => {
 
   it('does not flag a leaderless faction — that is the sibling check\'s job', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       npcs: [npc({ id: 'npc1', name: 'Kessler', factionRole: 'MEMBER' })],
     })
     expect(factionHasAtMostOneLivingLeader.run(snapshot)).toHaveLength(0)
@@ -153,7 +153,7 @@ describe('factionHasAtMostOneLivingLeader', () => {
 
   it('flags a faction with a PC leader AND a living NPC LEADER at the same time', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'char1', relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'char1' }],
       npcs: [npc({ id: 'npc1', name: 'Kessler', factionRole: 'LEADER' })],
     })
     const violations = factionHasAtMostOneLivingLeader.run(snapshot)
@@ -163,7 +163,7 @@ describe('factionHasAtMostOneLivingLeader', () => {
 
   it('flags two living NPCs simultaneously holding LEADER, one violation per conflicting NPC', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       npcs: [
         npc({ id: 'npc1', name: 'Kessler', importance: 2, factionRole: 'LEADER' }),
         npc({ id: 'npc2', name: 'Vashti', importance: 9, factionRole: 'LEADER' }),
@@ -177,7 +177,7 @@ describe('factionHasAtMostOneLivingLeader', () => {
 
   it('does not flag a dead NPC with a stale LEADER role', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'char1', relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'char1' }],
       npcs: [npc({ id: 'npc1', name: 'Kessler', factionRole: 'LEADER', isAlive: false })],
     })
     expect(factionHasAtMostOneLivingLeader.run(snapshot)).toHaveLength(0)
@@ -185,7 +185,7 @@ describe('factionHasAtMostOneLivingLeader', () => {
 
   it('does not flag an inactive (collapsed) faction', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: false, leaderCharacterId: 'char1', relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: false, leaderCharacterId: 'char1' }],
       npcs: [npc({ id: 'npc1', name: 'Kessler', factionRole: 'LEADER' })],
     })
     expect(factionHasAtMostOneLivingLeader.run(snapshot)).toHaveLength(0)

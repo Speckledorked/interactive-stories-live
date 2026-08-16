@@ -20,11 +20,12 @@
 // dependency (relationships depend on goals; DESTABILIZE_RIVAL depends on
 // relationships) without needing a two-pass tick.
 
-import type { FactionGoal, Prisma } from '@prisma/client'
+import type { FactionGoal } from '@prisma/client'
 import { band } from './factionTick'
 import { FactionRelationshipEntry, TickContext, TickHandlerResult } from './types'
 import { tickPairwiseTies } from './relationshipEngine'
 import { rosterFactionFilter } from './capOrdering'
+import { edgesFromFactionRows } from '../tieGraph'
 
 export type RelationshipType = 'RIVAL' | 'ALLY' | 'NEUTRAL'
 
@@ -68,12 +69,20 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
   const activeFactionIds = new Set(allFactions.filter((f) => f.isActive).map((f) => f.id))
   const factionNameById = new Map(allFactions.map((f) => [f.id, f.name]))
 
-  const { changes, working, dirty } = tickPairwiseTies({
+  // #373: every tie on record for this campaign, as edges. Campaign-scoped
+  // rather than restricted to this tick's roster because the expire pass
+  // needs to see an edge pointing OUT of the roster in order to end it.
+  const existingRows = await ctx.db.factionTie.findMany({
+    where: { campaignId: ctx.campaignId },
+    select: { factionAId: true, factionBId: true, type: true, since: true },
+  })
+
+  const { changes, upserts, deletes } = tickPairwiseTies({
     campaignId: ctx.campaignId,
     entityType: 'FACTION',
     entities: factions,
     turnNumber: ctx.turnNumber,
-    getRawTies: (f) => f.relationships,
+    existingEdges: edgesFromFactionRows(existingRows),
     // A rival only counts if it still exists as an active faction —
     // nothing else ever expires a stale entry (see the module doc above).
     isValidOtherId: (otherId) => activeFactionIds.has(otherId),
@@ -93,10 +102,28 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
   })
 
   if (!ctx.dryRun) {
-    for (const factionId of dirty) {
-      await ctx.db.faction.update({
-        where: { id: factionId },
-        data: { relationships: working.get(factionId) as unknown as Prisma.InputJsonValue },
+    // Deletes first: a pair can only appear in one list per tick, but
+    // ordering them this way keeps the write pass total rather than
+    // order-dependent if that ever stops being true.
+    for (const pair of deletes) {
+      await ctx.db.factionTie.deleteMany({
+        where: { factionAId: pair.aId, factionBId: pair.bId },
+      })
+    }
+    for (const edge of upserts) {
+      await ctx.db.factionTie.upsert({
+        where: { factionAId_factionBId: { factionAId: edge.aId, factionBId: edge.bId } },
+        // A tie flipping RIVAL <-> ALLY is a NEW tie, so `since` resets —
+        // matching the old behaviour, where the writer overwrote the whole
+        // entry with the current turn number.
+        update: { type: edge.type, since: edge.since },
+        create: {
+          campaignId: ctx.campaignId,
+          factionAId: edge.aId,
+          factionBId: edge.bId,
+          type: edge.type,
+          since: edge.since,
+        },
       })
     }
   }

@@ -94,8 +94,13 @@ export interface SeedableCapability {
   id: string
   tier: number
   isSecret: boolean
-  /** Prerequisite node, when this campaign's scaffold has a tree (#82). */
-  parentId?: string | null
+  /**
+   * How many prerequisites stand in front of this node (#82, #372).
+   * Zero means a root. A count rather than a parent id because the
+   * structure is a DAG now — "is anything in front of me" is the only
+   * question seeding asks, and it does not care what.
+   */
+  prerequisiteCount?: number
 }
 
 export interface SeedDecision {
@@ -113,10 +118,10 @@ export interface SeedDecision {
  *  NEWCOMER — has heard of the top-level systems, nothing deeper.
  *  OUTSIDER — a truly blank sheet until the fiction shows them anything.
  *
- * "Top-level" for a NEWCOMER means a ROOT of the prerequisite tree (#82) —
- * something with nothing standing in front of it — and additionally tier 1,
- * so a scaffold that has tiers but no declared prerequisites (every node a
- * root) still behaves exactly as it did before the tree existed.
+ * "Top-level" for a NEWCOMER means a ROOT of the prerequisite DAG (#82,
+ * #372) — something with nothing standing in front of it — and additionally
+ * tier 1, so a scaffold that has tiers but no declared prerequisites (every
+ * node a root) still behaves exactly as it did before the graph existed.
  */
 export function decideSeedStates(
   familiarity: OriginFamiliarity,
@@ -128,7 +133,7 @@ export function decideSeedStates(
       return visible.map(c => ({ capabilityId: c.id, state: 'GLIMPSED' as CapabilityState }))
     case 'NEWCOMER':
       return visible
-        .filter(c => !c.parentId && c.tier <= 1)
+        .filter(c => (c.prerequisiteCount ?? 0) === 0 && c.tier <= 1)
         .map(c => ({ capabilityId: c.id, state: 'GLIMPSED' as CapabilityState }))
     case 'OUTSIDER':
       return []
@@ -144,8 +149,16 @@ export interface LinkableCapability {
   name: string
   domain: string
   tier: number
-  /** Prerequisite as declared by generation — a display name, not a key. */
-  requires?: string
+  /**
+   * Prerequisites as declared by generation — display names, not keys.
+   *
+   * Accepts a single name or several (#372). A string is still valid and
+   * still means one prerequisite, so every existing generator output and
+   * every stored campaign keeps resolving exactly as before; the array form
+   * is what lets "Battle Alchemy requires Alchemy AND Swordplay" exist at
+   * all.
+   */
+  requires?: string | string[]
 }
 
 /**
@@ -170,7 +183,7 @@ export interface LinkableCapability {
  */
 export function resolvePrerequisiteLinks(
   nodes: LinkableCapability[]
-): Array<{ key: string; parentKey: string }> {
+): Array<{ key: string; prerequisiteKey: string }> {
   const byDomain = new Map<string, LinkableCapability[]>()
   for (const node of nodes) {
     const domain = node.domain.toLowerCase()
@@ -179,15 +192,30 @@ export function resolvePrerequisiteLinks(
     else byDomain.set(domain, [node])
   }
 
-  const links: Array<{ key: string; parentKey: string }> = []
+  const links: Array<{ key: string; prerequisiteKey: string }> = []
+  const seen = new Set<string>()
+
   for (const node of nodes) {
-    const wanted = node.requires?.trim().toLowerCase()
-    if (!wanted) continue
+    const declared = Array.isArray(node.requires) ? node.requires : node.requires ? [node.requires] : []
     const siblings = byDomain.get(node.domain.toLowerCase()) || []
-    const parent = siblings.find(
-      s => s.name.trim().toLowerCase() === wanted && s.tier < node.tier && s.key !== node.key
-    )
-    if (parent) links.push({ key: node.key, parentKey: parent.key })
+
+    for (const raw of declared) {
+      const wanted = raw?.trim().toLowerCase()
+      if (!wanted) continue
+      const prerequisite = siblings.find(
+        s => s.name.trim().toLowerCase() === wanted && s.tier < node.tier && s.key !== node.key
+      )
+      if (!prerequisite) continue
+      // The same prerequisite named twice is one edge, not two — the join
+      // table's unique index would reject the second anyway, and failing a
+      // whole campaign's scaffold over a duplicated name in a generated
+      // list would be the "cost the campaign its scaffold" failure this
+      // function's own doc comment refuses.
+      const edge = `${node.key}\u0000${prerequisite.key}`
+      if (seen.has(edge)) continue
+      seen.add(edge)
+      links.push({ key: node.key, prerequisiteKey: prerequisite.key })
+    }
   }
   return links
 }
@@ -244,32 +272,42 @@ export function shadowUnlockBlocked(
  * interact badly with the per-arc growth cap, stalling a branch for two
  * full arcs behind a number no player can see.
  *
- * `parentState` is the character's own row for the parent node, or null
- * when they have none. A node with no parent is ungated, which is every
- * node in a campaign generated before the tree existed.
+ * `prerequisiteStates` is the character's own row for EACH of this node's
+ * prerequisites (#372). A node with none is ungated, which is every node in
+ * a campaign generated before the graph existed. With several, ALL must be
+ * UNLOCKED — "requires Alchemy AND Swordplay" means and, and a node that
+ * opened on the first prerequisite would make the second decorative.
+ *
+ * A prerequisite the character has never touched has no row at all, so a
+ * MISSING entry has to count as not-unlocked. Passing fewer states than the
+ * node has prerequisites therefore cannot accidentally open the gate — the
+ * caller passes what it found, and anything it didn't find is a block.
  *
  * Glimpsing is never gated — as with shadow arts, anyone may learn that a
  * deeper art EXISTS. Only doing it requires the groundwork.
  */
 export function prerequisiteUnlockBlocked(
-  node: { parentId?: string | null; isNarrated?: boolean },
-  parentState: { state: CapabilityState } | null | undefined,
+  node: { prerequisiteIds?: string[]; isNarrated?: boolean },
+  prerequisiteStates: Array<{ state: CapabilityState }> | null | undefined,
   // #386: how many capabilities the character has already UNLOCKED in this
-  // node's domain. Only consulted for a parentless NARRATED node — see
+  // node's domain. Only consulted for a rootless NARRATED node — see
   // below. Omitted means "not checked", which preserves the exact
   // pre-#386 behaviour for every caller that doesn't supply it.
   domainUnlockedCount?: number
 ): boolean {
-  if (!node.parentId) {
-    // A parentless GENERATED node is a root, and roots are ungated by
+  const prerequisiteIds = node.prerequisiteIds ?? []
+
+  if (prerequisiteIds.length === 0) {
+    // A rootless GENERATED node is a root, and roots are ungated by
     // design — that is what the comment above describes, and it is true of
-    // every node in a campaign generated before the tree existed.
+    // every node in a campaign generated before the graph existed.
     //
-    // A parentless NARRATED node is a different animal: it is parentless
-    // because the AI just invented it, not because the world's designers
-    // placed it at the foundation. Ungating it means the model can name a
-    // deep art into existence and hand it over in the same scene, which is
-    // exactly the bypass. It needs the same shape of groundwork a real
+    // A rootless NARRATED node is a different animal: it has no
+    // prerequisites because the AI just invented it, not because the
+    // world's designers placed it at the foundation. Ungating it means the
+    // model can name a deep art into existence and hand it over in the
+    // same scene, which is exactly the bypass. It needs the same shape of
+    // groundwork a real
     // deeper art needs — some genuine footing in its own domain — without
     // requiring a specific parent it doesn't have.
     if (node.isNarrated && domainUnlockedCount !== undefined) {
@@ -277,7 +315,14 @@ export function prerequisiteUnlockBlocked(
     }
     return false
   }
-  return parentState?.state !== 'UNLOCKED'
+
+  // ALL of them, and a missing row counts as not-unlocked. Comparing counts
+  // first is what makes the missing-row case safe: a caller that found two
+  // states for a three-prerequisite node is blocked regardless of what
+  // those two say.
+  const states = prerequisiteStates ?? []
+  if (states.length < prerequisiteIds.length) return true
+  return !states.every((s) => s.state === 'UNLOCKED')
 }
 
 /**
@@ -360,16 +405,16 @@ export async function applyCapabilityChanges(
       const domain = change.domain || 'General'
       const siblings = await db.campaignCapability.findMany({
         where: { campaignId, domain },
-        select: { id: true, tier: true, isShadow: true, parentId: true },
+        select: { id: true, tier: true, isShadow: true, _count: { select: { prerequisites: true } } },
         orderBy: { tier: 'asc' },
       })
       const inheritedShadow = siblings.length > 0 && siblings.every((n) => n.isShadow)
       // Attach under the domain's root only when there is exactly one
-      // unambiguous candidate — guessing a position in a branching tree
+      // unambiguous candidate — guessing a position in a branching graph
       // would be worse than leaving it a root, and isNarrated below is
-      // what gates a root that has no parent to require.
-      const roots = siblings.filter((n) => !n.parentId)
-      const inheritedParentId = roots.length === 1 ? roots[0].id : null
+      // what gates a root with nothing to require.
+      const roots = siblings.filter((n) => n._count.prerequisites === 0)
+      const inheritedPrerequisiteId = roots.length === 1 ? roots[0].id : null
 
       try {
         node = await db.campaignCapability.create({
@@ -382,8 +427,14 @@ export async function applyCapabilityChanges(
             // each character glimpses them through the fiction.
             isSecret: true,
             isShadow: inheritedShadow,
-            parentId: inheritedParentId,
             isNarrated: true,
+            // #372: the inherited prerequisite is created as an edge in the
+            // same statement, so a narrated node is never briefly a root —
+            // a window in which prerequisiteUnlockBlocked would have let it
+            // through ungated.
+            ...(inheritedPrerequisiteId
+              ? { prerequisites: { create: [{ prerequisiteCapabilityId: inheritedPrerequisiteId }] } }
+              : {}),
           },
         })
         log.push(`New capability discovered in this world: ${node.name}`)
@@ -421,29 +472,49 @@ export async function applyCapabilityChanges(
       // Prerequisite gate (#82): a deeper art needs the art it grows out
       // of. Checked before the shadow gate because it's the cheaper and
       // more common refusal, and because a node can be both.
-      if (node.parentId || node.isNarrated) {
-        const parentState = node.parentId
-          ? await db.characterCapability.findUnique({
-              where: { characterId_capabilityId: { characterId, capabilityId: node.parentId } },
+      const prerequisiteEdges = await db.capabilityPrerequisite.findMany({
+        where: { capabilityId: node.id },
+        select: { prerequisiteCapabilityId: true },
+      })
+      const prerequisiteIds = prerequisiteEdges.map((e) => e.prerequisiteCapabilityId)
+
+      if (prerequisiteIds.length > 0 || node.isNarrated) {
+        // One query for every prerequisite rather than one per edge. A node
+        // with three prerequisites should cost the same as a node with one.
+        const prerequisiteStates = prerequisiteIds.length > 0
+          ? await db.characterCapability.findMany({
+              where: { characterId, capabilityId: { in: prerequisiteIds } },
               select: { state: true },
             })
-          : null
-        // #386: only needed for the parentless-narrated case, so it is only
+          : []
+        // #386: only needed for the rootless-narrated case, so it is only
         // paid for there.
         const domainUnlockedCount =
-          !node.parentId && node.isNarrated
+          prerequisiteIds.length === 0 && node.isNarrated
             ? await db.characterCapability.count({
                 where: { characterId, state: 'UNLOCKED', capability: { domain: node.domain } },
               })
             : undefined
-        if (prerequisiteUnlockBlocked(node, parentState, domainUnlockedCount)) {
-          const parent = node.parentId
-            ? await db.campaignCapability.findUnique({
-                where: { id: node.parentId },
+        if (prerequisiteUnlockBlocked({ prerequisiteIds, isNarrated: node.isNarrated }, prerequisiteStates, domainUnlockedCount)) {
+          // Name what is actually still missing, not just "a prerequisite".
+          // The log line reaches the narrator, so a vague refusal invites
+          // the same blocked unlock again next scene.
+          const unlockedIds = new Set(
+            (await db.characterCapability.findMany({
+              where: { characterId, capabilityId: { in: prerequisiteIds }, state: 'UNLOCKED' },
+              select: { capabilityId: true },
+            })).map((r) => r.capabilityId)
+          )
+          const missing = prerequisiteIds.length > 0
+            ? await db.campaignCapability.findMany({
+                where: { id: { in: prerequisiteIds.filter((id) => !unlockedIds.has(id)) } },
                 select: { name: true },
+                orderBy: { tier: 'asc' },
               })
-            : null
-          const parentName = parent?.name || `the basics of ${node.domain}`
+            : []
+          const parentName = missing.length > 0
+            ? missing.map((m) => m.name).join(' and ')
+            : `the basics of ${node.domain}`
           // Same shape as the shadow refusal: remember that it exists,
           // unlock nothing. The log line goes into the resolution summary,
           // so the narrator learns the prerequisite for future turns rather

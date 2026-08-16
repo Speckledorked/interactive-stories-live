@@ -91,50 +91,59 @@ export const characterRelationshipKeysResolve: IntegrityCheck = {
   },
 }
 
-/** NPC.socialTies (schema:861) — same JSON-map-keyed-by-NPC-id shape as
- * Character.relationships, written by tick/npcSocietyTick.ts. */
+/** NPC social ties — regression guard, not a live risk. #373 replaced the
+ * NPC.socialTies JSON blob with NpcTie edge rows whose endpoints are real
+ * foreign keys with onDelete: Cascade, so a tie to a deleted NPC cannot
+ * exist at rest: Postgres removes the edge with the NPC. Kept as a check,
+ * exactly like war.contestedLocationId.resolves, so dropping those
+ * constraints in a future migration is caught here rather than by a reader
+ * naming a ghost mid-tick. */
 export const npcSocialTiesKeysResolve: IntegrityCheck = {
   key: 'npc.socialTies.keys.resolve' satisfies CheckKey,
-  description: 'Every key in NPC.socialTies must reference an existing NPC',
+  description: 'Both endpoints of every NPC social tie must reference an existing NPC',
   run(snapshot: IntegritySnapshot): Violation[] {
-    const npcIds = new Set(snapshot.npcs.map((n) => n.id))
+    const npcById = new Map(snapshot.npcs.map((n) => [n.id, n]))
     const violations: Violation[] = []
-    for (const npc of snapshot.npcs) {
-      const orphanKeys = idKeyedMapKeys(npc.socialTies).filter((id) => id !== npc.id && !npcIds.has(id))
-      if (orphanKeys.length > 0) {
-        violations.push({
-          checkKey: 'npc.socialTies.keys.resolve',
-          entityType: 'NPC',
-          entityId: npc.id,
-          entityName: npc.name,
-          description: `${npc.name}'s social ties reference ${orphanKeys.length} NPC id(s) that don't exist: ${orphanKeys.join(', ')}`,
-        })
-      }
+    for (const tie of snapshot.npcTies) {
+      const missing = [tie.aId, tie.bId].filter((id) => !npcById.has(id))
+      if (missing.length === 0) continue
+      // Attributed to whichever endpoint still exists, so the violation
+      // names something an admin can actually look at; falls back to the
+      // first endpoint when both are gone.
+      const anchor = npcById.get(tie.aId) ?? npcById.get(tie.bId)
+      violations.push({
+        checkKey: 'npc.socialTies.keys.resolve',
+        entityType: 'NPC',
+        entityId: anchor?.id ?? tie.aId,
+        entityName: anchor?.name ?? tie.aId,
+        description: `A social tie references ${missing.length} NPC id(s) that don't exist: ${missing.join(', ')}`,
+      })
     }
     return violations
   },
 }
 
-/** Faction.relationships (schema:898) — JSON map keyed by the OTHER
- * faction's id. A deleted/collapsed-and-removed faction leaves stale keys
- * in every faction that used to track it. */
+/** Faction rivalries and alliances — regression guard, same as the NPC
+ * check above. #373 made these FactionTie edge rows with real foreign
+ * keys; a collapsed-and-deleted faction takes its edges with it instead of
+ * leaving stale keys in every faction that used to track it. */
 export const factionRelationshipKeysResolve: IntegrityCheck = {
   key: 'faction.relationships.keys.resolve' satisfies CheckKey,
-  description: 'Every key in Faction.relationships must reference an existing Faction',
+  description: 'Both endpoints of every faction relationship must reference an existing Faction',
   run(snapshot: IntegritySnapshot): Violation[] {
-    const factionIds = new Set(snapshot.factions.map((f) => f.id))
+    const factionById = new Map(snapshot.factions.map((f) => [f.id, f]))
     const violations: Violation[] = []
-    for (const faction of snapshot.factions) {
-      const orphanKeys = idKeyedMapKeys(faction.relationships).filter((id) => id !== faction.id && !factionIds.has(id))
-      if (orphanKeys.length > 0) {
-        violations.push({
-          checkKey: 'faction.relationships.keys.resolve',
-          entityType: 'FACTION',
-          entityId: faction.id,
-          entityName: faction.name,
-          description: `${faction.name}'s relationships reference ${orphanKeys.length} faction id(s) that don't exist: ${orphanKeys.join(', ')}`,
-        })
-      }
+    for (const tie of snapshot.factionTies) {
+      const missing = [tie.aId, tie.bId].filter((id) => !factionById.has(id))
+      if (missing.length === 0) continue
+      const anchor = factionById.get(tie.aId) ?? factionById.get(tie.bId)
+      violations.push({
+        checkKey: 'faction.relationships.keys.resolve',
+        entityType: 'FACTION',
+        entityId: anchor?.id ?? tie.aId,
+        entityName: anchor?.name ?? tie.aId,
+        description: `A relationship references ${missing.length} faction id(s) that don't exist: ${missing.join(', ')}`,
+      })
     }
     return violations
   },

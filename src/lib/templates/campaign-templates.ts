@@ -668,12 +668,17 @@ export async function applyCampaignTemplate(
       const idByKey = new Map<string, string>(
         nodes.map((n: { id: string; key: string }) => [n.key, n.id])
       )
-      for (const link of links) {
-        const childId = idByKey.get(link.key)
-        const parentId = idByKey.get(link.parentKey)
-        if (childId && parentId) {
-          await prisma.campaignCapability.update({ where: { id: childId }, data: { parentId } })
-        }
+      // #372: prerequisites are edges now — a node may need several.
+      const edges = links
+        .map((link) => ({
+          capabilityId: idByKey.get(link.key),
+          prerequisiteCapabilityId: idByKey.get(link.prerequisiteKey),
+        }))
+        .filter((e): e is { capabilityId: string; prerequisiteCapabilityId: string } =>
+          Boolean(e.capabilityId && e.prerequisiteCapabilityId)
+        )
+      if (edges.length > 0) {
+        await prisma.capabilityPrerequisite.createMany({ data: edges, skipDuplicates: true })
       }
       console.log(`🌳 Linked ${links.length} template capability prerequisites`)
     }

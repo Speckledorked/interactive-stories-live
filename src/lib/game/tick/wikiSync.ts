@@ -21,7 +21,8 @@
 
 import { prisma } from '@/lib/prisma'
 import type { Prisma, WikiEntryType } from '@prisma/client'
-import { WorldChange, parseFactionRelationships } from './types'
+import { WorldChange } from './types'
+import { TIE_INCLUDE, npcTies } from '../tieGraph'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
 import { deriveConditionTags } from './locationConditionTick'
 import { describeStat } from '@/lib/ai/qualitativeStats'
@@ -83,12 +84,14 @@ export async function syncWikiEntriesForChanges(
           include: {
             faction: { select: { name: true, isDiscovered: true } },
             location: { select: { name: true, isDiscovered: true } },
+            // #373: social ties are edge rows now.
+            ...TIE_INCLUDE,
           },
         })
         // Fog of war: an undiscovered NPC gets no wiki entry — the wiki is
         // readable by every campaign member, not just admins.
         if (!npc || !npc.isDiscovered) continue
-        const socialLine = await describeSocialTies(npc.socialTies)
+        const socialLine = await describeSocialTies(npcTies(npc))
         await syncNpcWikiEntry(
           campaignId,
           turnNumber,
@@ -119,8 +122,7 @@ export async function syncWikiEntriesForChanges(
 // Phase 9: NPC society — resolve NPC.socialTies into a wiki-readable line,
 // naming only DISCOVERED counterparts (an undiscovered ally's name is
 // exactly the kind of thing fog of war exists to keep off the wiki).
-async function describeSocialTies(rawTies: unknown): Promise<string | null> {
-  const ties = parseFactionRelationships(rawTies)
+async function describeSocialTies(ties: Record<string, { type: 'RIVAL' | 'ALLY' }>): Promise<string | null> {
   const otherIds = Object.keys(ties)
   if (otherIds.length === 0) return null
 

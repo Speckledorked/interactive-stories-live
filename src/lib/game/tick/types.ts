@@ -11,6 +11,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import type { Season } from '../calendar'
 import type { TickRoster } from './capOrdering'
+import type { TieEntry } from '../tieGraph'
 
 export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'LOCATION_CONDITION' | 'LOCATION_POPULATION' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT' | 'LOCATION'
 
@@ -217,26 +218,26 @@ export interface WorldTickResult {
 }
 
 /**
- * Shape of one entry in the Faction.relationships JSON column, keyed by the
- * other faction's id. Written by relationshipTick.ts; read by nearly every
- * other tick handler. Lives here (not in relationshipTick.ts) so
+ * One faction's stance toward another. Written by relationshipTick.ts; read
+ * by nearly every other tick handler. Re-exported here (not defined here) so
  * factionTick.ts can use the helpers below without an import cycle —
  * relationshipTick already imports band() from factionTick.
+ *
+ * #373: this used to be "the shape of one entry in the Faction.relationships
+ * JSON column". It is now the projection of a FactionTie row, which is the
+ * same shape read from a real edge instead of a blob.
  */
-export interface FactionRelationshipEntry {
-  type: 'RIVAL' | 'ALLY'
-  since: number
-}
+export type FactionRelationshipEntry = TieEntry
 
 /**
- * Parse the Faction.relationships JSON column into its real shape. The one
- * blessed replacement for the `(x as any as Record<...>) || {}` cast that
- * used to be copy-pasted across every consumer.
+ * A faction's neighbours, keyed by the other faction's id.
+ *
+ * The helpers below take this projected record rather than a raw column,
+ * because there is no longer a raw column: `parseFactionRelationships` was
+ * the blessed way to cast a JSON blob, and #373 removed the blob. Call
+ * `factionTies(faction)` (tieGraph.ts) on a row selected with TIE_INCLUDE.
  */
-export function parseFactionRelationships(value: unknown): Record<string, FactionRelationshipEntry> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return value as Record<string, FactionRelationshipEntry>
-}
+export type FactionRelationshipMap = Record<string, FactionRelationshipEntry>
 
 /**
  * The faction most plausibly meant by "their rival", if any.
@@ -251,7 +252,7 @@ export function parseFactionRelationships(value: unknown): Record<string, Factio
  * id so the result is stable across runs and across two factions whose
  * rivalries began on the same turn.
  */
-export function findRivalId(relationships: unknown): string | undefined {
+export function findRivalId(relationships: FactionRelationshipMap): string | undefined {
   return findRivalIds(relationships)[0]
 }
 
@@ -260,8 +261,8 @@ export function findRivalId(relationships: unknown): string | undefined {
  *
  * Ordering is part of the contract — see findRivalId.
  */
-export function findRivalIds(relationships: unknown): string[] {
-  return Object.entries(parseFactionRelationships(relationships))
+export function findRivalIds(relationships: FactionRelationshipMap): string[] {
+  return Object.entries(relationships)
     .filter(([, r]) => r.type === 'RIVAL')
     .sort(([idA, a], [idB, b]) => {
       // `since` may be absent on rows written before it existed; treat
@@ -275,35 +276,43 @@ export function findRivalIds(relationships: unknown): string[] {
 }
 
 /**
- * #403: is this relationship map symmetric with its counterpart?
+ * #403/#373: the canonical-ordering violations in a set of faction tie rows.
  *
- * Faction.relationships is written symmetrically by relationshipEngine.ts
- * (it sets both aTies[b.id] and bTies[a.id]) and read one-sidedly
- * everywhere else. Symmetry is therefore a property of the DATA enforced
- * only by the one writer that happens to do it — any other path (an admin
- * route, an integrity repair, an AI-driven change, an import) can produce
- * a legal-looking asymmetric map that no reader detects.
+ * This used to be `relationshipAsymmetries` — Faction.relationships was
+ * written symmetrically by relationshipEngine.ts (it set both `aTies[b.id]`
+ * and `bTies[a.id]`) and read one-sidedly everywhere else, so symmetry was
+ * a property of the DATA enforced only by the one writer that happened to
+ * do it. Any other path (an admin route, an integrity repair, an
+ * AI-driven change, an import) could produce a legal-looking asymmetric
+ * map that no reader detected.
  *
- * Exposed so the integrity engine can check it rather than assume it. A
- * grep for "symmetr"/"reciproc" across the repo used to return nothing.
+ * #373 made asymmetry unrepresentable: one canonical row per pair, with a
+ * DB CHECK requiring aId < bId. So the question changed rather than
+ * disappearing — the property that now carries symmetry is the canonical
+ * ordering, and this is what checks it. Two rows for one pair, or a row
+ * whose endpoints are in the wrong order, is what asymmetry looks like now.
  */
-export function relationshipAsymmetries(
-  factions: Array<{ id: string; relationships: unknown }>
-): Array<{ factionId: string; otherId: string; type: string; otherType: string | null }> {
-  const byId = new Map(factions.map((f) => [f.id, parseFactionRelationships(f.relationships)]))
-  const problems: Array<{ factionId: string; otherId: string; type: string; otherType: string | null }> = []
+export function tieOrderingViolations(
+  ties: Array<{ aId: string; bId: string }>
+): Array<{ aId: string; bId: string; problem: 'reversed' | 'self' | 'duplicate' }> {
+  const problems: Array<{ aId: string; bId: string; problem: 'reversed' | 'self' | 'duplicate' }> = []
+  const seen = new Set<string>()
 
-  for (const [factionId, ties] of byId) {
-    for (const [otherId, entry] of Object.entries(ties)) {
-      const otherTies = byId.get(otherId)
-      // A faction we don't have in hand can't be checked — that's a
-      // missing row, not an asymmetry.
-      if (!otherTies) continue
-      const mirrored = otherTies[factionId]
-      if (mirrored?.type !== entry.type) {
-        problems.push({ factionId, otherId, type: entry.type, otherType: mirrored?.type ?? null })
-      }
+  for (const tie of ties) {
+    if (tie.aId === tie.bId) {
+      problems.push({ aId: tie.aId, bId: tie.bId, problem: 'self' })
+      continue
     }
+    if (tie.aId > tie.bId) {
+      problems.push({ aId: tie.aId, bId: tie.bId, problem: 'reversed' })
+      continue
+    }
+    const key = `${tie.aId} ${tie.bId}`
+    if (seen.has(key)) {
+      problems.push({ aId: tie.aId, bId: tie.bId, problem: 'duplicate' })
+      continue
+    }
+    seen.add(key)
   }
   return problems
 }
@@ -314,8 +323,8 @@ export function relationshipAsymmetries(
  * helper exists to prevent came from one call site checking `type ===
  * 'RIVAL'` without asking whether the rival had since collapsed.
  */
-export function hasActiveRival(relationships: unknown, activeFactionIds: Set<string>): boolean {
-  return Object.entries(parseFactionRelationships(relationships)).some(
+export function hasActiveRival(relationships: FactionRelationshipMap, activeFactionIds: Set<string>): boolean {
+  return Object.entries(relationships).some(
     ([otherId, r]) => r.type === 'RIVAL' && activeFactionIds.has(otherId)
   )
 }
@@ -324,8 +333,8 @@ export function hasActiveRival(relationships: unknown, activeFactionIds: Set<str
  * Nothing acted on an ALLY tag mechanically before this except
  * warTick.ts's coalition-building; economyTick.ts's loan-extension is the
  * second. */
-export function findAllyIds(relationships: unknown): string[] {
-  return Object.entries(parseFactionRelationships(relationships))
+export function findAllyIds(relationships: FactionRelationshipMap): string[] {
+  return Object.entries(relationships)
     .filter(([, r]) => r.type === 'ALLY')
     .map(([id]) => id)
 }

@@ -286,17 +286,23 @@ export async function createCampaign(input: CreateCampaignInput) {
           select: { id: true, key: true },
         })
         const idByKey = new Map(nodes.map(n => [n.key, n.id]))
-        let linked = 0
-        for (const link of prereqLinks) {
-          const childId = idByKey.get(link.key)
-          const parentId = idByKey.get(link.parentKey)
-          if (!childId || !parentId) continue
-          await tx.campaignCapability.update({
-            where: { id: childId },
-            data: { parentId },
-          })
-          linked++
+        // #372: edges, not a parent column — a node may need several.
+        // createMany with skipDuplicates rather than a write per link: the
+        // unique index already rejects a repeat, and a generated scaffold
+        // naming the same prerequisite twice should cost one skipped row,
+        // not the whole campaign's capability tree.
+        const edges = prereqLinks
+          .map((link) => ({
+            capabilityId: idByKey.get(link.key),
+            prerequisiteCapabilityId: idByKey.get(link.prerequisiteKey),
+          }))
+          .filter((e): e is { capabilityId: string; prerequisiteCapabilityId: string } =>
+            Boolean(e.capabilityId && e.prerequisiteCapabilityId)
+          )
+        if (edges.length > 0) {
+          await tx.capabilityPrerequisite.createMany({ data: edges, skipDuplicates: true })
         }
+        const linked = edges.length
         console.log(`🌳 Linked ${linked} capability prerequisites`)
       }
 

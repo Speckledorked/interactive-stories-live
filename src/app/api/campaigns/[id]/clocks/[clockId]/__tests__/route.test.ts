@@ -134,3 +134,19 @@ describe('POST (tick/untick)', () => {
     expect(trigger).not.toHaveBeenCalled()
   })
 })
+
+// #426, found by mutation audit: flipping this route's `status: 401` to
+// `status: 200` did not fail a single test, because no test ever set
+// getUser to null. The unauthenticated branch — the most basic guarantee
+// the route makes — was never executed. Every other assertion in this file
+// runs as a signed-in user, so the 401 was structurally unreachable by the
+// suite that was said to cover it.
+describe('unauthenticated access (#426)', () => {
+  it('rejects a caller with no session', async () => {
+    ;(getUser as any).mockResolvedValue(null)
+
+    const response = await PATCH(patchRequest({ name: 'New' }), { params: { id: 'camp1', clockId: 'clock1' } })
+
+    expect(response.status).toBe(401)
+  })
+})

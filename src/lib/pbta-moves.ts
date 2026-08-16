@@ -122,29 +122,6 @@ export const BASIC_MOVES: PbtAMove[] = [
 ]
 
 // Peripheral Moves (happen automatically)
-export const PERIPHERAL_MOVES: PbtAMove[] = [
-  {
-    key: "take_harm",
-    name: "Take Harm",
-    trigger: "When you take harm",
-    description: "Mark harm on your sheet. At 3+ harm, roll+harm. On a 10+, choose 1 from a bad list. On a 7-9, the GM chooses 1.",
-    rollType: "roll+harm",
-    outcomes: {
-      strongHit: "You choose how you're taken out of action.",
-      weakHit: "The GM chooses how you're hurt.",
-      miss: "You take it like a champ and keep going."
-    },
-    category: 'peripheral'
-  },
-  {
-    key: "end_of_session",
-    name: "End of Session",
-    trigger: "At the end of each session",
-    description: "Mark XP if you hit your highlighted stats. Discuss what happened and what's coming.",
-    outcomes: {},
-    category: 'peripheral'
-  }
-]
 
 // Stats for PbtA characters
 export const PBTA_STATS = {
@@ -163,27 +140,5 @@ export function calculateOutcome(total: number): 'strongHit' | 'weakHit' | 'miss
 }
 
 // Format outcome text
-export function formatOutcome(outcome: 'strongHit' | 'weakHit' | 'miss'): string {
-  switch (outcome) {
-    case 'strongHit':
-      return '💪 Strong Hit (10+)'
-    case 'weakHit':
-      return '⚡ Weak Hit (7-9)'
-    case 'miss':
-      return '💀 Miss (6-)'
-  }
-}
 
 // Get modifier name from stat
-export function getStatName(stat: string): string {
-  const statMap: Record<string, string> = {
-    'cool': 'Cool',
-    'hard': 'Hard',
-    'hot': 'Hot',
-    'sharp': 'Sharp',
-    'weird': 'Weird',
-    'bond': 'Bond',
-    'harm': 'Harm'
-  }
-  return statMap[stat] || stat
-}

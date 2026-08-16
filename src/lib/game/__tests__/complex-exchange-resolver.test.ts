@@ -6,7 +6,7 @@
 // computed.
 
 import { describe, it, expect } from 'vitest'
-import { ComplexExchangeResolver, compareActionsByOutcome, rankActionsByOutcome, MicroExchange, ExchangeRosterEntity } from '../complex-exchange-resolver'
+import { ComplexExchangeResolver, compareActionsByOutcome, rankActionsByOutcome, NarrativeFlowManager, MicroExchange, ExchangeRosterEntity } from '../complex-exchange-resolver'
 import { ActionPriority } from '../exchange-manager'
 import type { ActionMechanics } from '../resolution'
 
@@ -162,5 +162,74 @@ describe('ComplexExchangeResolver.detectConflicts', () => {
       { id: 'negotiate-1', character: { name: 'Sable' }, actionText: 'negotiate with the guard captain' },
     ]
     expect(resolver.detectConflicts(microExchange(actions))).toEqual([])
+  })
+})
+
+describe('NarrativeFlowManager.generateFlowGuidance (#414)', () => {
+  // The defect: the function took `actions` and never read it, so every
+  // scene in the game got the same block. A guidance section is an
+  // INSTRUCTION ABOUT THIS EXCHANGE, so an unconditional one is not inert
+  // padding — it is a false statement competing with the true parts of the
+  // prompt for the narrator's attention.
+  const action = (id: string, characterId: string, actionText = 'swing') => ({
+    id,
+    actionText,
+    character: { id: characterId },
+  })
+
+  it('omits the multiplayer sections for a solo exchange', () => {
+    const guidance = NarrativeFlowManager.generateFlowGuidance([action('a1', 'pc1')])
+
+    expect(guidance).not.toContain('Simultaneous Actions')
+    expect(guidance).not.toContain('One Meaningful Action Per Exchange')
+    // The genuinely universal principles survive.
+    expect(guidance).toContain('Fiction First Principle')
+    expect(guidance).toContain('Framing Threats')
+  })
+
+  it('includes them when two different characters acted', () => {
+    const guidance = NarrativeFlowManager.generateFlowGuidance([action('a1', 'pc1'), action('a2', 'pc2')])
+
+    expect(guidance).toContain('Simultaneous Actions')
+    expect(guidance).toContain('One Meaningful Action Per Exchange')
+  })
+
+  it('says nothing about roll outcomes when nothing was rolled', () => {
+    const guidance = NarrativeFlowManager.generateFlowGuidance([action('a1', 'pc1')])
+
+    expect(guidance).not.toContain('Respect System Rolls')
+    expect(guidance).not.toContain('Strong Hit')
+    // ...and says so explicitly, which is the other half of the boundary:
+    // the narrator must not invent a verdict the dice never gave.
+    expect(guidance).toContain('Unrolled Actions')
+  })
+
+  it('names only the outcome bands that actually came up', () => {
+    const guidance = NarrativeFlowManager.generateFlowGuidance(
+      [action('a1', 'pc1'), action('a2', 'pc2')],
+      new Map([
+        ['a1', mechanics('weakHit', 8)],
+        ['a2', mechanics('weakHit', 7)],
+      ])
+    )
+
+    expect(guidance).toContain('Weak Hit (7-9)')
+    // A band nobody rolled invites a cost or a hard move the engine never
+    // charged for.
+    expect(guidance).not.toContain('Strong Hit (10+)')
+    expect(guidance).not.toContain('Miss (6-)')
+    // Everything was rolled, so there is nothing to warn about.
+    expect(guidance).not.toContain('Unrolled Actions')
+  })
+
+  it('describes a mixed exchange as both rolled and unrolled', () => {
+    const guidance = NarrativeFlowManager.generateFlowGuidance(
+      [action('a1', 'pc1'), action('a2', 'pc2'), action('a3', 'pc3')],
+      new Map([['a1', mechanics('miss', 4)]])
+    )
+
+    expect(guidance).toContain('Miss (6-)')
+    expect(guidance).toContain('2 actions')
+    expect(guidance).toContain('Unrolled Actions')
   })
 })

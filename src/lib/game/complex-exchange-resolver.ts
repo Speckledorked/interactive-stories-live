@@ -67,6 +67,18 @@ export interface ActionConflict {
 /** The subset of a computed roll actually needed to rank precedence. */
 type MechanicsForRanking = Pick<ActionMechanics, 'outcome' | 'total'>
 
+/**
+ * The subset of a PlayerAction NarrativeFlowManager reads (#414). Narrow on
+ * purpose: everything here comes from `scene.playerActions`, and typing the
+ * parameter is half the fix — the old `any[]` is what let an unused
+ * argument sit there without any signal that it was unused.
+ */
+export interface ActionForFlow {
+  id: string
+  actionText: string
+  character?: { id: string } | null
+}
+
 const OUTCOME_RANK: Record<ActionMechanics['outcome'], number> = { strongHit: 2, weakHit: 1, miss: 0 }
 
 /**
@@ -393,30 +405,84 @@ export class ComplexExchangeResolver {
  */
 export class NarrativeFlowManager {
   /**
-   * Generate AI GM prompt additions for narrative action flow
+   * Generate AI GM prompt additions for narrative action flow.
+   *
+   * #414: this took `actions` and ignored it, emitting one fixed block for
+   * every scene in the game. That is worse than it sounds, because the
+   * block is not neutral filler — it is a set of *instructions about this
+   * exchange*, and most of them were false most of the time. A solo player
+   * taking one unrolled action was told how to weave "multiple players
+   * acting against the same threat" together and handed the full
+   * strong/weak/miss table for rolls that had not happened. Every token of
+   * that is a token spent teaching the narrator about a situation it is not
+   * in, competing with the parts of the prompt that describe the situation
+   * it IS in.
+   *
+   * So each section is now conditional on the exchange containing the thing
+   * it describes. The two genuinely universal principles stay unconditional;
+   * everything else has to earn its place from the actions.
+   *
+   * @param actions - the scene's player actions.
+   * @param mechanicsByActionId - the rolls the engine actually made for
+   *   them. Empty (the default) means nothing was rolled, which is exactly
+   *   when the outcome-band table should be omitted rather than asserted.
    */
-  static generateFlowGuidance(actions: any[]): string {
+  static generateFlowGuidance(
+    actions: ActionForFlow[],
+    mechanicsByActionId: Map<string, MechanicsForRanking> = new Map()
+  ): string {
+    const multiplayer = new Set(actions.map((a) => a.character?.id ?? a.id)).size > 1
+    const rolled = actions.filter((a) => mechanicsByActionId.has(a.id))
+    const outcomes = new Set(rolled.map((a) => mechanicsByActionId.get(a.id)!.outcome))
+
     let guidance = '## Narrative Action Flow Guidance\n\n'
 
+    // Unconditional: these are claims about how the system reads fiction,
+    // true of a one-line solo scene and a six-way brawl alike.
     guidance += '**Fiction First Principle:**\n'
     guidance += 'Actions do not happen in strict turn order. They flow based on the fiction and narrative timing.\n\n'
-
-    guidance += '**One Meaningful Action Per Exchange:**\n'
-    guidance += 'Each player gets one significant action per exchange. Multiple players can act in the same fictional "moment".\n\n'
 
     guidance += '**Framing Threats:**\n'
     guidance += 'When a threat emerges, frame it clearly: "The orc swings at you, Marcus, what do you do?"\n'
     guidance += 'Players respond with their actions, which may trigger moves and rolls.\n\n'
 
-    guidance += '**Respect System Rolls:**\n'
-    guidance += 'If a roll was made, treat it as absolute truth:\n'
-    guidance += '- Strong Hit (10+): Player gets what they want with minimal cost\n'
-    guidance += '- Weak Hit (7-9): Player gets what they want, but with a cost, complication, or hard choice\n'
-    guidance += '- Miss (6-): Things go wrong, GM makes a hard move\n\n'
+    if (multiplayer) {
+      guidance += '**One Meaningful Action Per Exchange:**\n'
+      guidance += 'Each player gets one significant action per exchange. Multiple players can act in the same fictional "moment".\n\n'
 
-    guidance += '**Simultaneous Actions:**\n'
-    guidance += 'When multiple players act against the same threat, weave their actions together into a coherent narrative.\n'
-    guidance += 'The combined effect should be greater than individual actions alone.\n\n'
+      guidance += '**Simultaneous Actions:**\n'
+      guidance += 'When multiple players act against the same threat, weave their actions together into a coherent narrative.\n'
+      guidance += 'The combined effect should be greater than individual actions alone.\n\n'
+    }
+
+    if (rolled.length > 0) {
+      // Only the bands that were actually rolled. Naming a band the dice
+      // did not produce invites the narrator to write a cost or a hard move
+      // the engine never charged for — the same "narrate what the mechanics
+      // decided, not what would be dramatic" boundary the rest of the
+      // prompt enforces.
+      guidance += '**Respect System Rolls:**\n'
+      guidance += `${rolled.length === 1 ? 'A roll was' : `${rolled.length} rolls were`} made. Treat ${rolled.length === 1 ? 'it' : 'them'} as absolute truth:\n`
+      if (outcomes.has('strongHit')) {
+        guidance += '- Strong Hit (10+): Player gets what they want with minimal cost\n'
+      }
+      if (outcomes.has('weakHit')) {
+        guidance += '- Weak Hit (7-9): Player gets what they want, but with a cost, complication, or hard choice\n'
+      }
+      if (outcomes.has('miss')) {
+        guidance += '- Miss (6-): Things go wrong, GM makes a hard move\n'
+      }
+      guidance += '\n'
+    }
+
+    if (rolled.length < actions.length) {
+      // The other half of the same boundary: an unrolled action has no
+      // mechanical verdict attached, so the narrator must not invent one.
+      const unrolled = actions.length - rolled.length
+      guidance += '**Unrolled Actions:**\n'
+      guidance += `${unrolled === 1 ? 'One action' : `${unrolled} actions`} triggered no move, so no roll priced ${unrolled === 1 ? 'it' : 'them'}. `
+      guidance += 'Narrate what happens without granting or denying success as though dice had decided it.\n\n'
+    }
 
     return guidance
   }
@@ -424,7 +490,7 @@ export class NarrativeFlowManager {
   /**
    * Detect if exchange needs special handling (e.g., PvP conflict)
    */
-  static detectSpecialCases(actions: any[]): {
+  static detectSpecialCases(actions: ActionForFlow[]): {
     hasPvP: boolean
     hasEnvironmentalActions: boolean
     hasCompetingGoals: boolean
@@ -450,7 +516,7 @@ export class NarrativeFlowManager {
     }
   }
 
-  private static getActionGoal(action: any): string {
+  private static getActionGoal(action: ActionForFlow): string {
     const text = action.actionText.toLowerCase()
     if (text.includes('escape') || text.includes('flee')) return 'escape'
     if (text.includes('fight') || text.includes('attack')) return 'combat'

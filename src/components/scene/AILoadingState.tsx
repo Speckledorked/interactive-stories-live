@@ -145,20 +145,3 @@ export default function AILoadingState({
 }
 
 // Simple inline loader for smaller contexts
-export function AIInlineLoader({ text = 'Loading' }: { text?: string }) {
-  const [dots, setDots] = useState('')
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDots(prev => (prev.length >= 3 ? '' : prev + '.'))
-    }, 500)
-    return () => clearInterval(interval)
-  }, [])
-
-  return (
-    <div className="inline-flex items-center gap-2 text-myth-ink-muted">
-      <div className="w-4 h-4 border-2 border-transparent border-t-myth-accent border-r-myth-accent rounded-full animate-spin" />
-      <span>{text}<span className="inline-block w-6 text-left">{dots}</span></span>
-    </div>
-  )
-}

@@ -17,7 +17,7 @@ import { ResolutionJobStatus } from '@prisma/client'
 import { reportError } from '@/lib/monitoring'
 import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
 import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
-import { classifyStaleJob as classifyStaleJobCore } from '@/lib/jobs/staleJobRecovery'
+import { classifyStaleJob as classifyStaleJobCore, runStaleJobRecovery } from '@/lib/jobs/staleJobRecovery'
 import PusherServer from '@/lib/realtime/pusher-server'
 
 export const MAX_ATTEMPTS = 3
@@ -200,44 +200,13 @@ export function classifyStaleImageJob(job: JobForRecovery, nowMs: number): Recov
  * scene GET traffic. Never throws.
  */
 export async function recoverStaleImageJobs(campaignId: string): Promise<void> {
-  try {
-    const live = await prisma.sceneImage.findMany({
-      where: { campaignId, status: { in: ['PENDING', 'RUNNING'] } },
-      select: { id: true, status: true, attempts: true, updatedAt: true, startedAt: true },
-      take: 5,
-    })
-    const now = Date.now()
-
-    for (const job of live) {
-      const decision = classifyStaleImageJob(job, now)
-      if (decision === 'wait') continue
-
-      if (decision === 'fail') {
-        await prisma.sceneImage.update({
-          where: { id: job.id },
-          data: { status: 'FAILED', finishedAt: new Date(), lastError: 'Abandoned after repeated stalls' },
-        })
-        console.warn(`⚠️ Image job ${job.id} abandoned (stale RUNNING, out of attempts)`)
-        await reportError('scene-image-job-abandoned', new Error('Stale RUNNING image job out of attempts'), {
-          jobId: job.id, campaignId,
-        })
-        continue
-      }
-
-      if (decision === 'reset_and_kick') {
-        const reset = await prisma.sceneImage.updateMany({
-          where: { id: job.id, status: 'RUNNING' },
-          data: { status: 'PENDING' },
-        })
-        if (reset.count === 0) continue
-        console.warn(`🔁 Image job ${job.id} reset from stale RUNNING`)
-      }
-
-      await kickImageJob(job.id)
-    }
-  } catch (error) {
-    console.error('Stale image job recovery failed (non-critical):', error)
-  }
+  await runStaleJobRecovery(campaignId, {
+    model: prisma.sceneImage,
+    thresholds: { pendingStaleMs: PENDING_STALE_MS, runningStaleMs: RUNNING_STALE_MS, maxAttempts: MAX_ATTEMPTS },
+    label: 'Image job',
+    abandonContext: 'scene-image-job-abandoned',
+    kick: kickImageJob,
+  })
 }
 
 /**

@@ -598,22 +598,7 @@ export function logMoveLearned(
   }
 }
 
-/**
- * Get recent advancement entries (last N)
- */
-export function getRecentAdvancements(log: AdvancementLog, limit: number = 10): AdvancementLogEntry[] {
-  return log.entries.slice(-limit)
-}
 
-/**
- * Get all advancements of a specific type
- */
-export function getAdvancementsByType(
-  log: AdvancementLog,
-  type: 'stat_increase' | 'perk_gained' | 'move_learned'
-): AdvancementLogEntry[] {
-  return log.entries.filter(entry => entry.type === type)
-}
 
 /**
  * Format advancement log entry for display

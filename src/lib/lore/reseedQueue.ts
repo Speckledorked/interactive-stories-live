@@ -22,7 +22,7 @@ import { reportError } from '@/lib/monitoring'
 import { reseedWorldFromLore, clearPendingWorldSeed } from './reseedWorld'
 import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
 import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
-import { classifyStaleJob as classifyStaleJobCore } from '@/lib/jobs/staleJobRecovery'
+import { classifyStaleJob as classifyStaleJobCore, runStaleJobRecovery } from '@/lib/jobs/staleJobRecovery'
 
 export const MAX_ATTEMPTS = 3
 // Each attempt is at most one invocation's time budget — a RUNNING job
@@ -166,49 +166,19 @@ export function classifyStaleReseedJob(job: JobForRecovery, nowMs: number): Reco
  * retry loop). Never throws.
  */
 export async function recoverStaleReseedJobs(campaignId: string): Promise<void> {
-  try {
-    const live = await prisma.reseedJob.findMany({
-      where: { campaignId, status: { in: ['PENDING', 'RUNNING'] } },
-      select: { id: true, status: true, attempts: true, updatedAt: true, startedAt: true, releasesPlayLock: true },
-      take: 5,
-    })
-    const now = Date.now()
-
-    for (const job of live) {
-      const decision = classifyStaleReseedJob(job, now)
-      if (decision === 'wait') continue
-
-      if (decision === 'fail') {
-        await prisma.reseedJob.update({
-          where: { id: job.id },
-          data: { status: 'FAILED', finishedAt: new Date(), lastError: 'Abandoned after repeated stalls' },
-        })
-        console.warn(`⚠️ Reseed job ${job.id} abandoned (stale RUNNING, out of attempts)`)
-        await reportError('reseed-job-abandoned', new Error('Stale RUNNING job out of attempts'), {
-          jobId: job.id, campaignId,
-        })
-        if (job.releasesPlayLock) {
-          await clearPendingWorldSeed(campaignId).catch(e =>
-            console.error('Failed to clear pendingWorldSeed after abandoned reseed:', e)
-          )
-        }
-        continue
-      }
-
-      if (decision === 'reset_and_kick') {
-        const reset = await prisma.reseedJob.updateMany({
-          where: { id: job.id, status: 'RUNNING' },
-          data: { status: 'PENDING' },
-        })
-        if (reset.count === 0) continue
-        console.warn(`🔁 Reseed job ${job.id} reset from stale RUNNING`)
-      }
-
-      await kickReseedJob(job.id)
-    }
-  } catch (error) {
-    console.error('Stale reseed job recovery failed (non-critical):', error)
-  }
+  await runStaleJobRecovery<JobForRecovery & { releasesPlayLock: boolean }>(campaignId, {
+    model: prisma.reseedJob,
+    thresholds: { pendingStaleMs: PENDING_STALE_MS, runningStaleMs: RUNNING_STALE_MS, maxAttempts: MAX_ATTEMPTS },
+    label: 'Reseed job',
+    abandonContext: 'reseed-job-abandoned',
+    kick: kickReseedJob,
+    extraSelect: { releasesPlayLock: true },
+    // An abandoned creation-time job must release the play lock, or
+    // the campaign stays unplayable with nothing left running.
+    onAbandon: async (job) => {
+      if (job.releasesPlayLock) await clearPendingWorldSeed(campaignId)
+    },
+  })
 }
 
 /**

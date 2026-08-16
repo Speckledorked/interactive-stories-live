@@ -100,6 +100,18 @@ const DELIBERATELY_ABSENT: Record<string, string> = {
   // Renamed to generateGmAnswer to match the generate* convention every
   // other "make an AI call, return a generated artifact" function uses.
   answerGmQuestion: 'renamed to generateGmAnswer for naming consistency',
+
+  // #412/#413: the token-movement half of AIVisualService. All three had
+  // zero callers — the `ai-character-moved`/`ai-element-added`/
+  // `ai-element-removed` events they broadcast had no producer anywhere in
+  // the app, so the whole path was unreachable. Removed with the per-token
+  // mutation API in map-service.ts that existed only to serve them. Maps
+  // in MythOS are illustrative and regenerated per scene; grid combat is
+  // parked, and if it is picked up this surface gets written deliberately
+  // with the authorization and broadcast story these never had.
+  updateCharacterPosition: 'removed with the parked VTT token-movement path (#412)',
+  addSceneElement: 'removed with the parked VTT token-movement path (#412)',
+  removeSceneElement: 'removed with the parked VTT token-movement path (#412)',
 }
 
 const SEARCH_ROOTS = ['src', 'prisma']

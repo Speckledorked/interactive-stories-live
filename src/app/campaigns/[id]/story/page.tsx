@@ -520,21 +520,12 @@ export default function StoryPage() {
       }
     })
 
-    channel.bind('ai-character-moved', (data: any) => {
-      console.log('Character moved:', data)
-      // Reload map to get updated token positions
-      loadData()
-    })
-
-    channel.bind('ai-element-added', (data: any) => {
-      console.log('Element added to map:', data)
-      loadData()
-    })
-
-    channel.bind('ai-element-removed', (data: any) => {
-      console.log('Element removed from map:', data)
-      loadData()
-    })
+    // NOTE (#412): the ai-character-moved / ai-element-added /
+    // ai-element-removed listeners lived here, each triggering a full
+    // loadData(). Nothing ever published them — AIVisualService's
+    // token-movement methods were their only producers and had zero
+    // callers themselves — so they were three subscriptions to an event
+    // stream that did not exist. Removed with the producers.
 
     // Safety pause (X-Card). The safety service has always published these
     // and nothing has ever listened, so hitting the X-Card stopped the

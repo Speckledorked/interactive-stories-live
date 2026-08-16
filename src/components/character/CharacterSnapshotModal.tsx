@@ -5,7 +5,8 @@
 
 import { useEffect, useState } from 'react'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
-import HarmTracker from './HarmTracker'
+import HarmTracker, { HARM_STATUS_COLORS, healthRemaining } from './HarmTracker'
+import { clampHarm, getHarmStatus } from '@/lib/game/harm'
 import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
 import ConsequenceBadge from './ConsequenceBadge'
@@ -157,10 +158,13 @@ export default function CharacterSnapshotModal({
                   <span className="text-myth-ink-muted">{character.currentLocation}</span>
                 </div>
               )}
+              {/* Counts down from full, matching HarmTracker and the sheet.
+                  This previously printed the raw harm value under a "Health"
+                  label, so an unharmed character read "Health: 0/6". */}
               <div className="text-xs">
                 <span className="text-myth-ink-faint">Health: </span>
-                <span className={`font-semibold ${character.harm >= 4 ? 'text-myth-danger' : character.harm >= 2 ? 'text-myth-warn' : 'text-myth-good'}`}>
-                  {character.harm}/6
+                <span className={`font-semibold ${HARM_STATUS_COLORS[getHarmStatus(clampHarm(character.harm)).status] ?? 'text-myth-ink-muted'}`}>
+                  {healthRemaining(character.harm).remaining}/{healthRemaining(character.harm).max}
                 </span>
               </div>
             </div>

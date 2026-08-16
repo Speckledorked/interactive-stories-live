@@ -6,13 +6,14 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import HarmTracker from './HarmTracker'
+import HarmTracker, { HARM_STATUS_COLORS, healthRemaining } from './HarmTracker'
 import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
 import ConsequenceBadge from './ConsequenceBadge'
 import { DynamicDowntimeManager } from '@/components/downtime/DynamicDowntimeManager'
 import { SectionHeader } from '@/components/ui/section-header'
 import { parseCorruptionTheme, corruptionStage, MAX_CORRUPTION } from '@/lib/game/corruption'
+import { clampHarm, getHarmStatus } from '@/lib/game/harm'
 import { Tabs } from '@/components/ui/tabs'
 import { Backpack, BarChart3, Circle, ClipboardList, Coins, CreditCard, DollarSign, HeartHandshake, JapaneseYen, Moon, Sparkles, Sprout, Star, Target, TrendingUp } from 'lucide-react'
 import { type IconComponent } from '@/lib/ui/icons'
@@ -195,10 +196,16 @@ export default function CharacterSheetDisplay({
                   <div className="text-sm font-medium text-myth-ink">{character.currentLocation}</div>
                 </div>
               )}
+              {/* Health counts DOWN from full, the same direction HarmTracker
+                  reads (`Health: {remaining}/{max}`). This block used to print
+                  the raw harm value under a "Health" label, so an untouched
+                  character read "Health 0/6" — the number saying the opposite
+                  of the word above it. Bands come from getHarmStatus rather
+                  than a fourth hand-written copy of the >= 4 / >= 2 cutoffs. */}
               <div className="rounded-lg border border-myth-border bg-myth-surface-sunken p-3">
                 <div className="mb-1 text-xs uppercase tracking-wide text-myth-ink-faint">Health</div>
-                <div className={`text-lg font-bold ${character.harm >= 4 ? 'text-myth-danger' : character.harm >= 2 ? 'text-myth-warn' : 'text-myth-good'}`}>
-                  {character.harm}/6
+                <div className={`text-lg font-bold ${HARM_STATUS_COLORS[getHarmStatus(clampHarm(character.harm)).status] ?? 'text-myth-ink-muted'}`}>
+                  {healthRemaining(character.harm).remaining}/{healthRemaining(character.harm).max}
                 </div>
               </div>
             </div>

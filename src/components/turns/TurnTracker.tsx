@@ -272,6 +272,19 @@ export default function TurnTracker({
             </div>
           </div>
 
+          {/* The queue is advisory and never gates submission (see this
+              file's header comment) — but nothing on screen said so. A
+              player who isn't "up" sees a name they're waiting on, a
+              countdown labelled "remaining", and a draining bar: three
+              signals that all read as a lock. The one true statement about
+              it lived only in a source comment, so say it where the person
+              acting on it can read it. */}
+          {!isMyTurn && (
+            <p className="mb-3 text-xs text-myth-ink-muted">
+              You can still act at any time — this queue is a suggestion, not a lock.
+            </p>
+          )}
+
           {/* Progress Bar */}
           <div className="w-full bg-myth-surface-sunken rounded-full h-2 mb-3">
             <div

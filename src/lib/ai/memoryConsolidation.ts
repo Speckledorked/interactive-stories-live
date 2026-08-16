@@ -254,9 +254,28 @@ async function consolidateTierUnsafe(
       continue
     }
 
-    const idsToDelete = memories.map((m) => m.id)
+    // #392: ARCHIVE, don't delete.
+    //
+    // This used to DELETE, which irreversibly destroyed each memory's
+    // fullContext, emotionalTone, importance, memoryType, sourceId,
+    // retrievalCount, tags and its own turnNumber — and unioned entity
+    // attribution across the bucket, so "who was in what" became "who was
+    // in this decade". None of that is derivable from the summary, which
+    // is a list of headlines.
+    //
+    // Dropping the embedding is what the compaction was actually for: a
+    // 1536-dimension vector is the bulk of the row and the only part that
+    // competes in the RAG candidate pool. Nulling it removes the memory
+    // from retrieval — the CTE already requires `embedding IS NOT NULL` —
+    // while archivedAt makes the intent explicit for every other reader,
+    // and consolidatedIntoId records where to look instead.
+    const idsToArchive = memories.map((m) => m.id)
     await prisma.$executeRaw`
-      DELETE FROM campaign_memories WHERE id = ANY(${idsToDelete}::text[])
+      UPDATE campaign_memories
+         SET embedding = NULL,
+             "archivedAt" = NOW(),
+             "consolidatedIntoId" = ${created}
+       WHERE id = ANY(${idsToArchive}::text[])
     `
 
     bucketsConsolidated += 1

@@ -12,14 +12,32 @@
 // objects from rows it has already fog-of-war filtered, and the component
 // renders them. No query, no formatting of anything it wasn't handed.
 //
-// On the numbers-vs-labels question, this splits deliberately from
-// npcRelationship.ts. That helper returns labels ONLY, because a player
-// knowing an NPC's exact affection integer is a fiction leak — those are
-// someone's private feelings. A faction's threat level and a location's
-// condition are public, observable facts about the world, and the admin
-// panel already shows them numerically. So these carry the raw value AND
-// a band label: the meter needs the number, the screen reader needs the
-// word.
+// On the numbers-vs-labels question, this originally split deliberately
+// from npcRelationship.ts: that helper returns labels ONLY, because a
+// player knowing an NPC's exact affection integer is a fiction leak, while
+// a faction's threat level and a location's condition read as public,
+// observable facts.
+//
+// #389: that reasoning does not survive contact with the rest of the
+// codebase. Every OTHER player-facing surface bands these same fields —
+// wikiSync.ts:222 does it precisely so "the wiki can't hand players a
+// precision the AI itself is never allowed to narrate with",
+// entitySummaries.ts:37 does it, and worldSummaryMappers.ts:191 does it
+// for the GM MODEL. Shipping raw integers here gave players precision the
+// narrator is explicitly denied, which is not a defensible split; it is
+// one surface disagreeing with three.
+//
+// So the payload is now role-aware. An ADMIN gets the raw values (the
+// admin panel already shows them, and debugging the simulation needs
+// them). A PLAYER gets the band, plus a meter position derived FROM the
+// band rather than from the value — the meter still renders, at the
+// granularity the fiction actually supports.
+//
+// Fog of war has two independent properties: WHICH entities you may see,
+// and HOW EXACTLY you may see them. Only the first had a structural guard
+// (fogOfWar.test.ts checks queries go through visibleTo), which is why a
+// route that correctly adopted the guarded pattern for visibility
+// silently violated precision.
 
 export type FactionStats = {
   kind: 'FACTION'
@@ -27,10 +45,6 @@ export type FactionStats = {
   threatLevel: number
   /** 0-100. */
   stability: number
-  /** 0-100. */
-  influence: number
-  /** 0-100. */
-  military: number
   isActive: boolean
 }
 
@@ -107,4 +121,69 @@ export function describeWeather(weather: string, severity: number): string {
 /** Human-readable condition band, taken from the tag vocabulary itself. */
 export function describeConditionTag(tag: string): string {
   return tag.charAt(0) + tag.slice(1).toLowerCase()
+}
+
+// ---------------------------------------------------------------------------
+// #389: precision banding for player-facing payloads
+// ---------------------------------------------------------------------------
+//
+// The band labels above are already the vocabulary a player is allowed.
+// These snap the underlying VALUE to the midpoint of its own band, so the
+// meter still has something to render and the exact figure never leaves
+// the server for a PLAYER-role caller.
+//
+// Snapping rather than omitting the number keeps the component honest
+// (a meter with no value is a meter that renders wrong) without letting
+// the payload — or aria-valuenow, which announces it verbatim to a screen
+// reader — carry a precision the narrator itself is denied.
+
+/** Midpoint of the 0-100 stability band a score falls in. */
+export function bandedStability(score: number): number {
+  if (score < 25) return 12
+  if (score < 50) return 37
+  if (score < 75) return 62
+  return 87
+}
+
+/** Midpoint of the 0-100 condition band a score falls in — same bands. */
+export const bandedCondition = bandedStability
+
+/**
+ * Threat is already a 1-5 ordinal with a label per step, so there is no
+ * finer precision to lose. Clamped for the same reason describeThreat
+ * clamps: a widened range should round, not throw.
+ */
+export function bandedThreat(level: number): number {
+  return Math.min(Math.max(Math.round(level), THREAT_MIN), THREAT_MAX)
+}
+
+/**
+ * Build the FACTION card payload for a given role.
+ *
+ * ADMIN sees the simulation as it is. PLAYER sees the fiction.
+ */
+export function factionStatsFor(
+  role: 'ADMIN' | 'PLAYER',
+  faction: { threatLevel: number; stability: number; isActive: boolean }
+): FactionStats {
+  return {
+    kind: 'FACTION',
+    threatLevel: role === 'ADMIN' ? faction.threatLevel : bandedThreat(faction.threatLevel),
+    stability: role === 'ADMIN' ? faction.stability : bandedStability(faction.stability),
+    isActive: faction.isActive,
+  }
+}
+
+/** The LOCATION counterpart. weatherSeverity is a 1-5 ordinal like threat. */
+export function locationStatsFor(
+  role: 'ADMIN' | 'PLAYER',
+  location: { conditionScore: number; conditionTags: string[]; weather: string; weatherSeverity: number }
+): LocationStats {
+  return {
+    kind: 'LOCATION',
+    conditionScore: role === 'ADMIN' ? location.conditionScore : bandedCondition(location.conditionScore),
+    conditionTags: location.conditionTags,
+    weather: location.weather,
+    weatherSeverity: location.weatherSeverity,
+  }
 }

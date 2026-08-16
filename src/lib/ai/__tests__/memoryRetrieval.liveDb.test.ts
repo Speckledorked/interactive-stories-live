@@ -143,7 +143,7 @@ describeIfDb('retrieveRelevantHistory — real pgvector search', () => {
     expect(result.length).toBeGreaterThanOrEqual(2)
     // The genuinely close one must rank first, not just be present.
     expect(result[0].title).toBe('Close memory')
-    expect(result[0].similarity).toBeGreaterThan(result[1].similarity)
+    expect(result[0].similarity!).toBeGreaterThan(result[1].similarity!)
   })
 
   it('gracefully returns an empty array for a campaign with no memories yet', async () => {

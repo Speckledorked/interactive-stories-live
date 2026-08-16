@@ -90,3 +90,15 @@ UPDATE "NPC" n
 -- everything that exists today.
 -- ---------------------------------------------------------------------------
 ALTER TABLE "CampaignCapability" ADD COLUMN IF NOT EXISTS "isNarrated" BOOLEAN NOT NULL DEFAULT false;
+
+-- ---------------------------------------------------------------------------
+-- #392: consolidation archives instead of deleting.
+--
+-- No backfill possible or wanted: memories already deleted by past
+-- consolidation runs are gone. Every surviving row is live (archivedAt NULL),
+-- which is accurate.
+-- ---------------------------------------------------------------------------
+ALTER TABLE "campaign_memories" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3);
+ALTER TABLE "campaign_memories" ADD COLUMN IF NOT EXISTS "consolidatedIntoId" TEXT;
+CREATE INDEX IF NOT EXISTS "campaign_memories_campaignId_archivedAt_idx"
+  ON "campaign_memories" ("campaignId", "archivedAt");

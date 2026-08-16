@@ -8,6 +8,7 @@
 import { prisma } from '@/lib/prisma';
 import { embedWithCostTracking } from './embeddingService';
 import { MEMORY_SEARCH_COLUMNS } from './campaignMemoryColumns';
+import { MEMORY_FOG_PREDICATE } from './memoryFogPredicate';
 import type { Scene, PlayerAction, Character, NPC, Faction } from '@prisma/client';
 
 export interface RetrievalContext {
@@ -26,7 +27,18 @@ export interface RetrievedMemory {
   memoryType: string;
   importance: string;
   emotionalTone: string | null;
-  similarity: number; // Raw semantic similarity (0-1), independent of recency
+  /**
+   * Raw semantic similarity (0-1), independent of recency.
+   *
+   * #390: NULL means UNSCORED, not "perfectly similar". crossEntityRecall
+   * is a structural intersection ordered by recency and has no query
+   * embedding, so it has no similarity to report — it used to report a
+   * hardcoded 1.0, which bypassed the minSimilarity floor and won every
+   * importance-boosted re-sort against memories that were genuinely
+   * similar. A field whose value means something else is worse than an
+   * absent one.
+   */
+  similarity: number | null;
   // #293: the same similarity+recency blend the SQL ORDER BY uses, only
   // set by retrieveRelevantHistory (retrieveNpcHistory/
   // retrieveCrossEntityHistory have no recency component to blend, so they
@@ -114,13 +126,24 @@ export function filterAndRankMemories(
   memories: RetrievedMemory[],
   opts: { minSimilarity: number; importanceBoost: boolean; maxMemories: number }
 ): RetrievedMemory[] {
-  let filtered = memories.filter((m) => m.similarity >= opts.minSimilarity);
+  // #390: unscored rows (similarity null) are exempt from the quality
+  // floor — they earned their place STRUCTURALLY, by involving both
+  // queried entities, not by resembling the query. What they must not do
+  // is outrank rows that did earn it semantically.
+  let filtered = memories.filter((m) => m.similarity === null || m.similarity >= opts.minSimilarity);
 
   if (opts.importanceBoost) {
     filtered = filtered
       .map((m) => ({
         ...m,
-        boostedScore: (m.relevanceScore ?? m.similarity) * (IMPORTANCE_WEIGHTS[m.importance] || 1.0),
+        // Unscored rows sort after every scored one rather than ahead of
+        // them, which is what a hardcoded 1.0 used to guarantee.
+        boostedScore:
+          m.relevanceScore ?? m.similarity ?? -1,
+      }))
+      .map((m) => ({
+        ...m,
+        boostedScore: m.boostedScore < 0 ? m.boostedScore : m.boostedScore * (IMPORTANCE_WEIGHTS[m.importance] || 1.0),
       }))
       .sort((a, b) => b.boostedScore - a.boostedScore);
   }
@@ -179,6 +202,18 @@ export async function retrieveRelevantHistory(
     // See the CANDIDATE_POOL_MULTIPLIER comment above for why this is a
     // two-stage CTE rather than one flat query (#349).
     const candidatePoolSize = Math.max(opts.maxMemories * CANDIDATE_POOL_MULTIPLIER, MIN_CANDIDATE_POOL_SIZE);
+
+    // #391: pgvector's HNSW search returns FEWER rows than LIMIT when
+    // LIMIT > hnsw.ef_search, whose default is 40. Nothing anywhere set
+    // it, so the "generous candidate window" the CTE comment justifies at
+    // length was silently ~40 rows regardless of candidatePoolSize —
+    // before the entity and fog filters cut it further.
+    //
+    // SET LOCAL scopes this to the surrounding transaction, so it cannot
+    // leak onto an unrelated query sharing the pooled connection. The two
+    // values are derived from one number here, so they cannot drift apart
+    // again.
+    await prisma.$executeRawUnsafe(`SET LOCAL hnsw.ef_search = ${Math.max(candidatePoolSize, MIN_CANDIDATE_POOL_SIZE)}`);
     // See campaignMemoryColumns.ts for why the shared column list is quoted.
     const memories = await prisma.$queryRaw<RetrievedMemory[]>`
       WITH candidates AS (
@@ -212,10 +247,21 @@ export async function retrieveRelevantHistory(
         as "relevanceScore"
       FROM candidates
       WHERE
+        -- #391: the quality floor belongs UPSTREAM of truncation.
+        --
+        -- minSimilarity used to be applied in JavaScript by
+        -- filterAndRankMemories, i.e. after the CTE's LIMIT and after the
+        -- outer LIMIT below. The pipeline was therefore: take the top-K by
+        -- vector distance, truncate again, THEN apply the quality gate —
+        -- so on a campaign whose memories are semantically far from the
+        -- current scene the result could be EMPTY while eligible memories
+        -- sat just below the top-K cutoff. Silent zero-recall on exactly
+        -- the long campaigns RAG exists to serve.
+        similarity >= ${opts.minSimilarity}
         -- Entity filtering: include memories involving current NPCs/factions/characters
         -- When arrays are empty, use ARRAY[]::text[] which makes the overlap check return false
         -- This ensures we only match general memories (with no entities) when no entities are provided
-        (
+        AND (
           (${npcIds.length > 0} AND "involvedNpcIds" && ${npcIds}::text[])
           OR (${factionIds.length > 0} AND "involvedFactionIds" && ${factionIds}::text[])
           OR (${characterIds.length > 0} AND "involvedCharacterIds" && ${characterIds}::text[])
@@ -234,16 +280,7 @@ export async function retrieveRelevantHistory(
         -- have already filtered. Excludes a memory the moment ANY entity it
         -- involves isn't discovered yet, rather than trusting npcIds/
         -- factionIds (the CURRENT scene's roster) to already be clean.
-        AND NOT EXISTS (
-          SELECT 1 FROM unnest("involvedNpcIds") AS npc_id
-          JOIN "NPC" ON "NPC"."id" = npc_id
-          WHERE "NPC"."isDiscovered" = false
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM unnest("involvedFactionIds") AS faction_id
-          JOIN "Faction" ON "Faction"."id" = faction_id
-          WHERE "Faction"."isDiscovered" = false
-        )
+        AND ${MEMORY_FOG_PREDICATE}
       ORDER BY "relevanceScore" DESC
       LIMIT ${opts.maxMemories * 2}  -- Get extra, then filter by similarity threshold
     `;

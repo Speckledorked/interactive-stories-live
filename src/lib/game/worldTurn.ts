@@ -279,6 +279,13 @@ export async function runWorldTurn(campaignId: string) {
     // doesn't grow unbounded over a long campaign — every 10 turns is often
     // enough to keep it bounded without adding per-turn overhead. Piggybacks
     // on this existing cadence rather than needing a separate cron job.
+    //
+    // #392: this cadence only became real with #374. It reads
+    // `currentTurn % 10`, and currentTurn used to be the scene counter,
+    // which does not move on an idle campaign — so consolidation either
+    // NEVER ran (frozen on a non-multiple) or ran on EVERY SINGLE world
+    // turn (frozen on a multiple). It now counts world turns, which is
+    // what "every 10 turns" was always meant to mean.
     let memoriesConsolidated = 0
     if (currentTurn % 10 === 0) {
       const consolidation = await consolidateOldMemories(campaignId, currentTurn)

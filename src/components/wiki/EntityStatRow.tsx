@@ -51,7 +51,12 @@ function Meter({
         <span className="truncate font-mono text-[10px] uppercase tracking-wider text-myth-ink-faint">{label}</span>
         <span className="flex-shrink-0 text-[11px] text-myth-ink-muted">{display}</span>
       </div>
-      <Progress className="mt-1" size="sm" value={value} max={max} tone={tone} label={label} />
+      {/* #389: the screen reader announces the same band the sighted
+          player reads. Without valueText, aria-valuenow is read verbatim,
+          so assistive tech heard "Stability 63" against a visible
+          "Steady" — an accessibility inconsistency and a fog-of-war leak
+          in the same attribute. */}
+      <Progress className="mt-1" size="sm" value={value} max={max} tone={tone} label={label} valueText={`${label}: ${display}`} />
     </div>
   )
 }

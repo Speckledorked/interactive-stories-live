@@ -8,6 +8,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $queryRaw: vi.fn(),
+    // #391: SET LOCAL hnsw.ef_search, so the candidate pool the CTE asks
+    // for is the pool pgvector actually returns.
+    $executeRawUnsafe: vi.fn(),
     $executeRaw: vi.fn(),
     worldMeta: { findUnique: vi.fn() },
   },
@@ -198,5 +201,66 @@ describe('generateEntityPairs — amplification cap (#80)', () => {
 
   it('honors an explicit cap override', () => {
     expect(generateEntityPairs(['a', 'b', 'c', 'd'], 2)).toHaveLength(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #390: unscored memories must not win the ranking
+// ---------------------------------------------------------------------------
+//
+// crossEntityRecall is a structural intersection ordered by recency — no
+// query embedding, so nothing to score. It used to report a hardcoded 1.0,
+// which both bypassed the minSimilarity floor and carried the maximum
+// possible base score into the importance-boosted re-sort, so those rows
+// beat memories that were genuinely similar to the scene at hand.
+
+describe('filterAndRankMemories — unscored memories (#390)', () => {
+  const memory = (over: Partial<RetrievedMemory>): RetrievedMemory => ({
+    id: 'm', turnNumber: 1, title: 't', summary: 's', memoryType: 'SCENE',
+    importance: 'NORMAL', emotionalTone: null, similarity: 0.9, ...over,
+  })
+
+  it('exempts an unscored memory from the similarity floor', () => {
+    // It earned its place structurally, by involving both queried
+    // entities — not by resembling the query.
+    const result = filterAndRankMemories(
+      [memory({ id: 'unscored', similarity: null })],
+      { minSimilarity: 0.7, importanceBoost: false, maxMemories: 5 }
+    )
+
+    expect(result.map((m) => m.id)).toEqual(['unscored'])
+  })
+
+  it('ranks an unscored memory after every scored one', () => {
+    const result = filterAndRankMemories(
+      [
+        memory({ id: 'unscored', similarity: null }),
+        memory({ id: 'weakly-scored', similarity: 0.71 }),
+      ],
+      { minSimilarity: 0.7, importanceBoost: true, maxMemories: 5 }
+    )
+
+    expect(result.map((m) => m.id)).toEqual(['weakly-scored', 'unscored'])
+  })
+
+  it('does not let importance weighting float an unscored memory to the top', () => {
+    const result = filterAndRankMemories(
+      [
+        memory({ id: 'unscored-critical', similarity: null, importance: 'CRITICAL' }),
+        memory({ id: 'scored-minor', similarity: 0.75, importance: 'MINOR' }),
+      ],
+      { minSimilarity: 0.7, importanceBoost: true, maxMemories: 5 }
+    )
+
+    expect(result[0].id).toBe('scored-minor')
+  })
+
+  it('still drops a scored memory below the floor', () => {
+    const result = filterAndRankMemories(
+      [memory({ id: 'too-distant', similarity: 0.4 })],
+      { minSimilarity: 0.7, importanceBoost: false, maxMemories: 5 }
+    )
+
+    expect(result).toEqual([])
   })
 })

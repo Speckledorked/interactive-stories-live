@@ -3005,9 +3005,25 @@ model CampaignMemory {
   // costs one cheap SELECT instead of an API call.
   dedupeKey String?
 
-  createdAt DateTime @default(now())
+  // #392: consolidation is a compaction of the INDEX, not destruction of
+  // the RECORD.
+  //
+  // It used to DELETE the originals after writing an era summary, which
+  // irreversibly destroyed per-memory fullContext, emotionalTone,
+  // importance, memoryType, sourceId, retrievalCount, tags and turnNumber
+  // — and unioned entity attribution across the whole bucket, so "who was
+  // in what" became "who was in this decade". None of that is derivable
+  // from the summary, and there was no path back.
+  //
+  // What actually costs space and pollutes the candidate pool is the
+  // 1536-dimension embedding, not the text. So an archived memory keeps
+  // every field and loses only its embedding: it stops competing in
+  // retrieval, and the record survives.
+  archivedAt         DateTime?
+  consolidatedIntoId String?
 
   @@unique([campaignId, dedupeKey])
+  @@index([campaignId, archivedAt])
   @@index([campaignId, turnNumber])
   @@index([campaignId, memoryType])
   @@index([campaignId, importance])

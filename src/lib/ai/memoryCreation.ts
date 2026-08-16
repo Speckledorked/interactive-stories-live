@@ -64,16 +64,20 @@ export function memoryDedupeKey(parts: {
 /**
  * Create a campaign memory with semantic embedding
  *
- * Returns whether the write actually happened. Never throws — every
- * existing caller here already treated this as fire-and-forget (`await`ed
- * with the return value ignored), and that stays true; the return value
- * exists so a caller that DOES need to know (memoryConsolidation.ts's
- * create-then-delete loop, #216) can check it without this function's
- * own fail-open contract changing for anyone else.
+ * Returns the new memory's id, or null if the write did not happen. Never
+ * throws — every existing caller here already treated this as
+ * fire-and-forget (`await`ed with the return value ignored), and that
+ * stays true; the return value exists so a caller that DOES need to know
+ * (memoryConsolidation.ts's create-then-archive loop, #216) can check it
+ * without this function's own fail-open contract changing for anyone else.
+ *
+ * #392: an id rather than a bare boolean, so an archived memory can record
+ * WHICH summary replaced it. Still truthy/falsy at every existing call
+ * site.
  *
  * @param data - Memory data to store
  */
-export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
+export async function createCampaignMemory(data: MemoryData): Promise<string | null> {
   try {
     // #377: check BEFORE embedding, not just at insert time. The ON
     // CONFLICT below is what actually guarantees uniqueness, but by then
@@ -87,7 +91,7 @@ export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
       });
       if (existing) {
         console.log(`↩️  Memory already recorded (${data.title}) — replay, no embedding purchased`);
-        return true;
+        return existing.id;
       }
     }
 
@@ -108,7 +112,7 @@ export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
     // with (no @map on CampaignMemory's fields — only @@map on the table
     // itself) — unquoted snake_case identifiers here would silently target
     // nonexistent columns and fail against a real database.
-    await prisma.$executeRaw`
+    const inserted = await prisma.$queryRaw<Array<{ id: string }>>`
       INSERT INTO campaign_memories (
         id,
         "campaignId",
@@ -152,10 +156,24 @@ export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
       -- write; this is what actually enforces uniqueness. NULL dedupeKeys
       -- are distinct in Postgres, so opted-out callers never conflict.
       ON CONFLICT ("campaignId", "dedupeKey") DO NOTHING
+      RETURNING id
     `;
 
+    // DO NOTHING returns no row when a concurrent write won the race. The
+    // memory exists either way, which is what the caller cares about.
+    if (inserted.length === 0) {
+      const winner = data.dedupeKey
+        ? await prisma.campaignMemory.findFirst({
+            where: { campaignId: data.campaignId, dedupeKey: data.dedupeKey },
+            select: { id: true },
+          })
+        : null;
+      console.log(`↩️  Memory raced with a concurrent identical write (${data.title})`);
+      return winner?.id ?? null;
+    }
+
     console.log(`✓ Created memory: ${data.title} (${data.importance})`);
-    return true;
+    return inserted[0].id;
   } catch (error) {
     console.error('Error creating campaign memory:', error);
     // Don't throw - we don't want memory creation to block scene resolution.
@@ -181,7 +199,7 @@ export async function createCampaignMemory(data: MemoryData): Promise<boolean> {
       console.error('Failed to record memory creation failure:', recordError);
     }
     console.error('Failed to create memory, continuing without it');
-    return false;
+    return null;
   }
 }
 

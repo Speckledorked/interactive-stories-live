@@ -40,9 +40,9 @@ beforeEach(() => {
 describe('logSignificantChanges', () => {
   it('counts only changes createCampaignMemory actually reports success for', async () => {
     vi.mocked(createCampaignMemory)
-      .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce(false) // embedding call failed for this one
-      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce('mem-1')
+      .mockResolvedValueOnce(null) // embedding call failed for this one
+      .mockResolvedValueOnce('mem-1')
 
     const count = await logSignificantChanges('camp1', 5, [
       factionChange('f1'), factionChange('f2'), factionChange('f3'),
@@ -53,7 +53,7 @@ describe('logSignificantChanges', () => {
   })
 
   it('returns 0, not the candidate count, when every write fails', async () => {
-    vi.mocked(createCampaignMemory).mockResolvedValue(false)
+    vi.mocked(createCampaignMemory).mockResolvedValue(null)
 
     const count = await logSignificantChanges('camp1', 5, [factionChange('f1'), factionChange('f2')])
 
@@ -61,7 +61,7 @@ describe('logSignificantChanges', () => {
   })
 
   it('filters out non-significant changes before ever calling createCampaignMemory', async () => {
-    vi.mocked(createCampaignMemory).mockResolvedValue(true)
+    vi.mocked(createCampaignMemory).mockResolvedValue('mem-1')
 
     const count = await logSignificantChanges('camp1', 5, [
       factionChange('f1'),

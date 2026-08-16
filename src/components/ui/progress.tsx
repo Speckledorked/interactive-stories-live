@@ -17,6 +17,14 @@ export interface ProgressProps extends Omit<React.HTMLAttributes<HTMLDivElement>
   tone?: ProgressTone
   /** Accessible name, e.g. "Stability". Falls back to a generic label. */
   label?: string
+  /**
+   * #389: what a screen reader should announce INSTEAD of the raw number.
+   *
+   * Pass this wherever the visible label is a band ("Steady", "Dire") —
+   * otherwise aria-valuenow is announced verbatim and assistive tech gets
+   * the exact figure the sighted UI deliberately withholds.
+   */
+  valueText?: string
   /** Bar thickness. `sm` for inline meters in a dense card. */
   size?: 'sm' | 'md'
 }
@@ -30,7 +38,7 @@ const TONES: Record<ProgressTone, string> = {
 }
 
 export const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(function Progress(
-  { className = '', value = 0, max = 100, tone = 'accent', label, size = 'md', ...props },
+  { className = '', value = 0, max = 100, tone = 'accent', label, valueText, size = 'md', ...props },
   ref
 ) {
   const safeMax = max > 0 ? max : 100
@@ -43,6 +51,13 @@ export const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(function
       aria-valuenow={Math.round(value)}
       aria-valuemin={0}
       aria-valuemax={safeMax}
+      // #389: when the visible label is a BAND ("Steady"), the screen
+      // reader must announce the band too. Without this, aria-valuenow is
+      // read verbatim — so assistive tech announced "Stability 63" while
+      // every sighted player saw "Steady", which is both an accessibility
+      // inconsistency and a fog-of-war leak to exactly the users who can
+      // least easily cross-check it.
+      aria-valuetext={valueText}
       aria-label={label ?? 'Progress'}
       className={cn(
         'relative w-full overflow-hidden rounded-full bg-myth-surface-sunken',

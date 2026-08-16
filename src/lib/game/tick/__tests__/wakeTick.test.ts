@@ -11,6 +11,7 @@ vi.mock('@/lib/prisma', () => ({
 import { prisma } from '@/lib/prisma'
 import { decideWakeStabilityPenalty, decideWakeDecayStep, tickWake } from '../wakeTick'
 import type { TickContext } from '../types'
+import { factionTieRows } from './tieFixtures'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
   return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
@@ -212,7 +213,7 @@ describe('tickWake (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([]) // no dead npcs
     vi.mocked(prisma.faction.findMany)
       .mockResolvedValueOnce([
-        { id: 'f-collapsed', name: 'The Fallen Court', relationships: { 'f-rival': { type: 'RIVAL', since: 1 } } },
+        { id: 'f-collapsed', name: 'The Fallen Court', ...factionTieRows('f-collapsed', { 'f-rival': { type: 'RIVAL', since: 1 } }) },
       ] as any) // collapsed factions
       .mockResolvedValueOnce([{ id: 'f-rival', name: 'Rival Co', stability: 60 }] as any) // related, active
 
@@ -231,7 +232,7 @@ describe('tickWake (DB handler)', () => {
     vi.mocked(prisma.activeWake.findMany).mockResolvedValueOnce([]).mockResolvedValueOnce([])
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f-collapsed', name: 'The Fallen Court', relationships: {} },
+      { id: 'f-collapsed', name: 'The Fallen Court', ...factionTieRows('f-collapsed', {}) },
     ] as any)
 
     const result = await tickWake(baseCtx())
@@ -246,7 +247,7 @@ describe('tickWake (DB handler)', () => {
       .mockResolvedValueOnce([{ sourceEntityId: 'f-collapsed' }] as any) // already processed
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'f-collapsed', name: 'The Fallen Court', relationships: { 'f-rival': { type: 'RIVAL', since: 1 } } },
+      { id: 'f-collapsed', name: 'The Fallen Court', ...factionTieRows('f-collapsed', { 'f-rival': { type: 'RIVAL', since: 1 } }) },
     ] as any)
 
     const result = await tickWake(baseCtx())

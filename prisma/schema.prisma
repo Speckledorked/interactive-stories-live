@@ -394,6 +394,9 @@ model Campaign {
   characters       Character[]
   npcs             NPC[]
   factions         Faction[]
+  // #373: social ties as edges rather than per-node JSON blobs.
+  npcTies          NpcTie[]
+  factionTies      FactionTie[]
   locations        Location[]
   clocks           Clock[]
   scenes           Scene[]
@@ -1064,12 +1067,16 @@ model NPC {
 
   // Phase 9: NPC society — individual-level relationships between major
   // NPCs, derived from faction affiliation (same faction = ALLY; rival/ally
-  // factions per Faction.relationships = inherited). Shape mirrors
-  // Faction.relationships: Record<otherNpcId, { type: 'RIVAL' | 'ALLY';
-  // since: number }>. Written by npcSocietyTick.ts; distinct from the
-  // `relationship` field above, which is this NPC's stance toward the
-  // PLAYER CHARACTERS, not toward other NPCs.
-  socialTies Json?
+  // factions per FactionTie = inherited). Written by npcSocietyTick.ts;
+  // distinct from the `relationship` field above, which is this NPC's
+  // stance toward the PLAYER CHARACTERS, not toward other NPCs.
+  //
+  // #373: this was a `socialTies Json?` column — an id-keyed map stored on
+  // each NPC. That is graph data (pairwise weighted edges) held per node,
+  // which made every question except "who does THIS one NPC know" either
+  // impossible or a full table scan. It is an edge table now; see NpcTie.
+  tiesAsA NpcTie[] @relation("NpcTieA")
+  tiesAsB NpcTie[] @relation("NpcTieB")
 
   // Corruption gate (#83). min = only the marked may pass; max = the
   // marked are turned away. Null on both (the default) means ungated.
@@ -1116,6 +1123,96 @@ model NPC {
   @@index([campaignId, lastTickedAt])
 }
 
+// #373: social ties as a real graph.
+//
+// NPC.socialTies and Faction.relationships were id-keyed JSON blobs — each
+// entity carrying its own map of who it knows. That is genuinely graph data
+// (pairwise weighted edges) stored per node, and the ceiling was sharp:
+// "who does this ONE entity know" was cheap and *everything else* was
+// unavailable. No social distance, no alliance chains, no brokers. Rumour
+// propagation (informationTick.ts) was borrowing PHYSICAL distance from
+// WorldGraph as a stand-in for social distance, because social distance was
+// not computable — rumours spread by geography rather than by who talks to
+// whom.
+//
+// Three things become structural rather than maintained by convention:
+//
+//  1. Referential integrity. A key inside a JSON blob could point at a
+//     deleted entity and only an integrity CHECK would notice; a foreign
+//     key cannot. `npc.socialTies.keys.resolve` and
+//     `faction.relationships.keys.resolve` became regression guards for
+//     the same reason `war.contestedLocationId.resolves` did once its FK
+//     existed.
+//
+//  2. Symmetry. The blobs stored each tie TWICE, once per side, and only
+//     relationshipEngine.ts happened to write both — an admin route, an
+//     import, or a repair could produce a legal-looking asymmetric map
+//     that no reader detected (which is exactly what
+//     `faction.relationships.symmetric` was added to catch). One row per
+//     pair, canonically ordered so aId < bId, makes asymmetry
+//     unrepresentable rather than merely detectable.
+//
+//  3. NEUTRAL. It is the absence of a row, not a third stored value, so
+//     "no tie" has exactly one representation.
+//
+// The canonical ordering is enforced by a DB CHECK constraint, not just by
+// the writer — see the migration.
+enum TieType {
+  RIVAL
+  ALLY
+}
+
+model NpcTie {
+  id         String  @id @default(cuid())
+  campaignId String
+  // INVARIANT: npcAId < npcBId (DB CHECK NpcTie_canonical_order). The tie
+  // is undirected; ordering the endpoints is what makes the unique index
+  // able to say "one row per pair".
+  npcAId     String
+  npcBId     String
+  type       TieType
+  // The turn the tie formed. Read by findRivalIds to make "their rival"
+  // deterministic (longest-standing rivalry wins) rather than whichever
+  // key a JSON object happened to yield first.
+  since      Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  npcA     NPC      @relation("NpcTieA", fields: [npcAId], references: [id], onDelete: Cascade)
+  npcB     NPC      @relation("NpcTieB", fields: [npcBId], references: [id], onDelete: Cascade)
+
+  @@unique([npcAId, npcBId])
+  @@index([campaignId])
+  // Both directions indexed: an undirected edge is looked up from either
+  // endpoint, so "who does this NPC know" is `OR: [{npcAId}, {npcBId}]`.
+  @@index([npcAId])
+  @@index([npcBId])
+}
+
+model FactionTie {
+  id         String  @id @default(cuid())
+  campaignId String
+  /// INVARIANT: factionAId < factionBId (DB CHECK FactionTie_canonical_order).
+  factionAId String
+  factionBId String
+  type       TieType
+  since      Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaign  Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  factionA  Faction  @relation("FactionTieA", fields: [factionAId], references: [id], onDelete: Cascade)
+  factionB  Faction  @relation("FactionTieB", fields: [factionBId], references: [id], onDelete: Cascade)
+
+  @@unique([factionAId, factionBId])
+  @@index([campaignId])
+  @@index([factionAId])
+  @@index([factionBId])
+}
+
 model Faction {
   id            String   @id @default(cuid())
   campaignId    String
@@ -1126,12 +1223,15 @@ model Faction {
   influence     Int      @default(50)
   currentPlan   String?
   threatLevel   Int      @default(1)
-  // World Sim Phase 3: written and read by relationshipTick.ts. Shape:
-  // Record<otherFactionId, { type: 'RIVAL' | 'ALLY'; since: number }>.
-  // Absence of an entry for a given faction means NEUTRAL. Recomputed each
-  // tick from both factions' goals/stability, so it evolves on its own as
+  // World Sim Phase 3: written and read by relationshipTick.ts. Absence of
+  // an edge between two factions means NEUTRAL. Recomputed each tick from
+  // both factions' goals/stability, so it evolves on its own as
   // circumstances change rather than being a one-time GM-authored fact.
-  relationships Json?
+  //
+  // #373: this was a `relationships Json?` column — an id-keyed map stored
+  // on each faction. See NpcTie/FactionTie below for why it moved.
+  tiesAsA FactionTie[] @relation("FactionTieA")
+  tiesAsB FactionTie[] @relation("FactionTieB")
   gmNotes       String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

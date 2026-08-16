@@ -7,9 +7,9 @@ describe('noDuplicateNpcNames', () => {
   it('flags every row sharing a name, case/whitespace-insensitively', () => {
     const snapshot = emptySnapshot({
       npcs: [
-        { id: 'npc1', name: 'Lord Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null },
-        { id: 'npc2', name: '  lord   kessler ', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null },
-        { id: 'npc3', name: 'Vashti', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null },
+        { id: 'npc1', name: 'Lord Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 },
+        { id: 'npc2', name: '  lord   kessler ', isAlive: true, factionId: null, factionRole: null, importance: 1 },
+        { id: 'npc3', name: 'Vashti', isAlive: true, factionId: null, factionRole: null, importance: 1 },
       ],
     })
     const violations = noDuplicateNpcNames.run(snapshot)
@@ -20,8 +20,8 @@ describe('noDuplicateNpcNames', () => {
   it('does not flag unique names', () => {
     const snapshot = emptySnapshot({
       npcs: [
-        { id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null },
-        { id: 'npc2', name: 'Vashti', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null },
+        { id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 },
+        { id: 'npc2', name: 'Vashti', isAlive: true, factionId: null, factionRole: null, importance: 1 },
       ],
     })
     expect(noDuplicateNpcNames.run(snapshot)).toHaveLength(0)
@@ -32,8 +32,8 @@ describe('noDuplicateFactionNames / noDuplicateQuestNames', () => {
   it('apply the same rule to factions and quests', () => {
     const factionSnapshot = emptySnapshot({
       factions: [
-        { id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} },
-        { id: 'f2', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} },
+        { id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null },
+        { id: 'f2', name: 'The Crown', isActive: true, leaderCharacterId: null },
       ],
     })
     expect(noDuplicateFactionNames.run(factionSnapshot)).toHaveLength(2)

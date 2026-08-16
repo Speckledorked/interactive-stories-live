@@ -94,6 +94,10 @@ export interface IntegritySnapshot {
   debts: SnapshotDebt[]
   wars: SnapshotWar[]
   quests: SnapshotQuest[]
+  /** #373: NPC social ties, as edges. */
+  npcTies: SnapshotTie[]
+  /** #373: faction rivalries and alliances, as edges. */
+  factionTies: SnapshotTie[]
   /** Phase 4 — this campaign's semantic-invariant verdicts, or null if it
    * has none yet (always a safe state; see worldRules.ts). */
   worldRules: WorldRules | null
@@ -106,7 +110,6 @@ export interface SnapshotNpc {
   factionId: string | null
   factionRole: 'LEADER' | 'MEMBER' | null
   importance: number
-  socialTies: unknown
 }
 
 export interface SnapshotFaction {
@@ -114,7 +117,21 @@ export interface SnapshotFaction {
   name: string
   isActive: boolean
   leaderCharacterId: string | null
-  relationships: unknown
+}
+
+/**
+ * #373: social ties as edge rows rather than per-node JSON blobs. The
+ * snapshot carries the edges themselves — the checks over them are
+ * regression guards now (a foreign key makes a dangling endpoint
+ * impossible at rest), and the structural property that replaced symmetry
+ * is the canonical `aId < bId` ordering, which is checkable from exactly
+ * this shape.
+ */
+export interface SnapshotTie {
+  aId: string
+  bId: string
+  type: 'RIVAL' | 'ALLY'
+  since: number
 }
 
 export interface SnapshotCharacter {

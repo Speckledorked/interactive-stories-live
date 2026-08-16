@@ -23,16 +23,22 @@ const lukewarm = { trust: 20, respect: 10, tension: 0 } // +30, under threshold
 
 describe('parseSocialTies', () => {
   it('keeps only real tie types', () => {
-    expect(parseSocialTies({ a: { type: 'ALLY' }, b: { type: 'RIVAL' }, c: { type: 'FRENEMY' } }))
-      .toEqual({ a: { type: 'ALLY' }, b: { type: 'RIVAL' } })
+    // #373: the input is the projection of a typed enum column now, so the
+    // unknown-type case is only reachable if TieType grows a third member.
+    // Kept — this module has an opinion about ALLY and RIVAL and none about
+    // anything else, and silently reflecting rapport through a tie type it
+    // does not understand is the failure worth preventing.
+    const ties = { a: { type: 'ALLY' }, b: { type: 'RIVAL' }, c: { type: 'FRENEMY' } } as any
+    expect(parseSocialTies(ties)).toEqual({ a: { type: 'ALLY' }, b: { type: 'RIVAL' } })
   })
 
-  it('survives the shapes a JSON column can actually hold', () => {
+  it('reads an absent or empty tie set as no ties', () => {
     expect(parseSocialTies(null)).toEqual({})
     expect(parseSocialTies(undefined)).toEqual({})
-    expect(parseSocialTies([])).toEqual({})
-    expect(parseSocialTies('nope')).toEqual({})
-    expect(parseSocialTies({ a: null })).toEqual({})
+    expect(parseSocialTies({})).toEqual({})
+    // A malformed entry drops out rather than throwing — the projection
+    // comes from a map lookup, and a missing key reads as undefined.
+    expect(parseSocialTies({ a: null } as any)).toEqual({})
   })
 })
 

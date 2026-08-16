@@ -37,7 +37,8 @@
 
 import type { Prisma } from '@prisma/client'
 import { HIGH_BAND_MIN } from './factionTick'
-import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, parseFactionRelationships } from './types'
+import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId } from './types'
+import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import { decideArcDelta, decideArcResolution } from '../arc'
 import { rosterFactionFilter } from './capOrdering'
 
@@ -302,7 +303,7 @@ export function decideWarJoiner(candidates: WarJoinCandidate[]): WarJoinCandidat
 }
 
 type ActiveWar = Prisma.WarGetPayload<{
-  include: { attacker: true; defender: true; participants: { include: { faction: true } } }
+  include: { attacker: true; defender: true; participants: { include: { faction: { include: typeof TIE_INCLUDE } } } }
 }>
 
 export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
@@ -311,7 +312,9 @@ export async function tickWars(ctx: TickContext): Promise<TickHandlerResult> {
     include: {
       attacker: true,
       defender: true,
-      participants: { include: { faction: true } },
+      // #373: a coalition grows through a participant's ALLY ties, which
+      // are edge rows now rather than a column on the faction.
+      participants: { include: { faction: { include: TIE_INCLUDE } } },
     },
   })
 
@@ -540,7 +543,7 @@ async function growWarCoalitions(
 
       const candidateIds = new Set<string>()
       for (const p of sideParticipants) {
-        const relationships = parseFactionRelationships(p.faction.relationships)
+        const relationships = factionTies(p.faction)
         for (const [otherId, rel] of Object.entries(relationships)) {
           if (rel.type === 'ALLY' && !sideFactionIds.has(otherId) && !factionIdsAtWar.has(otherId)) {
             candidateIds.add(otherId)
@@ -605,6 +608,7 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
 
   const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true, ...rosterFactionFilter(ctx) },
+    include: TIE_INCLUDE,
   })
 
   const locations = await ctx.db.location.findMany({
@@ -623,7 +627,7 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
   for (const defender of factions) {
     if (factionIdsAtWar.has(defender.id)) continue
 
-    const rivalId = findRivalId(defender.relationships)
+    const rivalId = findRivalId(factionTies(defender))
     if (!rivalId || factionIdsAtWar.has(rivalId)) continue
 
     const attacker = factions.find((f) => f.id === rivalId)

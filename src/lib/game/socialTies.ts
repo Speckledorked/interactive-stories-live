@@ -2,7 +2,7 @@
 //
 // NPC society, made mechanically real (README #89).
 //
-// `NPC.socialTies` records who each major NPC counts as an ALLY or a RIVAL,
+// `NpcTie` records who each major NPC counts as an ALLY or a RIVAL,
 // derived from faction politics by npcSocietyTick. It was read in exactly
 // three places: the tick that writes it, one flavor sentence on the wiki,
 // and joint-scheme clock spawning. It never reached a dice roll or any
@@ -26,7 +26,7 @@
 //     and the tick's own ties. Nothing new is written, no new AI channel,
 //     and a campaign whose NPCs have no ties behaves exactly as before.
 
-/** One entry of NPC.socialTies. Mirrors Faction.relationships' shape. */
+/** One NPC tie, as projected from an NpcTie edge. Mirrors a FactionTie. */
 export interface SocialTie {
   type: 'RIVAL' | 'ALLY'
   since?: number
@@ -59,12 +59,20 @@ export const REFLECTED_RAPPORT_CAP = 1
  */
 export const REFLECTION_THRESHOLD = 50
 
-export function parseSocialTies(value: unknown): Record<string, SocialTie> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+/**
+ * Narrow a tie projection to the two types this module acts on.
+ *
+ * #373: this used to parse a JSON blob, where the validation was load-
+ * bearing — anything could be in that column. The input is now the
+ * projection of a typed enum column, so the only thing left to do is drop
+ * entries this module has no opinion about, which keeps the function
+ * honest if TieType ever grows a third member.
+ */
+export function parseSocialTies(value: Record<string, SocialTie> | null | undefined): Record<string, SocialTie> {
+  if (!value) return {}
   const out: Record<string, SocialTie> = {}
-  for (const [id, tie] of Object.entries(value as Record<string, unknown>)) {
-    const type = (tie as SocialTie | null)?.type
-    if (type === 'RIVAL' || type === 'ALLY') out[id] = { type }
+  for (const [id, tie] of Object.entries(value)) {
+    if (tie?.type === 'RIVAL' || tie?.type === 'ALLY') out[id] = { type: tie.type }
   }
   return out
 }
@@ -95,7 +103,7 @@ export function netGoodwill(rapport: RapportEntry | null | undefined): number {
  * campaign whose society tick hasn't run.
  */
 export function reflectedRapportModifier(
-  socialTies: unknown,
+  socialTies: Record<string, SocialTie> | null | undefined,
   relationships: Record<string, RapportEntry> | null | undefined
 ): number {
   const ties = parseSocialTies(socialTies)

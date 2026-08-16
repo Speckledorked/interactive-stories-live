@@ -18,7 +18,8 @@
 // existing campaign scale elsewhere in the codebase.
 
 import type { Faction, FactionGoal } from '@prisma/client'
-import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, hasActiveRival, parseFactionRelationships } from './types'
+import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId, hasActiveRival } from './types'
+import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import { BeliefVector, parseBeliefVector } from './beliefTick'
 import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
 import { rosterFactionFilter } from './capOrdering'
@@ -404,6 +405,9 @@ export function decideDefection(members: DefectionCandidate[]): DefectionDecisio
 export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult> {
   const factions = await ctx.db.faction.findMany({
     where: { campaignId: ctx.campaignId, isActive: true, ...rosterFactionFilter(ctx) },
+    // #373: ties are edge rows now, pulled from both directions — see
+    // tieGraph.ts's TIE_INCLUDE for why both sides are always included.
+    include: TIE_INCLUDE,
   })
 
   // #79: how long each faction has held its current goal, read back from
@@ -481,7 +485,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
       : rawFaction
 
     const next = decideFactionTick(faction)
-    const relationships = parseFactionRelationships(faction.relationships)
+    const relationships = factionTies(faction)
     // #207: previously nothing anywhere counted a faction's currently-
     // unresolved wakes for any purpose — read once per faction here so both
     // decideFactionCollapse (roughness) and decideFactionGoalReassessment

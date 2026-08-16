@@ -4,29 +4,51 @@
 // ALLY/NEUTRAL tie between pairs of entities: relationshipTick.ts (factions)
 // and npcSocietyTick.ts (NPC social ties). Both used to independently
 // implement the exact same shape — seed a mutable working copy of each
-// entity's JSON tie map, expire entries whose other side dropped out of this
+// entity's tie map, expire entries whose other side dropped out of this
 // tick's active roster, then walk every pair deciding whether the tie
 // changed — differing only in how a pair's tie is decided and how the
 // resulting WorldChange is worded. This is that shape, factored out once.
 //
-// Persistence is deliberately NOT done here: the two callers write to
-// different Prisma models (Faction vs NPC) and different columns
-// (relationships vs socialTies), so each keeps its own dryRun-gated
-// persistence loop over the `dirty`/`working` this returns.
+// #373: the engine now speaks in EDGES rather than in per-entity JSON
+// blobs. Two things that used to be the engine's job stopped being
+// anybody's job:
+//
+//   - Writing both sides. The old code set `aTies[b.id]` and `bTies[a.id]`
+//     and was the ONLY writer that did, which is why asymmetry needed an
+//     integrity check. One canonical row per pair cannot be asymmetric.
+//
+//   - The mutable working copy. It existed because re-spreading each
+//     entity's fetched map per pair clobbered earlier same-tick updates
+//     when one entity's ties changed against two partners in one pass.
+//     With edges there is nothing to clobber — each pair is its own row.
+//
+// Persistence is still deliberately NOT done here: the two callers write to
+// different Prisma models (FactionTie vs NpcTie) with differently-named
+// endpoint columns, so each keeps its own dryRun-gated persistence loop
+// over the `upserts`/`deletes` this returns.
 
-import { FactionRelationshipEntry, TickEntityType, WorldChange, parseFactionRelationships } from './types'
+import { TickEntityType, WorldChange } from './types'
+import { TieEdge, TieType as GraphTieType, canonicalTie, indexTies, pairKey, tiesOf } from '../tieGraph'
 
-export type TieType = 'RIVAL' | 'ALLY' | 'NEUTRAL'
+export type TieType = GraphTieType | 'NEUTRAL'
 
 export interface TieChangeText {
   reason: string
   significant: boolean
 }
 
+/** A pair to remove, canonically ordered. */
+export interface TieDeletion {
+  aId: string
+  bId: string
+}
+
 export interface PairwiseTiesResult {
   changes: WorldChange[]
-  working: Map<string, Record<string, FactionRelationshipEntry>>
-  dirty: Set<string>
+  /** Edges to create or update, canonically ordered (aId < bId). */
+  upserts: TieEdge[]
+  /** Pairs whose tie ended — expired or gone NEUTRAL. */
+  deletes: TieDeletion[]
 }
 
 /**
@@ -42,39 +64,39 @@ export function tickPairwiseTies<E extends { id: string; name: string }, M = und
   entityType: TickEntityType
   entities: E[]
   turnNumber: number
-  getRawTies: (entity: E) => unknown
-  /** Whether `otherId` is still part of this tick's active roster — an entry pointing at anything else expires. */
+  /** Every tie on record that touches at least one of `entities`. */
+  existingEdges: TieEdge[]
+  /** Whether `otherId` is still part of this tick's active roster — an edge pointing at anything else expires. */
   isValidOtherId: (otherId: string) => boolean
   decide: (a: E, b: E) => { type: TieType; meta: M }
-  buildExpireChange: (entity: E, otherId: string, previous: FactionRelationshipEntry) => TieChangeText
-  buildNeutralChange: (a: E, b: E, previous: FactionRelationshipEntry) => TieChangeText
-  buildNewChange: (a: E, b: E, type: 'RIVAL' | 'ALLY', meta: M) => TieChangeText
+  buildExpireChange: (entity: E, otherId: string, previous: { type: GraphTieType }) => TieChangeText
+  buildNeutralChange: (a: E, b: E, previous: { type: GraphTieType }) => TieChangeText
+  buildNewChange: (a: E, b: E, type: GraphTieType, meta: M) => TieChangeText
 }): PairwiseTiesResult {
-  const { campaignId, entityType, entities, turnNumber, getRawTies, isValidOtherId, decide, buildExpireChange, buildNeutralChange, buildNewChange } = params
+  const { campaignId, entityType, entities, turnNumber, existingEdges, isValidOtherId, decide, buildExpireChange, buildNeutralChange, buildNewChange } = params
 
   const changes: WorldChange[] = []
-
-  // One mutable working copy per entity, written back once at the end by
-  // the caller. The naive alternative — re-spreading the fetched ties fresh
-  // for each pair and writing immediately — silently clobbers earlier
-  // same-tick updates when one entity's ties change against two or more
-  // partners in the same pass.
-  const working = new Map<string, Record<string, FactionRelationshipEntry>>()
-  const dirty = new Set<string>()
-  for (const e of entities) {
-    working.set(e.id, { ...parseFactionRelationships(getRawTies(e)) })
-  }
+  const upserts: TieEdge[] = []
+  const deletes: TieDeletion[] = []
+  const index = indexTies(existingEdges)
 
   // Expire ties whose other side dropped out of this tick's active roster
-  // (collapsed, died, deleted) — nothing else ever removes these entries,
-  // so without this an entry to a since-gone counterpart stays on record
-  // forever.
+  // (collapsed, died, deleted) — nothing else ever removes these, so
+  // without this an edge to a since-gone counterpart stays on record
+  // forever. Driven from `entities` rather than from `existingEdges` so an
+  // edge between two entities BOTH outside the roster is left alone: this
+  // tick has no opinion about a pair it is not simulating.
+  const expired = new Set<string>()
   for (const e of entities) {
-    const ties = working.get(e.id)!
-    for (const [otherId, tie] of Object.entries(ties)) {
+    for (const [otherId, tie] of Object.entries(tiesOf(index, e.id))) {
       if (isValidOtherId(otherId)) continue
-      delete ties[otherId]
-      dirty.add(e.id)
+      const key = pairKey(e.id, otherId)
+      if (expired.has(key)) continue
+      expired.add(key)
+
+      const pair = canonicalTie(e.id, otherId, tie.type, tie.since)
+      if (pair) deletes.push({ aId: pair.aId, bId: pair.bId })
+
       const { reason, significant } = buildExpireChange(e, otherId, tie)
       changes.push({
         entityType, entityId: e.id, entityName: e.name, campaignId,
@@ -90,17 +112,13 @@ export function tickPairwiseTies<E extends { id: string; name: string }, M = und
       const b = entities[j]
 
       const { type: freshType, meta } = decide(a, b)
-      const aTies = working.get(a.id)!
-      const bTies = working.get(b.id)!
-      const existing = aTies[b.id]
+      const existing = tiesOf(index, a.id)[b.id]
 
       if (freshType === 'NEUTRAL') {
         if (!existing) continue
 
-        delete aTies[b.id]
-        delete bTies[a.id]
-        dirty.add(a.id)
-        dirty.add(b.id)
+        const pair = canonicalTie(a.id, b.id, existing.type, existing.since)
+        if (pair) deletes.push({ aId: pair.aId, bId: pair.bId })
 
         const { reason, significant } = buildNeutralChange(a, b, existing)
         changes.push({
@@ -113,10 +131,8 @@ export function tickPairwiseTies<E extends { id: string; name: string }, M = und
 
       if (existing?.type === freshType) continue
 
-      aTies[b.id] = { type: freshType, since: turnNumber }
-      bTies[a.id] = { type: freshType, since: turnNumber }
-      dirty.add(a.id)
-      dirty.add(b.id)
+      const edge = canonicalTie(a.id, b.id, freshType, turnNumber)
+      if (edge) upserts.push(edge)
 
       const { reason, significant } = buildNewChange(a, b, freshType, meta)
       changes.push({
@@ -127,5 +143,5 @@ export function tickPairwiseTies<E extends { id: string; name: string }, M = und
     }
   }
 
-  return { changes, working, dirty }
+  return { changes, upserts, deletes }
 }

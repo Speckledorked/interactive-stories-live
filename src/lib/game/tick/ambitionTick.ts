@@ -25,6 +25,7 @@
 import type { FactionGoal, FactionArchetype } from '@prisma/client'
 import { HIGH_BAND_MIN } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange, PendingAmbition, clamp, findRivalId, stableHash } from './types'
+import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import { BeliefVector } from './beliefTick'
 import { rosterFactionFilter } from './capOrdering'
 
@@ -180,6 +181,9 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
       spawnedClocks: {
         select: { currentTicks: true, maxTicks: true },
       },
+      // #373: DESTABILIZE_RIVAL aims at whichever faction is on record as
+      // a rival — an edge now, not a key in a JSON column.
+      ...TIE_INCLUDE,
     },
   })
 
@@ -217,7 +221,7 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
     let targetFactionId: string | undefined
     let targetFactionName: string | undefined
     if (faction.goal === 'DESTABILIZE_RIVAL') {
-      const rivalId = findRivalId(faction.relationships)
+      const rivalId = findRivalId(factionTies(faction))
       const rival = rivalId ? await ctx.db.faction.findUnique({ where: { id: rivalId } }) : null
       if (rival?.isActive) {
         targetFactionId = rival.id

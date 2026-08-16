@@ -37,7 +37,7 @@ describe('warContestedLocationResolves', () => {
 describe('clockParticipantNpcsResolve', () => {
   it('flags a clock whose participant list includes a deleted NPC', () => {
     const snapshot = emptySnapshot({
-      npcs: [{ id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null }],
+      npcs: [{ id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 }],
       clocks: [{ id: 'clock1', name: 'Joint Scheme', resolvedAt: null, sourceFactionId: null, participantNpcIds: ['npc1', 'npc-gone'] }],
     })
     const violations = clockParticipantNpcsResolve.run(snapshot)
@@ -47,7 +47,7 @@ describe('clockParticipantNpcsResolve', () => {
 
   it('does not flag a clock whose participants all resolve', () => {
     const snapshot = emptySnapshot({
-      npcs: [{ id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null }],
+      npcs: [{ id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 }],
       clocks: [{ id: 'clock1', name: 'Joint Scheme', resolvedAt: null, sourceFactionId: null, participantNpcIds: ['npc1'] }],
     })
     expect(clockParticipantNpcsResolve.run(snapshot)).toHaveLength(0)
@@ -57,7 +57,7 @@ describe('clockParticipantNpcsResolve', () => {
 describe('characterRelationshipKeysResolve', () => {
   it('flags an orphan key in Character.relationships', () => {
     const snapshot = emptySnapshot({
-      npcs: [{ id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null }],
+      npcs: [{ id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 }],
       characters: [{
         id: 'char1', name: 'Jason',
         relationships: { npc1: { trust: 10 }, 'npc_123': { trust: 5 } },
@@ -71,8 +71,8 @@ describe('characterRelationshipKeysResolve', () => {
 
   it('does not flag when every key resolves, or relationships is null', () => {
     const withValid = emptySnapshot({
-      npcs: [{ id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null }],
-      characters: [{ id: 'char1', name: 'Jason', relationships: { npc1: { trust: 10 } }, resources: null }],
+      npcs: [{ id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 }],
+      characters: [{ id: 'char1', name: 'Jason', relationships: null, resources: null }],
     })
     expect(characterRelationshipKeysResolve.run(withValid)).toHaveLength(0)
 
@@ -83,32 +83,59 @@ describe('characterRelationshipKeysResolve', () => {
   })
 })
 
-describe('npcSocialTiesKeysResolve', () => {
-  it('flags an orphan key, but not a self-reference or a valid tie', () => {
-    const npc1 = { id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: { npc1: { type: 'ALLY' }, npc2: { type: 'RIVAL' }, gone: { type: 'ALLY' } } }
-    const npc2 = { id: 'npc2', name: 'Vashti', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null }
-    const snapshot = emptySnapshot({ npcs: [npc1, npc2] })
+describe('npcSocialTiesKeysResolve (#373 regression guard)', () => {
+  // The FK on NpcTie makes this unreachable at rest — the check exists so
+  // that dropping the constraint in some future migration surfaces here
+  // rather than as a reader naming a ghost mid-tick. Same posture as
+  // warContestedLocationResolves.
+  it('flags an edge whose endpoint no longer exists', () => {
+    const npc1 = { id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 }
+    const npc2 = { id: 'npc2', name: 'Vashti', isAlive: true, factionId: null, factionRole: null, importance: 1 }
+    const snapshot = emptySnapshot({
+      npcs: [npc1, npc2],
+      npcTies: [
+        { aId: 'npc1', bId: 'npc2', type: 'RIVAL', since: 1 },
+        { aId: 'npc1', bId: 'zgone', type: 'ALLY', since: 1 },
+      ],
+    })
     const violations = npcSocialTiesKeysResolve.run(snapshot)
     expect(violations).toHaveLength(1)
+    // Attributed to the endpoint that still exists, so an admin has
+    // something they can actually open.
     expect(violations[0].entityId).toBe('npc1')
-    expect(violations[0].description).toContain('gone')
+    expect(violations[0].description).toContain('zgone')
+  })
+
+  it('flags nothing when every endpoint resolves', () => {
+    const snapshot = emptySnapshot({
+      npcs: [
+        { id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 },
+        { id: 'npc2', name: 'Vashti', isAlive: true, factionId: null, factionRole: null, importance: 1 },
+      ],
+      npcTies: [{ aId: 'npc1', bId: 'npc2', type: 'ALLY', since: 1 }],
+    })
+    expect(npcSocialTiesKeysResolve.run(snapshot)).toHaveLength(0)
   })
 })
 
-describe('factionRelationshipKeysResolve', () => {
-  it('flags an orphan key referencing a collapsed faction', () => {
-    const f1 = { id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: { 'f-gone': { type: 'RIVAL', since: 1 } } }
-    const snapshot = emptySnapshot({ factions: [f1] })
+describe('factionRelationshipKeysResolve (#373 regression guard)', () => {
+  it('flags an edge referencing a collapsed-and-deleted faction', () => {
+    const f1 = { id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }
+    const snapshot = emptySnapshot({
+      factions: [f1],
+      factionTies: [{ aId: 'f1', bId: 'zgone', type: 'RIVAL', since: 1 }],
+    })
     const violations = factionRelationshipKeysResolve.run(snapshot)
     expect(violations).toHaveLength(1)
     expect(violations[0].entityType).toBe('FACTION')
+    expect(violations[0].entityId).toBe('f1')
   })
 })
 
 describe('characterReputationKeysResolve', () => {
   it('flags an orphan faction id inside resources.reputation', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       characters: [{ id: 'char1', name: 'Jason', relationships: null, resources: { gold: 0, reputation: { f1: 10, 'f-gone': -5 } } }],
     })
     const violations = characterReputationKeysResolve.run(snapshot)
@@ -136,7 +163,7 @@ describe('debtCounterpartyResolves', () => {
 
   it('does not flag a debt with no counterparty id set, or one that resolves', () => {
     const snapshot = emptySnapshot({
-      npcs: [{ id: 'npc1', name: 'Vashti', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null }],
+      npcs: [{ id: 'npc1', name: 'Vashti', isAlive: true, factionId: null, factionRole: null, importance: 1 }],
       debts: [
         { id: 'debt1', counterpartyId: null, counterpartyName: 'Someone', counterpartyType: 'npc' },
         { id: 'debt2', counterpartyId: 'npc1', counterpartyName: 'Vashti', counterpartyType: 'npc' },
@@ -147,7 +174,7 @@ describe('debtCounterpartyResolves', () => {
 
   it('checks the faction pool when counterpartyType is faction', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       debts: [{ id: 'debt1', counterpartyId: 'f1', counterpartyName: 'The Crown', counterpartyType: 'faction' }],
     })
     expect(debtCounterpartyResolves.run(snapshot)).toHaveLength(0)
@@ -157,7 +184,7 @@ describe('debtCounterpartyResolves', () => {
 describe('clockSourceFactionActive', () => {
   it('flags an unresolved clock still driven by a collapsed faction', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: false, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: false, leaderCharacterId: null }],
       clocks: [{ id: 'clock1', name: 'Siege Front', resolvedAt: null, sourceFactionId: 'f1', participantNpcIds: [] }],
     })
     const violations = clockSourceFactionActive.run(snapshot)
@@ -166,7 +193,7 @@ describe('clockSourceFactionActive', () => {
 
   it('does not flag a resolved clock, one with no sourceFactionId, or one driven by an active faction', () => {
     const snapshot = emptySnapshot({
-      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null, relationships: {} }],
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       clocks: [
         { id: 'clock1', name: 'A', resolvedAt: new Date(), sourceFactionId: 'f1', participantNpcIds: [] },
         { id: 'clock2', name: 'B', resolvedAt: null, sourceFactionId: null, participantNpcIds: [] },

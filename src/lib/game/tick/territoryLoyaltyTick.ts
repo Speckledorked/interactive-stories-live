@@ -23,6 +23,7 @@
 // owner missed this tick's roster still has a contested territory.
 
 import { TickContext, TickHandlerResult, WorldChange, findRivalId } from './types'
+import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import { decideArcDelta, applyArcDelta, decideArcResolution, ArcResolution } from '../arc'
 
 // Same magnitude as WAR_DECISIVE_MOMENTUM (warTick.ts) — a contest this
@@ -84,7 +85,7 @@ export async function tickTerritoryLoyalty(ctx: TickContext): Promise<TickHandle
   const ownerIds = [...new Set(contestedLocations.map((l) => l.ownerFactionId!))]
   const owners = await ctx.db.faction.findMany({
     where: { id: { in: ownerIds }, isActive: true },
-    select: { id: true, name: true, military: true, relationships: true },
+    select: { id: true, name: true, military: true, ...TIE_INCLUDE },
   })
   const ownerById = new Map(owners.map((o) => [o.id, o]))
 
@@ -94,7 +95,7 @@ export async function tickTerritoryLoyalty(ctx: TickContext): Promise<TickHandle
     const owner = ownerById.get(location.ownerFactionId!)
     if (!owner) continue
 
-    const rivalId = findRivalId(owner.relationships)
+    const rivalId = findRivalId(factionTies(owner))
     if (!rivalId) continue
     const rival = await ctx.db.faction.findUnique({
       where: { id: rivalId },

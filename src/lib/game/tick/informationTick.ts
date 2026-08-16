@@ -9,6 +9,16 @@
 // every other worldGraph.ts consumer: no graph coverage falls back to a
 // flat delay, never blocks propagation entirely.
 //
+// #373: NPCs now have a SECOND channel. Word reaches an NPC by whichever
+// route is faster — the map, or the people they know (tieGraph.ts's
+// socialDistancesFrom over ALLY edges, seeded from whoever was standing
+// where it happened). Until #373 this file borrowed graphDiameter from
+// WorldGraph and propagated by physical distance alone, using geography as
+// a stand-in for social distance because social distance was not
+// computable over per-node JSON blobs. It is now, and it is a minimum
+// rather than a replacement: a campaign with no ties on record behaves
+// exactly as it did before.
+//
 // Deliberately does NOT reach back before a bounded window — an event
 // whose computed delay would land outside that window never reaches that
 // character in v1, silently. This is accepted v1 scope, not a bug: the
@@ -32,6 +42,7 @@
 
 import { TickContext, TickHandlerResult, stableHash } from './types'
 import { AdjacencyEdge, graphDiameter, distancesFrom } from '../worldGraph'
+import { TieEdge, edgesFromNpcRows, socialDistancesFrom } from '../tieGraph'
 import type { WorldEventTargetType, EventWitnessDistortion } from '@prisma/client'
 
 const BASE_PROPAGATION_DELAY_TURNS = 1
@@ -41,6 +52,14 @@ const TURNS_PER_DISTANCE_UNIT = 1
 // block. Bigger than BASE_PROPAGATION_DELAY_TURNS so word-of-mouth with
 // no known distance is never FASTER than a next-door neighbor hearing it.
 const FLAT_FALLBACK_DELAY_TURNS = 3
+// #373: one turn per SOCIAL hop, the same rate as one turn per map hop.
+// Deliberately not faster: an NPC hearing it from a friend who heard it
+// from a friend is one retelling per link either way, and making the
+// social channel cheaper than the physical one would be asserting
+// something about how gossip travels that nothing in the fiction supports.
+// What the social channel buys is REACH, not speed — an ally three
+// countries away is one hop, and used to be unreachable inside the window.
+const TURNS_PER_SOCIAL_HOP = 1
 
 // A floor under the graph-derived window so a tiny/disconnected map (small
 // or zero diameter) still gives an event a reasonable minimum chance to
@@ -151,6 +170,72 @@ function propagationDelayFrom(
 }
 
 /**
+ * #373: social hops from whoever was AT the event to everyone else, one
+ * traversal per distinct origin, memoized exactly like the physical one.
+ *
+ * The seeds are the NPCs standing where it happened — they are the people
+ * who could tell anyone. From there word moves along ALLY edges only: a
+ * rival is on record as someone this NPC is in conflict with, and treating
+ * a rivalry as a channel would say the one person you refuse to speak to
+ * is how you find things out.
+ *
+ * This is the capability #373 was filed for. Before it, informationTick
+ * borrowed `graphDiameter` from WorldGraph and propagated by PHYSICAL
+ * distance alone — rumours spread by geography, not by who talks to whom —
+ * because social distance was not computable over per-node JSON blobs.
+ */
+export function createSocialDistanceResolver(
+  npcTies: TieEdge[],
+  npcs: InformationSpreadNpcInput[]
+): (originLocationId: string | null) => Map<string, number> | null {
+  if (npcTies.length === 0) return () => null
+
+  const npcsByLocation = new Map<string, string[]>()
+  for (const npc of npcs) {
+    if (!npc.locationId) continue
+    const list = npcsByLocation.get(npc.locationId)
+    if (list) list.push(npc.npcId)
+    else npcsByLocation.set(npc.locationId, [npc.npcId])
+  }
+
+  const byOrigin = new Map<string, Map<string, number>>()
+  return (originLocationId) => {
+    if (!originLocationId) return null
+    let cached = byOrigin.get(originLocationId)
+    if (!cached) {
+      const seeds = npcsByLocation.get(originLocationId) ?? []
+      // Nobody was there to carry it: no social channel for this event.
+      // Distinct from "nobody has ties", which the early return above
+      // already handled.
+      if (seeds.length === 0) return null
+      cached = socialDistancesFrom(npcTies, seeds, { through: ['ALLY'] })
+      byOrigin.set(originLocationId, cached)
+    }
+    return cached
+  }
+}
+
+/**
+ * #373: an NPC hears it by whichever route reaches them first — the map or
+ * the people.
+ *
+ * A minimum, not a replacement. The social channel can only ever make word
+ * arrive SOONER, so a campaign with no ties on record behaves exactly as it
+ * did before, and the propagation window (sized from the physical
+ * diameter) still bounds every delay this can produce.
+ */
+export function npcPropagationDelay(
+  physicalDistances: Map<string, number> | null,
+  socialDistances: Map<string, number> | null,
+  npc: InformationSpreadNpcInput
+): number {
+  const physical = propagationDelayFrom(physicalDistances, npc.locationId)
+  const hops = socialDistances?.get(npc.npcId)
+  if (hops === undefined) return physical
+  return Math.min(physical, BASE_PROPAGATION_DELAY_TURNS + hops * TURNS_PER_SOCIAL_HOP)
+}
+
+/**
  * Pure — no DB access, safe to unit test directly. `coveredPairs` is every
  * `${worldEventId}:${characterId}` (or `${worldEventId}:npc:${npcId}` for
  * an NPC) pair that already has ANY EventWitness row (WITNESSED or TOLD)
@@ -169,15 +254,20 @@ export function decideInformationSpread(input: {
   npcs?: InformationSpreadNpcInput[]
   coveredPairs: Set<string>
   edges: AdjacencyEdge[]
+  /** #373: NPC social ties. Absent behaves exactly like an empty graph —
+   * the physical channel alone, i.e. the pre-#373 behaviour. */
+  npcTies?: TieEdge[]
 }): InformationSpreadDecision[] {
-  const { currentTurn, events, characters, npcs = [], coveredPairs, edges } = input
+  const { currentTurn, events, characters, npcs = [], coveredPairs, edges, npcTies = [] } = input
   const decisions: InformationSpreadDecision[] = []
 
   const distancesFor = createDistanceResolver(edges)
+  const socialDistancesFor = createSocialDistanceResolver(npcTies, npcs)
 
   for (const event of events) {
     const age = currentTurn - event.turnNumber
     const distances = distancesFor(event.originLocationId)
+    const socialDistances = socialDistancesFor(event.originLocationId)
     for (const character of characters) {
       const pairKey = `${event.worldEventId}:${character.characterId}`
       if (coveredPairs.has(pairKey)) continue
@@ -189,7 +279,7 @@ export function decideInformationSpread(input: {
     for (const npc of npcs) {
       const pairKey = `${event.worldEventId}:npc:${npc.npcId}`
       if (coveredPairs.has(pairKey)) continue
-      const delay = propagationDelayFrom(distances, npc.locationId)
+      const delay = npcPropagationDelay(distances, socialDistances, npc)
       if (age >= delay) {
         decisions.push({ worldEventId: event.worldEventId, npcId: npc.npcId })
       }
@@ -267,7 +357,7 @@ export async function tickInformation(ctx: TickContext): Promise<TickHandlerResu
   })
   if (events.length === 0) return { changes: [] }
 
-  const [characters, npcs] = await Promise.all([
+  const [characters, npcs, npcTieRows] = await Promise.all([
     ctx.db.character.findMany({
       where: { campaignId: ctx.campaignId, isAlive: true },
       select: { id: true, locationId: true },
@@ -276,7 +366,15 @@ export async function tickInformation(ctx: TickContext): Promise<TickHandlerResu
       where: { campaignId: ctx.campaignId, isAlive: true },
       select: { id: true, locationId: true },
     }),
+    // #373: the social channel. roster-exempt for the same reason the NPC
+    // query above is — who hears what must not depend on which entities
+    // this turn's cap happened to select.
+    ctx.db.npcTie.findMany({
+      where: { campaignId: ctx.campaignId },
+      select: { npcAId: true, npcBId: true, type: true, since: true },
+    }),
   ])
+  const npcTies = edgesFromNpcRows(npcTieRows)
   // Bug fixed alongside the NPC addition: this used to early-return on
   // characters.length === 0 alone, which would have silently skipped NPC
   // propagation too in a tick with zero living Characters.
@@ -304,6 +402,7 @@ export async function tickInformation(ctx: TickContext): Promise<TickHandlerResu
     npcs: npcs.map((n) => ({ npcId: n.id, locationId: n.locationId })),
     coveredPairs,
     edges,
+    npcTies,
   })
 
   if (!ctx.dryRun && decisions.length > 0) {
@@ -312,6 +411,8 @@ export async function tickInformation(ctx: TickContext): Promise<TickHandlerResu
       ...characters.map((c) => [c.id, c.locationId] as const),
       ...npcs.map((n) => [n.id, n.locationId] as const),
     ])
+    const npcInputs = npcs.map((n) => ({ npcId: n.id, locationId: n.locationId }))
+    const socialDistancesForWrite = createSocialDistanceResolver(npcTies, npcInputs)
     // #407: same memoized resolver as the decision pass above — the write
     // pass asks the same question about the same events, and used to
     // answer it with a fresh full Dijkstra per row.
@@ -321,7 +422,17 @@ export async function tickInformation(ctx: TickContext): Promise<TickHandlerResu
         const witnessId = d.npcId ?? d.characterId!
         const witnessKey = d.npcId ? `npc:${d.npcId}` : d.characterId!
         const event = eventById.get(d.worldEventId)!
-        const delay = propagationDelayFrom(distancesForWrite(event.originLocationId), locationById.get(witnessId) ?? null)
+        // The write pass must compute the SAME delay the decision pass
+        // did — decideDistortion is a function of it, so a mismatch would
+        // make how garbled a rumour is disagree with how far it travelled.
+        const witnessLocationId = locationById.get(witnessId) ?? null
+        const delay = d.npcId
+          ? npcPropagationDelay(
+              distancesForWrite(event.originLocationId),
+              socialDistancesForWrite(event.originLocationId),
+              { npcId: d.npcId, locationId: witnessLocationId }
+            )
+          : propagationDelayFrom(distancesForWrite(event.originLocationId), witnessLocationId)
         const { distorted, flavor } = decideDistortion(d.worldEventId, witnessKey, ctx.turnNumber, delay)
         return {
           campaignId: ctx.campaignId,

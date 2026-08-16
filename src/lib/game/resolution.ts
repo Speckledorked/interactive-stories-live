@@ -30,6 +30,7 @@ import { effectiveStandingModifier } from './standing'
 import { checkCorruptionGate } from './corruptionGates'
 import { conditionStatModifier } from './harm'
 import { reflectedRapportModifier, describeReflectedRapport } from './socialTies'
+import { TIE_INCLUDE, npcTies } from './tieGraph'
 import { debtModifier, debtsWithCounterparty, describeDebtLeverage, DebtsForRoll } from './debts'
 import {
   ZonePosition,
@@ -281,7 +282,7 @@ export interface RelationshipForRoll {
   tension: number
   respect: number
   // How this NPC's own allies and rivals color their view of the character
-  // (#89) — resolved by the orchestrator from NPC.socialTies against the
+  // (#89) — resolved by the orchestrator from the NPC's tie edges against the
   // character's existing rapport with those third parties. See
   // lib/game/socialTies.ts. Absent means no ties on record.
   reflected?: number
@@ -876,9 +877,10 @@ export async function resolveActionMechanics(
         where: { campaignId, isDiscovered: true },
         // Corruption gate columns (#83): a repulsed NPC's rapport must not
         // modify the roll — see the leverage gate below.
-        // socialTies (#89): who this NPC counts as an ally or rival, so the
-        // character's rapport with those third parties can echo onto them.
-        select: { id: true, name: true, minCorruption: true, maxCorruption: true, socialTies: true },
+        // Social ties (#89): who this NPC counts as an ally or rival, so
+        // the character's rapport with those third parties can echo onto
+        // them. #373: edge rows, included from both directions.
+        select: { id: true, name: true, minCorruption: true, maxCorruption: true, ...TIE_INCLUDE },
       }),
       // Live weather per location (see lib/game/tick/weatherTick.ts) —
       // matched against each acting character's locationId (falling back
@@ -1045,7 +1047,7 @@ export async function resolveActionMechanics(
               // (#89). Reads the character's EXISTING rapport with the
               // third parties, so nothing is written and an NPC with no
               // ties contributes nothing.
-              reflected: reflectedRapportModifier(npc.socialTies, character.relationships),
+              reflected: reflectedRapportModifier(npcTies(npc), character.relationships),
             }
           } else {
             console.log(`  🌑 ${npc.name} gives ${character.name} nothing — corruption gate (${gate.refusal})`)

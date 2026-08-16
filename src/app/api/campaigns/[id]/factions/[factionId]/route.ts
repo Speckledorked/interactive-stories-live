@@ -46,7 +46,8 @@ export async function PATCH(
         influence: body.influence,
         currentPlan: body.currentPlan,
         threatLevel: body.threatLevel,
-        relationships: body.relationships,
+        // #373: ties are edge rows written by relationshipTick, not a JSON
+        // field an admin PATCH can overwrite — see the POST route.
         gmNotes: body.gmNotes,
         leaderCharacterId: body.leaderCharacterId,
         isDiscovered: body.isDiscovered,

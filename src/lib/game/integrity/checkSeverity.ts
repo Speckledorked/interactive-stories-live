@@ -44,15 +44,19 @@ export const CHECK_SEVERITY: Partial<Record<CheckKey, number>> = {
   'war.contestedLocationId.resolves': 1,
 
   // The rest of the referential-integrity family: an orphaned id-keyed
-  // entry inside a JSON blob (relationships/socialTies/reputation/debt
-  // counterparty/clock participants). Real drift, worth fixing, but inert
-  // by the plan's own framing — it does nothing until/unless some other
-  // code path reads that specific dangling key — not a functional break
-  // the way a leaderless faction is.
+  // entry inside a JSON blob (relationships/reputation/debt counterparty/
+  // clock participants). Real drift, worth fixing, but inert by the plan's
+  // own framing — it does nothing until/unless some other code path reads
+  // that specific dangling key — not a functional break the way a
+  // leaderless faction is.
+  //
+  // #373: npc.socialTies.keys.resolve and faction.relationships.keys.resolve
+  // left this list. They are detect-only regression guards now (the edge
+  // tables' foreign keys make a dangling endpoint impossible at rest), and
+  // an unranked, unrepairable checkKey never competes for the repair
+  // budget — which is exactly what the rank was for.
   'clock.participantNpcIds.resolve': 2,
   'character.relationships.keys.resolve': 2,
-  'npc.socialTies.keys.resolve': 2,
-  'faction.relationships.keys.resolve': 2,
   'character.resources.reputation.keys.resolve': 2,
   'debt.counterpartyId.resolves': 2,
 

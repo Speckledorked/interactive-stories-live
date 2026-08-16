@@ -21,7 +21,7 @@ import { parseKnowledgeState } from '@/lib/game/knowledge'
 import { inventoryValue, describeWealth } from '@/lib/game/itemValue'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
-import { parseFactionRelationships } from '@/lib/game/tick/types'
+import { npcTies, type TieEntry } from '@/lib/game/tieGraph'
 import type { GroupedWitness } from '@/lib/game/eventWitness'
 
 // Depth-hardening #37 (see README): hard per-category caps on the live
@@ -36,12 +36,11 @@ export const MAX_CLOCKS_IN_PROMPT = 10
 export const MAX_QUESTS_IN_PROMPT = 8
 
 /**
- * Phase 9 NPC society: resolve NPC.socialTies into AI-facing lines, naming
+ * Phase 9 NPC society: resolve an NPC's tie edges into AI-facing lines, naming
  * only OTHER discovered NPCs — fog of war applies to social ties exactly
  * like every other NPC-facing field the prompt builders below already gate.
  */
-function describeNpcSocialTies(rawTies: unknown, discoveredNpcNameById: Map<string, string>): string[] {
-  const ties = parseFactionRelationships(rawTies)
+function describeNpcSocialTies(ties: Record<string, TieEntry>, discoveredNpcNameById: Map<string, string>): string[] {
   const lines: string[] = []
   for (const [otherId, tie] of Object.entries(ties)) {
     const name = discoveredNpcNameById.get(otherId)
@@ -154,7 +153,7 @@ export function mapNpcsForPrompt(discoveredNpcs: any[], discoveredNpcNameById: M
     factionId: n.factionId,
     factionRole: n.factionRole,
     // Phase 9 NPC society: this NPC's own web of allies/rivals.
-    social_ties: describeNpcSocialTies(n.socialTies, discoveredNpcNameById),
+    social_ties: describeNpcSocialTies(npcTies(n), discoveredNpcNameById),
     // PbtA GM-facing flavor (threat archetype, drives, custom moves) —
     // only present for NPCs where it's actually set (see npcFlavorFields).
     ...npcFlavorFields(n),

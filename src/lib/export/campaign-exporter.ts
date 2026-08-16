@@ -392,7 +392,12 @@ export class CampaignExporter {
           influence: faction.influence,
           currentPlan: faction.currentPlan,
           threatLevel: faction.threatLevel,
-          relationships: faction.relationships,
+          // #373: ties are edges keyed by faction id, and an import mints
+          // NEW ids — carrying the old map across would have written
+          // relationships pointing at factions from the source campaign.
+          // (It did: the export wrote them verbatim.) The first
+          // relationshipTick after import recomputes them from goals and
+          // stability, which is where they came from in the first place.
           gmNotes: faction.gmNotes,
         },
       });

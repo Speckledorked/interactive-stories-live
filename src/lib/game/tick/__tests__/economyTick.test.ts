@@ -11,6 +11,7 @@ vi.mock('@/lib/prisma', () => ({
 import { prisma } from '@/lib/prisma'
 import { decideLoanExtension, decideDefaultCascade, tickEconomy } from '../economyTick'
 import type { TickContext } from '../types'
+import { factionTieRows } from './tieFixtures'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
   return { campaignId: 'campaign-1', turnNumber: 10, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
@@ -186,7 +187,7 @@ describe('tickEconomy (DB handler)', () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([]) // no outstanding debts
     vi.mocked(prisma.faction.findMany)
       .mockResolvedValueOnce([
-        { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+        { id: 'broke1', name: 'Struggling Co', resources: 10, ...factionTieRows('broke1', { ally1: { type: 'ALLY', since: 1 } }) },
       ] as any) // broke factions
       .mockResolvedValueOnce([{ id: 'ally1', name: 'Wealthy Co', resources: 90 }] as any) // allies lookup
     vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null) // no existing debt
@@ -213,7 +214,7 @@ describe('tickEconomy (DB handler)', () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany)
       .mockResolvedValueOnce([
-        { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+        { id: 'broke1', name: 'Struggling Co', resources: 10, ...factionTieRows('broke1', { ally1: { type: 'ALLY', since: 1 } }) },
       ] as any)
       .mockResolvedValueOnce([{ id: 'ally1', name: 'Wealthy Co', resources: 90 }] as any)
     vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
@@ -231,7 +232,7 @@ describe('tickEconomy (DB handler)', () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany)
       .mockResolvedValueOnce([
-        { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+        { id: 'broke1', name: 'Struggling Co', resources: 10, ...factionTieRows('broke1', { ally1: { type: 'ALLY', since: 1 } }) },
       ] as any)
       .mockResolvedValueOnce([{ id: 'ally1', name: 'Wealthy Co', resources: 90 }] as any)
     vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
@@ -243,7 +244,7 @@ describe('tickEconomy (DB handler)', () => {
   it('does not originate a second loan while one is already outstanding', async () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+      { id: 'broke1', name: 'Struggling Co', resources: 10, ...factionTieRows('broke1', { ally1: { type: 'ALLY', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce({ id: 'existing-debt' } as any)
 
@@ -264,7 +265,7 @@ describe('tickEconomy (DB handler)', () => {
   it('#311: the existing-debt query excludes both OUTSTANDING and a recently-DEFAULTED debt', async () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+      { id: 'broke1', name: 'Struggling Co', resources: 10, ...factionTieRows('broke1', { ally1: { type: 'ALLY', since: 1 } }) },
     ] as any)
     vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([]) // no allies reached — findFirst is what's under test
@@ -292,7 +293,7 @@ describe('tickEconomy (DB handler)', () => {
   it('#311: does not originate a new loan for a debtor that defaulted within the cooldown window', async () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+      { id: 'broke1', name: 'Struggling Co', resources: 10, ...factionTieRows('broke1', { ally1: { type: 'ALLY', since: 1 } }) },
     ] as any)
     // Simulates the DB actually finding the recent DEFAULTED row the OR
     // clause above is meant to catch.
@@ -308,7 +309,7 @@ describe('tickEconomy (DB handler)', () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany)
       .mockResolvedValueOnce([
-        { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+        { id: 'broke1', name: 'Struggling Co', resources: 10, ...factionTieRows('broke1', { ally1: { type: 'ALLY', since: 1 } }) },
       ] as any)
       .mockResolvedValueOnce([{ id: 'ally1', name: 'Wealthy Co', resources: 90 }] as any)
     // The real query (not asserted here) would exclude this row on its
@@ -327,7 +328,7 @@ describe('tickEconomy (DB handler)', () => {
   it('does not originate a loan when the broke faction has no ally at all', async () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([
-      { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: {} },
+      { id: 'broke1', name: 'Struggling Co', resources: 10, ...factionTieRows('broke1', {}) },
     ] as any)
     vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
 
@@ -341,7 +342,7 @@ describe('tickEconomy (DB handler)', () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany)
       .mockResolvedValueOnce([
-        { id: 'broke1', name: 'Struggling Co', resources: 10, relationships: { ally1: { type: 'ALLY', since: 1 } } },
+        { id: 'broke1', name: 'Struggling Co', resources: 10, ...factionTieRows('broke1', { ally1: { type: 'ALLY', since: 1 } }) },
       ] as any)
       .mockResolvedValueOnce([{ id: 'ally1', name: 'Wealthy Co', resources: 90 }] as any)
     vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)

@@ -12,12 +12,14 @@ vi.mock('@/lib/prisma', () => ({
 import { prisma } from '@/lib/prisma'
 import { tickWars } from '../warTick'
 import type { TickContext } from '../types'
+import { factionTieRows } from './tieFixtures'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
   return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 function makeFaction(id: string, overrides: Record<string, any> = {}) {
+  const { ties, ...rest } = overrides
   return {
     id,
     name: id,
@@ -28,8 +30,11 @@ function makeFaction(id: string, overrides: Record<string, any> = {}) {
     // (see the tests below) start from a known, non-NaN baseline.
     influence: 50,
     isActive: true,
-    relationships: {},
-    ...overrides,
+    // #373: ties are edge rows now. `ties` is the readable per-entity map
+    // the fixtures used to set; factionTieRows turns it into the two
+    // relation arrays a TIE_INCLUDE query produces.
+    ...factionTieRows(id, ties ?? {}),
+    ...rest,
   }
 }
 
@@ -568,7 +573,7 @@ describe('tickWars coalitions', () => {
   })
 
   it('pulls in an eligible ally as a new WarParticipant', async () => {
-    const attackerA = makeFaction('att-a', { military: 50, relationships: { 'ally-1': { type: 'ALLY', since: 1 } } })
+    const attackerA = makeFaction('att-a', { military: 50, ties: { 'ally-1': { type: 'ALLY', since: 1 } } })
     const defender = makeFaction('def-a', { military: 50 })
     const ally = makeFaction('ally-1', { military: 80 }) // strong enough to join
 
@@ -603,7 +608,7 @@ describe('tickWars coalitions', () => {
   })
 
   it('does not pull in an ally that is already committed to another war', async () => {
-    const attackerA = makeFaction('att-a', { military: 50, relationships: { 'busy-ally': { type: 'ALLY', since: 1 } } })
+    const attackerA = makeFaction('att-a', { military: 50, ties: { 'busy-ally': { type: 'ALLY', since: 1 } } })
     const defenderA = makeFaction('def-a', { military: 50 })
     const busyAlly = makeFaction('busy-ally', { military: 90 })
     const otherOpponent = makeFaction('other-opp', { military: 50 })
@@ -651,8 +656,8 @@ describe('tickWars coalitions', () => {
   it('creates WarParticipant rows for both sides when a brand-new war is declared', async () => {
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([]) // no active wars
 
-    const attacker = makeFaction('att-a', { military: 80, relationships: { 'def-a': { type: 'RIVAL', since: 1 } } })
-    const defender = makeFaction('def-a', { military: 80, relationships: { 'att-a': { type: 'RIVAL', since: 1 } } })
+    const attacker = makeFaction('att-a', { military: 80, ties: { 'def-a': { type: 'RIVAL', since: 1 } } })
+    const defender = makeFaction('def-a', { military: 80, ties: { 'att-a': { type: 'RIVAL', since: 1 } } })
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([attacker, defender] as any)
     vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
       { id: 'loc-1', name: 'The Keep', ownerFactionId: 'def-a', isContested: true },

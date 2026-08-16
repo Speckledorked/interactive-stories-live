@@ -10,6 +10,9 @@ const db = vi.hoisted(() => ({
   debt: { findMany: vi.fn(async (): Promise<any[]> => []), update: vi.fn(async (_args: any) => ({})) },
   war: { findMany: vi.fn(async (): Promise<any[]> => []), update: vi.fn(async (_args: any) => ({})) },
   quest: { findMany: vi.fn(async (): Promise<any[]> => []) },
+  // #373: social ties are edge tables now, loaded into the snapshot.
+  npcTie: { findMany: vi.fn(async (): Promise<any[]> => []) },
+  factionTie: { findMany: vi.fn(async (): Promise<any[]> => []) },
   worldEvent: { findMany: vi.fn(async (): Promise<any[]> => []) },
 }))
 
@@ -27,6 +30,8 @@ beforeEach(() => {
   db.debt.findMany.mockResolvedValue([])
   db.war.findMany.mockResolvedValue([])
   db.quest.findMany.mockResolvedValue([])
+  db.npcTie.findMany.mockResolvedValue([])
+  db.factionTie.findMany.mockResolvedValue([])
   db.worldEvent.findMany.mockResolvedValue([])
 })
 
@@ -69,8 +74,8 @@ describe('runIntegrityPass — a repairable violation', () => {
 describe('runIntegrityPass — detect-only violations', () => {
   it('reports a duplicate-name violation as unrepaired, never dropped', async () => {
     db.nPC.findMany.mockResolvedValue([
-      { id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null },
-      { id: 'npc2', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1, socialTies: null },
+      { id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 },
+      { id: 'npc2', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 },
     ])
 
     const { changes, report } = await runIntegrityPass(db as any, 'camp1', 5)
@@ -186,7 +191,7 @@ describe('runIntegrityPass — blast-radius caps', () => {
       { id: 'f1', name: 'The Ashen Court', isActive: true, leaderCharacterId: null },
     ])
     db.nPC.findMany.mockResolvedValue([
-      { id: 'npc1', name: 'Vashti', isAlive: true, factionId: 'f1', factionRole: null, importance: 1, socialTies: null },
+      { id: 'npc1', name: 'Vashti', isAlive: true, factionId: 'f1', factionRole: null, importance: 1 },
     ])
 
     const { report } = await runIntegrityPass(db as any, 'camp1', 5)

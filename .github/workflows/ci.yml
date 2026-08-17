@@ -40,6 +40,14 @@ jobs:
       - name: Tests
         run: npx vitest run
 
+  # The PR-body closing-keyword gate (#453) lives in its own workflow,
+  # .github/workflows/pr-closing-keywords.yml, because it needs the `edited`
+  # pull_request type — a body is editable up to the merge, so a gate that
+  # reads the body has to re-run when it changes. `types:` cannot be scoped
+  # to a single job, and putting `edited` here would re-run this whole suite
+  # and the real-Postgres job on every description typo. See that file's
+  # header.
+
   # Enforces docs/ARCHITECTURE.md's Scorecard Audit Log rule: a Scorecard
   # row's score can't go up without a matching Audit Log entry recording
   # a clean adversarial pass. See that section's own header for why — a

@@ -1,0 +1,61 @@
+# #453: a pull request that says it closes ten issues must actually close ten
+# issues.
+#
+# PR #452's body opened `Closes #436, #437, #438, ... #445`, merged, and closed
+# exactly ONE. GitHub's rule is KEYWORD + ONE issue; a comma-separated run
+# after a single keyword drops every number but the first, with no warning in
+# the merge result. Nine issues sat open looking like the work had not been
+# done.
+#
+# ## Why this is its own workflow rather than a job in ci.yml
+#
+# It needs the `edited` event, and that is the whole reason for the split.
+#
+# `pull_request:` with no `types:` means [opened, synchronize, reopened] — a
+# body edit does not re-trigger it. This gate reads the BODY, and a body is
+# editable right up to the merge, so without `edited` the defect walks
+# straight through the check written to catch it: open with `Closes #453.`,
+# edit to `Closes #453, #451` an hour later, merge, and #451 is silently
+# dropped having never been examined. The gate would have been green on a
+# version of the body that no longer existed.
+#
+# `types:` cannot be scoped to one job, and putting `edited` on ci.yml would
+# re-run the full suite plus the real-Postgres job on every typo fix in a
+# description. So the cheap body check lives here with the trigger it needs,
+# and the expensive tree checks stay in ci.yml with the trigger they need.
+#
+# Found by trying to verify the failing side of this gate in CI and noticing
+# the edited body produced no run at all.
+name: PR closing keywords
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+# Reads the event payload and the tree; changes nothing.
+permissions:
+  contents: read
+
+jobs:
+  # Job id is the check-run name. Kept identical to the job this replaced in
+  # ci.yml so any branch protection referring to it keeps resolving.
+  pr-closing-keywords:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the PR body's issue-closing references will all close
+        env:
+          # Via env, never interpolated into the run script: a PR body is
+          # attacker-controlled text and `${{ }}` inside a shell command is a
+          # script-injection surface.
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: npx tsx scripts/check-pr-closing-keywords.ts

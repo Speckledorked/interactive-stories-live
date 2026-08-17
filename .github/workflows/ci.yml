@@ -176,45 +176,18 @@ jobs:
       # with nothing comparing them. Same shape as #425's dual columns and
       # #453's docs-vs-tracker.
       #
-      # `db-tests` is an accidental partial net, because it also builds from
-      # migrations, so a liveDb test touching a drifted column would fail. But
-      # that coverage is incidental: it only spans the models those 15 files
-      # exercise. This step is the direct question.
+      # Compares against the database the step above just migrated, not a
+      # shadow database: that database IS the migrations' result, and a shadow
+      # reset would drop the pgvector extension these migrations require but do
+      # not create.
       #
-      # --from-url rather than a shadow database, deliberately. The step above
-      # already applied the full history to $DATABASE_URL, so that database IS
-      # the migrations' result — no shadow needed, and no risk of Prisma's
-      # shadow reset dropping the pgvector extension these migrations require
-      # (the migrations do not create it; the "Enable pgvector" step does).
-      #
-      # Catches drift in BOTH directions: a schema edit with no migration, and
-      # a hand-edited migration that no longer matches the schema.
+      # On its FIRST run this found two real defects — a column present in
+      # every database but missing from the model, and a unique index whose
+      # 64-character name Postgres had silently truncated. See
+      # scripts/schemaDrift.ts for why the residual is a recorded snapshot
+      # rather than "the diff must be empty".
       - name: Check the migrations produce exactly schema.prisma
-        run: |
-          set +e
-          npx prisma migrate diff \
-            --from-url "$DATABASE_URL" \
-            --to-schema-datamodel prisma/schema.prisma \
-            --exit-code
-          code=$?
-          set -e
-          if [ "$code" -eq 0 ]; then
-            echo "No drift: the migration history reproduces schema.prisma exactly."
-            exit 0
-          fi
-          if [ "$code" -eq 2 ]; then
-            echo "::error::schema.prisma and prisma/migrations disagree. The summary above lists what differs; the SQL below is what a migration would need to contain. Generate one with 'npx prisma migrate dev --name <change>' rather than hand-writing it."
-            npx prisma migrate diff \
-              --from-url "$DATABASE_URL" \
-              --to-schema-datamodel prisma/schema.prisma \
-              --script || true
-            exit 1
-          fi
-          # Any other code is prisma itself failing — a bad connection, an
-          # unreadable schema. Fail rather than pass: a check that could not
-          # run has not passed (#443).
-          echo "::error::prisma migrate diff failed to run (exit $code); treating as failure rather than reporting green for a comparison that never happened."
-          exit "$code"
+        run: npx tsx scripts/check-schema-drift.ts
 
   # Runs the *.liveDb.test.ts / *.faultInjection.test.ts files the `check`
   # job's RUN_DB_TESTS-less `npx vitest run` always skips (see that job's

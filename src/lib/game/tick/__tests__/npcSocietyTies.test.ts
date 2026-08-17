@@ -21,9 +21,10 @@ const db = vi.hoisted(() => ({
 import { tickNpcSocialTies, tickNpcJointSchemes } from '../npcSocietyTick'
 import { npcTieTable, factionTieTable } from './tieFixtures'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'camp1', turnNumber: 12, factionCap: 10, npcCap: 20, dryRun: false, db: db as any, ...overrides }
+  return { campaignId: 'camp1', turnNumber: simTurn(12), factionCap: 10, npcCap: 20, dryRun: false, db: db as any, ...overrides }
 }
 
 const npc = (id: string, overrides: Record<string, any> = {}) => ({
@@ -66,7 +67,7 @@ describe('tickNpcSocialTies — edge writes (#373)', () => {
   it('stamps the tie with the turn it formed', async () => {
     db.nPC.findMany.mockResolvedValue([npc('a', { factionId: 'f1' }), npc('b', { factionId: 'f1' })])
 
-    await tickNpcSocialTies(baseCtx({ turnNumber: 41 }))
+    await tickNpcSocialTies(baseCtx({ turnNumber: simTurn(41) }))
 
     expect(db.npcTie.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ create: expect.objectContaining({ since: 41, campaignId: 'camp1' }) })

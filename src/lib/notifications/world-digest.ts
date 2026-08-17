@@ -24,6 +24,7 @@ import { NotificationService } from './notification-service'
 import type { WorldChange, TickEntityType } from '@/lib/game/tick/types'
 import { stableHash } from '@/lib/game/tick/types'
 import type { EventType, EventVisibility } from '@prisma/client'
+import type { SimTurn } from '@/lib/game/turnClock'
 
 // At most this many rumor lines per turn — a digest, not a firehose.
 export const MAX_DIGEST_LINES = 3
@@ -452,7 +453,9 @@ export function titleForDigestChange(change: WorldChange): string {
 export async function sendWorldDigest(
   campaignId: string,
   changes: WorldChange[],
-  currentTurn: number,
+  // #437: the SIMULATION turn — this is a world-turn phase, and the
+  // TimelineEvent journal rows below are a sim-clock column.
+  currentTurn: SimTurn,
   inGameDayNumber?: number
 ): Promise<number> {
   try {

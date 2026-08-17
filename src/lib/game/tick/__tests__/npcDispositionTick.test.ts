@@ -11,9 +11,10 @@ vi.mock('@/lib/prisma', () => ({
 import { prisma } from '@/lib/prisma'
 import { decideDispositionDrift, parseDisposition, NEUTRAL_DISPOSITION, tickNpcDisposition } from '../npcDispositionTick'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(5), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 describe('parseDisposition (NPC motivation model)', () => {
@@ -160,7 +161,7 @@ describe('tickNpcDisposition (DB handler)', () => {
 
   it('drifts and persists disposition when the NPC was personally endangered', async () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: null }] as any)
-    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'npc.consequence', newValue: 'THREATENED' }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ targetId: 'npc1', turnNumber: 11, type: 'npc.consequence', newValue: 'THREATENED' }] as any)
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -174,7 +175,7 @@ describe('tickNpcDisposition (DB handler)', () => {
 
   it('drifts disposition when the NPC was favored/protected', async () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: null }] as any)
-    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'npc.consequence', newValue: 'FAVORED' }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ targetId: 'npc1', turnNumber: 11, type: 'npc.consequence', newValue: 'FAVORED' }] as any)
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -194,7 +195,7 @@ describe('tickNpcDisposition (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: null }] as any)
     // RECRUITED is a real ConsequenceAction, but here we simulate a
     // completely unrecognized newValue to confirm no drift happens.
-    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'npc.consequence', newValue: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ targetId: 'npc1', turnNumber: 11, type: 'npc.consequence', newValue: null }] as any)
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -203,7 +204,7 @@ describe('tickNpcDisposition (DB handler)', () => {
 
   it('a personally completed goal raises ambition', async () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: null }] as any)
-    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'npc.goalCompleted', newValue: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ targetId: 'npc1', turnNumber: 11, type: 'npc.goalCompleted', newValue: null }] as any)
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -218,7 +219,7 @@ describe('tickNpcDisposition (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null }] as any)
     vi.mocked(prisma.worldEvent.findMany)
       .mockResolvedValueOnce([]) // own events
-      .mockResolvedValueOnce([{ type: 'faction.warResolved', newValue: 'attacker', origin: 'tick' }] as any) // faction events
+      .mockResolvedValueOnce([{ targetId: 'f1', turnNumber: 11, type: 'faction.warResolved', newValue: 'attacker', origin: 'tick' }] as any) // faction events
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -234,11 +235,70 @@ describe('tickNpcDisposition (DB handler)', () => {
     expect(result.changes).toHaveLength(1)
   })
 
+  // #445: two queries for the whole roster, not two per NPC. This loop issued
+  // a PAIR of worldEvent.findMany per NPC — up to npcCap of each (20 by
+  // default, MAX_NPC_CAP of 500) inside the shared 20s tick transaction,
+  // every world turn.
+  it('reads both event windows once for the whole roster', async () => {
+    const roster = Array.from({ length: 10 }, (_, i) => ({
+      id: `npc${i}`, name: `NPC ${i}`, factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null,
+    }))
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce(roster as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValue([] as any)
+
+    await tickNpcDisposition(baseCtx())
+
+    expect(prisma.worldEvent.findMany).toHaveBeenCalledTimes(2)
+  })
+
+  it('skips the faction query entirely when no NPC has a faction', async () => {
+    // The per-NPC form had this short-circuit one NPC at a time; the grouped
+    // form has to keep it, or an unaffiliated roster pays for a query whose
+    // id list is empty.
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([
+      { id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: null },
+    ] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValue([] as any)
+
+    await tickNpcDisposition(baseCtx())
+
+    expect(prisma.worldEvent.findMany).toHaveBeenCalledTimes(1)
+  })
+
+  it('never attributes one NPC\'s events to another', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([
+      { id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: null },
+      { id: 'npc2', name: 'Sela', factionId: null, disposition: null, dispositionDriftThroughTurn: null },
+    ] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValue([
+      { targetId: 'npc1', turnNumber: 11, type: 'npc.consequence', newValue: 'THREATENED' },
+    ] as any)
+
+    const result = await tickNpcDisposition(baseCtx())
+
+    expect(result.changes.map((c) => c.entityId)).toEqual(['npc1'])
+  })
+
+  it('still honours each NPC\'s own watermark, not just the widest', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([
+      { id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: null },
+      { id: 'npc2', name: 'Sela', factionId: null, disposition: null, dispositionDriftThroughTurn: 11 },
+    ] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValue([
+      { targetId: 'npc1', turnNumber: 11, type: 'npc.consequence', newValue: 'THREATENED' },
+      { targetId: 'npc2', turnNumber: 11, type: 'npc.consequence', newValue: 'THREATENED' },
+    ] as any)
+
+    const result = await tickNpcDisposition(baseCtx({ turnNumber: simTurn(13) }))
+
+    expect(result.changes.map((c) => c.entityId)).toEqual(['npc1'])
+  })
+
   it('classifies a stalemate war as no signal', async () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null }] as any)
     vi.mocked(prisma.worldEvent.findMany)
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ type: 'faction.warResolved', newValue: 'stalemate', origin: 'tick' }] as any)
+      .mockResolvedValueOnce([{ targetId: 'f1', turnNumber: 11, type: 'faction.warResolved', newValue: 'stalemate', origin: 'tick' }] as any)
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -255,7 +315,7 @@ describe('tickNpcDisposition (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null }] as any)
     vi.mocked(prisma.worldEvent.findMany)
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ type: 'faction.stability', newValue: '45', origin: 'tick' }] as any) // ordinary drift, not a wake ripple
+      .mockResolvedValueOnce([{ targetId: 'f1', turnNumber: 11, type: 'faction.stability', newValue: '45', origin: 'tick' }] as any) // ordinary drift, not a wake ripple
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -268,7 +328,7 @@ describe('tickNpcDisposition (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null }] as any)
     vi.mocked(prisma.worldEvent.findMany)
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'NPC' }] as any)
+      .mockResolvedValueOnce([{ targetId: 'f1', turnNumber: 11, type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'NPC' }] as any)
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -282,7 +342,7 @@ describe('tickNpcDisposition (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null }] as any)
     vi.mocked(prisma.worldEvent.findMany)
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'FACTION' }] as any)
+      .mockResolvedValueOnce([{ targetId: 'f1', turnNumber: 11, type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'FACTION' }] as any)
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -301,7 +361,7 @@ describe('tickNpcDisposition (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null }] as any)
     vi.mocked(prisma.worldEvent.findMany)
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'FACTION_DEFAULT' }] as any)
+      .mockResolvedValueOnce([{ targetId: 'f1', turnNumber: 11, type: 'faction.stability', newValue: '45', origin: 'wake', wakeSourceType: 'FACTION_DEFAULT' }] as any)
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -318,7 +378,7 @@ describe('tickNpcDisposition (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: 10 }] as any)
     vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([]).mockResolvedValueOnce([])
 
-    await tickNpcDisposition(baseCtx({ turnNumber: 12 }))
+    await tickNpcDisposition(baseCtx({ turnNumber: simTurn(12) }))
 
     for (const call of vi.mocked(prisma.worldEvent.findMany).mock.calls) {
       expect(call[0]).toMatchObject({ where: expect.objectContaining({ turnNumber: { gte: 11, lte: 11 } }) })
@@ -332,7 +392,7 @@ describe('tickNpcDisposition (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: 1 }] as any)
     vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([])
 
-    await tickNpcDisposition(baseCtx({ turnNumber: 5 }))
+    await tickNpcDisposition(baseCtx({ turnNumber: simTurn(5) }))
 
     expect(vi.mocked(prisma.worldEvent.findMany).mock.calls[0][0]).toMatchObject({
       where: expect.objectContaining({ turnNumber: { gte: 2, lte: 4 } }),
@@ -342,7 +402,7 @@ describe('tickNpcDisposition (DB handler)', () => {
   it('excludes NPCs already current in SQL rather than fetching and skipping them', async () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([])
 
-    await tickNpcDisposition(baseCtx({ turnNumber: 5 }))
+    await tickNpcDisposition(baseCtx({ turnNumber: simTurn(5) }))
 
     const args = vi.mocked(prisma.nPC.findMany).mock.calls[0][0] as any
     expect(args.where.OR).toEqual([
@@ -355,7 +415,7 @@ describe('tickNpcDisposition (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([
       { id: 'npc1', name: 'Bram', factionId: null, disposition: { selfPreservation: 90, loyalty: 50, ambition: 50 }, dispositionDriftThroughTurn: null },
     ] as any)
-    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'npc.consequence', newValue: 'THREATENED' }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ targetId: 'npc1', turnNumber: 11, type: 'npc.consequence', newValue: 'THREATENED' }] as any)
 
     const result = await tickNpcDisposition(baseCtx())
 
@@ -368,7 +428,7 @@ describe('tickNpcDisposition (DB handler)', () => {
 
   it('writes nothing in dry-run mode but still reports the changes', async () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: null }] as any)
-    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'npc.consequence', newValue: 'THREATENED' }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ targetId: 'npc1', turnNumber: 11, type: 'npc.consequence', newValue: 'THREATENED' }] as any)
 
     const result = await tickNpcDisposition(baseCtx({ dryRun: true }))
 
@@ -405,7 +465,7 @@ describe('tickNpcDisposition (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: null }] as any)
     vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([])
 
-    await tickNpcDisposition(baseCtx({ turnNumber: 5 }))
+    await tickNpcDisposition(baseCtx({ turnNumber: simTurn(5) }))
 
     expect(prisma.nPC.update).toHaveBeenCalledWith({
       where: { id: 'npc1' },
@@ -415,9 +475,9 @@ describe('tickNpcDisposition (DB handler)', () => {
 
   it('does not advance any watermark in dry-run mode', async () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: null, disposition: null, dispositionDriftThroughTurn: null }] as any)
-    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'npc.consequence', newValue: 'THREATENED' }] as any)
+    vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ targetId: 'npc1', turnNumber: 11, type: 'npc.consequence', newValue: 'THREATENED' }] as any)
 
-    await tickNpcDisposition(baseCtx({ turnNumber: 5, dryRun: true }))
+    await tickNpcDisposition(baseCtx({ turnNumber: simTurn(5), dryRun: true }))
 
     expect(prisma.nPC.update).not.toHaveBeenCalled()
   })

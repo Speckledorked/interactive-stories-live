@@ -35,6 +35,45 @@ const makeTx = () => ({
   character: { findMany: vi.fn(async (): Promise<Array<{ corruption: number }>> => []) },
 })
 
+/**
+ * #445: a tx whose quest table actually REMEMBERS what this batch created.
+ *
+ * The plain makeTx() above cannot express the bug at all — the bug IS that
+ * `findFirst` sees a row an earlier entry in the same loop created, and a
+ * findFirst returning a fixed value can never do that. Mocking it with
+ * mockResolvedValueOnce does not work either: claimObjectiveKey issues its
+ * own findFirst against the same mock, so a positional chain lands on the
+ * wrong call and the test passes without exercising anything. (It did. The
+ * first draft of these tests was green against the unfixed code.)
+ */
+function makeBatchTx() {
+  const base = makeTx()
+  const registry: Array<{ id: string; name: string; status: string; objectiveKey: string | null; progressLog: string[]; givenByNpcId: null; givenByFactionId: null }> = []
+  let n = 0
+
+  base.quest.findFirst.mockImplementation(async (args: any) => {
+    const where = args?.where ?? {}
+    // claimObjectiveKey's lookup — nothing holds a key in these tests.
+    if (where.objectiveKey !== undefined) return null
+    const wanted = String(where.name?.equals ?? '').toLowerCase()
+    return registry.find((q) => q.name.toLowerCase() === wanted) ?? null
+  })
+  ;(base.quest.create as any).mockImplementation(async (args: any) => {
+    const row = {
+      id: `q${++n}`,
+      name: args.data.name,
+      status: args.data.status,
+      objectiveKey: args.data.objectiveKey ?? null,
+      progressLog: [],
+      givenByNpcId: null,
+      givenByFactionId: null,
+    }
+    registry.push(row as never)
+    return row
+  })
+  return { tx: base, registry }
+}
+
 let tx: ReturnType<typeof makeTx>
 beforeEach(() => {
   tx = makeTx()
@@ -92,6 +131,87 @@ describe('applyQuestChanges — new quest', () => {
     // resolvedAt must not be stamped either — the quest is not resolved.
     const created = (tx.quest.create.mock.calls as any[])[0][0] as any
     expect(created.data.resolvedAt).toBeUndefined()
+  })
+
+  // #445 (F-06): the two-entry version of the same bypass, which #383 did
+  // not close. quest_changes is an unbounded array processed sequentially
+  // inside ONE transaction, and the findFirst in the loop sees rows created
+  // earlier in that same loop — so entry 1 invents the quest ACTIVE (exactly
+  // as #383 forces) and entry 2 finds it and completes it with a
+  // reward_grant, through the `existing` branch, with every gate satisfied.
+  //
+  // Both gates that branch relies on are gates on HISTORY:
+  // isLegalQuestStatusTransition asks what the quest's real status was, and
+  // questAcquisitionAllowed asks whether this party could have taken it on.
+  // A quest that has been ACTIVE for zero elapsed time answers both
+  // vacuously — there is nothing for them to check.
+  it('never pays out for a quest registered earlier in the same batch', async () => {
+    const { tx: batch } = makeBatchTx()
+
+    await applyQuestChanges(batch as any, 'camp1', 3, [
+      { name: 'Clear the Warrens', changes: { description: 'Rats.', status: 'ACTIVE' } } as QuestChange,
+      { name: 'Clear the Warrens', changes: { status: 'COMPLETED', reward_grant: { gold: 50 } } } as QuestChange,
+    ])
+
+    expect(applyQuestRewardGrant).not.toHaveBeenCalled()
+  })
+
+  it('leaves a same-batch quest ACTIVE rather than resolving it', async () => {
+    // Refused at the STATUS level, not just the payout — so the quest
+    // survives for a real next report to complete through the gated path,
+    // exactly as #383 said it should.
+    const { tx: batch } = makeBatchTx()
+
+    await applyQuestChanges(batch as any, 'camp1', 3, [
+      { name: 'Clear the Warrens', changes: { status: 'ACTIVE' } } as QuestChange,
+      { name: 'Clear the Warrens', changes: { status: 'COMPLETED', reward_grant: { gold: 50 } } } as QuestChange,
+    ])
+
+    for (const call of batch.quest.updateMany.mock.calls as any[]) {
+      expect(call[0].data.status).not.toBe('COMPLETED')
+    }
+  })
+
+  it('charges no failure cost for a same-batch quest reported as failed', async () => {
+    // The other side of the same ledger. Refusing only the payout would
+    // leave a free way to burn an NPC's trust over a quest that never was.
+    const { tx: batch } = makeBatchTx()
+
+    await applyQuestChanges(batch as any, 'camp1', 3, [
+      { name: 'Ashen Ledger', changes: { status: 'ACTIVE' } } as QuestChange,
+      { name: 'Ashen Ledger', changes: { status: 'ABANDONED' } } as QuestChange,
+    ])
+
+    expect(applyQuestFailureCost).not.toHaveBeenCalled()
+  })
+
+  it('is case-insensitive, matching the name lookup it is guarding', async () => {
+    // findFirst matches names case-insensitively, so tracking the batch
+    // case-sensitively would leave the bypass open behind a capital letter.
+    const { tx: batch } = makeBatchTx()
+
+    await applyQuestChanges(batch as any, 'camp1', 3, [
+      { name: 'Clear the Warrens', changes: { status: 'ACTIVE' } } as QuestChange,
+      { name: 'CLEAR THE WARRENS', changes: { status: 'COMPLETED', reward_grant: { gold: 50 } } } as QuestChange,
+    ])
+
+    expect(applyQuestRewardGrant).not.toHaveBeenCalled()
+  })
+
+  it('still pays out for a quest that existed before this batch', async () => {
+    // The guard must not swallow real completions — a quest the party has
+    // actually been carrying resolves exactly as before. Without this, the
+    // fix could be "refuse every completion" and the tests above would all
+    // still pass.
+    tx.quest.findFirst.mockResolvedValue({
+      id: 'q1', name: 'Clear the Warrens', status: 'ACTIVE', objectiveKey: 'k', progressLog: [],
+    })
+
+    await applyQuestChanges(tx as any, 'camp1', 3, [
+      { name: 'Clear the Warrens', changes: { status: 'COMPLETED', reward_grant: { gold: 50 } } } as QuestChange,
+    ])
+
+    expect(applyQuestRewardGrant).toHaveBeenCalled()
   })
 
   it('skips a malformed change with no name', async () => {

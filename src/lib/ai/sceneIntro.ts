@@ -10,6 +10,19 @@ import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { buildWorldSummaryForAI } from './worldSummary'
 import { truncateWithEllipsis } from '@/lib/format'
+import { loadAbsenceJournal } from '@/lib/game/absenceJournalQuery'
+import { describeJournalEntry } from '@/lib/game/absenceJournal'
+
+/**
+ * #445: how many durable-record lines the opener is given.
+ *
+ * Bounded independently of MAX_JOURNAL_ENTRIES (the lobby recap's budget):
+ * this is prompt text on the scene-opening path, and an opener asked to weave
+ * fifteen background developments into atmosphere weaves none of them. The
+ * journal already selects coverage-first, so the first few lines are the ones
+ * worth having.
+ */
+const MAX_JOURNAL_LINES_IN_INTRO = 4
 
 /**
  * Generate intro text for a brand new scene
@@ -110,8 +123,53 @@ export async function generateNewSceneIntro(campaignId: string, characterIds?: s
       })
     : []
 
-  const offscreenFalloutText = offscreenFallout.length > 0
-    ? `\n\nOFFSCREEN DEVELOPMENTS (happened in the world since the last scene, unseen by the party - the characters don't know these outright, but the atmosphere can carry a hint: a rumor overheard, a changed mood in the street, smoke where there wasn't any before):\n${offscreenFallout.map(e => `- ${e.title}: ${e.summaryPublic || 'details unclear'}`).join('\n')}`
+  // #445: the DURABLE half of the same question.
+  //
+  // The block above reads TimelineEvent — the narrated feed — which is
+  // exactly the incomplete record #396 built the absence journal to replace.
+  // A clock advancing, a debt cascading to a creditor, a war resolving, a
+  // location degrading: all of those are WorldEvent rows and none of them is
+  // guaranteed a TimelineEvent, so the opener could not reach for them at
+  // all. #396 built the journal, fog-gated it, made it idempotent — and
+  // wired it to the lobby UI only. Nothing in src/lib/ai read it, which was
+  // the stated point of building it.
+  //
+  // Read at PLAYER grade deliberately, matching the visibility filter the
+  // TimelineEvent query above already uses: this text becomes atmosphere in
+  // an opener the party experiences, not GM notes. describeJournalEntry
+  // never emits WorldEvent.reason for the same reason.
+  const journal = lastScene
+    ? await loadAbsenceJournal(campaignId, lastScene.updatedAt, 'PLAYER').catch((err: unknown) => {
+        // An opener with less context is a worse opener; an opener that
+        // throws is no scene at all. Same fail-open posture as every other
+        // enrichment in this function.
+        console.error('Absence journal for scene intro failed (non-critical):', err)
+        return null
+      })
+    : null
+
+  // Deduped against the narrated block above, so a development that DID
+  // produce a TimelineEvent is not described twice in two voices.
+  //
+  // Matched on the entry's targetName appearing in a narrated title, not on
+  // the rendered line: describeJournalEntry wraps the name in one of several
+  // prose variants, so the two strings are never equal even when they are
+  // about the same thing. Comparing the rendered line was the first draft's
+  // mistake, and it silently deduplicated nothing.
+  const narratedText = offscreenFallout.map((e) => e.title.toLowerCase()).join(' | ')
+  const journalLines = (journal?.entries ?? [])
+    .filter((entry) => {
+      const name = entry.targetName?.trim().toLowerCase()
+      return !name || !narratedText.includes(name)
+    })
+    .map((entry) => describeJournalEntry(entry))
+    .slice(0, MAX_JOURNAL_LINES_IN_INTRO)
+
+  const offscreenFalloutText = offscreenFallout.length > 0 || journalLines.length > 0
+    ? `\n\nOFFSCREEN DEVELOPMENTS (happened in the world since the last scene, unseen by the party - the characters don't know these outright, but the atmosphere can carry a hint: a rumor overheard, a changed mood in the street, smoke where there wasn't any before):\n${[
+        ...offscreenFallout.map(e => `- ${e.title}: ${e.summaryPublic || 'details unclear'}`),
+        ...journalLines.map(line => `- ${line}`),
+      ].join('\n')}`
     : ''
 
   const apiKey = process.env.OPENAI_API_KEY

@@ -199,26 +199,50 @@ export async function tickBeliefDrift(ctx: TickContext): Promise<TickHandlerResu
 
   const changes: WorldChange[] = []
 
-  for (const faction of factions) {
-    // Everything since this faction last drifted, bounded — not just
-    // targetTurn, so a faction that lost two rotations doesn't silently
-    // skip those turns' events.
-    const fromTurn = Math.max(
+  // Everything since each faction last drifted, bounded — not just
+  // targetTurn, so a faction that lost two rotations doesn't silently skip
+  // those turns' events.
+  const fromTurnFor = (faction: { beliefDriftThroughTurn: number | null }) =>
+    Math.max(
       (faction.beliefDriftThroughTurn ?? -1) + 1,
       targetTurn - MAX_BELIEF_CATCHUP_TURNS
     )
-    const events = await ctx.db.worldEvent.findMany({
-      where: {
-        campaignId: ctx.campaignId,
-        turnNumber: { gte: fromTurn, lte: targetTurn },
-        targetType: 'FACTION',
-        targetId: faction.id,
-        type: { in: RELEVANT_EVENT_TYPES },
-      },
-      select: { type: true, newValue: true, origin: true, wakeSourceType: true },
-    })
 
-    const driftEvents = events
+  // #445: ONE query for the whole roster, not one per faction.
+  //
+  // This loop used to issue a worldEvent.findMany per faction — up to
+  // factionCap of them (50 by default, MAX_FACTION_CAP of 250) inside the
+  // shared 20s tick transaction, on a handler that runs every world turn.
+  // The per-faction watermarks differ, so the grouped query takes the WIDEST
+  // window and each faction's own lower bound is applied in memory below.
+  // That window is bounded by MAX_BELIEF_CATCHUP_TURNS either way, so this
+  // reads the same rows the N+1 did — in one round trip instead of fifty.
+  const widestFrom = Math.min(...factions.map(fromTurnFor))
+  const allEvents = await ctx.db.worldEvent.findMany({
+    where: {
+      campaignId: ctx.campaignId,
+      turnNumber: { gte: widestFrom, lte: targetTurn },
+      targetType: 'FACTION',
+      targetId: { in: factions.map((f) => f.id) },
+      type: { in: RELEVANT_EVENT_TYPES },
+    },
+    select: { targetId: true, turnNumber: true, type: true, newValue: true, origin: true, wakeSourceType: true },
+  })
+
+  const eventsByFaction = new Map<string, typeof allEvents>()
+  for (const row of allEvents) {
+    const bucket = eventsByFaction.get(row.targetId)
+    if (bucket) bucket.push(row)
+    else eventsByFaction.set(row.targetId, [row])
+  }
+
+  for (const faction of factions) {
+    const fromTurn = fromTurnFor(faction)
+
+    const driftEvents = (eventsByFaction.get(faction.id) ?? [])
+      // Each faction's own window, applied here rather than in SQL — the
+      // grouped query above deliberately over-fetches to the widest one.
+      .filter((row) => row.turnNumber >= fromTurn)
       .map((row) => classifyWorldEvent({ type: row.type, newValue: row.newValue, origin: row.origin, wakeSourceType: row.wakeSourceType }))
       .filter((e): e is BeliefDriftEvent => e !== null)
 

@@ -28,6 +28,7 @@ import {
   MAX_DIGEST_LINES,
 } from '../world-digest'
 import type { WorldChange } from '@/lib/game/tick/types'
+import { simTurn } from '@/lib/game/turnClock'
 
 function makeChange(overrides: Partial<WorldChange> = {}): WorldChange {
   return {
@@ -192,7 +193,7 @@ describe('sendWorldDigest', () => {
   })
 
   it('does nothing when there are no changes', async () => {
-    const result = await sendWorldDigest('campaign-1', [], 3)
+    const result = await sendWorldDigest('campaign-1', [], simTurn(3))
     expect(result).toBe(0)
     expect(prisma.timelineEvent.createMany).not.toHaveBeenCalled()
     expect(NotificationService.createNotification).not.toHaveBeenCalled()
@@ -200,7 +201,7 @@ describe('sendWorldDigest', () => {
 
   it('does nothing when nothing digest-worthy touches a discovered entity', async () => {
     vi.mocked(prisma.campaignMembership.findMany).mockResolvedValueOnce([{ userId: 'user-1' }] as any)
-    const result = await sendWorldDigest('campaign-1', [makeChange({ significant: false })], 3)
+    const result = await sendWorldDigest('campaign-1', [makeChange({ significant: false })], simTurn(3))
     expect(result).toBe(0)
     expect(prisma.timelineEvent.createMany).not.toHaveBeenCalled()
   })
@@ -209,7 +210,7 @@ describe('sendWorldDigest', () => {
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'faction-1' }] as any)
     vi.mocked(prisma.campaignMembership.findMany).mockResolvedValueOnce([{ userId: 'user-1' }] as any)
 
-    await sendWorldDigest('campaign-1', [makeChange({ field: 'factionRole', entityName: 'Vex' })], 5)
+    await sendWorldDigest('campaign-1', [makeChange({ field: 'factionRole', entityName: 'Vex' })], simTurn(5))
 
     expect(prisma.timelineEvent.createMany).toHaveBeenCalledTimes(1)
     const call = vi.mocked(prisma.timelineEvent.createMany).mock.calls[0][0] as any
@@ -244,7 +245,7 @@ describe('sendWorldDigest', () => {
       makeChange({ entityType: 'NPC', field: 'factionRole', entityId: 'npc-3', entityName: 'Hale Renn' }),
     ]
 
-    await sendWorldDigest('campaign-1', changes, 6)
+    await sendWorldDigest('campaign-1', changes, simTurn(6))
 
     expect(prisma.timelineEvent.createMany).toHaveBeenCalledTimes(1)
     const call = vi.mocked(prisma.timelineEvent.createMany).mock.calls[0][0] as any
@@ -261,7 +262,7 @@ describe('sendWorldDigest', () => {
       { userId: 'user-2' },
     ] as any)
 
-    const notified = await sendWorldDigest('campaign-1', [makeChange()], 5)
+    const notified = await sendWorldDigest('campaign-1', [makeChange()], simTurn(5))
 
     expect(notified).toBe(2)
     expect(NotificationService.createNotification).toHaveBeenCalledTimes(2)
@@ -276,7 +277,7 @@ describe('sendWorldDigest', () => {
     vi.mocked(prisma.campaignMembership.findMany).mockResolvedValueOnce([{ userId: 'user-1' }] as any)
     vi.mocked(prisma.timelineEvent.createMany).mockRejectedValueOnce(new Error('db down'))
 
-    const notified = await sendWorldDigest('campaign-1', [makeChange()], 5)
+    const notified = await sendWorldDigest('campaign-1', [makeChange()], simTurn(5))
 
     expect(notified).toBe(1)
     expect(NotificationService.createNotification).toHaveBeenCalledTimes(1)
@@ -286,7 +287,7 @@ describe('sendWorldDigest', () => {
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'faction-1' }] as any)
     vi.mocked(prisma.campaignMembership.findMany).mockResolvedValueOnce([])
 
-    const result = await sendWorldDigest('campaign-1', [makeChange()], 5)
+    const result = await sendWorldDigest('campaign-1', [makeChange()], simTurn(5))
 
     expect(result).toBe(0)
     expect(prisma.timelineEvent.createMany).not.toHaveBeenCalled()
@@ -503,7 +504,7 @@ describe('the discovery gate and its id source cannot drift (#432 regression)', 
   it('queries a discovered-id source for every gated entity type', async () => {
     vi.mocked(prisma.campaignMembership.findMany).mockResolvedValueOnce([{ userId: 'u1' }] as any)
 
-    await sendWorldDigest('campaign-1', [makeChange({ field: 'factionRole' })], 5)
+    await sendWorldDigest('campaign-1', [makeChange({ field: 'factionRole' })], simTurn(5))
 
     // Not "queries location" — every model the gate depends on, whatever
     // that set becomes later.
@@ -528,7 +529,7 @@ describe('the discovery gate and its id source cannot drift (#432 regression)', 
 
     const notified = await sendWorldDigest('campaign-1', [makeChange({
       entityType: 'LOCATION_WEATHER', entityId: 'loc-1', entityName: 'Ashfall Reach', field: 'weather',
-    })], 5)
+    })], simTurn(5))
 
     expect(notified).toBe(1)
     // weatherLines was written in #432 and was unreachable until now.
@@ -542,7 +543,7 @@ describe('the discovery gate and its id source cannot drift (#432 regression)', 
 
     const notified = await sendWorldDigest('campaign-1', [makeChange({
       entityType: 'LOCATION_WEATHER', entityId: 'loc-secret', entityName: 'The Hidden Vault', field: 'weather',
-    })], 5)
+    })], simTurn(5))
 
     expect(notified).toBe(0)
     expect(prisma.timelineEvent.createMany).not.toHaveBeenCalled()

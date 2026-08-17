@@ -138,6 +138,33 @@ export interface AbsenceJournal {
   totalEvents: number
   /** Lowest and highest simulation turn the window spans. */
   turnRange: { from: number; to: number } | null
+  /**
+   * #445: true when `totalEvents`/`turnRange` describe MORE than the events
+   * this call was actually handed — i.e. the caller scanned a bounded slice
+   * and supplied the real window separately.
+   *
+   * Exists so a caller cannot report a sample as if it were the whole
+   * absence without saying so. The route's scan is ordered newest-first, so
+   * a truncated slice makes the absence look SHORTER and QUIETER than it
+   * was: a thirty-day absence was reported as roughly ten turns, and the
+   * number shown was wrong rather than merely capped.
+   */
+  truncated: boolean
+}
+
+/**
+ * #445: the real size of the absence window, when the caller read only a
+ * bounded slice of it.
+ *
+ * A journal derives totalEvents and turnRange from the events it is given,
+ * which is correct for a caller that gives it everything and silently wrong
+ * for one that does not — and the route does not, deliberately, because an
+ * unbounded scan of WorldEvent is exactly the risk JOURNAL_SCAN_LIMIT
+ * exists to bound.
+ */
+export interface JournalWindowTotals {
+  totalEvents: number
+  turnRange: { from: number; to: number } | null
 }
 
 /**
@@ -150,7 +177,10 @@ export interface AbsenceJournal {
  */
 export function buildAbsenceJournal(
   events: JournalEventInput[],
-  maxEntries: number = MAX_JOURNAL_ENTRIES
+  maxEntries: number = MAX_JOURNAL_ENTRIES,
+  // #445: when supplied, these describe the WHOLE window rather than the
+  // slice in `events`. See JournalWindowTotals.
+  windowTotals?: JournalWindowTotals
 ): AbsenceJournal {
   const classified: JournalEntry[] = []
   for (const event of events) {
@@ -159,7 +189,13 @@ export function buildAbsenceJournal(
   }
 
   if (classified.length === 0) {
-    return { entries: [], categoriesPresent: [], totalEvents: 0, turnRange: null }
+    return {
+      entries: [],
+      categoriesPresent: [],
+      totalEvents: windowTotals?.totalEvents ?? 0,
+      turnRange: windowTotals?.turnRange ?? null,
+      truncated: (windowTotals?.totalEvents ?? 0) > 0,
+    }
   }
 
   const ordered = [...classified].sort(compareJournalEvents)
@@ -195,13 +231,15 @@ export function buildAbsenceJournal(
   }
 
   const turns = classified.map((e) => e.turnNumber)
+  const scannedRange = { from: Math.min(...turns), to: Math.max(...turns) }
 
   return {
     // Presented oldest-first: a reconstruction reads as a story, not a feed.
     entries: chosen.sort((a, b) => -compareJournalEvents(a, b)),
     categoriesPresent,
-    totalEvents: classified.length,
-    turnRange: { from: Math.min(...turns), to: Math.max(...turns) },
+    totalEvents: windowTotals?.totalEvents ?? classified.length,
+    turnRange: windowTotals?.turnRange ?? scannedRange,
+    truncated: (windowTotals?.totalEvents ?? classified.length) > classified.length,
   }
 }
 

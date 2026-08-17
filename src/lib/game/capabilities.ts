@@ -306,7 +306,13 @@ export function prerequisiteUnlockBlocked(
   // node's domain. Only consulted for a rootless NARRATED node — see
   // below. Omitted means "not checked", which preserves the exact
   // pre-#386 behaviour for every caller that doesn't supply it.
-  domainUnlockedCount?: number
+  domainUnlockedCount?: number,
+  // #439: whether this node is the ONLY thing in its domain — i.e. the
+  // domain did not exist before the AI named it. Distinct from
+  // domainUnlockedCount === 0, which also covers a populated domain the
+  // character has simply not progressed in yet. Defaults false, so a caller
+  // that does not know keeps the strict behaviour.
+  domainIsNew = false
 ): boolean {
   const prerequisiteIds = node.prerequisiteIds ?? []
 
@@ -324,6 +330,28 @@ export function prerequisiteUnlockBlocked(
     // deeper art needs — some genuine footing in its own domain — without
     // requiring a specific parent it doesn't have.
     if (node.isNarrated && domainUnlockedCount !== undefined) {
+      // #439: "no footing in this domain yet" and "this domain does not
+      // exist yet" are different situations, and treating them the same
+      // made the second one a permanent deadlock.
+      //
+      // The gate's only OPEN path is this function, and nothing seeds an
+      // UNLOCKED node at character creation (decideSeedStates deliberately
+      // never does — there is a test asserting it). So in a domain with no
+      // nodes at all, domainUnlockedCount is 0, the node is blocked, and it
+      // stays 0 forever: the first capability the AI names into a brand-new
+      // domain could never be unlocked by any route. Not blocked by the
+      // fiction — unreachable by construction.
+      //
+      // That trapped any campaign whose generation omitted the optional
+      // capability_domains block, and EVERY imported campaign, since the
+      // exporter carries no capabilities at all.
+      //
+      // A domain with no nodes is not a deep art being smuggled in; it is a
+      // discipline being discovered, which is the thing this feature is
+      // for. The gate still does its job everywhere it has something to
+      // judge: as soon as a domain has any node, an unlock needs real
+      // footing in it.
+      if (domainIsNew) return false
       return domainUnlockedCount === 0
     }
     return false
@@ -508,7 +536,17 @@ export async function applyCapabilityChanges(
                 where: { characterId, state: 'UNLOCKED', capability: { domain: node.domain } },
               })
             : undefined
-        if (prerequisiteUnlockBlocked({ prerequisiteIds, isNarrated: node.isNarrated }, prerequisiteStates, domainUnlockedCount)) {
+        // #439: is this node the only thing in its domain? A domain the AI
+        // has just invented has no foundation to demand, and demanding one
+        // anyway made the first capability in it permanently un-unlockable.
+        // Counted only on the same narrow path domainUnlockedCount is.
+        const domainIsNew =
+          domainUnlockedCount !== undefined
+            ? (await db.campaignCapability.count({
+                where: { campaignId, domain: node.domain },
+              })) <= 1
+            : false
+        if (prerequisiteUnlockBlocked({ prerequisiteIds, isNarrated: node.isNarrated }, prerequisiteStates, domainUnlockedCount, domainIsNew)) {
           // Name what is actually still missing, not just "a prerequisite".
           // The log line reaches the narrator, so a vague refusal invites
           // the same blocked unlock again next scene.

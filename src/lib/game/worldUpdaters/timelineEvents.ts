@@ -5,6 +5,7 @@
 
 import { Prisma, EventVisibility } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
+import type { SimTurn } from '@/lib/game/turnClock'
 
 type Db = Prisma.TransactionClient
 export type TimelineEventChange = NonNullable<WorldUpdates['new_timeline_events']>[number]
@@ -12,7 +13,8 @@ export type TimelineEventChange = NonNullable<WorldUpdates['new_timeline_events'
 export async function applyTimelineEventChanges(
   tx: Db,
   campaignId: string,
-  currentTurnNumber: number,
+  // #437: TimelineEvent.turnNumber is a sim-clock column — see turnClock.ts.
+  simulationTurn: SimTurn,
   events: TimelineEventChange[],
   inGameDayNumber?: number
 ): Promise<void> {
@@ -22,7 +24,7 @@ export async function applyTimelineEventChanges(
     await tx.timelineEvent.create({
       data: {
         campaignId,
-        turnNumber: currentTurnNumber,
+        turnNumber: simulationTurn,
         title: event.title,
         summaryPublic: event.summary_public,
         summaryGM: event.summary_gm,

@@ -16,10 +16,12 @@ import { decideTerritoryClaim } from './territory'
 import { AdjacencyEdge } from '../worldGraph'
 import { persistWorldEvents } from './worldEventLog'
 import { logSignificantChanges } from './historyLog'
+import type { SimTurn } from '@/lib/game/turnClock'
 
 export async function resolveCompletedAmbitions(
   campaignId: string,
-  currentTurn: number,
+  // #437: the SIMULATION turn — one phase of a world turn.
+  currentTurn: SimTurn,
   completedAmbitionClocks: any[],
   inGameDayNumber?: number
 ) {

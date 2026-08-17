@@ -16,6 +16,7 @@ import { tickNpcDisposition } from '../npcDispositionTick'
 import { resolveTickRoster, markRosterTicked } from '../capOrdering'
 import { MAJOR_IMPORTANCE_THRESHOLD } from '../npcTick'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 const RUN = process.env.RUN_DB_TESTS === '1'
 const describeIfDb = RUN ? describe : describe.skip
@@ -71,7 +72,7 @@ describeIfDb('tickNpcDisposition — real database', () => {
     })
 
     const ctx: TickContext = {
-      campaignId, turnNumber: 2, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
+      campaignId, turnNumber: simTurn(2), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
     }
     const result = await tickNpcDisposition(ctx)
 
@@ -102,7 +103,7 @@ describeIfDb('tickNpcDisposition — real database', () => {
     })
 
     const ctx: TickContext = {
-      campaignId, turnNumber: 3, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
+      campaignId, turnNumber: simTurn(3), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
     }
     const result = await tickNpcDisposition(ctx)
 
@@ -147,7 +148,7 @@ describeIfDb('tickNpcDisposition — real database', () => {
     })
 
     const ctx: TickContext = {
-      campaignId: idempCampaignId, turnNumber: 2, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
+      campaignId: idempCampaignId, turnNumber: simTurn(2), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
     }
     const first = await tickNpcDisposition(ctx)
     expect(first.changes).toHaveLength(1)

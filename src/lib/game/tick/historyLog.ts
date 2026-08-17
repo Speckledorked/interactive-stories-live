@@ -8,6 +8,7 @@
 
 import { createCampaignMemory, memoryDedupeKey } from '@/lib/ai/memoryCreation'
 import { WorldChange, TickEntityType } from './types'
+import type { SimTurn } from '@/lib/game/turnClock'
 
 const MEMORY_TYPE_BY_ENTITY: Record<TickEntityType, 'WORLD_EVENT' | 'FACTION_EVENT' | 'LOCATION_EVENT'> = {
   NPC: 'WORLD_EVENT',
@@ -56,7 +57,11 @@ function memoryTypeFor(change: WorldChange): 'WORLD_EVENT' | 'FACTION_EVENT' | '
  */
 export async function logSignificantChanges(
   campaignId: string,
-  turnNumber: number,
+  // #437: the SIMULATION turn. This is the funnel every sim-clock history
+  // write goes through, so branding it here is what makes a scene counter
+  // reaching one of these columns a compile error rather than a silently
+  // wrong row. See turnClock.ts.
+  turnNumber: SimTurn,
   changes: WorldChange[]
 ): Promise<number> {
   const significant = changes.filter((c) => c.significant)

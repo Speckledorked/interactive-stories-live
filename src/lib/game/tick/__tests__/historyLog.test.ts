@@ -23,6 +23,7 @@ vi.mock('@/lib/ai/memoryCreation', () => ({
 import { createCampaignMemory } from '@/lib/ai/memoryCreation'
 import { logSignificantChanges } from '../historyLog'
 import type { WorldChange } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 function factionChange(id: string, overrides: Partial<WorldChange> = {}): WorldChange {
   return {
@@ -44,7 +45,7 @@ describe('logSignificantChanges', () => {
       .mockResolvedValueOnce(null) // embedding call failed for this one
       .mockResolvedValueOnce('mem-1')
 
-    const count = await logSignificantChanges('camp1', 5, [
+    const count = await logSignificantChanges('camp1', simTurn(5), [
       factionChange('f1'), factionChange('f2'), factionChange('f3'),
     ])
 
@@ -55,7 +56,7 @@ describe('logSignificantChanges', () => {
   it('returns 0, not the candidate count, when every write fails', async () => {
     vi.mocked(createCampaignMemory).mockResolvedValue(null)
 
-    const count = await logSignificantChanges('camp1', 5, [factionChange('f1'), factionChange('f2')])
+    const count = await logSignificantChanges('camp1', simTurn(5), [factionChange('f1'), factionChange('f2')])
 
     expect(count).toBe(0)
   })
@@ -63,7 +64,7 @@ describe('logSignificantChanges', () => {
   it('filters out non-significant changes before ever calling createCampaignMemory', async () => {
     vi.mocked(createCampaignMemory).mockResolvedValue('mem-1')
 
-    const count = await logSignificantChanges('camp1', 5, [
+    const count = await logSignificantChanges('camp1', simTurn(5), [
       factionChange('f1'),
       factionChange('f2', { significant: false }),
     ])
@@ -73,7 +74,7 @@ describe('logSignificantChanges', () => {
   })
 
   it('returns 0 for an empty batch without calling createCampaignMemory', async () => {
-    const count = await logSignificantChanges('camp1', 5, [])
+    const count = await logSignificantChanges('camp1', simTurn(5), [])
     expect(createCampaignMemory).not.toHaveBeenCalled()
     expect(count).toBe(0)
   })

@@ -181,24 +181,36 @@ export async function tickWake(ctx: TickContext): Promise<TickHandlerResult> {
       const newStability = clamp(faction.stability + stabilityPenalty, 0, 100)
 
       if (!ctx.dryRun) {
-        try {
-          await ctx.db.activeWake.create({
-            data: {
-              campaignId: ctx.campaignId,
-              sourceType: 'NPC',
-              sourceEntityId: npc.id,
-              sourceEntityName: npc.name,
-              affectedFactionId: faction.id,
-              totalStabilityPenalty: stabilityPenalty,
-              maxTicks: WAKE_DURATION_TURNS,
-            },
-          })
-        } catch (error) {
-          // Another concurrent pass already created this exact wake row —
-          // treat it as already handled rather than double-applying.
-          if (isUniqueConstraintViolation(error)) continue
-          throw error
-        }
+        // #441: skipDuplicates, NOT catch-and-continue.
+        //
+        // The intent was right and the mechanism could not work. This runs on
+        // ctx.db — the tick's shared Prisma.TransactionClient — and in
+        // Postgres a statement that raises inside a transaction puts the
+        // whole transaction into an aborted state. Prisma opens no per-
+        // statement savepoint, so there is nothing to roll back to: every
+        // subsequent handler query fails with "current transaction is
+        // aborted". The `continue` did not skip a duplicate wake and carry
+        // on; it carried on into a transaction that could no longer execute
+        // anything, turning a condition this code explicitly classifies as
+        // benign into total loss of the world turn.
+        //
+        // ON CONFLICT DO NOTHING (what skipDuplicates compiles to) never
+        // raises, so the transaction stays alive and `count` says whether
+        // this pass is the one that owns the follow-up writes.
+        const created = await ctx.db.activeWake.createMany({
+          data: [{
+            campaignId: ctx.campaignId,
+            sourceType: 'NPC',
+            sourceEntityId: npc.id,
+            sourceEntityName: npc.name,
+            affectedFactionId: faction.id,
+            totalStabilityPenalty: stabilityPenalty,
+            maxTicks: WAKE_DURATION_TURNS,
+          }],
+          skipDuplicates: true,
+        })
+        // Already handled by another pass — do not double-apply the penalty.
+        if (created.count === 0) continue
 
         await ctx.db.faction.update({ where: { id: faction.id }, data: { stability: newStability } })
 
@@ -282,22 +294,21 @@ export async function tickWake(ctx: TickContext): Promise<TickHandlerResult> {
         const newStability = clamp(related.stability + stabilityPenalty, 0, 100)
 
         if (!ctx.dryRun) {
-          try {
-            await ctx.db.activeWake.create({
-              data: {
-                campaignId: ctx.campaignId,
-                sourceType: 'FACTION',
-                sourceEntityId: collapsed.id,
-                sourceEntityName: collapsed.name,
-                affectedFactionId: related.id,
-                totalStabilityPenalty: stabilityPenalty,
-                maxTicks: WAKE_DURATION_TURNS,
-              },
-            })
-          } catch (error) {
-            if (isUniqueConstraintViolation(error)) continue
-            throw error
-          }
+          // #441: see the NPC-wake creation above for why this is
+          // skipDuplicates rather than catch-and-continue.
+          const created = await ctx.db.activeWake.createMany({
+            data: [{
+              campaignId: ctx.campaignId,
+              sourceType: 'FACTION',
+              sourceEntityId: collapsed.id,
+              sourceEntityName: collapsed.name,
+              affectedFactionId: related.id,
+              totalStabilityPenalty: stabilityPenalty,
+              maxTicks: WAKE_DURATION_TURNS,
+            }],
+            skipDuplicates: true,
+          })
+          if (created.count === 0) continue
 
           await ctx.db.faction.update({ where: { id: related.id }, data: { stability: newStability } })
         }

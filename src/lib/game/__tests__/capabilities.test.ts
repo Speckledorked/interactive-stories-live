@@ -824,3 +824,75 @@ describe('capabilityEdgeAcyclicity — both invariants, stated (C-15)', () => {
     expect(created.data.prerequisites).toBeUndefined()
   })
 })
+
+
+describe('a brand-new domain is not a permanent deadlock (#439)', () => {
+  // The gate's only OPEN path is prerequisiteUnlockBlocked itself, and
+  // nothing seeds an UNLOCKED node at character creation. So in a domain
+  // with no nodes, domainUnlockedCount is 0, the node is blocked, and it
+  // stays 0 forever — the first capability the AI names into a new domain
+  // could never be unlocked by ANY route. Unreachable by construction, not
+  // by fiction. It trapped every imported campaign (the exporter carries no
+  // capabilities) and every world generated without capability_domains.
+
+  it('lets the first capability in an empty domain through', () => {
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: [], isNarrated: true }, [], 0, true)).toBe(false)
+  })
+
+  it('still blocks a narrated node in a domain that already has content', () => {
+    // The #386 bypass this gate exists for: naming a deep art into an
+    // established domain and handing it over in the same scene.
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: [], isNarrated: true }, [], 0, false)).toBe(true)
+  })
+
+  it('lets it through once the character has real footing, new domain or not', () => {
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: [], isNarrated: true }, [], 1, false)).toBe(false)
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: [], isNarrated: true }, [], 1, true)).toBe(false)
+  })
+
+  it('defaults to the strict reading when the caller does not know', () => {
+    // A caller that cannot say whether the domain is new must not
+    // accidentally open the gate.
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: [], isNarrated: true }, [], 0)).toBe(true)
+  })
+
+  it('never affects a node that has real prerequisites', () => {
+    // domainIsNew is consulted only on the rootless-narrated path; a node
+    // with edges is judged on those edges regardless.
+    expect(prerequisiteUnlockBlocked({ prerequisiteIds: ['p'], isNarrated: true }, [], 0, true)).toBe(true)
+    expect(
+      prerequisiteUnlockBlocked({ prerequisiteIds: ['p'], isNarrated: true }, [{ state: 'UNLOCKED' }], 0, true)
+    ).toBe(false)
+  })
+
+  it('unlocks end to end when the AI names a capability into a domain that did not exist', async () => {
+    const db = {
+      campaignCapability: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        findUnique: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([]),          // empty domain
+        count: vi.fn().mockResolvedValue(1),               // only the node just minted
+        create: vi.fn(async ({ data }: any) => ({ id: 'new-node', isNarrated: true, domain: data.domain, ...data })),
+      },
+      characterCapability: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),               // zero unlocks in the domain
+        create: vi.fn().mockResolvedValue({}),
+        upsert: vi.fn(async ({ create }: any) => create),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      capabilityPrerequisite: { findMany: vi.fn().mockResolvedValue([]) },
+      character: { findUnique: vi.fn().mockResolvedValue({ corruption: 0 }) },
+    }
+
+    const log = await applyCapabilityChanges(db as any, 'camp1', 'char1', [
+      { capability_key: 'star-binding', change: 'unlock', is_new: true, name: 'Star Binding', domain: 'Astral Arts', reason: 'bound one' },
+    ], 4)
+
+    expect(db.characterCapability.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ state: 'UNLOCKED' }) })
+    )
+    expect(log).toContain('Unlocked: Star Binding')
+  })
+})

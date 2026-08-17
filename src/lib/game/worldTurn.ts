@@ -4,9 +4,11 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { TURN_PHASE } from './tick/simulationClock'
 import { checkAndResolveCompletedClocks } from './stateUpdater'
 import { runWorldTick } from './worldTick'
 import { consolidateOldMemories } from '@/lib/ai/memoryConsolidation'
+import { simTurn } from './turnClock'
 import { resolveWorldTurnHours, decideWorldTurnPacing, leaseIsAvailable, staleLeaseCutoff } from './tick/pacing'
 import { advanceClocks, decideClockAdvancement } from './tick/clockTick'
 import type { FactionForClockAdvancement } from './tick/clockTick'
@@ -132,6 +134,23 @@ export async function runWorldTurnIfDue(campaignId: string): Promise<{ ran: bool
   return { ran: true }
 }
 
+/** Record that the in-flight turn reached `phase`. */
+async function markTurnPhase(campaignId: string, turnNumber: number, phase: number): Promise<void> {
+  await prisma.worldMeta
+    .updateMany({
+      // Guarded on the turn: if something else has since moved the campaign
+      // on, this attempt is stale and must not stamp its watermark over a
+      // newer turn's.
+      where: { campaignId, turnInFlight: turnNumber },
+      data: { turnPhaseCompleted: phase },
+    })
+    .catch((err: unknown) => {
+      // A lost watermark costs a re-run of one idempotent-ish phase on
+      // retry, which is strictly better than failing the turn over it.
+      console.error(`⚠️ Failed to record turn phase ${phase} (non-critical):`, err)
+    })
+}
+
 /**
  * Run a world turn - advance clocks and generate background events
  * This simulates the world moving forward independent of player actions
@@ -165,7 +184,37 @@ export async function runWorldTurn(campaignId: string) {
   //
   // simulationTurn advances here and is committed inside runWorldTick's
   // transaction, so it moves if and only if a tick actually happened.
-  const currentTurn = worldMeta.simulationTurn + 1
+  //
+  // #436: a RESUMED turn reuses its own number instead of deriving a new
+  // one. simulationTurn commits with the tick, but the turn continues well
+  // past that commit — so a failure in any later phase used to leave the
+  // counter advanced and send the retry to N+2. Every dedupeKey embeds the
+  // turn, so at a fresh number nothing could collide and the retry wrote a
+  // second full set of events, doubling the drift derived from counting
+  // them. The keys were decoration on exactly the path they were built for.
+  //
+  // Tested with `typeof === 'number'` rather than `!== null` deliberately.
+  // The two failure directions are not symmetric: treating a real in-flight
+  // turn as fresh costs a duplicated turn number, while treating a missing
+  // value as in-flight would SKIP THE TICK and silently stop the world.
+  // Anything that is not a number — an undefined from a partial select, a
+  // row written before the column existed — has to mean "not resuming".
+  const resuming = typeof worldMeta.turnInFlight === 'number'
+  // #437: this is the SIMULATION turn — the whole of runWorldTurn works in
+  // world turns. Branded here, at the one place it is derived, so every
+  // downstream call inherits it and a scene counter can never be
+  // substituted for it by accident.
+  const currentTurn = simTurn(resuming ? worldMeta.turnInFlight! : worldMeta.simulationTurn + 1)
+
+  // How far the in-flight turn already got. Only meaningful when this IS a
+  // resume — a fresh turn starts at NOTHING regardless of what the column
+  // happens to hold.
+  const phaseDone = resuming && typeof worldMeta.turnPhaseCompleted === 'number'
+    ? worldMeta.turnPhaseCompleted
+    : TURN_PHASE.NOTHING
+  if (resuming) {
+    console.log(`🔁 Resuming world turn ${currentTurn} from phase ${phaseDone}`)
+  }
   // Which in-game day this world turn's events happened on — see
   // lib/game/calendar.ts. Every writer below stamps its TimelineEvent/
   // CampaignLog rows with this same value so a background tick's events
@@ -176,17 +225,42 @@ export async function runWorldTurn(campaignId: string) {
     // 0. World Sim Phase 1: deterministic tick — NPCs, factions, weather.
     // Pure and AI-free by design; it decides what changed and why. Only the
     // narration below (and the AI GM prompt builder) turns that into prose.
-    console.log('🧭 Running world tick (NPCs, factions, weather)...')
-    const worldTick = await runWorldTick(campaignId, currentTurn)
-    console.log(`  🧭 World tick: ${worldTick.changes.length} change(s), ${worldTick.historyEntriesCreated} logged to history`)
+    // #436: the tick applies stat deltas, so re-running it on a resume
+    // would double-apply them. Its own transaction already committed, and
+    // the WorldEvent rows it wrote are the durable record of what it
+    // decided — the phases below that need its output read from `changes`,
+    // which a resume deliberately leaves empty rather than recomputing
+    // against state the tick has already moved.
+    let worldTick: Awaited<ReturnType<typeof runWorldTick>> | null = null
+    if (phaseDone < TURN_PHASE.TICK) {
+      console.log('🧭 Running world tick (NPCs, factions, weather)...')
+      worldTick = await runWorldTick(campaignId, currentTurn)
+      console.log(`  🧭 World tick: ${worldTick.changes.length} change(s), ${worldTick.historyEntriesCreated} logged to history`)
+    } else {
+      console.log('  ⏭️ World tick already committed for this turn — skipping (see TURN_PHASE)')
+    }
+    const tickChanges = worldTick?.changes ?? []
+    const pendingAmbitions = worldTick?.pendingAmbitions ?? []
 
     // 1. Advance clocks based on faction tags
-    console.log('⏰ Advancing clocks...')
-    const advancedClocks = await advanceClocks(campaignId, currentTurn)
+    let advancedClocks: Awaited<ReturnType<typeof advanceClocks>> = []
+    if (phaseDone < TURN_PHASE.CLOCKS_ADVANCED) {
+      console.log('⏰ Advancing clocks...')
+      advancedClocks = await advanceClocks(campaignId, currentTurn)
+      await markTurnPhase(campaignId, currentTurn, TURN_PHASE.CLOCKS_ADVANCED)
+    } else {
+      console.log('  ⏭️ Clocks already advanced for this turn — skipping')
+    }
 
     // 2. Check for completed clocks
-    console.log('🔍 Checking completed clocks...')
-    const completedClocks = await checkAndResolveCompletedClocks(campaignId, currentTurn, inGameDayNumber)
+    let completedClocks: Awaited<ReturnType<typeof checkAndResolveCompletedClocks>> = []
+    if (phaseDone < TURN_PHASE.CLOCKS_RESOLVED) {
+      console.log('🔍 Checking completed clocks...')
+      completedClocks = await checkAndResolveCompletedClocks(campaignId, currentTurn, inGameDayNumber)
+      await markTurnPhase(campaignId, currentTurn, TURN_PHASE.CLOCKS_RESOLVED)
+    } else {
+      console.log('  ⏭️ Clocks already resolved for this turn — skipping')
+    }
 
     // 2a. Resolve any ambitions among the clocks that just completed — win
     // or lose, deterministically, so a faction's tournament/campaign/heist
@@ -194,8 +268,11 @@ export async function runWorldTurn(campaignId: string) {
     // flavor text. Runs before offscreen event generation below so the
     // world summary the AI sees already reflects the real outcome.
     const completedAmbitionClocks = completedClocks.filter((c: any) => c.sourceFactionId)
-    if (completedAmbitionClocks.length > 0) {
-      await resolveCompletedAmbitions(campaignId, currentTurn, completedAmbitionClocks, inGameDayNumber)
+    if (phaseDone < TURN_PHASE.AMBITIONS_RESOLVED) {
+      if (completedAmbitionClocks.length > 0) {
+        await resolveCompletedAmbitions(campaignId, currentTurn, completedAmbitionClocks, inGameDayNumber)
+      }
+      await markTurnPhase(campaignId, currentTurn, TURN_PHASE.AMBITIONS_RESOLVED)
     }
 
     // 2a-ii. GM/world clocks (no sourceFactionId — not an ambition) get an
@@ -206,21 +283,24 @@ export async function runWorldTurn(campaignId: string) {
     // only ever producing flavor text. Best-effort per clock; never blocks
     // the turn (see resolveGenericClockEffects's own try/catch).
     const completedGenericClocks = completedClocks.filter((c: any) => !c.sourceFactionId)
-    if (completedGenericClocks.length > 0) {
-      await resolveGenericClockEffects(campaignId, currentTurn, completedGenericClocks as any)
+    if (phaseDone < TURN_PHASE.GENERIC_CLOCK_EFFECTS) {
+      if (completedGenericClocks.length > 0) {
+        await resolveGenericClockEffects(campaignId, currentTurn, completedGenericClocks as any)
+      }
+      await markTurnPhase(campaignId, currentTurn, TURN_PHASE.GENERIC_CLOCK_EFFECTS)
     }
 
     // 2b. Major NPCs whose goal just completed this tick — these need AI
     // narration of the outcome and a new goal (see NPC_GOAL_COMPLETED
     // handling in generateOffscreenEvents), same trigger shape as clocks.
-    const completedGoalNpcs = worldTick.changes
+    const completedGoalNpcs = tickChanges
       .filter((c) => c.entityType === 'NPC' && c.field === 'goalCompleted')
       .map((c) => ({ npcId: c.entityId, npcName: c.entityName, completedGoal: c.previousValue }))
 
     // 3. Generate offscreen events with AI (if there's interesting clock or NPC activity)
-    if (advancedClocks.length > 0 || completedClocks.length > 0 || completedGoalNpcs.length > 0 || worldTick.pendingAmbitions.length > 0) {
+    if (advancedClocks.length > 0 || completedClocks.length > 0 || completedGoalNpcs.length > 0 || pendingAmbitions.length > 0) {
       console.log('🤖 Generating offscreen events...')
-      await generateOffscreenEvents(campaignId, currentTurn, advancedClocks, completedClocks, completedGoalNpcs, worldTick.pendingAmbitions, inGameDayNumber)
+      await generateOffscreenEvents(campaignId, currentTurn, advancedClocks, completedClocks, completedGoalNpcs, pendingAmbitions, inGameDayNumber)
     } else {
       console.log('  No significant clock or NPC activity - skipping offscreen events')
     }
@@ -273,7 +353,7 @@ export async function runWorldTurn(campaignId: string) {
     // becomes a "word on the street" notification for every member — the
     // living world reaching players instead of running silently. Best
     // effort; never blocks the turn.
-    await sendWorldDigest(campaignId, worldTick.changes, currentTurn, inGameDayNumber)
+    await sendWorldDigest(campaignId, tickChanges, currentTurn, inGameDayNumber)
 
     // 5. Periodically roll up old, low-importance memories so the RAG table
     // doesn't grow unbounded over a long campaign — every 10 turns is often
@@ -292,14 +372,29 @@ export async function runWorldTurn(campaignId: string) {
       memoriesConsolidated = consolidation.memoriesRemoved
     }
 
+    // #436: the turn finished. Clearing the marker is what makes the NEXT
+    // turn derive simulationTurn + 1 again — while it is set, every attempt
+    // reuses this turn's number so the dedupe keys can do their job.
+    await prisma.worldMeta
+      .updateMany({
+        where: { campaignId, turnInFlight: currentTurn },
+        data: { turnInFlight: null, turnPhaseCompleted: TURN_PHASE.NOTHING },
+      })
+      .catch((err: unknown) => {
+        // Left set, the next sweep re-runs this turn's remaining phases —
+        // all of which are now watermarked, so it resumes at the end and
+        // clears the marker then. Costly, not corrupting.
+        console.error('⚠️ Failed to clear the in-flight turn marker (self-heals on the next sweep):', err)
+      })
+
     console.log('✅ World turn complete')
 
     return {
       success: true,
       clocksAdvanced: advancedClocks.length,
       clocksCompleted: completedClocks.length,
-      worldTickChanges: worldTick.changes.length,
-      worldTickHistoryEntries: worldTick.historyEntriesCreated,
+      worldTickChanges: tickChanges.length,
+      worldTickHistoryEntries: worldTick?.historyEntriesCreated ?? 0,
       memoriesConsolidated
     }
   } catch (error) {

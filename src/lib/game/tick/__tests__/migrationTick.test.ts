@@ -12,9 +12,10 @@ vi.mock('@/lib/prisma', () => ({
 import { prisma } from '@/lib/prisma'
 import { decideMigration, tickMigration } from '../migrationTick'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(5), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 describe('decideMigration (#110)', () => {
@@ -420,7 +421,7 @@ describe('tickMigration (DB handler)', () => {
     ] as any)
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([])
 
-    await tickMigration(baseCtx({ turnNumber: 7 }))
+    await tickMigration(baseCtx({ turnNumber: simTurn(7) }))
 
     expect(prisma.populationFlightEvent.createMany).toHaveBeenCalledWith({
       data: [

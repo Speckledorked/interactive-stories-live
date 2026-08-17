@@ -8,60 +8,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { buildAwayRecap } from '@/lib/game/awayRecap'
-import {
-  buildAbsenceJournal,
-  describeJournalEntry,
-  CATEGORY_LABELS,
-  MAX_JOURNAL_ENTRIES,
-} from '@/lib/game/absenceJournal'
-import { DISCOVERY_GATED_ENTITY_TYPES } from '@/lib/notifications/world-digest'
-import { visibleTo, type CampaignRole } from '@/lib/api/visibility'
+import { describeJournalEntry, CATEGORY_LABELS } from '@/lib/game/absenceJournal'
+import { loadAbsenceJournal } from '@/lib/game/absenceJournalQuery'
+import { type CampaignRole } from '@/lib/api/visibility'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
-/** How many raw WorldEvent rows one reconstruction reads before selecting. */
-const JOURNAL_SCAN_LIMIT = 400
-
 /**
- * #396: the durable half of the recap, read off WorldEvent — the record
- * that has always covered every entity type, and that no player surface
- * read.
+ * #396: the durable half of the recap, read off WorldEvent — the record that
+ * has always covered every entity type, and that no player surface read.
  *
- * Fog is applied the same way world-digest.ts applies it (#395): per entity
- * TYPE, not per id. Only NPCs and factions model discovery; a location, a
- * clock, a quest, a war or a debt is not something the party "learns
- * exists", so testing those ids against a discovered-entity set built from
- * factions and NPCs would make every one of them structurally unreachable —
- * which is exactly the bug that hid weather and clocks from the digest.
- *
- * The discovered set itself comes from visibleTo(), not a hand-written
- * `isDiscovered: true`, so a GM's own recap is not fogged from them and the
- * polarity is decided in one place (clocks gate on isHidden, inverted).
+ * #445: the fog-gated read itself moved to lib/game/absenceJournalQuery.ts so
+ * the AI can be a second consumer of it rather than carrying a second copy of
+ * the fog rule (see that file). This function is now only the SHAPING of the
+ * journal into the route's response.
  */
 async function buildAbsenceJournalFor(campaignId: string, since: Date, role: CampaignRole) {
-  const [events, discoveredFactions, discoveredNpcs] = await Promise.all([
-    prisma.worldEvent.findMany({
-      where: { campaignId, createdAt: { gt: since } },
-      orderBy: [{ turnNumber: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
-      take: JOURNAL_SCAN_LIMIT,
-      select: {
-        id: true, turnNumber: true, createdAt: true, targetType: true,
-        targetId: true, targetName: true, field: true,
-        significant: true, importance: true,
-      },
-    }),
-    prisma.faction.findMany({ where: { campaignId, ...visibleTo('faction', role) }, select: { id: true } }),
-    prisma.nPC.findMany({ where: { campaignId, ...visibleTo('npc', role) }, select: { id: true } }),
-  ])
-
-  const discoveredIds = new Set([...discoveredFactions, ...discoveredNpcs].map((e) => e.id))
-  const gated = new Set<string>(DISCOVERY_GATED_ENTITY_TYPES)
-  const visible = events.filter((e) => (gated.has(e.targetType) ? discoveredIds.has(e.targetId) : true))
-
-  const journal = buildAbsenceJournal(visible, MAX_JOURNAL_ENTRIES)
+  const journal = await loadAbsenceJournal(campaignId, since, role)
 
   return {
     turnRange: journal.turnRange,
     totalEvents: journal.totalEvents,
+    // #445: says out loud that `entries` is a selection from a longer window,
+    // so the UI can render "showing N of M" instead of implying the absence
+    // was as small as the sample.
+    truncated: journal.truncated,
     categories: journal.categoriesPresent.map((c) => ({ key: c, label: CATEGORY_LABELS[c] })),
     entries: journal.entries.map((entry) => ({
       id: entry.id,

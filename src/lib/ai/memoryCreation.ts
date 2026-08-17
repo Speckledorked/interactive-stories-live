@@ -8,6 +8,7 @@
 import { prisma } from '@/lib/prisma';
 import { embedWithCostTracking } from './embeddingService';
 import type { Scene } from '@prisma/client';
+import type { SimTurn } from '@/lib/game/turnClock';
 
 // #284: a single bounded retry for a transient embedding-API failure
 // before giving up — most embedding failures are exactly that (a rate
@@ -23,7 +24,11 @@ export interface MemoryData {
   campaignId: string;
   memoryType: MemoryType;
   sourceId: string;
-  turnNumber: number;
+  // #437: CampaignMemory.turnNumber is a sim-clock column for every writer.
+  // Scene memories used to be stamped with the scene counter, so
+  // memoryConsolidation bucketed and aged them in a unit they were never
+  // measured in. See turnClock.ts.
+  turnNumber: SimTurn;
   title: string;
   summary: string;
   fullContext: string;
@@ -55,7 +60,7 @@ export interface MemoryData {
 export function memoryDedupeKey(parts: {
   memoryType: MemoryType;
   sourceId: string;
-  turnNumber: number;
+  turnNumber: SimTurn;
   title: string;
 }): string {
   return `${parts.memoryType}|${parts.sourceId}|${parts.turnNumber}|${parts.title}`;
@@ -218,7 +223,11 @@ export async function createCampaignMemory(data: MemoryData): Promise<string | n
  */
 export async function createSceneMemory(
   scene: Scene & { sceneResolutionText: string | null },
-  worldMeta: { turnNumber: number },
+  // #437: the SIMULATION turn — CampaignMemory.turnNumber is a sim-clock
+  // column for every writer (see turnClock.ts). The parameter is shaped
+  // like a WorldMeta row for historical reasons; the field it needs is the
+  // sim turn, not currentTurnNumber.
+  worldMeta: { turnNumber: SimTurn },
   aiResponse: any,
   involvedEntities?: { npcIds: string[]; factionIds: string[] }
 ): Promise<void> {

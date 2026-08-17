@@ -7,6 +7,7 @@
 import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { MAX_CORRUPTION, CorruptionTheme } from '../corruption'
+import type { SceneTurn } from '@/lib/game/turnClock'
 
 type Db = Prisma.TransactionClient
 export type BargainOffer = NonNullable<WorldUpdates['bargain_offers']>[number]
@@ -19,7 +20,7 @@ export type BargainOffer = NonNullable<WorldUpdates['bargain_offers']>[number]
 export async function applyBargainOffers(
   tx: Db,
   campaignId: string,
-  currentTurnNumber: number,
+  currentTurnNumber: SceneTurn,
   offers: BargainOffer[],
   getCorruptionTheme: () => Promise<CorruptionTheme | null>
 ): Promise<void> {

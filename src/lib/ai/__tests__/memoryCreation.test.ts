@@ -19,13 +19,14 @@ import { prisma } from '@/lib/prisma'
 import { embedWithCostTracking } from '../embeddingService'
 import { createCampaignMemory, determineImportance, extractTags, memoryDedupeKey, type MemoryData } from '../memoryCreation'
 import type { Scene } from '@prisma/client'
+import { simTurn } from '@/lib/game/turnClock'
 
 function makeMemoryData(overrides: Partial<MemoryData> = {}): MemoryData {
   return {
     campaignId: 'campaign-1',
     memoryType: 'SCENE',
     sourceId: 'scene-1',
-    turnNumber: 3,
+    turnNumber: simTurn(3),
     title: 'A scene happened',
     summary: 'Something happened in the scene.',
     fullContext: 'Full text of the scene resolution.',
@@ -294,14 +295,14 @@ describe('createCampaignMemory — replay safety (#377)', () => {
 
 describe('memoryDedupeKey', () => {
   it('is stable for the same logical event', () => {
-    const parts = { memoryType: 'WORLD_EVENT' as const, sourceId: 'evt-1', turnNumber: 5, title: 'The siege breaks' }
+    const parts = { memoryType: 'WORLD_EVENT' as const, sourceId: 'evt-1', turnNumber: simTurn(5), title: 'The siege breaks' }
 
     expect(memoryDedupeKey(parts)).toBe(memoryDedupeKey({ ...parts }))
   })
 
   it('separates the same event in different turns', () => {
-    const parts = { memoryType: 'WORLD_EVENT' as const, sourceId: 'evt-1', turnNumber: 5, title: 'The siege breaks' }
+    const parts = { memoryType: 'WORLD_EVENT' as const, sourceId: 'evt-1', turnNumber: simTurn(5), title: 'The siege breaks' }
 
-    expect(memoryDedupeKey(parts)).not.toBe(memoryDedupeKey({ ...parts, turnNumber: 6 }))
+    expect(memoryDedupeKey(parts)).not.toBe(memoryDedupeKey({ ...parts, turnNumber: simTurn(6) }))
   })
 })

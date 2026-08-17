@@ -13,7 +13,13 @@ vi.mock('@/lib/game/awayRecap', () => ({ buildAwayRecap: vi.fn(() => ({ summary:
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     timelineEvent: { findMany: vi.fn() },
-    worldEvent: { findMany: vi.fn() },
+    worldEvent: {
+      findMany: vi.fn(),
+      // #445: the true absence window, measured with one aggregate rather
+      // than inferred from the bounded scan. Defaults to "nothing beyond
+      // the sample" so every existing assertion keeps its old meaning.
+      aggregate: vi.fn(async () => ({ _count: { _all: 0 }, _min: { turnNumber: null }, _max: { turnNumber: null } })),
+    },
     faction: { findMany: vi.fn() },
     nPC: { findMany: vi.fn() },
     campaignMembership: { update: vi.fn() },
@@ -123,6 +129,92 @@ describe('GET', () => {
     expect(body.journal.entries[0].line).toContain('The Siege')
     // A journal with entries is something to show, so the checkpoint moves.
     expect(db.campaignMembership.update).toHaveBeenCalled()
+  })
+
+  // #445: JOURNAL_SCAN_LIMIT bounds a SCAN, and turnRange/totalEvents used
+  // to be derived from whatever survived it. The scan is ordered newest-first,
+  // so a long absence's oldest events fall off the end — a thirty-day absence
+  // was reported as roughly ten turns. The number shown to the player was
+  // wrong, not merely capped, which is worse: a capped list reads as a
+  // sample, a wrong range reads as a fact.
+  //
+  // The live-DB test for buildAbsenceJournal never caught it because it calls
+  // the pure function on an unlimited query, so the truncation the route does
+  // was never in the picture.
+  it('reports the whole absence window, not just the scanned slice (#445)', async () => {
+    const lastViewedAt = new Date('2026-01-01')
+    ;(getCampaignMembership as any).mockResolvedValue({ id: 'mem1', lastViewedAt })
+    ;(buildAwayRecap as any).mockReturnValue(null)
+    // What the bounded scan returned: two recent turns.
+    db.worldEvent.findMany.mockResolvedValue([
+      {
+        id: 'w1', turnNumber: 41, createdAt: new Date('2026-02-01'),
+        targetType: 'CLOCK', targetId: 'k1', targetName: 'The Siege',
+        field: 'currentTicks', significant: true, importance: 'MAJOR',
+      },
+      {
+        id: 'w2', turnNumber: 40, createdAt: new Date('2026-01-31'),
+        targetType: 'CLOCK', targetId: 'k1', targetName: 'The Siege',
+        field: 'currentTicks', significant: false, importance: 'NORMAL',
+      },
+    ])
+    // What actually happened: 900 events spanning turns 12 to 41.
+    db.worldEvent.aggregate.mockResolvedValue({
+      _count: { _all: 900 }, _min: { turnNumber: 12 }, _max: { turnNumber: 41 },
+    })
+
+    const response = await GET(req(), { params: { id: 'camp1' } })
+    const body = await response.json()
+
+    expect(body.journal.turnRange).toEqual({ from: 12, to: 41 })
+    expect(body.journal.totalEvents).toBe(900)
+    // And says out loud that the entries are a selection, so the UI can
+    // render "showing N of M" rather than implying the absence was small.
+    expect(body.journal.truncated).toBe(true)
+  })
+
+  it('fogs the window count the same way it fogs the entries (#445)', async () => {
+    // A total that included undiscovered NPCs would leak their existence as
+    // a number — the same per-TYPE fog rule the entry filter uses, applied
+    // to the aggregate.
+    const lastViewedAt = new Date('2026-01-01')
+    ;(getCampaignMembership as any).mockResolvedValue({ id: 'mem1', lastViewedAt })
+    ;(buildAwayRecap as any).mockReturnValue(null)
+    db.faction.findMany.mockResolvedValue([{ id: 'known-faction' }])
+    db.nPC.findMany.mockResolvedValue([])
+    db.worldEvent.findMany.mockResolvedValue([])
+
+    await GET(req(), { params: { id: 'camp1' } })
+
+    const where = db.worldEvent.aggregate.mock.calls[0][0].where
+    expect(where.OR).toEqual([
+      { targetType: { notIn: expect.any(Array) } },
+      { targetId: { in: ['known-faction'] } },
+    ])
+  })
+
+  it('claims nothing beyond the sample when the aggregate fails (#445)', async () => {
+    // A failed count must degrade to the sample-derived numbers, not take
+    // the whole "while you were away" down with it. An approximate range is
+    // worse than a real one and far better than no recap.
+    const lastViewedAt = new Date('2026-01-01')
+    ;(getCampaignMembership as any).mockResolvedValue({ id: 'mem1', lastViewedAt })
+    ;(buildAwayRecap as any).mockReturnValue(null)
+    db.worldEvent.findMany.mockResolvedValue([
+      {
+        id: 'w1', turnNumber: 7, createdAt: new Date('2026-01-02'),
+        targetType: 'CLOCK', targetId: 'k1', targetName: 'The Siege',
+        field: 'currentTicks', significant: true, importance: 'MAJOR',
+      },
+    ])
+    db.worldEvent.aggregate.mockRejectedValueOnce(new Error('db down'))
+
+    const response = await GET(req(), { params: { id: 'camp1' } })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.journal.turnRange).toEqual({ from: 7, to: 7 })
+    expect(body.journal.truncated).toBe(false)
   })
 
   it('hides events about undiscovered factions and NPCs (#396)', async () => {

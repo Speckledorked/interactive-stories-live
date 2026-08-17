@@ -8,7 +8,7 @@
 import { prisma } from '@/lib/prisma';
 import { embedWithCostTracking } from './embeddingService';
 import { MEMORY_SEARCH_COLUMNS } from './campaignMemoryColumns';
-import { MEMORY_FOG_PREDICATE } from './memoryFogPredicate';
+import { MEMORY_FOG_PREDICATE, MEMORY_LIVE_PREDICATE } from './memoryFogPredicate';
 import type { Scene, PlayerAction, Character, NPC, Faction } from '@prisma/client';
 
 export interface RetrievalContext {
@@ -209,13 +209,24 @@ export async function retrieveRelevantHistory(
     // length was silently ~40 rows regardless of candidatePoolSize —
     // before the entity and fog filters cut it further.
     //
-    // SET LOCAL scopes this to the surrounding transaction, so it cannot
-    // leak onto an unrelated query sharing the pooled connection. The two
-    // values are derived from one number here, so they cannot drift apart
-    // again.
-    await prisma.$executeRawUnsafe(`SET LOCAL hnsw.ef_search = ${Math.max(candidatePoolSize, MIN_CANDIDATE_POOL_SIZE)}`);
-    // See campaignMemoryColumns.ts for why the shared column list is quoted.
-    const memories = await prisma.$queryRaw<RetrievedMemory[]>`
+    // #445: SET LOCAL and the search have to be ONE TRANSACTION.
+    //
+    // #391 wrote "SET LOCAL scopes this to the surrounding transaction" and
+    // then issued it outside any transaction, where Postgres warns
+    // (`SET LOCAL can only be used in transaction blocks`) and IGNORES it —
+    // and the $queryRaw below may not even land on the same pooled
+    // connection. So ef_search stayed at its default of 40 against a
+    // candidate pool of 100, and the "generous candidate window" the CTE
+    // comment justifies at length was still silently ~40 rows, which is the
+    // exact defect #391 was written to fix.
+    //
+    // An interactive $transaction is what makes the claim true: one
+    // connection, one transaction block, the setting scoped to it and
+    // discarded at COMMIT so it cannot leak onto an unrelated query.
+    const memories = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL hnsw.ef_search = ${Math.max(candidatePoolSize, MIN_CANDIDATE_POOL_SIZE)}`);
+      // See campaignMemoryColumns.ts for why the shared column list is quoted.
+      return tx.$queryRaw<RetrievedMemory[]>`
       WITH candidates AS (
         -- Index-accelerated stage: deliberately ONLY campaignId + a bare
         -- vector-distance ORDER BY, matching the exact shape
@@ -284,6 +295,7 @@ export async function retrieveRelevantHistory(
       ORDER BY "relevanceScore" DESC
       LIMIT ${opts.maxMemories * 2}  -- Get extra, then filter by similarity threshold
     `;
+    });
 
     // Filter by minimum similarity and apply importance boost
     const result = filterAndRankMemories(memories, opts);
@@ -318,14 +330,20 @@ export async function retrieveRelevantHistory(
  * otherwise need turn context, and this write isn't latency-sensitive.
  */
 async function recordMemoryRetrievals(campaignId: string, memoryIds: string[]): Promise<void> {
+  // #437: the SIMULATION turn. This wrote the SCENE counter, and
+  // memoryConsolidation's isFrequentlyRetrieved subtracts lastRetrievedTurn
+  // from the SIM turn it is called with — so on a play-heavy campaign the
+  // difference went negative, every memory read as "retrieved recently", and
+  // consolidation archived NOTHING. On an idle-heavy one the opposite:
+  // genuinely hot memories aged out and got rolled into an era summary.
   const worldMeta = await prisma.worldMeta.findUnique({
     where: { campaignId },
-    select: { currentTurnNumber: true },
+    select: { simulationTurn: true },
   });
 
   await prisma.$executeRaw`
     UPDATE campaign_memories
-    SET "retrievalCount" = "retrievalCount" + 1, "lastRetrievedTurn" = ${worldMeta?.currentTurnNumber ?? null}
+    SET "retrievalCount" = "retrievalCount" + 1, "lastRetrievedTurn" = ${worldMeta?.simulationTurn ?? null}
     WHERE id = ANY(${memoryIds}::text[])
   `;
 }
@@ -400,25 +418,64 @@ export function buildSearchQuery(context: RetrievalContext): string {
  * @param npcId - NPC ID
  * @param limit - Maximum number of memories to retrieve
  */
+/**
+ * #440: the placeholder score for name-matched recall.
+ *
+ * Deliberately mid-range: high enough that a directly-named NPC's history
+ * survives the importance-boosted re-sort, low enough that it never
+ * displaces a genuine semantic match. It replaced a hardcoded 1.0, which
+ * both bypassed the minSimilarity floor and outranked everything.
+ */
+export const NAMED_RECALL_SIMILARITY = 0.5
+
 export async function retrieveNpcHistory(
   campaignId: string,
   npcId: string,
   limit: number = 5
 ): Promise<RetrievedMemory[]> {
   try {
+    // #440: this path was the one the shared-predicate work never reached,
+    // and it is the one most directly reachable from player text — it fires
+    // for guaranteed recall the moment a player names an NPC. Three
+    // separate problems, all now closed:
+    //
+    //  1. `1.0 as similarity` was hardcoded. These rows bypassed the
+    //     minSimilarity floor entirely AND outranked everything in the
+    //     importance-boosted re-sort — a fabricated perfect score beating
+    //     every genuinely relevant memory. Recency is the real ordering
+    //     here (there is no query vector to compare against), so the score
+    //     is now derived from it rather than invented, and stays strictly
+    //     below 1 so it can never outrank a true semantic match.
+    //
+    //  2. The discovery check was bespoke and single-id: it confirmed the
+    //     NAMED NPC was discovered and said nothing about the other NPCs in
+    //     involvedNpcIds. A memory involving discovered Vell and
+    //     undiscovered "the Ashen Warden" came back the instant a player
+    //     wrote "I ask Vell about it". MEMORY_FOG_PREDICATE covers every
+    //     involved entity, factions included.
+    //
+    //  3. No archive filter. #392's archive-don't-delete made that strictly
+    //     worse: consolidation retired a memory from semantic search while
+    //     leaving it live here at fake similarity 1.0. Deletion had made
+    //     that impossible; archiving reopened it.
     const memories = await prisma.$queryRaw<RetrievedMemory[]>`
       SELECT
         ${MEMORY_SEARCH_COLUMNS},
-        1.0 as similarity
+        -- NOT a semantic score, and no longer pretending to be one. There
+        -- is no query vector on this path — rows are selected by name
+        -- match and ordered by recency — so any number here is a
+        -- placeholder. What matters is that it sits below a real match
+        -- instead of above every one of them, which 1.0 did not.
+        ${NAMED_RECALL_SIMILARITY}::float8 as similarity
       FROM campaign_memories
       WHERE
         "campaignId" = ${campaignId}
         AND ${npcId} = ANY("involvedNpcIds")
-        -- #285/#327: same independent fog-of-war guard as
-        -- retrieveRelevantHistory above — don't trust the caller to have
-        -- already confirmed this NPC is discovered before asking for
-        -- their history.
-        AND EXISTS (SELECT 1 FROM "NPC" WHERE "NPC"."id" = ${npcId} AND "NPC"."isDiscovered" = true)
+        -- #285/#327/#440: the SHARED fog predicate, not a bespoke one. The
+        -- caller is still not trusted to have checked discovery — this
+        -- checks every involved entity rather than only the named NPC.
+        AND ${MEMORY_FOG_PREDICATE}
+        AND ${MEMORY_LIVE_PREDICATE}
       ORDER BY "turnNumber" DESC
       LIMIT ${limit}
     `;

@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { runWorldTick } from '@/lib/game/worldTick'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
+import { simTurn } from '@/lib/game/turnClock'
 
 export async function POST(
   request: NextRequest,
@@ -41,7 +42,7 @@ export async function POST(
     // currentTurnNumber (the scene counter), which is a different clock
     // entirely, so the preview's window arithmetic (information age, war
     // duration, goal commitment) described a turn that would never happen.
-    const result = await runWorldTick(campaignId, worldMeta.simulationTurn + 1, { dryRun: true })
+    const result = await runWorldTick(campaignId, simTurn(worldMeta.simulationTurn + 1), { dryRun: true })
 
     return NextResponse.json({ turnNumber: result.turnNumber, changes: result.changes })
   } catch (error) {

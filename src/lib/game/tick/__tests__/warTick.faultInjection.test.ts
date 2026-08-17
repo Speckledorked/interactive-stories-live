@@ -17,6 +17,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaClient } from '@prisma/client'
+import { simTurn } from '@/lib/game/turnClock'
 
 const RUN = process.env.RUN_DB_TESTS === '1'
 const describeIfDb = RUN ? describe : describe.skip
@@ -103,7 +104,7 @@ describeIfDb('War.contestedLocationId — real database fault injection', () => 
 
     const { tickWars } = await import('../warTick')
     const result = await tickWars({
-      campaignId, turnNumber: 2, factionCap: 10, npcCap: 20, dryRun: false, db: prisma,
+      campaignId, turnNumber: simTurn(2), factionCap: 10, npcCap: 20, dryRun: false, db: prisma,
     })
 
     const resolved = await prisma.war.findUniqueOrThrow({ where: { id: war.id } })

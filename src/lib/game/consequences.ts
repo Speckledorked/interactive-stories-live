@@ -20,6 +20,7 @@ import { persistWorldEvents } from './tick/worldEventLog'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './tick/npcTick'
 import { WorldChange, clamp } from './tick/types'
 import { resolveEntityByNameOrId } from './entityResolution'
+import { simTurn, type SimTurn } from '@/lib/game/turnClock'
 
 // Consequences that redefine an NPC's relationship to the party outright —
 // these always graduate a minor NPC into the simulated set, regardless of
@@ -280,7 +281,7 @@ export async function extractAndApplyConsequences(
   // scene-driven rows carried the scene counter and tick-driven rows
   // carried the simulation turn, that column would hold two different
   // units and every window over it would be meaningless.
-  const simulationTurn = await currentSimulationTurn(campaignId)
+  const simulationTurn = simTurn(await currentSimulationTurn(campaignId))
   await persistWorldEvents(campaignId, simulationTurn, changes)
   const historyEntriesCreated = await logSignificantChanges(campaignId, simulationTurn, changes)
   await syncWikiEntriesForChanges(campaignId, simulationTurn, changes)

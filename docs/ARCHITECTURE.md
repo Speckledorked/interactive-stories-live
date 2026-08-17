@@ -305,8 +305,12 @@ of the three tags is a bug in this list.
   covered mostly gate + shape assertions" — was PESSIMISTIC rather than
   merely vague; only three routes are gate-and-shape only, and none of them
   are high-risk. The floor was then tested rather than trusted: a mutation
-  audit over all 48 high-risk routes (164 mutations) found **12 survivors**,
-  every one now dead. Nine routes had never executed their own 401 — no test
+  audit over all 48 high-risk routes (164 mutations) found **14 survivors**,
+  every one now dead. (#445: this said 12, which was the number of route test
+  FILES the fixes touched — the three categories below sum to 14 findings
+  across those 12 files. Corrected to the count the enumeration actually
+  supports, since a bare total is exactly the kind of number nobody
+  re-derives.) Nine routes had never executed their own 401 — no test
   ever set `getUser` to null. Four member-management tests asserted `403` +
   "the write didn't happen", which deleting the admin gate outright still
   satisfied, because execution fell through to the target-not-a-member
@@ -480,6 +484,14 @@ above. A rename proves nothing about the system and is allowed to prove
 nothing; the declaration exists only so the checker can follow a row across
 a relabel instead of treating it as a brand-new, ungated row.
 
+Because of that, **a row may not simply disappear.** If a row present in
+the base is gone under that name, the checker fails: an undeclared rename
+is exactly what a vanished row looks like, and "brand-new rows are never
+gated" would otherwise hand any renamed row a free pass. Rename it with the
+declaration above, or — if the system genuinely no longer exists — keep the
+row and set its score to `—`, which the checker reads as "not a score" and
+never treats as an increase in either direction.
+
 - Renamed: "Capability tree (branching prerequisites)" -> "Capability graph (branching prerequisites)"
 
 ### 2026-08-13 — Resource infrastructure & logistics
@@ -540,7 +552,7 @@ deliberately just enough to know what happened without re-deriving it.
 - **The tutorial had never taught anyone anything, and the page that measured it reported on an empty table** (#436). Three independent breaks, any one of which was fatal: `initializeTutorialSteps()` had zero callers repo-wide, so `tutorial_steps` was empty in production; `startStep` was reachable only from `trackInteraction`, which also had no callers and no route, so nothing could reach `IN_PROGRESS` and `handleTriggerEvent` only ever completes `IN_PROGRESS` steps; and one of thirteen declared completion triggers was actually emitted. The content layer was dead in the same way — no component read `contentBlocks`, `targetElement` or `tooltipPosition`, and four of five declared CSS selectors matched nothing. What makes this worth recording is that the system had already been audited and fixed three times (#308, #317, #318) without any of it surfacing: those fixes made a checklist read the right response key and made step completion respect prerequisites, which is real work on machinery that was never switched on. The page's own tests passed throughout, because they mocked the API and asserted the component could render rows it was handed — nothing asserted there would ever BE rows. Rebuilt onto a typechecked content registry that ships with the code (no seeding step to forget), covering 41 mechanics and explaining how each system actually works rather than only that it exists, with the trigger itself under test rather than the rendering; `User.orientationSeenAt` is nullable with no backfill so the intro reaches existing accounts and not just new signups. Two guard suites now walk every player-visible string: one for cross-reference integrity, one enforcing the fog-of-war rule against prose — hidden state, engine vocabulary, and any threshold, rate, cap or range — since a help page publishing the rate standing moves at teaches farming exactly as well as the visible meter that was deliberately removed. *(Tutorial/onboarding)*
 - **A load-bearing rule lived in a hover tooltip, on a mobile-first product** (#436). `TurnOrderPanel` carried "submitting an action is never blocked by it" in a `title=` attribute — invisible to every touch user — and carried it on the state where turn order is DISABLED, which is the state where nobody would wonder. The enabled state, where a highlighted "current player" reads as a lock, said nothing at all. The rule is now visible text in the enabled branch, and the `title=` is gone rather than left as a second copy that could drift. *(Player-facing copy)*
 - **Preview builds were migrating the production database.** The build command in `vercel.json` ran `prisma migrate deploy` unconditionally, and a preview build runs it too — so a migration reached production the moment a PR *built a preview*, not when it merged, and an abandoned branch still migrated production. This produced a real outage on 2026-08-16: #431's `20260816160000_social_ties_edge_tables` (destructive by design — it drops `NPC.socialTies` and `Faction.relationships` after backfilling into `NpcTie`/`FactionTie`) applied to production while the matching code could not ship, because the account had hit Vercel's daily deployment limit. Production was left running pre-#431 code against a post-#431 schema. The symptom was deceptive: the campaign **list** kept working (it only reads `Campaign`/`CampaignMembership`, untouched by the migration) while campaign **interiors** failed, because a Prisma `findMany` with no `select` fetches every scalar column and so breaks on a dropped column it never named. Fixed by gating the migration on `VERCEL_ENV = production`, so previews still run against real data (a deliberate choice on a free-tier Neon plan whose 10-branch cap makes per-preview databases impractical) but only a production deploy may change the schema; a preview whose branch adds columns now fails against the un-migrated database, which is a preview breaking rather than production. A failed migration still fails the whole build — verified, since `if …; fi` propagates the then-branch's exit status through the `&&`. Does not address the remaining half (#434): even on production, migrations still run before the build proves shippable, so expand/contract is still the rule for anything destructive. *(Deploy/CI)*
-- A mutation audit over the route layer (#426) — 164 mutations across all 48 high-risk routes — found 12 survivors, all now fixed. The one that mattered: inverting `GET /campaigns/[id]`'s membership guard, so members are refused and **non-members are served the campaign's entire contents**, passed all 13 tests in that file. PATCH and DELETE both had their gates covered; GET's was never executed once, and GET is the handler that returns everything. Nine further routes had never executed their own 401 — no test ever set `getUser` to null, so the unauthenticated branch was structurally unreachable by the suite said to cover it. And four member-management tests passed for the wrong reason: they asserted `403` plus "the destructive call wasn't made", which deleting the admin gate outright still satisfied, because execution fell through to the target-not-a-member branch that also returns 403 and also never writes; they now assert identity with the gate's own `Response` instance, which only a short-circuit at the gate can produce. Worth recording that the audit's FIRST run was junk: `select: { name: true } → false` survived 20+ routes, which measures the harness rather than the tests — these suites mock Prisma, so query-shape mutations are unobservable by construction and would survive a perfect suite. *(API route test coverage)*
+- A mutation audit over the route layer (#426) — 164 mutations across all 48 high-risk routes — found 14 survivors (9 + 4 + 1, as enumerated below), all now fixed, across 12 route test files; #445 corrected this line and the Scorecard's from "12", which was the file count. The one that mattered: inverting `GET /campaigns/[id]`'s membership guard, so members are refused and **non-members are served the campaign's entire contents**, passed all 13 tests in that file. PATCH and DELETE both had their gates covered; GET's was never executed once, and GET is the handler that returns everything. Nine further routes had never executed their own 401 — no test ever set `getUser` to null, so the unauthenticated branch was structurally unreachable by the suite said to cover it. And four member-management tests passed for the wrong reason: they asserted `403` plus "the destructive call wasn't made", which deleting the admin gate outright still satisfied, because execution fell through to the target-not-a-member branch that also returns 403 and also never writes; they now assert identity with the gate's own `Response` instance, which only a short-circuit at the gate can produce. Worth recording that the audit's FIRST run was junk: `select: { name: true } → false` survived 20+ routes, which measures the harness rather than the tests — these suites mock Prisma, so query-shape mutations are unobservable by construction and would survive a perfect suite. *(API route test coverage)*
 - Admin reasoning previews were read-only projections (#427). Every `explain*` function was already pure and snapshot-shaped — precisely the signature a what-if needs — so the gap was only that nothing let an admin perturb the snapshot before it went in. All five previews (faction, NPC, location, clock, wars) now take a bounded override overlay via `lib/api/whatIf.ts`, with controls on every tab. Out-of-range values are rejected and reported rather than clamped, because clamping answers a question nobody asked: type 150, get the reasoning for 100, with nothing saying so. GET and query params rather than POST and a body, so "this never writes" holds at the HTTP verb rather than by convention; each route has a test asserting no `create`/`update`/`upsert`/`delete` fires on any mocked model during a what-if. The wars route scopes overrides by `warId` — it is campaign-wide, so an unscoped override would rewrite every war on the board and hand back four answers with no signal which were fiction — and its momentum range is `-100..100` to match the `War_momentum_range` DB CHECK rather than the stat band, which would have silently rejected half the legal values. *(Admin tooling as simulation design)*
 - 22 comments across 21 files cited a "README Known Bugs" section that has never existed in tracked history (#424). The cause was not 22 careless authors: `CONTRIBUTING.md` explicitly sanctioned citing it, and separately pointed at `README.md` for "architecture, current state, and priority list", none of which are there. Both targets now point at `docs/ARCHITECTURE.md`, and `docReferences.test.ts` checks that every section reference from `src/` — and every citation target CONTRIBUTING offers — resolves to a real heading. Writing that guard took three attempts: forward-only matching missed the exact citation that motivated the issue (`Known Bugs P0 — see README`, where the doc name trails), and the obvious bidirectional fix flagged ~30 false positives, so it is now two precise grammars, both mutation-verified. *(Documentation integrity)*
 - `Character`/`NPC` store location twice — `currentLocation` free text and a `locationId` FK, neither derived from the other (#425). #405 fixed the writers that set only the text and orphaned the FK; what it could not fix was that every future write has to remember, with eight comments across the tree existing purely to remind. Now a structural guard, brace-matched to the enclosing `data: { … }` payload. Its first draft checked a ±30-line window and passed a deliberately unpaired write, because `locationId` appears elsewhere in the same file for unrelated reasons — it was reading "this FILE mentions the column" as "this WRITE sets it". `WorldMeta.currentLocation` is excluded: different model, no FK, nothing to pair with. *(Schema invariants)*
@@ -898,3 +910,45 @@ validates the state every handler above just produced — broken references,
 duplicate names, and a closed catalogue of universe-scoped semantic
 invariants — and repairs what it safely can before the turn's changes are
 ever narrated.
+
+### The two clocks
+
+There are two counters in this codebase that a reader will call "the turn
+number", and they advance independently:
+
+- **`WorldMeta.simulationTurn`** — how many WORLD TURNS have run. Driven by
+  banked in-game hours, so it moves whether or not anyone is playing.
+- **`WorldMeta.currentTurnNumber`** — how many PLAYER SCENES have resolved.
+  Written only by `sceneResolver.ts`, so it does not move on an idle
+  campaign.
+
+Neither dominates the other, and subtracting one from the other is
+meaningless in both directions. `#374` added the second clock to fix the
+frozen-counter bug above; a later adversarial pass (`#437`) found seven
+places still comparing one against the other, including one that told the AI
+GM a war had been running for a NEGATIVE number of turns, and one that made
+memory consolidation archive either everything or nothing depending on which
+way the two had drifted. Two more turned up while fixing those seven.
+
+**The rule: every persisted turn column is on the simulation clock.**
+`WorldEvent`, `EventWitness`, `TimelineEvent`, `CampaignMemory` (including
+`lastRetrievedTurn`), `War.startedTurn`/`resolvedTurn`,
+`WarParticipant.joinedTurn`, `PopulationFlightEvent`. The scene counter stays
+in `WorldMeta.currentTurnNumber` and in the two places genuinely about
+scenes — `CampaignLog` (the per-scene story log) and `advancement.ts`'s arc
+gating. Several scenes resolving between two world turns all legitimately
+happened "during" the same simulation turn, so a scene-originated write
+resolves the sim turn via `currentSimulationTurn()` rather than stamping the
+counter it happens to be holding.
+
+The rule is enforced, not just written down. `src/lib/game/turnClock.ts`
+defines branded `SimTurn`/`SceneTurn` types — zero-cost at runtime, and a
+plain `number` cannot be passed where one is expected, so aliasing a value
+through three renames does not launder its clock. Prisma's generated `data:`
+types still accept a bare `number`, which is exactly the hole every one of
+these bugs lived in, so `turnClockConvention.test.ts` covers it structurally:
+every write to a declared sim-clock column has to be fed from a
+`file: identifier` pair listed there as SimTurn at its declaration. That list
+is deliberately file-scoped — `currentTurn` means the simulation turn in
+`worldTurn.ts` and the scene counter in `sceneResolver.ts`, and a global name
+list waved a real crossing straight through on the guard's first draft.

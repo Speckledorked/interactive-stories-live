@@ -16,6 +16,7 @@ import { findRivalId } from '@/lib/game/tick/types'
 import { TIE_INCLUDE, factionTies, type FactionTieRow } from '@/lib/game/tieGraph'
 import { parseBeliefVector } from '@/lib/game/tick/beliefTick'
 import { applyWhatIf, STAT_BAND, type WhatIfSpec } from '@/lib/api/whatIf'
+import { simTurn, type SimTurn } from '@/lib/game/turnClock'
 
 /**
  * #427: the stats an admin may perturb to ask "what would this faction do
@@ -43,7 +44,7 @@ interface FactionForGoalReasoning {
 /** Loads the two real-state reads decideFactionGoalReassessment's caller
  * (factionTick.ts) already does — goal-commitment history and rival
  * liveness — then calls the same pure explain function a real tick would. */
-async function loadGoalReasoning(campaignId: string, factionId: string, faction: FactionForGoalReasoning, turnNumber: number) {
+async function loadGoalReasoning(campaignId: string, factionId: string, faction: FactionForGoalReasoning, turnNumber: SimTurn) {
   const lastGoalChange = await prisma.worldEvent.findFirst({
     where: { campaignId, type: 'faction.goal', targetId: factionId },
     orderBy: { turnNumber: 'desc' },
@@ -89,7 +90,7 @@ export async function GET(
           beliefVector: true, leaderCharacterId: true, ...TIE_INCLUDE,
         },
       }),
-      prisma.worldMeta.findUnique({ where: { campaignId }, select: { currentTurnNumber: true } }),
+      prisma.worldMeta.findUnique({ where: { campaignId }, select: { simulationTurn: true } }),
     ])
 
     if (!faction) {
@@ -99,7 +100,13 @@ export async function GET(
       return NextResponse.json({ error: 'Campaign has no world state yet' }, { status: 404 })
     }
 
-    const turnNumber = worldMeta.currentTurnNumber
+    // #437: the SIMULATION turn — see turnClock.ts. This panel exists to
+    // show what the tick WOULD decide, and every tick decider is called
+    // with ctx.turnNumber (the sim clock). Reading the scene counter here
+    // made the preview and the reality diverge on exactly the campaigns
+    // where the two clocks had drifted, on the one feature whose entire
+    // purpose is showing reality.
+    const turnNumber = simTurn(worldMeta.simulationTurn)
 
     // #427: overlay the what-if BEFORE any reasoning runs, so every
     // downstream projection sees one consistent hypothetical rather than a

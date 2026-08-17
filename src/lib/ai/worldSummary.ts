@@ -21,6 +21,7 @@ import {
   mapWarsForPrompt,
 } from './worldSummaryMappers'
 import { groupEventWitnessesForPrompt, GroupedWitness } from '@/lib/game/eventWitness'
+import { simTurn, type SimTurn } from '@/lib/game/turnClock'
 
 // Information Latency (#101) — a query-cost bound only, not a correctness
 // one (the per-character MAX_WITNESSED/TOLD caps in eventWitness.ts do the
@@ -32,7 +33,7 @@ import { groupEventWitnessesForPrompt, GroupedWitness } from '@/lib/game/eventWi
 // path — widening this only widens an already-indexed
 // (campaignId, characterId, turnNumber) DB range scan, never the prompt
 // itself, since MAX_WITNESSED/TOLD_EVENTS_IN_PROMPT caps the actual output.
-const RECENT_WITNESS_WINDOW_TURNS = 300
+export const RECENT_WITNESS_WINDOW_TURNS = 300
 
 // #297/#326: both builders used to fetch EVERY NPC/faction for the campaign
 // before either relevance-filtering or capForPrompt ever ran — a query-cost
@@ -56,14 +57,19 @@ const FACTION_QUERY_BACKSTOP = 200
 async function fetchWitnessMap(
   campaignId: string,
   characterIds: string[],
-  currentTurnNumber: number
+  // #437: the SIMULATION turn. EventWitness.turnNumber had two writers on
+  // two clocks (stateUpdater stamped the scene counter, informationTick the
+  // sim turn) and this window compared the column against the scene counter.
+  // On a play-heavy campaign every witness row could silently drop out of
+  // the prompt; on an idle-heavy one the window was effectively unbounded.
+  simulationTurn: SimTurn
 ): Promise<Map<string, GroupedWitness>> {
   if (characterIds.length === 0) return new Map()
   const rows = await prisma.eventWitness.findMany({
     where: {
       campaignId,
       characterId: { in: characterIds },
-      turnNumber: { gte: currentTurnNumber - RECENT_WITNESS_WINDOW_TURNS },
+      turnNumber: { gte: simulationTurn - RECENT_WITNESS_WINDOW_TURNS },
     },
     orderBy: { turnNumber: 'desc' },
     select: {
@@ -88,14 +94,15 @@ async function fetchWitnessMap(
 async function fetchNpcWitnessMap(
   campaignId: string,
   npcIds: string[],
-  currentTurnNumber: number
+  // #437: the SIMULATION turn — see fetchWitnessMap above.
+  simulationTurn: SimTurn
 ): Promise<Map<string, GroupedWitness>> {
   if (npcIds.length === 0) return new Map()
   const rows = await prisma.eventWitness.findMany({
     where: {
       campaignId,
       npcId: { in: npcIds },
-      turnNumber: { gte: currentTurnNumber - RECENT_WITNESS_WINDOW_TURNS },
+      turnNumber: { gte: simulationTurn - RECENT_WITNESS_WINDOW_TURNS },
     },
     orderBy: { turnNumber: 'desc' },
     select: {
@@ -217,7 +224,7 @@ export async function buildOptimizedWorldSummary(
   // Information Latency (#101) — each character's own knowledge of
   // significant WorldEvents, scoped to just this builder's promptCharacters.
   const witnessByCharacterId = await fetchWitnessMap(
-    campaignId, promptCharacters.map(c => c.id), worldMeta.currentTurnNumber
+    campaignId, promptCharacters.map(c => c.id), simTurn(worldMeta.simulationTurn)
   )
 
   // Extract character locations for filtering — scoped to this scene's
@@ -276,7 +283,7 @@ export async function buildOptimizedWorldSummary(
   // knowledge — scoped to discoveredNpcs (the same relevance-filtered, capped
   // list that's about to be mapped into the prompt), not the full roster.
   const npcWitnessByNpcId = await fetchNpcWitnessMap(
-    campaignId, discoveredNpcs.map(n => n.id), worldMeta.currentTurnNumber
+    campaignId, discoveredNpcs.map(n => n.id), simTurn(worldMeta.simulationTurn)
   )
 
   console.log(`🔍 Filtered entities: ${discoveredNpcs.length}/${allNpcs.length} NPCs, ${discoveredFactions.length}/${allFactions.length} factions`)
@@ -358,7 +365,7 @@ CAMPAIGN OVERVIEW (${summary.campaignPhase} phase, ${summary.totalScenes} scenes
     // factions they've never encountered. Coalitions: ally counts only
     // include discovered factions, same fog-of-war rule as everything else
     // here — a hidden faction joining a known war doesn't get outed by it.
-    wars: mapWarsForPrompt(activeWars, allFactions, discoveredFactionIds, worldMeta.currentTurnNumber),
+    wars: mapWarsForPrompt(activeWars, allFactions, discoveredFactionIds, simTurn(worldMeta.simulationTurn)),
 
     // Use compressed timeline from context manager
     recent_timeline_events: compressedTimeline
@@ -480,10 +487,10 @@ export async function buildWorldSummaryForAI(
   // Information Latency (#101) — see the sibling builder above for the
   // full reasoning; same helper, same scoping.
   const witnessByCharacterId = await fetchWitnessMap(
-    campaignId, promptCharacters.map(c => c.id), worldMeta.currentTurnNumber
+    campaignId, promptCharacters.map(c => c.id), simTurn(worldMeta.simulationTurn)
   )
   const npcWitnessByNpcId = await fetchNpcWitnessMap(
-    campaignId, discoveredNpcs.map(n => n.id), worldMeta.currentTurnNumber
+    campaignId, discoveredNpcs.map(n => n.id), simTurn(worldMeta.simulationTurn)
   )
 
   // Format everything for the AI
@@ -529,7 +536,7 @@ export async function buildWorldSummaryForAI(
     // "how's the war going" from momentum/turns_elapsed, don't improvise.
     // Fog of war: only wars where both sides are discovered; ally counts
     // only include discovered factions.
-    wars: mapWarsForPrompt(activeWars, factions, discoveredFactionIds, worldMeta.currentTurnNumber),
+    wars: mapWarsForPrompt(activeWars, factions, discoveredFactionIds, simTurn(worldMeta.simulationTurn)),
   } as any
 
   // Return both world summary and entities for reuse in memory retrieval.

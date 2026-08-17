@@ -16,9 +16,10 @@ import { prisma } from '@/lib/prisma'
 import { tickWeather, decideNextWeather } from '../weatherTick'
 import { tickFactions } from '../factionTick'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(5), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 describe('tickWeather dry run', () => {
@@ -42,7 +43,7 @@ describe('tickWeather dry run', () => {
       { id: 'loc-1', name: 'The Market', campaignId: 'campaign-1', weather: 'CLEAR', weatherSeverity: 3 },
     ] as any)
 
-    const result = await tickWeather(baseCtx({ turnNumber: turn, dryRun: true }))
+    const result = await tickWeather(baseCtx({ turnNumber: simTurn(turn), dryRun: true }))
 
     expect(prisma.location.update).not.toHaveBeenCalled()
     // Sanity: confirm this turn actually produces a real change, so the
@@ -67,7 +68,7 @@ describe('tickWeather dry run', () => {
       { id: 'loc-1', name: 'The Market', campaignId: 'campaign-1', weather: 'CLEAR', weatherSeverity: 3 },
     ] as any)
 
-    await tickWeather(baseCtx({ turnNumber: turn, dryRun: false }))
+    await tickWeather(baseCtx({ turnNumber: simTurn(turn), dryRun: false }))
 
     expect(prisma.location.update).toHaveBeenCalledTimes(1)
   })

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { storeGmNotesForTurn } from '../worldMetaNotes'
+import { sceneTurn } from '@/lib/game/turnClock'
 
 const makeTx = () => ({
   worldMeta: {
@@ -17,7 +18,7 @@ describe('storeGmNotesForTurn', () => {
   it('appends a note to an empty history', async () => {
     tx.worldMeta.findUnique.mockResolvedValue({ id: 'wm1', otherMeta: null })
 
-    await storeGmNotesForTurn(tx as any, 'camp1', 5, 'The rebels are massing north of the wall.')
+    await storeGmNotesForTurn(tx as any, 'camp1', sceneTurn(5), 'The rebels are massing north of the wall.')
 
     expect(tx.worldMeta.update).toHaveBeenCalledWith({
       where: { id: 'wm1' },
@@ -37,7 +38,7 @@ describe('storeGmNotesForTurn', () => {
       otherMeta: { unrelatedField: 'keep-me', gm_notes_history: [{ turn: 1, notes: 'earlier note' }] },
     })
 
-    await storeGmNotesForTurn(tx as any, 'camp1', 2, 'new note')
+    await storeGmNotesForTurn(tx as any, 'camp1', sceneTurn(2), 'new note')
 
     const call = tx.worldMeta.update.mock.calls[0][0]
     expect(call.data.otherMeta.unrelatedField).toBe('keep-me')
@@ -49,7 +50,7 @@ describe('storeGmNotesForTurn', () => {
     const history = Array.from({ length: 20 }, (_, i) => ({ turn: i, notes: `note ${i}` }))
     tx.worldMeta.findUnique.mockResolvedValue({ id: 'wm1', otherMeta: { gm_notes_history: history } })
 
-    await storeGmNotesForTurn(tx as any, 'camp1', 20, 'the 21st note')
+    await storeGmNotesForTurn(tx as any, 'camp1', sceneTurn(20), 'the 21st note')
 
     const call = tx.worldMeta.update.mock.calls[0][0]
     expect(call.data.otherMeta.gm_notes_history).toHaveLength(20)
@@ -59,7 +60,7 @@ describe('storeGmNotesForTurn', () => {
 
   it('does nothing when the campaign has no WorldMeta row', async () => {
     tx.worldMeta.findUnique.mockResolvedValue(null)
-    await storeGmNotesForTurn(tx as any, 'camp1', 1, 'note')
+    await storeGmNotesForTurn(tx as any, 'camp1', sceneTurn(1), 'note')
     expect(tx.worldMeta.update).not.toHaveBeenCalled()
   })
 })

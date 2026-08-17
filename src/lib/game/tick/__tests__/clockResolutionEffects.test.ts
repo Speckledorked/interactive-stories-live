@@ -32,6 +32,7 @@ vi.mock('../historyLog', () => ({ logSignificantChanges: mocks.logSignificantCha
 vi.mock('../wikiSync', () => ({ syncWikiEntriesForChanges: mocks.syncWikiEntriesForChanges }))
 
 import { applyClockResolutionEffects, resolveGenericClockEffects } from '../clockResolutionEffects'
+import { simTurn } from '@/lib/game/turnClock'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -71,7 +72,7 @@ describe('applyClockResolutionEffects', () => {
 
   it('returns no changes for an empty effects list', async () => {
     const db = makeDb()
-    const changes = await applyClockResolutionEffects(db as any, 1, sourceClock, [], locations, factions)
+    const changes = await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, [], locations, factions)
     expect(changes).toEqual([])
     expect(db.clock.create).not.toHaveBeenCalled()
   })
@@ -82,7 +83,7 @@ describe('applyClockResolutionEffects', () => {
       const effects: ClockResolutionEffect[] = [
         { type: 'SPAWN_CLOCK', name: 'Astral Contamination Spreads', consequence: 'The breach widens.', category: 'urgent', maxTicks: 5, reason: 'unresolved threat' },
       ]
-      const changes = await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, factions)
+      const changes = await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, factions)
 
       expect(db.clock.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -104,7 +105,7 @@ describe('applyClockResolutionEffects', () => {
       const chainedSource = { ...sourceClock, agendaId: 'root-clock-id' }
       const effects: ClockResolutionEffect[] = [{ type: 'SPAWN_CLOCK', name: 'Stage 3', consequence: 'x', reason: 'y' }]
 
-      await applyClockResolutionEffects(db as any, 1, chainedSource, effects, locations, factions)
+      await applyClockResolutionEffects(db as any, simTurn(1), chainedSource, effects, locations, factions)
 
       expect(db.clock.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ agendaId: 'root-clock-id' }),
@@ -114,14 +115,14 @@ describe('applyClockResolutionEffects', () => {
     it('clamps maxTicks into the 3-8 bound even if given an out-of-range value', async () => {
       const db = makeDb()
       const effects: ClockResolutionEffect[] = [{ type: 'SPAWN_CLOCK', name: 'x', consequence: 'y', maxTicks: 999, reason: 'z' }]
-      await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, factions)
+      await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, factions)
       expect(db.clock.create).toHaveBeenCalledWith({ data: expect.objectContaining({ maxTicks: 8 }) })
     })
 
     it('skips an effect missing name or consequence rather than creating a broken clock', async () => {
       const db = makeDb()
       const effects: ClockResolutionEffect[] = [{ type: 'SPAWN_CLOCK', reason: 'z' } as ClockResolutionEffect]
-      const changes = await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, factions)
+      const changes = await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, factions)
       expect(db.clock.create).not.toHaveBeenCalled()
       expect(changes).toEqual([])
     })
@@ -133,7 +134,7 @@ describe('applyClockResolutionEffects', () => {
       const effects: ClockResolutionEffect[] = [
         { type: 'LOCATION_EFFECT', targetLocationName: 'Greenstone', conditionDelta: -10, reason: 'fallout' },
       ]
-      const changes = await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, factions)
+      const changes = await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, factions)
 
       expect(db.location.update).toHaveBeenCalledWith({ where: { id: 'loc1' }, data: { conditionScore: 50 } })
       expect(changes).toHaveLength(1)
@@ -152,7 +153,7 @@ describe('applyClockResolutionEffects', () => {
       const effects: ClockResolutionEffect[] = [
         { type: 'LOCATION_EFFECT', targetLocationName: 'Nonexistent Ruins', conditionDelta: -10, reason: 'x' },
       ]
-      const changes = await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, factions)
+      const changes = await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, factions)
       expect(db.location.update).not.toHaveBeenCalled()
       expect(changes).toEqual([])
     })
@@ -162,7 +163,7 @@ describe('applyClockResolutionEffects', () => {
       const effects: ClockResolutionEffect[] = [
         { type: 'LOCATION_EFFECT', targetLocationName: 'Greenstone', conditionDelta: -999, reason: 'x' },
       ]
-      await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, factions)
+      await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, factions)
       // 60 - 15 = 45, not 60 - 999 clamped to 0 — the delta itself is bounded before applying.
       expect(db.location.update).toHaveBeenCalledWith({ where: { id: 'loc1' }, data: { conditionScore: 45 } })
     })
@@ -173,7 +174,7 @@ describe('applyClockResolutionEffects', () => {
       const effects: ClockResolutionEffect[] = [
         { type: 'LOCATION_EFFECT', targetLocationName: 'Greenstone', conditionDelta: -15, reason: 'x' },
       ]
-      await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, factions)
+      await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, factions)
       expect(db.location.update).toHaveBeenCalledWith({ where: { id: 'loc1' }, data: { conditionScore: 0 } })
     })
   })
@@ -192,7 +193,7 @@ describe('applyClockResolutionEffects', () => {
           reason: 'directly involved',
         },
       ]
-      const changes = await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, factions)
+      const changes = await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, factions)
 
       expect(db.faction.update).toHaveBeenCalledWith({
         where: { id: 'fac1' },
@@ -207,7 +208,7 @@ describe('applyClockResolutionEffects', () => {
       const effects: ClockResolutionEffect[] = [
         { type: 'FACTION_EFFECT', targetFactionName: 'The Nonexistent Cabal', resourceDelta: 5, reason: 'x' },
       ]
-      const changes = await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, factions)
+      const changes = await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, factions)
       expect(db.faction.update).not.toHaveBeenCalled()
       expect(changes).toEqual([])
     })
@@ -218,7 +219,7 @@ describe('applyClockResolutionEffects', () => {
       const effects: ClockResolutionEffect[] = [
         { type: 'FACTION_EFFECT', targetFactionName: 'Astral Survey Office', resourceDelta: -10, stabilityDelta: -10, militaryDelta: -10, threatLevelDelta: -1, reason: 'x' },
       ]
-      await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, lowFaction)
+      await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, lowFaction)
       expect(db.faction.update).toHaveBeenCalledWith({
         where: { id: 'fac1' },
         data: { resources: 0, stability: 0, military: 0, threatLevel: 1 },
@@ -233,7 +234,7 @@ describe('applyClockResolutionEffects', () => {
       { type: 'LOCATION_EFFECT', targetLocationName: 'Greenstone', conditionDelta: -1, reason: 'b' },
       { type: 'LOCATION_EFFECT', targetLocationName: 'The Old Mill', conditionDelta: -1, reason: 'c' },
     ]
-    const changes = await applyClockResolutionEffects(db as any, 1, sourceClock, effects, locations, factions)
+    const changes = await applyClockResolutionEffects(db as any, simTurn(1), sourceClock, effects, locations, factions)
     expect(changes).toHaveLength(2)
   })
 })
@@ -242,14 +243,14 @@ describe('resolveGenericClockEffects', () => {
   const clock = { id: 'clock1', name: 'The Silver Landing', description: null, consequence: 'Hazardous fallout spreads.', gmNotes: null, category: 'urgent', agendaId: null }
 
   it('returns immediately with no queries when there are no completed clocks', async () => {
-    const result = await resolveGenericClockEffects('camp1', 1, [])
+    const result = await resolveGenericClockEffects('camp1', simTurn(1), [])
     expect(result).toEqual([])
     expect(mocks.campaignFindUnique).not.toHaveBeenCalled()
   })
 
   it('skips a clock the AI returns null or empty effects for, without touching the event pipeline', async () => {
     mocks.generateClockResolutionEffects.mockResolvedValue(null)
-    const result = await resolveGenericClockEffects('camp1', 1, [clock])
+    const result = await resolveGenericClockEffects('camp1', simTurn(1), [clock])
     expect(result).toEqual([])
     expect(mocks.persistWorldEvents).not.toHaveBeenCalled()
   })
@@ -262,7 +263,7 @@ describe('resolveGenericClockEffects', () => {
       { type: 'FACTION_EFFECT', targetFactionName: 'Astral Survey Office', resourceDelta: 5, reason: 'x' },
     ])
 
-    const result = await resolveGenericClockEffects('camp1', 1, [clock])
+    const result = await resolveGenericClockEffects('camp1', simTurn(1), [clock])
 
     expect(mocks.factionUpdate).toHaveBeenCalledWith({
       where: { id: 'fac1' },
@@ -280,7 +281,7 @@ describe('resolveGenericClockEffects', () => {
       .mockRejectedValueOnce(new Error('API exploded'))
       .mockResolvedValueOnce([{ type: 'FACTION_EFFECT', targetFactionName: 'Astral Survey Office', resourceDelta: 5, reason: 'x' }])
 
-    await expect(resolveGenericClockEffects('camp1', 1, [clock, clock2])).resolves.not.toThrow()
+    await expect(resolveGenericClockEffects('camp1', simTurn(1), [clock, clock2])).resolves.not.toThrow()
     expect(mocks.persistWorldEvents).toHaveBeenCalledTimes(1)
   })
 })

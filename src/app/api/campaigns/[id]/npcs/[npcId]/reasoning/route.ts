@@ -13,6 +13,7 @@ import { decideNpcTick } from '@/lib/game/tick/npcTick'
 import type { AdjacencyEdge } from '@/lib/game/worldGraph'
 import { visibleTo } from '@/lib/api/visibility'
 import { applyWhatIf, type WhatIfSpec } from '@/lib/api/whatIf'
+import { simTurn } from '@/lib/game/turnClock'
 
 /**
  * #427: goalProgress is the one numeric input decideNpcTick reads that a
@@ -45,7 +46,7 @@ export async function GET(
           faction: { select: { name: true, goal: true, isActive: true } },
         },
       }),
-      prisma.worldMeta.findUnique({ where: { campaignId }, select: { currentTurnNumber: true } }),
+      prisma.worldMeta.findUnique({ where: { campaignId }, select: { simulationTurn: true } }),
       // decideNpcTick's real caller (tickNpcs) always restricts candidate
       // locations to discovered ones, unconditionally — this isn't a
       // viewer-visibility gate (the route is already admin-only), it's the
@@ -74,11 +75,17 @@ export async function GET(
     const whatIf = applyWhatIf(npc, request.nextUrl.searchParams, NPC_WHAT_IF)
     const projected = whatIf.snapshot
 
-    const decision = decideNpcTick(projected, worldMeta.currentTurnNumber, discoveredLocationNames, factionContext, locationGraph)
+    // #437: the SIMULATION turn — see turnClock.ts. This panel exists to
+    // show what the tick WOULD decide, and every tick decider is called
+    // with ctx.turnNumber (the sim clock). Reading the scene counter here
+    // made the preview and the reality diverge on exactly the campaigns
+    // where the two clocks had drifted, on the one feature whose entire
+    // purpose is showing reality.
+    const decision = decideNpcTick(projected, simTurn(worldMeta.simulationTurn), discoveredLocationNames, factionContext, locationGraph)
 
     return NextResponse.json({
       npc: { id: npc.id, name: npc.name },
-      turnNumber: worldMeta.currentTurnNumber,
+      turnNumber: worldMeta.simulationTurn,
       decision,
       whatIf: {
         overridden: whatIf.overridden,

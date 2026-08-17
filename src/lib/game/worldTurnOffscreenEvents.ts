@@ -12,10 +12,12 @@ import { createCampaignMemory, memoryDedupeKey } from '@/lib/ai/memoryCreation'
 import { EventVisibility, FactionGoal } from '@prisma/client'
 import { PendingAmbition } from './tick/types'
 import { AMBITION_CATEGORY_OPTIONS } from './tick/ambitionTick'
+import { sceneTurn, simTurn, type SimTurn } from './turnClock'
 
 export async function generateOffscreenEvents(
   campaignId: string,
-  currentTurn: number,
+  // #437: the SIMULATION turn — this is one phase of a world turn.
+  currentTurn: SimTurn,
   advancedClocks: any[],
   completedClocks: any[],
   completedGoalNpcs: Array<{ npcId: string; npcName: string; completedGoal: string | number }> = [],
@@ -137,6 +139,18 @@ export async function generateOffscreenEvents(
       (aiResult.world_updates?.location_changes?.length || 0) > 0
 
     if (hasWorldUpdates) {
+      // #437: applyWorldUpdates' third argument is the SCENE counter, and
+      // this call passed it the simulation turn. Nothing read it on this
+      // path — the offscreen payload is built literally above and carries
+      // none of the scene-scoped change types — so the wrong unit was
+      // inert, which is exactly the kind of dormant crossing that becomes a
+      // real bug the day someone adds pc_changes or new_timeline_events to
+      // the offscreen payload. One extra column on a read this function
+      // already makes below buys the honest value.
+      const sceneMeta = await prisma.worldMeta.findUnique({
+        where: { campaignId },
+        select: { currentTurnNumber: true },
+      })
       const applied = await applyWorldUpdates(
         campaignId,
         {
@@ -147,7 +161,7 @@ export async function generateOffscreenEvents(
             location_changes: aiResult.world_updates?.location_changes,
           },
         },
-        currentTurn,
+        sceneTurn(sceneMeta?.currentTurnNumber ?? 0),
         // Fog of war: an offscreen event happening in the background is not
         // the party witnessing anything — it must not reveal entities.
         false,

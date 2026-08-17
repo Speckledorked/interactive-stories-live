@@ -147,6 +147,25 @@ export async function applyQuestChanges(
     }
   }
 
+  // #445 (F-06): quests registered by an EARLIER entry in this same batch.
+  //
+  // #383 closed the single-entry mint-and-collect — creation now refuses a
+  // terminal status outright. It did not close the two-entry version:
+  // quest_changes is an unbounded array processed sequentially inside one
+  // transaction, and the findFirst below sees rows created earlier in the
+  // same loop. So entry 1 invents "Retrieve the Ashen Ledger" and entry 2
+  // completes it with a reward_grant, through the `existing` branch, with
+  // every gate satisfied.
+  //
+  // Both gates that branch relies on are gates on HISTORY.
+  // isLegalQuestStatusTransition asks what the quest's real status was, and
+  // questAcquisitionAllowed asks whether this party could have taken it on.
+  // A quest that has been ACTIVE for zero elapsed time answers both
+  // questions vacuously — there is nothing for them to check. Names are
+  // free text, so this was one payout per unique name, unbounded, through
+  // the same prompt surface as everything else.
+  const registeredThisBatch = new Set<string>()
+
   for (const questChange of questChanges) {
     if (!questChange?.name) continue
     const changes = questChange.changes || {}
@@ -191,14 +210,32 @@ export async function applyQuestChanges(
       if (progressLine) {
         updateData.progressLog = appendBounded(existing.progressLog, progressLine, QUEST_PROGRESS_BOUNDS)
       }
-      let justCompleted = changes.status === 'COMPLETED' && existing.status !== 'COMPLETED'
+      // #445 (F-06): a quest this same batch invented cannot also resolve
+      // in it. Refused at the STATUS level rather than only at the payout,
+      // so the failure-cost side of the ledger closes the same way — and so
+      // the quest survives ACTIVE for a real next report to complete
+      // through the gated path, exactly as #383 said it should.
+      //
+      // Read into a local rather than mutating `changes`, which is a live
+      // reference into the AI response other appliers still read.
+      const sameBatchResolution =
+        registeredThisBatch.has(existing.name.toLowerCase()) &&
+        !!changes.status && changes.status !== 'ACTIVE'
+      if (sameBatchResolution) {
+        console.warn(
+          `  🚫 quest "${existing.name}" was registered and reported as ${changes.status} in the same batch — left ACTIVE; a reward for it must come through a real completion`
+        )
+      }
+      const reportedStatus = sameBatchResolution ? undefined : changes.status
+
+      let justCompleted = reportedStatus === 'COMPLETED' && existing.status !== 'COMPLETED'
       // Same once-only shape as justCompleted, and for the same reason: a
       // repeated report of an already-failed quest must not charge the
       // party twice for one broken promise.
       let justFailed =
-        (changes.status === 'FAILED' || changes.status === 'ABANDONED') &&
-        existing.status !== changes.status
-      if (changes.status && changes.status !== existing.status) {
+        (reportedStatus === 'FAILED' || reportedStatus === 'ABANDONED') &&
+        existing.status !== reportedStatus
+      if (reportedStatus && reportedStatus !== existing.status) {
         // #281: the concurrency guard further down protects against a
         // RACE, not against an illegal transition — without this,
         // reporting status: 'COMPLETED' for a quest whose real status is
@@ -207,13 +244,13 @@ export async function applyQuestChanges(
         // the failure cost already charged when it failed.
         // COMPLETED/FAILED/ABANDONED are each meant to be a one-way,
         // terminal mark — see isLegalQuestStatusTransition's own comment.
-        if (!isLegalQuestStatusTransition(existing.status as QuestStatus, changes.status as QuestStatus)) {
-          console.log(`  🚫 "${existing.name}": illegal quest status transition ${existing.status} → ${changes.status} refused`)
+        if (!isLegalQuestStatusTransition(existing.status as QuestStatus, reportedStatus as QuestStatus)) {
+          console.log(`  🚫 "${existing.name}": illegal quest status transition ${existing.status} → ${reportedStatus} refused`)
           justCompleted = false
           justFailed = false
         } else {
           // Acquisition gate: only a transition INTO active is checked.
-          const becomingActive = changes.status === 'ACTIVE' && existing.status !== 'ACTIVE'
+          const becomingActive = reportedStatus === 'ACTIVE' && existing.status !== 'ACTIVE'
           // The giver may have just been (re-)resolved above in this same
           // pass — prefer that over the stale row, same pattern the reward/
           // failure-cost lookups below already use.
@@ -224,8 +261,8 @@ export async function applyQuestChanges(
           if (becomingActive && !acquisition.allowed) {
             console.log(`  🌑 "${existing.name}" refused to this party — ${acquisition.reason}`)
           } else {
-            updateData.status = changes.status
-            if (changes.status !== 'ACTIVE') updateData.resolvedAt = new Date()
+            updateData.status = reportedStatus
+            if (reportedStatus !== 'ACTIVE') updateData.resolvedAt = new Date()
           }
         }
       }
@@ -266,7 +303,7 @@ export async function applyQuestChanges(
             justCompleted = false
             justFailed = false
           } else {
-            console.log(`  🎯 Updated quest: ${existing.name}${changes.status ? ` (${changes.status})` : ''}`)
+            console.log(`  🎯 Updated quest: ${existing.name}${reportedStatus ? ` (${reportedStatus})` : ''}`)
           }
         } else {
           await tx.quest.update({ where: { id: existing.id }, data: updateData })
@@ -302,7 +339,7 @@ export async function applyQuestChanges(
             givenByFactionId:
               (updateData.givenByFactionId as string | null | undefined) ?? existing.givenByFactionId,
           },
-          changes.status as QuestFailureStatus
+          reportedStatus as QuestFailureStatus
         )
         for (const line of failureLog) console.log(`  💔 ${line}`)
       }
@@ -364,6 +401,7 @@ export async function applyQuestChanges(
             `  🚫 quest "${questChange.name}" was reported as ${changes.status} on the turn it was introduced — registered ACTIVE instead; a reward for it must come through a real completion`
           )
         }
+        registeredThisBatch.add(questChange.name.toLowerCase())
         console.log(`  🎯 Registered quest: ${questChange.name}`)
       } catch (error) {
         if (!isUniqueConstraintViolation(error)) throw error

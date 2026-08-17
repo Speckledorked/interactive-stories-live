@@ -26,6 +26,7 @@
 // specific character has personally experienced.
 
 import { callChatCompletion } from './chatCompletion'
+import { delimitPlayerText, PLAYER_TEXT_PROMPT_RULE } from './playerText'
 import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { buildWorldSummaryForAI } from './worldState'
@@ -56,7 +57,9 @@ Rules:
 - Two different kinds of question need different answers. (1) "How does [a system/mechanic/rule of this setting] actually work?" is a question about the SETTING ITSELF — answer it from the campaign lore below if it's covered there, as established fact, even if ${ctx.characterName} hasn't personally experienced it yet in play. (2) "What do I see/know/notice right now?" is a question about THIS CHARACTER's current in-fiction perception — answer only with what ${ctx.characterName} could actually perceive or know right now, given the scene and their own knowledge below.
 - If the honest answer is "you don't know" or "you'd have to act to find out," say that plainly — never invent information just to be helpful. This applies to type (2) questions; a type (1) question about how the setting works should be answered directly from lore when the lore covers it, not deflected as something the character has to discover first.
 - Be brief and concrete: 1-3 sentences. This is a fast clarification, not narration.
-- Never break the fourth wall about game mechanics (dice, stats, rules) unless the player's question is itself about mechanics.`
+- Never break the fourth wall about game mechanics (dice, stats, rules) unless the player's question is itself about mechanics.
+
+${PLAYER_TEXT_PROMPT_RULE}`
 
   const loreBlock = ctx.relevantLore.length > 0
     ? `\n\nCAMPAIGN LORE (canon — treat as established fact if it answers the question):\n${ctx.relevantLore.map(l => `- ${l.title}: ${l.content}`).join('\n')}`
@@ -70,7 +73,8 @@ ${ctx.sceneText || '(no scene text yet)'}
 ${ctx.characterName.toUpperCase()}'S KNOWLEDGE:
 ${JSON.stringify(ctx.characterSummary, null, 2)}${loreBlock}
 
-${ctx.characterName}'s question: "${ctx.question}"
+${ctx.characterName}'s question:
+${delimitPlayerText(ctx.question)}
 
 Answer directly, as the GM speaking to the player out of character.`
 

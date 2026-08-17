@@ -13,9 +13,10 @@ import { prisma } from '@/lib/prisma'
 import { tickWars } from '../warTick'
 import type { TickContext } from '../types'
 import { factionTieRows } from './tieFixtures'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(5), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 function makeFaction(id: string, overrides: Record<string, any> = {}) {
@@ -74,7 +75,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    await tickWars(baseCtx({ turnNumber: 2 }))
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     // Attacker side total = 80, defender side total = 30 — a much bigger
     // edge than either single attacker faction (40) vs defender (30) alone
@@ -109,7 +110,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    await tickWars(baseCtx({ turnNumber: 2 }))
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     // 3 living participants -> 3 attrition writes, not 2.
     const attritionUpdates = vi.mocked(prisma.faction.update).mock.calls.filter((c) =>
@@ -147,7 +148,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+    const result = await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     expect(result.changes.some((c) => c.field === 'warResolved' && c.newValue === 'attacker')).toBe(true)
     const stabilityUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
@@ -188,7 +189,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    await tickWars(baseCtx({ turnNumber: 2 }))
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     const loserInfluenceUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
       (c) => (c[0] as any).where.id === 'def-a' && 'influence' in (c[0] as any).data
@@ -222,7 +223,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    await tickWars(baseCtx({ turnNumber: 2 }))
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     const loserInfluenceUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
       (c) => (c[0] as any).where.id === 'def-a' && 'influence' in (c[0] as any).data
@@ -258,7 +259,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+    const result = await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     expect(result.changes.some((c) => c.field === 'warResolved' && c.newValue === 'stalemate')).toBe(true)
     const anyInfluenceUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
@@ -289,7 +290,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+    const result = await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     expect(result.changes.some((c) => c.field === 'warResolved' && c.newValue === 'defender')).toBe(true)
     const stabilityUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
@@ -323,7 +324,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    await tickWars(baseCtx({ turnNumber: 2 }))
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     const defAStability = vi.mocked(prisma.faction.update).mock.calls.find(
       (c) => (c[0] as any).where.id === 'def-a' && 'stability' in (c[0] as any).data
@@ -357,7 +358,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    await tickWars(baseCtx({ turnNumber: 2 }))
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     const stabilityUpdate = vi.mocked(prisma.faction.update).mock.calls.find(
       (c) => (c[0] as any).where.id === 'def-a' && 'stability' in (c[0] as any).data
@@ -387,7 +388,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    const result = await tickWars(baseCtx({ turnNumber: 3, dryRun: true }))
+    const result = await tickWars(baseCtx({ turnNumber: simTurn(3), dryRun: true }))
 
     expect(prisma.war.update).not.toHaveBeenCalled()
     expect(prisma.faction.update).not.toHaveBeenCalled()
@@ -418,7 +419,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+    const result = await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     expect(prisma.war.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'RESOLVED', outcome: 'stalemate' }) })
@@ -456,7 +457,7 @@ describe('tickWars coalitions', () => {
     // updateMany matches zero rows rather than throwing, which is the point.
     vi.mocked(prisma.location.updateMany).mockResolvedValueOnce({ count: 0 } as any)
 
-    await expect(tickWars(baseCtx({ turnNumber: 2 }))).resolves.toBeDefined()
+    await expect(tickWars(baseCtx({ turnNumber: simTurn(2) }))).resolves.toBeDefined()
 
     expect(prisma.war.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'RESOLVED' }) })
@@ -487,7 +488,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
 
-    await tickWars(baseCtx({ turnNumber: 2 }))
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     // The war continues — only the living attacker-side faction (att-a)
     // pays attrition, the collapsed partner does not.
@@ -527,7 +528,7 @@ describe('tickWars coalitions', () => {
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
     vi.mocked(prisma.location.findUnique).mockResolvedValueOnce({ id: 'loc-1', name: 'The Keep' } as any)
 
-    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+    const result = await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     // Aggregate attacker military (95+95=190) vs defender (5) is such a
     // lopsided edge that momentum clamps to the max +20 swing regardless of
@@ -564,7 +565,7 @@ describe('tickWars coalitions', () => {
     }] as any)
     vi.mocked(prisma.location.findUnique).mockResolvedValueOnce(null as any)
 
-    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+    const result = await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     expect(result.changes.some((c) => c.field === 'warResolved')).toBe(true)
     expect(
@@ -599,7 +600,7 @@ describe('tickWars coalitions', () => {
       return Promise.resolve([]) // the "declare new wars" candidate list — irrelevant here
     }) as any)
 
-    const result = await tickWars(baseCtx({ turnNumber: 2 }))
+    const result = await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     expect(prisma.warParticipant.create).toHaveBeenCalledWith({
       data: { warId: 'war-1', factionId: 'ally-1', side: 'ATTACKER', joinedTurn: 2 },
@@ -648,7 +649,7 @@ describe('tickWars coalitions', () => {
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([warOne, warTwo] as any)
 
-    await tickWars(baseCtx({ turnNumber: 2 }))
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     expect(prisma.warParticipant.create).not.toHaveBeenCalled()
   })
@@ -664,7 +665,7 @@ describe('tickWars coalitions', () => {
     ] as any)
     vi.mocked(prisma.war.create).mockResolvedValueOnce({ id: 'new-war-1' } as any)
 
-    await tickWars(baseCtx({ turnNumber: 2 }))
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 
     expect(prisma.warParticipant.createMany).toHaveBeenCalledWith({
       data: [

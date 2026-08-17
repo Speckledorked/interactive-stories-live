@@ -26,6 +26,7 @@ import { applyQuestChanges } from './worldUpdaters/quests'
 import { applyBargainOffers } from './worldUpdaters/bargainOffers'
 import { storeGmNotesForTurn } from './worldUpdaters/worldMetaNotes'
 import { currentSimulationTurn } from './tick/simulationClock'
+import { simTurn, type SimTurn, type SceneTurn } from './turnClock'
 import { persistWorldEvents } from './tick/worldEventLog'
 import type { WorldChange } from './tick/types'
 
@@ -56,7 +57,14 @@ export interface AppliedWorldUpdates {
 export async function applyWorldUpdates(
   campaignId: string,
   aiResponse: AIGMResponse,
-  currentTurnNumber: number,
+  // #437: the SCENE counter (WorldMeta.currentTurnNumber). Reaches only the
+  // per-character/quest/bargain JSON blobs below, all of which are scene-
+  // scoped by nature and compared against this same counter on read. The
+  // two SHARED-HISTORY writes this function makes — TimelineEvent and
+  // EventWitness — are stamped on the simulation clock instead, via
+  // simulationTurn() below; see turnClock.ts for why every persisted turn
+  // column is on that clock.
+  currentTurnNumber: SceneTurn,
   // Fog of war: true when this call is resolving a scene the players are
   // actually in — the party witnessing an NPC/faction is what reveals them,
   // so isDiscovered only flips to true on this path. Offscreen background
@@ -97,6 +105,17 @@ export async function applyWorldUpdates(
   // other call site of this function).
   const worldChanges: WorldChange[] = []
 
+  // #437: read at most once per call, and only when something shared-history
+  // actually needs it — a scene with no timeline events and no significant
+  // changes still must not pay for an extra WorldMeta round-trip.
+  let simulationTurnMemo: SimTurn | undefined
+  const simulationTurn = async (): Promise<SimTurn> => {
+    if (simulationTurnMemo === undefined) {
+      simulationTurnMemo = simTurn(await currentSimulationTurn(campaignId))
+    }
+    return simulationTurnMemo
+  }
+
   try {
     await prisma.$transaction(async (tx) => {
       // Lazily fetched the first time a corruption_change or bargain_offer
@@ -116,7 +135,13 @@ export async function applyWorldUpdates(
 
       // 1. Create timeline events
       if (world_updates.new_timeline_events) {
-        await applyTimelineEventChanges(tx, campaignId, currentTurnNumber, world_updates.new_timeline_events, inGameDayNumber)
+        // #437: TimelineEvent.turnNumber is a sim-clock column. It used to
+        // take whatever this function was called with, so a scene-resolved
+        // event was stamped on the scene counter and an offscreen one on the
+        // sim counter — then the prompt's "last 10 events" ordered the two
+        // together, across incomparable units, letting one source crowd the
+        // other out entirely.
+        await applyTimelineEventChanges(tx, campaignId, await simulationTurn(), world_updates.new_timeline_events, inGameDayNumber)
       }
 
       // Fetched once per batch and resolved against in-memory (exact -> a
@@ -228,8 +253,8 @@ export async function applyWorldUpdates(
       // npcDispositionTick; mixing the two counters into one column makes
       // every window over it meaningless. Several scenes resolving between
       // two world turns legitimately share one simulation turn.
-      const simulationTurn = await currentSimulationTurn(campaignId)
-      const { events } = await persistWorldEvents(campaignId, simulationTurn, worldChanges)
+      const eventTurn = await simulationTurn()
+      const { events } = await persistWorldEvents(campaignId, eventTurn, worldChanges)
 
       // #101: everyone present in this scene WITNESSED whatever significant
       // things just happened in it — this is the scene's whole party, not
@@ -249,7 +274,14 @@ export async function applyWorldUpdates(
                   worldEventId,
                   characterId,
                   grade: 'WITNESSED' as const,
-                  turnNumber: currentTurnNumber,
+                  // #437: the SIMULATION turn, same as the WorldEvent this
+                  // row witnesses — resolved by the memo above, for exactly
+                  // the reason the #374 comment there gives. This stamped
+                  // currentTurnNumber, so EventWitness.turnNumber had two
+                  // writers on two clocks (informationTick writes the sim
+                  // turn) and the recency window in worldSummary compared
+                  // the mixture against a third.
+                  turnNumber: eventTurn,
                 }))
               ),
               skipDuplicates: true,
@@ -277,7 +309,11 @@ export async function applyWorldUpdates(
  */
 export async function checkAndResolveCompletedClocks(
   campaignId: string,
-  currentTurnNumber: number,
+  // #437: the SIMULATION turn. Only ever called from runWorldTurn, which
+  // works in world turns — the parameter was named after the scene counter
+  // and the TimelineEvent rows it writes are sim-clock, so the name was the
+  // only thing wrong here. Branded so it stays that way.
+  simulationTurn: SimTurn,
   inGameDayNumber?: number
 ): Promise<Clock[]> {
   console.log('🔍 Checking for completed clocks...')
@@ -307,7 +343,7 @@ export async function checkAndResolveCompletedClocks(
       await prisma.timelineEvent.create({
         data: {
           campaignId,
-          turnNumber: currentTurnNumber,
+          turnNumber: simulationTurn,
           title: `${clock.name} - Complete!`,
           summaryPublic: clock.consequence,
           summaryGM: `Clock "${clock.name}" reached ${clock.maxTicks} ticks. ${clock.gmNotes}`,

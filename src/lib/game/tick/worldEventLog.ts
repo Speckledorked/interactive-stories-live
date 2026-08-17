@@ -13,6 +13,7 @@
 import { prisma } from '@/lib/prisma'
 import type { WorldEventActorType, WorldEventTargetType } from '@prisma/client'
 import { WorldChange } from './types'
+import type { SimTurn } from '@/lib/game/turnClock'
 
 function actorTypeFor(change: WorldChange): WorldEventActorType {
   // 'sceneResolution' (#175) is the main per-exchange AI GM path — every
@@ -41,7 +42,7 @@ function typeFor(change: WorldChange): string {
  * deterministic, so a replay produces the same change list in the same
  * order and therefore the same ordinals.
  */
-export function worldEventDedupeKeys(turnNumber: number, changes: WorldChange[]): string[] {
+export function worldEventDedupeKeys(turnNumber: SimTurn, changes: WorldChange[]): string[] {
   const seen = new Map<string, number>()
   return changes.map((change) => {
     const identity = [
@@ -77,7 +78,11 @@ export interface PersistedWorldEvent {
  */
 export async function persistWorldEvents(
   campaignId: string,
-  turnNumber: number,
+  // #437: the SIMULATION turn. This is the funnel every sim-clock history
+  // write goes through, so branding it here is what makes a scene counter
+  // reaching one of these columns a compile error rather than a silently
+  // wrong row. See turnClock.ts.
+  turnNumber: SimTurn,
   changes: WorldChange[]
 ): Promise<{ count: number; events: PersistedWorldEvent[] }> {
   if (changes.length === 0) return { count: 0, events: [] }

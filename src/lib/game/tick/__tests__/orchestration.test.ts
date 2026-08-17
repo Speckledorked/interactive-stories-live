@@ -114,6 +114,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { runWorldTick } from '../../worldTick'
 import { prisma } from '@/lib/prisma'
+import { simTurn } from '@/lib/game/turnClock'
 
 beforeEach(() => {
   callOrder.length = 0
@@ -130,7 +131,7 @@ const at = (name: string) => callOrder.indexOf(name)
 
 describe('runWorldTick — the handler sequence', () => {
   it('runs every registered handler exactly once', async () => {
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
 
     expect(callOrder).toHaveLength(20)
     expect(new Set(callOrder).size).toBe(20)
@@ -146,7 +147,7 @@ describe('runWorldTick — the handler sequence', () => {
     // relationshipTick writes from the previous turn's goals; factionTick
     // then reads a fresh relationship to decide whether DESTABILIZE_RIVAL
     // is even reachable. Swap these and that check reads stale data.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('relationships')).toBeLessThan(at('factions'))
   })
 
@@ -154,7 +155,7 @@ describe('runWorldTick — the handler sequence', () => {
     // tickBeliefDrift (#104) updates Faction.beliefVector from the prior
     // turn's WorldEvent history; tickFactions's goal reassessment then
     // reads the freshly-drifted belief the same turn it changed.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('relationships')).toBeLessThan(at('beliefDrift'))
     expect(at('beliefDrift')).toBeLessThan(at('factions'))
   })
@@ -164,7 +165,7 @@ describe('runWorldTick — the handler sequence', () => {
     // WorldEvent history; tickFactions' collapse-defection split (loyalty)
     // and tickFactionLeadership's succession scoring (ambition) then both
     // read the freshly-drifted disposition the same turn it changed.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('beliefDrift')).toBeLessThan(at('npcDisposition'))
     expect(at('npcDisposition')).toBeLessThan(at('factions'))
     expect(at('npcDisposition')).toBeLessThan(at('leadership'))
@@ -174,12 +175,12 @@ describe('runWorldTick — the handler sequence', () => {
     // When a faction collapses and its members defect to a rival,
     // leadershipTick can give that rival a leader immediately instead of
     // leaving it leaderless for a full turn.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('factions')).toBeLessThan(at('leadership'))
   })
 
   it('runs wars after faction drift and leadership, so momentum reads current strength', async () => {
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('leadership')).toBeLessThan(at('wars'))
     expect(at('factions')).toBeLessThan(at('wars'))
   })
@@ -189,12 +190,12 @@ describe('runWorldTick — the handler sequence', () => {
     // ESCALATING war. Running wars first means the rows exist by the time
     // ambitions are weighed, so nobody commits to an unrelated ambition
     // the same tick they go to war.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('wars')).toBeLessThan(at('ambitions'))
   })
 
   it('runs location condition right after wars, so a war resolved this tick no longer counts as "at war"', async () => {
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('wars')).toBeLessThan(at('locationCondition'))
   })
 
@@ -203,7 +204,7 @@ describe('runWorldTick — the handler sequence', () => {
     // tick can transfer a location), and a loyalty-driven flip this same
     // turn must be visible to tickLocationCondition's own war-presence
     // check, not lag a full extra turn.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('wars')).toBeLessThan(at('territoryLoyalty'))
     expect(at('territoryLoyalty')).toBeLessThan(at('locationCondition'))
   })
@@ -213,7 +214,7 @@ describe('runWorldTick — the handler sequence', () => {
     // tickLocationCondition already reads, and must land before ambitions
     // so a faction's logistics-driven resource gain is visible to
     // ambition commitment's resource threshold the same turn.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('locationCondition')).toBeLessThan(at('logistics'))
     expect(at('logistics')).toBeLessThan(at('ambitions'))
   })
@@ -221,7 +222,7 @@ describe('runWorldTick — the handler sequence', () => {
   it('derives NPC ties after NPCs move, then schemes from those ties, all in one pass', async () => {
     // Ties derive from faction/NPC state; schemes then use the ties this
     // turn established rather than waiting an extra tick.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('npcs')).toBeLessThan(at('socialTies'))
     expect(at('socialTies')).toBeLessThan(at('jointSchemes'))
   })
@@ -230,7 +231,7 @@ describe('runWorldTick — the handler sequence', () => {
     // tickMigration (#110) reads each NPC's currentLocation as of THIS
     // turn's tickNpcs pass, not last turn's, and depends on
     // tickLocationCondition's conditionScore from earlier in the same pass.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('npcs')).toBeLessThan(at('migration'))
     expect(at('locationCondition')).toBeLessThan(at('migration'))
   })
@@ -239,7 +240,7 @@ describe('runWorldTick — the handler sequence', () => {
     // tickWake (#103) reads ctx.collapseRoughnessByFactionId/
     // ctx.successionRoughnessByFactionId, set by tickFactions/
     // tickFactionLeadership earlier in this same pass.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('factions')).toBeLessThan(at('wake'))
     expect(at('leadership')).toBeLessThan(at('wake'))
     expect(at('wake')).toBeLessThan(at('economy'))
@@ -249,7 +250,7 @@ describe('runWorldTick — the handler sequence', () => {
     // tickEconomy (#111) creates its own ActiveWake rows (cascading
     // defaults) and must run AFTER tickWake's own decay phase this same
     // tick, or its fresh row would get decayed the same turn it was born.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     expect(at('wake')).toBeLessThan(at('economy'))
     expect(at('economy')).toBeLessThan(at('integrity'))
   })
@@ -257,7 +258,7 @@ describe('runWorldTick — the handler sequence', () => {
   it('validates integrity LAST, after every other handler has written', async () => {
     // tickIntegrity checks the state this turn actually produced — it has
     // to see every other handler's writes, not last turn's.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     for (const name of ['weather', 'season', 'relationships', 'beliefDrift', 'npcDisposition', 'factions', 'leadership', 'wars', 'territoryLoyalty', 'locationCondition', 'logistics', 'ambitions', 'npcs', 'migration', 'information', 'socialTies', 'jointSchemes', 'wake', 'economy']) {
       expect(at(name)).toBeLessThan(at('integrity'))
     }
@@ -268,7 +269,7 @@ describe('runWorldTick — context and accumulation', () => {
   it('resolves caps once and hands the same context to every handler', async () => {
     const { tickWeather } = await import('../weatherTick')
     const { tickNpcs } = await import('../npcTick')
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
 
     expect(prisma.worldMeta.findUnique).toHaveBeenCalledTimes(1)
     const expected = { campaignId: 'camp1', turnNumber: 7, factionCap: 12, npcCap: 30, dryRun: false }
@@ -280,7 +281,7 @@ describe('runWorldTick — context and accumulation', () => {
     ;(prisma.worldMeta.findUnique as any).mockResolvedValue(null)
     const { tickWeather } = await import('../weatherTick')
 
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
 
     const ctx = (tickWeather as any).mock.calls.at(-1)[0]
     expect(Number.isFinite(ctx.factionCap)).toBe(true)
@@ -288,7 +289,7 @@ describe('runWorldTick — context and accumulation', () => {
   })
 
   it('collects every handler\'s changes, losing none', async () => {
-    const result = await runWorldTick('camp1', 7)
+    const result = await runWorldTick('camp1', simTurn(7))
     expect(result.changes).toHaveLength(20)
     expect(result.changes.map(c => c.field).sort()).toEqual([...callOrder].sort())
   })
@@ -297,12 +298,12 @@ describe('runWorldTick — context and accumulation', () => {
     // Only ambitionTick returns these, and the orchestrator has to thread
     // them out to the narration layer — dropping them means an earned
     // ambition silently goes nowhere.
-    const result = await runWorldTick('camp1', 7)
+    const result = await runWorldTick('camp1', simTurn(7))
     expect(result.pendingAmbitions).toEqual([pendingAmbition])
   })
 
   it('reports the turn it was asked to run', async () => {
-    const result = await runWorldTick('camp1', 42)
+    const result = await runWorldTick('camp1', simTurn(42))
     expect(result).toMatchObject({ campaignId: 'camp1', turnNumber: 42 })
     expect(result.timestamp).toBeInstanceOf(Date)
   })
@@ -313,7 +314,7 @@ describe('runWorldTick — the fan-out to all three consumers', () => {
     // These three fan out from one array — the event-bus shape without a
     // pub/sub mechanism. A consumer receiving a different set than its
     // siblings is the failure mode worth pinning.
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
 
     for (const consumer of [persistWorldEvents, logSignificantChanges, syncWikiEntriesForChanges]) {
       expect(consumer).toHaveBeenCalledTimes(1)
@@ -325,7 +326,7 @@ describe('runWorldTick — the fan-out to all three consumers', () => {
   })
 
   it('reports the history count from the logger rather than guessing it', async () => {
-    const result = await runWorldTick('camp1', 7)
+    const result = await runWorldTick('camp1', simTurn(7))
     expect(result.historyEntriesCreated).toBe(3)
   })
 })
@@ -340,7 +341,7 @@ describe('runWorldTick — the fan-out to all three consumers', () => {
 describe('runWorldTick — post-commit consumer resilience', () => {
   it('still calls history and wiki sync when persistWorldEvents throws unexpectedly', async () => {
     persistWorldEvents.mockRejectedValueOnce(new Error('db down'))
-    const result = await runWorldTick('camp1', 7)
+    const result = await runWorldTick('camp1', simTurn(7))
     expect(logSignificantChanges).toHaveBeenCalledTimes(1)
     expect(syncWikiEntriesForChanges).toHaveBeenCalledTimes(1)
     expect(result.campaignId).toBe('camp1')
@@ -348,23 +349,23 @@ describe('runWorldTick — post-commit consumer resilience', () => {
 
   it('still calls wiki sync and reports zero history when logSignificantChanges throws unexpectedly', async () => {
     logSignificantChanges.mockRejectedValueOnce(new Error('embedding service down'))
-    const result = await runWorldTick('camp1', 7)
+    const result = await runWorldTick('camp1', simTurn(7))
     expect(syncWikiEntriesForChanges).toHaveBeenCalledTimes(1)
     expect(result.historyEntriesCreated).toBe(0)
   })
 
   it('does not throw when syncWikiEntriesForChanges fails unexpectedly, and still reports the real history count', async () => {
     syncWikiEntriesForChanges.mockRejectedValueOnce(new Error('db down'))
-    const result = await runWorldTick('camp1', 7)
+    const result = await runWorldTick('camp1', simTurn(7))
     expect(result.historyEntriesCreated).toBe(3)
   })
 
   it('a failure in one consumer does not prevent a later call from behaving normally', async () => {
     persistWorldEvents.mockRejectedValueOnce(new Error('transient'))
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
     persistWorldEvents.mockClear()
 
-    const result = await runWorldTick('camp1', 8)
+    const result = await runWorldTick('camp1', simTurn(8))
     expect(persistWorldEvents).toHaveBeenCalledTimes(1)
     expect(result.historyEntriesCreated).toBe(3)
   })
@@ -382,7 +383,7 @@ describe('runWorldTick — ctx.season wiring (#263)', () => {
     const { tickWeather } = await import('../weatherTick')
     const { tickSeasonalPressure } = await import('../seasonTick')
 
-    await runWorldTick('camp1', 7)
+    await runWorldTick('camp1', simTurn(7))
 
     const weatherCtx = (tickWeather as any).mock.calls[0][0]
     const seasonCtx = (tickSeasonalPressure as any).mock.calls[0][0]
@@ -396,7 +397,7 @@ describe('runWorldTick — ctx.season wiring (#263)', () => {
     ;(prisma.worldMeta.findUnique as any).mockResolvedValue({ factionCap: 12, npcCap: 30 })
     const { tickWeather } = await import('../weatherTick')
 
-    await expect(runWorldTick('camp1', 7)).resolves.toBeDefined()
+    await expect(runWorldTick('camp1', simTurn(7))).resolves.toBeDefined()
     const weatherCtx = (tickWeather as any).mock.calls[0][0]
     expect(['spring', 'summer', 'autumn', 'winter']).toContain(weatherCtx.season)
   })
@@ -404,20 +405,20 @@ describe('runWorldTick — ctx.season wiring (#263)', () => {
 
 describe('runWorldTick — dry run', () => {
   it('still runs every handler, so the preview reflects real decisions', async () => {
-    await runWorldTick('camp1', 7, { dryRun: true })
+    await runWorldTick('camp1', simTurn(7), { dryRun: true })
     expect(callOrder).toHaveLength(20)
   })
 
   it('tells every handler it is a dry run, since each skips its own writes', async () => {
     const { tickFactions } = await import('../factionTick')
-    await runWorldTick('camp1', 7, { dryRun: true })
+    await runWorldTick('camp1', simTurn(7), { dryRun: true })
     expect((tickFactions as any).mock.calls.at(-1)[0].dryRun).toBe(true)
   })
 
   it('persists nothing at all', async () => {
     // The whole guarantee of the admin preview. If any of these fired, a
     // read-only preview would be writing world history.
-    await runWorldTick('camp1', 7, { dryRun: true })
+    await runWorldTick('camp1', simTurn(7), { dryRun: true })
 
     expect(persistWorldEvents).not.toHaveBeenCalled()
     expect(logSignificantChanges).not.toHaveBeenCalled()
@@ -425,7 +426,7 @@ describe('runWorldTick — dry run', () => {
   })
 
   it('returns the changes it would have made, with a zeroed history count', async () => {
-    const result = await runWorldTick('camp1', 7, { dryRun: true })
+    const result = await runWorldTick('camp1', simTurn(7), { dryRun: true })
     expect(result.changes).toHaveLength(20)
     expect(result.historyEntriesCreated).toBe(0)
     expect(result.pendingAmbitions).toEqual([pendingAmbition])

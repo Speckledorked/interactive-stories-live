@@ -42,7 +42,7 @@ describe('GET /campaigns/[id]/factions/[factionId]/reasoning', () => {
 
   it('404s when the faction does not exist in this campaign', async () => {
     db.faction.findFirst.mockResolvedValue(null)
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 5 })
 
     const response = await GET(req(), { params: { id: 'camp1', factionId: 'f1' } })
     expect(response.status).toBe(404)
@@ -53,7 +53,7 @@ describe('GET /campaigns/[id]/factions/[factionId]/reasoning', () => {
       id: 'f1', name: 'Ashcrown', goal: 'CONSOLIDATE', resources: 50, stability: 50, military: 50,
       relationships: {}, beliefVector: null, leaderCharacterId: null,
     })
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 5 })
     db.worldEvent.findFirst.mockResolvedValue(null)
     db.warParticipant.findMany.mockResolvedValue([])
 
@@ -72,7 +72,7 @@ describe('GET /campaigns/[id]/factions/[factionId]/reasoning', () => {
       id: 'f1', name: 'Ashcrown', goal: 'EXPAND', resources: 90, stability: 90, military: 90,
       relationships: {}, beliefVector: null, leaderCharacterId: 'char1',
     })
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 5 })
     db.warParticipant.findMany.mockResolvedValue([])
 
     const response = await GET(req(), { params: { id: 'camp1', factionId: 'f1' } })
@@ -88,7 +88,7 @@ describe('GET /campaigns/[id]/factions/[factionId]/reasoning', () => {
       id: 'f1', name: 'Ashcrown', goal: 'CONSOLIDATE', resources: 80, stability: 50, military: 80,
       relationships: { f2: { type: 'RIVAL', since: 1 } }, beliefVector: null, leaderCharacterId: null,
     })
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 5 })
     db.worldEvent.findFirst.mockResolvedValue(null)
     db.faction.findUnique.mockResolvedValue({ isActive: false })
     db.warParticipant.findMany.mockResolvedValue([])
@@ -106,7 +106,7 @@ describe('GET /campaigns/[id]/factions/[factionId]/reasoning', () => {
       id: 'f1', name: 'Ashcrown', goal: 'CONSOLIDATE', resources: 50, stability: 50, military: 80,
       relationships: {}, beliefVector: null, leaderCharacterId: null,
     })
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 5 })
     db.worldEvent.findFirst.mockResolvedValue(null)
     db.warParticipant.findMany.mockResolvedValue([
       {
@@ -140,7 +140,7 @@ describe('what-if overrides (#427)', () => {
 
   beforeEach(() => {
     db.faction.findFirst.mockResolvedValue({ ...FACTION })
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 7 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 7 })
     db.worldEvent.findFirst.mockResolvedValue(null)
     db.warParticipant.findMany.mockResolvedValue([])
   })

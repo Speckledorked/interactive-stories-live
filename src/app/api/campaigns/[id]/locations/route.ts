@@ -5,6 +5,8 @@ import { visibleTo, isCampaignAdmin } from '@/lib/api/visibility'
 import { getUser } from '@/lib/auth'
 import { redactGmNotesList } from '@/lib/game/visibility'
 import { getCampaignMembership, requireCampaignAdmin } from '@/lib/db/campaignAccess'
+import { deriveResourceSlots } from '@/lib/game/resourceSlots'
+import { attachLocationToGraph } from '@/lib/game/locationGraph'
 
 // GET /api/campaigns/:id/locations - List all locations for a campaign
 export async function GET(
@@ -84,8 +86,25 @@ export async function POST(
         gmNotes: body.gmNotes || null,
         ownerFactionId: body.ownerFactionId || null,
         isDiscovered: body.isDiscovered !== undefined ? body.isDiscovered : true,
+        // #445 (F-04): #378 wired deriveResourceSlots into three of the four
+        // creation paths and missed this one — the hand-authoring surface an
+        // admin actually uses. A location created here produced nothing at
+        // all, so logisticsTick's extraction and supply-route passes both
+        // skipped it forever, exactly the failure #378 set out to close.
+        resourceSlots: deriveResourceSlots({
+          name: body.name,
+          locationType: body.locationType ?? null,
+          description: body.description ?? null,
+        }),
       },
     })
+
+    // #445 (F-04): and it joins the world graph. Every graph reader treats
+    // an edgeless location as unreachable and falls back silently, so an
+    // admin-created place was invisible to the simulation while looking
+    // perfectly real in the UI. Best-effort: the location is already
+    // committed, and a missing edge must not fail the request.
+    await attachLocationToGraph(prisma, campaignId, location.id)
 
     return NextResponse.json({ location }, { status: 201 })
   } catch (error) {

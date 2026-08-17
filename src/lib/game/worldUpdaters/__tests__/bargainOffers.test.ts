@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { applyBargainOffers, BargainOffer } from '../bargainOffers'
 import { MAX_CORRUPTION, CorruptionTheme } from '../../corruption'
+import { sceneTurn } from '@/lib/game/turnClock'
 
 const makeTx = () => ({
   character: {
@@ -19,7 +20,7 @@ beforeEach(() => {
 describe('applyBargainOffers', () => {
   it('does nothing if the campaign has no corruption theme (getter returns null)', async () => {
     const getCorruptionTheme = vi.fn().mockResolvedValue(null)
-    await applyBargainOffers(tx as any, 'camp1', 4, [
+    await applyBargainOffers(tx as any, 'camp1', sceneTurn(4), [
       { character_name_or_id: 'Jason', offer: 'Take the power, lose a piece of yourself' } as BargainOffer,
     ], getCorruptionTheme)
     expect(tx.character.findFirst).not.toHaveBeenCalled()
@@ -29,7 +30,7 @@ describe('applyBargainOffers', () => {
     tx.character.findFirst.mockResolvedValue({ id: 'char1', name: 'Jason', corruption: 2 })
     const getCorruptionTheme = vi.fn().mockResolvedValue(theme)
 
-    await applyBargainOffers(tx as any, 'camp1', 4, [
+    await applyBargainOffers(tx as any, 'camp1', sceneTurn(4), [
       { character_name_or_id: 'Jason', offer: 'Take the power, lose a piece of yourself' } as BargainOffer,
     ], getCorruptionTheme)
 
@@ -43,7 +44,7 @@ describe('applyBargainOffers', () => {
     tx.character.findFirst.mockResolvedValue({ id: 'char1', name: 'Jason', corruption: MAX_CORRUPTION })
     const getCorruptionTheme = vi.fn().mockResolvedValue(theme)
 
-    await applyBargainOffers(tx as any, 'camp1', 4, [
+    await applyBargainOffers(tx as any, 'camp1', sceneTurn(4), [
       { character_name_or_id: 'Jason', offer: 'One more deal' } as BargainOffer,
     ], getCorruptionTheme)
 
@@ -52,7 +53,7 @@ describe('applyBargainOffers', () => {
 
   it('skips an offer with no character_name_or_id or no offer text', async () => {
     const getCorruptionTheme = vi.fn().mockResolvedValue(theme)
-    await applyBargainOffers(tx as any, 'camp1', 4, [
+    await applyBargainOffers(tx as any, 'camp1', sceneTurn(4), [
       { character_name_or_id: '', offer: 'x' } as BargainOffer,
       { character_name_or_id: 'Jason', offer: '' } as BargainOffer,
     ], getCorruptionTheme)
@@ -63,7 +64,7 @@ describe('applyBargainOffers', () => {
     tx.character.findFirst.mockResolvedValue({ id: 'char1', name: 'Jason', corruption: 0 })
     const getCorruptionTheme = vi.fn().mockResolvedValue(theme)
 
-    await applyBargainOffers(tx as any, 'camp1', 4, [
+    await applyBargainOffers(tx as any, 'camp1', sceneTurn(4), [
       { character_name_or_id: 'Jason', offer: 'first' } as BargainOffer,
       { character_name_or_id: 'Jason', offer: 'second' } as BargainOffer,
     ], getCorruptionTheme)

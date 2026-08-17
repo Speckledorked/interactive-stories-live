@@ -1,0 +1,21 @@
+-- #445: drop the campaign-level drift watermarks.
+--
+-- #276 added WorldMeta.beliefDriftProcessedThroughTurn and
+-- .dispositionDriftProcessedThroughTurn so an idle campaign stopped
+-- reprocessing the same WorldEvent rows as fresh drift. #375 found the grain
+-- was wrong — the tick caps and ROTATES its roster, so a campaign-level
+-- watermark advanced past a turn after reaching only that tick's subset, and
+-- every entity that lost the rotation never received that turn's drift.
+--
+-- They were superseded by the per-entity Faction.beliefDriftThroughTurn and
+-- NPC.dispositionDriftThroughTurn, and kept only as the backfill source for
+-- those. That backfill ran in 20260816090000_world_turn_integrity. Nothing
+-- has read either column since — verified by grep across src/: the only
+-- remaining references were prose.
+--
+-- Dropped rather than left in place because a nullable Int column that
+-- nothing reads still looks like state to the next person to open the
+-- schema, and #375's whole finding was that reading the wrong watermark is
+-- an easy mistake to make.
+ALTER TABLE "WorldMeta" DROP COLUMN IF EXISTS "beliefDriftProcessedThroughTurn";
+ALTER TABLE "WorldMeta" DROP COLUMN IF EXISTS "dispositionDriftProcessedThroughTurn";

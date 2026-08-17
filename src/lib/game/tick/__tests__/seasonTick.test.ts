@@ -11,9 +11,10 @@ import { prisma } from '@/lib/prisma'
 import { tickSeasonalPressure, SEASON_MODIFIERS } from '../seasonTick'
 import type { TickContext } from '../types'
 import { DEFAULT_CALENDAR } from '../../calendar'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(5), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 // DEFAULT_CALENDAR: 12 x 30-day months. Month 0-2 spring, 3-5 summer,

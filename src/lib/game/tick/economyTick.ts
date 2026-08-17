@@ -352,20 +352,23 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
       // which is a strictly worse outcome than the bug the constraint
       // exists to prevent. Same swallow-and-skip pattern this file already
       // uses for the ActiveWake creation above.
-      try {
-        await ctx.db.factionDebt.create({
-          data: {
-            campaignId: ctx.campaignId,
-            creditorFactionId: lender.id,
-            debtorFactionId: broke.id,
-            amount: decision.amount,
-            turnCreated: ctx.turnNumber,
-          },
-        })
-      } catch (error) {
-        if (!isUniqueConstraintViolation(error)) throw error
-        continue
-      }
+      // #441: skipDuplicates rather than catch-and-continue — see
+      // wakeTick.ts's ActiveWake creation for the full reasoning. Short
+      // version: this runs on the tick's shared transaction client, and a
+      // raised constraint violation aborts the whole transaction, so the
+      // `continue` this used to do carried on into a transaction that could
+      // no longer execute anything. ON CONFLICT DO NOTHING never raises.
+      const created = await ctx.db.factionDebt.createMany({
+        data: [{
+          campaignId: ctx.campaignId,
+          creditorFactionId: lender.id,
+          debtorFactionId: broke.id,
+          amount: decision.amount,
+          turnCreated: ctx.turnNumber,
+        }],
+        skipDuplicates: true,
+      })
+      if (created.count === 0) continue
       await ctx.db.faction.update({ where: { id: lender.id }, data: { resources: newLenderResources } })
       await ctx.db.faction.update({ where: { id: broke.id }, data: { resources: newBrokeResources } })
     }

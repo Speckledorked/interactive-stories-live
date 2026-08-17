@@ -9,6 +9,8 @@ import { prisma } from '@/lib/prisma'
 import { generateMilestoneRecap } from '@/lib/ai/worldState'
 import { NotificationService } from '@/lib/notifications/notification-service'
 import { pickCrisisFaction, decideCrisisEscalation, CRISIS_WORLD_EVENT_TYPE, RECENT_CRISIS_LOOKBACK } from './tick/crisisClock'
+import { currentSimulationTurn } from './tick/simulationClock'
+import { simTurn, type SceneTurn } from './turnClock'
 
 export const CAMPAIGN_MILESTONE_INTERVAL = 20
 
@@ -29,7 +31,18 @@ export function isMilestoneTurn(sceneLogCount: number): boolean {
  * and notification, or null if the campaign has no active faction yet to
  * threaten anyone with.
  */
-async function triggerMilestoneCrisis(campaignId: string, turnNumber: number, inGameDayNumber?: number): Promise<string | null> {
+async function triggerMilestoneCrisis(campaignId: string, inGameDayNumber?: number): Promise<string | null> {
+  // #437: an EIGHTH cross-clock site, not in the audit's list of seven —
+  // found by asking the question the branded types force. This took
+  // checkAndCreateMilestone's `latestTurnNumber`, which is the SCENE
+  // counter (it feeds CampaignLog.turnNumber, a scene-scoped story log),
+  // and stamped it onto WorldEvent.turnNumber and TimelineEvent.turnNumber,
+  // both sim-clock columns. It then read WorldEvent back ordered by that
+  // column to decide which faction to threaten — so on any campaign where
+  // the clocks had diverged, the crisis history it consulted was ordered
+  // against a mixture and "don't threaten the same faction twice in a row"
+  // silently stopped working.
+  const simulationTurn = simTurn(await currentSimulationTurn(campaignId))
   const factions = await prisma.faction.findMany({
     where: { campaignId, isActive: true },
     select: { id: true, name: true, threatLevel: true, military: true, resources: true }
@@ -89,7 +102,7 @@ async function triggerMilestoneCrisis(campaignId: string, turnNumber: number, in
   await prisma.timelineEvent.create({
     data: {
       campaignId,
-      turnNumber,
+      turnNumber: simulationTurn,
       title: decision.action === 'escalate' ? `${threat.name} escalates` : clockName,
       summaryPublic: blurb,
       summaryGM: blurb,
@@ -107,7 +120,7 @@ async function triggerMilestoneCrisis(campaignId: string, turnNumber: number, in
   await prisma.worldEvent.create({
     data: {
       campaignId,
-      turnNumber,
+      turnNumber: simulationTurn,
       type: CRISIS_WORLD_EVENT_TYPE,
       origin: 'tick',
       actorType: 'SYSTEM',
@@ -135,7 +148,9 @@ async function triggerMilestoneCrisis(campaignId: string, turnNumber: number, in
 export async function checkAndCreateMilestone(
   campaignId: string,
   sceneLogCount: number,
-  latestTurnNumber: number,
+  // #437: the SCENE counter — CampaignLog is the per-scene story log, and
+  // this is the only thing it feeds now. See turnClock.ts.
+  latestTurnNumber: SceneTurn,
   inGameDayNumber?: number
 ): Promise<void> {
   if (!isMilestoneTurn(sceneLogCount)) return
@@ -156,7 +171,7 @@ export async function checkAndCreateMilestone(
     // A milestone isn't just a look back - the world moves too. Best-effort
     // and independent of the recap above: a crisis failure never blocks the
     // real milestone entry from being written.
-    const crisisBlurb = await triggerMilestoneCrisis(campaignId, latestTurnNumber, inGameDayNumber).catch((err: unknown) => {
+    const crisisBlurb = await triggerMilestoneCrisis(campaignId, inGameDayNumber).catch((err: unknown) => {
       console.error('Milestone crisis trigger failed (non-critical):', err)
       return null
     })

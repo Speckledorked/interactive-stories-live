@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { applyTimelineEventChanges, TimelineEventChange } from '../timelineEvents'
+import { simTurn } from '@/lib/game/turnClock'
 
 const makeTx = () => ({
   timelineEvent: { create: vi.fn(async ({ data }: any) => data) },
@@ -22,7 +23,7 @@ describe('applyTimelineEventChanges', () => {
       } as TimelineEventChange,
     ]
 
-    await applyTimelineEventChanges(tx as any, 'camp1', 7, events)
+    await applyTimelineEventChanges(tx as any, 'camp1', simTurn(7), events)
 
     expect(tx.timelineEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -48,7 +49,7 @@ describe('applyTimelineEventChanges', () => {
       } as TimelineEventChange,
     ]
 
-    await applyTimelineEventChanges(tx as any, 'camp1', 3, events)
+    await applyTimelineEventChanges(tx as any, 'camp1', simTurn(3), events)
 
     expect(tx.timelineEvent.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ visibility: 'GM_ONLY' }) })
@@ -56,7 +57,7 @@ describe('applyTimelineEventChanges', () => {
   })
 
   it('creates nothing for an empty list', async () => {
-    await applyTimelineEventChanges(tx as any, 'camp1', 1, [])
+    await applyTimelineEventChanges(tx as any, 'camp1', simTurn(1), [])
     expect(tx.timelineEvent.create).not.toHaveBeenCalled()
   })
 })

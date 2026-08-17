@@ -57,6 +57,7 @@ import { applyQuestChanges } from '../worldUpdaters/quests'
 import { applyBargainOffers } from '../worldUpdaters/bargainOffers'
 import { storeGmNotesForTurn } from '../worldUpdaters/worldMetaNotes'
 import { persistWorldEvents } from '../tick/worldEventLog'
+import { sceneTurn } from '@/lib/game/turnClock'
 
 const makeTx = () => ({
   campaign: { findUnique: vi.fn(async () => ({ corruptionTheme: { name: 'The Hunger' } })) },
@@ -79,7 +80,7 @@ const response = (worldUpdates: Record<string, unknown>) =>
 
 describe('applyWorldUpdates — delegation', () => {
   it('calls no applier when world_updates is empty', async () => {
-    await applyWorldUpdates('camp1', response({}), 5)
+    await applyWorldUpdates('camp1', response({}), sceneTurn(5))
     expect(applyTimelineEventChanges).not.toHaveBeenCalled()
     expect(applyClockChanges).not.toHaveBeenCalled()
     expect(applyNpcChanges).not.toHaveBeenCalled()
@@ -92,7 +93,7 @@ describe('applyWorldUpdates — delegation', () => {
   })
 
   it('routes each field to its own applier and nothing else', async () => {
-    await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Find the ledger' }] }), 7)
+    await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Find the ledger' }] }), sceneTurn(7))
     expect(applyQuestChanges).toHaveBeenCalledWith(
       tx, 'camp1', 7, [{ name: 'Find the ledger' }]
     )
@@ -100,22 +101,51 @@ describe('applyWorldUpdates — delegation', () => {
     expect(applyCharacterChanges).not.toHaveBeenCalled()
   })
 
-  it('passes the turn number through to the appliers that take one', async () => {
+  // #437: the two clocks, at the one call site that hands out both. The
+  // scene counter (42) reaches the per-character blobs; the simulation turn
+  // (7, from the mocked WorldMeta above) is what lands in the shared history
+  // tables. Deliberately different numbers — with the two equal, this test
+  // would pass whichever clock the code picked, which is how the crossing
+  // survived being "covered" in the first place.
+  it('splits the two clocks: scene counter to the character blobs, sim turn to history', async () => {
     await applyWorldUpdates(
       'camp1',
       response({ new_timeline_events: [{ title: 'X' }], pc_changes: [{ character_name_or_id: 'Vera', changes: {} }] }),
-      42
+      sceneTurn(42)
     )
-    expect(applyTimelineEventChanges).toHaveBeenCalledWith(tx, 'camp1', 42, [{ title: 'X' }], undefined)
+    // TimelineEvent.turnNumber is a sim-clock column.
+    expect(applyTimelineEventChanges).toHaveBeenCalledWith(tx, 'camp1', 7, [{ title: 'X' }], undefined)
+    // appliedAt/grantedTurn and the rest of applyCharacterChanges' JSON
+    // blobs are scene-scoped and compared against this same counter on read.
     expect(applyCharacterChanges).toHaveBeenCalledWith(
       tx, 'camp1', 42, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), true, []
     )
+  })
+
+  it('reads WorldMeta at most once even when two history writes need the sim turn', async () => {
+    // The memo. Without it a scene with timeline events AND significant
+    // changes paid for two extra round-trips on the resolution hot path.
+    ;(applyQuestChanges as any).mockResolvedValueOnce({ worldChanges: [
+      { entityType: 'QUEST', entityId: 'q1', entityName: 'Q', campaignId: 'camp1', field: 'status',
+        previousValue: 'a', newValue: 'b', reason: 'r', significant: true, importance: 'NORMAL' },
+    ] })
+    await applyWorldUpdates(
+      'camp1',
+      response({ new_timeline_events: [{ title: 'X' }], quest_changes: [{ name: 'Q' }] }),
+      sceneTurn(42)
+    )
+    expect(prisma.worldMeta.findUnique).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not read WorldMeta at all when nothing shared-history is written', async () => {
+    await applyWorldUpdates('camp1', response({ pc_changes: [{ character_name_or_id: 'Vera', changes: {} }] }), sceneTurn(42))
+    expect(prisma.worldMeta.findUnique).not.toHaveBeenCalled()
   })
 })
 
 describe('applyWorldUpdates — conditional roster fetching', () => {
   it('fetches no rosters when nothing needs resolving', async () => {
-    await applyWorldUpdates('camp1', response({ new_timeline_events: [{ title: 'X' }] }), 1)
+    await applyWorldUpdates('camp1', response({ new_timeline_events: [{ title: 'X' }] }), sceneTurn(1))
     expect(tx.clock.findMany).not.toHaveBeenCalled()
     expect(tx.nPC.findMany).not.toHaveBeenCalled()
     expect(tx.character.findMany).not.toHaveBeenCalled()
@@ -123,7 +153,7 @@ describe('applyWorldUpdates — conditional roster fetching', () => {
   })
 
   it('fetches only the rosters the present change types actually need', async () => {
-    await applyWorldUpdates('camp1', response({ clock_changes: [{ clock_name_or_id: 'Doom', delta: 1 }] }), 1)
+    await applyWorldUpdates('camp1', response({ clock_changes: [{ clock_name_or_id: 'Doom', delta: 1 }] }), sceneTurn(1))
     expect(tx.clock.findMany).toHaveBeenCalledOnce()
     expect(tx.nPC.findMany).not.toHaveBeenCalled()
     expect(tx.faction.findMany).not.toHaveBeenCalled()
@@ -133,7 +163,7 @@ describe('applyWorldUpdates — conditional roster fetching', () => {
   })
 
   it('fetches the character roster for npc_changes alone, since NPC harm needs the attacker', async () => {
-    await applyWorldUpdates('camp1', response({ npc_changes: [{ npc_name_or_id: 'Duke', changes: {} }] }), 1)
+    await applyWorldUpdates('camp1', response({ npc_changes: [{ npc_name_or_id: 'Duke', changes: {} }] }), sceneTurn(1))
     expect(tx.nPC.findMany).toHaveBeenCalledOnce()
     expect(tx.character.findMany).toHaveBeenCalledOnce()
   })
@@ -145,7 +175,7 @@ describe('applyWorldUpdates — conditional roster fetching', () => {
         npc_changes: [{ npc_name_or_id: 'Duke', changes: {} }],
         pc_changes: [{ character_name_or_id: 'Vera', changes: {} }],
       }),
-      1
+      sceneTurn(1)
     )
     expect(tx.character.findMany).toHaveBeenCalledOnce()
   })
@@ -153,7 +183,7 @@ describe('applyWorldUpdates — conditional roster fetching', () => {
 
 describe('applyWorldUpdates — sceneOrigin (fog of war) threading', () => {
   it('defaults to true — a live scene reveals what it touches', async () => {
-    await applyWorldUpdates('camp1', response({ npc_changes: [{ npc_name_or_id: 'Duke', changes: {} }] }), 1)
+    await applyWorldUpdates('camp1', response({ npc_changes: [{ npc_name_or_id: 'Duke', changes: {} }] }), sceneTurn(1))
     expect(applyNpcChanges).toHaveBeenCalledWith(
       tx, 'camp1', expect.anything(), expect.anything(), expect.anything(), true
     )
@@ -168,7 +198,7 @@ describe('applyWorldUpdates — sceneOrigin (fog of war) threading', () => {
         location_changes: [{ name: 'Ruins' }],
         pc_changes: [{ character_name_or_id: 'Vera', changes: {} }],
       }),
-      1,
+      sceneTurn(1),
       false
     )
     expect(applyNpcChanges).toHaveBeenCalledWith(tx, 'camp1', expect.anything(), expect.anything(), expect.anything(), false)
@@ -184,7 +214,7 @@ describe('applyWorldUpdates — sceneOrigin (fog of war) threading', () => {
     await applyWorldUpdates(
       'camp1',
       response({ bargain_offers: [{ character_name_or_id: 'Vera', offer: 'Power, for a price' }] }),
-      1,
+      sceneTurn(1),
       false
     )
     expect(applyBargainOffers).not.toHaveBeenCalled()
@@ -194,21 +224,21 @@ describe('applyWorldUpdates — sceneOrigin (fog of war) threading', () => {
     await applyWorldUpdates(
       'camp1',
       response({ bargain_offers: [{ character_name_or_id: 'Vera', offer: 'Power, for a price' }] }),
-      1,
+      sceneTurn(1),
       true
     )
     expect(applyBargainOffers).toHaveBeenCalledOnce()
   })
 
   it('skips bargain offers when the array is present but empty', async () => {
-    await applyWorldUpdates('camp1', response({ bargain_offers: [] }), 1, true)
+    await applyWorldUpdates('camp1', response({ bargain_offers: [] }), sceneTurn(1), true)
     expect(applyBargainOffers).not.toHaveBeenCalled()
   })
 })
 
 describe('applyWorldUpdates — corruption theme memoization', () => {
   it('does not look the theme up at all when nothing needs it', async () => {
-    await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), 1)
+    await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), sceneTurn(1))
     expect(tx.campaign.findUnique).not.toHaveBeenCalled()
   })
 
@@ -228,7 +258,7 @@ describe('applyWorldUpdates — corruption theme memoization', () => {
         pc_changes: [{ character_name_or_id: 'Vera', changes: {} }],
         bargain_offers: [{ character_name_or_id: 'Vera', offer: 'A bargain' }],
       }),
-      1,
+      sceneTurn(1),
       true
     )
 
@@ -244,7 +274,7 @@ describe('applyWorldUpdates — corruption theme memoization', () => {
       return { gateRefusals: [], unresolvedCharacterNames: [], worldChanges: [] }
     })
 
-    await applyWorldUpdates('camp1', response({ pc_changes: [{ character_name_or_id: 'Vera', changes: {} }] }), 1)
+    await applyWorldUpdates('camp1', response({ pc_changes: [{ character_name_or_id: 'Vera', changes: {} }] }), sceneTurn(1))
     expect(tx.campaign.findUnique).toHaveBeenCalledOnce()
   })
 })
@@ -257,7 +287,7 @@ describe('applyWorldUpdates — results and failure', () => {
         npc_changes: [{ npc_name_or_id: 'Duke', changes: {} }],
         faction_changes: [{ faction_name_or_id: 'Crown', changes: {} }],
       }),
-      1
+      sceneTurn(1)
     )
     expect(result).toEqual({
       involvedNpcIds: ['npc-from-applier'],
@@ -268,21 +298,21 @@ describe('applyWorldUpdates — results and failure', () => {
   })
 
   it('returns empty id lists when the relevant appliers never ran', async () => {
-    const result = await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), 1)
+    const result = await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), sceneTurn(1))
     expect(result).toEqual({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] })
   })
 
   it('wraps and rethrows when an applier fails, so the caller sees a real failure', async () => {
     ;(applyQuestChanges as any).mockRejectedValueOnce(new Error('quest writer exploded'))
     await expect(
-      applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), 1)
+      applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), sceneTurn(1))
     ).rejects.toThrow(/Failed to apply world updates/)
   })
 
   it('never silently swallows an applier failure into a success result', async () => {
     ;(applyCharacterChanges as any).mockRejectedValueOnce(new Error('boom'))
     await expect(
-      applyWorldUpdates('camp1', response({ pc_changes: [{ character_name_or_id: 'Vera', changes: {} }] }), 1)
+      applyWorldUpdates('camp1', response({ pc_changes: [{ character_name_or_id: 'Vera', changes: {} }] }), sceneTurn(1))
     ).rejects.toThrow()
   })
 })
@@ -302,13 +332,18 @@ describe('applyWorldUpdates — WITNESSED event-witness writes (#101)', () => {
     ;(persistWorldEvents as any).mockResolvedValueOnce({ count: 1, events: [{ id: 'evt-1', significant: true }] })
 
     await applyWorldUpdates(
-      'camp1', response({ quest_changes: [{ name: 'Q' }] }), 5, true, undefined, [], ['char-a', 'char-b']
+      'camp1', response({ quest_changes: [{ name: 'Q' }] }), sceneTurn(5), true, undefined, [], ['char-a', 'char-b']
     )
 
+    // #437: turnNumber is 7 (the mocked simulationTurn), NOT the 5 this was
+    // called with. EventWitness rows are satellites of the WorldEvent they
+    // witness, and that event is stamped on the simulation clock — a witness
+    // on a different clock than its own event made the recency window in
+    // worldSummary compare two units.
     expect(prisma.eventWitness.createMany).toHaveBeenCalledWith({
       data: [
-        { campaignId: 'camp1', worldEventId: 'evt-1', characterId: 'char-a', grade: 'WITNESSED', turnNumber: 5 },
-        { campaignId: 'camp1', worldEventId: 'evt-1', characterId: 'char-b', grade: 'WITNESSED', turnNumber: 5 },
+        { campaignId: 'camp1', worldEventId: 'evt-1', characterId: 'char-a', grade: 'WITNESSED', turnNumber: 7 },
+        { campaignId: 'camp1', worldEventId: 'evt-1', characterId: 'char-b', grade: 'WITNESSED', turnNumber: 7 },
       ],
       skipDuplicates: true,
     })
@@ -319,7 +354,7 @@ describe('applyWorldUpdates — WITNESSED event-witness writes (#101)', () => {
     ;(persistWorldEvents as any).mockResolvedValueOnce({ count: 1, events: [{ id: 'evt-1', significant: false }] })
 
     await applyWorldUpdates(
-      'camp1', response({ quest_changes: [{ name: 'Q' }] }), 5, true, undefined, [], ['char-a']
+      'camp1', response({ quest_changes: [{ name: 'Q' }] }), sceneTurn(5), true, undefined, [], ['char-a']
     )
 
     expect(prisma.eventWitness.createMany).not.toHaveBeenCalled()
@@ -330,7 +365,7 @@ describe('applyWorldUpdates — WITNESSED event-witness writes (#101)', () => {
     ;(persistWorldEvents as any).mockResolvedValueOnce({ count: 1, events: [{ id: 'evt-1', significant: true }] })
 
     await applyWorldUpdates(
-      'camp1', response({ quest_changes: [{ name: 'Q' }] }), 5, false, undefined, [], ['char-a']
+      'camp1', response({ quest_changes: [{ name: 'Q' }] }), sceneTurn(5), false, undefined, [], ['char-a']
     )
 
     expect(prisma.eventWitness.createMany).not.toHaveBeenCalled()
@@ -340,7 +375,7 @@ describe('applyWorldUpdates — WITNESSED event-witness writes (#101)', () => {
     ;(applyQuestChanges as any).mockResolvedValueOnce({ worldChanges: [significantChange] })
     ;(persistWorldEvents as any).mockResolvedValueOnce({ count: 1, events: [{ id: 'evt-1', significant: true }] })
 
-    await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), 5)
+    await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), sceneTurn(5))
 
     expect(prisma.eventWitness.createMany).not.toHaveBeenCalled()
   })
@@ -351,7 +386,7 @@ describe('applyWorldUpdates — WITNESSED event-witness writes (#101)', () => {
     ;(prisma.eventWitness.createMany as any).mockRejectedValueOnce(new Error('db down'))
 
     await expect(
-      applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), 5, true, undefined, [], ['char-a'])
+      applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), sceneTurn(5), true, undefined, [], ['char-a'])
     ).resolves.toBeDefined()
   })
 })
@@ -366,7 +401,7 @@ describe('applyWorldUpdates — organic_advancement is deliberately NOT applied 
     await applyWorldUpdates(
       'camp1',
       response({ organic_advancement: [{ character_id: 'ch1', new_perks: [{ name: 'Free Perk', description: 'x' }] }] }),
-      1
+      sceneTurn(1)
     )
     expect(applyCharacterChanges).not.toHaveBeenCalled()
     expect(tx.character.findMany).not.toHaveBeenCalled()

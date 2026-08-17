@@ -6,13 +6,14 @@
 import { Prisma } from '@prisma/client'
 
 type Db = Prisma.TransactionClient
+import type { SceneTurn } from '@/lib/game/turnClock'
 
 const MAX_GM_NOTES_HISTORY = 20
 
 export async function storeGmNotesForTurn(
   tx: Db,
   campaignId: string,
-  currentTurnNumber: number,
+  currentTurnNumber: SceneTurn,
   notesForGm: string
 ): Promise<void> {
   const worldMeta = await tx.worldMeta.findUnique({

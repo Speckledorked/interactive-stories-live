@@ -19,6 +19,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 import { tickLogistics } from '../logisticsTick'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 const RUN = process.env.RUN_DB_TESTS === '1'
 const describeIfDb = RUN ? describe : describe.skip
@@ -61,7 +62,7 @@ describeIfDb('tickLogistics — real database (#106/#108 follow-up)', () => {
     expect(await prisma.supplyRoute.count({ where: { campaignId } })).toBe(0)
 
     const ctx: TickContext = {
-      campaignId, turnNumber: 1, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
+      campaignId, turnNumber: simTurn(1), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
     }
     const result = await tickLogistics(ctx)
 
@@ -84,7 +85,7 @@ describeIfDb('tickLogistics — real database (#106/#108 follow-up)', () => {
     expect(before).toBe(1) // the route the previous test created
 
     const ctx: TickContext = {
-      campaignId, turnNumber: 2, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
+      campaignId, turnNumber: simTurn(2), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
     }
     await tickLogistics(ctx)
 

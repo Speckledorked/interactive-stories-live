@@ -15,6 +15,7 @@ import { TENSION_BASELINE, tensionClockBonus, refreshCampaignTension } from './t
 import { persistWorldEvents } from './worldEventLog'
 import { SEASON_MODIFIERS } from './seasonTick'
 import { GeneratedCalendar, deriveSeason } from '../calendar'
+import { simTurn, type SimTurn } from '@/lib/game/turnClock'
 
 export interface FactionForClockAdvancement {
   resources: number
@@ -164,7 +165,7 @@ export function decideClockAdvancement(
  * steady progress for joint NPC schemes, and category pacing only as a
  * last resort for clocks with no such link. See decideClockAdvancement.
  */
-export async function advanceClocks(campaignId: string, simulationTurn?: number) {
+export async function advanceClocks(campaignId: string, simulationTurn?: SimTurn) {
   console.log('  Fetching active clocks...')
 
   const clocks = await prisma.clock.findMany({
@@ -211,7 +212,7 @@ export async function advanceClocks(campaignId: string, simulationTurn?: number)
   // passes it to runWorldTick; it passes it here too now. The fallback
   // read exists for the admin/force paths that call advanceClocks
   // directly, and reads the simulation clock rather than the scene one.
-  const turnNumber = simulationTurn ?? worldMeta?.simulationTurn ?? 0
+  const turnNumber = simulationTurn ?? simTurn(worldMeta?.simulationTurn ?? 0)
 
   // #118: unattached-GM-clock speed. Computed here (not passed in) since
   // advanceClocks runs outside TICK_HANDLERS — this is the only place that

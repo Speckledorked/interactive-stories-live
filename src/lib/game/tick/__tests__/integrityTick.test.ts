@@ -8,9 +8,10 @@ vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
 import { tickIntegrity } from '../integrityTick'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'camp1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: {} as any, ...overrides }
+  return { campaignId: 'camp1', turnNumber: simTurn(5), factionCap: 10, npcCap: 20, dryRun: false, db: {} as any, ...overrides }
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -22,7 +23,7 @@ describe('tickIntegrity', () => {
       report: { violationsFound: 1, repairsApplied: 1, unrepaired: [], escalations: [] },
     })
 
-    const result = await tickIntegrity(baseCtx({ campaignId: 'camp1', turnNumber: 9, dryRun: true }))
+    const result = await tickIntegrity(baseCtx({ campaignId: 'camp1', turnNumber: simTurn(9), dryRun: true }))
 
     expect(runIntegrityPass).toHaveBeenCalledWith(expect.anything(), 'camp1', 9, { dryRun: true })
     expect(result.changes).toHaveLength(1)

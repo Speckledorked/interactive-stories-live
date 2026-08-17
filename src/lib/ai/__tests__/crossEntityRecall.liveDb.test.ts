@@ -12,6 +12,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { PrismaClient } from '@prisma/client'
+import { simTurn } from '@/lib/game/turnClock'
 
 // retrieveCrossEntityHistory never touches embeddings itself (it's a plain
 // id/EXISTS filter, not a similarity search — see the hardcoded
@@ -59,7 +60,7 @@ describeIfDb('retrieveCrossEntityHistory — real fog-of-war guard', () => {
     const knownNpc = await prisma.nPC.create({ data: { campaignId, name: 'Known One', isDiscovered: true } })
 
     await createCampaignMemory({
-      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 1,
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: simTurn(1),
       title: 'History with a hidden NPC', summary: 's', fullContext: 'f',
       involvedCharacterIds: [], involvedNpcIds: [hiddenNpc.id, knownNpc.id], involvedFactionIds: [], locationTags: [],
       importance: 'NORMAL', tags: [],
@@ -77,7 +78,7 @@ describeIfDb('retrieveCrossEntityHistory — real fog-of-war guard', () => {
     const knownNpc = await prisma.nPC.create({ data: { campaignId, name: 'Known Two', isDiscovered: true } })
 
     await createCampaignMemory({
-      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 2,
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: simTurn(2),
       title: 'History with a hidden faction', summary: 's', fullContext: 'f',
       involvedCharacterIds: [], involvedNpcIds: [knownNpc.id], involvedFactionIds: [hiddenFaction.id], locationTags: [],
       importance: 'NORMAL', tags: [],
@@ -95,7 +96,7 @@ describeIfDb('retrieveCrossEntityHistory — real fog-of-war guard', () => {
     const npcB = await prisma.nPC.create({ data: { campaignId, name: 'Beta', isDiscovered: true } })
 
     await createCampaignMemory({
-      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 3,
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: simTurn(3),
       title: 'History between two discovered NPCs', summary: 's', fullContext: 'f',
       involvedCharacterIds: [], involvedNpcIds: [npcA.id, npcB.id], involvedFactionIds: [], locationTags: [],
       importance: 'NORMAL', tags: [],
@@ -115,7 +116,7 @@ describeIfDb('retrieveCrossEntityHistory — real fog-of-war guard', () => {
     const npc = await prisma.nPC.create({ data: { campaignId, name: 'Gamma', isDiscovered: true } })
 
     await createCampaignMemory({
-      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 4,
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: simTurn(4),
       title: 'History between a PC and an NPC', summary: 's', fullContext: 'f',
       involvedCharacterIds: [character.id], involvedNpcIds: [npc.id], involvedFactionIds: [], locationTags: [],
       importance: 'NORMAL', tags: [],

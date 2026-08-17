@@ -18,6 +18,7 @@ import { capForPrompt } from './contextManager'
 import { describeStat, describeThreatLevel, describeWarMomentum } from './qualitativeStats'
 import { summarizeCapabilities } from '@/lib/game/capabilities'
 import { parseKnowledgeState } from '@/lib/game/knowledge'
+import { simTurn, turnsElapsed, type SimTurn } from '@/lib/game/turnClock'
 import { inventoryValue, describeWealth } from '@/lib/game/itemValue'
 import { summarizeDebts } from '@/lib/game/debts'
 import { summarizeStandings } from '@/lib/game/standing'
@@ -261,7 +262,13 @@ export function mapWarsForPrompt(
   activeWars: any[],
   allFactions: any[],
   discoveredFactionIds: Set<string>,
-  currentTurnNumber: number
+  // #437: the SIMULATION turn. War.startedTurn is stamped by warTick on the
+  // sim clock (`startedTurn: ctx.turnNumber`), and this used to subtract it
+  // from the SCENE counter — so any campaign that had ticked more than it
+  // had been played told the AI GM a war had been running for a negative
+  // number of turns. turnsElapsed's signature is what now stops that:
+  // both arguments have to be on the same clock.
+  simulationTurn: SimTurn
 ) {
   return activeWars
     .filter(w => discoveredFactionIds.has(w.attackerFactionId) && discoveredFactionIds.has(w.defenderFactionId))
@@ -276,7 +283,7 @@ export function mapWarsForPrompt(
         attacker_allies: attackerAllies,
         defender_allies: defenderAllies,
         momentum: describeWarMomentum(w.momentum),
-        turns_elapsed: currentTurnNumber - w.startedTurn
+        turns_elapsed: turnsElapsed(simulationTurn, simTurn(w.startedTurn))
       }
     })
 }

@@ -15,6 +15,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 import { tickInformation } from '../informationTick'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 const RUN = process.env.RUN_DB_TESTS === '1'
 const describeIfDb = RUN ? describe : describe.skip
@@ -89,12 +90,12 @@ describeIfDb('tickInformation — real database (#101)', () => {
     expect(await prisma.eventWitness.count({ where: { campaignId } })).toBe(0)
 
     // distance 1 -> delay = 1 (base) + 1 = 2. Turn 6 (age 1) is too early.
-    const tooEarly: TickContext = { campaignId, turnNumber: 6, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any }
+    const tooEarly: TickContext = { campaignId, turnNumber: simTurn(6), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any }
     await tickInformation(tooEarly)
     expect(await prisma.eventWitness.count({ where: { campaignId } })).toBe(0)
 
     // Turn 7 (age 2) fires.
-    const onTime: TickContext = { campaignId, turnNumber: 7, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any }
+    const onTime: TickContext = { campaignId, turnNumber: simTurn(7), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any }
     await tickInformation(onTime)
 
     const witnesses = await prisma.eventWitness.findMany({ where: { campaignId } })
@@ -108,7 +109,7 @@ describeIfDb('tickInformation — real database (#101)', () => {
   })
 
   it('is idempotent: running it again does not create a duplicate row', async () => {
-    const ctx: TickContext = { campaignId, turnNumber: 8, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any }
+    const ctx: TickContext = { campaignId, turnNumber: simTurn(8), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any }
     await tickInformation(ctx)
 
     expect(await prisma.eventWitness.count({ where: { campaignId, worldEventId, characterId } })).toBe(1)

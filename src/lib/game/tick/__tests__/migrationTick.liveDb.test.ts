@@ -15,6 +15,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 import { tickMigration } from '../migrationTick'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 const RUN = process.env.RUN_DB_TESTS === '1'
 const describeIfDb = RUN ? describe : describe.skip
@@ -51,7 +52,7 @@ describeIfDb('tickMigration — real database (#262)', () => {
     expect(await prisma.populationFlightEvent.count({ where: { campaignId } })).toBe(0)
 
     const ctx: TickContext = {
-      campaignId, turnNumber: 3, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
+      campaignId, turnNumber: simTurn(3), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any,
     }
     await tickMigration(ctx)
 

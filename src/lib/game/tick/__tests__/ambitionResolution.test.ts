@@ -34,6 +34,7 @@ vi.mock('../worldEventLog', () => ({ persistWorldEvents: mocks.persistWorldEvent
 vi.mock('../historyLog', () => ({ logSignificantChanges: mocks.logSignificantChanges }))
 
 import { resolveCompletedAmbitions } from '../ambitionResolution'
+import { simTurn } from '@/lib/game/turnClock'
 
 describe('resolveCompletedAmbitions (#227)', () => {
   beforeEach(() => {
@@ -86,7 +87,7 @@ describe('resolveCompletedAmbitions (#227)', () => {
   it('resolves the outcome using the clock\'s own goal, not the drifted live faction.goal', async () => {
     mocks.factionFindUnique.mockResolvedValueOnce(faction)
 
-    await resolveCompletedAmbitions('camp1', 5, [clock])
+    await resolveCompletedAmbitions('camp1', simTurn(5), [clock])
 
     // A DESTABILIZE_RIVAL success applies resourceDelta -3 / stabilityDelta
     // +1 / militaryDelta +2 (see decideAmbitionOutcome) — an ENRICH success
@@ -106,7 +107,7 @@ describe('resolveCompletedAmbitions (#227)', () => {
     // goal (DESTABILIZE_RIVAL) never changed.
     mocks.factionFindUnique.mockResolvedValueOnce({ ...faction, goal: 'DEFEND' })
 
-    await resolveCompletedAmbitions('camp1', 5, [clock])
+    await resolveCompletedAmbitions('camp1', simTurn(5), [clock])
 
     expect(mocks.clockCreate).toHaveBeenCalledTimes(1)
     const created = mocks.clockCreate.mock.calls[0][0].data
@@ -120,7 +121,7 @@ describe('resolveCompletedAmbitions (#227)', () => {
   it('falls back to faction.goal for a legacy clock with no stored goal', async () => {
     mocks.factionFindUnique.mockResolvedValueOnce({ ...faction, goal: 'DESTABILIZE_RIVAL' })
 
-    await resolveCompletedAmbitions('camp1', 5, [{ ...clock, goal: null }])
+    await resolveCompletedAmbitions('camp1', simTurn(5), [{ ...clock, goal: null }])
 
     expect(mocks.factionUpdate).toHaveBeenCalledWith({
       where: { id: 'faction-drift-1' },

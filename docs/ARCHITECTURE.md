@@ -901,3 +901,45 @@ validates the state every handler above just produced — broken references,
 duplicate names, and a closed catalogue of universe-scoped semantic
 invariants — and repairs what it safely can before the turn's changes are
 ever narrated.
+
+### The two clocks
+
+There are two counters in this codebase that a reader will call "the turn
+number", and they advance independently:
+
+- **`WorldMeta.simulationTurn`** — how many WORLD TURNS have run. Driven by
+  banked in-game hours, so it moves whether or not anyone is playing.
+- **`WorldMeta.currentTurnNumber`** — how many PLAYER SCENES have resolved.
+  Written only by `sceneResolver.ts`, so it does not move on an idle
+  campaign.
+
+Neither dominates the other, and subtracting one from the other is
+meaningless in both directions. `#374` added the second clock to fix the
+frozen-counter bug above; a later adversarial pass (`#437`) found seven
+places still comparing one against the other, including one that told the AI
+GM a war had been running for a NEGATIVE number of turns, and one that made
+memory consolidation archive either everything or nothing depending on which
+way the two had drifted. Two more turned up while fixing those seven.
+
+**The rule: every persisted turn column is on the simulation clock.**
+`WorldEvent`, `EventWitness`, `TimelineEvent`, `CampaignMemory` (including
+`lastRetrievedTurn`), `War.startedTurn`/`resolvedTurn`,
+`WarParticipant.joinedTurn`, `PopulationFlightEvent`. The scene counter stays
+in `WorldMeta.currentTurnNumber` and in the two places genuinely about
+scenes — `CampaignLog` (the per-scene story log) and `advancement.ts`'s arc
+gating. Several scenes resolving between two world turns all legitimately
+happened "during" the same simulation turn, so a scene-originated write
+resolves the sim turn via `currentSimulationTurn()` rather than stamping the
+counter it happens to be holding.
+
+The rule is enforced, not just written down. `src/lib/game/turnClock.ts`
+defines branded `SimTurn`/`SceneTurn` types — zero-cost at runtime, and a
+plain `number` cannot be passed where one is expected, so aliasing a value
+through three renames does not launder its clock. Prisma's generated `data:`
+types still accept a bare `number`, which is exactly the hole every one of
+these bugs lived in, so `turnClockConvention.test.ts` covers it structurally:
+every write to a declared sim-clock column has to be fed from a
+`file: identifier` pair listed there as SimTurn at its declaration. That list
+is deliberately file-scoped — `currentTurn` means the simulation turn in
+`worldTurn.ts` and the scene counter in `sceneResolver.ts`, and a global name
+list waved a real crossing straight through on the guard's first draft.

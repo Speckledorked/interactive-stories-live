@@ -46,6 +46,8 @@ import { ensureSurgeCorruptionChanges } from './corruption'
 import { aggregateInventoryItems, describeAggregatedItem } from './itemRegistry'
 import { reportError } from '@/lib/monitoring'
 import { checkAndCreateMilestone } from './campaignMilestone'
+import { sceneTurn, simTurn } from './turnClock'
+import { currentSimulationTurn } from './tick/simulationClock'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import {
   buildNpcWikiSummary,
@@ -353,11 +355,19 @@ async function performResolution(
       // surface any other notable timeline event reaches, not a new
       // player-facing concept. isOffscreen: false because this happened in
       // a scene the party was actually in, unlike a background tick event.
+      // #437: a NINTH cross-clock site, found by dumping what the
+      // turnClockConvention guard matches. `currentTurn` in this file is
+      // the SCENE counter, and TimelineEvent.turnNumber is a sim-clock
+      // column — the same name means the simulation turn in worldTurn.ts,
+      // which is exactly why a name is not a unit.
+      const beatTurn = simTurn(
+        newSignificantBeats.length > 0 ? await currentSimulationTurn(campaignId) : 0
+      )
       for (const beatText of newSignificantBeats) {
         await prisma.timelineEvent.create({
           data: {
             campaignId,
-            turnNumber: currentTurn,
+            turnNumber: beatTurn,
             title: truncateWithEllipsis(beatText, 80),
             summaryPublic: beatText,
             summaryGM: beatText,
@@ -727,9 +737,14 @@ async function performResolution(
 
       // Timeout memory creation after 20 seconds
       const MEMORY_CREATE_TIMEOUT_MS = 20 * 1000
+      // #437: CampaignMemory.turnNumber is a sim-clock column — historyLog
+      // and worldTurnOffscreenEvents already stamp it that way, and
+      // memoryConsolidation ages the whole table against the sim clock. A
+      // scene memory stamped `currentTurn + 1` (the SCENE counter) was
+      // bucketed and aged against a unit it was never measured in.
       const memoryCreatePromise = createSceneMemory(
         { ...scene, sceneResolutionText: aiResponse.scene_text },
-        { turnNumber: currentTurn + 1 },
+        { turnNumber: simTurn(await currentSimulationTurn(campaignId)) },
         aiResponse,
         { npcIds: involvedNpcIds, factionIds: involvedFactionIds }
       )
@@ -1316,7 +1331,7 @@ async function generateCampaignLog(
   const sceneLogCount = await prisma.campaignLog.count({
     where: { campaignId, entryType: 'scene' }
   })
-  await checkAndCreateMilestone(campaignId, sceneLogCount, turnNumber, inGameDayNumber)
+  await checkAndCreateMilestone(campaignId, sceneLogCount, sceneTurn(turnNumber), inGameDayNumber)
 }
 
 /**

@@ -25,6 +25,7 @@ import { persistWorldEvents } from './worldEventLog'
 import { logSignificantChanges } from './historyLog'
 import { syncWikiEntriesForChanges } from './wikiSync'
 import { generateClockResolutionEffects } from '@/lib/ai/clockResolutionEffects'
+import type { SimTurn } from '@/lib/game/turnClock'
 import {
   ClockResolutionEffect,
   MAX_EFFECTS_PER_CLOCK,
@@ -74,7 +75,8 @@ type Db = Prisma.TransactionClient
  */
 export async function applyClockResolutionEffects(
   db: Db,
-  currentTurn: number,
+  // #437: the SIMULATION turn — one phase of a world turn.
+  currentTurn: SimTurn,
   sourceClock: SourceClock,
   effects: ClockResolutionEffect[],
   locations: ResolvableEntity[],
@@ -212,7 +214,8 @@ interface GenericCompletedClock {
  */
 export async function resolveGenericClockEffects(
   campaignId: string,
-  currentTurn: number,
+  // #437: the SIMULATION turn — one phase of a world turn.
+  currentTurn: SimTurn,
   completedClocks: GenericCompletedClock[]
 ): Promise<WorldChange[]> {
   if (completedClocks.length === 0) return []

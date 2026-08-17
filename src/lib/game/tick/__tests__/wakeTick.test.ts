@@ -12,9 +12,10 @@ import { prisma } from '@/lib/prisma'
 import { decideWakeStabilityPenalty, decideWakeDecayStep, tickWake } from '../wakeTick'
 import type { TickContext } from '../types'
 import { factionTieRows } from './tieFixtures'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(5), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 describe('decideWakeStabilityPenalty (#103)', () => {

@@ -12,6 +12,7 @@ import { getUser } from '@/lib/auth'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { explainWarMomentum } from '@/lib/game/tick/warTick'
 import { applyWhatIf, type WhatIfSpec } from '@/lib/api/whatIf'
+import { simTurn } from '@/lib/game/turnClock'
 
 /**
  * #427: war what-ifs, scoped to ONE war by `warId`.
@@ -56,11 +57,17 @@ export async function GET(
     const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can preview war reasoning')
     if ('response' in adminCheck) return adminCheck.response
 
-    const worldMeta = await prisma.worldMeta.findUnique({ where: { campaignId }, select: { currentTurnNumber: true } })
+    // #437: the SIMULATION turn. This panel exists to show what the tick
+    // WOULD decide, and every tick decider is called with ctx.turnNumber
+    // (the sim clock). Reading the scene counter here meant the preview and
+    // the reality diverged on exactly the campaigns where the two clocks
+    // had drifted — on the one feature whose entire purpose is showing
+    // reality.
+    const worldMeta = await prisma.worldMeta.findUnique({ where: { campaignId }, select: { simulationTurn: true } })
     if (!worldMeta) {
       return NextResponse.json({ error: 'Campaign has no world state yet' }, { status: 404 })
     }
-    const turnNumber = worldMeta.currentTurnNumber
+    const turnNumber = simTurn(worldMeta.simulationTurn)
 
     const escalatingWars = await prisma.war.findMany({
       where: { campaignId, status: 'ESCALATING' },

@@ -47,6 +47,10 @@ function baseWorldMeta() {
   return {
     campaignId: 'camp1',
     currentTurnNumber: 50,
+    // #437: the witness window is on the SIMULATION clock. Deliberately
+    // different from currentTurnNumber — see worldSummary.turnClock.test.ts
+    // for the assertions that depend on the two being distinguishable.
+    simulationTurn: 30,
     tension: 20,
     phase: null,
     currentInGameDate: 'Day 3',

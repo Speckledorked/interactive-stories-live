@@ -21,9 +21,10 @@ import { tickFactions } from '../factionTick'
 import { tickFactionAmbitions } from '../ambitionTick'
 import type { TickContext } from '../types'
 import { factionTieRows, factionTieTable } from './tieFixtures'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(5), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 function makeFaction(id: string, overrides: Record<string, any> = {}) {
@@ -238,7 +239,7 @@ describe('tickFactions goal-history lookback is bounded (audit fix #202)', () =>
       .mockResolvedValueOnce([a] as any)
       .mockResolvedValueOnce([{ id: 'a' }] as any)
 
-    await tickFactions(baseCtx({ turnNumber: 100 }))
+    await tickFactions(baseCtx({ turnNumber: simTurn(100) }))
 
     const call = vi.mocked(prisma.worldEvent.findMany).mock.calls.find(
       (c) => (c[0] as any)?.where?.type === 'faction.goal'

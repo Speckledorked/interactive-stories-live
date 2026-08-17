@@ -12,6 +12,7 @@ import type { Prisma, PrismaClient } from '@prisma/client'
 import type { Season } from '../calendar'
 import type { TickRoster } from './capOrdering'
 import type { TieEntry } from '../tieGraph'
+import type { SimTurn } from '../turnClock'
 
 export type TickEntityType = 'NPC' | 'FACTION' | 'LOCATION_WEATHER' | 'LOCATION_CONDITION' | 'LOCATION_POPULATION' | 'CLOCK' | 'QUEST' | 'WAR' | 'CHARACTER' | 'DEBT' | 'LOCATION'
 
@@ -86,7 +87,15 @@ export interface WorldChange {
 
 export interface TickContext {
   campaignId: string
-  turnNumber: number
+  /**
+   * #437: the SIMULATION turn (WorldMeta.simulationTurn), never the scene
+   * counter. Every handler's elapsed-time arithmetic — information latency,
+   * loan maturity, war duration, goal commitment windows, drift watermarks —
+   * is measured in world turns, and every turn column a handler writes is a
+   * sim-clock column. Branded so a scene counter cannot be substituted, in
+   * production or in a test fixture. See turnClock.ts.
+   */
+  turnNumber: SimTurn
   /** World Sim Phase 8: resolved once per tick in worldTick.ts — see caps.ts. */
   factionCap: number
   npcCap: number
@@ -210,7 +219,7 @@ export type TickHandler = (ctx: TickContext) => Promise<TickHandlerResult>
 
 export interface WorldTickResult {
   campaignId: string
-  turnNumber: number
+  turnNumber: SimTurn
   timestamp: Date
   changes: WorldChange[]
   historyEntriesCreated: number

@@ -8,6 +8,7 @@ import { TURN_PHASE } from './tick/simulationClock'
 import { checkAndResolveCompletedClocks } from './stateUpdater'
 import { runWorldTick } from './worldTick'
 import { consolidateOldMemories } from '@/lib/ai/memoryConsolidation'
+import { simTurn } from './turnClock'
 import { resolveWorldTurnHours, decideWorldTurnPacing, leaseIsAvailable, staleLeaseCutoff } from './tick/pacing'
 import { advanceClocks, decideClockAdvancement } from './tick/clockTick'
 import type { FactionForClockAdvancement } from './tick/clockTick'
@@ -199,7 +200,11 @@ export async function runWorldTurn(campaignId: string) {
   // Anything that is not a number — an undefined from a partial select, a
   // row written before the column existed — has to mean "not resuming".
   const resuming = typeof worldMeta.turnInFlight === 'number'
-  const currentTurn = resuming ? worldMeta.turnInFlight! : worldMeta.simulationTurn + 1
+  // #437: this is the SIMULATION turn — the whole of runWorldTurn works in
+  // world turns. Branded here, at the one place it is derived, so every
+  // downstream call inherits it and a scene counter can never be
+  // substituted for it by accident.
+  const currentTurn = simTurn(resuming ? worldMeta.turnInFlight! : worldMeta.simulationTurn + 1)
 
   // How far the in-flight turn already got. Only meaningful when this IS a
   // resume — a fresh turn starts at NOTHING regardless of what the column

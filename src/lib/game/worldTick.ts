@@ -52,6 +52,7 @@ import { TickContext, TickHandler, WorldChange, WorldTickResult, PendingAmbition
 import { resolveTickCaps, DEFAULT_FACTION_CAP, DEFAULT_NPC_CAP, type TickCapReport } from './tick/caps'
 import { resolveTickRoster, markRosterTicked } from './tick/capOrdering'
 import { deriveSeason, GeneratedCalendar } from './calendar'
+import type { SimTurn } from './turnClock'
 
 // tickFactionRelationships runs BEFORE tickFactions on purpose: it reads
 // each faction's goal as of the end of the previous turn and writes this
@@ -227,13 +228,15 @@ const MAX_TICK_TRANSACTION_TIMEOUT_MS = 60_000
  * Cadence: paced by IN-GAME time — runWorldTurnIfDue only invokes
  * runWorldTurn (and therefore this) once enough fictional hours have
  * accumulated from the AI's time_passage (default one in-game day; see
- * lib/game/tick/pacing.ts). There is no separate clock; this rides the
- * existing WorldMeta.currentTurnNumber progression instead of inventing
- * a new one.
+ * lib/game/tick/pacing.ts).
  */
 export async function runWorldTick(
   campaignId: string,
-  turnNumber: number,
+  // #437: the SIMULATION turn — WorldMeta.simulationTurn + 1, derived by
+  // runWorldTurn. Branded so a caller cannot hand this the scene counter,
+  // which is what every tick handler's elapsed-time arithmetic used to read
+  // before #374 split the two clocks apart.
+  turnNumber: SimTurn,
   options: { dryRun?: boolean } = {}
 ): Promise<WorldTickResult> {
   const dryRun = options.dryRun ?? false

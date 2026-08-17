@@ -44,7 +44,7 @@ describe('GET /campaigns/[id]/npcs/[npcId]/reasoning', () => {
 
   it('404s when the NPC does not exist in this campaign', async () => {
     db.nPC.findFirst.mockResolvedValue(null)
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 5 })
 
     const response = await GET(req(), { params: { id: 'camp1', npcId: 'npc1' } })
     expect(response.status).toBe(404)
@@ -63,7 +63,7 @@ describe('GET /campaigns/[id]/npcs/[npcId]/reasoning', () => {
       id: 'npc1', name: 'Elder Rowan', goals: 'Broker peace', relationship: 'wary of the council',
       currentLocation: 'Ashcrown Hold', goalProgress: 40, faction: { name: 'Ashcrown', goal: 'CONSOLIDATE', isActive: true },
     })
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 5 })
 
     const response = await GET(req(), { params: { id: 'camp1', npcId: 'npc1' } })
     const body = await response.json()
@@ -79,7 +79,7 @@ describe('GET /campaigns/[id]/npcs/[npcId]/reasoning', () => {
       id: 'npc1', name: 'Elder Rowan', goals: 'Broker peace', relationship: null,
       currentLocation: 'Home', goalProgress: 0, faction: null,
     })
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 5 })
     db.location.findMany.mockResolvedValue([
       { id: 'loc-home', name: 'Home' },
       { id: 'loc-work', name: 'Work' },
@@ -108,7 +108,7 @@ describe('what-if overrides (#427)', () => {
 
   beforeEach(() => {
     db.nPC.findFirst.mockResolvedValue({ ...NPC })
-    db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 5 })
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 5 })
     db.location.findMany.mockResolvedValue([])
     db.locationAdjacency.findMany.mockResolvedValue([])
   })

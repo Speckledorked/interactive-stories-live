@@ -16,6 +16,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { PrismaClient } from '@prisma/client'
+import { simTurn } from '@/lib/game/turnClock'
 
 // The embedding call itself needs a real OPENAI_API_KEY this environment
 // doesn't have — mocked to a controlled, deterministic vector keyed off
@@ -79,7 +80,7 @@ describeIfDb('retrieveRelevantHistory — real pgvector search', () => {
       campaignId,
       memoryType: 'WORLD_EVENT',
       sourceId: 'test-source',
-      turnNumber: 1,
+      turnNumber: simTurn(1),
       title: 'Close memory',
       summary: 'TOPIC_A memory content',
       fullContext: 'TOPIC_A memory content',
@@ -94,7 +95,7 @@ describeIfDb('retrieveRelevantHistory — real pgvector search', () => {
       campaignId,
       memoryType: 'WORLD_EVENT',
       sourceId: 'test-source',
-      turnNumber: 1,
+      turnNumber: simTurn(1),
       title: 'Far memory',
       summary: 'TOPIC_B memory content',
       fullContext: 'TOPIC_B memory content',
@@ -188,13 +189,13 @@ describeIfDb('retrieveRelevantHistory — real pgvector search', () => {
     })
 
     await createCampaignMemory({
-      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 3,
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: simTurn(3),
       title: 'Undiscovered NPC memory', summary: 'TOPIC_A memory about the hidden cultist', fullContext: 'TOPIC_A',
       involvedCharacterIds: [], involvedNpcIds: [hiddenNpc.id], involvedFactionIds: [], locationTags: [],
       importance: 'NORMAL', tags: [],
     })
     await createCampaignMemory({
-      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 3,
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: simTurn(3),
       title: 'Discovered NPC memory', summary: 'TOPIC_A memory about the known blacksmith', fullContext: 'TOPIC_A',
       involvedCharacterIds: [], involvedNpcIds: [knownNpc.id], involvedFactionIds: [], locationTags: [],
       importance: 'NORMAL', tags: [],
@@ -237,13 +238,13 @@ describeIfDb('retrieveRelevantHistory — real pgvector search', () => {
     })
 
     await createCampaignMemory({
-      campaignId: recencyCampaign.id, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 1,
+      campaignId: recencyCampaign.id, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: simTurn(1),
       title: 'Old similar memory', summary: 'TOPIC_A memory content', fullContext: 'TOPIC_A memory content',
       involvedCharacterIds: [], involvedNpcIds: [], involvedFactionIds: [], locationTags: [],
       importance: 'NORMAL', tags: [],
     })
     await createCampaignMemory({
-      campaignId: recencyCampaign.id, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 50,
+      campaignId: recencyCampaign.id, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: simTurn(50),
       title: 'Recent dissimilar memory', summary: 'TOPIC_B memory content', fullContext: 'TOPIC_B memory content',
       involvedCharacterIds: [], involvedNpcIds: [], involvedFactionIds: [], locationTags: [],
       importance: 'NORMAL', tags: [],
@@ -299,7 +300,7 @@ describeIfDb('retrieveNpcHistory — real fog-of-war guard (#285/#327)', () => {
       data: { campaignId, name: 'The Hidden Cultist', isDiscovered: false },
     })
     await createCampaignMemory({
-      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 1,
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: simTurn(1),
       title: 'A memory about the hidden cultist', summary: 's', fullContext: 'f',
       involvedCharacterIds: [], involvedNpcIds: [hiddenNpc.id], involvedFactionIds: [], locationTags: [],
       importance: 'NORMAL', tags: [],
@@ -317,7 +318,7 @@ describeIfDb('retrieveNpcHistory — real fog-of-war guard (#285/#327)', () => {
       data: { campaignId, name: 'The Known Blacksmith', isDiscovered: true },
     })
     await createCampaignMemory({
-      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: 1,
+      campaignId, memoryType: 'WORLD_EVENT', sourceId: 'test-source', turnNumber: simTurn(1),
       title: 'A memory about the known blacksmith', summary: 's', fullContext: 'f',
       involvedCharacterIds: [], involvedNpcIds: [knownNpc.id], involvedFactionIds: [], locationTags: [],
       importance: 'NORMAL', tags: [],

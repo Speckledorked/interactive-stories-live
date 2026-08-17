@@ -38,7 +38,7 @@ beforeEach(() => {
   ;(getUser as any).mockResolvedValue({ userId: 'user1', email: 'user1@example.com' })
   ;(requireCampaignAdmin as any).mockResolvedValue({ membership: { role: 'ADMIN' } })
   db.worldMeta.findUnique.mockResolvedValue({
-    currentTurnNumber: 5, tension: 25, totalElapsedGameHours: 0, campaign: { calendarConfig: null },
+    simulationTurn: 5, tension: 25, totalElapsedGameHours: 0, campaign: { calendarConfig: null },
   })
   db.faction.findMany.mockResolvedValue([])
 })

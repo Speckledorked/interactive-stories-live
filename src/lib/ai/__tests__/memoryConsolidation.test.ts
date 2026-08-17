@@ -18,6 +18,7 @@ vi.mock('../memoryCreation', () => ({
 
 import { prisma } from '@/lib/prisma'
 import { createCampaignMemory } from '../memoryCreation'
+import { simTurn } from '@/lib/game/turnClock'
 import {
   decideConsolidationBuckets,
   consolidateOldMemories,
@@ -112,25 +113,25 @@ describe('decideConsolidationBuckets (pure)', () => {
 
 describe('isFrequentlyRetrieved (pure)', () => {
   it('exempts a memory retrieved often and recently', () => {
-    expect(isFrequentlyRetrieved({ retrievalCount: 3, lastRetrievedTurn: 90 }, 100)).toBe(true)
+    expect(isFrequentlyRetrieved({ retrievalCount: 3, lastRetrievedTurn: 90 }, simTurn(100))).toBe(true)
   })
 
   it('does not exempt a memory retrieved fewer than the minimum count', () => {
-    expect(isFrequentlyRetrieved({ retrievalCount: 2, lastRetrievedTurn: 90 }, 100)).toBe(false)
+    expect(isFrequentlyRetrieved({ retrievalCount: 2, lastRetrievedTurn: 90 }, simTurn(100))).toBe(false)
   })
 
   it('does not exempt a memory retrieved often but not recently', () => {
     // retrieved 10 times, but not for the last 30 turns — was useful once, not still useful now
-    expect(isFrequentlyRetrieved({ retrievalCount: 10, lastRetrievedTurn: 70 }, 100)).toBe(false)
+    expect(isFrequentlyRetrieved({ retrievalCount: 10, lastRetrievedTurn: 70 }, simTurn(100))).toBe(false)
   })
 
   it('does not exempt a memory that has never been retrieved', () => {
-    expect(isFrequentlyRetrieved({ retrievalCount: 0, lastRetrievedTurn: null }, 100)).toBe(false)
+    expect(isFrequentlyRetrieved({ retrievalCount: 0, lastRetrievedTurn: null }, simTurn(100))).toBe(false)
   })
 
   it('is inclusive at exactly the recency boundary', () => {
-    expect(isFrequentlyRetrieved({ retrievalCount: 3, lastRetrievedTurn: 85 }, 100)).toBe(true) // 100-85=15
-    expect(isFrequentlyRetrieved({ retrievalCount: 3, lastRetrievedTurn: 84 }, 100)).toBe(false) // 100-84=16
+    expect(isFrequentlyRetrieved({ retrievalCount: 3, lastRetrievedTurn: 85 }, simTurn(100))).toBe(true) // 100-85=15
+    expect(isFrequentlyRetrieved({ retrievalCount: 3, lastRetrievedTurn: 84 }, simTurn(100))).toBe(false) // 100-84=16
   })
 })
 
@@ -140,14 +141,14 @@ describe('consolidateOldMemories (DB wrapper)', () => {
   })
 
   it('no-ops when currentTurn is within the age threshold', async () => {
-    const result = await consolidateOldMemories('campaign-1', 5) // cutoff would be negative
+    const result = await consolidateOldMemories('campaign-1', simTurn(5)) // cutoff would be negative
     expect(result).toEqual({ bucketsConsolidated: 0, memoriesRemoved: 0 })
     expect(prisma.$queryRaw).not.toHaveBeenCalled()
   })
 
   it('no-ops when the query finds no eligible memories', async () => {
     vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([])
-    const result = await consolidateOldMemories('campaign-1', 25)
+    const result = await consolidateOldMemories('campaign-1', simTurn(25))
     expect(result).toEqual({ bucketsConsolidated: 0, memoriesRemoved: 0 })
     expect(createCampaignMemory).not.toHaveBeenCalled()
     expect(prisma.$executeRaw).not.toHaveBeenCalled()
@@ -155,7 +156,7 @@ describe('consolidateOldMemories (DB wrapper)', () => {
 
   it('no-ops when the only eligible window is below the minimum bucket size', async () => {
     vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([makeRow({ turnNumber: 1 }), makeRow({ turnNumber: 2 })])
-    const result = await consolidateOldMemories('campaign-1', 25)
+    const result = await consolidateOldMemories('campaign-1', simTurn(25))
     expect(result).toEqual({ bucketsConsolidated: 0, memoriesRemoved: 0 })
     expect(createCampaignMemory).not.toHaveBeenCalled()
   })
@@ -168,7 +169,7 @@ describe('consolidateOldMemories (DB wrapper)', () => {
     ]
     vi.mocked(prisma.$queryRaw).mockResolvedValueOnce(rows)
 
-    const result = await consolidateOldMemories('campaign-1', 25)
+    const result = await consolidateOldMemories('campaign-1', simTurn(25))
 
     expect(result).toEqual({ bucketsConsolidated: 1, memoriesRemoved: 3 })
     expect(createCampaignMemory).toHaveBeenCalledTimes(1)
@@ -186,14 +187,14 @@ describe('consolidateOldMemories (DB wrapper)', () => {
 
   it('never queries memories newer than currentTurn minus the age threshold', async () => {
     vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([])
-    await consolidateOldMemories('campaign-1', 30)
+    await consolidateOldMemories('campaign-1', simTurn(30))
     // Just confirm it actually ran the query this time (currentTurn - 20 = 10 > 0)
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(1)
   })
 
   it('does not throw when the underlying query rejects', async () => {
     vi.mocked(prisma.$queryRaw).mockRejectedValueOnce(new Error('db down'))
-    const result = await consolidateOldMemories('campaign-1', 25)
+    const result = await consolidateOldMemories('campaign-1', simTurn(25))
     expect(result).toEqual({ bucketsConsolidated: 0, memoriesRemoved: 0 })
   })
 
@@ -206,7 +207,7 @@ describe('consolidateOldMemories (DB wrapper)', () => {
     vi.mocked(prisma.$queryRaw).mockResolvedValueOnce(rows)
 
     // Bucket now only has 'b' and 'c' — below MIN_BUCKET_SIZE_TO_CONSOLIDATE (3)
-    const result = await consolidateOldMemories('campaign-1', 25)
+    const result = await consolidateOldMemories('campaign-1', simTurn(25))
 
     expect(result).toEqual({ bucketsConsolidated: 0, memoriesRemoved: 0 })
     expect(createCampaignMemory).not.toHaveBeenCalled()
@@ -221,7 +222,7 @@ describe('consolidateOldMemories (DB wrapper)', () => {
     ]
     vi.mocked(prisma.$queryRaw).mockResolvedValueOnce(rows)
 
-    const result = await consolidateOldMemories('campaign-1', 25)
+    const result = await consolidateOldMemories('campaign-1', simTurn(25))
 
     expect(result).toEqual({ bucketsConsolidated: 1, memoriesRemoved: 3 })
     // The exempt memory 'a' must never appear among the archived ids.
@@ -248,7 +249,7 @@ describe('consolidateOldMemories (DB wrapper)', () => {
       // call should happen at all (MAJOR's cutoff is negative, so it
       // short-circuits before ever querying).
       vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([])
-      await consolidateOldMemories('campaign-1', 25)
+      await consolidateOldMemories('campaign-1', simTurn(25))
       expect(prisma.$queryRaw).toHaveBeenCalledTimes(1)
     })
 
@@ -263,7 +264,7 @@ describe('consolidateOldMemories (DB wrapper)', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce(majorRows)
 
-      const result = await consolidateOldMemories('campaign-1', 300)
+      const result = await consolidateOldMemories('campaign-1', simTurn(300))
 
       expect(prisma.$queryRaw).toHaveBeenCalledTimes(2)
       expect(result).toEqual({ bucketsConsolidated: 1, memoriesRemoved: 3 })
@@ -284,7 +285,7 @@ describe('consolidateOldMemories (DB wrapper)', () => {
         .mockResolvedValueOnce(minorRows) // MINOR tier succeeds
         .mockRejectedValueOnce(new Error('db down')) // MAJOR tier fails
 
-      const result = await consolidateOldMemories('campaign-1', 300)
+      const result = await consolidateOldMemories('campaign-1', simTurn(300))
 
       // The MINOR tier's real, successful consolidation must still be
       // reported — a failure in the OTHER tier must not zero it out.
@@ -304,7 +305,7 @@ describe('consolidateOldMemories (DB wrapper)', () => {
       vi.mocked(prisma.$queryRaw).mockResolvedValueOnce(rows)
       vi.mocked(createCampaignMemory).mockResolvedValueOnce(null)
 
-      const result = await consolidateOldMemories('campaign-1', 25)
+      const result = await consolidateOldMemories('campaign-1', simTurn(25))
 
       expect(result).toEqual({ bucketsConsolidated: 0, memoriesRemoved: 0 })
       expect(prisma.$executeRaw).not.toHaveBeenCalled()
@@ -334,7 +335,7 @@ describe('consolidateOldMemories — archival, not deletion (#392)', () => {
     ])
     vi.mocked(createCampaignMemory).mockResolvedValue('era-1')
 
-    await consolidateOldMemories('campaign-1', 25)
+    await consolidateOldMemories('campaign-1', simTurn(25))
 
     const sql = vi.mocked(prisma.$executeRaw).mock.calls
       .map((call) => (call[0] as unknown as string[]).join(''))
@@ -355,7 +356,7 @@ describe('consolidateOldMemories — archival, not deletion (#392)', () => {
     ])
     vi.mocked(createCampaignMemory).mockResolvedValue('era-1')
 
-    await consolidateOldMemories('campaign-1', 25)
+    await consolidateOldMemories('campaign-1', simTurn(25))
 
     const sql = (vi.mocked(prisma.$executeRaw).mock.calls[0][0] as unknown as string[]).join('')
     expect(sql).toMatch(/embedding = NULL/)

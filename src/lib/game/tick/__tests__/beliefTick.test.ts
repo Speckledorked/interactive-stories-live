@@ -11,9 +11,10 @@ vi.mock('@/lib/prisma', () => ({
 import { prisma } from '@/lib/prisma'
 import { decideBeliefDrift, parseBeliefVector, NEUTRAL_BELIEF, tickBeliefDrift, MAX_BELIEF_CATCHUP_TURNS } from '../beliefTick'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 5, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(5), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 describe('parseBeliefVector (#104)', () => {
@@ -151,7 +152,7 @@ describe('tickBeliefDrift (DB handler)', () => {
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'f1', name: 'Ashcrown', beliefVector: null, beliefDriftThroughTurn: 10 }] as any)
     vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([])
 
-    await tickBeliefDrift(baseCtx({ turnNumber: 12 }))
+    await tickBeliefDrift(baseCtx({ turnNumber: simTurn(12) }))
 
     expect(prisma.worldEvent.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ turnNumber: { gte: 11, lte: 11 } }) })
@@ -255,7 +256,7 @@ describe('tickBeliefDrift (DB handler)', () => {
   it('excludes factions already current in SQL rather than fetching and skipping them', async () => {
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([])
 
-    await tickBeliefDrift(baseCtx({ turnNumber: 5 }))
+    await tickBeliefDrift(baseCtx({ turnNumber: simTurn(5) }))
 
     const args = vi.mocked(prisma.faction.findMany).mock.calls[0][0] as any
     expect(args.where.OR).toEqual([
@@ -268,7 +269,7 @@ describe('tickBeliefDrift (DB handler)', () => {
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'f1', name: 'Ashcrown', beliefVector: null, beliefDriftThroughTurn: null }] as any)
     vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([])
 
-    await tickBeliefDrift(baseCtx({ turnNumber: 5 }))
+    await tickBeliefDrift(baseCtx({ turnNumber: simTurn(5) }))
 
     // An empty window is a real answer to "did anything happen", not a
     // reason to re-ask next tick.
@@ -285,7 +286,7 @@ describe('tickBeliefDrift (DB handler)', () => {
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'f1', name: 'Ashcrown', beliefVector: null, beliefDriftThroughTurn: 1 }] as any)
     vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([])
 
-    await tickBeliefDrift(baseCtx({ turnNumber: 5 }))
+    await tickBeliefDrift(baseCtx({ turnNumber: simTurn(5) }))
 
     const args = vi.mocked(prisma.worldEvent.findMany).mock.calls[0][0] as any
     expect(args.where.turnNumber).toEqual({ gte: 2, lte: 4 })
@@ -295,7 +296,7 @@ describe('tickBeliefDrift (DB handler)', () => {
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'f1', name: 'Ashcrown', beliefVector: null, beliefDriftThroughTurn: null }] as any)
     vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([])
 
-    await tickBeliefDrift(baseCtx({ turnNumber: 500 }))
+    await tickBeliefDrift(baseCtx({ turnNumber: simTurn(500) }))
 
     const args = vi.mocked(prisma.worldEvent.findMany).mock.calls[0][0] as any
     expect(args.where.turnNumber).toEqual({ gte: 499 - MAX_BELIEF_CATCHUP_TURNS, lte: 499 })
@@ -305,7 +306,7 @@ describe('tickBeliefDrift (DB handler)', () => {
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([{ id: 'f1', name: 'Ashcrown', beliefVector: null, beliefDriftThroughTurn: null }] as any)
     vi.mocked(prisma.worldEvent.findMany).mockResolvedValueOnce([{ type: 'faction.warResolved', newValue: 'attacker', origin: 'tick' }] as any)
 
-    await tickBeliefDrift(baseCtx({ turnNumber: 5, dryRun: true }))
+    await tickBeliefDrift(baseCtx({ turnNumber: simTurn(5), dryRun: true }))
 
     expect(prisma.faction.update).not.toHaveBeenCalled()
   })

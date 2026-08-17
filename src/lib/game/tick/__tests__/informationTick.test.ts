@@ -29,11 +29,12 @@ import {
   MIN_PROPAGATION_WINDOW_TURNS,
 } from '../informationTick'
 import type { TickContext } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 const db = prisma as any
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 20, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(20), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 describe('decideInformationSpread — the social channel (#373)', () => {
@@ -320,7 +321,7 @@ describe('tickInformation (DB handler)', () => {
     db.locationAdjacency.findMany.mockResolvedValue(edges)
     db.worldEvent.findMany.mockResolvedValue([])
 
-    await tickInformation(baseCtx({ turnNumber: 50 }))
+    await tickInformation(baseCtx({ turnNumber: simTurn(50) }))
 
     expect(db.worldEvent.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
@@ -351,7 +352,7 @@ describe('tickInformation (DB handler)', () => {
     db.character.findMany.mockResolvedValue([])
     db.nPC.findMany.mockResolvedValue([{ id: 'n1', locationId: 'loc-a' }])
 
-    await tickInformation(baseCtx({ turnNumber: 13 }))
+    await tickInformation(baseCtx({ turnNumber: simTurn(13) }))
 
     expect(db.eventWitness.createMany).toHaveBeenCalledWith(expect.objectContaining({
       data: [expect.objectContaining({ npcId: 'n1', grade: 'TOLD' })],
@@ -366,7 +367,7 @@ describe('tickInformation (DB handler)', () => {
     db.character.findMany.mockResolvedValue([])
     db.nPC.findMany.mockResolvedValue([{ id: 'n1', locationId: 'loc-a' }])
 
-    await tickInformation(baseCtx({ turnNumber: 13 }))
+    await tickInformation(baseCtx({ turnNumber: simTurn(13) }))
 
     expect(db.eventWitness.createMany).toHaveBeenCalledTimes(1)
     const data = db.eventWitness.createMany.mock.calls[0][0].data
@@ -384,7 +385,7 @@ describe('tickInformation (DB handler)', () => {
     db.character.findMany.mockResolvedValue([{ id: 'c1', locationId: 'loc-b' }])
     db.locationAdjacency.findMany.mockResolvedValue([{ locationAId: 'loc-a', locationBId: 'loc-b', distance: 1 }])
 
-    await tickInformation(baseCtx({ turnNumber: 12 })) // age 2, delay 1+1=2 -> fires
+    await tickInformation(baseCtx({ turnNumber: simTurn(12) })) // age 2, delay 1+1=2 -> fires
 
     expect(db.eventWitness.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({ campaignId: 'campaign-1', worldEventId: 'e1', characterId: 'c1', grade: 'TOLD', turnNumber: 12 })],
@@ -399,7 +400,7 @@ describe('tickInformation (DB handler)', () => {
     db.character.findMany.mockResolvedValue([{ id: 'c1', locationId: 'loc-b' }])
     db.locationAdjacency.findMany.mockResolvedValue([{ locationAId: 'loc-a', locationBId: 'loc-b', distance: 1 }])
 
-    await tickInformation(baseCtx({ turnNumber: 12 }))
+    await tickInformation(baseCtx({ turnNumber: simTurn(12) }))
 
     expect(db.eventWitness.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({ campaignId: 'campaign-1', worldEventId: 'e1', characterId: 'c1', grade: 'TOLD', turnNumber: 12 })],
@@ -414,11 +415,11 @@ describe('tickInformation (DB handler)', () => {
     db.character.findMany.mockResolvedValue([{ id: 'c1', locationId: 'loc-b' }])
 
     // flat fallback delay is 3 -> age 2 at turn 12 doesn't fire yet
-    await tickInformation(baseCtx({ turnNumber: 12 }))
+    await tickInformation(baseCtx({ turnNumber: simTurn(12) }))
     expect(db.eventWitness.createMany).not.toHaveBeenCalled()
 
     // age 3 at turn 13 fires
-    await tickInformation(baseCtx({ turnNumber: 13 }))
+    await tickInformation(baseCtx({ turnNumber: simTurn(13) }))
     expect(db.eventWitness.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({ campaignId: 'campaign-1', worldEventId: 'e1', characterId: 'c1', grade: 'TOLD', turnNumber: 13 })],
       skipDuplicates: true,
@@ -432,7 +433,7 @@ describe('tickInformation (DB handler)', () => {
     db.character.findMany.mockResolvedValue([{ id: 'c1', locationId: 'loc-a' }])
     db.eventWitness.findMany.mockResolvedValue([{ worldEventId: 'e1', characterId: 'c1' }])
 
-    await tickInformation(baseCtx({ turnNumber: 50 }))
+    await tickInformation(baseCtx({ turnNumber: simTurn(50) }))
 
     expect(db.eventWitness.createMany).not.toHaveBeenCalled()
   })
@@ -443,7 +444,7 @@ describe('tickInformation (DB handler)', () => {
     ])
     db.character.findMany.mockResolvedValue([{ id: 'c1', locationId: 'loc-a' }])
 
-    await tickInformation(baseCtx({ turnNumber: 13 }))
+    await tickInformation(baseCtx({ turnNumber: simTurn(13) }))
 
     expect(db.eventWitness.createMany).toHaveBeenCalledWith(expect.objectContaining({ skipDuplicates: true }))
   })
@@ -454,7 +455,7 @@ describe('tickInformation (DB handler)', () => {
     ])
     db.character.findMany.mockResolvedValue([{ id: 'c1', locationId: 'loc-a' }])
 
-    const result = await tickInformation(baseCtx({ turnNumber: 13, dryRun: true }))
+    const result = await tickInformation(baseCtx({ turnNumber: simTurn(13), dryRun: true }))
 
     expect(db.eventWitness.createMany).not.toHaveBeenCalled()
     expect(result.changes).toEqual([])
@@ -466,7 +467,7 @@ describe('tickInformation (DB handler)', () => {
     ])
     db.character.findMany.mockResolvedValue([{ id: 'c1', locationId: 'loc-a' }])
 
-    const result = await tickInformation(baseCtx({ turnNumber: 13 }))
+    const result = await tickInformation(baseCtx({ turnNumber: simTurn(13) }))
 
     expect(result).toEqual({ changes: [] })
   })

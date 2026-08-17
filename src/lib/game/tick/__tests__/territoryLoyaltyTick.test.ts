@@ -13,9 +13,10 @@ import { prisma } from '@/lib/prisma'
 import { decideTerritoryLoyaltyPush, tickTerritoryLoyalty } from '../territoryLoyaltyTick'
 import type { TickContext } from '../types'
 import { factionTieRows } from './tieFixtures'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 10, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(10), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 describe('decideTerritoryLoyaltyPush (#119)', () => {
@@ -123,7 +124,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 30, isActive: true } as any)
     vi.mocked(prisma.arc.create).mockResolvedValueOnce({ id: 'arc1', value: 5 } as any)
 
-    const result = await tickTerritoryLoyalty(baseCtx({ turnNumber: 10 }))
+    const result = await tickTerritoryLoyalty(baseCtx({ turnNumber: simTurn(10) }))
 
     expect(prisma.arc.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ campaignId: 'campaign-1', kind: 'TERRITORY_LOYALTY', locationId: 'loc1', startedTurn: 10 }),
@@ -141,7 +142,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 50, isActive: true } as any)
 
-    await tickTerritoryLoyalty(baseCtx({ turnNumber: 7 }))
+    await tickTerritoryLoyalty(baseCtx({ turnNumber: simTurn(7) }))
 
     expect(prisma.arc.update).toHaveBeenCalledWith({ where: { id: 'arc1' }, data: { value: expect.any(Number) } })
     expect(prisma.arc.create).not.toHaveBeenCalled()
@@ -156,7 +157,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 90, isActive: true } as any)
 
-    const result = await tickTerritoryLoyalty(baseCtx({ turnNumber: 2 }))
+    const result = await tickTerritoryLoyalty(baseCtx({ turnNumber: simTurn(2) }))
 
     expect(prisma.location.update).toHaveBeenCalledWith({ where: { id: 'loc1' }, data: { ownerFactionId: 'f2', isContested: false } })
     expect(prisma.arc.update).toHaveBeenCalledWith({ where: { id: 'arc1' }, data: { value: 0 } })
@@ -173,7 +174,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 10, isActive: true } as any)
 
-    const result = await tickTerritoryLoyalty(baseCtx({ turnNumber: 2 }))
+    const result = await tickTerritoryLoyalty(baseCtx({ turnNumber: simTurn(2) }))
 
     expect(prisma.location.update).toHaveBeenCalledWith({ where: { id: 'loc1' }, data: { isContested: false } })
     expect(result.changes[0]).toMatchObject({ entityType: 'FACTION', entityId: 'f1', field: 'territoryContested', newValue: 'secured', significant: true, importance: 'NORMAL' })
@@ -188,7 +189,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 50, isActive: true } as any)
 
-    const result = await tickTerritoryLoyalty(baseCtx({ turnNumber: 9 }))
+    const result = await tickTerritoryLoyalty(baseCtx({ turnNumber: simTurn(9) }))
 
     expect(prisma.location.update).toHaveBeenCalledWith({ where: { id: 'loc1' }, data: { isContested: false } })
     expect(result.changes[0]).toMatchObject({ field: 'territoryContested', newValue: 'settled', significant: false, importance: 'NORMAL' })
@@ -203,7 +204,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
     ] as any)
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f2', name: 'Blackreach', military: 90, isActive: true } as any)
 
-    const result = await tickTerritoryLoyalty(baseCtx({ dryRun: true, turnNumber: 2 }))
+    const result = await tickTerritoryLoyalty(baseCtx({ dryRun: true, turnNumber: simTurn(2) }))
 
     expect(prisma.arc.update).not.toHaveBeenCalled()
     expect(prisma.location.update).not.toHaveBeenCalled()
@@ -235,7 +236,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
     ] as any)
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([{ contestedLocationId: 'loc1' }] as any)
 
-    const result = await tickTerritoryLoyalty(baseCtx({ turnNumber: 2 }))
+    const result = await tickTerritoryLoyalty(baseCtx({ turnNumber: simTurn(2) }))
 
     // Never even reaches the faction lookups — the location is filtered
     // out before any owner/rival resolution happens.
@@ -260,7 +261,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.arc.create).mockResolvedValueOnce({ id: 'arc1', value: 5 } as any)
 
-    await tickTerritoryLoyalty(baseCtx({ turnNumber: 10 }))
+    await tickTerritoryLoyalty(baseCtx({ turnNumber: simTurn(10) }))
 
     expect(prisma.war.findMany).toHaveBeenCalledWith({
       where: { campaignId: 'campaign-1', status: 'ESCALATING', contestedLocationId: { not: null } },
@@ -281,7 +282,7 @@ describe('tickTerritoryLoyalty (DB handler, #119)', () => {
     vi.mocked(prisma.faction.findUnique).mockResolvedValueOnce({ id: 'f4', name: 'Ninefold', military: 50, isActive: true } as any)
     vi.mocked(prisma.arc.create).mockResolvedValueOnce({ id: 'arc2', value: 0 } as any)
 
-    await tickTerritoryLoyalty(baseCtx({ turnNumber: 10 }))
+    await tickTerritoryLoyalty(baseCtx({ turnNumber: simTurn(10) }))
 
     // loc1 (at war) is filtered out before the faction fetch, so the
     // faction query only ever needs to resolve loc2's owner.

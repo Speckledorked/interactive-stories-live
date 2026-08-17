@@ -16,6 +16,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 import { persistWorldEvents } from '../worldEventLog'
 import type { WorldChange } from '../types'
+import { simTurn } from '@/lib/game/turnClock'
 
 const RUN = process.env.RUN_DB_TESTS === '1'
 const describeIfDb = RUN ? describe : describe.skip
@@ -66,7 +67,7 @@ describeIfDb('persistWorldEvents / EventWitness — real database (#101)', () =>
   }
 
   it('returns real ids and significant flags from createManyAndReturn', async () => {
-    const result = await persistWorldEvents(campaignId, 3, [
+    const result = await persistWorldEvents(campaignId, simTurn(3), [
       makeChange({ significant: true }),
       makeChange({ significant: false }),
     ])
@@ -84,7 +85,7 @@ describeIfDb('persistWorldEvents / EventWitness — real database (#101)', () =>
   })
 
   it('writes a real WITNESSED EventWitness row, and skipDuplicates no-ops on a repeat insert', async () => {
-    const { events } = await persistWorldEvents(campaignId, 4, [makeChange({ significant: true })])
+    const { events } = await persistWorldEvents(campaignId, simTurn(4), [makeChange({ significant: true })])
     const worldEventId = events[0].id
 
     await prisma.eventWitness.createMany({
@@ -117,7 +118,7 @@ describeIfDb('persistWorldEvents / EventWitness — real database (#101)', () =>
       data: { campaignId: campaign.id, userId: user.id, name: 'Doomed' },
     })
 
-    const { events } = await persistWorldEvents(campaign.id, 1, [makeChange({ campaignId: campaign.id, significant: true })])
+    const { events } = await persistWorldEvents(campaign.id, simTurn(1), [makeChange({ campaignId: campaign.id, significant: true })])
     await prisma.eventWitness.create({
       data: { campaignId: campaign.id, worldEventId: events[0].id, characterId: character.id, grade: 'WITNESSED', turnNumber: 1 },
     })

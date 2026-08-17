@@ -12,9 +12,10 @@ import { prisma } from '@/lib/prisma'
 import { decideLoanExtension, decideDefaultCascade, tickEconomy } from '../economyTick'
 import type { TickContext } from '../types'
 import { factionTieRows } from './tieFixtures'
+import { simTurn } from '@/lib/game/turnClock'
 
 function baseCtx(overrides: Partial<TickContext> = {}): TickContext {
-  return { campaignId: 'campaign-1', turnNumber: 10, factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
+  return { campaignId: 'campaign-1', turnNumber: simTurn(10), factionCap: 10, npcCap: 20, dryRun: false, db: prisma as any, ...overrides }
 }
 
 describe('decideLoanExtension (#111)', () => {
@@ -163,7 +164,7 @@ describe('tickEconomy (DB handler)', () => {
   it('excludes debts created THIS same turn from default-eligibility', async () => {
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([])
-    await tickEconomy(baseCtx({ turnNumber: 10 }))
+    await tickEconomy(baseCtx({ turnNumber: simTurn(10) }))
     expect(prisma.factionDebt.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ turnCreated: { lt: 10 } }) })
     )
@@ -285,7 +286,7 @@ describe('tickEconomy (DB handler)', () => {
     vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([]) // no allies reached — findFirst is what's under test
 
-    await tickEconomy(baseCtx({ turnNumber: 10 }))
+    await tickEconomy(baseCtx({ turnNumber: simTurn(10) }))
 
     expect(prisma.factionDebt.findFirst).toHaveBeenCalledWith({
       where: {

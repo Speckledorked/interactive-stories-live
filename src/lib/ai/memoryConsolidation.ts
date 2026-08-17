@@ -28,6 +28,7 @@
 import { prisma } from '@/lib/prisma'
 import { createCampaignMemory } from './memoryCreation'
 import type { MemoryImportance } from '@prisma/client'
+import { simTurn, type SimTurn } from '@/lib/game/turnClock'
 
 const CONSOLIDATION_AGE_TURNS = 20 // only touch memories at least this many turns old
 const CONSOLIDATION_BUCKET_SIZE = 10 // group eligible memories into turn-number windows this wide
@@ -67,7 +68,9 @@ export interface EligibleMemoryRow {
  */
 export function isFrequentlyRetrieved(
   memory: { retrievalCount: number; lastRetrievedTurn: number | null },
-  currentTurn: number
+  // #437: the SIMULATION turn, matching the clock lastRetrievedTurn is now
+  // written on (memoryRetrieval.ts). See turnClock.ts.
+  currentTurn: SimTurn
 ): boolean {
   if (memory.retrievalCount < FREQUENT_RETRIEVAL_MIN_COUNT) return false
   if (memory.lastRetrievedTurn === null) return false
@@ -159,7 +162,7 @@ const MAJOR_TIER: ConsolidationTierConfig = {
  */
 async function consolidateTier(
   campaignId: string,
-  currentTurn: number,
+  currentTurn: SimTurn,
   tier: ConsolidationTierConfig
 ): Promise<{ bucketsConsolidated: number; memoriesRemoved: number }> {
   try {
@@ -172,7 +175,7 @@ async function consolidateTier(
 
 async function consolidateTierUnsafe(
   campaignId: string,
-  currentTurn: number,
+  currentTurn: SimTurn,
   tier: ConsolidationTierConfig
 ): Promise<{ bucketsConsolidated: number; memoriesRemoved: number }> {
   const cutoffTurn = currentTurn - tier.ageThreshold
@@ -249,7 +252,8 @@ async function consolidateTierUnsafe(
       campaignId,
       memoryType: 'WORLD_EVENT',
       sourceId: campaignId,
-      turnNumber: maxTurn,
+      // Read back off CampaignMemory.turnNumber, already a sim-clock column.
+      turnNumber: simTurn(maxTurn),
       title: `Turns ${startTurn}-${endTurn}: ${memories.length} ${tier.eventLabel}`,
       summary: `${tier.stretchLabel} (turns ${startTurn}-${endTurn}): ${memories.map((m) => m.title).join('; ')}`,
       fullContext: memories.map((m) => `- ${m.title}: ${m.summary}`).join('\n'),
@@ -306,7 +310,11 @@ async function consolidateTierUnsafe(
  */
 export async function consolidateOldMemories(
   campaignId: string,
-  currentTurn: number
+  // #437: the SIMULATION turn. Every age threshold in this module
+  // (CONSOLIDATION_AGE_TURNS, MAJOR_CONSOLIDATION_AGE_TURNS,
+  // FREQUENT_RETRIEVAL_RECENCY_TURNS) is measured against it, and
+  // CampaignMemory.turnNumber is now a sim-clock column for every writer.
+  currentTurn: SimTurn
 ): Promise<{ bucketsConsolidated: number; memoriesRemoved: number }> {
   // consolidateTier already catches and fails-safe per tier — see its own
   // doc comment for why that isolation matters — so a failure in one tier

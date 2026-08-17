@@ -26,6 +26,7 @@ import { applyWhatIf, STAT_BAND, type WhatIfSpec } from '@/lib/api/whatIf'
  */
 const CLOCK_WHAT_IF: WhatIfSpec = { tension: STAT_BAND, currentTicks: { min: 0, max: 100 } }
 import { GeneratedCalendar, deriveSeason } from '@/lib/game/calendar'
+import { simTurn } from '@/lib/game/turnClock'
 
 export async function GET(
   request: NextRequest,
@@ -53,7 +54,7 @@ export async function GET(
       prisma.worldMeta.findUnique({
         where: { campaignId },
         select: {
-          currentTurnNumber: true, tension: true, totalElapsedGameHours: true,
+          simulationTurn: true, tension: true, totalElapsedGameHours: true,
           campaign: { select: { calendarConfig: true } },
         },
       }),
@@ -91,17 +92,23 @@ export async function GET(
     )
     const projected = whatIf.snapshot
 
+    // #437: the SIMULATION turn — see turnClock.ts. This panel exists to
+    // show what the tick WOULD decide, and every tick decider is called
+    // with ctx.turnNumber (the sim clock). Reading the scene counter here
+    // made the preview and the reality diverge on exactly the campaigns
+    // where the two clocks had drifted, on the one feature whose entire
+    // purpose is showing reality.
     const { advanceAmount, reasoning } = explainClockAdvancement(
       projected,
       factionById,
-      worldMeta.currentTurnNumber,
+      simTurn(worldMeta.simulationTurn),
       projected.tension,
       clockSpeedMultiplier
     )
 
     return NextResponse.json({
       clock: { id: clock.id, name: clock.name, currentTicks: projected.currentTicks, maxTicks: clock.maxTicks },
-      turnNumber: worldMeta.currentTurnNumber,
+      turnNumber: worldMeta.simulationTurn,
       projectedAdvance: advanceAmount,
       projectedTicks: Math.min(projected.currentTicks + advanceAmount, clock.maxTicks),
       reasoning,

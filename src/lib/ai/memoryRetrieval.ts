@@ -318,14 +318,20 @@ export async function retrieveRelevantHistory(
  * otherwise need turn context, and this write isn't latency-sensitive.
  */
 async function recordMemoryRetrievals(campaignId: string, memoryIds: string[]): Promise<void> {
+  // #437: the SIMULATION turn. This wrote the SCENE counter, and
+  // memoryConsolidation's isFrequentlyRetrieved subtracts lastRetrievedTurn
+  // from the SIM turn it is called with — so on a play-heavy campaign the
+  // difference went negative, every memory read as "retrieved recently", and
+  // consolidation archived NOTHING. On an idle-heavy one the opposite:
+  // genuinely hot memories aged out and got rolled into an era summary.
   const worldMeta = await prisma.worldMeta.findUnique({
     where: { campaignId },
-    select: { currentTurnNumber: true },
+    select: { simulationTurn: true },
   });
 
   await prisma.$executeRaw`
     UPDATE campaign_memories
-    SET "retrievalCount" = "retrievalCount" + 1, "lastRetrievedTurn" = ${worldMeta?.currentTurnNumber ?? null}
+    SET "retrievalCount" = "retrievalCount" + 1, "lastRetrievedTurn" = ${worldMeta?.simulationTurn ?? null}
     WHERE id = ANY(${memoryIds}::text[])
   `;
 }

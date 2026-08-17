@@ -28,7 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   ;(getUser as any).mockResolvedValue({ userId: 'user1', email: 'user1@example.com' })
   ;(requireCampaignAdmin as any).mockResolvedValue({ membership: { role: 'ADMIN' } })
-  db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 10 })
+  db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 10, currentTurnNumber: 99 })
 })
 
 describe('GET /campaigns/[id]/wars/reasoning', () => {
@@ -59,6 +59,20 @@ describe('GET /campaigns/[id]/wars/reasoning', () => {
     expect(db.war.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { campaignId: 'camp1', status: 'ESCALATING' },
     }))
+  })
+
+  it('reads the SIMULATION clock, not the scene counter (#437)', async () => {
+    // The panel's whole purpose is showing what the tick would decide, and
+    // the tick works in world turns. The mock returns both clocks with very
+    // different values so this can only pass one way; it used to select
+    // currentTurnNumber, and the stalemate verdict it previewed therefore
+    // disagreed with the one the tick applied.
+    db.war.findMany.mockResolvedValue([])
+    await GET(req(), { params: { id: 'camp1' } })
+
+    expect(db.worldMeta.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ select: { simulationTurn: true } })
+    )
   })
 
   it('bounds the query with a take cap (#224) rather than fetching every escalating war unbounded', async () => {

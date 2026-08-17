@@ -89,7 +89,7 @@ describe('the turn number runWorldTurn derives (#444)', () => {
     worldMeta.findUnique.mockResolvedValue(meta({ simulationTurn: 41 }))
     await runWorldTurn('camp1')
 
-    expect(runWorldTick.mock.calls.map(c => c[1])).toEqual([41, 42])
+    expect((runWorldTick.mock.calls as unknown as any[][]).map(c => c[1])).toEqual([41, 42])
   })
 
   it('starts at turn 1 on a brand-new campaign', async () => {

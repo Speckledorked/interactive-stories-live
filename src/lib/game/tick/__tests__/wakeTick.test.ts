@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    activeWake: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+    activeWake: { findMany: vi.fn(), create: vi.fn(), createMany: vi.fn(), update: vi.fn() },
     faction: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     nPC: { findMany: vi.fn(), update: vi.fn() },
   },
@@ -87,6 +87,11 @@ describe('decideWakeDecayStep (#103)', () => {
 describe('tickWake (DB handler)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // #441: wake creation is createMany + skipDuplicates now (ON CONFLICT
+    // DO NOTHING) — a raised P2002 inside the shared tick transaction
+    // aborted the whole turn, which the old catch-and-continue could not
+    // recover from. Default: one row inserted.
+    vi.mocked(prisma.activeWake.createMany).mockResolvedValue({ count: 1 } as any)
   })
 
   it('does nothing when there are no active wakes, dead NPCs, or collapsed factions', async () => {
@@ -142,8 +147,9 @@ describe('tickWake (DB handler)', () => {
 
     // No successionRoughness on ctx for this faction, so it falls back to
     // DEFAULT_ROUGHNESS (0.4): -round(6 * (0.5+0.4) * 1) = -5.
-    expect(prisma.activeWake.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ sourceType: 'NPC', sourceEntityId: 'npc1', affectedFactionId: 'f1', totalStabilityPenalty: -5 }),
+    expect(prisma.activeWake.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ sourceType: 'NPC', sourceEntityId: 'npc1', affectedFactionId: 'f1', totalStabilityPenalty: -5 })],
+      skipDuplicates: true,
     })
     expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'f1' }, data: { stability: 45 } })
     expect(result.changes).toHaveLength(1)
@@ -162,8 +168,9 @@ describe('tickWake (DB handler)', () => {
 
     const result = await tickWake(baseCtx({ successionRoughnessByFactionId: new Map([['f1', 1]]) }))
 
-    expect(prisma.activeWake.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ totalStabilityPenalty: -14 }),
+    expect(prisma.activeWake.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ totalStabilityPenalty: -14 })],
+      skipDuplicates: true,
     })
     expect(result.changes[0]).toMatchObject({ importance: 'MAJOR' })
   })
@@ -189,7 +196,7 @@ describe('tickWake (DB handler)', () => {
 
     const result = await tickWake(baseCtx())
 
-    expect(prisma.activeWake.create).not.toHaveBeenCalled()
+    expect(prisma.activeWake.createMany).not.toHaveBeenCalled()
     expect(result.changes).toEqual([])
   })
 
@@ -219,8 +226,9 @@ describe('tickWake (DB handler)', () => {
 
     const result = await tickWake(baseCtx({ collapseRoughnessByFactionId: new Map([['f-collapsed', 0]]) }))
 
-    expect(prisma.activeWake.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ sourceType: 'FACTION', sourceEntityId: 'f-collapsed', affectedFactionId: 'f-rival', totalStabilityPenalty: -3 }),
+    expect(prisma.activeWake.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ sourceType: 'FACTION', sourceEntityId: 'f-collapsed', affectedFactionId: 'f-rival', totalStabilityPenalty: -3 })],
+      skipDuplicates: true,
     })
     expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'f-rival' }, data: { stability: 57 } })
     expect(result.changes).toHaveLength(1)
@@ -237,7 +245,7 @@ describe('tickWake (DB handler)', () => {
 
     const result = await tickWake(baseCtx())
 
-    expect(prisma.activeWake.create).not.toHaveBeenCalled()
+    expect(prisma.activeWake.createMany).not.toHaveBeenCalled()
     expect(result.changes).toEqual([])
   })
 
@@ -252,7 +260,7 @@ describe('tickWake (DB handler)', () => {
 
     const result = await tickWake(baseCtx())
 
-    expect(prisma.activeWake.create).not.toHaveBeenCalled()
+    expect(prisma.activeWake.createMany).not.toHaveBeenCalled()
     expect(result.changes).toEqual([])
   })
 
@@ -264,7 +272,7 @@ describe('tickWake (DB handler)', () => {
 
     const result = await tickWake(baseCtx({ dryRun: true }))
 
-    expect(prisma.activeWake.create).not.toHaveBeenCalled()
+    expect(prisma.activeWake.createMany).not.toHaveBeenCalled()
     expect(prisma.faction.update).not.toHaveBeenCalled()
     expect(result.changes).toHaveLength(1)
   })

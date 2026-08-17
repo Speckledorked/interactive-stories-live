@@ -71,11 +71,26 @@ export const RETENTION_BATCH_SIZE = 5_000
  */
 export const AI_COST_RETENTION_MS = 730 * 24 * 60 * 60 * 1000
 
+/**
+ * C-13/#442: how long an ARCHIVED memory is kept before it is finally
+ * deleted.
+ *
+ * #392 made consolidation archive rather than delete — safer for the data,
+ * and it left memoryConsolidation's own stated purpose ("so the table stays
+ * bounded") unmet, because nothing ever retired an archived row. A year is
+ * deliberately long: an archived memory is already invisible to every
+ * retrieval path, so the only thing this window buys is the ability to
+ * recover from a consolidation that archived too aggressively.
+ */
+export const ARCHIVED_MEMORY_RETENTION_MS = 365 * 24 * 60 * 60 * 1000
+
 export interface RetentionResult {
   worldEventsDeleted: number
   eventWitnessesDeleted: number
   diceRollsDeleted: number
   aiCostEntriesDeleted: number
+  /** C-13/#442: archived memories, which had no retention pass at all. */
+  archivedMemoriesDeleted: number
 }
 
 /**
@@ -89,18 +104,57 @@ export interface RetentionResult {
  * someone would want precisely when something has gone wrong.
  */
 export async function pruneCampaignHistory(campaignId: string): Promise<RetentionResult> {
+  // #442: telemetry FIRST, and unconditionally.
+  //
+  // DiceRoll and AICostEntry are pruned on a real-time basis
+  // (`createdAt < now - AI_COST_RETENTION_MS`) and have nothing whatsoever
+  // to do with simulation turns. They used to sit BELOW two early returns
+  // keyed on a different table's age — `cutoffTurn <= 0` and
+  // `staleEventIds.length === 0` — so the two highest-volume telemetry
+  // tables in the schema were never pruned at all until a campaign was old
+  // enough to have stale WORLD EVENTS. That is backwards: telemetry
+  // accumulates fastest early, when play is most active, and the audit's
+  // ~360-turn threshold means "nearly every campaign, forever".
+  //
+  // An early return is a claim about the whole function. These deletes have
+  // their own criteria, so they belong above any return that does not.
+  const telemetryCutoff = new Date(Date.now() - AI_COST_RETENTION_MS)
+  const diceRolls = await prisma.diceRoll.deleteMany({
+    where: { campaignId, createdAt: { lt: telemetryCutoff } },
+  })
+  const costEntries = await prisma.aICostEntry.deleteMany({
+    where: { campaignId, createdAt: { lt: telemetryCutoff } },
+  })
+
+  // C-13/#442: the memory archive had no retention pass at all.
+  //
+  // #392 changed consolidation from delete to ARCHIVE, which is safer for
+  // the data and left memoryConsolidation's own stated purpose — "so the
+  // table stays bounded" — unmet, because nothing ever retired an archived
+  // row. Archived memories are already excluded from every retrieval path,
+  // so this is the one place they can go.
+  const archivedMemories = await prisma.campaignMemory.deleteMany({
+    where: { campaignId, archivedAt: { lt: new Date(Date.now() - ARCHIVED_MEMORY_RETENTION_MS) } },
+  })
+
+  const empty = (): RetentionResult => ({
+    worldEventsDeleted: 0,
+    eventWitnessesDeleted: 0,
+    diceRollsDeleted: diceRolls.count,
+    aiCostEntriesDeleted: costEntries.count,
+    archivedMemoriesDeleted: archivedMemories.count,
+  })
+
   const meta = await prisma.worldMeta.findUnique({
     where: { campaignId },
     select: { simulationTurn: true },
   })
   const cutoffTurn = (meta?.simulationTurn ?? 0) - EVENT_RETENTION_TURNS
 
-  // A campaign younger than the window has nothing to prune, and a
+  // A campaign younger than the window has no WORLD EVENTS to prune, and a
   // negative cutoff would be a no-op query run for every campaign on every
-  // sweep.
-  if (cutoffTurn <= 0) {
-    return { worldEventsDeleted: 0, eventWitnessesDeleted: 0, diceRollsDeleted: 0, aiCostEntriesDeleted: 0 }
-  }
+  // sweep. The telemetry above has already been dealt with.
+  if (cutoffTurn <= 0) return empty()
 
   // EventWitness rows hang off WorldEvent, so they go first — otherwise the
   // FK cascade decides the order and the batch bound stops meaning
@@ -112,30 +166,18 @@ export async function pruneCampaignHistory(campaignId: string): Promise<Retentio
     orderBy: { turnNumber: 'asc' },
   })
 
-  if (staleEventIds.length === 0) {
-    return { worldEventsDeleted: 0, eventWitnessesDeleted: 0, diceRollsDeleted: 0, aiCostEntriesDeleted: 0 }
-  }
+  if (staleEventIds.length === 0) return empty()
 
   const ids = staleEventIds.map((e) => e.id)
   const witnesses = await prisma.eventWitness.deleteMany({ where: { worldEventId: { in: ids } } })
   const events = await prisma.worldEvent.deleteMany({ where: { id: { in: ids } } })
-
-  // DiceRoll and AICostEntry are pure telemetry with no reader in the
-  // simulation at all — DiceRoll's own audit finding is that its rollType
-  // is read by nothing but the exporter. DiceRoll has no turnNumber, so it
-  // is pruned on the same real-time basis as cost entries.
-  const diceRolls = await prisma.diceRoll.deleteMany({
-    where: { campaignId, createdAt: { lt: new Date(Date.now() - AI_COST_RETENTION_MS) } },
-  })
-  const costEntries = await prisma.aICostEntry.deleteMany({
-    where: { campaignId, createdAt: { lt: new Date(Date.now() - AI_COST_RETENTION_MS) } },
-  })
 
   return {
     worldEventsDeleted: events.count,
     eventWitnessesDeleted: witnesses.count,
     diceRollsDeleted: diceRolls.count,
     aiCostEntriesDeleted: costEntries.count,
+    archivedMemoriesDeleted: archivedMemories.count,
   }
 }
 

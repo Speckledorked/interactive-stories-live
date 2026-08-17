@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    factionDebt: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
+    factionDebt: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn(), create: vi.fn(), createMany: vi.fn() },
     faction: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     activeWake: { create: vi.fn() },
   },
@@ -86,6 +86,9 @@ describe('decideDefaultCascade (#111)', () => {
 describe('tickEconomy (DB handler)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // #441: the loan write is createMany + skipDuplicates now (ON CONFLICT
+    // DO NOTHING), so the default is "inserted one row".
+    vi.mocked(prisma.factionDebt.createMany).mockResolvedValue({ count: 1 } as any)
   })
 
   it('does nothing when there are no outstanding debts and no broke factions', async () => {
@@ -194,8 +197,9 @@ describe('tickEconomy (DB handler)', () => {
 
     const result = await tickEconomy(baseCtx())
 
-    expect(prisma.factionDebt.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ creditorFactionId: 'ally1', debtorFactionId: 'broke1', amount: 15, turnCreated: 10 }),
+    expect(prisma.factionDebt.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ creditorFactionId: 'ally1', debtorFactionId: 'broke1', amount: 15, turnCreated: 10 })],
+      skipDuplicates: true,
     })
     expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'ally1' }, data: { resources: 75 } })
     expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'broke1' }, data: { resources: 25 } })
@@ -203,14 +207,22 @@ describe('tickEconomy (DB handler)', () => {
     expect(result.changes[0]).toMatchObject({ entityId: 'broke1', field: 'resources' })
   })
 
-  it('#238: swallows a P2002 from the DB-level single-outstanding-debt backstop instead of aborting the whole tick', async () => {
-    // The rare window this backstops: the findFirst check above (mocked
-    // null here, "no existing debt") and the create below it are two
-    // separate statements — the new partial unique index (see the
-    // migration) is what actually enforces the invariant if they ever
-    // race. An uncaught P2002 here would abort runWorldTick's entire
-    // transaction, not just this one loan, so this must be caught.
-    const { Prisma } = await import('@prisma/client')
+  it('#238/#441: never lets the single-outstanding-debt backstop raise inside the tick transaction', async () => {
+    // The rare window this backstops: the findFirst check above and the
+    // write below it are two separate statements, and the partial unique
+    // index is what actually enforces the invariant if they ever race.
+    //
+    // This test used to assert that a raised P2002 was CAUGHT, on the
+    // stated reasoning that "an uncaught P2002 here would abort
+    // runWorldTick's entire transaction, so this must be caught". The
+    // premise was right and the conclusion did not follow: by the time the
+    // catch runs, the statement has ALREADY aborted the transaction.
+    // Postgres does not un-abort on catch and Prisma opens no savepoint, so
+    // every later handler failed with "current transaction is aborted".
+    // Catching converted a benign collision into a lost world turn.
+    //
+    // So what is asserted now is that it cannot raise at all:
+    // createMany + skipDuplicates compiles to ON CONFLICT DO NOTHING.
     vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany)
       .mockResolvedValueOnce([
@@ -218,12 +230,15 @@ describe('tickEconomy (DB handler)', () => {
       ] as any)
       .mockResolvedValueOnce([{ id: 'ally1', name: 'Wealthy Co', resources: 90 }] as any)
     vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
-    vi.mocked(prisma.factionDebt.create).mockRejectedValueOnce(
-      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'x' })
-    )
+    // The collision: the row already existed, so nothing was inserted.
+    vi.mocked(prisma.factionDebt.createMany).mockResolvedValueOnce({ count: 0 } as any)
 
     const result = await tickEconomy(baseCtx())
 
+    expect(prisma.factionDebt.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skipDuplicates: true })
+    )
+    // Nothing raised, and the loan's follow-up writes correctly did not run.
     expect(prisma.faction.update).not.toHaveBeenCalled()
     expect(result.changes).toEqual([])
   })
@@ -236,7 +251,7 @@ describe('tickEconomy (DB handler)', () => {
       ] as any)
       .mockResolvedValueOnce([{ id: 'ally1', name: 'Wealthy Co', resources: 90 }] as any)
     vi.mocked(prisma.factionDebt.findFirst).mockResolvedValueOnce(null)
-    vi.mocked(prisma.factionDebt.create).mockRejectedValueOnce(new Error('connection reset'))
+    vi.mocked(prisma.factionDebt.createMany).mockRejectedValueOnce(new Error('connection reset'))
 
     await expect(tickEconomy(baseCtx())).rejects.toThrow('connection reset')
   })
@@ -319,8 +334,9 @@ describe('tickEconomy (DB handler)', () => {
 
     const result = await tickEconomy(baseCtx())
 
-    expect(prisma.factionDebt.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ creditorFactionId: 'ally1', debtorFactionId: 'broke1' }),
+    expect(prisma.factionDebt.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ creditorFactionId: 'ally1', debtorFactionId: 'broke1' })],
+      skipDuplicates: true,
     })
     expect(result.changes).toHaveLength(1)
   })

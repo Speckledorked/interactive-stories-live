@@ -80,6 +80,46 @@ export default function HelpPage() {
           />
         </div>
 
+        {/* #449: above the reference list, not below it.
+            The quickstart is the only link to /tutorial, and it used to
+            sit under all six categories — so a first-time visitor, who is
+            exactly the person who wants the short guided version, had to
+            scroll past the entire reference to find it. Rendering it as a
+            footer also signalled "supplementary" for the page's most
+            valuable destination.
+            Search stays above it: "I saw a word and want to know what it
+            means" is still the primary job of this page. */}
+        {!isSearching && (
+          <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Link
+              href="/tutorial"
+              className="group rounded-lg border border-myth-border bg-myth-surface p-5 transition-colors hover:border-myth-border-strong"
+            >
+              <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-myth-ink">
+                How to play
+                <ArrowRight className="h-4 w-4 text-myth-ink-faint transition-transform group-hover:translate-x-0.5" />
+              </h2>
+              <p className="text-sm leading-relaxed text-myth-ink-muted">
+                The short version — enough to start, nothing you do not need yet.
+              </p>
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))}
+              className="min-h-[44px] rounded-lg border border-myth-border bg-myth-surface p-5 text-left transition-colors hover:border-myth-border-strong"
+            >
+              <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-myth-ink">
+                <Keyboard className="h-5 w-5 text-myth-ink-faint" />
+                Keyboard shortcuts
+              </h2>
+              <p className="text-sm leading-relaxed text-myth-ink-muted">
+                Cmd+K opens the command palette from anywhere.
+              </p>
+            </button>
+          </div>
+        )}
+
         {isSearching ? (
           <section>
             <SectionHeader
@@ -122,34 +162,6 @@ export default function HelpPage() {
           </div>
         )}
 
-        <div className="mt-12 grid grid-cols-1 gap-4 border-t border-myth-border pt-8 sm:grid-cols-2">
-          <Link
-            href="/tutorial"
-            className="group rounded-lg border border-myth-border bg-myth-surface p-5 transition-colors hover:border-myth-border-strong"
-          >
-            <h3 className="mb-1 flex items-center gap-2 text-lg font-bold text-myth-ink">
-              How to play
-              <ArrowRight className="h-4 w-4 text-myth-ink-faint transition-transform group-hover:translate-x-0.5" />
-            </h3>
-            <p className="text-sm leading-relaxed text-myth-ink-muted">
-              The short version — enough to start, nothing you do not need yet.
-            </p>
-          </Link>
-
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))}
-            className="min-h-[44px] rounded-lg border border-myth-border bg-myth-surface p-5 text-left transition-colors hover:border-myth-border-strong"
-          >
-            <h3 className="mb-1 flex items-center gap-2 text-lg font-bold text-myth-ink">
-              <Keyboard className="h-5 w-5 text-myth-ink-faint" />
-              Keyboard shortcuts
-            </h3>
-            <p className="text-sm leading-relaxed text-myth-ink-muted">
-              Cmd+K opens the command palette from anywhere.
-            </p>
-          </button>
-        </div>
       </main>
 
       <TavernNav campaignId={lastCampaignId || undefined} />

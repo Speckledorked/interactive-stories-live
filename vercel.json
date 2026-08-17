@@ -1,5 +1,5 @@
 {
-  "buildCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then prisma migrate deploy; fi && prisma generate && next build",
+  "buildCommand": "prisma generate && next build && if [ \"$VERCEL_ENV\" = \"production\" ]; then prisma migrate deploy; fi",
   "installCommand": "npm install",
   "framework": "nextjs",
   "git": {

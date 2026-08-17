@@ -234,43 +234,77 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
 
   const changes: WorldChange[] = []
 
-  for (const npc of npcs) {
-    // Everything since this NPC last drifted, bounded — so an NPC that
-    // lost two rotations catches up on those turns rather than skipping
-    // them, and one returning after a long absence can't scan its whole
-    // history inside the shared tick transaction.
-    const turnWindow = {
-      gte: Math.max(
-        (npc.dispositionDriftThroughTurn ?? -1) + 1,
-        targetTurn - MAX_DISPOSITION_CATCHUP_TURNS
-      ),
-      lte: targetTurn,
-    }
-    const [ownEvents, factionEvents] = await Promise.all([
-      ctx.db.worldEvent.findMany({
-        where: {
-          campaignId: ctx.campaignId,
-          turnNumber: turnWindow,
-          targetType: 'NPC',
-          targetId: npc.id,
-          type: { in: RELEVANT_OWN_EVENT_TYPES },
-        },
-        select: { type: true, newValue: true },
-      }),
-      npc.factionId
-        ? ctx.db.worldEvent.findMany({
-            where: {
-              campaignId: ctx.campaignId,
-              turnNumber: turnWindow,
-              targetType: 'FACTION',
-              targetId: npc.factionId,
-              type: { in: RELEVANT_FACTION_EVENT_TYPES },
-            },
-            select: { type: true, newValue: true, origin: true, wakeSourceType: true },
-          })
-        : Promise.resolve([] as { type: string; newValue: string | null; origin: string; wakeSourceType: string | null }[]),
-    ])
+  // Everything since each NPC last drifted, bounded — so an NPC that lost
+  // two rotations catches up on those turns rather than skipping them, and
+  // one returning after a long absence can't scan its whole history inside
+  // the shared tick transaction.
+  const fromTurnFor = (npc: { dispositionDriftThroughTurn: number | null }) =>
+    Math.max(
+      (npc.dispositionDriftThroughTurn ?? -1) + 1,
+      targetTurn - MAX_DISPOSITION_CATCHUP_TURNS
+    )
 
+  // #445: TWO queries for the whole roster, not two per NPC.
+  //
+  // This loop issued a pair of worldEvent.findMany per NPC — up to npcCap of
+  // each (20 by default, MAX_NPC_CAP of 500) inside the shared 20s tick
+  // transaction, every world turn. The per-NPC watermarks differ, so these
+  // take the WIDEST window and each NPC's own lower bound is applied in
+  // memory below; the window is bounded by MAX_DISPOSITION_CATCHUP_TURNS
+  // either way, so the same rows are read in two round trips instead of
+  // forty.
+  const widestFrom = Math.min(...npcs.map(fromTurnFor))
+  const rosterWindow = { gte: widestFrom, lte: targetTurn }
+  const factionIds = [...new Set(npcs.map((n) => n.factionId).filter((id): id is string => !!id))]
+
+  const [allOwnEvents, allFactionEvents] = await Promise.all([
+    ctx.db.worldEvent.findMany({
+      where: {
+        campaignId: ctx.campaignId,
+        turnNumber: rosterWindow,
+        targetType: 'NPC',
+        targetId: { in: npcs.map((n) => n.id) },
+        type: { in: RELEVANT_OWN_EVENT_TYPES },
+      },
+      select: { targetId: true, turnNumber: true, type: true, newValue: true },
+    }),
+    // Skipped entirely when no NPC in the roster has a faction — the old
+    // per-NPC form had the same short-circuit, one NPC at a time.
+    factionIds.length > 0
+      ? ctx.db.worldEvent.findMany({
+          where: {
+            campaignId: ctx.campaignId,
+            turnNumber: rosterWindow,
+            targetType: 'FACTION',
+            targetId: { in: factionIds },
+            type: { in: RELEVANT_FACTION_EVENT_TYPES },
+          },
+          select: { targetId: true, turnNumber: true, type: true, newValue: true, origin: true, wakeSourceType: true },
+        })
+      : Promise.resolve([] as Array<{ targetId: string; turnNumber: number; type: string; newValue: string | null; origin: string; wakeSourceType: string | null }>),
+  ])
+
+  function groupByTarget<T extends { targetId: string }>(rows: T[]): Map<string, T[]> {
+    const byTarget = new Map<string, T[]>()
+    for (const row of rows) {
+      const bucket = byTarget.get(row.targetId)
+      if (bucket) bucket.push(row)
+      else byTarget.set(row.targetId, [row])
+    }
+    return byTarget
+  }
+  const ownByNpc = groupByTarget(allOwnEvents)
+  const factionByFaction = groupByTarget(allFactionEvents)
+
+  for (const npc of npcs) {
+    const fromTurn = fromTurnFor(npc)
+    // Each NPC's own window, applied here rather than in SQL — the grouped
+    // queries above deliberately over-fetch to the widest one.
+    const inWindow = <T extends { turnNumber: number }>(rows: T[]) =>
+      rows.filter((row) => row.turnNumber >= fromTurn)
+
+    const ownEvents = inWindow(ownByNpc.get(npc.id) ?? [])
+    const factionEvents = npc.factionId ? inWindow(factionByFaction.get(npc.factionId) ?? []) : []
 
     const driftEvents = [
       ...ownEvents.map((row) => classifyOwnEvent({ type: row.type, newValue: row.newValue })),

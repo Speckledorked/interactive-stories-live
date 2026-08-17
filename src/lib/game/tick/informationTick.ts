@@ -257,12 +257,28 @@ export function decideInformationSpread(input: {
   /** #373: NPC social ties. Absent behaves exactly like an empty graph —
    * the physical channel alone, i.e. the pre-#373 behaviour. */
   npcTies?: TieEdge[]
+  /**
+   * #445: memoized resolvers built by the caller, so the decision pass and
+   * the write pass share ONE set of traversals.
+   *
+   * #407 memoized within each pass and noted that "both the decision pass
+   * and the write pass go through the same resolver, because they ask the
+   * same question about the same events" — which was the intent, and not
+   * what the code did: the tick built a second pair for the write pass, so
+   * every origin location was traversed twice per turn. Optional so every
+   * existing caller (and every test) still gets a self-contained pure
+   * function.
+   */
+  resolvers?: {
+    distancesFor: (originLocationId: string | null) => Map<string, number> | null
+    socialDistancesFor: (originLocationId: string | null) => Map<string, number> | null
+  }
 }): InformationSpreadDecision[] {
   const { currentTurn, events, characters, npcs = [], coveredPairs, edges, npcTies = [] } = input
   const decisions: InformationSpreadDecision[] = []
 
-  const distancesFor = createDistanceResolver(edges)
-  const socialDistancesFor = createSocialDistanceResolver(npcTies, npcs)
+  const distancesFor = input.resolvers?.distancesFor ?? createDistanceResolver(edges)
+  const socialDistancesFor = input.resolvers?.socialDistancesFor ?? createSocialDistanceResolver(npcTies, npcs)
 
   for (const event of events) {
     const age = currentTurn - event.turnNumber
@@ -395,14 +411,23 @@ export async function tickInformation(ctx: TickContext): Promise<TickHandlerResu
     return { worldEventId: event.id, turnNumber: event.turnNumber, originLocationId }
   })
 
+  // #445: built ONCE, here, and used by both passes below — see the
+  // `resolvers` field on decideInformationSpread's input.
+  const npcInputs = npcs.map((n) => ({ npcId: n.id, locationId: n.locationId }))
+  const resolvers = {
+    distancesFor: createDistanceResolver(edges),
+    socialDistancesFor: createSocialDistanceResolver(npcTies, npcInputs),
+  }
+
   const decisions = decideInformationSpread({
     currentTurn: ctx.turnNumber,
     events: eventInputs,
     characters: characters.map((c) => ({ characterId: c.id, locationId: c.locationId })),
-    npcs: npcs.map((n) => ({ npcId: n.id, locationId: n.locationId })),
+    npcs: npcInputs,
     coveredPairs,
     edges,
     npcTies,
+    resolvers,
   })
 
   if (!ctx.dryRun && decisions.length > 0) {
@@ -411,12 +436,11 @@ export async function tickInformation(ctx: TickContext): Promise<TickHandlerResu
       ...characters.map((c) => [c.id, c.locationId] as const),
       ...npcs.map((n) => [n.id, n.locationId] as const),
     ])
-    const npcInputs = npcs.map((n) => ({ npcId: n.id, locationId: n.locationId }))
-    const socialDistancesForWrite = createSocialDistanceResolver(npcTies, npcInputs)
-    // #407: same memoized resolver as the decision pass above — the write
-    // pass asks the same question about the same events, and used to
-    // answer it with a fresh full Dijkstra per row.
-    const distancesForWrite = createDistanceResolver(edges)
+    // #407/#445: the SAME memoized resolvers the decision pass used. #407
+    // removed the per-row Dijkstra; this removes the second full set of
+    // traversals, which is what "both passes go through the same resolver"
+    // was supposed to mean.
+    const { distancesFor: distancesForWrite, socialDistancesFor: socialDistancesForWrite } = resolvers
     await ctx.db.eventWitness.createMany({
       data: decisions.map((d) => {
         const witnessId = d.npcId ?? d.characterId!

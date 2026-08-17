@@ -42,9 +42,14 @@ export const WALKTHROUGH: readonly WalkthroughSection[] = [
   },
   {
     id: 'your-character',
-    title: 'Reading your character',
-    lede: 'What is on your sheet, and what is deliberately not.',
-    mechanicIds: ['character-sheet', 'harm'],
+    title: 'Your character, and how it changes',
+    // Advancement lives here rather than in its own section: "how do I
+    // level up" is the first question anyone asks of any RPG, and the
+    // answer here is unusual enough (no points, no level-up screen,
+    // improvement follows from what you actually did) that omitting it
+    // reads as the feature being missing rather than as restraint.
+    lede: 'What is on your sheet, what is deliberately not, and how any of it improves.',
+    mechanicIds: ['character-sheet', 'harm', 'advancement'],
   },
   {
     id: 'the-world',

@@ -28,8 +28,7 @@ import { TavernNav } from '@/components/tavern/TavernNav'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Button } from '@/components/ui/button'
 import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
-import { getLastCampaignId, getUser, isAuthenticated } from '@/lib/clientAuth'
-import { clearOrientationLocally } from '@/lib/tutorial/orientationClient'
+import { getLastCampaignId, isAuthenticated } from '@/lib/clientAuth'
 import { WALKTHROUGH } from '@/lib/tutorial/content/walkthrough'
 import { getMechanic } from '@/lib/tutorial/content/mechanics'
 import { OrientationOverlay } from '@/components/tutorial/OrientationOverlay'
@@ -47,19 +46,12 @@ export default function TutorialPage() {
     setLastCampaignId(getLastCampaignId())
   }, [router])
 
-  // Replaying the intro is local-only and does not clear the server
-  // record: the point is "let me watch that again", not "pretend I never
-  // saw it", and re-arming it across every device the user owns would be
-  // a surprise.
+  // Replaying is purely a re-view: it touches neither the server record
+  // nor the local cache. The user is saying "let me watch that again",
+  // not "pretend I never saw it", so re-arming the overlay — on this
+  // device or, worse, on every device they own — would be a surprise.
   const replayIntro = () => setShowIntro(true)
-
-  const closeIntro = () => {
-    setShowIntro(false)
-    const user = getUser()
-    // Nothing to undo if they never had a cached answer; this just keeps
-    // the local cache honest after an explicit replay.
-    if (user?.id) clearOrientationLocally(user.id)
-  }
+  const closeIntro = () => setShowIntro(false)
 
   return (
     <TavernPage>
@@ -122,9 +114,11 @@ export default function TutorialPage() {
         <div className="mt-14 border-t border-myth-border pt-8">
           <h2 className="mb-2 text-lg font-bold text-myth-ink">That is the whole tutorial</h2>
           <p className="mb-5 max-w-prose text-sm leading-relaxed text-myth-ink-muted">
-            The rest of it — factions, threads, standing, downtime, what the
-            world does while you are away — you will meet as you play, and it
-            is all written up in Help whenever you want to look something up.
+            The rest of it — factions and the plans they are pursuing, threads,
+            standing, debts, wars, downtime, how the Codex keeps itself current —
+            you will meet as you play. All of it is written up properly in Help,
+            including how each system actually works, whenever you want to look
+            something up.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link href={lastCampaignId ? `/campaigns/${lastCampaignId}` : '/campaigns'}>

@@ -24,7 +24,7 @@ import { getMechanic } from '@/lib/tutorial/content/mechanics'
 import { formatNameList, readStatLabels } from '@/lib/tutorial/content/labels'
 
 /** Mechanics whose copy is improved by knowing the campaign's own names. */
-const LABEL_AWARE = new Set(['character-sheet'])
+const LABEL_AWARE = new Set(['character-sheet', 'origins', 'actions'])
 
 export default function MechanicPage() {
   const params = useParams<{ mechanicId: string }>()

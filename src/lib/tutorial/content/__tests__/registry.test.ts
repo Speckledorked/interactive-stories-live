@@ -105,6 +105,36 @@ describe('every cross-reference resolves', () => {
   })
 })
 
+// Caught three separate times by hand while writing this content, which
+// is the definition of something that should be a rule instead. A
+// heading with the same words as one of the entries beneath it reads as a
+// duplicate rather than as a grouping, and it makes every test that looks
+// content up by its visible text ambiguous.
+describe('no heading collides with the name of an entry under it', () => {
+  const TERMS = new Set(MECHANICS.map(m => m.term.toLowerCase()))
+
+  it('no category label is also a mechanic name', () => {
+    const clashes = CATEGORY_ORDER
+      .map(c => CATEGORY_LABELS[c])
+      .filter(label => TERMS.has(label.toLowerCase()))
+    expect(clashes).toEqual([])
+  })
+
+  it('no walkthrough section title is also a mechanic name', () => {
+    const clashes = WALKTHROUGH
+      .map(s => s.title)
+      .filter(title => TERMS.has(title.toLowerCase()))
+    expect(clashes).toEqual([])
+  })
+
+  it('no orientation card title is also a mechanic name', () => {
+    const clashes = ORIENTATION_CARDS
+      .map(c => c.title)
+      .filter(title => TERMS.has(title.toLowerCase()))
+    expect(clashes).toEqual([])
+  })
+})
+
 describe('the orientation stays short', () => {
   // Not an arbitrary number. The orientation exists to answer "what is
   // this and how do I act"; the moment it grows into a syllabus it

@@ -1,0 +1,57 @@
+# #453: does the issue tracker still agree with the docs?
+#
+# The tree and the tracker are two records of the same facts, and nothing
+# compared them. For about an hour after PR #452 merged, ARCHITECTURE.md
+# described ten defects in the past tense while all ten issues sat open — a
+# comma-separated `Closes #436, #437, ...` closed only the first. Neither
+# record knew the other disagreed.
+#
+# ## Why this is scheduled and not a gate
+#
+# On a pull request the issue being fixed is still open BY DEFINITION — it
+# closes on merge — so a per-PR gate would fail on every PR that fixes
+# anything. On push-to-main it races GitHub's own processing of the closing
+# keyword, which would make it flaky in the direction that gets a check muted.
+#
+# What it actually measures is divergence that has PERSISTED, and a daily
+# cadence is the honest shape for that: no race, and a failure means a real
+# and lasting disagreement rather than a timing artefact. The cost is latency
+# — it reports hours later, not at the merge. The PR-body gate in ci.yml is
+# what catches the common cause at the moment it is introduced; this is the
+# backstop for everything that gate cannot see.
+name: Issue hygiene
+
+on:
+  schedule:
+    # 07:00 UTC daily. No alignment requirement — nothing else keys off it.
+    - cron: '0 7 * * *'
+  # So it can be run on demand after a merge rather than waiting a day, which
+  # is exactly what today's ten-open-issues situation wanted.
+  workflow_dispatch:
+
+# Read-only. This check reports; it does not close anything on its own —
+# closing an issue is a statement that work is done, and a scheduled job is
+# not in a position to make it.
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  fixed-issues-closed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check that issues the Fix Log calls fixed are closed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: npx tsx scripts/check-fixed-issues-closed.ts

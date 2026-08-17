@@ -40,6 +40,41 @@ jobs:
       - name: Tests
         run: npx vitest run
 
+  # #453: a pull request that says it closes ten issues must actually close
+  # ten issues.
+  #
+  # PR #452's body opened `Closes #436, #437, #438, ... #445`, merged, and
+  # closed exactly ONE. GitHub's rule is KEYWORD + ONE issue; a
+  # comma-separated run after a single keyword drops every number but the
+  # first, with no warning in the merge result. Nine issues sat open looking
+  # like the work had not been done.
+  #
+  # pull_request only — there is no PR body on a push, and the check fails
+  # closed rather than passing when PR_BODY is absent (#443's rule: a gate
+  # that cannot run has not passed), so it must not be given a run where the
+  # variable is legitimately unset.
+  pr-closing-keywords:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the PR body's issue-closing references will all close
+        env:
+          # Via env, never interpolated into the run script: a PR body is
+          # attacker-controlled text and `${{ }}` inside a shell command is a
+          # script-injection surface.
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: npx tsx scripts/check-pr-closing-keywords.ts
+
   # Enforces docs/ARCHITECTURE.md's Scorecard Audit Log rule: a Scorecard
   # row's score can't go up without a matching Audit Log entry recording
   # a clean adversarial pass. See that section's own header for why — a

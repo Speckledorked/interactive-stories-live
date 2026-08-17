@@ -46,14 +46,32 @@ export interface SwallowedReference {
 }
 
 /**
- * Fenced code blocks are stripped before scanning.
+ * Code — fenced blocks AND inline spans — is blanked before scanning.
  *
- * Not a nicety: the documentation for this check contains the broken pattern
- * as an example, and so does this repo's CONTRIBUTING guidance. A check that
- * fires on its own worked example is a check people turn off.
+ * This is a correctness rule, not a convenience. GitHub does not autolink an
+ * issue reference inside code, and a reference it does not link is a reference
+ * it cannot close. So a closing keyword inside code is quoted text about a
+ * closing statement, never one itself.
+ *
+ * The inline half was missing in the first draft, and this gate caught it on
+ * its own pull request: #454's body describes the bug in prose (``opened
+ * `Closes #436, #437, ...` ``) and tabulates accepted and rejected forms as
+ * inline code. Both tripped it. The fenced case had a test and a comment
+ * reasoning about exactly this hazard — "a check that fires on its own worked
+ * example is a check people turn off" — and I then wrote the documentation
+ * using the other kind of code span.
+ *
+ * Replaced with spaces rather than removed: the scan works on offsets, so the
+ * text has to keep its length.
  */
-function stripFencedCode(body: string): string {
-  return body.replace(/```[\s\S]*?```/g, (block) => block.replace(/[^\n]/g, ' '))
+function stripCode(body: string): string {
+  const blank = (block: string) => block.replace(/[^\n]/g, ' ')
+  return body
+    .replace(/```[\s\S]*?```/g, blank)
+    // Inline spans, one or more backticks, never crossing a line — a code
+    // span cannot contain a blank line, and not crossing newlines keeps an
+    // unmatched stray backtick from blanking the rest of the body.
+    .replace(/`+[^`\n]*`+/g, blank)
 }
 
 /** `#123`, `owner/repo#123`, and the full-URL form, with their positions. */
@@ -98,7 +116,7 @@ const CONTINUATION = /^[\s]*(?:,|,?\s*(?:and|&|plus)|;)[\s]*$/i
  * chain after the first is swallowed.
  */
 export function findSwallowedReferences(body: string): SwallowedReference[] {
-  const text = stripFencedCode(body)
+  const text = stripCode(body)
   const refs = findReferences(text)
   const swallowed: SwallowedReference[] = []
 

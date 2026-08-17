@@ -84,6 +84,55 @@ describe('silence on everything that is not this bug', () => {
     expect(findSwallowedReferences(body)).toEqual([])
   })
 
+  // #454: the gate caught this on its own pull request, which is the best
+  // evidence available that it works and the most embarrassing possible way
+  // to find out that it did not.
+  //
+  // The fenced-block case below had a test AND a comment reasoning about this
+  // exact hazard. I then wrote #454's body using INLINE code spans — prose
+  // quoting the bad pattern, and a table of accepted/rejected forms — and the
+  // gate flagged four references in its own description.
+  //
+  // Stripping inline code is correct rather than convenient: GitHub does not
+  // autolink an issue reference inside code, so a reference there cannot
+  // close, so a keyword there is not a closing statement.
+  it('does not fire on prose quoting the bad pattern as inline code', () => {
+    const body = [
+      'Closes #453.',
+      '',
+      "PR #452's body opened `Closes #436, #437, #438, ... #445`. It merged and closed one.",
+    ].join('\n')
+    expect(findSwallowedReferences(body)).toEqual([])
+  })
+
+  it('does not fire on a markdown table of accepted and rejected forms', () => {
+    // Verbatim shape from #454's body.
+    const body = [
+      'Closes #453.',
+      '',
+      '| Body | Result |',
+      '|---|---|',
+      '| `Closes #1, #2` | fails, suggests `Closes #1. Closes #2.` |',
+      '| `Closes #1, closes #2` | passes — GitHub honours this |',
+      '| `Closes #1. See also #2, #3` | passes — a sentence break ends it |',
+    ].join('\n')
+    expect(findSwallowedReferences(body)).toEqual([])
+  })
+
+  it('still sees a real closing run that merely sits near inline code', () => {
+    // The stripping must not swallow live text around it, or the gate goes
+    // blind on any body that happens to contain a code span.
+    const body = 'Closes #1, #2 — see `npm test` for the suite.'
+    expect(findSwallowedReferences(body).map((r) => r.issue)).toEqual([2])
+  })
+
+  it('does not let a stray backtick blank the rest of the body', () => {
+    // An unmatched backtick is common in prose ("don't"-style typos, a lone
+    // `). If stripping crossed newlines, everything after it would go unread.
+    const body = 'Some prose with one ` stray backtick.\n\nCloses #1, #2'
+    expect(findSwallowedReferences(body).map((r) => r.issue)).toEqual([2])
+  })
+
   it('does not fire on its own worked example inside a code fence', () => {
     // The documentation for this check, and any CONTRIBUTING guidance about
     // it, will contain the broken pattern as an example. A check that flags

@@ -1,258 +1,187 @@
+// src/app/help/page.tsx
+//
+// The reference. Complete where the tutorial is deliberately not, and
+// written in the language the UI actually uses.
+//
+// Search matters more here than structure. The realistic entry point is
+// not "I want to read about information latency" — it is "the screen said
+// Heard secondhand and I do not know what that means". So the search runs
+// over each mechanic's aliases, and the aliases are the literal strings a
+// player can see on screen. See mechanics.ts for the rule.
+//
+// The previous version of this page hardcoded "2d6 + Stat" and named the
+// engine's own stat keys. Campaign.statLabels renames those per campaign
+// and lib/ai/moveFlavor.ts renames the moves, so that copy described a
+// vocabulary most players never see.
+
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { ArrowRight, Keyboard, Search } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SectionHeader } from '@/components/ui/section-header'
-import { getLastCampaignId } from '@/lib/clientAuth'
-import { BookOpen, Dices, Download, Feather, Keyboard, Map as MapIcon, MessageSquare, Scroll, Users } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/ui/empty-state'
 import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
+import { getLastCampaignId } from '@/lib/clientAuth'
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  MECHANICS,
+  searchMechanics,
+  type Mechanic,
+  type MechanicCategory,
+} from '@/lib/tutorial/content/mechanics'
 
 export default function HelpPage() {
   const [lastCampaignId, setLastCampaignId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     setLastCampaignId(getLastCampaignId())
   }, [])
 
+  const results = useMemo(() => searchMechanics(query), [query])
+  const isSearching = query.trim().length > 0
+
+  const grouped = useMemo(() => {
+    const map = new Map<MechanicCategory, Mechanic[]>()
+    for (const mechanic of MECHANICS) {
+      const list = map.get(mechanic.category) ?? []
+      list.push(mechanic)
+      map.set(mechanic.category, list)
+    }
+    return map
+  }, [])
+
   return (
     <TavernPage>
-      <TavernHeader backHref="/campaigns" title="Help & Documentation" />
+      <TavernHeader backHref="/campaigns" title="Help" />
 
-      <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
-        <p className="mb-8 text-sm text-myth-ink-faint">Everything you need to know about playing AI-powered TTRPGs</p>
+      <main className={`max-w-3xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
+        <p className="mb-6 max-w-prose text-sm leading-relaxed text-myth-ink-faint">
+          Everything MythOS does, explained. If you saw a word on screen and
+          want to know what it means, search for that word — it will find
+          the right page.
+        </p>
 
-      {/* Quick Links — real navigation/action CTAs, stay bordered */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
-        <Link
-          href="/tutorial"
-          className="group rounded-lg border border-myth-border bg-myth-surface p-6 transition-colors hover:border-myth-border-strong"
-        >
-          <BookOpen className="mx-auto mb-4 h-10 w-10 text-myth-ink-faint" />
-          <h3 className="font-display mb-2 text-2xl font-semibold text-myth-ink">
-            Interactive Tutorial
-          </h3>
-          <p className="text-sm leading-relaxed text-myth-ink-muted">
-            Step-by-step guide to get started with character creation, scenes, and gameplay
-          </p>
-        </Link>
+        <div className="relative mb-8">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-myth-ink-faint" />
+          <Input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search — try &ldquo;heard secondhand&rdquo; or &ldquo;x-card&rdquo;"
+            aria-label="Search help"
+            className="pl-9"
+          />
+        </div>
 
-        <button
-          onClick={() => {
-            const event = new KeyboardEvent('keydown', { key: '?' })
-            window.dispatchEvent(event)
-          }}
-          className="group rounded-lg border border-myth-border bg-myth-surface p-6 text-left transition-colors hover:border-myth-border-strong"
-        >
-          <Keyboard className="mb-4 h-12 w-12 text-myth-accent" />
-          <h3 className="font-display mb-2 text-2xl font-semibold text-myth-ink">
-            Keyboard Shortcuts
-          </h3>
-          <p className="text-sm leading-relaxed text-myth-ink-muted">
-            Speed up your workflow with Cmd+K command palette and navigation shortcuts
-          </p>
-        </button>
-      </div>
-
-      {/* Documentation prose — narrative content, de-boxed (see
-          docs/design-system.md): meant to be read, not acted on. */}
-      <div className="space-y-10">
-        <section>
-          <SectionHeader as="h2" title="Getting Started" />
-          <div className="mt-6 space-y-6 divide-y divide-myth-border">
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-myth-border bg-myth-surface-sunken font-bold text-myth-ink">1</div>
-                <h3 className="text-xl font-bold text-myth-ink">Create a Campaign</h3>
-              </div>
-              <p className="leading-relaxed text-myth-ink-muted">
-                Start by creating a campaign from the campaigns page. Choose a universe (Fantasy, Sci-Fi, Modern, etc.)
-                and MythOS will generate a starting scenario.
+        {/* #449: above the reference list, not below it.
+            The quickstart is the only link to /tutorial, and it used to
+            sit under all six categories — so a first-time visitor, who is
+            exactly the person who wants the short guided version, had to
+            scroll past the entire reference to find it. Rendering it as a
+            footer also signalled "supplementary" for the page's most
+            valuable destination.
+            Search stays above it: "I saw a word and want to know what it
+            means" is still the primary job of this page. */}
+        {!isSearching && (
+          <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Link
+              href="/tutorial"
+              className="group rounded-lg border border-myth-border bg-myth-surface p-5 transition-colors hover:border-myth-border-strong"
+            >
+              <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-myth-ink">
+                How to play
+                <ArrowRight className="h-4 w-4 text-myth-ink-faint transition-transform group-hover:translate-x-0.5" />
+              </h2>
+              <p className="text-sm leading-relaxed text-myth-ink-muted">
+                The short version — enough to start, nothing you do not need yet.
               </p>
-            </div>
+            </Link>
 
-            <div className="pt-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-myth-border bg-myth-surface-sunken font-bold text-myth-ink">2</div>
-                <h3 className="text-xl font-bold text-myth-ink">Create Your Character</h3>
-              </div>
-              <p className="leading-relaxed text-myth-ink-muted">
-                Design your character with a name, pronouns, concept, and description. The system handles
-                dice and stats behind the scenes, so you can focus on freeform storytelling.
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))}
+              className="min-h-[44px] rounded-lg border border-myth-border bg-myth-surface p-5 text-left transition-colors hover:border-myth-border-strong"
+            >
+              <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-myth-ink">
+                <Keyboard className="h-5 w-5 text-myth-ink-faint" />
+                Keyboard shortcuts
+              </h2>
+              <p className="text-sm leading-relaxed text-myth-ink-muted">
+                Cmd+K opens the command palette from anywhere.
               </p>
-            </div>
-
-            <div className="pt-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-myth-border bg-myth-surface-sunken font-bold text-myth-ink">3</div>
-                <h3 className="text-xl font-bold text-myth-ink">Enter the Story</h3>
-              </div>
-              <p className="leading-relaxed text-myth-ink-muted">
-                Navigate to the Story tab to see the current scene. Submit actions for your character,
-                and MythOS will resolve them narratively.
-              </p>
-            </div>
+            </button>
           </div>
-        </section>
+        )}
 
-        <section>
-          <SectionHeader as="h2" title="Core Concepts" />
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-6 h-6 text-myth-ink-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                </svg>
-                <h3 className="font-bold text-myth-ink text-lg">Scenes & Exchanges</h3>
+        {isSearching ? (
+          <section>
+            <SectionHeader
+              as="h2"
+              title={`${results.length} ${results.length === 1 ? 'result' : 'results'}`}
+            />
+            {results.length === 0 ? (
+              <div className="mt-6">
+                <EmptyState
+                  icon={<Search className="h-8 w-8" />}
+                  title="Nothing matched that"
+                  description="Try a word you saw on screen, or clear the search to browse everything."
+                />
               </div>
-              <p className="text-sm leading-relaxed text-myth-ink-muted">
-                Scenes are continuous until a player ends them — any player can start or end a scene.
-                Each round of actions is called an "exchange." Submit actions, and MythOS resolves them
-                as a group to advance the story.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-6 h-6 text-myth-ink-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                </svg>
-                <h3 className="font-bold text-myth-ink text-lg">Dice Rolls (2d6 + Stat)</h3>
-              </div>
-              <p className="text-sm leading-relaxed text-myth-ink-muted">
-                When you attempt risky actions, roll 2d6 + a relevant stat:
-              </p>
-              <ul className="ml-4 space-y-1 text-sm text-myth-ink-muted">
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-myth-good">10+:</span>
-                  <span>Full success</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-myth-warn">7-9:</span>
-                  <span>Partial success with a cost</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-myth-danger">6-:</span>
-                  <span>Failure with complications — the story takes a hard turn</span>
-                </li>
+            ) : (
+              <ul className="mt-6 space-y-3">
+                {results.map(mechanic => (
+                  <MechanicLink key={mechanic.id} mechanic={mechanic} />
+                ))}
               </ul>
-            </div>
+            )}
+          </section>
+        ) : (
+          <div className="space-y-10">
+            {CATEGORY_ORDER.map(category => {
+              const list = grouped.get(category) ?? []
+              if (list.length === 0) return null
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-6 h-6 text-myth-ink-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <h3 className="font-bold text-myth-ink text-lg">Freeform Combat</h3>
-              </div>
-              <p className="text-sm leading-relaxed text-myth-ink-muted">
-                Combat is narrative by default. Describe your actions naturally, and MythOS
-                will narrate the outcome. Everyone can act at the same time — no waiting your turn,
-                unless the table turns on optional turn order for a scene.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-6 h-6 text-myth-ink-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <h3 className="font-bold text-myth-ink text-lg">Scene Maps</h3>
-              </div>
-              <p className="text-sm leading-relaxed text-myth-ink-muted">
-                Scenes can generate maps that visualize where everyone is. Positioning is
-                narrative — describe where your character moves in your action, and MythOS
-                takes it into account when resolving.
-              </p>
-            </div>
+              return (
+                <section key={category}>
+                  <SectionHeader as="h2" title={CATEGORY_LABELS[category]} />
+                  <ul className="mt-6 space-y-3">
+                    {list.map(mechanic => (
+                      <MechanicLink key={mechanic.id} mechanic={mechanic} />
+                    ))}
+                  </ul>
+                </section>
+              )
+            })}
           </div>
-        </section>
+        )}
 
-        <section>
-          <SectionHeader as="h2" title="Features" />
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              { icon: Users, title: 'Invite Your Party', desc: 'No cap on how many players can join a campaign — share an invite link from the Players panel and everyone plays together' },
-              { icon: MessageSquare, title: 'Chat', desc: 'Real-time in-character (IC) and out-of-character (OOC) chat to talk with the other real players in your campaign' },
-              { icon: Dices, title: 'Turn Order', desc: 'Play is simultaneous by default — everyone acts anytime. Any player can turn on an optional turn queue for a scene that wants it' },
-              { icon: Feather, title: 'Notes', desc: 'Take private or shared notes to track NPCs, clues, and plot points' },
-              { icon: MapIcon, title: 'Maps', desc: 'AI-generated tactical maps with zones and character tokens' },
-              { icon: BookOpen, title: 'World & Codex', desc: 'World tracks the NPCs, factions, locations and threads MythOS updates every turn; the Codex holds the lore, items and rumors behind them' },
-              { icon: Scroll, title: 'Story Log', desc: 'Auto-generated chronicle of your adventure with highlights and timeline' },
-              { icon: Download, title: 'Export', desc: 'Download your campaign data — characters, scenes, factions, and more — as JSON' }
-            ].map((feature, index) => (
-              <div key={index} className="rounded-lg border border-myth-border p-4">
-                <feature.icon className="mb-2 h-6 w-6 text-myth-ink-muted" />
-                <h3 className="mb-1 text-lg font-bold text-myth-ink">{feature.title}</h3>
-                <p className="text-sm leading-relaxed text-myth-ink-muted">{feature.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <SectionHeader as="h2" title="Safety Tools" />
-          <div className="mt-6 space-y-6 divide-y divide-myth-border">
-            <div>
-              <h3 className="mb-2 text-lg font-bold text-myth-ink">X-Card</h3>
-              <p className="text-sm leading-relaxed text-myth-ink-muted">
-                Use the X-Card button on the story page to pause or rewind uncomfortable content.
-                No explanation needed—your comfort is the priority.
-              </p>
-            </div>
-
-            <div className="pt-6">
-              <h3 className="mb-2 text-lg font-bold text-myth-ink">Content Warnings</h3>
-              <p className="text-sm leading-relaxed text-myth-ink-muted">
-                The campaign host can set content warnings for the campaign (violence, trauma, etc.)
-                in the Safety Settings panel.
-              </p>
-            </div>
-
-            <div className="pt-6">
-              <h3 className="mb-2 text-lg font-bold text-myth-ink">Lines & Veils</h3>
-              <p className="text-sm leading-relaxed text-myth-ink-muted">
-                Define hard boundaries (lines - won't appear) and soft boundaries
-                (veils - happen off-screen) in campaign safety settings.
-              </p>
-            </div>
-
-            <div className="pt-6">
-              <h3 className="mb-2 text-lg font-bold text-myth-ink">Block & Report</h3>
-              <p className="text-sm leading-relaxed text-myth-ink-muted">
-                Any player can block another player in a campaign, and report content to the
-                campaign host — keeping the table comfortable is on everyone, not one person.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section>
-          <SectionHeader as="h2" title="Support" description="Need more help? Here are some resources:" />
-          <div className="mt-6 space-y-3">
-            {[
-              { key: 'Cmd+K', desc: 'Open the command palette anywhere' },
-              { key: '?', desc: 'See all keyboard shortcuts' },
-              { key: 'Tutorial', desc: 'Check the tutorial for hands-on guidance' }
-            ].map((item, index) => (
-              <div key={index} className="flex items-center gap-3 rounded-lg border border-myth-border p-3">
-                <div className="flex-shrink-0">
-                  <kbd className="rounded-lg border border-myth-border bg-myth-surface-sunken px-3 py-1.5 text-sm font-medium text-myth-ink">
-                    {item.key}
-                  </kbd>
-                </div>
-                <span className="text-myth-ink-muted">{item.desc}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
       </main>
 
       <TavernNav campaignId={lastCampaignId || undefined} />
     </TavernPage>
+  )
+}
+
+function MechanicLink({ mechanic }: { mechanic: Mechanic }) {
+  return (
+    <li>
+      <Link
+        href={`/help/${mechanic.id}`}
+        className="group flex min-h-[44px] flex-col justify-center rounded-lg border border-myth-border bg-myth-surface px-4 py-3 transition-colors hover:border-myth-border-strong"
+      >
+        <span className="flex items-center gap-2 font-bold text-myth-ink">
+          {mechanic.term}
+          <ArrowRight className="h-4 w-4 text-myth-ink-faint transition-transform group-hover:translate-x-0.5" />
+        </span>
+        <span className="mt-0.5 text-sm leading-relaxed text-myth-ink-muted">{mechanic.short}</span>
+      </Link>
+    </li>
   )
 }

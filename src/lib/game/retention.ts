@@ -84,6 +84,27 @@ export const AI_COST_RETENTION_MS = 730 * 24 * 60 * 60 * 1000
  */
 export const ARCHIVED_MEMORY_RETENTION_MS = 365 * 24 * 60 * 60 * 1000
 
+/**
+ * #445: how long a MemoryCreationFailure row is kept.
+ *
+ * This table is WRITE-ONLY today, and that is not the same thing as dead.
+ * #284 added it deliberately, and its own comment says why the full payload
+ * is stored rather than an error string: "so it's queryable and a future
+ * retry/reader can recreate the memory exactly, not reconstruct it from the
+ * original scene from scratch." That reader still does not exist — a real
+ * open gap, and one this pass deliberately does NOT close by deleting the
+ * model, which would throw away the record of every scene that silently
+ * vanished from campaign history.
+ *
+ * What it does close is the unbounded growth: #408's own module comment lists
+ * this among the eighteen tables with zero delete sites, and it was still one
+ * of them. The window is deliberately long — far longer than any plausible
+ * retry horizon — so adding that reader later still finds something to work
+ * with. The rows are rare by construction (one per memory-creation failure,
+ * on a path that already fails open), so a generous window costs nothing.
+ */
+export const MEMORY_FAILURE_RETENTION_MS = 180 * 24 * 60 * 60 * 1000
+
 export interface RetentionResult {
   worldEventsDeleted: number
   eventWitnessesDeleted: number
@@ -91,6 +112,8 @@ export interface RetentionResult {
   aiCostEntriesDeleted: number
   /** C-13/#442: archived memories, which had no retention pass at all. */
   archivedMemoriesDeleted: number
+  /** #445: memory-creation failures — write-only, and previously unbounded. */
+  memoryFailuresDeleted: number
 }
 
 /**
@@ -137,12 +160,23 @@ export async function pruneCampaignHistory(campaignId: string): Promise<Retentio
     where: { campaignId, archivedAt: { lt: new Date(Date.now() - ARCHIVED_MEMORY_RETENTION_MS) } },
   })
 
+  // #445: the last write-only table with no delete site. Real-time cutoff for
+  // the same reason the telemetry deletes have one — these rows record a
+  // wall-clock failure, not a simulation event — which is also why this sits
+  // above the turn-keyed early return below. See
+  // MEMORY_FAILURE_RETENTION_MS for why the window is long and why the
+  // table is not simply dropped.
+  const memoryFailures = await prisma.memoryCreationFailure.deleteMany({
+    where: { campaignId, createdAt: { lt: new Date(Date.now() - MEMORY_FAILURE_RETENTION_MS) } },
+  })
+
   const empty = (): RetentionResult => ({
     worldEventsDeleted: 0,
     eventWitnessesDeleted: 0,
     diceRollsDeleted: diceRolls.count,
     aiCostEntriesDeleted: costEntries.count,
     archivedMemoriesDeleted: archivedMemories.count,
+    memoryFailuresDeleted: memoryFailures.count,
   })
 
   const meta = await prisma.worldMeta.findUnique({
@@ -178,6 +212,7 @@ export async function pruneCampaignHistory(campaignId: string): Promise<Retentio
     diceRollsDeleted: diceRolls.count,
     aiCostEntriesDeleted: costEntries.count,
     archivedMemoriesDeleted: archivedMemories.count,
+    memoryFailuresDeleted: memoryFailures.count,
   }
 }
 

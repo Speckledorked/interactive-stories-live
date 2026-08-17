@@ -2188,35 +2188,26 @@ model WorldMeta {
   factionCap Int?
   npcCap     Int?
 
-  // #276: currentTurnNumber only ever advances via scene resolution
-  // (sceneResolver.ts) — an idle campaign, ticked only by the daily cron
-  // sweep, passes runWorldTick the SAME frozen turnNumber on every pass.
-  // beliefTick.ts/npcDispositionTick.ts each classify WorldEvent rows from
-  // exactly `turnNumber - 1` — a window that never moves while frozen —
-  // so without this, the same handful of events would be reclassified and
-  // reapplied as fresh drift on every single idle-cron pass, driving
-  // belief/disposition vectors to their clamp within days of inactivity.
-  // Null means "never processed" (a brand-new campaign); each handler
-  // short-circuits once its own watermark already covers turnNumber - 1,
-  // and advances it past that same value after a pass actually runs its
-  // query — so a genuinely-frozen turnNumber naturally stops reprocessing
-  // after the first pass, while a real turn advance (scene resolution
-  // eventually happens) still runs the window fresh, exactly as before.
+  // #276/#375/#445: the campaign-level drift watermarks that used to live
+  // here (beliefDriftProcessedThroughTurn,
+  // dispositionDriftProcessedThroughTurn) are GONE.
   //
-  // DEPRECATED (#375). A CAMPAIGN-level watermark is wrong once the tick
-  // caps and rotates its roster: a pass advanced this past turn T after
-  // processing only the capped subset, so every faction/NPC that lost that
-  // tick's rotation never received turn T's drift and the watermark
-  // guaranteed it never would. Pre-rotation that lost a stable (if unfair)
-  // subset; rotation spread the loss across the whole roster.
+  // #276 added them so an idle campaign — ticked only by the daily cron, with
+  // a frozen currentTurnNumber — stopped reclassifying the same WorldEvent
+  // rows as fresh drift on every pass. #375 found the grain was wrong: the
+  // tick caps and ROTATES its roster, so a campaign-level watermark advanced
+  // past turn T after reaching only that tick's subset, and every entity that
+  // lost the rotation never received turn T's drift. Superseded by the
+  // per-entity Faction.beliefDriftThroughTurn and
+  // NPC.dispositionDriftThroughTurn, which are exactly-once PER ENTITY
+  // regardless of which tick it wins, and by WorldMeta.simulationTurn, which
+  // fixed the frozen counter at the source (#374).
   //
-  // Superseded by the per-entity Faction.beliefDriftThroughTurn /
-  // NPC.dispositionDriftThroughTurn, which make drift exactly-once PER
-  // ENTITY regardless of which tick it happens to win. Retained only as
-  // the backfill source for those columns (migration
-  // 20260816090000_world_turn_integrity) — no code reads them.
-  beliefDriftProcessedThroughTurn      Int?
-  dispositionDriftProcessedThroughTurn Int?
+  // Kept as nullable columns after #375 purely as the backfill source for
+  // those per-entity ones. That backfill ran in
+  // 20260816090000_world_turn_integrity, so nothing has read them since; #445
+  // drops them rather than leave two Int columns whose only remaining
+  // function was to look like state.
 
   // Phase 15: AI Health & Cost Tracking
   aiHealth              Json? // Circuit breaker state and AI failure tracking

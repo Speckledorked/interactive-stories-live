@@ -22,7 +22,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 const TICK_DIR = join(__dirname, '..')
 
@@ -39,6 +39,37 @@ function tickHandlerSources(): Array<{ file: string; source: string }> {
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '')
 }
+
+/**
+ * #445: the handlers that genuinely simulate the FULL population.
+ *
+ * The exemption is deliberately TWO-PLACE: a `roster-exempt: <reason>` marker
+ * in the handler, and an entry here. Either alone fails.
+ *
+ * The marker alone was the original design, and its reasoning was sound as far
+ * as it went — "an allowlist in a test file is a decision made far away from
+ * the code it governs, and the next handler gets written by copying its
+ * neighbour, not by reading this file." That is exactly the problem: copying a
+ * neighbour copies its exemption, and a guard whose escape hatch is a comment
+ * is an allowlist nobody reviews. Five handlers had opted out with no single
+ * place a reviewer could see the set.
+ *
+ * Requiring both keeps the reason beside the code AND makes opting out a
+ * visible, deliberate edit to a list — and the stale-entry check below keeps
+ * the list honest in the other direction.
+ */
+const ROSTER_EXEMPT_HANDLERS = new Set([
+  // A wake ripples to everyone the death or collapse actually touched.
+  'wakeTick.ts',
+  // Information spreads to WITNESSES, not to a simulated subset.
+  'informationTick.ts',
+  // Population movement is location-driven.
+  'migrationTick.ts',
+  // Loyalty is a property of a LOCATION and its owner/rival.
+  'territoryLoyaltyTick.ts',
+  // Debts and loans are per-CONTRACT, not per-faction.
+  'economyTick.ts',
+])
 
 describe('tick handlers do not resolve their own entity roster (#375)', () => {
   it('no handler applies an entity cap with take:', () => {
@@ -91,24 +122,52 @@ describe('tick handlers do not resolve their own entity roster (#375)', () => {
 
       const appliesFilter = /roster(Faction|Npc)Filter\(ctx\)/.test(code)
       // Some handlers legitimately operate on the FULL population — a
-      // ripple that reaches every affected faction, information spreading
-      // to every witness. Those declare it in the source with a
-      // `roster-exempt:` marker and a reason.
-      //
-      // The marker lives in the handler, not in an allowlist here, on
-      // purpose: an allowlist in a test file is a decision made far away
-      // from the code it governs, and the next handler gets written by
-      // copying its neighbour, not by reading this file.
+      // ripple that reaches every affected faction, information spreading to
+      // every witness. Those need BOTH halves: the `roster-exempt:` marker
+      // with its reason in the handler, and an entry in
+      // ROSTER_EXEMPT_HANDLERS above. See that list for why.
       const declaresExemption = /roster-exempt:/.test(source)
+      const isDeclaredExempt = ROSTER_EXEMPT_HANDLERS.has(basename(file))
 
-      if (!appliesFilter && !declaresExemption) missing.push(file)
+      if (appliesFilter) continue
+      if (declaresExemption && isDeclaredExempt) continue
+
+      missing.push(
+        declaresExemption
+          ? `${basename(file)} (has the marker, not in ROSTER_EXEMPT_HANDLERS)`
+          : basename(file)
+      )
     }
 
     expect(
       missing,
       `These handlers query factions/NPCs without restricting to ctx.roster and without ` +
-        `declaring a "roster-exempt: <reason>" marker, so they silently simulate a ` +
-        `different population than the rest of the tick.`
+        `a declared exemption, so they silently simulate a different population than ` +
+        `the rest of the tick. An exemption needs the "roster-exempt: <reason>" marker ` +
+        `in the handler AND an entry in ROSTER_EXEMPT_HANDLERS in this file.`
+    ).toEqual([])
+  })
+
+  // #445: the other direction. A list that only ever grows accumulates
+  // entries for handlers that have since started filtering properly, and then
+  // it is documentation of the past rather than a decision about the present.
+  it('has no stale entry in ROSTER_EXEMPT_HANDLERS', () => {
+    const sources = new Map(tickHandlerSources().map(({ file, source }) => [basename(file), source]))
+    const stale: string[] = []
+
+    for (const name of ROSTER_EXEMPT_HANDLERS) {
+      const source = sources.get(name)
+      if (source === undefined) {
+        stale.push(`${name} (no such tick handler)`)
+      } else if (!/roster-exempt:/.test(source)) {
+        stale.push(`${name} (listed here, no marker in the handler)`)
+      }
+    }
+
+    expect(
+      stale,
+      `ROSTER_EXEMPT_HANDLERS names handlers that no longer claim the exemption. ` +
+        `Remove them, so the list stays a statement about what is true now.`
     ).toEqual([])
   })
 })

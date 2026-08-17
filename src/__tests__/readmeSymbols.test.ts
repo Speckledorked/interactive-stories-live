@@ -51,6 +51,16 @@ const DELIBERATELY_ABSENT: Record<string, string> = {
   // two things. Replaced by CapabilityPrerequisite edge rows.
   parentId: 'the single-parent column #372 replaced with CapabilityPrerequisite edges',
 
+  // #445: the campaign-level drift watermarks. The docs name them because
+  // #375's finding — that a campaign-level watermark is the WRONG GRAIN once
+  // the tick caps and rotates its roster — is the useful part of that
+  // history, and the per-entity replacement only makes sense against it.
+  // Superseded by Faction.beliefDriftThroughTurn /
+  // NPC.dispositionDriftThroughTurn; kept only as the backfill source for
+  // those, and that backfill has run.
+  dispositionDriftProcessedThroughTurn: 'campaign-level watermark #375 replaced with per-entity ones; #445 dropped the column',
+  beliefDriftProcessedThroughTurn: 'campaign-level watermark #375 replaced with per-entity ones; #445 dropped the column',
+
   // Removed with the manual world-turn trigger — the admin tick preview
   // is intentionally read-only.
   getWorldTurnSummary: 'world-turn trigger removed on purpose',

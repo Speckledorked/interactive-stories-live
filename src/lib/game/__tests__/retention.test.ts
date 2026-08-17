@@ -22,6 +22,7 @@ const db = vi.hoisted(() => ({
   diceRoll: { deleteMany: vi.fn() },
   aICostEntry: { deleteMany: vi.fn() },
   campaignMemory: { deleteMany: vi.fn() },
+  memoryCreationFailure: { deleteMany: vi.fn() },
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
@@ -37,6 +38,7 @@ beforeEach(() => {
   db.diceRoll.deleteMany.mockResolvedValue({ count: 3 })
   db.aICostEntry.deleteMany.mockResolvedValue({ count: 5 })
   db.campaignMemory.deleteMany.mockResolvedValue({ count: 2 })
+  db.memoryCreationFailure.deleteMany.mockResolvedValue({ count: 4 })
 })
 
 describe('telemetry pruning is independent of world-event age (#442)', () => {
@@ -109,5 +111,42 @@ describe('the memory archive is bounded (C-13, #442)', () => {
     // someone has to remember to add.
     const where = db.campaignMemory.deleteMany.mock.calls[0][0].where
     expect(where.archivedAt).toHaveProperty('lt')
+  })
+})
+
+describe('the last write-only table is bounded (#445)', () => {
+  it('prunes memory-creation failures on a real-time cutoff', async () => {
+    // #408's own module comment listed MemoryCreationFailure among the
+    // eighteen tables with zero delete sites, and it was still one of them.
+    const result = await pruneCampaignHistory('camp1')
+
+    const where = db.memoryCreationFailure.deleteMany.mock.calls[0][0].where
+    expect(where.campaignId).toBe('camp1')
+    expect(where.createdAt.lt).toBeInstanceOf(Date)
+    expect(where).not.toHaveProperty('turnNumber')
+    expect(result.memoryFailuresDeleted).toBe(4)
+  })
+
+  it('prunes it even for a brand-new campaign, above the turn-keyed return', async () => {
+    // Same reasoning as the telemetry deletes: these rows record a wall-clock
+    // failure, not a simulation event, so they must not sit below a return
+    // keyed on another table's turn age (#442).
+    db.worldMeta.findUnique.mockResolvedValue({ simulationTurn: 1 })
+
+    const result = await pruneCampaignHistory('camp1')
+
+    expect(db.memoryCreationFailure.deleteMany).toHaveBeenCalled()
+    expect(result.memoryFailuresDeleted).toBe(4)
+  })
+
+  it('keeps the window far longer than the telemetry window', async () => {
+    // The table exists so a retry/reader #284 anticipated can recreate the
+    // exact memory that failed. That reader still does not exist, so the
+    // window is generous on purpose — pruning it aggressively would throw
+    // away the only record that a scene vanished from campaign history.
+    await pruneCampaignHistory('camp1')
+
+    const failureCutoff = db.memoryCreationFailure.deleteMany.mock.calls[0][0].where.createdAt.lt
+    expect(Date.now() - failureCutoff.getTime()).toBeGreaterThan(30 * 24 * 60 * 60 * 1000)
   })
 })

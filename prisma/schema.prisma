@@ -731,7 +731,13 @@ model CapabilityPrerequisite {
 
   createdAt DateTime @default(now())
 
-  @@unique([capabilityId, prerequisiteCapabilityId])
+  // Named explicitly to match what is actually in the database. The migration
+  // asked for "..._prerequisiteCapabilityId_key" (64 chars) and Postgres
+  // silently truncated it to its 63-byte identifier limit, dropping the "y":
+  // "..._prerequisiteCapabilityId_ke". Prisma truncates differently, keeping
+  // the "_key" suffix and cutting the column name instead. Both are 63 chars,
+  // neither matches, and nothing noticed until the drift check compared them.
+  @@unique([capabilityId, prerequisiteCapabilityId], map: "CapabilityPrerequisite_capabilityId_prerequisiteCapabilityId_ke")
   @@index([capabilityId])
   @@index([prerequisiteCapabilityId])
 }
@@ -3152,6 +3158,14 @@ model CampaignMemory {
   memoryType MemoryType
   sourceId   String // ID of source (sceneId, npcId, factionId, etc.)
   turnNumber Int
+
+  // Present in every database since 0_baseline, but absent from this model
+  // until the migration-drift check found it: the column existed, carried a
+  // real timestamp on every row, and Prisma could not see it — so nothing
+  // could read it and nothing could have noticed. Declared rather than
+  // dropped, because the data is real and making it visible costs nothing.
+  // turnNumber is the SIM clock; this is wall time.
+  createdAt DateTime @default(now())
 
   // Searchable content
   title       String

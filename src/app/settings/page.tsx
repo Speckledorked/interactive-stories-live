@@ -366,7 +366,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between py-4 border-b border-myth-border">
                 <div>
                   <h3 className="text-myth-ink font-semibold mb-1">Show Online Status</h3>
-                  <p className="text-sm text-myth-ink-muted">Let other players see when you're online</p>
+                  <p className="text-sm text-myth-ink-muted">Let other players see when you&apos;re online</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <Checkbox className="sr-only peer" defaultChecked />

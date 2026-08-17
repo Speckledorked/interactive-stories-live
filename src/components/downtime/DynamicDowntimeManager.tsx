@@ -125,8 +125,12 @@ export function DynamicDowntimeManager({
     })
   }
 
-  // Use suggested activity
-  const useSuggestion = (suggestion: string) => {
+  // Apply a suggested activity. Named applySuggestion, not
+  // useSuggestion: it is an ordinary click handler, and a `use`
+  // prefix marks a React hook — misleading to readers and to
+  // react-hooks/rules-of-hooks, which flagged it as a hook called
+  // inside a callback.
+  const applySuggestion = (suggestion: string) => {
     setCreateModal({
       isOpen: true,
       description: suggestion,
@@ -426,7 +430,7 @@ export function DynamicDowntimeManager({
               <div
                 key={index}
                 className="p-3 border border-myth-border rounded-lg hover:bg-myth-surface-sunken cursor-pointer transition-colors group"
-                onClick={() => useSuggestion(suggestion)}
+                onClick={() => applySuggestion(suggestion)}
               >
                 <div className="flex items-start justify-between">
                   <p className="text-sm flex-1 text-myth-ink-muted">{suggestion}</p>
@@ -451,13 +455,13 @@ export function DynamicDowntimeManager({
                   {/* Header */}
                   <div>
                     <div className="flex items-start justify-between mb-2">
-                      <h4 className="font-semibold text-sm text-myth-ink">What you're doing:</h4>
+                      <h4 className="font-semibold text-sm text-myth-ink">What you&apos;re doing:</h4>
                       <Badge className={getRiskColor(activity.aiInterpretation.riskLevel)}>
                         {activity.aiInterpretation.riskLevel} risk
                       </Badge>
                     </div>
                     <p className="text-sm text-myth-ink-muted italic mb-2">
-                      "{activity.playerDescription}"
+                      &quot;{activity.playerDescription}&quot;
                     </p>
                     <p className="text-sm font-medium text-myth-ink">
                       {activity.aiInterpretation.summary}
@@ -537,7 +541,7 @@ export function DynamicDowntimeManager({
                 <div className="space-y-2">
                   <div>
                     <p className="text-xs text-myth-ink-faint italic">
-                      "{activity.playerDescription}"
+                      &quot;{activity.playerDescription}&quot;
                     </p>
                     <h4 className="font-medium text-sm text-myth-ink">{activity.aiInterpretation.summary}</h4>
                     <p className="text-xs text-myth-ink-faint">
@@ -568,7 +572,7 @@ export function DynamicDowntimeManager({
           <h3 className="text-lg font-semibold mb-2 text-myth-ink">No Activities Yet</h3>
           <p className="text-myth-ink-muted mb-6">
             Describe any downtime activity you can imagine - MythOS will make it happen!
-            Whether it's learning new skills, starting a business, or investigating mysteries.
+            Whether it&apos;s learning new skills, starting a business, or investigating mysteries.
           </p>
           <Button onClick={() => setCreateModal(prev => ({ ...prev, isOpen: true }))}>
             <Sparkles className="w-4 h-4 mr-2" />

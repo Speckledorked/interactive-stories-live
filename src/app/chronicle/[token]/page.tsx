@@ -82,7 +82,7 @@ export default function PublicChroniclePage() {
 
       <main className="mx-auto max-w-2xl px-4 py-10">
         {data.scenes.length === 0 ? (
-          <p className="text-center text-myth-ink-faint">No scenes have concluded yet — check back once the story's underway.</p>
+          <p className="text-center text-myth-ink-faint">No scenes have concluded yet — check back once the story&apos;s underway.</p>
         ) : (
           <div className="divide-y divide-myth-border">
             {data.scenes.map(scene => (

@@ -281,7 +281,7 @@ export default function CommandPalette({
         <div className="max-h-[400px] overflow-y-auto">
           {filteredCommands.length === 0 ? (
             <div className="px-4 py-8 text-center text-myth-ink-faint">
-              No commands found for "{search}"
+              No commands found for &quot;{search}&quot;
             </div>
           ) : (
             <div className="py-2">

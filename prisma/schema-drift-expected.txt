@@ -1,0 +1,42 @@
+# Residual difference between the migration history and schema.prisma that
+# prisma CANNOT express, and therefore reports forever.
+#
+# Read the direction: `prisma migrate diff` runs FROM the migrated database TO
+# schema.prisma, so "Removed index" means the DATABASE has the index and the
+# datamodel does not.
+#
+# Every line below is one of the four indexes campaign_memories creates in raw
+# SQL (see 20260815070000_campaign_memory_ann_index and 0_baseline):
+#
+#   CREATE INDEX ... USING hnsw (embedding vector_cosine_ops);
+#   CREATE INDEX ... USING GIN ("involvedCharacterIds");
+#   CREATE INDEX ... USING GIN ("involvedNpcIds");
+#   CREATE INDEX ... USING GIN ("involvedFactionIds");
+#
+# The hnsw one is the reason this file exists. Prisma's schema language has no
+# syntax for pgvector access methods at all — it supports Gin, Gist, Hash,
+# Brin and SpGist — so that index can never be represented in the datamodel and
+# `migrate diff` will report it missing no matter what anyone writes. The three
+# GIN indexes are left recorded alongside it rather than re-expressed in Prisma
+# because they already exist and are correct, and restating them in the
+# datamodel would mean naming each one with `map:` to match its hand-written
+# name for no behavioural gain.
+#
+# ## Maintaining this file
+#
+# Adding a line here is asserting "prisma cannot express this". Do not add a
+# line to make a red check green — that is drift, and the whole point of the
+# check is that drift reaches production silently. The check ALSO fails if a
+# line here stops appearing, so a stale exception cannot rot unnoticed.
+#
+# This file records only what the check found once the two REAL findings from
+# its first run were fixed: campaign_memories.createdAt (present in every
+# database since the baseline, absent from the model, therefore unreadable) and
+# the CapabilityPrerequisite unique index whose 64-character name Postgres had
+# silently truncated to 63.
+
+[*] Changed the `campaign_memories` table
+  [-] Removed index on columns (embedding)
+  [-] Removed index on columns (involvedCharacterIds)
+  [-] Removed index on columns (involvedFactionIds)
+  [-] Removed index on columns (involvedNpcIds)

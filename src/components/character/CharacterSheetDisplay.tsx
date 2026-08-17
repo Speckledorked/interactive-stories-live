@@ -394,7 +394,7 @@ export default function CharacterSheetDisplay({
                 <CardLabel>Abilities & Knowledge</CardLabel>
                 {capabilitySummary.known.length === 0 && capabilitySummary.glimpsed.length === 0 ? (
                   <p className="text-sm italic text-myth-ink-faint">
-                    You haven't discovered anything about this world's systems yet — abilities and lore will appear here as the story reveals them.
+                    You haven&apos;t discovered anything about this world&apos;s systems yet — abilities and lore will appear here as the story reveals them.
                   </p>
                 ) : (
                   <div className="space-y-4">
@@ -692,7 +692,7 @@ export default function CharacterSheetDisplay({
             <Card className="bg-myth-surface-sunken">
               <p className="text-sm italic text-myth-ink-muted">
                 The promises, debts, enemies and lasting threats your choices have created. These accumulate through
-                play — how any given NPC privately regards you is something you'll have to read from how they treat
+                play — how any given NPC privately regards you is something you&apos;ll have to read from how they treat
                 you in the fiction.
               </p>
             </Card>

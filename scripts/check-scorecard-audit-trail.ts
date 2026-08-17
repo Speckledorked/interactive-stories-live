@@ -13,10 +13,15 @@
 // project's own workflow lands changes on main) or, on a pull_request
 // event, against the PR's base branch.
 //
+// This file owns only the git/filesystem/exit-code half. The comparison
+// itself lives in ./scorecardAuditTrail.ts so it can be tested without a
+// repository — see that file's header for why (#443).
+//
 // Usage: npx tsx scripts/check-scorecard-audit-trail.ts
 
 import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
+import { findViolations } from './scorecardAuditTrail'
 
 const DOC_PATH = 'docs/ARCHITECTURE.md'
 
@@ -57,79 +62,34 @@ function loadFileAt(ref: string, path: string): string | null {
   }
 }
 
-/** System name -> score. Non-numeric scores (e.g. "—" for a removed/decided
- * row) are stored as null and never treated as an "increase" either way. */
-function parseScorecard(content: string): Map<string, number | null> {
-  const scores = new Map<string, number | null>()
-  const tableStart = content.indexOf('## Scorecard')
-  const tableEnd = content.indexOf('## Scorecard Audit Log', tableStart)
-  if (tableStart === -1) return scores
-  const section = tableEnd === -1 ? content.slice(tableStart) : content.slice(tableStart, tableEnd)
-
-  const rowRe = /^\|\s*([^|]+?)\s*\|\s*([0-9]|—)\s*\|/gm
-  let m: RegExpExecArray | null
-  while ((m = rowRe.exec(section))) {
-    const system = m[1].trim()
-    if (system === 'System' || /^:?-+:?$/.test(system)) continue // header/separator rows
-    const raw = m[2]
-    scores.set(system, raw === '—' ? null : Number(raw))
-  }
-  return scores
-}
-
-/** System names with at least one Audit Log entry recording a clean
- * ("0 new defects found") adversarial pass. */
-function parseCleanAuditEntries(content: string): Set<string> {
-  const cleared = new Set<string>()
-  const sectionMatch = content.match(/## Scorecard Audit Log\n([\s\S]*?)(?=\n## |$)/)
-  if (!sectionMatch) return cleared
-
-  const entries = sectionMatch[1].split(/\n(?=### )/)
-  for (const entry of entries) {
-    const heading = entry.match(/^### \d{4}-\d{2}-\d{2} — (.+)$/m)
-    if (!heading) continue
-    if (/0 new defects found/i.test(entry)) {
-      cleared.add(heading[1].trim())
-    }
-  }
-  return cleared
-}
-
-/**
- * #372: declared renames. #397 made a renamed row fail unconditionally,
- * which closed a real bypass (a rename used to carry any score across
- * unchecked) but also made row names permanently frozen — a row whose
- * subject genuinely changed shape could never be relabelled honestly.
- *
- * A rename is now declarable in the Audit Log:
- *
- *     - Renamed: "Old row name" -> "New row name"
- *
- * and the check still does the work: the new row inherits the OLD row's
- * score for comparison, so a rename that also raises the number needs the
- * same clean-adversarial-pass entry any other raise would. A rename alone
- * proves nothing and is therefore allowed to prove nothing.
- *
- * Returns new name -> old name.
- */
-function parseDeclaredRenames(content: string): Map<string, string> {
-  const renames = new Map<string, string>()
-  const sectionMatch = content.match(/## Scorecard Audit Log\n([\s\S]*?)(?=\n## |$)/)
-  if (!sectionMatch) return renames
-
-  const re = /^\s*[-*]\s*Renamed:\s*["“]([^"”]+)["”]\s*(?:->|→)\s*["“]([^"”]+)["”]\s*$/gm
-  let m: RegExpExecArray | null
-  while ((m = re.exec(sectionMatch[1]))) {
-    renames.set(m[2].trim(), m[1].trim())
-  }
-  return renames
-}
-
 /**
  * #397: distinguishes "no base to compare" from "the base is unreachable".
  * Only the former is a legitimate skip.
  */
 function isFirstCommitTouchingDoc(): boolean {
+  // #443: a shallow clone makes this question unanswerable, so it must be
+  // asked FIRST rather than inferred from a commit count that shallowness
+  // itself corrupts.
+  //
+  // The count is 1 by construction in a shallow clone, so the old version
+  // reported "first commit to touch it, nothing to compare" and exited 0 —
+  // demonstrated in a real checkout. That is precisely the failure #397 set
+  // out to close ("a gate that cannot run has not passed"): the escape
+  // hatch exists to recognise a genuine first commit, and it could not tell
+  // one from a misconfigured checkout.
+  try {
+    const shallow = execSync('git rev-parse --is-shallow-repository', {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    if (shallow === 'true') return false
+  } catch {
+    // Old git without --is-shallow-repository, or not a repo at all. Either
+    // way we cannot establish that history is complete, so we must not
+    // claim this is the first commit.
+    return false
+  }
+
   try {
     const history = execSync(`git log --format=%H -- ${DOC_PATH}`, {
       encoding: 'utf-8',
@@ -164,62 +124,10 @@ function main() {
     process.exit(1)
   }
 
-  const currentContent = readFileSync(DOC_PATH, 'utf-8')
-  const baseScores = parseScorecard(baseContent)
-  const currentScores = parseScorecard(currentContent)
-  const cleared = parseCleanAuditEntries(currentContent)
-  const renames = parseDeclaredRenames(currentContent)
-
-  const violations: string[] = []
-  for (const [system, currentScore] of currentScores) {
-    if (currentScore === null) continue
-    let baseScore = baseScores.get(system)
-
-    // #372: a declared rename resolves to the OLD row's score, so the
-    // comparison below is the same one every other row gets. Only accepted
-    // when the old name is genuinely gone — declaring a rename while both
-    // rows still exist would be a way to give a brand-new row a score it
-    // never earned.
-    const oldName = renames.get(system)
-    if (baseScore === undefined && oldName !== undefined && !currentScores.has(oldName)) {
-      const inherited = baseScores.get(oldName)
-      if (inherited === undefined) {
-        violations.push(
-          `"${system}": declared as a rename of "${oldName}", but no row by that name exists in the base`
-        )
-        continue
-      }
-      baseScore = inherited
-    }
-
-    if (baseScore === null) continue // was non-numeric — not a "raise"
-    if (baseScore === undefined) {
-      // #397: a row present now but absent from the base is either a
-      // genuinely NEW row, or a RENAMED one — and renaming was a real
-      // bypass, because `baseScores.get(system)` returned undefined and
-      // the check simply `continue`d past any score it carried.
-      //
-      // Distinguished by counting: if the base had the same number of rows
-      // or more, nothing was added, so a row appearing here means one
-      // disappeared — a rename. That needs a human to confirm the score
-      // came along honestly.
-      if (baseScores.size >= currentScores.size) {
-        violations.push(
-          `"${system}": not present under this name in the base, and no row was added ` +
-          `(base had ${baseScores.size} rows, now ${currentScores.size}) — a renamed row cannot ` +
-          `carry its score across unchecked. If this IS a rename, declare it in the Audit Log ` +
-          `as: - Renamed: "old name" -> "${system}"`
-        )
-      }
-      continue
-    }
-    if (currentScore > baseScore && !cleared.has(system)) {
-      violations.push(`"${system}": ${baseScore} -> ${currentScore}, no matching "0 new defects found" entry`)
-    }
-  }
+  const violations = findViolations(baseContent, readFileSync(DOC_PATH, 'utf-8'))
 
   if (violations.length > 0) {
-    console.error(`Scorecard score(s) increased (vs. ${baseRef}) with no matching Audit Log entry:\n`)
+    console.error(`Scorecard audit trail check failed (vs. ${baseRef}):\n`)
     for (const v of violations) console.error(`  - ${v}`)
     console.error(`\nSee docs/ARCHITECTURE.md's "Scorecard Audit Log" section for the required entry format.`)
     process.exit(1)

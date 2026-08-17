@@ -480,6 +480,14 @@ above. A rename proves nothing about the system and is allowed to prove
 nothing; the declaration exists only so the checker can follow a row across
 a relabel instead of treating it as a brand-new, ungated row.
 
+Because of that, **a row may not simply disappear.** If a row present in
+the base is gone under that name, the checker fails: an undeclared rename
+is exactly what a vanished row looks like, and "brand-new rows are never
+gated" would otherwise hand any renamed row a free pass. Rename it with the
+declaration above, or — if the system genuinely no longer exists — keep the
+row and set its score to `—`, which the checker reads as "not a score" and
+never treats as an increase in either direction.
+
 - Renamed: "Capability tree (branching prerequisites)" -> "Capability graph (branching prerequisites)"
 
 ### 2026-08-13 — Resource infrastructure & logistics

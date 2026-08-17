@@ -202,6 +202,18 @@ async function consolidateTierUnsafe(
       AND "turnNumber" <= ${cutoffTurn}
       AND importance = ANY(${tier.importanceFilter}::"MemoryImportance"[])
       AND NOT (${ERA_SUMMARY_TAG} = ANY(tags))
+      -- #440: an already-archived memory must not be re-selected. Without
+      -- this the pass re-archives its own output every run, which reset
+      -- archivedAt each time — and once #442 added retention keyed on that
+      -- column, a row whose clock restarts every consolidation could never
+      -- age out at all. The archive would have been unbounded by a
+      -- different mechanism than the one #442 closed.
+      AND "archivedAt" IS NULL
+      -- memory-fog-exempt: this is the maintenance pass that DECIDES what to
+      -- archive, not a player-facing read. Fog-filtering it would leave
+      -- memories involving undiscovered entities permanently un-archivable,
+      -- which is the opposite of what this module is for. Nothing it selects
+      -- reaches a prompt; it only ever writes summaries and sets archivedAt.
     ORDER BY "turnNumber" ASC
   `
 

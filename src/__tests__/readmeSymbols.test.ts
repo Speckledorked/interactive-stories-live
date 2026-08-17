@@ -115,6 +115,27 @@ const DELIBERATELY_ABSENT: Record<string, string> = {
   getNextStep: '#447: deleted with tutorial-service.ts',
   arePrerequisitesSatisfied: '#447: the shared helper #317 added, deleted with tutorial-service.ts',
 
+  // #447 step 3: TutorialStep's columns, gone with the table itself.
+  //
+  // These are SCHEMA fields rather than functions, and they went absent later
+  // than the functions above — the code contraction landed in #450 and the
+  // tables were dropped in a separate migration-only change once that had
+  // shipped. This guard is what caught the difference: the prose naming these
+  // columns was still true of prisma/schema.prisma right up until the drop.
+  //
+  // The docs name them because the DEAD CONTENT LAYER is the sharpest part of
+  // #436's finding. It is not just that the tutorial did not work; a whole
+  // content model had been designed and migrated and nothing ever read any of
+  // it — no component touched contentBlocks, targetElement or tooltipPosition,
+  // four of five declared CSS selectors matched no element, and exactly one of
+  // thirteen declared completionTrigger values was ever emitted. Naming the
+  // columns is what makes that concrete.
+  contentBlocks: '#447: TutorialStep column nothing ever read; table dropped in step 3',
+  targetElement: '#447: TutorialStep column nothing ever read; four of five selectors matched nothing',
+  tooltipPosition: '#447: TutorialStep column nothing ever read; table dropped in step 3',
+  completionTrigger: '#447: TutorialStep column; 1 of 13 declared values was ever emitted',
+  isOptional: '#447: TutorialStep column, dropped with the table in step 3',
+
   // Removed with the manual world-turn trigger.
   manualWorldTurn: 'host-facing "advance the world now" surface, never connected',
 

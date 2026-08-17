@@ -174,7 +174,27 @@ export async function tickNpcSocialTies(ctx: TickContext): Promise<TickHandlerRe
     return tiesOf(factionRelById, aFactionId)[bFactionId]?.type ?? 'NEUTRAL'
   }
 
-  const aliveNpcIds = new Set(npcs.map((n) => n.id))
+  // The FULL campaign roster of NPCs eligible to hold a tie — deliberately
+  // uncapped and unrotated, unlike `npcs` above.
+  //
+  // This used to be `new Set(npcs.map(n => n.id))`, i.e. this tick's capped,
+  // rotating slice. `isValidOtherId` below then read "not in this rotation"
+  // as "no longer exists", so above npcCap major NPCs every world turn
+  // deleted the ties of everyone the rotation happened to exclude and
+  // recreated them the next time they came round — churning `since`,
+  // destroying findRivalIds' longest-standing-rivalry ordering, and
+  // emitting a stream of untrue "the rivalry lapses" changes. Which ties
+  // survived depended on which slice the cap selected, which is precisely
+  // what the roster is supposed to prevent leaking into world state.
+  //
+  // relationshipTick.ts has always done this correctly for factions (it
+  // queries `allFactions` separately for exactly this reason); this is the
+  // same shape.
+  const eligibleNpcs = await ctx.db.nPC.findMany({
+    where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD } },
+    select: { id: true },
+  })
+  const aliveNpcIds = new Set(eligibleNpcs.map((n) => n.id))
 
   // Campaign-scoped, not roster-scoped: the expire pass below has to be
   // able to SEE an edge pointing out of this tick's roster in order to end

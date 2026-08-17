@@ -119,6 +119,36 @@ describe('tickNpcSocialTies — edge writes (#373)', () => {
     expect(result.changes.filter((c) => c.newValue === 'NEUTRAL')).toHaveLength(1)
   })
 
+  it('keeps a tie to a live major NPC who is merely outside this rotation', async () => {
+    // The bug: validity was checked against this tick's CAPPED, ROTATING
+    // slice, so "not in this rotation" read as "no longer exists". Above
+    // npcCap major NPCs that deleted and recreated ties every world turn —
+    // resetting `since`, destroying findRivalIds' longest-standing-rivalry
+    // ordering, and emitting untrue "the rivalry lapses" changes. Which
+    // ties survived depended on which slice the cap selected, which is
+    // exactly what the roster must never leak into world state.
+    db.nPC.findMany
+      .mockResolvedValueOnce([npc('a', { factionId: 'f1' })])           // this tick's slice
+      .mockResolvedValueOnce([{ id: 'a' }, { id: 'rotated-out' }])      // everyone eligible
+    db.npcTie.findMany.mockResolvedValue(npcTieTable([['a', 'rotated-out', 'ALLY', 3]]) as any)
+
+    const result = await tickNpcSocialTies(baseCtx())
+
+    expect(db.npcTie.deleteMany).not.toHaveBeenCalled()
+    expect(result.changes).toEqual([])
+  })
+
+  it('still expires a tie to an NPC who is genuinely gone', async () => {
+    db.nPC.findMany
+      .mockResolvedValueOnce([npc('a', { factionId: 'f1' })])
+      .mockResolvedValueOnce([{ id: 'a' }]) // 'ghost' is not eligible anywhere
+    db.npcTie.findMany.mockResolvedValue(npcTieTable([['a', 'ghost', 'RIVAL', 3]]) as any)
+
+    await tickNpcSocialTies(baseCtx())
+
+    expect(db.npcTie.deleteMany).toHaveBeenCalledWith({ where: { npcAId: 'a', npcBId: 'ghost' } })
+  })
+
   it('leaves a tie between two NPCs both outside the roster untouched', async () => {
     // This tick has no opinion about a pair it is not simulating — expiring
     // it would make what survives depend on which slice the cap selected.

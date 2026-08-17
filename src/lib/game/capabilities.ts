@@ -172,9 +172,22 @@ export interface LinkableCapability {
  *    was trained, which is not what "deeper art" means.
  *
  *  - Strictly lower tier. This is what makes cycles structurally
- *    impossible: every edge decreases tier, so no path can return to where
- *    it started. Cheaper and more honest than detecting cycles after the
- *    fact, and it matches what the generator was asked for.
+ *    impossible for edges CREATED HERE: every one decreases tier, so no
+ *    path can return to where it started. Cheaper and more honest than
+ *    detecting cycles after the fact, and it matches what the generator
+ *    was asked for.
+ *
+ * Note the scope. This is not the only edge writer, and stating it as
+ * though it were was wrong: applyCapabilityChanges also creates an edge
+ * when it mints a NARRATED node, and that one carries no tier comparison
+ * at all (the new node takes the schema default and its inherited
+ * prerequisite is a domain root, which may sit at the same tier).
+ *
+ * Acyclicity still holds there, by a DIFFERENT and equally structural
+ * property: that edge is created in the same statement as the node itself,
+ * and a node that did not exist a moment ago has no incoming edges — so an
+ * edge OUT of it cannot close a cycle, whatever it points at. Both
+ * properties are load-bearing; see capabilityEdgeAcyclicity in the tests.
  *
  * Anything that fails to resolve is dropped, not repaired — a node with an
  * unresolvable prerequisite becomes a root, which is always playable. A

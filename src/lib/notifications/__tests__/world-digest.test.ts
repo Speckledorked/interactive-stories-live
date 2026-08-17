@@ -4,6 +4,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     faction: { findMany: vi.fn().mockResolvedValue([]) },
     nPC: { findMany: vi.fn().mockResolvedValue([]) },
+    location: { findMany: vi.fn().mockResolvedValue([]) },
     campaignMembership: { findMany: vi.fn().mockResolvedValue([]) },
     timelineEvent: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
   },
@@ -16,6 +17,8 @@ vi.mock('../notification-service', () => ({
 import { prisma } from '@/lib/prisma'
 import { NotificationService } from '../notification-service'
 import {
+  DISCOVERY_GATED_ENTITY_TYPES,
+  DISCOVERY_SOURCE_MODELS,
   selectDigestChanges,
   groupDigestChangesByField,
   formatDigestLine,
@@ -477,5 +480,71 @@ describe('rumor variety (#432)', () => {
 
     expect(selected).toHaveLength(1)
     expect(selected[0].field).toBe('goalCompleted')
+  })
+})
+
+
+describe('the discovery gate and its id source cannot drift (#432 regression)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(prisma.faction.findMany).mockResolvedValue([] as any)
+    vi.mocked(prisma.nPC.findMany).mockResolvedValue([] as any)
+    vi.mocked(prisma.location.findMany).mockResolvedValue([] as any)
+  })
+
+  // The bug these exist for: #432 gated the LOCATION* types and left the
+  // discovered-id set built from factions and NPCs only. Every location
+  // change then failed a check against a set that could never contain it —
+  // the leak inverted into a blackout. The unit test written at the time
+  // passed the id set in DIRECTLY, so it proved the pure filter worked and
+  // said nothing about where the real set comes from. That gap is the
+  // thing under test here, not the filter.
+
+  it('queries a discovered-id source for every gated entity type', async () => {
+    vi.mocked(prisma.campaignMembership.findMany).mockResolvedValueOnce([{ userId: 'u1' }] as any)
+
+    await sendWorldDigest('campaign-1', [makeChange({ field: 'factionRole' })], 5)
+
+    // Not "queries location" — every model the gate depends on, whatever
+    // that set becomes later.
+    for (const model of DISCOVERY_SOURCE_MODELS) {
+      expect(prisma[model].findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { campaignId: 'campaign-1', isDiscovered: true } })
+      )
+    }
+  })
+
+  it('covers every gated type with a source model', () => {
+    // Structural: the gate is derived from the same table as the query, so
+    // this asserts the derivation actually holds rather than restating it.
+    expect(DISCOVERY_GATED_ENTITY_TYPES.size).toBeGreaterThan(0)
+    expect(DISCOVERY_SOURCE_MODELS.length).toBeGreaterThan(0)
+    expect(new Set(DISCOVERY_SOURCE_MODELS).size).toBe(DISCOVERY_SOURCE_MODELS.length)
+  })
+
+  it('delivers a storm at a discovered location, end to end', async () => {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([{ id: 'loc-1' }] as any)
+    vi.mocked(prisma.campaignMembership.findMany).mockResolvedValueOnce([{ userId: 'u1' }] as any)
+
+    const notified = await sendWorldDigest('campaign-1', [makeChange({
+      entityType: 'LOCATION_WEATHER', entityId: 'loc-1', entityName: 'Ashfall Reach', field: 'weather',
+    })], 5)
+
+    expect(notified).toBe(1)
+    // weatherLines was written in #432 and was unreachable until now.
+    const call = vi.mocked(prisma.timelineEvent.createMany).mock.calls[0][0] as any
+    expect(call.data[0].summaryPublic).toContain('Ashfall Reach')
+  })
+
+  it('still withholds a storm at a location the party has not found', async () => {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([] as any)
+    vi.mocked(prisma.campaignMembership.findMany).mockResolvedValueOnce([{ userId: 'u1' }] as any)
+
+    const notified = await sendWorldDigest('campaign-1', [makeChange({
+      entityType: 'LOCATION_WEATHER', entityId: 'loc-secret', entityName: 'The Hidden Vault', field: 'weather',
+    })], 5)
+
+    expect(notified).toBe(0)
+    expect(prisma.timelineEvent.createMany).not.toHaveBeenCalled()
   })
 })

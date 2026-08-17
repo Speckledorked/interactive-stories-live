@@ -8,8 +8,16 @@
 --
 -- Acyclicity is preserved by the same invariant as before, not by a new
 -- check: resolvePrerequisiteLinks only links a prerequisite of STRICTLY
--- LOWER tier, so every edge decreases tier and no path can return to its
--- start. That holds for many prerequisites exactly as it did for one.
+-- LOWER tier, so every edge IT creates decreases tier and no path can
+-- return to its start. That holds for many prerequisites exactly as it did
+-- for one.
+--
+-- That is not the whole story, and the original wording of this comment
+-- overstated it. applyCapabilityChanges also creates an edge when it mints
+-- a narrated node, with no tier comparison at all. Acyclicity holds there
+-- by a different structural property: the edge is created in the same
+-- statement as the node, and a node that did not exist a moment ago has no
+-- incoming edges, so an edge out of it cannot close a cycle.
 
 CREATE TABLE "CapabilityPrerequisite" (
     "id" TEXT NOT NULL,

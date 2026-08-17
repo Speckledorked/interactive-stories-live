@@ -1220,7 +1220,7 @@ export default function AdminPage() {
                     Player actions are checked before reaching MythOS. Standard allows ordinary
                     combat and violence — expected content in this kind of game — while still
                     blocking genuinely severe content (sexual content involving minors, self-harm
-                    instructions, credible threats). Strict blocks anything OpenAI's moderation
+                    instructions, credible threats). Strict blocks anything OpenAI&apos;s moderation
                     flags, including plain violence.
                   </p>
                   <Select
@@ -1833,7 +1833,7 @@ export default function AdminPage() {
                             <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
                         </Select>
-                        <p className="text-xs text-myth-ink-faint mt-1">If set, this faction's Simulation Goal is the player's call — the world tick won't reassess it automatically.</p>
+                        <p className="text-xs text-myth-ink-faint mt-1">If set, this faction&apos;s Simulation Goal is the player&apos;s call — the world tick won&apos;t reassess it automatically.</p>
                       </div>
                       <div className="flex items-center space-x-2">
                         <Checkbox

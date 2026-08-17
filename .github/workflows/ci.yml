@@ -40,6 +40,33 @@ jobs:
       - name: Tests
         run: npx vitest run
 
+  # `npm run lint` was declared in package.json for the life of this project
+  # with eslint never installed and no CI job invoking it, so it had never run
+  # once. See .eslintrc.js for what the first real run found and why two rules
+  # are configured the way they are.
+  #
+  # Errors fail the job. Warnings are RATCHETED at the count that existed when
+  # linting was adopted (--max-warnings 30 in the npm script) — 30 mostly
+  # react-hooks/exhaustive-deps findings that are not safe to "fix" mechanically,
+  # since changing a dependency array can introduce a render loop. The ratchet
+  # freezes that debt instead of pretending it is clean: one new warning fails
+  # the job. When it does, fix the warning rather than raising the number.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
   # The PR-body closing-keyword gate (#453) lives in its own workflow,
   # .github/workflows/pr-closing-keywords.yml, because it needs the `edited`
   # pull_request type — a body is editable up to the merge, so a gate that
@@ -134,6 +161,7 @@ jobs:
       # it fails here, on the PR, instead of at 2am against production.
       - name: Apply the full migration history, as the deploy would
         run: npx prisma migrate deploy
+
 
   # Runs the *.liveDb.test.ts / *.faultInjection.test.ts files the `check`
   # job's RUN_DB_TESTS-less `npx vitest run` always skips (see that job's

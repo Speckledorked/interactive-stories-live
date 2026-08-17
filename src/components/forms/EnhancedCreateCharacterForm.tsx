@@ -547,7 +547,7 @@ export default function EnhancedCreateCharacterForm({
               )}
               {partyLocations.length > 1 && (
                 <p className="text-xs text-myth-ink-faint mt-1">
-                  Your party isn't in one place right now — pick a location to match one of them, or somewhere new if your character is arriving separately: {partyLocations.join(', ')}
+                  Your party isn&apos;t in one place right now — pick a location to match one of them, or somewhere new if your character is arriving separately: {partyLocations.join(', ')}
                 </p>
               )}
             </div>

@@ -59,6 +59,42 @@ describe('/help', () => {
     }
   })
 
+  // #449. The quickstart used to render below all six categories, so the
+  // one visitor who most needs the short guided version — someone who has
+  // just arrived — had to scroll past 41 reference entries to find the
+  // only link to it. Asserted on DOCUMENT ORDER because the pre-existing
+  // tests here checked presence only, and presence was never the problem.
+  it('puts the quickstart above the reference list', () => {
+    render(<HelpPage />)
+
+    const main = document.querySelector('main')!
+    const quickstart = within(main).getByText('How to play')
+    const firstCategory = within(main).getByText(CATEGORY_LABELS[CATEGORY_ORDER[0]])
+
+    // Node.compareDocumentPosition: FOLLOWING means the argument comes
+    // after the node it is called on, in document order.
+    const relation = quickstart.compareDocumentPosition(firstCategory)
+    expect(
+      relation & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the quickstart renders after the first category heading'
+    ).toBeTruthy()
+  })
+
+  // It sat in both states before, which would now push results down the
+  // page behind a card the searcher has already bypassed.
+  it('gets out of the way once someone is searching', () => {
+    render(<HelpPage />)
+    const input = screen.getByLabelText('Search help')
+
+    expect(content().queryByText('How to play')).toBeTruthy()
+
+    fireEvent.change(input, { target: { value: 'x-card' } })
+    expect(content().queryByText('How to play')).toBeNull()
+
+    fireEvent.change(input, { target: { value: '' } })
+    expect(content().queryByText('How to play')).toBeTruthy()
+  })
+
   // The point of aliases. Nobody searches the name of the concept.
   it('finds a topic by a phrase the player actually saw on screen', () => {
     render(<HelpPage />)

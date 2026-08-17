@@ -1,7 +1,5 @@
 'use client'
 
-import { useEffect } from 'react'
-import { authenticatedFetch, getUser } from '@/lib/clientAuth'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { IconButton } from '@/components/ui/icon-button'
 import { X } from 'lucide-react'
@@ -23,19 +21,14 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShor
   // Close on Escape key
   useEscapeKey(onClose, isOpen)
 
-  // Trigger tutorial completion when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      const user = getUser()
-      if (user?.id) {
-        // Trigger the 'shortcuts_viewed' event for tutorial tracking
-        authenticatedFetch('/api/tutorial/trigger', {
-          method: 'POST',
-          body: JSON.stringify({ trigger: 'shortcuts_viewed' })
-        }).catch(err => console.error('Failed to track tutorial event:', err))
-      }
-    }
-  }, [isOpen])
+  // #447: this used to POST a 'shortcuts_viewed' event to
+  // /api/tutorial/trigger on every open. It was the ONLY one of the old
+  // tutorial's thirteen declared completion triggers that anything ever
+  // emitted — and it could never complete a step, because
+  // handleTriggerEvent only completed steps already IN_PROGRESS and
+  // nothing in the app could put a step there. So it was a network
+  // request on a hot path (every `?` press) that provably did nothing.
+  // Removed with the endpoint it called.
 
   if (!isOpen) return null
 

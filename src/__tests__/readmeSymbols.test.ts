@@ -85,6 +85,26 @@ const DELIBERATELY_ABSENT: Record<string, string> = {
   // Renamed in the campaign-host reframing: "GM" now only means the AI.
   isGM: 'renamed to isHost when GM came to mean only the AI',
 
+  // #447: tutorial-service.ts, deleted whole along with its four routes.
+  // The docs still name these because what they DID is the whole point of
+  // the Scorecard row and Fix Log entry — this system's failure was
+  // structural, and naming the specific functions is how the entry
+  // explains it. initializeTutorialSteps had zero callers so the step
+  // table was never seeded; startStep was reachable only from
+  // trackInteraction, which had no callers and no route, so nothing could
+  // reach IN_PROGRESS; and handleTriggerEvent only completed steps
+  // already IN_PROGRESS, which closed the loop on a system that could not
+  // teach anyone anything. Replaced by the typechecked content registry
+  // in src/lib/tutorial/content/.
+  initializeTutorialSteps: '#447: never had a caller, so tutorial_steps was never seeded',
+  startStep: '#447: reachable only from trackInteraction, which had no callers and no route',
+  trackInteraction: '#447: no callers, no API route — the reason no step could start',
+  handleTriggerEvent: '#447: only completed steps already IN_PROGRESS, which nothing could produce',
+  completeStep: '#447: deleted with tutorial-service.ts',
+  skipStep: '#447: deleted with tutorial-service.ts',
+  getNextStep: '#447: deleted with tutorial-service.ts',
+  arePrerequisitesSatisfied: '#447: the shared helper #317 added, deleted with tutorial-service.ts',
+
   // Removed with the manual world-turn trigger.
   manualWorldTurn: 'host-facing "advance the world now" surface, never connected',
 

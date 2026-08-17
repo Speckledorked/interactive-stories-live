@@ -104,8 +104,20 @@ function keywordBefore(body: string, refStart: number): string | null {
  * intended the following reference to be part of the same closing statement.
  * Anything else (a full stop, a newline, prose) starts a new thought and the
  * following reference is an ordinary mention.
+ *
+ * The bare-whitespace branch was missing, and #452 is the proof it matters:
+ * its PR body used the comma form, but its MERGE COMMIT used spaces —
+ * `Closes #436 #437 #438 ... #445` — and nine issues stayed open either way.
+ * GitHub drops everything after the first reference regardless of which
+ * separator joins them, so a gate that only knew about commas passed the very
+ * string the incident was written in. Found by re-reading that merge commit
+ * while the gate sat green on this PR awaiting merge.
+ *
+ * Horizontal whitespace only, never a newline: a reference at the start of the
+ * next line is a new line item, not a continuation, and treating it as one
+ * would flag ordinary "Related:" lists.
  */
-const CONTINUATION = /^[\s]*(?:,|,?\s*(?:and|&|plus)|;)[\s]*$/i
+const CONTINUATION = /^(?:[ \t]+|[\s]*(?:,|,?\s*(?:and|&|plus)|;)[\s]*)$/i
 
 /**
  * Issue references that LOOK like they are part of a closing statement but

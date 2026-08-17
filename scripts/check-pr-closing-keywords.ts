@@ -49,9 +49,10 @@ function main() {
   console.error(
     `This pull request names ${swallowed.length} issue reference(s) that read as closing ` +
     `references but will NOT close.\n\n` +
-    `GitHub closes KEYWORD + ONE issue. A comma-separated run after a single keyword ` +
-    `closes the first number and silently drops the rest — which is how PR #452 said it ` +
-    `closed ten issues, closed one, and left nine open with no warning anywhere.\n`
+    `GitHub closes KEYWORD + ONE issue. A run of references after a single keyword ` +
+    `closes the first number and silently drops the rest, whatever joins them — a comma, ` +
+    `"and", or just a space. That is how PR #452 said it closed ten issues, closed one, ` +
+    `and left nine open with no warning anywhere.\n`
   )
   for (const { keyword, issues } of byRun.values()) {
     const dropped = issues.slice(1)

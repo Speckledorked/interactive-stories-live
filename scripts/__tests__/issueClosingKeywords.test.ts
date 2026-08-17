@@ -55,6 +55,25 @@ describe('separators that mean "and this one too"', () => {
   it('catches a semicolon', () => {
     expect(findSwallowedReferences('Closes #7; #8')).toHaveLength(1)
   })
+
+  // The separator #452's MERGE COMMIT actually used. Its PR body had the comma
+  // form, its merge commit had this one, and nine issues stayed open either
+  // way — GitHub drops everything after the first reference no matter what
+  // joins them. The first version of this check only knew about commas, so it
+  // passed this string: a false negative on the literal shape of the incident
+  // it was written for, sitting green on the PR that introduced it.
+  it("catches a bare-space run — #452's merge commit form", () => {
+    const body = 'Closes #436 #437 #438 #439 #440 #441 #442 #443 #444 #445.'
+
+    const swallowed = findSwallowedReferences(body)
+
+    expect(swallowed.map((s) => s.issue)).toEqual([437, 438, 439, 440, 441, 442, 443, 444, 445])
+    expect(new Set(swallowed.map((s) => s.closes))).toEqual(new Set([436]))
+  })
+
+  it('catches a two-reference space run', () => {
+    expect(findSwallowedReferences('Fixes #10 #11')).toHaveLength(1)
+  })
 })
 
 describe('silence on everything that is not this bug', () => {
@@ -69,6 +88,13 @@ describe('silence on everything that is not this bug', () => {
 
   it('ignores a mention on a following line', () => {
     expect(findSwallowedReferences('Closes #1\n\nRelated: #2, #3')).toEqual([])
+  })
+
+  it('does not treat a newline as a space-separated continuation', () => {
+    // The bare-whitespace rule is horizontal only. A reference starting the
+    // next line is a new line item — a changelog or a "Related" list — not a
+    // continuation of the closing sentence above it.
+    expect(findSwallowedReferences('Closes #1\n#2 #3')).toEqual([])
   })
 
   it('ignores prose between two references', () => {

@@ -2114,6 +2114,36 @@ model WorldMeta {
   // maxDuration is a real risk here — can't wedge a campaign forever.
   worldTurnRunningSince DateTime?
 
+  // #436: which turn is part-way through, and how far it got.
+  //
+  // simulationTurn commits INSIDE runWorldTick's transaction, but a world
+  // turn is much more than its tick — clocks advance, ambitions resolve,
+  // the AI narrates, digests go out, all after that commit. So a failure
+  // in any of them used to leave simulationTurn already advanced, and the
+  // retry derived `simulationTurn + 1` and ran at a turn NUMBER ONE HIGHER
+  // than the attempt it was retrying.
+  //
+  // That silently defeated the whole replay-safety design: every dedupeKey
+  // embeds the turn, so at a fresh turn number nothing could ever collide.
+  // The retry wrote a second full set of WorldEvent rows, re-bought every
+  // embedding, and — because beliefTick/npcDispositionTick derive drift by
+  // COUNTING prior-turn WorldEvent rows — fed the doubled set back into
+  // drift. The keys were decoration on the one path they were written for.
+  //
+  // turnInFlight pins the turn number so a retry reuses it and the keys do
+  // their job. But a stable number alone is not enough: advanceClocks,
+  // checkAndResolveCompletedClocks and resolveCompletedAmbitions all mutate
+  // state non-idempotently, so simply re-running them would double-apply
+  // what already succeeded. turnPhaseCompleted is the watermark that stops
+  // that — the same "processed through turn N" shape already used by
+  // Faction.beliefDriftThroughTurn and NPC.dispositionDriftThroughTurn,
+  // applied to the turn's own phases instead of to an entity.
+  //
+  // Both are cleared when a turn completes. turnInFlight null means "no
+  // partial turn"; see TURN_PHASE in lib/game/worldTurn.ts for the ladder.
+  turnInFlight        Int?
+  turnPhaseCompleted  Int  @default(0)
+
   // #410: what the last world tick could NOT simulate.
   //
   // factionCap/npcCap bound how many entities a tick considers, and when

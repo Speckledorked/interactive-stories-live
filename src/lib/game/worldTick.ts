@@ -25,6 +25,7 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { TURN_PHASE } from './tick/simulationClock'
 import { tickWeather } from './tick/weatherTick'
 import { tickSeasonalPressure } from './tick/seasonTick'
 import { tickFactionRelationships } from './tick/relationshipTick'
@@ -344,6 +345,14 @@ export async function runWorldTick(
         where: { campaignId },
         data: {
           simulationTurn: turnNumber,
+          // #436: claim the turn as in-flight in the SAME transaction that
+          // advances simulationTurn. The two must move together — a turn
+          // whose tick committed but whose later phases have not is exactly
+          // the state the retry needs to recognise, and deriving it from
+          // simulationTurn alone is what sent retries to N+2 and made every
+          // dedupeKey miss.
+          turnInFlight: turnNumber,
+          turnPhaseCompleted: TURN_PHASE.TICK,
           lastTickCapReport: capReport as unknown as Prisma.InputJsonValue,
         },
       })

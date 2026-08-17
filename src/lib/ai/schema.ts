@@ -44,14 +44,48 @@ export const MAX_RELATIONSHIP_DELTA_PER_ENTRY = 25
 export const MAX_CLOCK_DELTA_PER_ENTRY = 4
 export const MAX_ITEM_QUANTITY_DELTA_PER_ENTRY = 100
 export const MAX_STAT_INCREASE_DELTA_PER_ENTRY = 1
+// #445 (F-14): deliberately far above applyStandingChanges' own ±1 clamp —
+// see StandingChangeSchema for why a schema bound must not restate an
+// applier clamp it would turn into a dropped entry.
+export const MAX_STANDING_DELTA_PER_ENTRY = 25
+// Mirrors economy.ts's MAX_GOLD_DELTA_MAGNITUDE. Not imported from there:
+// schema.ts is the AI trust boundary and lib/game is the applier layer, and
+// this file deliberately owns no runtime dependency on the appliers it
+// guards. goldBoundMatchesEconomy in schema.bounds.test.ts asserts the two
+// stay equal, which is the part that actually needs to be true.
+export const MAX_GOLD_AMOUNT_PER_ENTRY = 100_000
+// applyCorruptionMarks takes at most +1 per scene and ignores anything
+// negative, so this is a finiteness backstop rather than a second copy of
+// that rule — signed for the same reason StandingChangeSchema's is: a
+// negative here is a harmless no-op today, and corruption_change sits
+// INSIDE a pc_changes entry, so dropping it would cost that character's
+// harm and conditions too.
+export const MAX_CORRUPTION_MARKS_PER_ENTRY = 5
 
 /**
- * A bounded integer delta. `.catch()` is deliberate: an out-of-range
- * magnitude is clamped to the bound rather than failing the whole section,
- * because the ladder in validation.ts would otherwise drop every OTHER
- * change in the same batch over one bad number.
+ * A bounded integer delta. An out-of-range magnitude fails THIS ENTRY.
+ *
+ * #445: this comment used to describe a `.catch()` clamp, which the code
+ * has never had — it reasoned that failing would "drop every OTHER change
+ * in the same batch", and that was true of the validation ladder as it
+ * stood when the comment was written. It is not true now:
+ * salvageWorldUpdates (validation.ts) re-parses a failed section
+ * entry-by-entry and keeps the ones that stand on their own, so a single
+ * out-of-range number costs exactly itself.
+ *
+ * Given that, dropping is the better behaviour and the comment was
+ * describing the worse one. A hallucinated or injected 1e9 is not a
+ * request for 100; silently clamping it to the bound would hand the AI the
+ * maximum every time it overreaches, which makes the ceiling the default
+ * rather than the backstop.
  */
 const boundedDelta = (max: number) => z.number().int().min(-max).max(max)
+
+/**
+ * A bounded non-negative integer AMOUNT — a quantity or a payout, not a
+ * step. Same drop-the-entry semantics as boundedDelta above.
+ */
+const boundedAmount = (max: number) => z.number().int().min(0).max(max)
 
 // Relationship change schema
 export const RelationshipChangeSchema = z.object({
@@ -170,7 +204,14 @@ export const InventoryItemEffectSchema = z.object({
 export const InventoryItemSchema = z.object({
   id: z.string(),
   name: z.string(),
-  quantity: z.number(),
+  // #445 (F-14): this was a bare z.number(), which bypassed #384's ±100
+  // items_modify bound completely — an items_add (or a reward_grant item)
+  // carrying `quantity: 1e9` merged straight into the character sheet, and
+  // characters.ts adds an incoming quantity to any existing stack. Bounding
+  // the STEP was the whole point of #384, and an add is a step from zero,
+  // so it reuses that same constant rather than inventing a second ceiling
+  // for the same idea.
+  quantity: boundedAmount(MAX_ITEM_QUANTITY_DELTA_PER_ENTRY),
   tags: z.array(z.string()),
   // Structured mechanical identity (depth-hardening #33 — see README): when
   // set, this is the exact armor reduction (0-3) the item grants, used in
@@ -224,7 +265,16 @@ export const DebtChangeSchema = z.object({
 // server clamps to ±1 per scene, bounds ±3).
 export const StandingChangeSchema = z.object({
   faction_name: z.string(),
-  delta: z.number(),
+  // #445 (F-14): applyStandingChanges clamps this to ±MAX_SHIFT_PER_SCENE
+  // (1) and checks Number.isFinite, so the applier was never actually at
+  // risk — but the bound lived only there, which is the shared-invariant-
+  // with-voluntary-adoption shape this audit keeps finding. Bounded
+  // generously rather than at the applier's own ±1 ON PURPOSE: a schema
+  // bound DROPS the entry, and the AI plausibly reports ±2 for a big
+  // moment, which today clamps to ±1 and applies. Tightening to ±1 here
+  // would silently lose standing changes that currently land. This is a
+  // backstop against an absurd magnitude, not a second copy of the rule.
+  delta: boundedDelta(MAX_STANDING_DELTA_PER_ENTRY),
   reason: z.string()
 })
 
@@ -279,7 +329,12 @@ export const PCChangesSchema = z.object({
     // standing_changes already is the mechanically-real version of the
     // same idea.
     resource_changes: z.object({
-      gold_delta: z.number().optional(),
+      // #445 (F-14): clampGoldDelta already bounds this in the applier;
+      // the schema said nothing, so a 1e9 reached that clamp and became a
+      // full 100,000-gold grant. Dropping the entry instead means an
+      // overreach costs the AI the change rather than paying it the
+      // ceiling.
+      gold_delta: boundedDelta(MAX_GOLD_AMOUNT_PER_ENTRY).optional(),
       contacts_add: z.array(z.string()).optional(),
       contacts_remove: z.array(z.string()).optional()
     }).optional(),
@@ -315,7 +370,8 @@ export const PCChangesSchema = z.object({
     // Corruption mark drawn from this campaign's corruption theme —
     // ignored entirely in campaigns without one (see lib/game/corruption.ts).
     corruption_change: z.object({
-      marks: z.number(),
+      // #445 (F-14): see MAX_CORRUPTION_MARKS_PER_ENTRY.
+      marks: boundedDelta(MAX_CORRUPTION_MARKS_PER_ENTRY),
       reason: z.string()
     }).optional()
   })
@@ -474,7 +530,11 @@ export const LocationChangesSchema = z.object({
 // left to a free-text description the code would have to guess at.
 export const RewardGrantSchema = z.object({
   character_names: z.array(z.string()).optional(), // recipients; absent/empty = every living party member
-  gold: z.number().optional(),
+  // #445 (F-14): non-negative because questRewards already floors it at 0
+  // (`Math.max(0, clampGoldDelta(grant.gold))`) — a negative reward is a
+  // fine that the reward path has no way to express, so it is a malformed
+  // entry rather than a small one.
+  gold: boundedAmount(MAX_GOLD_AMOUNT_PER_ENTRY).optional(),
   items: z.array(InventoryItemSchema).optional(),
   standing_changes: z.array(StandingChangeSchema).optional(),
   // Who is footing the bill. When this names a real faction, the payout
@@ -548,6 +608,15 @@ export const WorldUpdatesSchema = z.object({
 // signal anything was wrong — nothing failed validation, so the existing
 // "reformat and retry" loop (validation.ts) never had a reason to kick in.
 export const TimePassageSchema = z.object({
+  // schema-number-exempt: these are the two fields in this file that
+  // legitimately carry a FRACTION — "half a day", "two and a half hours" —
+  // so the .int() every bounded helper here applies would reject real
+  // answers. elapsedInGameHours (tick/pacing.ts) already floors at 0 and
+  // clamps to MAX_TIME_PASSAGE_HOURS_PER_SCENE, and coerces through
+  // `Number(x) || 0`, so an absurd or non-numeric value is bounded there
+  // rather than dropping the whole time_passage — which would silently
+  // bank zero hours toward the world-turn clock, the exact failure this
+  // schema's own .refine() below exists to prevent.
   days: z.number().optional(),
   hours: z.number().optional(),
   description: z.string().optional()

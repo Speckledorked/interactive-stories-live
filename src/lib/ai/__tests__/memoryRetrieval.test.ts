@@ -5,16 +5,31 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // test coverage anywhere — only its pure post-filter (filterAndRankMemories,
 // below) was tested. A broken query or a down embedding provider must
 // degrade to "no memories this turn," never take down scene resolution.
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
+// #445: the semantic search now runs inside an interactive $transaction,
+// because SET LOCAL only means anything inside a transaction block — see
+// memoryRetrieval.ts. The mock hands the callback a tx that delegates to the
+// same spies, so every existing assertion about $queryRaw/$executeRawUnsafe
+// keeps working AND a test can assert the two really do share one
+// transaction.
+vi.mock('@/lib/prisma', () => {
+  const prisma: any = {
     $queryRaw: vi.fn(),
     // #391: SET LOCAL hnsw.ef_search, so the candidate pool the CTE asks
     // for is the pool pgvector actually returns.
     $executeRawUnsafe: vi.fn(),
     $executeRaw: vi.fn(),
     worldMeta: { findUnique: vi.fn() },
-  },
-}))
+  }
+  prisma.$transaction = vi.fn(async (fn: any) =>
+    typeof fn === 'function'
+      ? fn({
+          $queryRaw: (...args: any[]) => prisma.$queryRaw(...args),
+          $executeRawUnsafe: (...args: any[]) => prisma.$executeRawUnsafe(...args),
+        })
+      : Promise.all(fn)
+  )
+  return { prisma }
+})
 vi.mock('../embeddingService', () => ({
   embedWithCostTracking: vi.fn(),
 }))
@@ -153,6 +168,83 @@ describe('retrieveRelevantHistory — fail-open behavior (#293)', () => {
 
     expect(result).toHaveLength(1)
     expect(result[0].title).toBe('A thing happened')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// hnsw.ef_search (#391, fixed properly in #445)
+// ---------------------------------------------------------------------------
+// #391 diagnosed this exactly right — pgvector's HNSW search returns fewer
+// rows than LIMIT when LIMIT exceeds hnsw.ef_search (default 40), so the
+// "generous candidate window" the CTE justifies at length was silently ~40
+// rows before the entity and fog filters cut it further.
+//
+// And then it issued `SET LOCAL` outside any transaction, where Postgres
+// warns and IGNORES it, with a comment asserting the opposite ("SET LOCAL
+// scopes this to the surrounding transaction"). There was no surrounding
+// transaction. The setting never applied, the pool stayed at 40, and nothing
+// tested either half — the fix and the bug had identical observable
+// behaviour, which is why it survived a release.
+
+describe('the candidate-pool setting actually applies (#445)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(embedWithCostTracking).mockResolvedValue({ embedding: [0.1, 0.2, 0.3] } as any)
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([] as any)
+  })
+
+  it('runs the search inside a transaction', async () => {
+    await retrieveRelevantHistory('camp1', makeContext(), {})
+    expect(prisma.$transaction).toHaveBeenCalled()
+  })
+
+  it('issues SET LOCAL from INSIDE that transaction, not beside it', async () => {
+    // The whole finding in one assertion. Outside a transaction block
+    // Postgres discards the statement, so "was it called" is not the
+    // question — "was it called somewhere it counts" is.
+    let insideTransaction = false
+    let setLocalWasInside = false
+    ;(prisma.$executeRawUnsafe as any).mockImplementation(async (sql: string) => {
+      if (/SET LOCAL/i.test(sql)) setLocalWasInside = insideTransaction
+      return 0
+    })
+    ;(prisma.$transaction as any).mockImplementation(async (fn: any) => {
+      insideTransaction = true
+      try {
+        return await fn({
+          $queryRaw: (...args: any[]) => (prisma.$queryRaw as any)(...args),
+          $executeRawUnsafe: (...args: any[]) => (prisma.$executeRawUnsafe as any)(...args),
+        })
+      } finally {
+        insideTransaction = false
+      }
+    })
+
+    await retrieveRelevantHistory('camp1', makeContext(), {})
+
+    expect(setLocalWasInside).toBe(true)
+  })
+
+  it('sets ef_search to at least the pool the query then asks for', async () => {
+    // The two numbers are derived from one expression, so what matters is
+    // that the setting is never SMALLER than the LIMIT — which is the
+    // condition under which HNSW silently returns short.
+    await retrieveRelevantHistory('camp1', makeContext(), { maxMemories: 25 })
+
+    const sql = vi.mocked(prisma.$executeRawUnsafe).mock.calls
+      .map((c) => String(c[0]))
+      .find((c) => /SET LOCAL hnsw\.ef_search/i.test(c))
+    expect(sql).toBeDefined()
+    const value = Number(/=\s*(\d+)/.exec(sql!)![1])
+    expect(value).toBeGreaterThanOrEqual(25 * 2)
+  })
+
+  it('never sets it below the floor, even for a tiny request', async () => {
+    await retrieveRelevantHistory('camp1', makeContext(), { maxMemories: 1 })
+
+    const sql = String(vi.mocked(prisma.$executeRawUnsafe).mock.calls[0]?.[0] ?? '')
+    const value = Number(/=\s*(\d+)/.exec(sql)?.[1] ?? 0)
+    expect(value).toBeGreaterThan(40) // pgvector's own default, the value this exists to raise
   })
 })
 

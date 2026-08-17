@@ -209,13 +209,24 @@ export async function retrieveRelevantHistory(
     // length was silently ~40 rows regardless of candidatePoolSize —
     // before the entity and fog filters cut it further.
     //
-    // SET LOCAL scopes this to the surrounding transaction, so it cannot
-    // leak onto an unrelated query sharing the pooled connection. The two
-    // values are derived from one number here, so they cannot drift apart
-    // again.
-    await prisma.$executeRawUnsafe(`SET LOCAL hnsw.ef_search = ${Math.max(candidatePoolSize, MIN_CANDIDATE_POOL_SIZE)}`);
-    // See campaignMemoryColumns.ts for why the shared column list is quoted.
-    const memories = await prisma.$queryRaw<RetrievedMemory[]>`
+    // #445: SET LOCAL and the search have to be ONE TRANSACTION.
+    //
+    // #391 wrote "SET LOCAL scopes this to the surrounding transaction" and
+    // then issued it outside any transaction, where Postgres warns
+    // (`SET LOCAL can only be used in transaction blocks`) and IGNORES it —
+    // and the $queryRaw below may not even land on the same pooled
+    // connection. So ef_search stayed at its default of 40 against a
+    // candidate pool of 100, and the "generous candidate window" the CTE
+    // comment justifies at length was still silently ~40 rows, which is the
+    // exact defect #391 was written to fix.
+    //
+    // An interactive $transaction is what makes the claim true: one
+    // connection, one transaction block, the setting scoped to it and
+    // discarded at COMMIT so it cannot leak onto an unrelated query.
+    const memories = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL hnsw.ef_search = ${Math.max(candidatePoolSize, MIN_CANDIDATE_POOL_SIZE)}`);
+      // See campaignMemoryColumns.ts for why the shared column list is quoted.
+      return tx.$queryRaw<RetrievedMemory[]>`
       WITH candidates AS (
         -- Index-accelerated stage: deliberately ONLY campaignId + a bare
         -- vector-distance ORDER BY, matching the exact shape
@@ -284,6 +295,7 @@ export async function retrieveRelevantHistory(
       ORDER BY "relevanceScore" DESC
       LIMIT ${opts.maxMemories * 2}  -- Get extra, then filter by similarity threshold
     `;
+    });
 
     // Filter by minimum similarity and apply importance boost
     const result = filterAndRankMemories(memories, opts);

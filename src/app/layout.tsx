@@ -5,6 +5,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { CommandPaletteProvider } from '@/contexts/CommandPaletteContext'
 import { ErrorHandlerInit } from './ErrorHandlerInit'
+import { OrientationGate } from '@/components/tutorial/OrientationGate'
 import { getAppUrl } from '@/lib/appUrl'
 import { fontDisplay, fontSans, fontMono } from '@/lib/fonts'
 import { THEME_INIT_SCRIPT } from '@/lib/theme'
@@ -52,6 +53,11 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-myth-canvas text-myth-ink">
         <ErrorHandlerInit />
+        {/* Shows the "what is this" intro once per user, on whatever
+            authenticated page they load first. Renders nothing when
+            signed out, so /login and /signup are unaffected without a
+            route allowlist. */}
+        <OrientationGate />
         <CommandPaletteProvider>
           <main className="container mx-auto px-4 py-8">
             {children}

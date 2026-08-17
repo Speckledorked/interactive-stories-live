@@ -1,0 +1,16 @@
+-- Orientation overlay: remember that a user has seen it.
+--
+-- Purely additive and nullable, with no backfill and no default. That is
+-- deliberate on both counts:
+--
+--   * Additive means this is safe under the deploy ordering described in
+--     docs/ARCHITECTURE.md (#434) — code that predates this column keeps
+--     working against a database that has it, so the migration landing
+--     before the build proves shippable cannot break production.
+--
+--   * No backfill means every existing account reads NULL, i.e. "has not
+--     seen the orientation", so the overlay shows once to the whole
+--     existing userbase rather than only to accounts created from here
+--     on. Backfilling now() would hide it from exactly the people who
+--     have never been taught anything.
+ALTER TABLE "User" ADD COLUMN "orientationSeenAt" TIMESTAMP(3);

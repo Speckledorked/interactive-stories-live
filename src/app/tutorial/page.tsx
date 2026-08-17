@@ -1,286 +1,141 @@
+// src/app/tutorial/page.tsx
+//
+// Rewritten. The previous version rendered a progress bar and a checklist
+// over the `tutorial_steps` table — a table nothing has ever seeded, since
+// initializeTutorialSteps() has no callers anywhere in the repo. In
+// production it drew a 0% bar over an empty list, and no step could reach
+// IN_PROGRESS in any case because the only path to startStep was a
+// function with no callers and no route. It measured nothing and taught
+// nobody.
+//
+// This reads from src/lib/tutorial/content/, which is typechecked and
+// ships with the code, so there is no seeding step to forget.
+//
+// No progress tracking, on purpose. Percent-complete on a tutorial invites
+// grinding it to 100% rather than reading it, and the honest state — "have
+// you been shown the intro" — is a single timestamp the orientation
+// overlay already owns.
+
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId } from '@/lib/clientAuth'
+import { ArrowRight, RotateCcw } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
 import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
-import type { TutorialStepWithProgress, TutorialProgressResponse } from '@/types/api'
+import { SectionHeader } from '@/components/ui/section-header'
 import { Button } from '@/components/ui/button'
-import { Check, Gamepad2, Lightbulb, MessageSquare, Rocket, Swords } from 'lucide-react'
 import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
-
-type TutorialStep = TutorialStepWithProgress
+import { getLastCampaignId, isAuthenticated } from '@/lib/clientAuth'
+import { WALKTHROUGH } from '@/lib/tutorial/content/walkthrough'
+import { getMechanic } from '@/lib/tutorial/content/mechanics'
+import { OrientationOverlay } from '@/components/tutorial/OrientationOverlay'
 
 export default function TutorialPage() {
   const router = useRouter()
-  const [steps, setSteps] = useState<TutorialStep[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [completionPercentage, setCompletionPercentage] = useState(0)
   const [lastCampaignId, setLastCampaignId] = useState<string | null>(null)
+  const [showIntro, setShowIntro] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated()) {
       router.push('/login')
       return
     }
-
     setLastCampaignId(getLastCampaignId())
-    loadTutorialProgress()
-  }, [])
+  }, [router])
 
-  const loadTutorialProgress = async () => {
-    try {
-      const response = await authenticatedFetch('/api/tutorial/progress')
-      if (response.ok) {
-        // #308: the route returns `progress`, not `steps` — this used to
-        // read a key that never existed, so `steps` stayed permanently
-        // empty and every category section (which renders null when its
-        // step list is empty) never showed up at all.
-        const data: TutorialProgressResponse = await response.json()
-        setSteps(data.progress || [])
-        setCompletionPercentage(data.completionPercentage || 0)
-      } else {
-        setError('Failed to load tutorial progress')
-      }
-    } catch (err) {
-      setError('Failed to load tutorial progress')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleSkipStep = async (stepId: string) => {
-    try {
-      const response = await authenticatedFetch(`/api/tutorial/steps/${stepId}/skip`, {
-        method: 'POST'
-      })
-      if (response.ok) {
-        loadTutorialProgress()
-      }
-    } catch (err) {
-      console.error('Failed to skip step:', err)
-    }
-  }
-
-  if (loading) {
-    return (
-      <TavernPage>
-        <TavernHeader backHref="/campaigns" title="Tutorial & Onboarding" />
-        <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-16`}>
-          <div className="flex justify-center py-16">
-            <div className="h-16 w-16 animate-spin rounded-full border-b-2 border-myth-accent" />
-          </div>
-        </main>
-      </TavernPage>
-    )
-  }
-
-  const groupedSteps = steps.reduce((acc, step) => {
-    if (!acc[step.category]) acc[step.category] = []
-    acc[step.category].push(step)
-    return acc
-  }, {} as Record<string, TutorialStep[]>)
-
-  const categoryOrder = ['basics', 'social', 'combat', 'advanced']
-  const categoryLabels = {
-    basics: 'Basics',
-    social: 'Social & Communication',
-    combat: 'Combat',
-    advanced: 'Advanced'
-  }
-
-  const categoryIcons = {
-    basics: Gamepad2,
-    social: MessageSquare,
-    combat: Swords,
-    advanced: Rocket
-  }
+  // Replaying is purely a re-view: it touches neither the server record
+  // nor the local cache. The user is saying "let me watch that again",
+  // not "pretend I never saw it", so re-arming the overlay — on this
+  // device or, worse, on every device they own — would be a surprise.
+  const replayIntro = () => setShowIntro(true)
+  const closeIntro = () => setShowIntro(false)
 
   return (
     <TavernPage>
-      <TavernHeader backHref="/campaigns" title="Tutorial & Onboarding" />
+      <TavernHeader backHref="/campaigns" title="How to play" />
 
-      <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
-        <p className="mb-8 text-sm text-myth-ink-faint">Master the art of AI-powered tabletop adventures</p>
+      <main className={`max-w-3xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
+        <p className="mb-8 max-w-prose text-sm leading-relaxed text-myth-ink-faint">
+          Enough to get you playing, and nothing you do not need yet. This
+          is not the full reference — when you want that, it is in{' '}
+          <Link href="/help" className="text-myth-accent underline underline-offset-4">
+            Help
+          </Link>
+          .
+        </p>
 
-      {/* Progress Card */}
-      <div className="mb-8 rounded-lg border border-myth-border bg-myth-surface p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-myth-ink">Your Progress</h2>
-          <div className="rounded-full border border-myth-border bg-myth-surface-sunken px-4 py-2 text-lg font-medium text-myth-ink">
-            {completionPercentage}%
-          </div>
+        <div className="mb-10">
+          <Button variant="secondary" icon={RotateCcw} onClick={replayIntro}>
+            Show the intro again
+          </Button>
         </div>
 
-        <div className="relative h-6 overflow-hidden rounded-full border border-myth-border bg-myth-surface-sunken">
-          <div
-            className="absolute left-0 top-0 h-full bg-myth-accent transition-all duration-500"
-            style={{ width: `${completionPercentage}%` }}
-          />
-        </div>
+        <div className="space-y-12">
+          {WALKTHROUGH.map(section => (
+            <section key={section.id}>
+              <SectionHeader as="h2" title={section.title} description={section.lede} />
 
-        <div className="mt-4 flex items-center gap-6 text-sm text-myth-ink-muted">
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full bg-myth-good" />
-            <span>{steps.filter(s => s.userProgress?.status === 'COMPLETED').length} Completed</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full bg-myth-accent" />
-            <span>{steps.filter(s => s.userProgress?.status === 'IN_PROGRESS').length} In Progress</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full bg-myth-surface-sunken border border-myth-border" />
-            <span>{steps.filter(s => !s.userProgress || s.userProgress.status === 'NOT_STARTED').length} Not Started</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Tutorial Steps by Category — a genuine checklist with per-item
-          actions (Skip), stays bordered/reference throughout. */}
-      <div className="space-y-6">
-        {categoryOrder.map(category => {
-          const categorySteps = groupedSteps[category] || []
-          if (categorySteps.length === 0) return null
-
-          return (
-            <div key={category} className="rounded-lg border border-myth-border bg-myth-surface p-6">
-              <div className="mb-6 flex items-center gap-3">
-                {(() => {
-                  const Icon = categoryIcons[category as keyof typeof categoryIcons]
-                  return <Icon className="h-8 w-8 flex-shrink-0 text-myth-ink-muted" />
-                })()}
-                <h2 className="text-2xl font-bold text-myth-ink">
-                  {categoryLabels[category as keyof typeof categoryLabels]}
-                </h2>
-              </div>
-
-              <div className="space-y-3">
-                {categorySteps.map((step, index) => {
-                  const status = step.userProgress?.status || 'NOT_STARTED'
-                  const isCompleted = status === 'COMPLETED'
-                  const isSkipped = status === 'SKIPPED'
-                  const isInProgress = status === 'IN_PROGRESS'
+              <div className="mt-6 space-y-8 divide-y divide-myth-border">
+                {section.mechanicIds.map((id, index) => {
+                  const mechanic = getMechanic(id)
+                  // A walkthrough referencing a mechanic that no longer
+                  // exists renders nothing rather than an empty block.
+                  // walkthroughIntegrity.test.ts fails the build first.
+                  if (!mechanic) return null
 
                   return (
-                    <div
-                      key={step.id}
-                      className={`group relative rounded-lg border p-5 transition-colors ${
-                        isCompleted
-                          ? 'border-myth-good/30 bg-myth-good/10'
-                          : isSkipped
-                          ? 'border-myth-border bg-myth-surface-sunken'
-                          : isInProgress
-                          ? 'border-myth-accent/40 bg-myth-accent/5'
-                          : 'border-myth-border hover:border-myth-border-strong'
-                      }`}
-                      style={{ animationDelay: `${index * 50}ms` }}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex flex-1 items-start gap-4">
-                          <div className="mt-0.5 flex-shrink-0">
-                            {isCompleted ? (
-                              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-myth-good">
-                                <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                              </div>
-                            ) : isSkipped ? (
-                              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-myth-surface-sunken">
-                                <svg className="h-4 w-4 text-myth-ink-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                                </svg>
-                              </div>
-                            ) : isInProgress ? (
-                              <div className="flex h-6 w-6 animate-pulse items-center justify-center rounded-full bg-myth-accent">
-                                <svg className="h-4 w-4 text-myth-accent-ink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                              </div>
-                            ) : (
-                              <div className="h-6 w-6 rounded-full border-2 border-myth-border" />
-                            )}
-                          </div>
-
-                          <div className="flex-1">
-                            <div className="mb-1 flex items-center gap-2">
-                              <h3 className="text-lg font-bold text-myth-ink">{step.title}</h3>
-                              {step.isOptional && (
-                                <span className="rounded-full border border-myth-border bg-myth-surface-sunken px-2 py-0.5 text-xs font-semibold text-myth-ink-faint">
-                                  Optional
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm leading-relaxed text-myth-ink-muted">{step.description}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          {status === 'NOT_STARTED' && step.isOptional && (
-                            <Button
-                              variant="secondary"
-                              onClick={() => handleSkipStep(step.id)}
-                            >
-                              Skip
-                            </Button>
-                          )}
-
-                          {isCompleted && step.userProgress?.completedAt && (
-                            <div className="text-xs font-medium text-myth-good">
-                              <Check className="mr-1 inline h-3.5 w-3.5 align-[-0.15em]" />{new Date(step.userProgress.completedAt).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
+                    <div key={mechanic.id} className={index === 0 ? '' : 'pt-8'}>
+                      <h3 className="mb-2 text-lg font-bold text-myth-ink">{mechanic.term}</h3>
+                      <div className="space-y-3">
+                        {mechanic.body.map((paragraph, i) => (
+                          <p key={i} className="max-w-prose text-sm leading-relaxed text-myth-ink-muted">
+                            {paragraph}
+                          </p>
+                        ))}
                       </div>
+                      <Link
+                        href={`/help/${mechanic.id}`}
+                        className="mt-3 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-myth-accent hover:text-myth-ink"
+                      >
+                        More on {mechanic.term.toLowerCase()}
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
                     </div>
                   )
                 })}
               </div>
-            </div>
-          )
-        })}
-      </div>
+            </section>
+          ))}
+        </div>
 
-      {/* Help Text */}
-      <div className="mt-8 rounded-lg border border-myth-border bg-myth-surface p-6">
-        <div className="flex items-start gap-4">
-          <Lightbulb className="h-7 w-7 flex-shrink-0 text-myth-ink-muted" />
-          <div>
-            <h3 className="mb-3 text-lg font-bold text-myth-ink">How the Tutorial Works</h3>
-            <ul className="space-y-2 text-sm text-myth-ink-muted">
-              <li className="flex items-start gap-2">
-                <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-myth-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Tutorial steps complete automatically as you use features</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-myth-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Optional steps can be skipped if you already know the feature</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-myth-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Required steps must be completed to reach 100%</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-myth-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Return to this page anytime to track your progress</span>
-              </li>
-            </ul>
+        <div className="mt-14 border-t border-myth-border pt-8">
+          <h2 className="mb-2 text-lg font-bold text-myth-ink">That is the whole tutorial</h2>
+          <p className="mb-5 max-w-prose text-sm leading-relaxed text-myth-ink-muted">
+            The rest of it — factions and the plans they are pursuing, threads,
+            standing, debts, wars, downtime, how the Codex keeps itself current —
+            you will meet as you play. All of it is written up properly in Help,
+            including how each system actually works, whenever you want to look
+            something up.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Link href={lastCampaignId ? `/campaigns/${lastCampaignId}` : '/campaigns'}>
+              <Button iconRight={ArrowRight} fullWidth>
+                {lastCampaignId ? 'Back to your campaign' : 'Go to your campaigns'}
+              </Button>
+            </Link>
+            <Link href="/help">
+              <Button variant="secondary" fullWidth>
+                Browse the full reference
+              </Button>
+            </Link>
           </div>
         </div>
-      </div>
       </main>
 
+      <OrientationOverlay open={showIntro} onDismiss={closeIntro} />
       <TavernNav campaignId={lastCampaignId || undefined} />
     </TavernPage>
   )

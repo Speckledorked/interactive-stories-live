@@ -1,15 +1,21 @@
 // src/app/tutorial/__tests__/page.test.tsx
-// #308: GET /api/tutorial/progress returns `{ progress, nextStep,
-// completionPercentage }`, but this page read `data.steps` — a key that
-// never existed — so `steps` stayed permanently `[]`. Every category
-// section (which renders null when its own step list is empty) never
-// rendered at all; only the completion-percentage bar worked, since it
-// read the correctly-named key. This renders the page against the API's
-// real response shape and asserts the step list and tallies actually
-// populate, the gap the bug shipped through unnoticed.
+//
+// Rewritten alongside the page itself.
+//
+// The previous tests here rendered the DB-backed checklist and asserted
+// its tallies against a mocked /api/tutorial/progress response. They
+// passed — and the page still taught nobody anything, because in
+// production that endpoint reads `tutorial_steps`, a table nothing has
+// ever seeded (initializeTutorialSteps() has no callers repo-wide). The
+// tests proved the component could render rows it was handed; nothing
+// proved there would ever BE rows.
+//
+// That is the failure this file is now written against: content comes
+// from a typechecked module that ships with the code, so "does the page
+// show real teaching content" is answerable without a database at all.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -17,82 +23,67 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
-const { authenticatedFetchMock } = vi.hoisted(() => ({
-  authenticatedFetchMock: vi.fn(),
-}))
-
 vi.mock('@/lib/clientAuth', () => ({
-  authenticatedFetch: authenticatedFetchMock,
+  authenticatedFetch: vi.fn(),
   isAuthenticated: () => true,
   getUser: () => ({ id: 'u1', email: 'u1@example.com' }),
   getLastCampaignId: () => null,
-  // TavernHeader's bell reads the unread count (useUnreadCount), which
-  // needs a token to fetch with. Returning null here is the "logged out /
-  // no token" path the hook already handles by rendering no badge, which
-  // is what this page's tests care about — they're about the checklist,
-  // not the chrome.
+  // TavernHeader's bell reads the unread count, which needs a token.
+  // Null is the "no token" path the hook handles by rendering no badge.
   getToken: () => null,
   logout: () => {},
 }))
 
 import TutorialPage from '../page'
-
-function jsonResponse(body: unknown) {
-  return { ok: true, json: async () => body }
-}
-
-function progressStep(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 'step1',
-    stepKey: 'welcome',
-    title: 'Welcome to MythOS',
-    description: 'Learn the basics',
-    category: 'basics',
-    orderIndex: 1,
-    isOptional: false,
-    userProgress: null,
-    ...overrides,
-  }
-}
+import { WALKTHROUGH } from '@/lib/tutorial/content/walkthrough'
+import { getMechanic } from '@/lib/tutorial/content/mechanics'
 
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
 describe('/tutorial page', () => {
-  it('renders the step checklist and tallies from the real API response shape (progress, not steps)', async () => {
-    authenticatedFetchMock.mockResolvedValue(
-      jsonResponse({
-        progress: [
-          progressStep({ id: 's1', stepKey: 'welcome', title: 'Welcome to MythOS', userProgress: { status: 'COMPLETED', completedAt: '2026-01-01' } }),
-          progressStep({ id: 's2', stepKey: 'create_character', title: 'Create Your Character', userProgress: { status: 'IN_PROGRESS' } }),
-          progressStep({ id: 's3', stepKey: 'first_scene', title: 'Your First Scene', userProgress: null }),
-        ],
-        nextStep: null,
-        completionPercentage: 33,
-      })
-    )
-
+  it('renders teaching content with no database and no fetch at all', () => {
     render(<TutorialPage />)
 
-    await waitFor(() => expect(screen.getByText('Welcome to MythOS')).toBeTruthy())
-    expect(screen.getByText('Create Your Character')).toBeTruthy()
-    expect(screen.getByText('Your First Scene')).toBeTruthy()
+    // Every section heading from the registry is on the page.
+    for (const section of WALKTHROUGH) {
+      expect(screen.getByText(section.title)).toBeTruthy()
+    }
 
-    // The tallies at the top are computed from the same `steps` state —
-    // these only ever read 0/0/0 while `steps` stayed permanently empty.
-    expect(screen.getByText('1 Completed')).toBeTruthy()
-    expect(screen.getByText('1 In Progress')).toBeTruthy()
-    expect(screen.getByText('1 Not Started')).toBeTruthy()
-    expect(screen.getByText('33%')).toBeTruthy()
+    // And every mechanic it names renders its real prose, not a title
+    // over an empty block.
+    for (const section of WALKTHROUGH) {
+      for (const id of section.mechanicIds) {
+        const mechanic = getMechanic(id)
+        expect(mechanic).toBeDefined()
+        expect(screen.getByText(mechanic!.body[0])).toBeTruthy()
+      }
+    }
   })
 
-  it('renders nothing in the checklist (but does not crash) when the API returns no progress at all', async () => {
-    authenticatedFetchMock.mockResolvedValue(jsonResponse({ progress: [], nextStep: null, completionPercentage: 0 }))
-
+  it('teaches the two things a player must not discover the hard way', () => {
     render(<TutorialPage />)
 
-    await waitFor(() => expect(screen.getByText('0%')).toBeTruthy())
-    expect(screen.getByText('0 Completed')).toBeTruthy()
+    // Money and safety are in the walkthrough on purpose: being charged
+    // without warning, or having no idea there is a way to stop content,
+    // are the two failures that cost a real person something.
+    const taught = WALKTHROUGH.flatMap(s => s.mechanicIds)
+    expect(taught).toContain('scene-cost')
+    expect(taught).toContain('safety')
+  })
+
+  it('does not render a progress bar over content it cannot measure', () => {
+    const { container } = render(<TutorialPage />)
+
+    // The old page drew "0%" and "0 Completed" against an empty table.
+    // A completion metric here would be measuring nothing again.
+    expect(container.textContent).not.toMatch(/\d+%/)
+    expect(container.textContent).not.toMatch(/Completed/)
+  })
+
+  it('points at the full reference rather than trying to be it', () => {
+    render(<TutorialPage />)
+    expect(screen.getByText('That is the whole tutorial')).toBeTruthy()
   })
 })

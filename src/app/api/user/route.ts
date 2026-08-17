@@ -16,6 +16,9 @@ const USER_SELECT = {
   email: true,
   name: true,
   themePreference: true,
+  // Null means "has never seen the orientation overlay" — the client
+  // shows it on that basis. See the column comment in schema.prisma.
+  orientationSeenAt: true,
   createdAt: true
 } as const
 
@@ -46,7 +49,7 @@ export async function PATCH(request: NextRequest) {
     const tokenUser = await requireAuth(request)
     const body = await request.json()
 
-    const { name, themePreference } = body
+    const { name, themePreference, orientationSeenAt } = body
 
     if (name !== undefined && typeof name !== 'string') {
       return NextResponse.json<ErrorResponse>(
@@ -73,14 +76,39 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // Boolean in, timestamp out. The client says WHETHER the orientation
+    // has been seen; the server decides WHEN. Accepting a caller-supplied
+    // date here would let a client write an arbitrary (or future, or
+    // skewed) timestamp into a column whose whole purpose is answering
+    // "has this person been shown the intro yet".
+    //
+    // `false` resets it to null, which re-arms the overlay — that's what
+    // backs the "show me the intro again" control in settings.
+    if (
+      orientationSeenAt !== undefined &&
+      typeof orientationSeenAt !== 'boolean'
+    ) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'orientationSeenAt must be a boolean' },
+        { status: 400 }
+      )
+    }
+
     // Build the update from only the keys actually present. This used to
     // be an unconditional `name: name || null`, which meant a PATCH
     // updating any OTHER field would silently clear the user's name — a
     // latent bug that only became reachable once this route accepted a
     // second field.
-    const data: { name?: string | null; themePreference?: string | null } = {}
+    const data: {
+      name?: string | null
+      themePreference?: string | null
+      orientationSeenAt?: Date | null
+    } = {}
     if (name !== undefined) data.name = name || null
     if (themePreference !== undefined) data.themePreference = themePreference
+    if (orientationSeenAt !== undefined) {
+      data.orientationSeenAt = orientationSeenAt ? new Date() : null
+    }
 
     const user = await prisma.user.update({
       where: { id: tokenUser.userId },

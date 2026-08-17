@@ -20,7 +20,10 @@ vi.mock('@/lib/game/visibility', () => ({
   redactGmNotesList: vi.fn((list: any, isAdmin: boolean) => isAdmin ? list : list.map((l: any) => ({ ...l, gmNotes: null }))),
 }))
 vi.mock('@/lib/prisma', () => ({
-  prisma: { location: { findMany: vi.fn(), create: vi.fn() } },
+  prisma: {
+    location: { findMany: vi.fn(), create: vi.fn() },
+    locationAdjacency: { createMany: vi.fn(async () => ({ count: 2 })) },
+  },
 }))
 
 import { getUser } from '@/lib/auth'
@@ -91,6 +94,53 @@ describe('POST', () => {
     const body = await response.json()
     expect(response.status).toBe(201)
     expect(body.location).toEqual({ id: 'l1', name: 'Old Mill' })
+  })
+
+  // #445 (F-04): this route was the one creation path #378 and #379 both
+  // missed — the hand-authoring surface an admin actually uses. A location
+  // created here produced nothing (logisticsTick's extraction and
+  // supply-route passes both open with `if (resourceSlots.length === 0)
+  // continue`) and had no edges (every graph reader falls back silently on
+  // an unreachable node). It looked entirely real in the UI and did not
+  // exist to the simulation.
+  it('derives resource slots from what the admin actually typed', async () => {
+    db.location.create.mockResolvedValue({ id: 'l1', name: 'Ironhold Mine' })
+    await POST(postRequest({ name: 'Ironhold Mine' }), { params: { id: 'camp1' } })
+
+    expect(db.location.create.mock.calls[0][0].data.resourceSlots).toEqual(['ore'])
+  })
+
+  it('never creates a location that produces nothing by accident', async () => {
+    // The settlement default. An empty array is a real answer for a ruin,
+    // and must not also be the answer for "the admin phrased it unusually".
+    db.location.create.mockResolvedValue({ id: 'l1', name: 'Thrennish Hollow' })
+    await POST(postRequest({ name: 'Thrennish Hollow' }), { params: { id: 'camp1' } })
+
+    expect(db.location.create.mock.calls[0][0].data.resourceSlots).toEqual(['grain'])
+  })
+
+  it('attaches the new location to the world graph', async () => {
+    db.location.create.mockResolvedValue({ id: 'l9', name: 'Old Mill' })
+    db.location.findMany.mockResolvedValue([{ id: 'l1' }, { id: 'l2' }, { id: 'l9' }])
+
+    await POST(postRequest({ name: 'Old Mill' }), { params: { id: 'camp1' } })
+
+    const rows = db.locationAdjacency.createMany.mock.calls[0][0].data
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(row.campaignId).toBe('camp1')
+      expect(row.locationAId === 'l9' || row.locationBId === 'l9').toBe(true)
+    }
+  })
+
+  it('still returns the location when the graph write fails', async () => {
+    db.location.create.mockResolvedValue({ id: 'l9', name: 'Old Mill' })
+    db.location.findMany.mockResolvedValue([{ id: 'l1' }, { id: 'l9' }])
+    db.locationAdjacency.createMany.mockRejectedValueOnce(new Error('db down'))
+
+    const response = await POST(postRequest({ name: 'Old Mill' }), { params: { id: 'camp1' } })
+
+    expect(response.status).toBe(201)
   })
 })
 

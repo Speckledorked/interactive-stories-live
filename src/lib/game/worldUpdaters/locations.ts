@@ -28,6 +28,7 @@ import { Prisma } from '@prisma/client'
 import type { WorldUpdates } from '@/lib/ai/schema'
 import { appendBounded, GM_NOTES_BOUNDS } from '../textAppend'
 import { deriveResourceSlots } from '../resourceSlots'
+import { attachLocationToGraph } from '../locationGraph'
 import { sceneWorldChange } from './sceneWorldEvents'
 import { resolveEntityByNameOrId } from '../entityResolution'
 import type { WorldChange } from '../tick/types'
@@ -133,6 +134,13 @@ export async function applyLocationChanges(
           isDiscovered: sceneOrigin
         }
       })
+      // #445: and it joins the world GRAPH too. #378 gave a new location
+      // something to produce; without an edge, informationTick, npcTick,
+      // migrationTick, logisticsTick and ambitionResolution all treat it as
+      // unreachable and fall back silently — the same invisible absence
+      // #379 was written to close, reopened for every location minted after
+      // campaign creation.
+      await attachLocationToGraph(tx, campaignId, created.id)
       locationsForResolution.push(created)
       console.log(`  📍 Created location: ${locChange.name}`)
     } else {
@@ -212,6 +220,9 @@ export async function resolveOrCreateLocationId(
         resourceSlots: deriveResourceSlots({ name }),
       },
     })
+    // #445: same reasoning as the richer create path above — and more
+    // pressing here, since this is the main way real new places appear.
+    await attachLocationToGraph(tx, campaignId, created.id)
     return created.id
   } catch {
     return null

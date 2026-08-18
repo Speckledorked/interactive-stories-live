@@ -75,6 +75,42 @@ jobs:
   # and the real-Postgres job on every description typo. See that file's
   # header.
 
+  # A merged migration file must never be edited again.
+  #
+  # 20260816090000_world_turn_integrity was applied to production, and three
+  # later PRs then appended statements to that same file. `prisma migrate
+  # deploy` keys on the migration NAME and does not fail on a checksum
+  # mismatch, so those statements ran in CI — which builds its database from
+  # the current files — and never ran in production. Every campaign page
+  # returned P2022 for a day and a half with CI green throughout.
+  #
+  # The #455 drift check cannot see this: the files are self-consistent and a
+  # fresh database built from them is correct. What had drifted was production,
+  # against a history rewritten underneath it. This needs no database — only
+  # git — and with the allowlist emptied it rediscovers both edited migrations
+  # on its own.
+  #
+  # fetch-depth: 0 is load-bearing. At the default depth 1 every file looks
+  # like it has exactly one commit and the check would pass vacuously forever,
+  # so the script refuses to run on a shallow clone rather than reporting green.
+  migrations-immutable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check no applied migration has been edited
+        run: npx tsx scripts/check-migrations-immutable.ts
+
   # Enforces docs/ARCHITECTURE.md's Scorecard Audit Log rule: a Scorecard
   # row's score can't go up without a matching Audit Log entry recording
   # a clean adversarial pass. See that section's own header for why — a

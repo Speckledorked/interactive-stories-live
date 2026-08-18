@@ -104,11 +104,32 @@ describe('the SQL backfill and deriveResourceSlots are one rule (#445)', () => {
   it('is the newest migration touching resourceSlots, so it wins', () => {
     // Ordering matters: the corrective UPDATE has to run AFTER the original
     // backfill, or it is silently undone on a fresh database.
+    //
+    // Comments are stripped before the match, because what matters is what a
+    // migration DOES. 20260817230000_repair_world_turn_integrity_tail names
+    // this column in prose — it replays a tail production never ran, and
+    // explains that it deliberately leaves the resourceSlots backfill out
+    // precisely BECAUSE the corrective migration below supersedes it. Reading
+    // that explanation as a competing write would fail this guard for saying
+    // the right thing, which is the same trap readmeSymbols fell into when it
+    // flagged prose describing a deleted symbol.
+    const withoutComments = (sql: string) => sql.replace(/--[^\n]*/g, '')
     const touching = readdirSync(MIGRATIONS)
       .filter((d) => {
-        try { return /resourceSlots/.test(migrationSql(d)) } catch { return false }
+        try { return /resourceSlots/.test(withoutComments(migrationSql(d))) } catch { return false }
       })
       .sort()
     expect(touching[touching.length - 1]).toBe(CORRECTIVE)
+  })
+
+  it('still catches a LATER migration that really writes resourceSlots', () => {
+    // The comment-stripping above must not blind the guard to a real
+    // competing write. A migration whose SQL actually assigns the column is
+    // caught regardless of what its comments say.
+    const later = '-- resourceSlots: nothing to see here\nUPDATE "Location" SET "resourceSlots" = ARRAY[\'ore\'];'
+    expect(/resourceSlots/.test(later.replace(/--[^\n]*/g, ''))).toBe(true)
+
+    const commentOnly = '-- mentions resourceSlots only in prose\nSELECT 1;'
+    expect(/resourceSlots/.test(commentOnly.replace(/--[^\n]*/g, ''))).toBe(false)
   })
 })

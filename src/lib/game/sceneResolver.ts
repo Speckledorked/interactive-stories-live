@@ -41,6 +41,7 @@ import {
 import { createSceneMemory } from '@/lib/ai/memoryCreation'
 import { extractAndApplyConsequences } from './consequences'
 import { formatRollReceipt } from './resolution'
+import { mechanicsUnavailableDetails, type MechanicsUnavailableInput } from '@/lib/game/mechanicsUnavailable'
 import { elapsedInGameHours } from './tick/pacing'
 import { ensureSurgeCorruptionChanges } from './corruption'
 import { aggregateInventoryItems, describeAggregatedItem } from './itemRegistry'
@@ -464,12 +465,13 @@ async function performResolution(
     // kind of "something silently didn't happen" case that mechanism
     // exists for, not the collapsed-by-default measurement-only panels
     // (adherence/moveVariety) below.
-    if ((aiRequest as { _mechanicsUnavailable?: boolean })._mechanicsUnavailable) {
+    const mechanicsFailure = mechanicsUnavailableDetails(aiRequest as MechanicsUnavailableInput)
+    if (mechanicsFailure) {
       worldStateChanges.push({
         category: 'consequence',
         type: 'failed',
         entityName: 'Dice Mechanics',
-        details: 'The dice engine was unavailable this exchange (an API issue) — every action resolved as freeform narration instead of a real roll.',
+        details: mechanicsFailure,
         impact: 'major'
       })
     }

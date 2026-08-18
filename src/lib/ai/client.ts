@@ -8,6 +8,7 @@ import { callChatCompletion } from './chatCompletion'
 import { buildSystemPrompt, buildUserPrompt } from './scenePrompt'
 import { validateAIResponseWithRepair, addValidationMetadata } from './validation'
 import { checkOutcomeAdherence, type OutcomeBand, type AdherenceResult } from '@/lib/game/outcomeAdherence'
+import type { MechanicsUnavailableReason } from '@/lib/game/resolution'
 import { repairUnreportedAdherence } from './outcomeEchoRepair'
 import { validateWorldTurnResponse } from './validation'
 import { circuitBreakerManager } from './circuit-breaker'
@@ -615,6 +616,11 @@ export interface AIGMRequest {
   // unavailable this exchange" signal instead of the failure being
   // indistinguishable from "nothing needed rolling."
   _mechanicsUnavailable?: boolean
+  // WHY the dice engine produced nothing, so the player-facing banner can
+  // stop attributing a model mistake to "an API issue".
+  _mechanicsUnavailableReason?: MechanicsUnavailableReason
+  // Which field paths the model got wrong, when the cause was its output.
+  _mechanicsDroppedFields?: string[]
 }
 
 // Prompt-caching params for a scene-resolution call. Scoped per campaign,

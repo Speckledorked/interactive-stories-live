@@ -178,7 +178,7 @@ export async function buildSceneResolutionRequest(
   // this exchange BEFORE the narrator sees them, so outcome bands arrive
   // as binding constraints. Fails open to [] — freeform resolution.
   const pendingActions = scene.playerActions.filter(a => a.status === 'pending')
-  const { mechanics: actionMechanics, classificationUnavailable } = await resolveActionMechanics(
+  const { mechanics: actionMechanics, classificationUnavailable, unavailableReason, droppedFields } = await resolveActionMechanics(
     campaignId,
     sceneId,
     pendingActions.map(a => ({
@@ -530,6 +530,8 @@ export async function buildSceneResolutionRequest(
     is_scene_ending: effectiveIsSceneEnding,
     scene_progress_ledger: sceneProgressLedger,
     last_progress_exchange: progressState.lastProgressExchange,
-    _mechanicsUnavailable: classificationUnavailable
+    _mechanicsUnavailable: classificationUnavailable,
+    _mechanicsUnavailableReason: unavailableReason,
+    _mechanicsDroppedFields: droppedFields
   }
 }

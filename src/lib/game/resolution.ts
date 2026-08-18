@@ -633,19 +633,41 @@ const MOVE_LIST_FOR_PROMPT = BASIC_MOVES.map(m => `- "${m.name}": ${m.trigger}`)
  * Still fail-open per entry: one malformed classification drops that
  * action to freeform rather than failing the whole exchange.
  */
+/**
+ * Why a classification was thrown away, in a form worth logging.
+ *
+ * The field path matters more than the message. When the dice engine goes
+ * quiet the useful question is always "which field did the model get wrong,
+ * and is it the same one every time" — and until this existed the answer was
+ * a single message string with no path attached, so a recurring null in one
+ * field was indistinguishable from scattered noise.
+ */
+export interface DroppedClassification {
+  /** Dotted path, e.g. `classifications.0.stat_key`. `envelope` when the whole response was wrong. */
+  field: string
+  reason: string
+}
+
 export function parseClassifications(
   raw: any,
   actionCount: number,
   // The real rosters this campaign has. Omitted means "don't re-verify",
   // which is the right degradation for callers with no roster to check
   // against — never the live path, which always has them.
-  known?: { factionNames?: string[]; npcNames?: string[] }
+  known?: { factionNames?: string[]; npcNames?: string[] },
+  // Optional sink for what was dropped and why. Added rather than folded
+  // into the return type so every existing caller keeps working unchanged;
+  // the live path passes a collector, tests that only care about the
+  // surviving classifications still just read the array.
+  onDropped?: (dropped: DroppedClassification) => void
 ): ActionClassification[] {
   const parsed = ActionClassificationResponseSchema.safeParse(raw)
   if (!parsed.success) {
     // The envelope itself is wrong (not an object, classifications not an
     // array). Nothing salvageable.
-    console.warn('Action classification response failed schema validation — resolving freeform:', parsed.error.issues[0]?.message)
+    const issue = parsed.error.issues[0]
+    console.warn('Action classification response failed schema validation — resolving freeform:', issue?.message)
+    onDropped?.({ field: issue?.path?.join('.') || 'envelope', reason: issue?.message ?? 'envelope failed validation' })
     return []
   }
 
@@ -663,13 +685,21 @@ export function parseClassifications(
     // mechanics rather than the whole exchange's.
     const entry = ActionClassificationSchema.safeParse(raw)
     if (!entry.success) {
-      console.warn('Dropping a malformed action classification — that action resolves freeform:', entry.error.issues[0]?.message)
+      const issue = entry.error.issues[0]
+      // The path is the point: "stat_key: received null" is actionable,
+      // "received null" on its own is not.
+      const field = issue?.path?.join('.') || 'unknown'
+      console.warn(
+        `Dropping a malformed action classification — that action resolves freeform: ${field}: ${issue?.message}`
+      )
+      onDropped?.({ field, reason: issue?.message ?? 'failed validation' })
       continue
     }
     const c = entry.data
     if (c.action_index >= actionCount) continue
     if (!validMoves.has(c.move_name)) {
       console.warn(`Classifier named a move that does not exist ("${c.move_name}") — that action resolves freeform`)
+      onDropped?.({ field: 'move_name', reason: `move "${c.move_name}" does not exist` })
       continue
     }
 
@@ -678,6 +708,7 @@ export function parseClassifications(
     // classifications that carry no mechanical risk.
     if (c.move_name !== 'no_roll' && !c.stat_key) {
       console.warn(`Classifier returned "${c.move_name}" with no stat — that action resolves freeform rather than defaulting to a stat nobody chose`)
+      onDropped?.({ field: 'stat_key', reason: `move "${c.move_name}" arrived with no stat` })
       continue
     }
 
@@ -717,6 +748,34 @@ export function parseClassifications(
   return out
 }
 
+/**
+ * Why the dice engine produced nothing.
+ *
+ * This existed as a bare empty array, which collapsed four unrelated causes
+ * into one indistinguishable outcome: no API key, an HTTP failure, a thrown
+ * error, and "the model answered but every classification failed validation".
+ * The player-facing banner then reported all four as "an API issue" — which
+ * on 2026-08-18 was actively wrong. The classifier call had succeeded and
+ * been billed; the model had simply returned `stat_key: null`.
+ *
+ * A cause the operator cannot distinguish is a cause they will debug in the
+ * wrong place.
+ */
+export type MechanicsUnavailableReason =
+  /** OPENAI_API_KEY absent — configuration, not a fault. */
+  | 'no-api-key'
+  /** The call itself failed: non-ok HTTP, network, or a thrown error. */
+  | 'api-error'
+  /** The call SUCCEEDED and was billed; nothing it returned survived validation. */
+  | 'unusable-output'
+
+interface ClassificationAttempt {
+  classifications: ActionClassification[]
+  failure: MechanicsUnavailableReason | null
+  /** Field paths the model got wrong, when failure is 'unusable-output'. */
+  droppedFields: string[]
+}
+
 async function classifyActions(
   actions: Array<{ actionText: string }>,
   characters: CharacterForRoll[],
@@ -725,9 +784,9 @@ async function classifyActions(
   npcNames: string[],
   campaignId: string,
   sceneId: string
-): Promise<ActionClassification[]> {
+): Promise<ClassificationAttempt> {
   const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return []
+  if (!apiKey) return { classifications: [], failure: 'no-api-key', droppedFields: [] }
 
   const actionLines = actions
     .map((a, i) => {
@@ -794,7 +853,7 @@ Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fi
     })
     if (!response.ok) {
       console.error('Action classification API error:', response.status)
-      return []
+      return { classifications: [], failure: 'api-error', droppedFields: [] }
     }
     const data = await response.json()
     const content = data.choices[0].message.content
@@ -813,11 +872,24 @@ Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fi
       responseTimeMs: Date.now() - startTime,
       success: true,
     }).catch(console.error)
-    return parseClassifications(JSON.parse(content), actions.length, { factionNames, npcNames })
+    const droppedFields: string[] = []
+    const classifications = parseClassifications(
+      JSON.parse(content),
+      actions.length,
+      { factionNames, npcNames },
+      (d) => droppedFields.push(d.field)
+    )
+    // The call worked. If nothing survived, that is the MODEL's answer being
+    // unusable, not the API being down — and the two want different messages.
+    return {
+      classifications,
+      failure: classifications.length === 0 ? 'unusable-output' : null,
+      droppedFields,
+    }
   } catch (error) {
     // Fail open: unclassified actions resolve freeform, as they always did.
     console.error('Action classification failed (failing open):', error)
-    return []
+    return { classifications: [], failure: 'api-error', droppedFields: [] }
   }
 }
 
@@ -844,6 +916,13 @@ export interface ActionMechanicsResult {
   // back anyway — i.e. the dice engine was supposed to run and didn't.
   // False when there were simply no pending actions to roll.
   classificationUnavailable: boolean
+  // WHY it was unavailable. Kept alongside the boolean rather than
+  // replacing it so every existing caller and test reads unchanged, while
+  // the player-facing message can stop calling a model mistake "an API
+  // issue". Absent when classificationUnavailable is false.
+  unavailableReason?: MechanicsUnavailableReason
+  // Field paths the model got wrong, for 'unusable-output'. Empty otherwise.
+  droppedFields?: string[]
 }
 
 export async function resolveActionMechanics(
@@ -989,7 +1068,7 @@ export async function resolveActionMechanics(
     const conditionScoreByLocationId = new Map(locationRows.map(l => [l.id, l.conditionScore]))
     const conditionScoreByLocationName = new Map(locationRows.map(l => [l.name.toLowerCase(), l.conditionScore]))
 
-    const classifications = await classifyActions(
+    const attempt = await classifyActions(
       pendingActions,
       characters,
       pendingActions.map(a => a.characterId),
@@ -1001,7 +1080,15 @@ export async function resolveActionMechanics(
       campaignId,
       sceneId
     )
-    if (classifications.length === 0) return { mechanics: [], classificationUnavailable: true }
+    const classifications = attempt.classifications
+    if (classifications.length === 0) {
+      return {
+        mechanics: [],
+        classificationUnavailable: true,
+        unavailableReason: attempt.failure ?? 'unusable-output',
+        droppedFields: attempt.droppedFields,
+      }
+    }
 
     const mechanics: ActionMechanics[] = []
     for (const classification of classifications) {
@@ -1222,7 +1309,7 @@ export async function resolveActionMechanics(
     return { mechanics, classificationUnavailable: false }
   } catch (error) {
     console.error('Action mechanics failed (failing open — freeform resolution):', error)
-    return { mechanics: [], classificationUnavailable: true }
+    return { mechanics: [], classificationUnavailable: true, unavailableReason: 'api-error', droppedFields: [] }
   }
 }
 

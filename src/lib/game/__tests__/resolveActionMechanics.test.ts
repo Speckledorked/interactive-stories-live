@@ -163,8 +163,31 @@ describe('resolveActionMechanics — receipts', () => {
     // "nothing needed rolling."
     openaiFetch.mockRejectedValue(new Error('upstream down'))
 
-    await expect(resolveActionMechanics('camp1', 'scene1', actions, () => 0.5))
-      .resolves.toEqual({ mechanics: [], classificationUnavailable: true })
+    const result = await resolveActionMechanics('camp1', 'scene1', actions, () => 0.5)
+
+    expect(result.mechanics).toEqual([])
+    expect(result.classificationUnavailable).toBe(true)
+    // A thrown call IS an API problem — this is the one case where saying so
+    // is correct, which is what makes the 'unusable-output' case below wrong
+    // to describe the same way.
+    expect(result.unavailableReason).toBe('api-error')
+    expect(prisma.diceRoll.create).not.toHaveBeenCalled()
+  })
+
+  it("reports the MODEL's bad output as unusable-output, not as an API problem", async () => {
+    // The 2026-08-18 incident: the classifier call succeeded and was billed,
+    // and returned stat_key: null. The banner blamed "an API issue" and sent
+    // the reader to OpenAI's status page. The cause has to survive the trip
+    // to the UI or the message cannot be right.
+    openaiFetch.mockResolvedValue(classifierReturning([
+      { action_index: 0, move_name: 'Act Under Fire', stat_key: null },
+    ]))
+
+    const result = await resolveActionMechanics('camp1', 'scene1', [actions[0]], () => 0.5)
+
+    expect(result.classificationUnavailable).toBe(true)
+    expect(result.unavailableReason).toBe('unusable-output')
+    expect(result.droppedFields).toContain('stat_key')
     expect(prisma.diceRoll.create).not.toHaveBeenCalled()
   })
 
@@ -173,7 +196,9 @@ describe('resolveActionMechanics — receipts', () => {
 
     const result = await resolveActionMechanics('camp1', 'scene1', actions, () => 0.5)
 
-    expect(result).toEqual({ mechanics: [], classificationUnavailable: true })
+    expect(result.mechanics).toEqual([])
+    expect(result.classificationUnavailable).toBe(true)
+    expect(result.unavailableReason).toBe('no-api-key')
     expect(openaiFetch).not.toHaveBeenCalled()
     expect(prisma.diceRoll.create).not.toHaveBeenCalled()
   })

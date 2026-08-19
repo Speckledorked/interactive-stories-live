@@ -1,6 +1,6 @@
 // src/lib/game/__tests__/economy.test.ts
 import { describe, it, expect } from 'vitest'
-import { clampGoldDelta, applyGoldDelta, MAX_GOLD_DELTA_MAGNITUDE } from '../economy'
+import { clampGoldDelta, applyGoldDelta, spendGold, MAX_GOLD_DELTA_MAGNITUDE } from '../economy'
 
 describe('clampGoldDelta', () => {
   it('passes a reasonable delta through unchanged', () => {
@@ -66,5 +66,71 @@ describe('applyGoldDelta', () => {
     // Guards against a caller ever passing a pre-corrupted negative
     // balance in — the floor applies to the RESULT, not just the input.
     expect(applyGoldDelta(-20, 5)).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// spendGold — the refusal applyGoldDelta could not express.
+//
+// applyGoldDelta floors at 0, which is right for a credit and was quietly
+// wrong for a purchase: spending 200 with 50 in hand produced a balance of 0
+// and let the purchase stand. Nobody could ever fail to afford anything —
+// only be drained — so "I can't cover this" never became a reason to bargain,
+// borrow, lie or steal.
+// ---------------------------------------------------------------------------
+describe('spendGold', () => {
+  it('REFUSES a purchase the character cannot cover, and takes nothing', () => {
+    // The whole point. The old behaviour was gold: 0 and the purchase stands.
+    const out = spendGold(50, -200)
+
+    expect(out.refused).toBe(true)
+    expect(out.spent).toBe(0)
+    expect(out.gold).toBe(50)
+    expect(out.shortfall).toBe(150)
+  })
+
+  it('does not partially pay — half a purchase is not a state the fiction can hold', () => {
+    expect(spendGold(199, -200).spent).toBe(0)
+    expect(spendGold(199, -200).gold).toBe(199)
+  })
+
+  it('allows a spend the character can exactly cover', () => {
+    const out = spendGold(200, -200)
+    expect(out.refused).toBe(false)
+    expect(out.spent).toBe(200)
+    expect(out.gold).toBe(0)
+    expect(out.shortfall).toBe(0)
+  })
+
+  it('reads the cost as an amount, so sign at the call site cannot flip the meaning', () => {
+    expect(spendGold(100, -30)).toEqual(spendGold(100, 30))
+  })
+
+  it('treats a zero or missing cost as a no-op rather than a refusal', () => {
+    for (const cost of [0, null, undefined, NaN]) {
+      const out = spendGold(100, cost as number)
+      expect(out.refused, String(cost)).toBe(false)
+      expect(out.gold, String(cost)).toBe(100)
+      expect(out.spent, String(cost)).toBe(0)
+    }
+  })
+
+  it('never returns a negative balance from junk input', () => {
+    expect(spendGold(-20, -5).gold).toBe(0)
+    expect(spendGold(NaN, -5).gold).toBe(0)
+    expect(spendGold(null, -5).refused).toBe(true)
+  })
+
+  it('still respects the magnitude guardrail', () => {
+    // A hallucinated cost is clamped before it can decide affordability.
+    expect(spendGold(MAX_GOLD_DELTA_MAGNITUDE, -99_999_999).refused).toBe(false)
+  })
+
+  it('leaves applyGoldDelta alone — a REWARD must not start refusing', () => {
+    // Rewards, quest payouts and downtime returns all still credit through
+    // applyGoldDelta. Changing that function instead of adding this one would
+    // have made every credit path affordability-checked, which is nonsense.
+    expect(applyGoldDelta(10, -50)).toBe(0)
+    expect(applyGoldDelta(10, 50)).toBe(60)
   })
 })

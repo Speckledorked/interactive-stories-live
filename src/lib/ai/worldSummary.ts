@@ -22,6 +22,7 @@ import {
 } from './worldSummaryMappers'
 import { groupEventWitnessesForPrompt, GroupedWitness } from '@/lib/game/eventWitness'
 import { simTurn, type SimTurn } from '@/lib/game/turnClock'
+import { activeTexts } from '@/lib/game/consequenceRecords'
 
 // Information Latency (#101) — a query-cost bound only, not a correctness
 // one (the per-character MAX_WITNESSED/TOLD caps in eventWitness.ts do the
@@ -251,10 +252,12 @@ export async function buildOptimizedWorldSummary(
   // Filter factions: only include active threats (4-5/5) or those mentioned in character consequences
   const characterConsequences = promptCharacters.flatMap(c => {
     const cons = c.consequences as any
+    // ACTIVE only. A resolved threat that keeps feeding the prompt is a
+    // threat the fiction never actually let the character out from under.
     return [
-      ...(cons?.enemies || []),
-      ...(cons?.debts || []),
-      ...(cons?.longTermThreats || [])
+      ...activeTexts(cons?.enemies),
+      ...activeTexts(cons?.debts),
+      ...activeTexts(cons?.longTermThreats)
     ]
   })
 

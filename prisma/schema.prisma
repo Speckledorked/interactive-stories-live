@@ -366,6 +366,24 @@ model Campaign {
   // Shape: { rules: WorldRule[] } (game/integrity/worldRules.ts)
   worldRules Json?
 
+  // What "getting stronger" MEANS in this universe — the rank ladder and any
+  // bounded slot collections (essences, spell schools, covenant marks).
+  // Generated once at creation from the fiction, same frozen pattern as
+  // statLabels/corruptionTheme/calendarConfig above, and same discipline as
+  // worldRules about what the model decides: the SHAPE is closed and defined
+  // in game/advancementTrack.ts, the generator only picks names, order and
+  // capacities — never a new kind of progression.
+  //
+  // Null is a real answer, not a gap: a universe with no ranks and no slots
+  // gets null and the sheet renders nothing, exactly as a null corruptionTheme
+  // disables the corruption track rather than inventing one.
+  //
+  // Slot fill is COUNTED from CampaignCapability rows whose domain matches, so
+  // there is one record of what a character has learned rather than a second
+  // counter to keep in sync.
+  // Shape: AdvancementTrack (game/advancementTrack.ts)
+  advancementTrack Json?
+
   // True while a creation-time lore import + auto-reseed is in flight —
   // the campaign is unplayable (no characters, no scenes) until the world
   // has finished becoming its canon self, so a mid-import character can't
@@ -919,6 +937,12 @@ model Character {
   perks          Json? // [{ id, name, description, tags? }]
   advancementLog Json? // { entries: [], totalStatIncreases, totalPerksGained, totalMovesLearned }
 
+  // Which rung of Campaign.advancementTrack.tiers this character stands on.
+  // Null means the first rung — "unranked" is a real starting state, and a
+  // character created before the campaign had a track should read as a
+  // beginner rather than as a broken row (see tierProgress).
+  advancementTier String?
+
   // #214: optimistic-concurrency guard for applyOrganicCharacterGrowth
   // (sceneResolver.ts) — that write reads this character once, computes the
   // whole statUsage/stats/perks/moves/advancementLog update from that
@@ -952,7 +976,17 @@ model Character {
   // would plausibly know, while rapport is someone else's private opinion
   // of them.
   relationships Json? // { [entityId: string]: { trust: Int, tension: Int, respect: Int, fear: Int } }
-  consequences  Json? // { promises?: string[], debts?: string[], enemies?: string[], longTermThreats?: string[] }
+  // Entries are RECORDS, not bare strings:
+  //   { text, status: 'active'|'resolved', since?: turn, resolvedAt?: turn }
+  // A string had no identity and no status, so the only expressible
+  // operations were append and splice-out — which is why threats accumulated
+  // all campaign, and why the one path that removed one destroyed it.
+  // Surviving a contract that hunted you for six sessions is part of who the
+  // character is, not the absence of a contract.
+  // Legacy string arrays are still readable (normalizeConsequenceList in
+  // lib/game/consequenceRecords.ts reads both) and backfilled by
+  // 20260819180000_consequence_records. Only ACTIVE entries reach AI context.
+  consequences  Json? // { promises?: ConsequenceRecord[], debts?: [], enemies?: [], longTermThreats?: [] }
 
   // Abstract range band within the current scene: how far this character
   // stands from the center of the action ("close" | "near" | "far" |

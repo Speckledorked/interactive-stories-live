@@ -6,7 +6,6 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { SpendPanel } from './SpendPanel'
 import HarmTracker, { HARM_STATUS_COLORS, healthRemaining } from './HarmTracker'
 import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
@@ -18,6 +17,8 @@ import { clampHarm, getHarmStatus } from '@/lib/game/harm'
 import { Tabs } from '@/components/ui/tabs'
 import { Backpack, BarChart3, Circle, ClipboardList, Coins, CreditCard, DollarSign, HeartHandshake, JapaneseYen, Moon, Sparkles, Sprout, Star, Target, TrendingUp } from 'lucide-react'
 import { type IconComponent } from '@/lib/ui/icons'
+import { normalizeConsequenceList } from '@/lib/game/consequenceRecords'
+import { parseAdvancementTrack, tierProgress, slotProgress } from '@/lib/game/advancementTrack'
 
 interface CharacterSheetDisplayProps {
   character: any
@@ -109,12 +110,21 @@ export default function CharacterSheetDisplay({
 
   // Parse consequences
   const consequences = character?.consequences as any || {}
-  const allConsequences = [
-    ...(consequences.promises || []).map((p: string) => ({ type: 'promise' as const, description: p })),
-    ...(consequences.debts || []).map((d: string) => ({ type: 'debt' as const, description: d })),
-    ...(consequences.enemies || []).map((e: string) => ({ type: 'enemy' as const, description: e })),
-    ...(consequences.longTermThreats || []).map((t: string) => ({ type: 'longTermThreat' as const, description: t }))
+  // Consequences carry a status now, so the sheet can distinguish "still
+  // hunting you" from "you got out from under it". Active drives the cards;
+  // resolved is kept as history and shown only on request, the same split
+  // the Conditions / Past Conditions cards use.
+  const consequenceEntries = (key: string, type: 'promise' | 'debt' | 'enemy' | 'longTermThreat') =>
+    normalizeConsequenceList(consequences[key]).map((r) => ({ type, description: r.text, status: r.status, resolvedAt: r.resolvedAt }))
+
+  const everyConsequence = [
+    ...consequenceEntries('promises', 'promise'),
+    ...consequenceEntries('debts', 'debt'),
+    ...consequenceEntries('enemies', 'enemy'),
+    ...consequenceEntries('longTermThreats', 'longTermThreat'),
   ]
+  const allConsequences = everyConsequence.filter((c) => c.status === 'active')
+  const resolvedConsequences = everyConsequence.filter((c) => c.status === 'resolved')
 
   // Parse inventory
   const inventory = character?.inventory as any || {}
@@ -150,6 +160,15 @@ export default function CharacterSheetDisplay({
     knownDomains: string[]
   } | undefined
   const capabilityDomains: string[] = capabilitySummary?.knownDomains || []
+
+  // Per-universe progression. Null track = this world has no ranks and no
+  // slot collections, and nothing renders — the same way a null
+  // corruptionTheme disables the corruption track rather than inventing one.
+  // Slot fill is COUNTED from the character's own known capabilities, so
+  // there is no second counter to drift from what they have actually learned.
+  const advancementTrack = parseAdvancementTrack(campaign?.advancementTrack)
+  const tier = tierProgress(advancementTrack, character?.advancementTier)
+  const slots = slotProgress(advancementTrack, (capabilitySummary?.known || []).map(k => k.domain))
 
   // Debt economy — diegetic summary from the character GET route
   const debtSummary = character?.debtSummary as {
@@ -344,21 +363,36 @@ export default function CharacterSheetDisplay({
 
             {/* Resolved conditions — the historical record that a condition
                 applied and later cleared, kept distinct from the current
-                Conditions card above (#173). */}
+                Conditions card above (#173).
+
+                COLLAPSED by default. #173 was right that the record is worth
+                keeping and wrong to spend permanent sheet space on it: this
+                list only grows, so on a long campaign it buries the Conditions
+                card that says what is wrong with you RIGHT NOW — which is the
+                one thing a sheet has to answer at a glance. Kept rather than
+                deleted because "she was Restrained two sessions ago" is real
+                history; moved behind a disclosure because it is never the
+                question being asked. Most recent first, for the same reason. */}
             {conditionHistoryList.length > 0 && (
               <Card>
-                <CardLabel>Past Conditions</CardLabel>
-                <div className="flex flex-wrap gap-2">
-                  {conditionHistoryList.map((entry: any, idx: number) => (
-                    <span
-                      key={idx}
-                      className="rounded-full border border-myth-border bg-myth-surface-sunken px-3 py-1 text-xs font-medium text-myth-ink-faint"
-                      title={entry.resolvedAt ? `Resolved turn ${entry.resolvedAt}` : undefined}
-                    >
-                      {entry.name}
-                    </span>
-                  ))}
-                </div>
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+                    <CardLabel>Past Conditions ({conditionHistoryList.length})</CardLabel>
+                    <span className="text-xs text-myth-ink-faint group-open:hidden">show</span>
+                    <span className="hidden text-xs text-myth-ink-faint group-open:inline">hide</span>
+                  </summary>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[...conditionHistoryList].reverse().map((entry: any, idx: number) => (
+                      <span
+                        key={idx}
+                        className="rounded-full border border-myth-border bg-myth-surface-sunken px-3 py-1 text-xs font-medium text-myth-ink-faint"
+                        title={entry.resolvedAt ? `Resolved turn ${entry.resolvedAt}` : undefined}
+                      >
+                        {entry.name}
+                      </span>
+                    ))}
+                  </div>
+                </details>
               </Card>
             )}
 
@@ -389,6 +423,52 @@ export default function CharacterSheetDisplay({
                 with a genuinely blank sheet by design, and without an
                 explicit empty state that's indistinguishable from the
                 feature being broken. */}
+            {(tier || slots.length > 0) && (
+              <Card>
+                <CardLabel>Advancement</CardLabel>
+                {tier && (
+                  <div className="mb-4">
+                    <div className="mb-2 flex items-baseline justify-between gap-2">
+                      <span className="text-sm font-medium text-myth-ink">{tier.label}</span>
+                      <span className="text-xs text-myth-ink-faint">
+                        {tier.next ? `next: ${tier.next}` : 'highest'}
+                      </span>
+                    </div>
+                    <div className="flex gap-1" aria-label={`Rank ${tier.index + 1} of ${tier.total}`}>
+                      {Array.from({ length: tier.total }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-1.5 flex-1 rounded-full ${i <= tier.index ? 'bg-myth-accent' : 'bg-myth-surface-sunken'}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {slots.map(group => (
+                  <div key={group.key} className="mt-3">
+                    <div className="mb-2 flex items-baseline justify-between gap-2">
+                      <span className="text-sm text-myth-ink-muted">{group.label}</span>
+                      <span className="text-xs font-medium text-myth-ink-faint">
+                        {group.filled}/{group.capacity}
+                      </span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {Array.from({ length: group.capacity }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-6 flex-1 rounded border ${
+                            i < group.filled
+                              ? 'border-myth-accent/40 bg-myth-accent/20'
+                              : 'border-dashed border-myth-border bg-transparent'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            )}
+
             {capabilitySummary && (
               <Card className="md:col-span-2">
                 <CardLabel>Abilities & Knowledge</CardLabel>
@@ -670,20 +750,18 @@ export default function CharacterSheetDisplay({
               </Card>
             )}
 
-            {/* #416: where gold actually goes. The economy modelled earning,
-                owing and defaulting and had no modelled way to spend, so
-                gold accumulated and only ever left through an AI-narrated
-                delta. Fetches its own prices — see SpendPanel. */}
-            {campaignId && character?.id && (
-              <Card className="md:col-span-2">
-                <CardLabel>Spend</CardLabel>
-                <SpendPanel
-                  campaignId={campaignId}
-                  characterId={character.id}
-                  currencyPlural={currency.plural}
-                />
-              </Card>
-            )}
+            {/* The Spend panel that stood here is gone.
+                #416 added it because the economy modelled earning, owing and
+                defaulting with no modelled way to spend — a real gap, solved
+                the wrong way. It turned spending into a shopfront of three
+                fixed transactions (settle a debt, treat harm, commission an
+                item) with server-priced buttons, in a game whose whole premise
+                is that things happen in the fiction. Players commission gear by
+                talking to a smith, not by clicking Commission.
+                The gap it was covering is now closed where it belongs: an
+                AI-narrated spend is CHARGED and, if the character cannot cover
+                it, REFUSED — see spendGold in lib/game/economy.ts and the
+                gateRefusals path out of worldUpdaters/characters.ts. */}
           </div>
         )}
 
@@ -696,6 +774,32 @@ export default function CharacterSheetDisplay({
                 you in the fiction.
               </p>
             </Card>
+
+            {/* Behind you now. The whole point of giving consequences a status
+                was that a threat which ENDED is not the same as one that never
+                existed — surviving the Ironveil contract is part of who the
+                character is. Collapsed, because it is history rather than
+                anything the player is currently up against. */}
+            {resolvedConsequences.length > 0 && (
+              <Card>
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+                    <CardLabel>Behind You ({resolvedConsequences.length})</CardLabel>
+                    <span className="text-xs text-myth-ink-faint group-open:hidden">show</span>
+                    <span className="hidden text-xs text-myth-ink-faint group-open:inline">hide</span>
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    {[...resolvedConsequences].reverse().map((cons, idx) => (
+                      <div key={idx} className="rounded-lg border border-myth-border bg-myth-surface-sunken p-3">
+                        <p className="text-sm text-myth-ink-faint line-through decoration-myth-ink-faint/40">
+                          {cons.description}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </Card>
+            )}
 
             {allConsequences.filter(c => c.type === 'enemy').length > 0 && (
               <Card>

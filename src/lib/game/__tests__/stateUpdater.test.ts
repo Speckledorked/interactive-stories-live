@@ -294,12 +294,13 @@ describe('applyWorldUpdates — results and failure', () => {
       involvedFactionIds: ['faction-from-applier'],
       unresolvedCharacterNames: [],
       worldChanges: [],
+      gateRefusals: [],
     })
   })
 
   it('returns empty id lists when the relevant appliers never ran', async () => {
     const result = await applyWorldUpdates('camp1', response({ quest_changes: [{ name: 'Q' }] }), sceneTurn(1))
-    expect(result).toEqual({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [] })
+    expect(result).toEqual({ involvedNpcIds: [], involvedFactionIds: [], unresolvedCharacterNames: [], worldChanges: [], gateRefusals: [] })
   })
 
   it('wraps and rethrows when an applier fails, so the caller sees a real failure', async () => {

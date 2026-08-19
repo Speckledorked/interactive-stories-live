@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs } from '@/components/ui/tabs'
 import { Backpack, BarChart3, Coins, Handshake, HeartHandshake, Sparkles, Swords, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { activeTexts } from '@/lib/game/consequenceRecords'
 
 interface CharacterSnapshotModalProps {
   characterId: string
@@ -99,10 +100,10 @@ export default function CharacterSnapshotModal({
   // Parse consequences
   const consequences = character?.consequences as any || {}
   const allConsequences = [
-    ...(consequences.promises || []).map((p: string) => ({ type: 'promise' as const, description: p })),
-    ...(consequences.debts || []).map((d: string) => ({ type: 'debt' as const, description: d })),
-    ...(consequences.enemies || []).map((e: string) => ({ type: 'enemy' as const, description: e })),
-    ...(consequences.longTermThreats || []).map((t: string) => ({ type: 'longTermThreat' as const, description: t }))
+    ...activeTexts(consequences.promises).map((p: string) => ({ type: 'promise' as const, description: p })),
+    ...activeTexts(consequences.debts).map((d: string) => ({ type: 'debt' as const, description: d })),
+    ...activeTexts(consequences.enemies).map((e: string) => ({ type: 'enemy' as const, description: e })),
+    ...activeTexts(consequences.longTermThreats).map((t: string) => ({ type: 'longTermThreat' as const, description: t }))
   ]
 
   // Parse inventory

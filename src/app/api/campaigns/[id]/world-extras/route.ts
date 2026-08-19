@@ -95,6 +95,15 @@ export async function POST(
       archetypesCreated = created.count
     }
 
+    // Backfill the advancement track too, on the same terms as the theme:
+    // only when absent, never a re-roll over one a campaign already has.
+    if (!campaign.advancementTrack && extras.advancementTrack) {
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { advancementTrack: extras.advancementTrack as object },
+      })
+    }
+
     let corruptionThemeSet = false
     if (!campaign.corruptionTheme && extras.corruptionTheme) {
       await prisma.campaign.update({

@@ -52,7 +52,7 @@ vi.mock('@/lib/ai/worldExtras', () => ({
       backstoryPrompts: [],
       glimpseCapabilityKeys: [],
     }],
-    corruptionTheme: null,
+    corruptionTheme: null, advancementTrack: null,
     npcs: [],
     locations: [],
   }),
@@ -126,7 +126,7 @@ describe('reseedWorldFromLore — archetype regeneration', () => {
     vi.clearAllMocks()
     db.campaign.findUnique.mockResolvedValue({
       id: 'camp1', title: 'Test', description: '', universe: 'Original',
-      initialWorldSeed: '', statLabels: null, corruptionTheme: null,
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null, advancementTrack: null,
     })
     db.faction.findMany.mockResolvedValue([])
     db.faction.updateMany.mockResolvedValue({ count: 0 })
@@ -211,7 +211,7 @@ describe('reseedWorldFromLore — stat labels', () => {
     vi.clearAllMocks()
     db.campaign.findUnique.mockResolvedValue({
       id: 'camp1', title: 'Test', description: '', universe: 'Original',
-      initialWorldSeed: '', statLabels: { cool: { name: 'Steady', description: 'y' } }, corruptionTheme: null,
+      initialWorldSeed: '', statLabels: { cool: { name: 'Steady', description: 'y' } }, corruptionTheme: null, advancementTrack: null,
     })
     db.faction.findMany.mockResolvedValue([])
     db.faction.updateMany.mockResolvedValue({ count: 0 })
@@ -302,7 +302,7 @@ describe('reseedWorldFromLore — NPCs and locations', () => {
     vi.clearAllMocks()
     db.campaign.findUnique.mockResolvedValue({
       id: 'camp1', title: 'Test', description: '', universe: 'Original',
-      initialWorldSeed: '', statLabels: null, corruptionTheme: null,
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null, advancementTrack: null,
     })
     db.character.count.mockResolvedValue(2) // live mode — irrelevant to NPC/location additivity
     db.faction.findMany.mockResolvedValue([])
@@ -324,7 +324,7 @@ describe('reseedWorldFromLore — NPCs and locations', () => {
 
     vi.mocked(generateWorldExtras).mockResolvedValue({
       archetypes: [],
-      corruptionTheme: null,
+      corruptionTheme: null, advancementTrack: null,
       npcs: [
         { name: 'Lord Kessler', description: 'x', importance: 4 },
         { name: 'Existing Elder', description: 'y', importance: 2 },
@@ -384,7 +384,7 @@ describe('reseedWorldFromLore — move flavor regeneration', () => {
     vi.clearAllMocks()
     db.campaign.findUnique.mockResolvedValue({
       id: 'camp1', title: 'Test', description: '', universe: 'Original',
-      initialWorldSeed: '', statLabels: null, corruptionTheme: null,
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null, advancementTrack: null,
     })
     db.faction.findMany.mockResolvedValue([])
     db.faction.updateMany.mockResolvedValue({ count: 0 })
@@ -479,7 +479,7 @@ describe('reseedWorldFromLore — Phase 4 world rules generation', () => {
   it('generates and persists rules when the campaign has none yet', async () => {
     db.campaign.findUnique.mockResolvedValue({
       id: 'camp1', title: 'Test', description: '', universe: 'Original',
-      initialWorldSeed: '', statLabels: null, corruptionTheme: null, worldRules: null,
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null, advancementTrack: null, worldRules: null,
     })
     db.character.count.mockResolvedValue(2) // live mode — worldRules absence is what gates this, not fresh/live
     db.worldMeta.findUnique.mockResolvedValue({ currentTurnNumber: 7 })
@@ -503,7 +503,7 @@ describe('reseedWorldFromLore — Phase 4 world rules generation', () => {
   it('does not regenerate in live mode when the campaign already has rules', async () => {
     db.campaign.findUnique.mockResolvedValue({
       id: 'camp1', title: 'Test', description: '', universe: 'Original',
-      initialWorldSeed: '', statLabels: null, corruptionTheme: null,
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null, advancementTrack: null,
       worldRules: { rules: [{ familyKey: 'faction.leaderOptional', applies: false, confidence: 0.9, rationale: 'x', sinceTurn: 1 }] },
     })
     db.character.count.mockResolvedValue(2)
@@ -517,7 +517,7 @@ describe('reseedWorldFromLore — Phase 4 world rules generation', () => {
   it('does not persist anything when generation fails (fail-open)', async () => {
     db.campaign.findUnique.mockResolvedValue({
       id: 'camp1', title: 'Test', description: '', universe: 'Original',
-      initialWorldSeed: '', statLabels: null, corruptionTheme: null, worldRules: null,
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null, advancementTrack: null, worldRules: null,
     })
     db.character.count.mockResolvedValue(0)
     vi.mocked(generateWorldRules).mockResolvedValue(null)
@@ -588,7 +588,7 @@ describe('reseedWorldFromLore — capability prerequisites (#372)', () => {
     vi.clearAllMocks()
     db.campaign.findUnique.mockResolvedValue({
       id: 'camp1', title: 'Test', description: '', universe: 'Original',
-      initialWorldSeed: '', statLabels: null, corruptionTheme: null,
+      initialWorldSeed: '', statLabels: null, corruptionTheme: null, advancementTrack: null,
     })
     db.character.count.mockResolvedValue(2) // live mode — no scaffold wipe
     db.faction.findMany.mockResolvedValue([])

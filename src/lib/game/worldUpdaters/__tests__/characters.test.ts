@@ -764,13 +764,46 @@ describe('applyCharacterChanges — inventory', () => {
 })
 
 describe('applyCharacterChanges — resources and relationships', () => {
-  it('never lets gold go negative', async () => {
+  it('REFUSES an unaffordable spend rather than draining the purse to zero', async () => {
+    // This used to assert gold === 0: overspending took everything the
+    // character had and let the purchase stand. That meant nobody could ever
+    // fail to afford anything, so "I can't cover this" was never a reason to
+    // bargain, borrow, lie or steal — the economy could not say no.
     const roster = [character({ resources: { gold: 5, contacts: [], reputation: {} } })]
-    await applyCharacterChanges(tx as any, 'camp1', 1, [
+
+    const result = await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { resource_changes: { gold_delta: -20 } } } as PcChange,
     ], roster, npcRoster, noTheme, true)
+
+    // Untouched, not zeroed.
     const data = tx.character.update.mock.calls[0][0].data
-    expect(data.resources.gold).toBe(0)
+    expect(data.resources.gold).toBe(5)
+    // And the refusal is reported, not swallowed — the narration described a
+    // purchase that did not happen.
+    expect(result.gateRefusals.join(' ')).toMatch(/could not afford/)
+    expect(result.gateRefusals.join(' ')).toMatch(/short 15/)
+  })
+
+  it('still charges a spend the character can cover', async () => {
+    const roster = [character({ resources: { gold: 50, contacts: [], reputation: {} } })]
+
+    const result = await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { resource_changes: { gold_delta: -20 } } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    expect(tx.character.update.mock.calls[0][0].data.resources.gold).toBe(30)
+    expect(result.gateRefusals).toEqual([])
+  })
+
+  it('never gates a gain — only spending is checked', async () => {
+    const roster = [character({ resources: { gold: 0, contacts: [], reputation: {} } })]
+
+    const result = await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { resource_changes: { gold_delta: 40 } } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    expect(tx.character.update.mock.calls[0][0].data.resources.gold).toBe(40)
+    expect(result.gateRefusals).toEqual([])
   })
 
   it('does not duplicate a contact already on record', async () => {
@@ -992,7 +1025,51 @@ describe('applyCharacterChanges — delegation to debt/standing/capability write
     ], roster, npcRoster, noTheme, true)
 
     const data = tx.character.update.mock.calls[0][0].data
-    expect(data.consequences.promises).toEqual(['Swore to return for the child'])
+    // Records now, not bare strings — a string has no status, which is why
+    // nothing could ever be retired. `since` is the turn it was incurred.
+    expect(data.consequences.promises).toEqual([
+      { text: 'Swore to return for the child', status: 'active', since: 3 },
+    ])
+  })
+
+  it('RETIRES a consequence rather than deleting it', async () => {
+    // The old path spliced the entry out, which made surviving a threat
+    // indistinguishable from it never having existed.
+    const roster = [character({
+      consequences: { promises: [], debts: [], enemies: ['Hunted by Ironveil'], longTermThreats: [] },
+    })]
+
+    await applyCharacterChanges(tx as any, 'camp1', 11, [
+      {
+        character_name_or_id: 'char1',
+        changes: { consequences_remove: ['Hunted by Ironveil'] },
+      } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.consequences.enemies).toEqual([
+      { text: 'Hunted by Ironveil', status: 'resolved', resolvedAt: 11 },
+    ])
+  })
+
+  it('resolves a legacy string entry, so old campaigns are not stranded', async () => {
+    // Everything already on disk is a bare string. If removal only worked
+    // against the new shape, no existing threat could ever be retired.
+    const roster = [character({
+      consequences: { longTermThreats: ['The silver route will come looking'] },
+    })]
+
+    await applyCharacterChanges(tx as any, 'camp1', 5, [
+      {
+        character_name_or_id: 'char1',
+        changes: { consequences_remove: ['silver route'] },
+      } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    const data = tx.character.update.mock.calls[0][0].data
+    expect(data.consequences.longTermThreats).toEqual([
+      { text: 'The silver route will come looking', status: 'resolved', resolvedAt: 5 },
+    ])
   })
 
   it('delegates standing_changes to applyStandingChanges', async () => {

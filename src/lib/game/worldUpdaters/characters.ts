@@ -49,6 +49,7 @@ import { checkConditionGate, describeConditionRefusal } from '../conditionGates'
 import { applyConditionTemplate, stabilizeCharacter } from '../harm'
 import { applyGrantBudget, rarityPoints } from '../itemValue'
 import { clampGoldDelta, applyGoldDelta, spendGold } from '../economy'
+import { normalizeConsequenceList, addRecord, retireAt } from '../consequenceRecords'
 import { appendBoundedProse, MAX_CHARACTER_DESCRIPTION_CHARS } from '../textAppend'
 import {
   applyCorruptionMarks,
@@ -112,8 +113,15 @@ export function findConsequenceToRemove(
     if (!Array.isArray(list)) continue
 
     for (let index = 0; index < list.length; index++) {
-      const entry = list[index]
+      const raw = list[index]
+      // Entries are ConsequenceRecords now and legacy strings on anything
+      // written before that; both have to match, or a removal reported
+      // against an old campaign would silently find nothing.
+      const entry = typeof raw === 'string' ? raw : (raw as { text?: unknown })?.text
       if (typeof entry !== 'string') continue
+      // An already-resolved record is not a candidate: re-reporting a
+      // resolution must not rewrite when it ended.
+      if (typeof raw === 'object' && raw !== null && (raw as { status?: string }).status === 'resolved') continue
       const hay = entry.trim().toLowerCase()
 
       if (hay === needle) return { key, index, matched: entry }
@@ -765,7 +773,11 @@ export async function applyCharacterChanges(
           if (!currentConsequences[typeKey]) {
             currentConsequences[typeKey] = []
           }
-          currentConsequences[typeKey].push(newConseq.description)
+          currentConsequences[typeKey] = addRecord(
+            normalizeConsequenceList(currentConsequences[typeKey]),
+            newConseq.description,
+            currentTurnNumber
+          )
           console.log(`  ⚠️ ${character.name} gained ${newConseq.type}: ${newConseq.description}`)
         }
       }
@@ -784,7 +796,14 @@ export async function applyCharacterChanges(
         for (const toRemove of pcChange.changes.consequences_remove) {
           const removal = findConsequenceToRemove(currentConsequences, toRemove)
           if (removal) {
-            currentConsequences[removal.key].splice(removal.index, 1)
+            // Retired, not deleted. "The contract that hunted you for six
+            // sessions is over" is something the character survived; splicing
+            // it made that indistinguishable from it never having happened.
+            currentConsequences[removal.key] = retireAt(
+              normalizeConsequenceList(currentConsequences[removal.key]),
+              removal.index,
+              currentTurnNumber
+            )
             console.log(`  ✅ ${character.name} resolved consequence: ${removal.matched}`)
           } else {
             console.warn(`  ⚠️ ${character.name}: no consequence matched "${toRemove}" — nothing removed`)

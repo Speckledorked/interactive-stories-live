@@ -952,7 +952,17 @@ model Character {
   // would plausibly know, while rapport is someone else's private opinion
   // of them.
   relationships Json? // { [entityId: string]: { trust: Int, tension: Int, respect: Int, fear: Int } }
-  consequences  Json? // { promises?: string[], debts?: string[], enemies?: string[], longTermThreats?: string[] }
+  // Entries are RECORDS, not bare strings:
+  //   { text, status: 'active'|'resolved', since?: turn, resolvedAt?: turn }
+  // A string had no identity and no status, so the only expressible
+  // operations were append and splice-out — which is why threats accumulated
+  // all campaign, and why the one path that removed one destroyed it.
+  // Surviving a contract that hunted you for six sessions is part of who the
+  // character is, not the absence of a contract.
+  // Legacy string arrays are still readable (normalizeConsequenceList in
+  // lib/game/consequenceRecords.ts reads both) and backfilled by
+  // 20260819180000_consequence_records. Only ACTIVE entries reach AI context.
+  consequences  Json? // { promises?: ConsequenceRecord[], debts?: [], enemies?: [], longTermThreats?: [] }
 
   // Abstract range band within the current scene: how far this character
   // stands from the center of the action ("close" | "near" | "far" |

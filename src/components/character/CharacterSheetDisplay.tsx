@@ -17,6 +17,7 @@ import { clampHarm, getHarmStatus } from '@/lib/game/harm'
 import { Tabs } from '@/components/ui/tabs'
 import { Backpack, BarChart3, Circle, ClipboardList, Coins, CreditCard, DollarSign, HeartHandshake, JapaneseYen, Moon, Sparkles, Sprout, Star, Target, TrendingUp } from 'lucide-react'
 import { type IconComponent } from '@/lib/ui/icons'
+import { normalizeConsequenceList } from '@/lib/game/consequenceRecords'
 
 interface CharacterSheetDisplayProps {
   character: any
@@ -108,12 +109,21 @@ export default function CharacterSheetDisplay({
 
   // Parse consequences
   const consequences = character?.consequences as any || {}
-  const allConsequences = [
-    ...(consequences.promises || []).map((p: string) => ({ type: 'promise' as const, description: p })),
-    ...(consequences.debts || []).map((d: string) => ({ type: 'debt' as const, description: d })),
-    ...(consequences.enemies || []).map((e: string) => ({ type: 'enemy' as const, description: e })),
-    ...(consequences.longTermThreats || []).map((t: string) => ({ type: 'longTermThreat' as const, description: t }))
+  // Consequences carry a status now, so the sheet can distinguish "still
+  // hunting you" from "you got out from under it". Active drives the cards;
+  // resolved is kept as history and shown only on request, the same split
+  // the Conditions / Past Conditions cards use.
+  const consequenceEntries = (key: string, type: 'promise' | 'debt' | 'enemy' | 'longTermThreat') =>
+    normalizeConsequenceList(consequences[key]).map((r) => ({ type, description: r.text, status: r.status, resolvedAt: r.resolvedAt }))
+
+  const everyConsequence = [
+    ...consequenceEntries('promises', 'promise'),
+    ...consequenceEntries('debts', 'debt'),
+    ...consequenceEntries('enemies', 'enemy'),
+    ...consequenceEntries('longTermThreats', 'longTermThreat'),
   ]
+  const allConsequences = everyConsequence.filter((c) => c.status === 'active')
+  const resolvedConsequences = everyConsequence.filter((c) => c.status === 'resolved')
 
   // Parse inventory
   const inventory = character?.inventory as any || {}
@@ -708,6 +718,32 @@ export default function CharacterSheetDisplay({
                 you in the fiction.
               </p>
             </Card>
+
+            {/* Behind you now. The whole point of giving consequences a status
+                was that a threat which ENDED is not the same as one that never
+                existed — surviving the Ironveil contract is part of who the
+                character is. Collapsed, because it is history rather than
+                anything the player is currently up against. */}
+            {resolvedConsequences.length > 0 && (
+              <Card>
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+                    <CardLabel>Behind You ({resolvedConsequences.length})</CardLabel>
+                    <span className="text-xs text-myth-ink-faint group-open:hidden">show</span>
+                    <span className="hidden text-xs text-myth-ink-faint group-open:inline">hide</span>
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    {[...resolvedConsequences].reverse().map((cons, idx) => (
+                      <div key={idx} className="rounded-lg border border-myth-border bg-myth-surface-sunken p-3">
+                        <p className="text-sm text-myth-ink-faint line-through decoration-myth-ink-faint/40">
+                          {cons.description}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </Card>
+            )}
 
             {allConsequences.filter(c => c.type === 'enemy').length > 0 && (
               <Card>

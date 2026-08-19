@@ -10,6 +10,7 @@
 
 import { PrismaClient, Scene, MemoryImportance } from '@prisma/client';
 import { truncateWithEllipsis } from '@/lib/format';
+import { activeTexts } from '@/lib/game/consequenceRecords'
 
 // #297/#326: query-cost backstops for buildOptimizedContext's all-history
 // reads (allScenes/timeline below) — generous enough to never affect a
@@ -120,12 +121,10 @@ export async function generateCampaignSummary(
   const activeThreats: string[] = [];
   characters.forEach(char => {
     const consequences = char.consequences as any;
-    if (consequences?.enemies) {
-      activeThreats.push(...consequences.enemies);
-    }
-    if (consequences?.longTermThreats) {
-      activeThreats.push(...consequences.longTermThreats);
-    }
+    // The variable is called activeThreats; it now actually means it.
+    // Resolved entries used to keep flowing into context forever.
+    activeThreats.push(...activeTexts(consequences?.enemies));
+    activeThreats.push(...activeTexts(consequences?.longTermThreats));
   });
 
   return {

@@ -6,7 +6,6 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { SpendPanel } from './SpendPanel'
 import HarmTracker, { HARM_STATUS_COLORS, healthRemaining } from './HarmTracker'
 import StatBar from './StatBar'
 import CharacterAvatar from './CharacterAvatar'
@@ -344,21 +343,36 @@ export default function CharacterSheetDisplay({
 
             {/* Resolved conditions — the historical record that a condition
                 applied and later cleared, kept distinct from the current
-                Conditions card above (#173). */}
+                Conditions card above (#173).
+
+                COLLAPSED by default. #173 was right that the record is worth
+                keeping and wrong to spend permanent sheet space on it: this
+                list only grows, so on a long campaign it buries the Conditions
+                card that says what is wrong with you RIGHT NOW — which is the
+                one thing a sheet has to answer at a glance. Kept rather than
+                deleted because "she was Restrained two sessions ago" is real
+                history; moved behind a disclosure because it is never the
+                question being asked. Most recent first, for the same reason. */}
             {conditionHistoryList.length > 0 && (
               <Card>
-                <CardLabel>Past Conditions</CardLabel>
-                <div className="flex flex-wrap gap-2">
-                  {conditionHistoryList.map((entry: any, idx: number) => (
-                    <span
-                      key={idx}
-                      className="rounded-full border border-myth-border bg-myth-surface-sunken px-3 py-1 text-xs font-medium text-myth-ink-faint"
-                      title={entry.resolvedAt ? `Resolved turn ${entry.resolvedAt}` : undefined}
-                    >
-                      {entry.name}
-                    </span>
-                  ))}
-                </div>
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+                    <CardLabel>Past Conditions ({conditionHistoryList.length})</CardLabel>
+                    <span className="text-xs text-myth-ink-faint group-open:hidden">show</span>
+                    <span className="hidden text-xs text-myth-ink-faint group-open:inline">hide</span>
+                  </summary>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[...conditionHistoryList].reverse().map((entry: any, idx: number) => (
+                      <span
+                        key={idx}
+                        className="rounded-full border border-myth-border bg-myth-surface-sunken px-3 py-1 text-xs font-medium text-myth-ink-faint"
+                        title={entry.resolvedAt ? `Resolved turn ${entry.resolvedAt}` : undefined}
+                      >
+                        {entry.name}
+                      </span>
+                    ))}
+                  </div>
+                </details>
               </Card>
             )}
 
@@ -670,20 +684,18 @@ export default function CharacterSheetDisplay({
               </Card>
             )}
 
-            {/* #416: where gold actually goes. The economy modelled earning,
-                owing and defaulting and had no modelled way to spend, so
-                gold accumulated and only ever left through an AI-narrated
-                delta. Fetches its own prices — see SpendPanel. */}
-            {campaignId && character?.id && (
-              <Card className="md:col-span-2">
-                <CardLabel>Spend</CardLabel>
-                <SpendPanel
-                  campaignId={campaignId}
-                  characterId={character.id}
-                  currencyPlural={currency.plural}
-                />
-              </Card>
-            )}
+            {/* The Spend panel that stood here is gone.
+                #416 added it because the economy modelled earning, owing and
+                defaulting with no modelled way to spend — a real gap, solved
+                the wrong way. It turned spending into a shopfront of three
+                fixed transactions (settle a debt, treat harm, commission an
+                item) with server-priced buttons, in a game whose whole premise
+                is that things happen in the fiction. Players commission gear by
+                talking to a smith, not by clicking Commission.
+                The gap it was covering is now closed where it belongs: an
+                AI-narrated spend is CHARGED and, if the character cannot cover
+                it, REFUSED — see spendGold in lib/game/economy.ts and the
+                gateRefusals path out of worldUpdaters/characters.ts. */}
           </div>
         )}
 

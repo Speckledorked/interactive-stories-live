@@ -764,13 +764,46 @@ describe('applyCharacterChanges — inventory', () => {
 })
 
 describe('applyCharacterChanges — resources and relationships', () => {
-  it('never lets gold go negative', async () => {
+  it('REFUSES an unaffordable spend rather than draining the purse to zero', async () => {
+    // This used to assert gold === 0: overspending took everything the
+    // character had and let the purchase stand. That meant nobody could ever
+    // fail to afford anything, so "I can't cover this" was never a reason to
+    // bargain, borrow, lie or steal — the economy could not say no.
     const roster = [character({ resources: { gold: 5, contacts: [], reputation: {} } })]
-    await applyCharacterChanges(tx as any, 'camp1', 1, [
+
+    const result = await applyCharacterChanges(tx as any, 'camp1', 1, [
       { character_name_or_id: 'char1', changes: { resource_changes: { gold_delta: -20 } } } as PcChange,
     ], roster, npcRoster, noTheme, true)
+
+    // Untouched, not zeroed.
     const data = tx.character.update.mock.calls[0][0].data
-    expect(data.resources.gold).toBe(0)
+    expect(data.resources.gold).toBe(5)
+    // And the refusal is reported, not swallowed — the narration described a
+    // purchase that did not happen.
+    expect(result.gateRefusals.join(' ')).toMatch(/could not afford/)
+    expect(result.gateRefusals.join(' ')).toMatch(/short 15/)
+  })
+
+  it('still charges a spend the character can cover', async () => {
+    const roster = [character({ resources: { gold: 50, contacts: [], reputation: {} } })]
+
+    const result = await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { resource_changes: { gold_delta: -20 } } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    expect(tx.character.update.mock.calls[0][0].data.resources.gold).toBe(30)
+    expect(result.gateRefusals).toEqual([])
+  })
+
+  it('never gates a gain — only spending is checked', async () => {
+    const roster = [character({ resources: { gold: 0, contacts: [], reputation: {} } })]
+
+    const result = await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { resource_changes: { gold_delta: 40 } } } as PcChange,
+    ], roster, npcRoster, noTheme, true)
+
+    expect(tx.character.update.mock.calls[0][0].data.resources.gold).toBe(40)
+    expect(result.gateRefusals).toEqual([])
   })
 
   it('does not duplicate a contact already on record', async () => {

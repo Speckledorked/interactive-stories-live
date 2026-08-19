@@ -48,7 +48,7 @@ import { checkCorruptionGate, hasCorruptionGate, describeRefusal } from '../corr
 import { checkConditionGate, describeConditionRefusal } from '../conditionGates'
 import { applyConditionTemplate, stabilizeCharacter } from '../harm'
 import { applyGrantBudget, rarityPoints } from '../itemValue'
-import { clampGoldDelta, applyGoldDelta } from '../economy'
+import { clampGoldDelta, applyGoldDelta, spendGold } from '../economy'
 import { appendBoundedProse, MAX_CHARACTER_DESCRIPTION_CHARS } from '../textAppend'
 import {
   applyCorruptionMarks,
@@ -947,10 +947,38 @@ export async function applyCharacterChanges(
 
       // Gold changes — clamped to a sane magnitude (see economy.ts) before
       // ever touching the balance, same discipline standing/corruption use.
+      //
+      // A SPEND is gated; a gain is not. applyGoldDelta floors at 0, which is
+      // correct for a credit and was quietly wrong for a purchase: spending
+      // 200 with 50 in hand produced a balance of 0 and let the purchase
+      // stand. Nobody could ever fail to afford anything — they could only be
+      // drained — so "I can't cover this" never became a reason to bargain,
+      // borrow, lie or steal. An economy that cannot refuse is decoration.
       if (resChange.gold_delta !== undefined) {
         const goldDelta = clampGoldDelta(resChange.gold_delta)
-        currentResources.gold = applyGoldDelta(currentResources.gold, resChange.gold_delta)
-        console.log(`  💰 ${character.name} ${goldDelta > 0 ? 'gained' : 'spent'} ${Math.abs(goldDelta)} gold (now ${currentResources.gold})`)
+
+        if (goldDelta < 0) {
+          const outcome = spendGold(currentResources.gold, goldDelta)
+          if (outcome.refused) {
+            // Nothing is taken. The narrator described a purchase that did
+            // not happen, and that divergence between prose and state is
+            // exactly what gateRefusals exists to carry.
+            gateRefusals.push(
+              `${character.name} could not afford to spend ${Math.abs(goldDelta)} ` +
+              `(has ${outcome.gold}, short ${outcome.shortfall}) — nothing was paid`
+            )
+            console.log(
+              `  💰 ${character.name} REFUSED: cannot spend ${Math.abs(goldDelta)}, ` +
+              `has ${outcome.gold} (short ${outcome.shortfall})`
+            )
+          } else {
+            currentResources.gold = outcome.gold
+            console.log(`  💰 ${character.name} spent ${outcome.spent} gold (now ${outcome.gold})`)
+          }
+        } else {
+          currentResources.gold = applyGoldDelta(currentResources.gold, resChange.gold_delta)
+          console.log(`  💰 ${character.name} gained ${goldDelta} gold (now ${currentResources.gold})`)
+        }
       }
 
       // Contact changes

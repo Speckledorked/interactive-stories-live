@@ -52,6 +52,13 @@ export interface AppliedWorldUpdates {
   unresolvedCharacterNames: string[]
   /** #175: every WorldChange this scene resolution produced, already persisted to WorldEvent by the time this resolves. */
   worldChanges: WorldChange[]
+  /**
+   * Rules refusals: things the narration described that state did not
+   * honour — an unaffordable purchase, a corruption gate turning someone
+   * away. Carried out rather than only logged, because a refusal the player
+   * never sees is indistinguishable from the purchase having happened.
+   */
+  gateRefusals: string[]
 }
 
 export async function applyWorldUpdates(
@@ -99,6 +106,9 @@ export async function applyWorldUpdates(
   let involvedNpcIds: string[] = []
   let involvedFactionIds: string[] = []
   let unresolvedCharacterNames: string[] = []
+  // Rules refusals the fiction described but state did not honour — an
+  // unaffordable purchase, a corruption gate turning someone away.
+  const gateRefusals: string[] = []
   // #175: collected across every domain applier below, persisted to
   // WorldEvent once the transaction commits (see persistWorldEvents' own
   // doc comment — best-effort, outside the transaction, same as every
@@ -192,6 +202,10 @@ export async function applyWorldUpdates(
         for (const refusal of result.gateRefusals) {
           console.log(`  🌑 ${refusal}`)
         }
+        // Carried out, not just logged. A refusal the server prints and the
+        // player never sees is the same "something silently didn't happen"
+        // shape the dice-mechanics banner exists for.
+        gateRefusals.push(...result.gateRefusals)
         unresolvedCharacterNames = result.unresolvedCharacterNames
         worldChanges.push(...result.worldChanges)
       }
@@ -293,7 +307,7 @@ export async function applyWorldUpdates(
       }
     }
 
-    return { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames, worldChanges }
+    return { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames, worldChanges, gateRefusals }
   } catch (error) {
     console.error('❌ Failed to apply world updates:', error)
     throw new Error(`Failed to apply world updates: ${error}`)

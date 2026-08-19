@@ -321,7 +321,7 @@ async function performResolution(
     const witnessCharacterIds = (aiRequest.world_summary?.characters || [])
       .map(c => c.id)
       .filter(id => recentlyActiveCharacterIds.has(id))
-    const { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber, aiRequest.action_mechanics || [], witnessCharacterIds)
+    const { involvedNpcIds, involvedFactionIds, unresolvedCharacterNames, gateRefusals } = await applyWorldUpdates(campaignId, aiResponse, currentTurn, true, inGameDayNumber, aiRequest.action_mechanics || [], witnessCharacterIds)
 
     // 6.05. Apply the scene progress ledger — what this exchange
     // established/resolved, replacing re-derivation from raw prose (see
@@ -451,6 +451,22 @@ async function performResolution(
         type: 'failed',
         entityName: name,
         details: `MythOS reported an update for "${name}" but couldn't match that name to a character in this campaign — the update was skipped entirely.`,
+        impact: 'major'
+      })
+    }
+
+    // A rules refusal: the narration described something state declined to
+    // honour — most often a purchase the character could not afford. Same
+    // prominent mechanism as the unresolved names above, and for the same
+    // reason: the prose says the coin changed hands, and it did not. Without
+    // this the player reads a completed purchase and a balance that never
+    // moved, with nothing connecting the two.
+    for (const refusal of gateRefusals) {
+      worldStateChanges.push({
+        category: 'consequence',
+        type: 'failed',
+        entityName: 'Refused by the rules',
+        details: refusal,
         impact: 'major'
       })
     }

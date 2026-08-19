@@ -40,3 +40,49 @@ export function applyGoldDelta(currentGold: number | null | undefined, delta: nu
   const current = typeof currentGold === 'number' && Number.isFinite(currentGold) ? currentGold : 0
   return Math.max(0, current + clampGoldDelta(delta))
 }
+
+/**
+ * The outcome of trying to SPEND, which is a different question from
+ * applying a delta.
+ *
+ * applyGoldDelta floors the result at 0, which is right for a credit and
+ * wrong for a purchase: spending 200 with 50 in hand silently produced a
+ * balance of 0 and let the purchase happen anyway. A player could never be
+ * refused, only drained — so "I cannot afford this" never became a reason to
+ * bargain, borrow, lie or steal, which is the pressure an economy is for.
+ *
+ * This makes the refusal representable. It does not decide what the fiction
+ * then does about it; that is the caller's business.
+ */
+export interface SpendOutcome {
+  /** The balance after the attempt. Unchanged when refused. */
+  gold: number
+  /** How much actually left the purse — 0 when refused. */
+  spent: number
+  /** True when the character could not cover the cost and nothing was taken. */
+  refused: boolean
+  /** How much short they were. 0 unless refused. */
+  shortfall: number
+}
+
+/**
+ * Attempt to spend `cost` from `currentGold`, all-or-nothing.
+ *
+ * All-or-nothing on purpose. Partial payment would leave the fiction in an
+ * incoherent state — the item half-bought, the debt half-settled — and it is
+ * the exact behaviour being fixed: taking everything the character has and
+ * calling it a completed purchase.
+ *
+ * `cost` is normalised through clampGoldDelta's magnitude guardrail and read
+ * as a positive amount, so a caller passing -50 or 50 means the same thing.
+ */
+export function spendGold(currentGold: number | null | undefined, cost: number | null | undefined): SpendOutcome {
+  const current = typeof currentGold === 'number' && Number.isFinite(currentGold) ? Math.max(0, currentGold) : 0
+  const amount = Math.abs(clampGoldDelta(cost))
+
+  if (amount === 0) return { gold: current, spent: 0, refused: false, shortfall: 0 }
+  if (amount > current) {
+    return { gold: current, spent: 0, refused: true, shortfall: amount - current }
+  }
+  return { gold: current - amount, spent: amount, refused: false, shortfall: 0 }
+}

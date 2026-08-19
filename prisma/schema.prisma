@@ -366,6 +366,24 @@ model Campaign {
   // Shape: { rules: WorldRule[] } (game/integrity/worldRules.ts)
   worldRules Json?
 
+  // What "getting stronger" MEANS in this universe — the rank ladder and any
+  // bounded slot collections (essences, spell schools, covenant marks).
+  // Generated once at creation from the fiction, same frozen pattern as
+  // statLabels/corruptionTheme/calendarConfig above, and same discipline as
+  // worldRules about what the model decides: the SHAPE is closed and defined
+  // in game/advancementTrack.ts, the generator only picks names, order and
+  // capacities — never a new kind of progression.
+  //
+  // Null is a real answer, not a gap: a universe with no ranks and no slots
+  // gets null and the sheet renders nothing, exactly as a null corruptionTheme
+  // disables the corruption track rather than inventing one.
+  //
+  // Slot fill is COUNTED from CampaignCapability rows whose domain matches, so
+  // there is one record of what a character has learned rather than a second
+  // counter to keep in sync.
+  // Shape: AdvancementTrack (game/advancementTrack.ts)
+  advancementTrack Json?
+
   // True while a creation-time lore import + auto-reseed is in flight —
   // the campaign is unplayable (no characters, no scenes) until the world
   // has finished becoming its canon self, so a mid-import character can't
@@ -918,6 +936,12 @@ model Character {
   statUsage      Json? // { [statKey: string]: { uses: Int, successes: Int, failures: Int, lastGrowthTurn?: Int } } — lastGrowthTurn gates re-proposing a +1 within the same arc (see ARC_LENGTH_TURNS in lib/game/capabilities.ts)
   perks          Json? // [{ id, name, description, tags? }]
   advancementLog Json? // { entries: [], totalStatIncreases, totalPerksGained, totalMovesLearned }
+
+  // Which rung of Campaign.advancementTrack.tiers this character stands on.
+  // Null means the first rung — "unranked" is a real starting state, and a
+  // character created before the campaign had a track should read as a
+  // beginner rather than as a broken row (see tierProgress).
+  advancementTier String?
 
   // #214: optimistic-concurrency guard for applyOrganicCharacterGrowth
   // (sceneResolver.ts) — that write reads this character once, computes the

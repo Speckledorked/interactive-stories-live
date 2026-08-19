@@ -18,6 +18,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { Backpack, BarChart3, Circle, ClipboardList, Coins, CreditCard, DollarSign, HeartHandshake, JapaneseYen, Moon, Sparkles, Sprout, Star, Target, TrendingUp } from 'lucide-react'
 import { type IconComponent } from '@/lib/ui/icons'
 import { normalizeConsequenceList } from '@/lib/game/consequenceRecords'
+import { parseAdvancementTrack, tierProgress, slotProgress } from '@/lib/game/advancementTrack'
 
 interface CharacterSheetDisplayProps {
   character: any
@@ -159,6 +160,15 @@ export default function CharacterSheetDisplay({
     knownDomains: string[]
   } | undefined
   const capabilityDomains: string[] = capabilitySummary?.knownDomains || []
+
+  // Per-universe progression. Null track = this world has no ranks and no
+  // slot collections, and nothing renders — the same way a null
+  // corruptionTheme disables the corruption track rather than inventing one.
+  // Slot fill is COUNTED from the character's own known capabilities, so
+  // there is no second counter to drift from what they have actually learned.
+  const advancementTrack = parseAdvancementTrack(campaign?.advancementTrack)
+  const tier = tierProgress(advancementTrack, character?.advancementTier)
+  const slots = slotProgress(advancementTrack, (capabilitySummary?.known || []).map(k => k.domain))
 
   // Debt economy — diegetic summary from the character GET route
   const debtSummary = character?.debtSummary as {
@@ -413,6 +423,52 @@ export default function CharacterSheetDisplay({
                 with a genuinely blank sheet by design, and without an
                 explicit empty state that's indistinguishable from the
                 feature being broken. */}
+            {(tier || slots.length > 0) && (
+              <Card>
+                <CardLabel>Advancement</CardLabel>
+                {tier && (
+                  <div className="mb-4">
+                    <div className="mb-2 flex items-baseline justify-between gap-2">
+                      <span className="text-sm font-medium text-myth-ink">{tier.label}</span>
+                      <span className="text-xs text-myth-ink-faint">
+                        {tier.next ? `next: ${tier.next}` : 'highest'}
+                      </span>
+                    </div>
+                    <div className="flex gap-1" aria-label={`Rank ${tier.index + 1} of ${tier.total}`}>
+                      {Array.from({ length: tier.total }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-1.5 flex-1 rounded-full ${i <= tier.index ? 'bg-myth-accent' : 'bg-myth-surface-sunken'}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {slots.map(group => (
+                  <div key={group.key} className="mt-3">
+                    <div className="mb-2 flex items-baseline justify-between gap-2">
+                      <span className="text-sm text-myth-ink-muted">{group.label}</span>
+                      <span className="text-xs font-medium text-myth-ink-faint">
+                        {group.filled}/{group.capacity}
+                      </span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {Array.from({ length: group.capacity }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-6 flex-1 rounded border ${
+                            i < group.filled
+                              ? 'border-myth-accent/40 bg-myth-accent/20'
+                              : 'border-dashed border-myth-border bg-transparent'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            )}
+
             {capabilitySummary && (
               <Card className="md:col-span-2">
                 <CardLabel>Abilities & Knowledge</CardLabel>

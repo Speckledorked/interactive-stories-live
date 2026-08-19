@@ -16,6 +16,7 @@ import { validateStats } from '@/lib/game/advancement'
 import { MAX_CORRUPTION, CorruptionTheme } from '@/lib/game/corruption'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 import type { GeneratedCapability, GeneratedStatLabels, GeneratedNPC, GeneratedLocation } from './worldGenerator'
+import { parseAdvancementTrack, type AdvancementTrack } from '@/lib/game/advancementTrack'
 
 // Not exported: only referenced structurally (via GeneratedArchetype.startingTie)
 // by the one external importer, GeneratedWorldExtras — nothing imports this
@@ -47,6 +48,7 @@ export interface GeneratedArchetype {
 export interface GeneratedWorldExtras {
   archetypes: GeneratedArchetype[]
   corruptionTheme: CorruptionTheme | null
+  advancementTrack: AdvancementTrack | null
   // Notable NPCs/locations, generated here rather than in the main
   // world-gen call (worldGenerator.ts) — that call is already at its own
   // token budget, and a truncated response there fails JSON.parse
@@ -112,6 +114,10 @@ Produce four things as JSON:
     "stages": ["stage 1 (subtle)", "stage 2", "stage 3", "stage 4", "stage 5 (the point of no return)"],
     "bargain_guidance": "1-2 sentences on when a bargain fits this world's fiction"
   },
+  "advancement_track": {
+    "tiers": [{"key": "stable-slug", "label": "What this world calls this rank", "description": "1 short sentence"}],
+    "slot_groups": [{"key": "stable-slug", "label": "What this world calls this collection", "capacity": 4, "domain": "exact domain string from the capability list above"}]
+  },
   "npcs": [
     {
       "name": "Full name",
@@ -138,6 +144,12 @@ Rules for archetypes:
 - starting_tie: reference a REAL faction from the list above when counterparty_type is "faction"; invent a fitting named NPC otherwise. kind "faction_standing" uses standing_value between -2 and +2 (a disgraced origin can start negative)
 - glimpse_capability_keys: 0-3 keys, chosen ONLY from the capability list above, never secret ones
 - backstory_prompts: 2-3 questions each
+
+Rules for advancement_track — read carefully:
+- tiers is this universe's RANK LADDER in ascending order, lowest first, and the lowest rung must be the state a brand-new character is in (e.g. "unranked", "civilian", "unawakened"). Only include a ladder the fiction actually has an explicit name for
+- slot_groups are BOUNDED collections a character fills — essence slots, spell schools, covenant marks. capacity is the hard maximum the fiction states. domain MUST be one of the capability domains listed above, exactly, because slots are counted from those capabilities rather than tracked separately
+- If this universe has NO named rank ladder, return an empty tiers array. If it has no bounded collection, return an empty slot_groups array. If it has neither, return null for advancement_track. Returning null is a correct, expected answer — do not invent a progression system for a world that doesn't have one
+- Do not invent a ladder out of vague power levels ("weak/strong/legendary"). A rank must be something characters in the fiction would actually say out loud
 
 Rules for corruption_theme — read carefully:
 - Corruption is what THIS universe's fiction treats as a devil's bargain: power that changes or spends the self in ways the character cannot control or undo (forbidden rites, a god's invasive influence, knowledge that erodes the knower)
@@ -262,6 +274,11 @@ Rules for locations:
       }
     }
 
+    // Same closed-shape discipline as worldRules: the model names and orders
+    // the rungs, it does not invent a kind of progression. parseAdvancementTrack
+    // returns null for anything it cannot render honestly.
+    const advancementTrack = parseAdvancementTrack(raw.advancement_track)
+
     // Dedupe by case-insensitive name WITHIN this response, not just
     // against what's already in the DB (that dedup happens later, at the
     // call site) — the model can and does name the same notable place
@@ -307,8 +324,8 @@ Rules for locations:
       }
     }
 
-    console.log(`✅ World extras: ${archetypes.length} archetypes, corruption theme: ${corruptionTheme ? corruptionTheme.name : 'none (universe has no such concept)'}, ${npcs.length} NPCs, ${locations.length} locations`)
-    return { archetypes, corruptionTheme, npcs, locations }
+    console.log(`✅ World extras: ${archetypes.length} archetypes, corruption theme: ${corruptionTheme ? corruptionTheme.name : 'none (universe has no such concept)'}, advancement: ${advancementTrack ? `${advancementTrack.tiers.length} tiers / ${advancementTrack.slotGroups.length} slot groups` : 'none'}, ${npcs.length} NPCs, ${locations.length} locations`)
+    return { archetypes, corruptionTheme, advancementTrack, npcs, locations }
   } catch (err) {
     console.error('World extras generation failed (archetypes/corruption/npcs/locations skipped):', err)
     return null

@@ -482,6 +482,24 @@ export async function reseedWorldFromLore(campaignId: string, options: ReseedOpt
         locationsAdded = newLocations.map(l => l.name)
       }
 
+      // The advancement track follows the theme's rule: written when absent,
+      // and on a FRESH campaign a null verdict from canon replaces whatever
+      // provisional structure was there. A universe canon says has no ranks
+      // should stop showing a ladder.
+      if (extras.advancementTrack) {
+        if (!campaign.advancementTrack || fresh) {
+          await prisma.campaign.update({
+            where: { id: campaignId },
+            data: { advancementTrack: extras.advancementTrack as object },
+          })
+        }
+      } else if (fresh && campaign.advancementTrack) {
+        await prisma.campaign.update({
+          where: { id: campaignId },
+          data: { advancementTrack: Prisma.JsonNull },
+        })
+      }
+
       if (wantTheme) {
         if (extras.corruptionTheme) {
           await prisma.campaign.update({

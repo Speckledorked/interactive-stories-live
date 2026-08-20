@@ -359,7 +359,10 @@ export class NotificationService {
           select: { id: true, title: true }
         },
         scene: {
-          select: { id: true, title: true }
+          // sceneNumber, not title: Scene.title was a column nothing ever
+          // wrote (dropped 20260820140000), so every notification shipped
+          // scene.title: null.
+          select: { id: true, sceneNumber: true }
         }
       },
       orderBy: { createdAt: 'desc' },

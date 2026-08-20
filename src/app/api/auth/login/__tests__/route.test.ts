@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { user: { findUnique: vi.fn() } },
+  prisma: { user: { findUnique: vi.fn(), update: vi.fn() } },
 }))
 vi.mock('@/lib/password', () => ({ verifyPassword: vi.fn() }))
 vi.mock('@/lib/auth', () => ({ createToken: vi.fn() }))
@@ -39,6 +39,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   ;(createToken as any).mockReturnValue('fake-jwt-token')
   ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
+  // The lastSeenAt stamp — fire-and-forget, must never fail a login.
+  db.user.update.mockResolvedValue({})
 })
 
 describe('POST /api/auth/login', () => {

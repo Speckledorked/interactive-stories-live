@@ -47,7 +47,7 @@ export async function POST(
 
     const scene = await prisma.scene.findUnique({
       where: { id: sceneId },
-      select: { campaignId: true, sceneResolutionText: true, sceneIntroText: true, framing: true, location: true },
+      select: { campaignId: true, sceneResolutionText: true, sceneIntroText: true },
     })
     if (!scene) {
       return NextResponse.json({ error: 'Scene not found' }, { status: 404 })
@@ -66,8 +66,6 @@ export async function POST(
     const prompt = buildScenePrompt({
       sceneIntroText: scene.sceneIntroText,
       sceneResolutionText: firstExchangeText,
-      framing: scene.framing,
-      location: scene.location,
     })
 
     const result = await enqueueSceneImageGeneration(campaignId, sceneId, prompt)

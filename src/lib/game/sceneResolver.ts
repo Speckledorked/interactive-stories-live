@@ -641,8 +641,6 @@ async function performResolution(
         const prompt = buildScenePrompt({
           sceneIntroText: scene.sceneIntroText,
           sceneResolutionText: allResolutions,
-          framing: scene.framing,
-          location: scene.location,
         })
         await enqueueSceneImageGeneration(campaignId, sceneId, prompt)
         console.log('🖼️  Scene image generation enqueued')

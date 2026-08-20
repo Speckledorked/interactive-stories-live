@@ -279,7 +279,9 @@ export async function createSceneMemory(
       involvedCharacterIds: characterIds,
       involvedNpcIds: involvedEntities?.npcIds || [],
       involvedFactionIds: involvedEntities?.factionIds || [],
-      locationTags: scene.location ? [scene.location] : [],
+      // Scene.location was a column nothing ever wrote (dropped
+      // 20260820140000): this line always produced [], and now says so.
+      locationTags: [],
       importance,
       emotionalTone,
       tags,
@@ -310,11 +312,11 @@ function extractSummary(text: string): string {
 }
 
 /**
- * Extract a title from the scene
+ * Extract a title from the scene. Derived from the intro text — Scene.title
+ * was a column nothing ever wrote (dropped 20260820140000), so this
+ * derivation was already the only branch that ever ran.
  */
 function extractTitle(scene: Scene): string {
-  if (scene.title) return scene.title;
-
   // Extract first sentence or first 50 chars from intro
   const firstLine = scene.sceneIntroText?.split('\n')[0] || '';
   return firstLine.slice(0, 50) + (firstLine.length > 50 ? '...' : '');

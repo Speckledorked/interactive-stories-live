@@ -394,10 +394,8 @@ export function buildSearchQuery(context: RetrievalContext): string {
     parts.push(`Factions involved: ${factionContext}`);
   }
 
-  // Location
-  if (context.currentScene.location) {
-    parts.push(`Location: ${context.currentScene.location}`);
-  }
+  // Scene.location was a column nothing ever wrote (dropped 20260820140000);
+  // the `Location:` line it guarded never appeared in a single query.
 
   return parts.join('\n');
 }

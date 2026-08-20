@@ -53,14 +53,16 @@ describe('GET', () => {
   it('returns only public narrative fields, never GM data', async () => {
     db.campaign.findUnique.mockResolvedValue({ id: 'camp1', title: 'T', description: 'd', universe: 'Original', chronicleShareEnabled: true })
     db.scene.findMany.mockResolvedValue([
-      { sceneNumber: 1, title: 'Opening', sceneIntroText: 'intro', sceneResolutionText: 'resolution' },
+      { sceneNumber: 1, sceneIntroText: 'intro', sceneResolutionText: 'resolution' },
     ])
     const response = await GET(req('live-token'), { params: { token: 'live-token' } })
     const body = await response.json()
     expect(response.status).toBe(200)
     expect(body).toEqual({
       campaign: { title: 'T', description: 'd', universe: 'Original' },
-      scenes: [{ sceneNumber: 1, title: 'Opening', introText: 'intro', resolutionText: 'resolution' }],
+      // No title field: Scene.title was a column nothing ever wrote
+      // (dropped 20260820140000), so the chronicle stopped shipping it.
+      scenes: [{ sceneNumber: 1, introText: 'intro', resolutionText: 'resolution' }],
     })
     expect(JSON.stringify(body)).not.toContain('chronicleShareToken')
   })

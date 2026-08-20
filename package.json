@@ -14,7 +14,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "check:wiring": "tsx scripts/check-column-wiring.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",

@@ -59,6 +59,7 @@ describeIfDb('applyCharacterChanges — stress, real database', () => {
         [{ character_name_or_id: 'Kess', changes: {} } as PcChange],
         roster, [],
         async () => null,
+        async () => null,
         true,
         [{ characterId, characterName: 'Kess', outcome: 'miss' } as any]
       )
@@ -75,6 +76,7 @@ describeIfDb('applyCharacterChanges — stress, real database', () => {
         tx, campaignId, 2,
         [{ character_name_or_id: 'Kess', changes: { location: 'The Docks' } } as PcChange],
         roster, [],
+        async () => null,
         async () => null,
         true
       )

@@ -50,17 +50,31 @@ export async function GET(
       )
     }
 
-    // Get character
-    const character = await prisma.character.findUnique({
-      where: { id: characterId },
-      include: {
-        capabilities: { include: { capability: true } },
-        debts: { where: { status: 'OUTSTANDING' }, orderBy: { createdAt: 'asc' } },
-        factionStandings: {
-          include: { faction: { select: { name: true, isActive: true, isDiscovered: true } } }
+    // The advancement track lives on the CAMPAIGN, but a character's position
+    // on it (advancementTier) and its slot fill (counted from capabilities)
+    // are meaningless without it. Shipped alongside so every consumer of this
+    // route can render progression — the snapshot modal could not, and showed
+    // no rank at all, because the ladder was simply not in the payload.
+    //
+    // Fetched alongside the character rather than before it: the two lookups
+    // are independent, so serialising them would add a round trip to every
+    // character view for no reason.
+    const [campaignRow, character] = await Promise.all([
+      prisma.campaign.findUnique({
+        where: { id: campaignId },
+        select: { advancementTrack: true },
+      }),
+      prisma.character.findUnique({
+        where: { id: characterId },
+        include: {
+          capabilities: { include: { capability: true } },
+          debts: { where: { status: 'OUTSTANDING' }, orderBy: { createdAt: 'asc' } },
+          factionStandings: {
+            include: { faction: { select: { name: true, isActive: true, isDiscovered: true } } }
+          }
         }
-      }
-    })
+      }),
+    ])
 
     if (!character) {
       return NextResponse.json(
@@ -80,7 +94,16 @@ export async function GET(
 
     // All campaign members can view any character in the campaign
     // (Editing is still restricted to owner/admin - see PATCH handler)
-    return NextResponse.json({ ...characterFields, capabilitySummary, debtSummary, standingSummary })
+    return NextResponse.json({
+      ...characterFields,
+      capabilitySummary,
+      debtSummary,
+      standingSummary,
+      // Nested rather than flattened: `advancementTrack` is the campaign's and
+      // `advancementTier` is the character's, and merging them into one flat
+      // object invites reading the ladder as something the character owns.
+      campaign: { advancementTrack: campaignRow?.advancementTrack ?? null },
+    })
   } catch (error) {
     console.error('Get character error:', error)
     return NextResponse.json(

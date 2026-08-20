@@ -29,6 +29,7 @@ import { currentSimulationTurn } from './tick/simulationClock'
 import { simTurn, type SimTurn, type SceneTurn } from './turnClock'
 import { persistWorldEvents } from './tick/worldEventLog'
 import type { WorldChange } from './tick/types'
+import { parseAdvancementTrack, type AdvancementTrack } from './advancementTrack'
 
 // Re-exported so existing importers (sceneResolver.ts) don't need to
 // change — the implementation lives in stubEnrichment.ts now, see there
@@ -143,6 +144,21 @@ export async function applyWorldUpdates(
         return corruptionTheme
       }
 
+      // Same memoized shape for the rank ladder — undefined = not looked up,
+      // null = this campaign has no ladder. Only touched when a pc_change
+      // actually carries an advancement_tier.
+      let advancementTrack: AdvancementTrack | null | undefined = undefined
+      const getAdvancementTrack = async (): Promise<AdvancementTrack | null> => {
+        if (advancementTrack === undefined) {
+          const campaignRow = await tx.campaign.findUnique({
+            where: { id: campaignId },
+            select: { advancementTrack: true }
+          })
+          advancementTrack = parseAdvancementTrack(campaignRow?.advancementTrack)
+        }
+        return advancementTrack
+      }
+
       // 1. Create timeline events
       if (world_updates.new_timeline_events) {
         // #437: TimelineEvent.turnNumber is a sim-clock column. It used to
@@ -193,7 +209,7 @@ export async function applyWorldUpdates(
       // 4. Update player characters
       if (world_updates.pc_changes) {
         const result = await applyCharacterChanges(
-          tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, npcsForResolution, getCorruptionTheme, sceneOrigin, actionMechanics
+          tx, campaignId, currentTurnNumber, world_updates.pc_changes, charactersForResolution, npcsForResolution, getCorruptionTheme, getAdvancementTrack, sceneOrigin, actionMechanics
         )
         // Corruption gates (#83) refusing a move is a real world event, not
         // a silent no-op — a character the narrator described walking into

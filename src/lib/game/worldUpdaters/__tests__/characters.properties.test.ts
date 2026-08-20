@@ -37,6 +37,9 @@ vi.mock('../../capabilities', () => ({ applyCapabilityChanges: vi.fn(async () =>
 vi.mock('../locations', () => ({ resolveOrCreateLocationId: vi.fn(async () => null) }))
 
 const noTheme = vi.fn().mockResolvedValue(null)
+// Campaigns in these fixtures have no rank ladder; the advancement_tier
+// channel is inert for them, exactly as it is for a real such campaign.
+const noTrack = vi.fn().mockResolvedValue(null)
 
 function makeTx() {
   return {
@@ -108,7 +111,7 @@ describe('applyCharacterChanges — relationship key resolution (property)', () 
             }] as PcChange[],
             [character()],
             roster,
-            noTheme,
+            noTheme, noTrack,
             true
           )
 
@@ -226,7 +229,7 @@ describe('applyCharacterChanges — relationship round trip (property)', () => {
             }] as PcChange[],
             [character()],
             roster,
-            noTheme,
+            noTheme, noTrack,
             true
           )
 
@@ -325,7 +328,7 @@ describe('applyCharacterChanges — relationship alias round-trip (property)', (
             }] as PcChange[],
             [character()],
             roster,
-            noTheme,
+            noTheme, noTrack,
             true
           )
 
@@ -391,7 +394,7 @@ describe('applyCharacterChanges — relationship convergence across turns (prope
               }] as PcChange[],
               [workingCharacter],
               roster,
-              noTheme,
+              noTheme, noTrack,
               true
             )
 

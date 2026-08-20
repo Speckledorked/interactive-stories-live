@@ -430,10 +430,10 @@ export default function CharacterSheetDisplay({
                     <div className="mb-2 flex items-baseline justify-between gap-2">
                       <span className="text-sm font-medium text-myth-ink">{tier.label}</span>
                       <span className="text-xs text-myth-ink-faint">
-                        {tier.next ? `next: ${tier.next}` : 'highest'}
+                        {tier.unplaced ? `starts at: ${tier.next}` : tier.next ? `next: ${tier.next}` : 'highest'}
                       </span>
                     </div>
-                    <div className="flex gap-1" aria-label={`Rank ${tier.index + 1} of ${tier.total}`}>
+                    <div className="flex gap-1" aria-label={tier.unplaced ? `No rank recorded; ${tier.total} ranks in this world` : `Rank ${tier.index + 1} of ${tier.total}`}>
                       {Array.from({ length: tier.total }).map((_, i) => (
                         <div
                           key={i}

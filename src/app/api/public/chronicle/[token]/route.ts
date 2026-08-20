@@ -32,7 +32,6 @@ export async function GET(
       where: { campaignId: campaign.id, status: 'RESOLVED' },
       select: {
         sceneNumber: true,
-        title: true,
         sceneIntroText: true,
         sceneResolutionText: true,
       },
@@ -45,9 +44,11 @@ export async function GET(
         description: campaign.description,
         universe: campaign.universe,
       },
+      // `title` is deliberately absent: Scene.title was a column nothing ever
+      // wrote (dropped 20260820140000), so every chronicle entry shipped
+      // title: null and readers rendered their own fallback anyway.
       scenes: scenes.map(s => ({
         sceneNumber: s.sceneNumber,
-        title: s.title,
         introText: s.sceneIntroText,
         resolutionText: s.sceneResolutionText,
       })),

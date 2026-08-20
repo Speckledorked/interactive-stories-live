@@ -43,22 +43,24 @@ const IMAGE_STYLE_SUFFIX = 'Digital painting, atmospheric, cinematic lighting. N
 export interface ScenePromptInput {
   sceneIntroText: string
   sceneResolutionText: string | null
-  framing: string | null
-  location: string | null
 }
 
 /**
  * Pure — no DB access, no AI call, safe to unit test directly. Prefers the
  * scene's resolved narration (what actually happened), falling back to its
- * framing text, then its intro text, for a scene that somehow has neither
- * (shouldn't happen for a resolved scene, but never produce an empty
- * prompt).
+ * intro text (never produce an empty prompt).
+ *
+ * This chain used to include `scene.framing` between the two, and prefixed a
+ * `Setting: …` note from `scene.location` — both columns that NOTHING ever
+ * wrote (confirmed against production: zero non-null values across every
+ * scene). The fallback could never fire and the setting note never rendered;
+ * both reads were removed with the columns rather than left as dead
+ * reassurance.
  */
 export function buildScenePrompt(scene: ScenePromptInput): string {
-  const narrative = (scene.sceneResolutionText || scene.framing || scene.sceneIntroText || '').trim()
-  const locationNote = scene.location ? `Setting: ${scene.location}. ` : ''
+  const narrative = (scene.sceneResolutionText || scene.sceneIntroText || '').trim()
   const body = truncateWithEllipsis(narrative, PROMPT_MAX_CHARS)
-  return `${locationNote}${body} ${IMAGE_STYLE_SUFFIX}`.trim()
+  return `${body} ${IMAGE_STYLE_SUFFIX}`.trim()
 }
 
 export interface GeneratedImage {

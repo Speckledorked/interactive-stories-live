@@ -12,6 +12,7 @@ vi.mock('@/lib/db/campaignAccess', () => ({ getCampaignMembership: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     character: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    campaign: { findUnique: vi.fn() },
   },
 }))
 vi.mock('@/lib/game/advancement', () => ({ validateStats: vi.fn() }))
@@ -49,6 +50,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   ;(getUser as any).mockResolvedValue({ userId: 'player1', email: 'player1@example.com' })
   ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
+  // GET reads the campaign's advancement ladder alongside the character.
+  db.campaign.findUnique.mockResolvedValue({ advancementTrack: null })
 })
 
 describe('GET', () => {
@@ -70,6 +73,35 @@ describe('GET', () => {
     })
     const response = await GET(getRequest(), { params: { id: 'camp1', characterId: 'char1' } })
     expect(response.status).toBe(200)
+  })
+
+  it('ships the campaign advancement track so a rank can be placed', async () => {
+    // advancementTrack is the CAMPAIGN's and advancementTier is the
+    // CHARACTER's; without the ladder in the payload, every consumer renders
+    // no progression while looking perfectly healthy — which is exactly how
+    // the snapshot modal shipped with no rank on it.
+    const track = { tiers: [{ key: 'unranked', label: 'Unranked' }, { key: 'iron', label: 'Iron' }], slotGroups: [] }
+    db.campaign.findUnique.mockResolvedValue({ advancementTrack: track })
+    db.character.findUnique.mockResolvedValue({
+      id: 'char1', userId: 'player1', name: 'Rowan', advancementTier: 'iron',
+      capabilities: [], debts: [], factionStandings: [],
+    })
+    const body = await (await GET(getRequest(), { params: { id: 'camp1', characterId: 'char1' } })).json()
+    expect(body.campaign.advancementTrack).toEqual(track)
+    expect(body.advancementTier).toBe('iron')
+    // Read from the campaign row, not the character row.
+    expect(db.campaign.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'camp1' } })
+    )
+  })
+
+  it('reports a campaign with no ladder as null, not as a missing field', async () => {
+    db.campaign.findUnique.mockResolvedValue({ advancementTrack: null })
+    db.character.findUnique.mockResolvedValue({
+      id: 'char1', userId: 'player1', name: 'Rowan', capabilities: [], debts: [], factionStandings: [],
+    })
+    const body = await (await GET(getRequest(), { params: { id: 'camp1', characterId: 'char1' } })).json()
+    expect(body.campaign).toEqual({ advancementTrack: null })
   })
 })
 

@@ -60,6 +60,7 @@ import {
 import { classifyStressEvents, decideStressDrift, StressSignal } from '../stress'
 import type { ActionMechanics } from '../resolution'
 import { recordStateMutation } from '../stateMutation'
+import { resolveTierKey, tierProgress, type AdvancementTrack } from '../advancementTrack'
 
 type Db = Prisma.TransactionClient
 export type PcChange = NonNullable<WorldUpdates['pc_changes']>[number]
@@ -184,6 +185,9 @@ function buildCharacterWorldChanges(
   if ('isAlive' in updateData) {
     push('isAlive', character.isAlive ? 'alive' : 'deceased', updateData.isAlive ? 'alive' : 'deceased', 'MAJOR')
   }
+  if ('advancementTier' in updateData) {
+    push('advancementTier', character.advancementTier || '(unranked)', updateData.advancementTier, 'MAJOR')
+  }
   if ('corruption' in updateData && (character.corruption ?? 0) !== updateData.corruption) {
     push('corruption', character.corruption ?? 0, updateData.corruption)
   }
@@ -240,6 +244,10 @@ export async function applyCharacterChanges(
   charactersForResolution: Character[],
   npcsForResolution: Array<{ id: string; name: string }>,
   getCorruptionTheme: () => Promise<CorruptionTheme | null>,
+  // Same lazy shape as getCorruptionTheme: a campaign with no rank ladder
+  // never pays for the lookup, and the advancement_tier channel is simply
+  // inert for it.
+  getAdvancementTrack: () => Promise<AdvancementTrack | null>,
   sceneOrigin: boolean,
   // The engine's own pre-rolled outcome per character this exchange — used
   // to drift Character.stress (see ../stress.ts). Never the AI's
@@ -288,7 +296,12 @@ export async function applyCharacterChanges(
       continue
     }
 
-    const updateData: any = {}
+    // Typed as the real Prisma input, not `any`: the compiler catches a
+    // misspelled or mistyped column, and the column-wiring engine sees every
+    // `updateData.col = x` below as a first-class write. As `any`, these
+    // writes were invisible to both. Unchecked, because this code writes the
+    // locationId FK column directly rather than through the relation.
+    const updateData: Prisma.CharacterUncheckedUpdateInput = {}
 
     // #213: a dead character cannot take more harm, heal, gain/lose
     // conditions, be treated, rest, make a death save, sacrifice
@@ -381,7 +394,7 @@ export async function applyCharacterChanges(
       knowledgeChanged = true
     }
     if (knowledgeChanged) {
-      updateData.knownConcepts = { concepts: knownConcepts }
+      updateData.knownConcepts = { concepts: knownConcepts } as unknown as Prisma.InputJsonObject
     }
 
     // Apply harm damage (armor mitigates incoming damage) — prefers a
@@ -616,6 +629,38 @@ export async function applyCharacterChanges(
       harmMessages.push(sacrifice.legacy || `${character.name} makes the ultimate sacrifice.`)
     }
 
+    // Rank movement along the campaign's declared ladder.
+    //
+    // This is the only writer of Character.advancementTier. Before it existed
+    // the column was read by two surfaces and written by nothing, so every
+    // character rendered the same rank forever — the ladder was decoration.
+    //
+    // Closed shape: the GM moves a character ALONG the ladder and may never
+    // invent a rung. An undeclared rung is dropped rather than stored,
+    // because storing an unknown key renders as "not yet ranked" and would
+    // silently undo the promotion the fiction just narrated. Movement in
+    // either direction is allowed — demotion and disgrace are real events.
+    if (character.isAlive && pcChange.changes.advancement_tier) {
+      const track = await getAdvancementTrack()
+      const resolved = resolveTierKey(track, pcChange.changes.advancement_tier)
+      if (resolved && resolved !== character.advancementTier) {
+        updateData.advancementTier = resolved
+        const before = tierProgress(track, character.advancementTier)
+        const after = tierProgress(track, resolved)
+        harmMessages.push(
+          `${character.name} is now ${after?.label ?? resolved}${before && !before.unplaced ? ` (was ${before.label})` : ''}.`
+        )
+      } else if (!resolved) {
+        // Named a rung this world does not have. Surfaced rather than
+        // swallowed: the narration said a promotion happened and the sheet
+        // will not show one, which is exactly the kind of silent divergence
+        // the AI Changes panel exists for.
+        gateRefusals.push(
+          `${character.name}: "${pcChange.changes.advancement_tier}" is not a rank in this world, so no rank change was recorded.`
+        )
+      }
+    }
+
     // Corruption marks — only when this campaign actually has a
     // corruption theme (a universe without one ignores the field
     // entirely). Clamped to one mark per scene, never decreases;
@@ -652,7 +697,7 @@ export async function applyCharacterChanges(
         permanentInjuries,
         deathSaves,
         conditionHistory
-      }
+      } as unknown as Prisma.InputJsonObject
       if (newIsAlive !== undefined) {
         updateData.isAlive = newIsAlive
       }
@@ -918,7 +963,7 @@ export async function applyCharacterChanges(
               currentHarm = healResult.newHarm
               harmMessages.push(`${character.name} uses ${removedItem.name}: ${healResult.message}`)
               updateData.harm = currentHarm
-              updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves, conditionHistory }
+              updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves, conditionHistory } as unknown as Prisma.InputJsonObject
             }
           }
         }
@@ -939,7 +984,7 @@ export async function applyCharacterChanges(
                 currentHarm = healResult.newHarm
                 harmMessages.push(`${character.name} uses ${Math.abs(modify.quantity_delta)}x ${item.name}: ${healResult.message}`)
                 updateData.harm = currentHarm
-                updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves, conditionHistory }
+                updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves, conditionHistory } as unknown as Prisma.InputJsonObject
               }
             }
 

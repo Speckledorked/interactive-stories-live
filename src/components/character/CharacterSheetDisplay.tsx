@@ -90,7 +90,7 @@ export default function CharacterSheetDisplay({
 }: CharacterSheetDisplayProps) {
   const params = useParams()
   const campaignId = params?.id as string
-  const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'inventory' | 'relationships' | 'advancement' | 'downtime'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'inventory' | 'relationships' | 'downtime'>('overview')
   const showDowntimeTab = downtimeActivities !== undefined
 
   // Get currency info from campaign universe
@@ -170,6 +170,14 @@ export default function CharacterSheetDisplay({
   const tier = tierProgress(advancementTrack, character?.advancementTier)
   const slots = slotProgress(advancementTrack, (capabilitySummary?.known || []).map(k => k.domain))
 
+  // Growth log, hoisted out of what used to be its own tab. Progression now
+  // reads top to bottom on one screen: where you stand (rank, essence
+  // slots), what you can do (stats, perks, abilities), and how you got here
+  // (this log). Splitting it meant a tab named Advancement that showed no
+  // advancement track, and a rank you could only find somewhere else.
+  const advLog = (character.advancementLog as any) || { entries: [], totalStatIncreases: 0, totalPerksGained: 0, totalMovesLearned: 0 }
+  const advEntries: any[] = advLog.entries || []
+
   // Debt economy — diegetic summary from the character GET route
   const debtSummary = character?.debtSummary as {
     owedByCharacter: Array<{ counterparty: string; description: string }>
@@ -241,10 +249,9 @@ export default function CharacterSheetDisplay({
         className="mb-2"
         items={[
           { key: 'overview', label: 'Overview', icon: ClipboardList },
-          { key: 'stats', label: 'Stats & Status', icon: BarChart3 },
+          { key: 'stats', label: 'Stats & Growth', icon: BarChart3 },
           { key: 'inventory', label: 'Inventory', icon: Backpack },
           { key: 'relationships', label: 'Ties & Consequences', icon: HeartHandshake },
-          { key: 'advancement', label: 'Advancement', icon: Star },
           ...(showDowntimeTab ? [{ key: 'downtime', label: 'Downtime', icon: Moon }] : []),
         ]}
       />
@@ -613,6 +620,74 @@ export default function CharacterSheetDisplay({
                 </div>
               </Card>
             )}
+
+            {/* Growth log — formerly the Advancement tab. Full width at the
+                bottom: it is the history behind everything above it, so it
+                reads last rather than competing with current state. */}
+            <div className="space-y-6 md:col-span-2">
+                {/* Summary counters */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="rounded-lg border border-myth-border p-4 text-center">
+                    <div className="text-2xl font-bold text-myth-ink">{advLog.totalStatIncreases || 0}</div>
+                    <div className="mt-1 text-xs uppercase tracking-wide text-myth-ink-faint">Stat Increases</div>
+                  </div>
+                  <div className="rounded-lg border border-myth-border p-4 text-center">
+                    <div className="text-2xl font-bold text-myth-good">{advLog.totalPerksGained || 0}</div>
+                    <div className="mt-1 text-xs uppercase tracking-wide text-myth-ink-faint">Perks Gained</div>
+                  </div>
+                  <div className="rounded-lg border border-myth-border p-4 text-center">
+                    <div className="text-2xl font-bold text-myth-ink">{advLog.totalMovesLearned || 0}</div>
+                    <div className="mt-1 text-xs uppercase tracking-wide text-myth-ink-faint">Abilities Learned</div>
+                  </div>
+                </div>
+
+                {/* History */}
+                <Card>
+                  <SectionHeader as="h3" title="Growth History" />
+                  <div className="mt-4">
+                  {advEntries.length === 0 ? (
+                    <div className="py-8 text-center text-myth-ink-faint">
+                      <Sprout className="mx-auto mb-3 h-8 w-8 text-myth-ink-faint" />
+                      <p>No advancements yet</p>
+                      <p className="mt-1 text-sm">Keep playing — your character grows organically through action</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {[...advEntries].reverse().map((entry: any, idx: number) => {
+                        const date = new Date(entry.timestamp).toLocaleDateString()
+                        const turnInfo = entry.turnNumber ? ` · Turn ${entry.turnNumber}` : ''
+                        let Icon: IconComponent = Star
+                        let color = 'text-myth-ink-muted'
+                        let label = ''
+                        if (entry.type === 'stat_increase') {
+                          Icon = TrendingUp
+                          color = 'text-myth-ink'
+                          label = `${entry.details.statKey} ${entry.details.oldValue} → ${entry.details.newValue}`
+                        } else if (entry.type === 'perk_gained') {
+                          Icon = Sparkles
+                          color = 'text-myth-good'
+                          label = entry.details.perkName || entry.details.perkId
+                        } else if (entry.type === 'move_learned') {
+                          Icon = Target
+                          color = 'text-myth-ink'
+                          label = entry.details.moveId
+                        }
+                        return (
+                          <div key={idx} className="flex items-start gap-3 rounded-lg border border-myth-border bg-myth-surface-sunken p-3">
+                            <Icon className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <div className={`text-sm font-medium ${color}`}>{label}</div>
+                              <div className="mt-0.5 text-xs text-myth-ink-faint">{entry.details.reason}</div>
+                            </div>
+                            <div className="whitespace-nowrap text-xs text-myth-ink-faint">{date}{turnInfo}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  </div>
+                </Card>
+            </div>
           </div>
         )}
 
@@ -873,77 +948,6 @@ export default function CharacterSheetDisplay({
           </div>
         )}
 
-        {activeTab === 'advancement' && (() => {
-          const advLog = (character.advancementLog as any) || { entries: [], totalStatIncreases: 0, totalPerksGained: 0, totalMovesLearned: 0 }
-          const entries: any[] = advLog.entries || []
-
-          return (
-            <div className="space-y-6">
-              {/* Summary counters */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="rounded-lg border border-myth-border p-4 text-center">
-                  <div className="text-2xl font-bold text-myth-ink">{advLog.totalStatIncreases || 0}</div>
-                  <div className="mt-1 text-xs uppercase tracking-wide text-myth-ink-faint">Stat Increases</div>
-                </div>
-                <div className="rounded-lg border border-myth-border p-4 text-center">
-                  <div className="text-2xl font-bold text-myth-good">{advLog.totalPerksGained || 0}</div>
-                  <div className="mt-1 text-xs uppercase tracking-wide text-myth-ink-faint">Perks Gained</div>
-                </div>
-                <div className="rounded-lg border border-myth-border p-4 text-center">
-                  <div className="text-2xl font-bold text-myth-ink">{advLog.totalMovesLearned || 0}</div>
-                  <div className="mt-1 text-xs uppercase tracking-wide text-myth-ink-faint">Abilities Learned</div>
-                </div>
-              </div>
-
-              {/* History */}
-              <Card>
-                <SectionHeader as="h3" title="Growth History" />
-                <div className="mt-4">
-                {entries.length === 0 ? (
-                  <div className="py-8 text-center text-myth-ink-faint">
-                    <Sprout className="mx-auto mb-3 h-8 w-8 text-myth-ink-faint" />
-                    <p>No advancements yet</p>
-                    <p className="mt-1 text-sm">Keep playing — your character grows organically through action</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {[...entries].reverse().map((entry: any, idx: number) => {
-                      const date = new Date(entry.timestamp).toLocaleDateString()
-                      const turnInfo = entry.turnNumber ? ` · Turn ${entry.turnNumber}` : ''
-                      let Icon: IconComponent = Star
-                      let color = 'text-myth-ink-muted'
-                      let label = ''
-                      if (entry.type === 'stat_increase') {
-                        Icon = TrendingUp
-                        color = 'text-myth-ink'
-                        label = `${entry.details.statKey} ${entry.details.oldValue} → ${entry.details.newValue}`
-                      } else if (entry.type === 'perk_gained') {
-                        Icon = Sparkles
-                        color = 'text-myth-good'
-                        label = entry.details.perkName || entry.details.perkId
-                      } else if (entry.type === 'move_learned') {
-                        Icon = Target
-                        color = 'text-myth-ink'
-                        label = entry.details.moveId
-                      }
-                      return (
-                        <div key={idx} className="flex items-start gap-3 rounded-lg border border-myth-border bg-myth-surface-sunken p-3">
-                          <Icon className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <div className={`text-sm font-medium ${color}`}>{label}</div>
-                            <div className="mt-0.5 text-xs text-myth-ink-faint">{entry.details.reason}</div>
-                          </div>
-                          <div className="whitespace-nowrap text-xs text-myth-ink-faint">{date}{turnInfo}</div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-                </div>
-              </Card>
-            </div>
-          )
-        })()}
 
         {activeTab === 'downtime' && showDowntimeTab && (
           <DynamicDowntimeManager

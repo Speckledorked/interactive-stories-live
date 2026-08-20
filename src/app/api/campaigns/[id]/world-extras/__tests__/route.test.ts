@@ -78,15 +78,82 @@ describe('POST', () => {
     expect(response.status).toBe(404)
   })
 
-  it('refuses to re-roll a campaign that already has both', async () => {
+  it('refuses to re-roll a campaign that already has everything', async () => {
     db.campaignArchetype.count.mockResolvedValue(4)
     db.campaign.findUnique.mockResolvedValue({
       id: 'camp1', title: 'T', description: 'd', universe: 'Original', statLabels: null,
       corruptionTheme: { name: 'The Rot' },
+      advancementTrack: { tiers: [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }], slotGroups: [] },
     })
     const response = await POST(req(), { params: { id: 'camp1' } })
     expect(response.status).toBe(409)
     expect(generateWorldExtras).not.toHaveBeenCalled()
+  })
+
+  it('still runs for a campaign that has archetypes and a theme but no track', async () => {
+    // This case used to 409. The guard hardcoded archetypes + corruption
+    // theme, so when the advancement track became a third backfillable
+    // field the route refused before it could ever fill one — locking out
+    // exactly the long-running campaigns most likely to want it, from the
+    // route whose purpose is to undo that lock-out.
+    db.campaignArchetype.count.mockResolvedValue(4)
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'T', description: 'd', universe: 'Original', statLabels: null,
+      corruptionTheme: { name: 'The Rot' },
+      advancementTrack: null,
+    })
+    ;(generateWorldExtras as any).mockResolvedValue({
+      archetypes: [],
+      corruptionTheme: { name: 'Ignored' },
+      advancementTrack: { tiers: [{ key: 'initiate', label: 'Initiate' }, { key: 'adept', label: 'Adept' }], slotGroups: [] },
+    })
+    const response = await POST(req(), { params: { id: 'camp1' } })
+    const body = await response.json()
+    expect(response.status).toBe(200)
+    expect(body.advancementTrackSet).toBe(true)
+    expect(db.campaign.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'camp1' },
+      data: { advancementTrack: expect.objectContaining({ tiers: expect.any(Array) }) },
+    }))
+    // The theme it already had is left alone — this is a backfill of what
+    // is missing, not a re-roll of what is there.
+    expect(body.corruptionThemeSet).toBe(false)
+  })
+
+  it('distinguishes a failed generation from a universe with no ranks', async () => {
+    // The alert an operator reads is built from these fields. If a fumbled
+    // advancement_track arrives as the same payload as a deliberate "this
+    // world has no ladder", they are told a fact about their universe that
+    // nobody established, and have no reason to retry.
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'T', description: 'd', universe: 'Original', statLabels: null,
+      corruptionTheme: null, advancementTrack: null,
+    })
+    ;(generateWorldExtras as any).mockResolvedValue({
+      archetypes: [], corruptionTheme: null,
+      advancementTrack: null, advancementTrackOutcome: 'unusable',
+    })
+    const body = await (await POST(req(), { params: { id: 'camp1' } })).json()
+    expect(body.advancementTrackSet).toBe(false)
+    expect(body.advancementTrackOutcome).toBe('unusable')
+  })
+
+  it('reports a universe with no ranks distinctly from writing nothing', async () => {
+    // null from the generator is a real answer: this world has no ladder.
+    // It must not read as "the backfill silently did nothing", which is the
+    // failure mode that hid the missing write at campaign creation.
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'T', description: 'd', universe: 'Original', statLabels: null,
+      corruptionTheme: null, advancementTrack: null,
+    })
+    ;(generateWorldExtras as any).mockResolvedValue({
+      archetypes: [], corruptionTheme: null,
+      advancementTrack: null, advancementTrackOutcome: 'declined',
+    })
+    const body = await (await POST(req(), { params: { id: 'camp1' } })).json()
+    expect(body.advancementTrackSet).toBe(false)
+    expect(body.advancementTierCount).toBe(null)
+    expect(body.advancementTrackOutcome).toBe('declined')
   })
 
   it('degrades to a clean 502 when generation fails', async () => {
@@ -99,12 +166,20 @@ describe('POST', () => {
     ;(generateWorldExtras as any).mockResolvedValue({
       archetypes: [{ name: 'The Outsider', description: 'd', originFamiliarity: 'stranger', backstoryPrompts: [], glimpseCapabilityKeys: [] }],
       corruptionTheme: { name: 'The Rot' },
+      advancementTrack: null, advancementTrackOutcome: 'declined',
     })
     db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
     const response = await POST(req(), { params: { id: 'camp1' } })
     const body = await response.json()
     expect(response.status).toBe(200)
-    expect(body).toEqual({ archetypesCreated: 1, corruptionThemeSet: true, corruptionThemeName: 'The Rot' })
+    expect(body).toEqual({
+      archetypesCreated: 1,
+      corruptionThemeSet: true,
+      corruptionThemeName: 'The Rot',
+      advancementTrackSet: false,
+      advancementTierCount: null,
+      advancementTrackOutcome: 'declined',
+    })
     expect(db.campaign.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'camp1' },
       data: { corruptionTheme: { name: 'The Rot' } },

@@ -50,12 +50,27 @@ export async function POST(
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     }
 
-    // Idempotence: this is a backfill, not a re-roll. A campaign that
-    // already has both just gets told so — regenerating would silently
+    // Idempotence: this is a backfill, not a re-roll. A campaign with
+    // nothing left to fill just gets told so — regenerating would silently
     // replace cards players may have already built characters from.
-    if (existingArchetypes > 0 && campaign.corruptionTheme) {
+    //
+    // The guard is a list, not a hardcoded pair. It used to read
+    // `existingArchetypes > 0 && campaign.corruptionTheme`, and when the
+    // advancement track became a third backfillable field that stale
+    // condition short-circuited BEFORE the new backfill below could run —
+    // so a campaign with archetypes and a theme could never acquire a
+    // track, which is precisely the lock-out this route exists to undo.
+    // Adding a fourth field means adding a line here; forgetting to means
+    // the same silent regression, so the shape is now uniform enough that
+    // the omission is visible.
+    const missing = [
+      existingArchetypes === 0 && 'archetypes',
+      !campaign.corruptionTheme && 'corruption theme',
+      !campaign.advancementTrack && 'advancement track',
+    ].filter(Boolean) as string[]
+    if (missing.length === 0) {
       return NextResponse.json({
-        error: 'This campaign already has archetypes and a corruption theme.',
+        error: 'This campaign already has archetypes, a corruption theme and an advancement track.',
       }, { status: 409 })
     }
 
@@ -97,11 +112,13 @@ export async function POST(
 
     // Backfill the advancement track too, on the same terms as the theme:
     // only when absent, never a re-roll over one a campaign already has.
+    let advancementTrackSet = false
     if (!campaign.advancementTrack && extras.advancementTrack) {
       await prisma.campaign.update({
         where: { id: campaignId },
         data: { advancementTrack: extras.advancementTrack as object },
       })
+      advancementTrackSet = true
     }
 
     let corruptionThemeSet = false
@@ -129,6 +146,17 @@ export async function POST(
       // null from the generator means "this universe has no such concept"
       // — a real answer, distinct from generation failing.
       corruptionThemeName: extras.corruptionTheme?.name ?? null,
+      advancementTrackSet,
+      // Reported separately from `advancementTrackSet` for the same reason:
+      // "the generator said this world has no ranks" and "nothing was
+      // written" are the same false, and only one of them is a problem.
+      advancementTierCount: extras.advancementTrack?.tiers.length ?? null,
+      // ...and 'declined' vs 'unusable' splits that false in two again. A
+      // universe with no rank ladder is a real answer; a missing or malformed
+      // advancement_track is a generation failure that would otherwise be
+      // reported to the operator AS that real answer, leaving them to believe
+      // a fact about their world that nobody actually established.
+      advancementTrackOutcome: extras.advancementTrackOutcome,
     })
   } catch (error) {
     console.error('World extras backfill error:', error)

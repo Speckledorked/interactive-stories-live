@@ -324,7 +324,7 @@ describe('reseedWorldFromLore — NPCs and locations', () => {
 
     vi.mocked(generateWorldExtras).mockResolvedValue({
       archetypes: [],
-      corruptionTheme: null, advancementTrack: null,
+      corruptionTheme: null, advancementTrack: null, advancementTrackOutcome: 'declined',
       npcs: [
         { name: 'Lord Kessler', description: 'x', importance: 4 },
         { name: 'Existing Elder', description: 'y', importance: 2 },

@@ -606,9 +606,14 @@ export default function AdminPage() {
       parts.push(
         data.advancementTrackSet
           ? `advancement track: ${data.advancementTierCount} ranks`
-          : data.advancementTierCount === null
-            ? 'no advancement track — this universe has no rank ladder (that\'s a valid outcome)'
-            : 'advancement track already existed'
+          : data.advancementTrackOutcome === 'unusable'
+            // NOT folded into the "no rank ladder" line below. That line
+            // states a fact about the universe; this one says the question
+            // never got a usable answer, and running it again may.
+            ? 'advancement track FAILED — the generator returned nothing usable. This is not "no ranks", it is a failed call; try again'
+            : data.advancementTierCount === null && data.advancementTrackOutcome === 'declined'
+              ? 'no advancement track — this universe has no rank ladder (that\'s a valid outcome)'
+              : 'advancement track already existed'
       )
       alert(`Done: ${parts.join('; ')}`)
     } catch (err) {

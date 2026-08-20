@@ -120,6 +120,24 @@ describe('POST', () => {
     expect(body.corruptionThemeSet).toBe(false)
   })
 
+  it('distinguishes a failed generation from a universe with no ranks', async () => {
+    // The alert an operator reads is built from these fields. If a fumbled
+    // advancement_track arrives as the same payload as a deliberate "this
+    // world has no ladder", they are told a fact about their universe that
+    // nobody established, and have no reason to retry.
+    db.campaign.findUnique.mockResolvedValue({
+      id: 'camp1', title: 'T', description: 'd', universe: 'Original', statLabels: null,
+      corruptionTheme: null, advancementTrack: null,
+    })
+    ;(generateWorldExtras as any).mockResolvedValue({
+      archetypes: [], corruptionTheme: null,
+      advancementTrack: null, advancementTrackOutcome: 'unusable',
+    })
+    const body = await (await POST(req(), { params: { id: 'camp1' } })).json()
+    expect(body.advancementTrackSet).toBe(false)
+    expect(body.advancementTrackOutcome).toBe('unusable')
+  })
+
   it('reports a universe with no ranks distinctly from writing nothing', async () => {
     // null from the generator is a real answer: this world has no ladder.
     // It must not read as "the backfill silently did nothing", which is the
@@ -129,11 +147,13 @@ describe('POST', () => {
       corruptionTheme: null, advancementTrack: null,
     })
     ;(generateWorldExtras as any).mockResolvedValue({
-      archetypes: [], corruptionTheme: null, advancementTrack: null,
+      archetypes: [], corruptionTheme: null,
+      advancementTrack: null, advancementTrackOutcome: 'declined',
     })
     const body = await (await POST(req(), { params: { id: 'camp1' } })).json()
     expect(body.advancementTrackSet).toBe(false)
     expect(body.advancementTierCount).toBe(null)
+    expect(body.advancementTrackOutcome).toBe('declined')
   })
 
   it('degrades to a clean 502 when generation fails', async () => {
@@ -146,6 +166,7 @@ describe('POST', () => {
     ;(generateWorldExtras as any).mockResolvedValue({
       archetypes: [{ name: 'The Outsider', description: 'd', originFamiliarity: 'stranger', backstoryPrompts: [], glimpseCapabilityKeys: [] }],
       corruptionTheme: { name: 'The Rot' },
+      advancementTrack: null, advancementTrackOutcome: 'declined',
     })
     db.campaignArchetype.createMany.mockResolvedValue({ count: 1 })
     const response = await POST(req(), { params: { id: 'camp1' } })
@@ -157,6 +178,7 @@ describe('POST', () => {
       corruptionThemeName: 'The Rot',
       advancementTrackSet: false,
       advancementTierCount: null,
+      advancementTrackOutcome: 'declined',
     })
     expect(db.campaign.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'camp1' },

@@ -127,6 +127,56 @@ export function parseAdvancementTrack(raw: unknown): AdvancementTrack | null {
   return { tiers, slotGroups }
 }
 
+/**
+ * Why there is no track, when there is no track.
+ *
+ * `parseAdvancementTrack` collapses three different situations into null, and
+ * only one of them is good news:
+ *
+ *   - `generated`  a usable track came back;
+ *   - `declined`   the model deliberately said this universe has no ladder
+ *                  and no bounded collections, which the prompt explicitly
+ *                  calls a correct, expected answer;
+ *   - `unusable`   the field was missing entirely, or present and malformed,
+ *                  or held so little that nothing could be rendered.
+ *
+ * Reporting `unusable` as `declined` is the failure mode this whole column
+ * has already been bitten by once: null is a MEANINGFUL value here, so a null
+ * that means "the generator fumbled" is indistinguishable from one that means
+ * "this world genuinely has no ranks" — and the reassuring reading is the one
+ * a person acts on. Whoever clicks the backfill button and is told their
+ * universe has no rank ladder deserves to know whether anything was actually
+ * asked and answered.
+ *
+ * An explicit `null`, and an object whose tiers and slot groups are both
+ * present and empty, are both read as `declined` — the prompt offers both as
+ * ways to say "neither". Everything else that fails to parse is `unusable`.
+ */
+export type AdvancementTrackOutcome = 'generated' | 'declined' | 'unusable'
+
+export function classifyAdvancementTrack(
+  raw: unknown,
+  parsed: AdvancementTrack | null = parseAdvancementTrack(raw)
+): AdvancementTrackOutcome {
+  if (parsed) return 'generated'
+  // Explicit null is the prompt's documented way to say "this world has
+  // neither". `undefined` is NOT: it means the key never arrived.
+  if (raw === null) return 'declined'
+  if (!raw || typeof raw !== 'object') return 'unusable'
+  const source = raw as { tiers?: unknown; slotGroups?: unknown; slot_groups?: unknown }
+  const groups = Array.isArray(source.slotGroups)
+    ? source.slotGroups
+    : Array.isArray(source.slot_groups)
+      ? source.slot_groups
+      : undefined
+  // Both arrays present and empty is the other documented way to say it.
+  const tiersEmpty = Array.isArray(source.tiers) && source.tiers.length === 0
+  const groupsEmpty = Array.isArray(groups) && groups.length === 0
+  if (tiersEmpty && groupsEmpty) return 'declined'
+  // Anything else reaching here had content that could not be rendered.
+  return 'unusable'
+}
+
 export interface TierProgress {
   label: string
   /** 0-based position on the ladder. */

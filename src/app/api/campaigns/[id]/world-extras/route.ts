@@ -151,6 +151,12 @@ export async function POST(
       // "the generator said this world has no ranks" and "nothing was
       // written" are the same false, and only one of them is a problem.
       advancementTierCount: extras.advancementTrack?.tiers.length ?? null,
+      // ...and 'declined' vs 'unusable' splits that false in two again. A
+      // universe with no rank ladder is a real answer; a missing or malformed
+      // advancement_track is a generation failure that would otherwise be
+      // reported to the operator AS that real answer, leaving them to believe
+      // a fact about their world that nobody actually established.
+      advancementTrackOutcome: extras.advancementTrackOutcome,
     })
   } catch (error) {
     console.error('World extras backfill error:', error)

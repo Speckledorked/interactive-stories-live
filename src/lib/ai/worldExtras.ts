@@ -16,7 +16,12 @@ import { validateStats } from '@/lib/game/advancement'
 import { MAX_CORRUPTION, CorruptionTheme } from '@/lib/game/corruption'
 import { slugifyCapabilityKey } from '@/lib/game/capabilities'
 import type { GeneratedCapability, GeneratedStatLabels, GeneratedNPC, GeneratedLocation } from './worldGenerator'
-import { parseAdvancementTrack, type AdvancementTrack } from '@/lib/game/advancementTrack'
+import {
+  parseAdvancementTrack,
+  classifyAdvancementTrack,
+  type AdvancementTrack,
+  type AdvancementTrackOutcome,
+} from '@/lib/game/advancementTrack'
 
 // Not exported: only referenced structurally (via GeneratedArchetype.startingTie)
 // by the one external importer, GeneratedWorldExtras — nothing imports this
@@ -49,6 +54,14 @@ export interface GeneratedWorldExtras {
   archetypes: GeneratedArchetype[]
   corruptionTheme: CorruptionTheme | null
   advancementTrack: AdvancementTrack | null
+  /**
+   * WHY advancementTrack is null, when it is. A null track is a valid answer
+   * ('declined') and also what a fumbled or missing field produces
+   * ('unusable') — callers that report the outcome to a person must be able
+   * to tell those apart, or a generation failure reads as a fact about the
+   * universe.
+   */
+  advancementTrackOutcome: AdvancementTrackOutcome
   // Notable NPCs/locations, generated here rather than in the main
   // world-gen call (worldGenerator.ts) — that call is already at its own
   // token budget, and a truncated response there fails JSON.parse
@@ -278,6 +291,18 @@ Rules for locations:
     // the rungs, it does not invent a kind of progression. parseAdvancementTrack
     // returns null for anything it cannot render honestly.
     const advancementTrack = parseAdvancementTrack(raw.advancement_track)
+    // `raw.advancement_track` is `undefined` when the key never arrived, which
+    // is NOT the same as the explicit null the prompt asks for.
+    const advancementTrackOutcome = classifyAdvancementTrack(
+      'advancement_track' in raw ? raw.advancement_track : undefined,
+      advancementTrack
+    )
+    if (advancementTrackOutcome === 'unusable') {
+      console.warn(
+        '⚠️ World extras: advancement_track came back missing or unusable — this is a generation ' +
+          'failure, not a universe without ranks. Retrying the call may produce one.'
+      )
+    }
 
     // Dedupe by case-insensitive name WITHIN this response, not just
     // against what's already in the DB (that dedup happens later, at the
@@ -324,8 +349,8 @@ Rules for locations:
       }
     }
 
-    console.log(`✅ World extras: ${archetypes.length} archetypes, corruption theme: ${corruptionTheme ? corruptionTheme.name : 'none (universe has no such concept)'}, advancement: ${advancementTrack ? `${advancementTrack.tiers.length} tiers / ${advancementTrack.slotGroups.length} slot groups` : 'none'}, ${npcs.length} NPCs, ${locations.length} locations`)
-    return { archetypes, corruptionTheme, advancementTrack, npcs, locations }
+    console.log(`✅ World extras: ${archetypes.length} archetypes, corruption theme: ${corruptionTheme ? corruptionTheme.name : 'none (universe has no such concept)'}, advancement: ${advancementTrack ? `${advancementTrack.tiers.length} tiers / ${advancementTrack.slotGroups.length} slot groups` : advancementTrackOutcome}, ${npcs.length} NPCs, ${locations.length} locations`)
+    return { archetypes, corruptionTheme, advancementTrack, advancementTrackOutcome, npcs, locations }
   } catch (err) {
     console.error('World extras generation failed (archetypes/corruption/npcs/locations skipped):', err)
     return null

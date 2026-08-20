@@ -151,6 +151,17 @@ export async function createCampaign(input: CreateCampaignInput) {
         // Null is meaningful: this universe has no power-at-a-cost
         // concept, so the corruption track stays disabled.
         corruptionTheme: (worldExtras?.corruptionTheme as object | undefined) || undefined,
+        // Same generator, same null-is-an-answer rule: a universe with no
+        // rank ladder and no slot groups renders no advancement UI at all.
+        //
+        // This line is the whole feature. The generator produced the track
+        // and every reader was wired for it, but creation dropped it here,
+        // so EVERY campaign — new ones included — had a null column and the
+        // sheet correctly rendered nothing. A "generated once at creation"
+        // column that creation does not write is permanently null, and the
+        // null is indistinguishable from the honest "this world has no
+        // ranks" answer, which is exactly why nothing looked broken.
+        advancementTrack: (worldExtras?.advancementTrack as object | undefined) || undefined,
         // Never null for a campaign created after this shipped — see
         // resolvedCalendar above.
         calendarConfig: resolvedCalendar as object,

@@ -415,14 +415,6 @@ export default function CharacterSheetDisplay({
               </Card>
             )}
 
-            {/* Abilities & Knowledge — the knowledge-relative sheet. What
-                renders here is what the character KNOWS: unlocked abilities
-                show with a qualitative skill band, glimpsed ones as "???",
-                and everything they've never encountered simply isn't here.
-                Always shown (not just when non-empty) — an Outsider starts
-                with a genuinely blank sheet by design, and without an
-                explicit empty state that's indistinguishable from the
-                feature being broken. */}
             {(tier || slots.length > 0) && (
               <Card>
                 <CardLabel>Advancement</CardLabel>
@@ -469,6 +461,14 @@ export default function CharacterSheetDisplay({
               </Card>
             )}
 
+            {/* Abilities & Knowledge — the knowledge-relative sheet. What
+                renders here is what the character KNOWS: unlocked abilities
+                show with a qualitative skill band, glimpsed ones as "???",
+                and everything they've never encountered simply isn't here.
+                Always shown (not just when non-empty) — an Outsider starts
+                with a genuinely blank sheet by design, and without an
+                explicit empty state that's indistinguishable from the
+                feature being broken. */}
             {capabilitySummary && (
               <Card className="md:col-span-2">
                 <CardLabel>Abilities & Knowledge</CardLabel>

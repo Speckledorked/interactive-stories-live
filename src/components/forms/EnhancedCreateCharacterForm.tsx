@@ -154,7 +154,11 @@ export default function EnhancedCreateCharacterForm({
   }>>([])
 
   useEffect(() => {
-    if (!track) return
+    // NOT gated on the ladder. "Already mastered" is meaningful in every
+    // universe with capabilities — an established Auror, a hero with powers
+    // in hand — even where nobody speaks in ranks (Harry Potter has school
+    // years at most; a superhero setting has no ladder at all). The rank
+    // picker below is the only part that needs tiers.
     let cancelled = false
     authenticatedFetch(`/api/campaigns/${campaignId}/capabilities`)
       .then(res => (res.ok ? res.json() : { capabilities: [] }))
@@ -631,25 +635,29 @@ export default function EnhancedCreateCharacterForm({
                 server validates every claim against the campaign's declared
                 content (a rung must exist; capabilities respect slot-group
                 capacities and the prerequisite chain). */}
-            {track && track.tiers.length > 0 && (
+            {((track && track.tiers.length > 0) || pickableCapabilities.length > 0) && (
               <div>
-                <label htmlFor="startingTier" className="block text-sm font-medium text-myth-ink mb-1">
+                <span className="block text-sm font-medium text-myth-ink mb-1">
                   Where do they start?
-                </label>
-                <Select
-                  id="startingTier"
-                  value={startingTierKeyChoice}
-                  onChange={(e) => setStartingTierKeyChoice(e.target.value)}
-                >
-                  {track.tiers.map((tier, i) => (
-                    <option key={tier.key} value={i === 0 ? '' : tier.key}>
-                      {tier.label}{i === 0 ? ' — just starting out' : ''}{tier.description ? ` — ${tier.description}` : ''}
-                    </option>
-                  ))}
-                </Select>
-                <p className="text-xs text-myth-ink-muted mt-1">
-                  An established character can begin higher up this world&apos;s ladder — the story will treat that standing as real, and so will everyone in it.
-                </p>
+                </span>
+                {track && track.tiers.length > 0 && (
+                  <>
+                    <Select
+                      id="startingTier"
+                      value={startingTierKeyChoice}
+                      onChange={(e) => setStartingTierKeyChoice(e.target.value)}
+                    >
+                      {track.tiers.map((tier, i) => (
+                        <option key={tier.key} value={i === 0 ? '' : tier.key}>
+                          {tier.label}{i === 0 ? ' — just starting out' : ''}{tier.description ? ` — ${tier.description}` : ''}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-myth-ink-muted mt-1">
+                      An established character can begin higher up this world&apos;s ladder — the story will treat that standing as real, and so will everyone in it.
+                    </p>
+                  </>
+                )}
 
                 {pickableCapabilities.length > 0 && (
                   <div className="mt-3">
@@ -658,7 +666,7 @@ export default function EnhancedCreateCharacterForm({
                     </span>
                     <p className="text-xs text-myth-ink-muted mb-2">
                       What can they already do when the story begins? Anything that builds on something else needs its foundation picked too.
-                      {track.slotGroups.map(group => {
+                      {(track?.slotGroups ?? []).map(group => {
                         const filled = pickableCapabilities.filter(c => c.domain === group.domain && startingCapabilityIds.includes(c.id)).length
                         return ` ${group.label}: ${filled}/${group.capacity}.`
                       }).join('')}
@@ -666,7 +674,7 @@ export default function EnhancedCreateCharacterForm({
                     <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-myth-border p-2">
                       {pickableCapabilities.map(cap => {
                         const checked = startingCapabilityIds.includes(cap.id)
-                        const group = track.slotGroups.find(g => g.domain === cap.domain)
+                        const group = track?.slotGroups.find(g => g.domain === cap.domain)
                         const groupFull = group
                           ? pickableCapabilities.filter(c => c.domain === group.domain && startingCapabilityIds.includes(c.id)).length >= group.capacity
                           : false

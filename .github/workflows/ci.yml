@@ -37,6 +37,16 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # Every column a reader depends on has a writer — symbol-level, per
+      # (model, column), via the TypeScript checker against the generated
+      # Prisma delegate/input/payload types. Also verifies the generated-once
+      # column flow manifest (src/lib/game/generatedColumnFlow.ts) from the
+      # same program build. Runs here rather than in its own job because it
+      # needs exactly what this job already has: npm ci + prisma generate.
+      # See scripts/columnFlowAnalysis.ts for the incidents and the design.
+      - name: Column wiring
+        run: npx tsx scripts/check-column-wiring.ts
+
       - name: Tests
         run: npx vitest run
 

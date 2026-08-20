@@ -61,20 +61,47 @@ export type FlowRole =
  * rank ladder was cut out of the scene-prompt request builder, that file still
  * mentioned `advancementTrack` in the surrounding code, so "does this file
  * participate" stayed true while the delivery link was gone — which is the
- * precise defect this manifest is for. Naming the payload key makes the link
- * itself checkable, not merely the file's involvement.
+ * precise defect this manifest is for. Evidence makes the LINK checkable, not
+ * merely the file's involvement.
  *
- * Declare evidence wherever the thing being checked is a HANDOFF whose name
- * differs from the column's: a request field, a response key, a prompt tag.
+ * Evidence is structured, not a source substring. The first version embedded
+ * formatting ('campaign: { advancementTrack'), which Prettier or a rename
+ * would break — refactor-hostile in a check that exists to survive refactors.
+ *
+ *  - prisma-write / prisma-read: verified against the wiring engine's
+ *    symbol-level record for this (Campaign, column) in this file — the same
+ *    fact Gate 1 runs on. Use for handoffs that ARE database access.
+ *  - payload-key: an object-literal property with this name exists in the
+ *    file (AST, comment- and format-proof). Use for request/response fields.
+ *  - string-key: a string/template literal in the file contains this text.
+ *    Use for prompt tags the model is told about ('advancement_track').
+ *
+ * Roles `persist` and `backfill` are checked as prisma-write even without
+ * explicit evidence — role semantics carry the guarantee, not annotations.
  */
-export type FlowEntry = FlowRole | { role: FlowRole; evidence: string }
+export type Evidence =
+  | { kind: 'prisma-write' }
+  | { kind: 'prisma-read' }
+  | { kind: 'payload-key'; key: string }
+  | { kind: 'string-key'; key: string }
+
+/**
+ * One entry may carry SEVERAL pieces of evidence, all of which must hold —
+ * added after a mutation slipped through a single-evidence check: cutting the
+ * character route's response payload left its `select` read intact, so
+ * `prisma-read` evidence stayed green while the delivery it was supposed to
+ * pin was gone. A read that goes nowhere is not a delivery; pinning both the
+ * read AND the response payload key is what makes the link checkable.
+ */
+export type FlowEntry = FlowRole | { role: FlowRole; evidence: Evidence | Evidence[] }
 
 export function roleOf(entry: FlowEntry): FlowRole {
   return typeof entry === 'string' ? entry : entry.role
 }
 
-export function evidenceOf(entry: FlowEntry): string | null {
-  return typeof entry === 'string' ? null : entry.evidence
+export function evidenceOf(entry: FlowEntry): Evidence[] {
+  if (typeof entry === 'string') return []
+  return Array.isArray(entry.evidence) ? entry.evidence : [entry.evidence]
 }
 
 export interface DataFlow {
@@ -104,11 +131,17 @@ export const GENERATED_COLUMN_FLOWS: DataFlow[] = [
       'with no rank ladder. A missing link therefore looks exactly like an honest answer.',
     roles: {
       'src/lib/ai/worldExtras.ts': 'generate',
-      'src/lib/game/campaignCreation.ts': { role: 'persist', evidence: 'advancementTrack: (worldExtras' },
+      'src/lib/game/campaignCreation.ts': { role: 'persist', evidence: { kind: 'prisma-write' } },
       'src/app/api/campaigns/[id]/world-extras/route.ts': 'backfill',
       'src/lib/lore/reseedWorld.ts': 'backfill',
-      'src/app/api/campaigns/[id]/characters/[characterId]/route.ts': { role: 'deliver', evidence: 'campaign: { advancementTrack' },
-      'src/lib/ai/sceneResolutionRequest.ts': { role: 'deliver', evidence: 'advancement_track:' },
+      'src/app/api/campaigns/[id]/characters/[characterId]/route.ts': {
+        role: 'deliver',
+        // Both halves: the column is READ from the campaign row AND a
+        // `campaign` payload is shipped in the response. Either alone can
+        // survive the other's removal.
+        evidence: [{ kind: 'prisma-read' }, { kind: 'payload-key', key: 'campaign' }],
+      },
+      'src/lib/ai/sceneResolutionRequest.ts': { role: 'deliver', evidence: { kind: 'payload-key', key: 'advancement_track' } },
       'src/components/character/CharacterSheetDisplay.tsx': 'consume',
       'src/components/character/CharacterSnapshotModal.tsx': 'consume',
       'src/lib/game/worldUpdaters/characters.ts': 'consume',
@@ -122,11 +155,11 @@ export const GENERATED_COLUMN_FLOWS: DataFlow[] = [
     why: 'Null disables the corruption track entirely — indistinguishable from a broken link.',
     roles: {
       'src/lib/ai/worldExtras.ts': 'generate',
-      'src/lib/game/campaignCreation.ts': { role: 'persist', evidence: 'corruptionTheme: (worldExtras' },
+      'src/lib/game/campaignCreation.ts': { role: 'persist', evidence: { kind: 'prisma-write' } },
       'src/app/api/campaigns/[id]/world-extras/route.ts': 'backfill',
       'src/lib/lore/reseedWorld.ts': 'backfill',
       'src/app/campaigns/[id]/admin/page.tsx': 'consume',
-      'src/lib/ai/sceneResolutionRequest.ts': { role: 'deliver', evidence: 'corruption_theme:' },
+      'src/lib/ai/sceneResolutionRequest.ts': { role: 'deliver', evidence: { kind: 'payload-key', key: 'corruption_theme' } },
       'src/lib/game/stateUpdater.ts': 'deliver',
       'src/components/character/CharacterSheetDisplay.tsx': 'consume',
       'src/lib/game/resolution.ts': 'consume',

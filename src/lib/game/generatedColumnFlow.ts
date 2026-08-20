@@ -147,6 +147,18 @@ export const GENERATED_COLUMN_FLOWS: DataFlow[] = [
       'src/lib/game/worldUpdaters/characters.ts': 'consume',
       'src/lib/game/stateUpdater.ts': 'consume',
       'src/lib/game/characterCreation.ts': 'consume',
+      // The creation wizard's established-start section: the campaign page
+      // hands the track down as a prop, and the form renders the rank picker
+      // and slot-group counters from it. Declared the day they were added —
+      // by this check failing on its own pull request, which is precisely
+      // the moment it exists for.
+      // Participation-level only: the handoff is a JSX attribute
+      // (advancementTrack={campaign.advancementTrack}), which is not an
+      // object-literal property, and that attribute is the file's sole
+      // mention of the symbol — so the participation check itself covers
+      // removal of the prop.
+      'src/app/campaigns/[id]/page.tsx': 'deliver',
+      'src/components/forms/EnhancedCreateCharacterForm.tsx': 'consume',
     },
   },
   {

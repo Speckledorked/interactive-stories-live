@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { PBTA_STATS } from '@/lib/pbta-moves'
+import { parseAdvancementTrack } from '@/lib/game/advancementTrack'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
@@ -34,6 +35,12 @@ interface EnhancedCreateCharacterFormProps {
   // to the generic PBTA_STATS names when a campaign doesn't have them
   // (older campaigns, or generation failed).
   statLabels?: Partial<Record<keyof typeof PBTA_STATS, StatLabel>>
+  // The campaign's rank ladder (Campaign.advancementTrack, raw). When this
+  // universe has one, the wizard offers "where do they start" — an
+  // ESTABLISHED character may claim any declared rung and the capabilities
+  // to match; the server re-validates everything (resolveTierKey +
+  // resolveStartingCapabilities), so this is UI, not authority.
+  advancementTrack?: unknown
   onSuccess?: () => void
   onCancel?: () => void
 }
@@ -43,6 +50,7 @@ type TabKey = 'basics' | 'character' | 'stats' | 'equipment' | 'resources' | 'co
 export default function EnhancedCreateCharacterForm({
   campaignId,
   statLabels,
+  advancementTrack: advancementTrackRaw,
   onSuccess,
   onCancel
 }: EnhancedCreateCharacterFormProps) {
@@ -135,6 +143,31 @@ export default function EnhancedCreateCharacterForm({
   }
   const [archetypes, setArchetypes] = useState<ArchetypeCard[]>([])
   const [selectedArchetypeId, setSelectedArchetypeId] = useState<string | null>(null)
+
+  // Established-character start: which rung, and which capabilities they
+  // already command. Only offered when the campaign declares a ladder.
+  const track = parseAdvancementTrack(advancementTrackRaw)
+  const [startingTierKeyChoice, setStartingTierKeyChoice] = useState<string>('')
+  const [startingCapabilityIds, setStartingCapabilityIds] = useState<string[]>([])
+  const [pickableCapabilities, setPickableCapabilities] = useState<Array<{
+    id: string; name: string; domain: string; tier: number; description: string | null; prerequisiteIds: string[]
+  }>>([])
+
+  useEffect(() => {
+    if (!track) return
+    let cancelled = false
+    authenticatedFetch(`/api/campaigns/${campaignId}/capabilities`)
+      .then(res => (res.ok ? res.json() : { capabilities: [] }))
+      .then(data => {
+        if (!cancelled) setPickableCapabilities(data.capabilities || [])
+      })
+      .catch(() => {
+        // No list just means no picker — the server-side default (bottom
+        // rung, no loadout) is a complete character.
+      })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaignId])
 
   useEffect(() => {
     let cancelled = false
@@ -252,6 +285,10 @@ export default function EnhancedCreateCharacterForm({
           // Server-side archetype seeding: extra capability glimpses + the
           // starting tie (a Debt or faction standing) into the living world.
           archetypeId: selectedArchetypeId || undefined,
+          // Established start: a declared rung (or empty = bottom) and the
+          // capabilities already mastered. Both re-validated server-side.
+          advancementTier: startingTierKeyChoice || undefined,
+          startingCapabilityIds: startingCapabilityIds.length > 0 ? startingCapabilityIds : undefined,
         }),
       })
 
@@ -587,6 +624,105 @@ export default function EnhancedCreateCharacterForm({
                 This shapes what appears on your character sheet. An outsider starts with a nearly blank sheet and discovers this world&apos;s powers, arts, and secrets through the story itself.
               </p>
             </div>
+
+            {/* Established start — only when this universe declares a rank
+                ladder. A brand-new nobody is the default; an Iron adventurer
+                with essences already bound is equally legitimate, and the
+                server validates every claim against the campaign's declared
+                content (a rung must exist; capabilities respect slot-group
+                capacities and the prerequisite chain). */}
+            {track && track.tiers.length > 0 && (
+              <div>
+                <label htmlFor="startingTier" className="block text-sm font-medium text-myth-ink mb-1">
+                  Where do they start?
+                </label>
+                <Select
+                  id="startingTier"
+                  value={startingTierKeyChoice}
+                  onChange={(e) => setStartingTierKeyChoice(e.target.value)}
+                >
+                  {track.tiers.map((tier, i) => (
+                    <option key={tier.key} value={i === 0 ? '' : tier.key}>
+                      {tier.label}{i === 0 ? ' — just starting out' : ''}{tier.description ? ` — ${tier.description}` : ''}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-xs text-myth-ink-muted mt-1">
+                  An established character can begin higher up this world&apos;s ladder — the story will treat that standing as real, and so will everyone in it.
+                </p>
+
+                {pickableCapabilities.length > 0 && (
+                  <div className="mt-3">
+                    <span className="block text-sm font-medium text-myth-ink mb-1">
+                      Already mastered
+                    </span>
+                    <p className="text-xs text-myth-ink-muted mb-2">
+                      What can they already do when the story begins? Anything that builds on something else needs its foundation picked too.
+                      {track.slotGroups.map(group => {
+                        const filled = pickableCapabilities.filter(c => c.domain === group.domain && startingCapabilityIds.includes(c.id)).length
+                        return ` ${group.label}: ${filled}/${group.capacity}.`
+                      }).join('')}
+                    </p>
+                    <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-myth-border p-2">
+                      {pickableCapabilities.map(cap => {
+                        const checked = startingCapabilityIds.includes(cap.id)
+                        const group = track.slotGroups.find(g => g.domain === cap.domain)
+                        const groupFull = group
+                          ? pickableCapabilities.filter(c => c.domain === group.domain && startingCapabilityIds.includes(c.id)).length >= group.capacity
+                          : false
+                        return (
+                          <label key={cap.id} className="flex items-start gap-2 text-sm text-myth-ink">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={checked}
+                              disabled={!checked && groupFull}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  // Pull the prerequisite chain in with it —
+                                  // an established character earned the whole
+                                  // chain, and the server refuses gaps.
+                                  const withPrereqs = new Set(startingCapabilityIds)
+                                  const add = (id: string) => {
+                                    if (withPrereqs.has(id)) return
+                                    withPrereqs.add(id)
+                                    pickableCapabilities.find(c => c.id === id)?.prerequisiteIds.forEach(add)
+                                  }
+                                  add(cap.id)
+                                  setStartingCapabilityIds([...withPrereqs])
+                                } else {
+                                  // Dropping a foundation drops what stands on it.
+                                  const remaining = new Set(startingCapabilityIds.filter(id => id !== cap.id))
+                                  let changed = true
+                                  while (changed) {
+                                    changed = false
+                                    for (const id of [...remaining]) {
+                                      const node = pickableCapabilities.find(c => c.id === id)
+                                      if (node && node.prerequisiteIds.some(pr => !remaining.has(pr) && pickableCapabilities.some(c => c.id === pr))) {
+                                        remaining.delete(id)
+                                        changed = true
+                                      }
+                                    }
+                                  }
+                                  setStartingCapabilityIds([...remaining])
+                                }
+                              }}
+                            />
+                            <span>
+                              <span className="font-medium">{cap.name}</span>
+                              <span className="text-myth-ink-faint"> — {cap.domain}</span>
+                              {cap.description && (
+                                <span className="block text-xs text-myth-ink-muted">{cap.description}</span>
+                              )}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div>
               <label htmlFor="backstory" className="block text-sm font-medium text-myth-ink mb-1">

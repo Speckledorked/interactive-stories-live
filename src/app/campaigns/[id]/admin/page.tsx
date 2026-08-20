@@ -603,6 +603,13 @@ export default function AdminPage() {
             ? 'no corruption theme — this universe has no power-at-a-cost concept (that\'s a valid outcome)'
             : 'corruption theme already existed'
       )
+      parts.push(
+        data.advancementTrackSet
+          ? `advancement track: ${data.advancementTierCount} ranks`
+          : data.advancementTierCount === null
+            ? 'no advancement track — this universe has no rank ladder (that\'s a valid outcome)'
+            : 'advancement track already existed'
+      )
       alert(`Done: ${parts.join('; ')}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate world extras')

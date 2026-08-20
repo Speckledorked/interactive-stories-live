@@ -15,6 +15,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { Backpack, BarChart3, Coins, Handshake, HeartHandshake, Sparkles, Swords, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { activeTexts } from '@/lib/game/consequenceRecords'
+import { parseAdvancementTrack, tierProgress, slotProgress } from '@/lib/game/advancementTrack'
 
 interface CharacterSnapshotModalProps {
   characterId: string
@@ -42,6 +43,10 @@ interface CharacterData {
   consequences?: any
   relationships?: any
   moves?: string[]
+  advancementTier?: string | null
+  capabilitySummary?: { known?: Array<{ domain: string }> } | null
+  /** The campaign's ladder — see the character route's comment on why. */
+  campaign?: { advancementTrack?: unknown } | null
 }
 
 export default function CharacterSnapshotModal({
@@ -96,6 +101,13 @@ export default function CharacterSnapshotModal({
   // Parse stats
   const stats = character?.stats as Record<string, number> || {}
   const statEntries = Object.entries(stats)
+
+  // Progression, derived exactly as the full sheet derives it — same parser,
+  // same helpers, same null-is-an-answer rule. A universe with no ladder
+  // renders nothing here rather than an empty heading.
+  const advancementTrack = parseAdvancementTrack(character?.campaign?.advancementTrack)
+  const tier = tierProgress(advancementTrack, character?.advancementTier)
+  const slots = slotProgress(advancementTrack, (character?.capabilitySummary?.known || []).map(k => k.domain))
 
   // Parse consequences
   const consequences = character?.consequences as any || {}
@@ -203,6 +215,43 @@ export default function CharacterSnapshotModal({
                       <h3 className="text-sm font-medium uppercase tracking-wide text-myth-ink-faint mb-2">HARM</h3>
                       <HarmTracker current={character.harm} max={6} />
                     </div>
+
+                    {/* Advancement — compact. This is the in-play quick
+                        reference, so it states position and fill and stops
+                        there; the full sheet carries the same data with more
+                        room. Hidden entirely when the universe has no track,
+                        matching the sheet. */}
+                    {(tier || slots.length > 0) && (
+                      <div>
+                        <h3 className="text-sm font-medium uppercase tracking-wide text-myth-ink-faint mb-2">ADVANCEMENT</h3>
+                        {tier && (
+                          <div className="mb-2">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="text-sm font-medium text-myth-ink">{tier.label}</span>
+                              <span className="text-xs text-myth-ink-faint">
+                                {tier.next ? `next: ${tier.next}` : 'highest'}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex gap-1" aria-label={`Rank ${tier.index + 1} of ${tier.total}`}>
+                              {Array.from({ length: tier.total }).map((_, i) => (
+                                <div
+                                  key={i}
+                                  className={`h-1.5 flex-1 rounded-full ${i <= tier.index ? 'bg-myth-accent' : 'bg-myth-surface-sunken'}`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {slots.map(group => (
+                          <div key={group.key} className="mt-2 flex items-baseline justify-between gap-2">
+                            <span className="text-sm text-myth-ink-muted">{group.label}</span>
+                            <span className="text-xs font-medium text-myth-ink-faint">
+                              {group.filled}/{group.capacity}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Stats */}
                     {statEntries.length > 0 && (

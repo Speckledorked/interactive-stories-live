@@ -61,6 +61,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Stamp lastSeenAt. Until this line existed the column had readers and
+    // no writer anywhere — the friends page rendered "last seen" from a value
+    // nothing ever set, so every friend showed as plain "Offline" forever
+    // (confirmed in production: zero non-null values). Login is a coarse
+    // proxy for presence, but it is a TRUE one; a wrong-but-confident
+    // timestamp would be worse. Fire-and-forget: a presence stamp must never
+    // fail a login.
+    prisma.user
+      .update({ where: { id: user.id }, data: { lastSeenAt: new Date() } })
+      .catch((err) => console.error('lastSeenAt stamp failed (non-critical):', err))
+
     // Create JWT token
     const token = createToken({
       userId: user.id,

@@ -408,7 +408,7 @@ describe('Scene Resolver', () => {
 
       expect(result.success).toBe(true);
       expect(buildScenePrompt).toHaveBeenCalledWith(
-        expect.objectContaining({ sceneIntroText: mockScene.sceneIntroText, framing: undefined, location: undefined })
+        expect.objectContaining({ sceneIntroText: mockScene.sceneIntroText })
       );
       expect(enqueueSceneImageGeneration).toHaveBeenCalledWith(mockCampaignId, mockSceneId, 'a generated illustration prompt');
     });

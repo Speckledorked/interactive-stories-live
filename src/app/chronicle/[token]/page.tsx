@@ -16,7 +16,6 @@ import { SectionHeader } from '@/components/ui/section-header'
 
 interface ChronicleScene {
   sceneNumber: number
-  title: string | null
   introText: string
   resolutionText: string | null
 }
@@ -89,7 +88,7 @@ export default function PublicChroniclePage() {
               <article key={scene.sceneNumber} className="py-8 first:pt-0 last:pb-0">
                 <SectionHeader
                   as="h2"
-                  title={`Scene ${scene.sceneNumber}${scene.title ? ` — ${scene.title}` : ''}`}
+                  title={`Scene ${scene.sceneNumber}`}
                 />
                 <p className="mt-3 whitespace-pre-wrap leading-relaxed text-myth-ink">{scene.introText}</p>
                 {scene.resolutionText && (

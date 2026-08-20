@@ -25,55 +25,27 @@ beforeEach(() => {
 })
 
 describe('buildScenePrompt', () => {
-  it('prefers the resolved narration over framing/intro text', () => {
+  // framing and location are gone from these fixtures deliberately: both were
+  // Scene columns with no writer anywhere (dropped 20260820140000), so the
+  // tests that exercised "falls back to framing" and "Setting: note" were
+  // asserting behaviour no production input could ever produce — tests
+  // supplying the value production never does, which is the exact blind spot
+  // the column-wiring check exists for.
+  it('prefers the resolved narration over the intro text', () => {
     const prompt = buildScenePrompt({
       sceneIntroText: 'The party arrives at the gate.',
       sceneResolutionText: 'The gate splinters as the ram connects a third time.',
-      framing: 'A tense standoff at the city gate.',
-      location: 'Ashcrown Gate',
     })
     expect(prompt).toContain('The gate splinters as the ram connects a third time.')
     expect(prompt).not.toContain('The party arrives at the gate.')
   })
 
-  it('falls back to framing when there is no resolution text yet', () => {
+  it('falls back to the scene intro text when there is no resolution yet', () => {
     const prompt = buildScenePrompt({
       sceneIntroText: 'The party arrives at the gate.',
       sceneResolutionText: null,
-      framing: 'A tense standoff at the city gate.',
-      location: null,
-    })
-    expect(prompt).toContain('A tense standoff at the city gate.')
-  })
-
-  it('falls back to the scene intro text when nothing else is set', () => {
-    const prompt = buildScenePrompt({
-      sceneIntroText: 'The party arrives at the gate.',
-      sceneResolutionText: null,
-      framing: null,
-      location: null,
     })
     expect(prompt).toContain('The party arrives at the gate.')
-  })
-
-  it('includes the location as a setting note when present', () => {
-    const prompt = buildScenePrompt({
-      sceneIntroText: 'x',
-      sceneResolutionText: 'Something happens.',
-      framing: null,
-      location: 'Ashcrown Gate',
-    })
-    expect(prompt).toMatch(/^Setting: Ashcrown Gate\./)
-  })
-
-  it('omits the setting note entirely when there is no location', () => {
-    const prompt = buildScenePrompt({
-      sceneIntroText: 'x',
-      sceneResolutionText: 'Something happens.',
-      framing: null,
-      location: null,
-    })
-    expect(prompt).not.toMatch(/^Setting:/)
   })
 
   it('truncates an overlong narrative rather than sending an unbounded prompt', () => {
@@ -81,8 +53,6 @@ describe('buildScenePrompt', () => {
     const prompt = buildScenePrompt({
       sceneIntroText: 'x',
       sceneResolutionText: longNarrative,
-      framing: null,
-      location: null,
     })
     expect(prompt.length).toBeLessThan(2000)
     expect(prompt).toContain('…')
@@ -92,14 +62,12 @@ describe('buildScenePrompt', () => {
     const prompt = buildScenePrompt({
       sceneIntroText: 'x',
       sceneResolutionText: 'Something happens.',
-      framing: null,
-      location: null,
     })
     expect(prompt).toContain('Digital painting, atmospheric, cinematic lighting')
   })
 
   it('is deterministic for the same input', () => {
-    const scene = { sceneIntroText: 'x', sceneResolutionText: 'Something happens.', framing: null, location: 'Ashcrown Gate' }
+    const scene = { sceneIntroText: 'x', sceneResolutionText: 'Something happens.' }
     expect(buildScenePrompt(scene)).toBe(buildScenePrompt(scene))
   })
 })

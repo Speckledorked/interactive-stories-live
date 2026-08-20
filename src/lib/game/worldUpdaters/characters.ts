@@ -296,7 +296,12 @@ export async function applyCharacterChanges(
       continue
     }
 
-    const updateData: any = {}
+    // Typed as the real Prisma input, not `any`: the compiler catches a
+    // misspelled or mistyped column, and the column-wiring engine sees every
+    // `updateData.col = x` below as a first-class write. As `any`, these
+    // writes were invisible to both. Unchecked, because this code writes the
+    // locationId FK column directly rather than through the relation.
+    const updateData: Prisma.CharacterUncheckedUpdateInput = {}
 
     // #213: a dead character cannot take more harm, heal, gain/lose
     // conditions, be treated, rest, make a death save, sacrifice
@@ -389,7 +394,7 @@ export async function applyCharacterChanges(
       knowledgeChanged = true
     }
     if (knowledgeChanged) {
-      updateData.knownConcepts = { concepts: knownConcepts }
+      updateData.knownConcepts = { concepts: knownConcepts } as unknown as Prisma.InputJsonObject
     }
 
     // Apply harm damage (armor mitigates incoming damage) — prefers a
@@ -692,7 +697,7 @@ export async function applyCharacterChanges(
         permanentInjuries,
         deathSaves,
         conditionHistory
-      }
+      } as unknown as Prisma.InputJsonObject
       if (newIsAlive !== undefined) {
         updateData.isAlive = newIsAlive
       }
@@ -958,7 +963,7 @@ export async function applyCharacterChanges(
               currentHarm = healResult.newHarm
               harmMessages.push(`${character.name} uses ${removedItem.name}: ${healResult.message}`)
               updateData.harm = currentHarm
-              updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves, conditionHistory }
+              updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves, conditionHistory } as unknown as Prisma.InputJsonObject
             }
           }
         }
@@ -979,7 +984,7 @@ export async function applyCharacterChanges(
                 currentHarm = healResult.newHarm
                 harmMessages.push(`${character.name} uses ${Math.abs(modify.quantity_delta)}x ${item.name}: ${healResult.message}`)
                 updateData.harm = currentHarm
-                updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves, conditionHistory }
+                updateData.conditions = { ...harmState, conditions: currentConditions, permanentInjuries, deathSaves, conditionHistory } as unknown as Prisma.InputJsonObject
               }
             }
 

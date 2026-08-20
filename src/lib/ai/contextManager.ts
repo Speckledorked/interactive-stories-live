@@ -200,7 +200,9 @@ async function extractImportantMoments(
     if (importance !== 'normal') {
       importantMoments.push({
         sceneNumber: scene.sceneNumber,
-        title: scene.title || `Scene ${scene.sceneNumber}`,
+        // Scene.title never had a writer (dropped 20260820140000) — the
+        // fallback below was the only branch that ever ran.
+        title: `Scene ${scene.sceneNumber}`,
         summary: summarizeSceneText(scene.sceneResolutionText || ''),
         importance,
         relationshipChanges: extractRelationshipChangesFromScene(scene)

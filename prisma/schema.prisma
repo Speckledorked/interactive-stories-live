@@ -1925,10 +1925,7 @@ model Scene {
   id                  String      @id @default(cuid())
   campaignId          String
   sceneNumber         Int
-  title               String?
   sceneIntroText      String      @db.Text // required by createNewScene()
-  framing             String?     @db.Text // optional alternative, preserved
-  location            String?
   participants        Json?
   status              SceneStatus @default(AWAITING_ACTIONS)
   sceneResolutionText String?     @db.Text
@@ -2408,10 +2405,6 @@ model Message {
   // Phase 9: Mention detection
   mentionsUserIds Json?   @default("[]")
   hasMentions     Boolean @default(false)
-
-  // Phase 9: Sound triggers
-  triggerSound String?
-  soundVolume  Float?  @default(1.0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

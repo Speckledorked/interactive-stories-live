@@ -99,19 +99,50 @@ describe('parsing what the model returned', () => {
 describe('where a character stands', () => {
   const track = parseAdvancementTrack(HWFWM)!
 
-  it('reads an absent tier as the FIRST rung, not as an error', () => {
-    // "Unranked" is a real starting state, and a character created before the
-    // campaign had a track should look like a beginner, not a broken row.
-    expect(tierProgress(track, null)).toEqual({ label: 'Unranked', index: 0, total: 3, next: 'Iron' })
-    expect(tierProgress(track, undefined)?.index).toBe(0)
+  it('reports an absent tier as UNPLACED, never as the first rung', () => {
+    // This used to return index 0 and render the lowest rung, justified as
+    // "unranked is a real starting state". Two things were wrong with that.
+    //
+    // First, nothing wrote Character.advancementTier at all — two readers,
+    // zero writers — so index 0 was not a fallback, it was the ONLY value the
+    // sheet ever showed. Every character in every campaign displayed the
+    // bottom rank permanently, and the fallback is what made a dead column
+    // look like a working feature parked at the start.
+    //
+    // Second, it is a claim we cannot support even with a writer. See the
+    // ladder-that-starts-high case below.
+    expect(tierProgress(track, null)).toEqual({
+      label: 'Not yet ranked', index: -1, total: 3, next: 'Unranked', unplaced: true,
+    })
+    expect(tierProgress(track, undefined)?.unplaced).toBe(true)
   })
 
-  it('reads an unrecognised tier as the first rung for the same reason', () => {
-    expect(tierProgress(track, 'diamond')?.index).toBe(0)
+  it('reports an unrecognised tier as unplaced too', () => {
+    // A stored key the ladder does not declare is not evidence of a rank.
+    expect(tierProgress(track, 'diamond')?.unplaced).toBe(true)
+    expect(tierProgress(track, 'diamond')?.index).toBe(-1)
+  })
+
+  it('does not report a veteran as holding the lowest rung of a ladder that starts high', () => {
+    // The generator is ASKED to make the lowest rung the brand-new state, but
+    // a prompt is not a guarantee. If a ladder starts at Iron, mapping "no
+    // record" onto index 0 tells every existing character they are Iron — a
+    // rank nobody earned, rendered as a confident filled bar.
+    const startsHigh = parseAdvancementTrack({
+      tiers: [{ key: 'iron', label: 'Iron' }, { key: 'bronze', label: 'Bronze' }],
+      slotGroups: [],
+    })!
+    const progress = tierProgress(startsHigh, null)
+    expect(progress?.label).not.toBe('Iron')
+    expect(progress?.unplaced).toBe(true)
+    // Nothing filled: `i <= -1` is false for every segment.
+    expect(progress?.index).toBe(-1)
   })
 
   it('locates a real tier and names what comes next', () => {
-    expect(tierProgress(track, 'iron')).toEqual({ label: 'Iron', index: 1, total: 3, next: 'Bronze' })
+    expect(tierProgress(track, 'iron')).toEqual({
+      label: 'Iron', index: 1, total: 3, next: 'Bronze', unplaced: false,
+    })
   })
 
   it('reports no next rung at the top', () => {

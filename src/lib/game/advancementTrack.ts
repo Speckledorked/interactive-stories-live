@@ -178,13 +178,27 @@ export function classifyAdvancementTrack(
 }
 
 export interface TierProgress {
+  /** What to show: a rung's label, or the not-yet-placed reading. */
   label: string
-  /** 0-based position on the ladder. */
+  /**
+   * 0-based position on the ladder, or -1 when the character has not been
+   * placed on it at all. -1 is not "before the first rung" — it means we have
+   * no record, which is a different claim.
+   */
   index: number
   total: number
   /** The next rung, when there is one. */
   next: string | null
+  /** True when nothing has recorded this character's rank. */
+  unplaced: boolean
 }
+
+/**
+ * Shown when a character has no recorded rank. Deliberately not a rung name:
+ * the ladder's own lowest rung is a claim about the fiction, and "we have not
+ * recorded this" is a claim about our data.
+ */
+export const UNPLACED_TIER_LABEL = 'Not yet ranked'
 
 /**
  * Where a character stands on the ladder.
@@ -196,13 +210,66 @@ export interface TierProgress {
 export function tierProgress(track: AdvancementTrack | null, tierKey: string | null | undefined): TierProgress | null {
   if (!track || track.tiers.length === 0) return null
   const found = tierKey ? track.tiers.findIndex((t) => t.key.toLowerCase() === tierKey.toLowerCase()) : -1
-  const index = found >= 0 ? found : 0
-  return {
-    label: track.tiers[index].label,
-    index,
-    total: track.tiers.length,
-    next: index + 1 < track.tiers.length ? track.tiers[index + 1].label : null,
+  if (found < 0) {
+    // Previously this fell back to index 0 and rendered the lowest rung. That
+    // was a claim we had no basis for, and with nothing writing
+    // advancementTier it was the ONLY thing the sheet ever showed: every
+    // character in every campaign displayed the bottom rank, permanently,
+    // regardless of the fiction. The fallback made a dead column look like a
+    // working feature parked at the start.
+    //
+    // It is also wrong even with a writer. The prompt asks for the lowest rung
+    // to be the brand-new state, but a prompt is not a guarantee — if a
+    // generated ladder starts at "Iron", mapping "no record" onto index 0
+    // reports every veteran as Iron, a rank nobody earned.
+    return {
+      label: UNPLACED_TIER_LABEL,
+      index: -1,
+      total: track.tiers.length,
+      next: track.tiers[0].label,
+      unplaced: true,
+    }
   }
+  return {
+    label: track.tiers[found].label,
+    index: found,
+    total: track.tiers.length,
+    next: found + 1 < track.tiers.length ? track.tiers[found + 1].label : null,
+    unplaced: false,
+  }
+}
+
+/**
+ * The key a brand-new character starts on, when the campaign has a ladder.
+ *
+ * This is the one case where the lowest rung is the right answer WITHOUT
+ * trusting the model's ordering: a character being created has not done
+ * anything yet, so whatever the bottom of this world's ladder is called, they
+ * are on it. Seeding at creation is a real fact; inferring it at render time
+ * for an arbitrary character is not.
+ */
+export function startingTierKey(track: AdvancementTrack | null): string | null {
+  if (!track || track.tiers.length === 0) return null
+  return track.tiers[0].key
+}
+
+/**
+ * Resolve a model-proposed rank to a declared rung, or null.
+ *
+ * Closed shape, same discipline as worldRules: the ladder is the campaign's,
+ * and the GM may move a character ALONG it but never invent a rung. A tier the
+ * track does not declare is dropped rather than stored, because a stored
+ * unknown key renders as "not yet ranked" forever — silently undoing the
+ * promotion the fiction just narrated.
+ */
+export function resolveTierKey(track: AdvancementTrack | null, proposed: unknown): string | null {
+  if (!track || typeof proposed !== 'string') return null
+  const wanted = proposed.trim().toLowerCase()
+  if (!wanted) return null
+  const hit = track.tiers.find(
+    (t) => t.key.toLowerCase() === wanted || t.label.toLowerCase() === wanted
+  )
+  return hit ? hit.key : null
 }
 
 export interface SlotProgress {

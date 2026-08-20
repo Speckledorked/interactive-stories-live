@@ -14,6 +14,7 @@ import { decideSeedStates } from '@/lib/game/capabilities'
 import { getTemplate } from '@/lib/templates/campaign-templates'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
 import { ensureContactNpcStubs } from '@/lib/wiki/contactNpcStubs'
+import { parseAdvancementTrack, startingTierKey } from './advancementTrack'
 
 export interface CreateCharacterBody {
   name: string
@@ -75,6 +76,26 @@ export async function createCharacter(campaignId: string, userId: string, body: 
   // uses for a PC's reported movement.
   const locationId = await resolveOrCreateLocationId(prisma, campaignId, body.currentLocation, true)
 
+  // Place a new character on the bottom rung of this world's ladder, when it
+  // has one.
+  //
+  // This is the ONE case where the lowest rung is the right answer without
+  // trusting the generator's ordering: a character being created has done
+  // nothing yet, so whatever the bottom is called, they are on it. Doing the
+  // same inference at RENDER time — which is what tierProgress used to do for
+  // any null tier — is not equivalent: it claimed a rank for every existing
+  // character too, including veterans of campaigns that had no ladder when
+  // they were made.
+  //
+  // Existing characters stay null and read as "not yet ranked" until the
+  // fiction places them, which the GM can now do because the ladder reaches
+  // the scene prompt.
+  const campaignTrack = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { advancementTrack: true },
+  })
+  const advancementTier = startingTierKey(parseAdvancementTrack(campaignTrack?.advancementTrack))
+
   const character = await prisma.character.create({
     data: {
       campaignId,
@@ -96,6 +117,9 @@ export async function createCharacter(campaignId: string, userId: string, body: 
       resources: body.resources || undefined,
       perks: body.perks || undefined,
       consequences: body.consequences || undefined,
+      // null when this universe has no ladder — the column stays meaningfully
+      // empty rather than being stamped with a rank that does not exist.
+      advancementTier,
     },
   })
 

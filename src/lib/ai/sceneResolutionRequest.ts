@@ -18,6 +18,7 @@ import { isEvolutionEligible } from '@/lib/game/advancement'
 import { buildOptimizedWorldSummary, buildWorldSummaryForAI } from './worldSummary'
 import { applyTokenBudget } from './tokenBudget'
 import { parseSceneProgressState } from '@/lib/game/worldUpdaters/sceneProgress'
+import { parseAdvancementTrack, tierProgress } from '@/lib/game/advancementTrack'
 
 // Backstop: a real scene reported stuck at 60 exchanges despite
 // scenePrompt.ts's urgent <pacing> tier being a "HARD REQUIREMENT" for
@@ -458,6 +459,23 @@ export async function buildSceneResolutionRequest(
   // section) and each character's qualitative stage. The summary builders
   // don't carry raw corruption values, but entities.characters are the
   // unfiltered rows — match by id. No theme = the track doesn't exist here.
+  // Advancement: attach the campaign's ladder (gates the <advancement> prompt
+  // section) and each character's position on it. Without both halves the GM
+  // cannot narrate a promotion, which is why nothing ever wrote
+  // Character.advancementTier — the model was never told the ladder existed.
+  const advancementTrack = parseAdvancementTrack(campaign.advancementTrack)
+  if (advancementTrack && advancementTrack.tiers.length > 0) {
+    for (const summaryCharacter of worldSummaryWithMemories.characters as any[]) {
+      const raw = entities.characters.find((rc: any) => rc.id === summaryCharacter.id)
+      const progress = tierProgress(advancementTrack, raw?.advancementTier)
+      if (progress) {
+        summaryCharacter.advancement_status = progress.unplaced
+          ? `${progress.label} (lowest rung is ${progress.next})`
+          : progress.label
+      }
+    }
+  }
+
   const corruptionTheme = parseCorruptionTheme(campaign.corruptionTheme)
   let corruptionThemeForPrompt: AIGMRequest['corruption_theme'] = corruptionTheme
   if (corruptionTheme) {
@@ -521,6 +539,12 @@ export async function buildSceneResolutionRequest(
     world_summary: budgeted.worldSummary,
     current_scene_intro: budgeted.currentSceneIntro,
     corruption_theme: corruptionThemeForPrompt,
+    // Only the rungs — descriptions included, slot groups omitted: slots are
+    // counted from capabilities the GM already sees, so shipping them here
+    // would be a second copy of a fact with no channel to change it.
+    advancement_track: advancementTrack && advancementTrack.tiers.length > 0
+      ? { tiers: advancementTrack.tiers }
+      : null,
     safety_lines: safetySettings?.lines ?? [],
     safety_veils: safetySettings?.veils ?? [],
     player_actions: playerActions,

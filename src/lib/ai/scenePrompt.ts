@@ -502,6 +502,23 @@ ${guidance[band]}
 </outcome_band_pacing>`
 }
 
+function buildAdvancementSection(track: AIGMRequest['advancement_track']): string {
+  if (!track || track.tiers.length === 0) return ''
+  const ladder = track.tiers.map((t, i) => `${i + 1}. ${t.label} (key: ${t.key})${t.description ? ` — ${t.description}` : ''}`).join('\n')
+  return `
+<advancement>
+This world has a NAMED RANK LADDER. These are its rungs, lowest first:
+${ladder}
+
+- A character's current rank is shown on their line as "Rank: X", or "Rank: not yet ranked" when nothing has placed them yet. Not-yet-ranked is the honest default for characters who existed before this ladder was recorded — it is not a claim that they are a beginner
+- Report a change with {"advancement_tier": "key-or-label"} inside that character's pc_changes, ONLY when the fiction actually establishes it: a rank is conferred, tested for, formally recognised, or lost. A character growing more capable is not a promotion
+- Use ONLY the rungs listed above, by key or exact label. Anything else is DROPPED by the engine and the promotion you narrated will not stick
+- Placing an unranked veteran is legitimate and encouraged the first time their standing comes up in the fiction — say what they are, then report it
+- Ranks may go DOWN. Stripped, demoted, disgraced — report the lower rung the same way
+</advancement>
+`
+}
+
 function buildCorruptionSection(theme: AIGMRequest['corruption_theme']): string {
   return theme ? `
 <corruption>
@@ -634,6 +651,7 @@ ${buildOutcomeBandSection(selectPrimaryOutcomeBand(request.action_mechanics ?? [
 
 ${CAPABILITIES_SECTION}
 ${buildCorruptionSection(request.corruption_theme)}
+${buildAdvancementSection(request.advancement_track)}
 ${buildSafetySection(request.safety_lines, request.safety_veils)}
 
 ${NPC_TRACKING}
@@ -727,6 +745,14 @@ function buildCharactersSection(characters: WorldSummary['characters']): string 
         ...c.debts.owedToCharacter.map(d => `${d.counterparty} owes ${c.name} (${d.description})`),
       ]
       parts.push(`Debts: ${debtLines.join('; ')}`)
+    }
+
+    // Rank: where this character stands on the campaign's ladder — see
+    // <advancement>. Stated even when unplaced, because "nothing has recorded
+    // a rank for them" is exactly the case the GM should notice and resolve
+    // in the fiction, and an omitted line reads as "this world has no ranks".
+    if (c.advancement_status) {
+      parts.push(`Rank: ${c.advancement_status}`)
     }
 
     // Corruption: qualitative stage only — see <corruption>.

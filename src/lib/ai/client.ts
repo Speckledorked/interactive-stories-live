@@ -129,6 +129,9 @@ export interface AIGMResponse {
           direction?: 'owed_by_character' | 'owed_to_character'
         }>
         consequences_remove?: string[] // Descriptions of consequences to remove
+        // A rung from the campaign's declared ladder. Closed shape: the GM
+        // moves a character ALONG the ladder, never invents a rung.
+        advancement_tier?: string
         // Physical appearance changes (scars, lost limbs, etc.)
         appearance_changes?: {
           description: string // New or updated appearance text
@@ -409,6 +412,8 @@ export interface AIGMRequest {
       // Qualitative corruption state — only set when the campaign has a
       // corruption theme (see lib/game/corruption.ts). Never a raw number.
       corruption_status?: string
+      /** Rung label, or the not-yet-ranked reading. See <advancement>. */
+      advancement_status?: string
       // True when accumulated stress (lib/game/stress.ts) plus available
       // perk/move arc budget make a perk/move evolution offer eligible
       // this scene — see advancement.ts's isEvolutionEligible. Never the
@@ -540,6 +545,16 @@ export interface AIGMRequest {
   // prompt cost.
   safety_lines?: string[]
   safety_veils?: string[]
+  // The campaign's rank ladder, when this universe has one. Gates the
+  // <advancement> prompt section and the advancement_tier response channel.
+  //
+  // Without this the GM could not see the ladder at all: it was generated,
+  // stored and rendered on the sheet, but never reached the model resolving
+  // scenes — so nothing could ever narrate a promotion, and nothing wrote
+  // Character.advancementTier. The sheet showed a rank derived from no data.
+  advancement_track?: {
+    tiers: Array<{ key: string; label: string; description?: string }>
+  } | null
   player_actions: Array<{
     character_name: string
     character_id: string

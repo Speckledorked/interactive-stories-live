@@ -298,6 +298,12 @@ export const PCChangesSchema = z.object({
     relationship_changes: z.array(RelationshipChangeSchema).optional(),
     consequences_add: z.array(ConsequenceAddSchema).optional(),
     consequences_remove: z.array(z.string()).optional(),
+    // A rung from the campaign's declared rank ladder, by key or label.
+    // Validated against the track before it is stored (resolveTierKey) — an
+    // undeclared rung is dropped, because storing an unknown key renders as
+    // "not yet ranked" forever and silently undoes the promotion the fiction
+    // just narrated.
+    advancement_tier: z.string().max(40).optional(),
     appearance_changes: z.object({
       description: z.string().max(MEDIUM_TEXT),
       append: z.boolean().optional()

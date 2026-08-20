@@ -118,7 +118,7 @@ describe('applyWorldUpdates — delegation', () => {
     // appliedAt/grantedTurn and the rest of applyCharacterChanges' JSON
     // blobs are scene-scoped and compared against this same counter on read.
     expect(applyCharacterChanges).toHaveBeenCalledWith(
-      tx, 'camp1', 42, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), true, []
+      tx, 'camp1', 42, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), expect.any(Function), true, []
     )
   })
 
@@ -205,7 +205,7 @@ describe('applyWorldUpdates — sceneOrigin (fog of war) threading', () => {
     expect(applyFactionChanges).toHaveBeenCalledWith(tx, 'camp1', expect.anything(), expect.anything(), false)
     expect(applyLocationChanges).toHaveBeenCalledWith(tx, 'camp1', expect.anything(), false)
     expect(applyCharacterChanges).toHaveBeenCalledWith(
-      tx, 'camp1', 1, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), false, []
+      tx, 'camp1', 1, expect.anything(), expect.anything(), expect.anything(), expect.any(Function), expect.any(Function), false, []
     )
   })
 

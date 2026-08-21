@@ -889,6 +889,7 @@ export default function CampaignLobbyPage() {
             <EnhancedCreateCharacterForm
               campaignId={campaignId}
               statLabels={campaign.statLabels}
+              advancementTrack={campaign.advancementTrack}
               onSuccess={() => {
                 setShowCreateCharacter(false)
                 // Refresh characters list after creating a new one

@@ -14,10 +14,30 @@ import { decideSeedStates } from '@/lib/game/capabilities'
 import { getTemplate } from '@/lib/templates/campaign-templates'
 import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
 import { ensureContactNpcStubs } from '@/lib/wiki/contactNpcStubs'
-import { parseAdvancementTrack, startingTierKey } from './advancementTrack'
+import { parseAdvancementTrack, resolveTierKey, startingTierKey, type AdvancementTrack } from './advancementTrack'
+import { UNLOCK_STARTING_PROFICIENCY } from '@/lib/game/capabilities'
 
 export interface CreateCharacterBody {
   name: string
+  // Where this character starts on the campaign's rank ladder, by rung key
+  // or label. An ESTABLISHED character is a legitimate concept — an Iron
+  // adventurer with essences already bound, or higher — so any DECLARED rung
+  // may be claimed. The closed shape still holds: the value is resolved
+  // against the campaign's track (resolveTierKey) and never stored raw, so
+  // you can claim Diamond but not "Cosmic Overlord". Absent or unresolvable
+  // falls back to the lowest rung, which stays the default for a brand-new
+  // character. Same trust model as archetypeId below: the client picks among
+  // campaign-generated content, the server validates membership.
+  advancementTier?: string
+  // Capabilities this character already commands when the story begins —
+  // the "essences already bound" half of an established concept. Validated
+  // against the campaign scaffold (see validateStartingCapabilities): ids
+  // must be campaign-scoped and neither secret nor shadow; slot-group
+  // capacities bound the count per domain; the prerequisite DAG must be
+  // respected within the selected set. Each becomes UNLOCKED at the same
+  // proficiency an in-play unlock grants — established, not legendary; the
+  // story is where mastery grows.
+  startingCapabilityIds?: string[]
   // Origin archetype card picked in the creation wizard, if any — seeds
   // extra capability glimpses and a starting tie (Debt/faction standing).
   archetypeId?: string
@@ -64,6 +84,76 @@ export interface CreateCharacterBody {
   }
 }
 
+/**
+ * The starting loadout was rejected. The route maps this to a 400 with the
+ * message intact — these are player-fixable problems (too many essences, a
+ * capstone without its foundation), not server errors.
+ */
+export class StartingLoadoutError extends Error {}
+
+/**
+ * Validate a player-declared starting loadout against the campaign.
+ *
+ * Returns the ids to seed as UNLOCKED. Three layers, none invented here:
+ *
+ * - Visibility: only campaign-scoped, non-secret, non-shadow nodes exist as
+ *   far as creation is concerned — the same surface glimpse seeding exposes.
+ *   Shadow arts additionally require corruption >= tier to unlock IN PLAY,
+ *   and a fresh character has zero corruption, so starting with one would
+ *   bypass a gate the engine enforces everywhere else. Ineligible ids are
+ *   dropped silently, matching the archetype-glimpse path: the client should
+ *   never have offered them, and telling a player "you may not have the
+ *   thing you cannot see" leaks that it exists.
+ * - Slot-group capacity: the generator declared how many essences (or spell
+ *   schools, covenant marks) this world allows; a loadout cannot start past
+ *   a capacity the fiction itself states. Refused loudly, by group name.
+ * - Prerequisite closure: the #372 DAG holds at creation exactly as it holds
+ *   in play — a selected node's prerequisites must be in the selection too.
+ *   An established character earned the whole chain, not just its capstone.
+ */
+export async function resolveStartingCapabilities(
+  campaignId: string,
+  track: AdvancementTrack | null,
+  requestedIds: string[] | undefined
+): Promise<string[]> {
+  if (!requestedIds || requestedIds.length === 0) return []
+  const unique = [...new Set(requestedIds.filter((id) => typeof id === 'string' && id))]
+  if (unique.length === 0) return []
+
+  const eligible = await prisma.campaignCapability.findMany({
+    where: { campaignId, id: { in: unique }, isSecret: false, isShadow: false },
+    select: {
+      id: true,
+      name: true,
+      domain: true,
+      prerequisites: { select: { prerequisiteCapabilityId: true, prerequisite: { select: { name: true } } } },
+    },
+  })
+  const selected = new Set(eligible.map((c) => c.id))
+
+  for (const node of eligible) {
+    for (const prereq of node.prerequisites) {
+      if (!selected.has(prereq.prerequisiteCapabilityId)) {
+        throw new StartingLoadoutError(
+          `"${node.name}" builds on "${prereq.prerequisite.name}" — an established character earned ` +
+            `the whole chain, so include it in the starting loadout too.`
+        )
+      }
+    }
+  }
+
+  for (const group of track?.slotGroups ?? []) {
+    const inGroup = eligible.filter((c) => c.domain === group.domain).length
+    if (inGroup > group.capacity) {
+      throw new StartingLoadoutError(
+        `${inGroup} starting capabilities in ${group.label}, but this world allows ${group.capacity}.`
+      )
+    }
+  }
+
+  return eligible.map((c) => c.id)
+}
+
 export async function createCharacter(campaignId: string, userId: string, body: CreateCharacterBody) {
   const originFamiliarity: OriginFamiliarity =
     body.originFamiliarity && ['NATIVE', 'NEWCOMER', 'OUTSIDER'].includes(body.originFamiliarity)
@@ -94,7 +184,18 @@ export async function createCharacter(campaignId: string, userId: string, body: 
     where: { id: campaignId },
     select: { advancementTrack: true },
   })
-  const advancementTier = startingTierKey(parseAdvancementTrack(campaignTrack?.advancementTrack))
+  const track = parseAdvancementTrack(campaignTrack?.advancementTrack)
+  // A claimed rung resolves against the declared ladder or falls back to the
+  // bottom — never stored raw, never invented. Ladderless campaigns stay null.
+  const advancementTier = resolveTierKey(track, body.advancementTier) ?? startingTierKey(track)
+
+  // Validate the starting-capability selection BEFORE creating anything, so a
+  // rejected loadout leaves no half-made character behind.
+  const startingCapabilities = await resolveStartingCapabilities(
+    campaignId,
+    track,
+    body.startingCapabilityIds
+  )
 
   const character = await prisma.character.create({
     data: {
@@ -123,9 +224,38 @@ export async function createCharacter(campaignId: string, userId: string, body: 
     },
   })
 
+  // Established-character loadout: capabilities the player declared as part
+  // of who this character already is. Seeded FIRST and as UNLOCKED, before
+  // the glimpse seeding below — both writes share the (characterId,
+  // capabilityId) unique key and glimpse seeding uses skipDuplicates, so
+  // this order means an already-mastered node is never shadowed down to a
+  // glimpse. Proficiency is the same floor an in-play unlock grants: an
+  // Iron veteran can do these things; the story hasn't tested them yet.
+  if (startingCapabilities.length > 0) {
+    try {
+      await prisma.characterCapability.createMany({
+        data: startingCapabilities.map((id) => ({
+          characterId: character.id,
+          capabilityId: id,
+          state: 'UNLOCKED' as const,
+          proficiency: UNLOCK_STARTING_PROFICIENCY,
+          unlockedAt: new Date(),
+          source: 'Part of who they were before the story began',
+        })),
+        skipDuplicates: true,
+      })
+      console.log(`⚔️ Seeded ${startingCapabilities.length} established capabilities for ${body.name}`)
+    } catch (loadoutError) {
+      // Non-critical after validation passed: the character exists; a missed
+      // loadout row reads as "not yet shown in the fiction".
+      console.error('Failed to seed starting capabilities:', loadoutError)
+    }
+  }
+
   // Knowledge-relative sheet seeding: what this character already knows
-  // EXISTS in this universe, by origin (never what they can do — nothing
-  // seeds UNLOCKED; ability comes from the fiction).
+  // EXISTS in this universe, by origin. Familiarity and archetype seeding
+  // only ever create GLIMPSED rows — UNLOCKED at creation comes solely from
+  // the validated starting loadout above.
   try {
     const scaffold = await prisma.campaignCapability.findMany({
       where: { campaignId },

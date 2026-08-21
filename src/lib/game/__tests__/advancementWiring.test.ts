@@ -69,16 +69,29 @@ describe('the rank a character holds can actually change', () => {
     expect(REQUEST).toMatch(/advancement_status/)
   })
 
-  it('a new character is placed on the bottom rung at creation', () => {
+  it('a new character defaults to the bottom rung, and may claim any declared one', () => {
+    // The default is still the lowest rung — a brand-new nobody needs no
+    // input. But an ESTABLISHED character is equally legitimate (an Iron
+    // adventurer with essences already bound, a Diamond, a half-
+    // transcendent), so the body may claim a rung. This test's previous
+    // version asserted the opposite ("a client-supplied tier would let
+    // anyone start at the top" — which is now the point, not the threat):
+    // the third test this week found encoding a policy as an invariant.
     expect(CREATION).toMatch(/startingTierKey\(/)
     expect(CREATION).toMatch(/advancementTier,/)
+    expect(CREATION).toMatch(/body\.advancementTier/)
   })
 
-  it('creation reads the ladder from the campaign, not from the request body', () => {
-    // A client-supplied tier would let anyone start at the top.
+  it('a claimed rung is resolved against the campaign ladder, never stored raw', () => {
+    // The security property that SURVIVES the policy change: nothing
+    // arbitrary is ever written. You may claim Diamond; you may not claim
+    // "Cosmic Overlord". resolveTierKey returns null for an undeclared rung
+    // and the fallback places the character at the bottom.
     const seed = CREATION.slice(CREATION.indexOf('const campaignTrack'), CREATION.indexOf('prisma.character.create'))
     expect(seed).toMatch(/prisma\.campaign\.findUnique/)
-    expect(seed).not.toMatch(/body\.advancementTier/)
+    expect(seed).toMatch(/resolveTierKey\(track, body\.advancementTier\)/)
+    // The raw body value must never be a fallback of its own.
+    expect(seed).not.toMatch(/\?\?\s*body\.advancementTier/)
   })
 
   it('does not re-infer a starting rung at render time', () => {

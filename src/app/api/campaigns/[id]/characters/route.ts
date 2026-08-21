@@ -6,7 +6,7 @@ import { validateStats } from '@/lib/game/advancement'
 import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import { recordEvent } from '@/lib/analytics/events'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
-import { createCharacter, type CreateCharacterBody } from '@/lib/game/characterCreation'
+import { createCharacter, StartingLoadoutError, type CreateCharacterBody } from '@/lib/game/characterCreation'
 
 export async function POST(
   request: NextRequest,
@@ -61,6 +61,12 @@ export async function POST(
 
     return NextResponse.json({ character })
   } catch (error) {
+    // A rejected starting loadout is the player's to fix, not a server
+    // fault: too many essences for this world's declared capacity, or a
+    // capstone claimed without its foundation. The message says which.
+    if (error instanceof StartingLoadoutError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     console.error('Create character error:', error)
     return NextResponse.json(
       { error: 'Failed to create character' },

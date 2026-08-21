@@ -78,13 +78,15 @@ describe('startingTierKey', () => {
     expect(startingTierKey(parseAdvancementTrack({ tiers: [], slotGroups: [{ key: 'e', label: 'E', capacity: 2, domain: 'd' }] }))).toBeNull()
   })
 
-  it('is only correct at CREATION, which is why it is a separate function', () => {
-    // A character being created has done nothing yet, so whatever this
-    // world's bottom rung is called, they are on it — that is a fact, not an
-    // inference. The same reasoning does NOT transfer to an arbitrary
-    // character with a null tier, which is the conflation that made every
-    // existing character render as a beginner. tierProgress deliberately does
-    // not call this.
+  it('is the creation DEFAULT, which is why it is a separate function', () => {
+    // The default for a character created with no claimed rank: whatever
+    // this world's bottom rung is called, that is where a brand-new nobody
+    // starts. An ESTABLISHED character may claim a higher declared rung at
+    // creation instead (resolved via resolveTierKey — see characterCreation).
+    // Either way the reasoning does NOT transfer to an arbitrary character
+    // with a null tier at RENDER time, which is the conflation that made
+    // every existing character render as a beginner. tierProgress
+    // deliberately does not call this.
     const startsHigh = parseAdvancementTrack({
       tiers: [{ key: 'iron', label: 'Iron' }, { key: 'bronze', label: 'Bronze' }],
       slotGroups: [],

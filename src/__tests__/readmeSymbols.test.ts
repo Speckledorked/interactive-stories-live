@@ -78,6 +78,13 @@ const DELIBERATELY_ABSENT: Record<string, string> = {
   // The keyword classifier the AI move-classifier replaced.
   extractTagsFromAction: 'keyword guesswork, replaced by the classifier',
 
+  // #461: one of five columns the schema-wide column-wiring check's first
+  // clean-tree run found with zero production values and no writer.
+  // Message.triggerSound/title/framing/location are also gone but each
+  // collides with a live symbol of the same bare name elsewhere in the
+  // codebase, so only this one actually needs the entry.
+  soundVolume: 'Message column dropped by #461 — read by nothing, written by nothing',
+
   // AIResponseCache and its pattern-template machinery, deleted whole.
   matchPattern: 'part of the deleted response-cache pattern templates',
   skipCache: 'option became meaningless once the cache was deleted',

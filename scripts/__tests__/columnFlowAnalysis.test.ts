@@ -226,6 +226,34 @@ describe('write detection', () => {
     expect(usage(a, 'WidgetPart.label').writers).toHaveLength(1)
   })
 
+  it('unwraps nested update/updateMany/createMany instead of treating the where/data wrapper as the payload', () => {
+    // Prisma wraps a to-many relation's nested `update`/`updateMany` as
+    // { where?, data } and nested `createMany` as { data: [...],
+    // skipDuplicates? } — passing that wrapper straight to walkWrite matched
+    // none of WidgetPart's columns (no field is named "where"/"data"), so the
+    // write silently vanished. Found by adversarial audit of this engine
+    // itself: none of its own tests exercised the wrapped nested shapes,
+    // only nested `create`'s direct (unwrapped) one.
+    const a = analyze({
+      '/src/nestedWrapped.ts': `
+        import { prisma } from '@prisma/client'
+        export async function go() {
+          await prisma.widget.update({
+            where: { id: '1' },
+            data: {
+              parts: {
+                update: { where: { id: 'p1' }, data: { label: 'renamed' } },
+                updateMany: { where: { widgetId: '1' }, data: { label: 'bulk-renamed' } },
+                createMany: { data: [{ label: 'batch' }], skipDuplicates: true },
+              },
+            },
+          })
+        }
+      `,
+    })
+    expect(usage(a, 'WidgetPart.label').writers.length).toBeGreaterThanOrEqual(3)
+  })
+
   it('records an opaque write for a variable payload, not nothing', () => {
     const a = analyze({
       '/src/opaque.ts': `

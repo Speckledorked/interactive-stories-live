@@ -54,12 +54,19 @@ const TRACK = parseAdvancementTrack({
   slotGroups: [{ key: 'essences', label: 'Essences', capacity: 2, domain: 'Essence Magic' }],
 })
 
-function node(id: string, domain = 'Essence Magic', prereqs: Array<{ id: string; name: string }> = []) {
+function node(
+  id: string,
+  domain = 'Essence Magic',
+  prereqs: Array<{ id: string; name: string; isSecret?: boolean; isShadow?: boolean }> = []
+) {
   return {
     id,
     name: id,
     domain,
-    prerequisites: prereqs.map((p) => ({ prerequisiteCapabilityId: p.id, prerequisite: { name: p.name } })),
+    prerequisites: prereqs.map((p) => ({
+      prerequisiteCapabilityId: p.id,
+      prerequisite: { name: p.name, isSecret: !!p.isSecret, isShadow: !!p.isShadow },
+    })),
   }
 }
 
@@ -116,6 +123,42 @@ describe('resolveStartingCapabilities', () => {
     ])
     await expect(resolveStartingCapabilities('camp1', TRACK, ['battle-alchemy'])).rejects.toThrow(
       /"battle-alchemy" builds on "Alchemy"/
+    )
+  })
+
+  it('tells the player to select a missing but pickable foundation', async () => {
+    db.campaignCapability.findMany.mockResolvedValue([
+      node('battle-alchemy', 'Swordplay', [{ id: 'alchemy', name: 'Alchemy' }]),
+    ])
+    await expect(resolveStartingCapabilities('camp1', TRACK, ['battle-alchemy'])).rejects.toThrow(
+      /include it in the starting loadout too/
+    )
+  })
+
+  it('tells the player to earn a secret foundation in play instead, not to select it', async () => {
+    // A visible node can rest on a secret/shadow prerequisite — nothing
+    // upstream of resolvePrerequisiteLinks enforces monotonic secrecy along
+    // the DAG. That prerequisite is filtered out of `eligible` by the same
+    // isSecret/isShadow check every visibility rule in this file uses, so no
+    // value the player could put in `startingCapabilityIds` would ever make
+    // it appear there — "include it" is advice they can never act on. The
+    // capabilities route's own header comment claims "the server check
+    // yields the honest error either way"; this is the branch that makes
+    // that actually true instead of just asserted.
+    db.campaignCapability.findMany.mockResolvedValue([
+      node('battle-alchemy', 'Swordplay', [{ id: 'forbidden-alchemy', name: 'Forbidden Alchemy', isSecret: true }]),
+    ])
+    await expect(resolveStartingCapabilities('camp1', TRACK, ['battle-alchemy'])).rejects.toThrow(
+      /hasn't revealed yet[\s\S]*Earn it in play first/
+    )
+  })
+
+  it('gives the same earn-it-in-play message for a shadow foundation', async () => {
+    db.campaignCapability.findMany.mockResolvedValue([
+      node('battle-alchemy', 'Swordplay', [{ id: 'blood-rite', name: 'Blood Rite', isShadow: true }]),
+    ])
+    await expect(resolveStartingCapabilities('camp1', TRACK, ['battle-alchemy'])).rejects.toThrow(
+      /Earn it in play first/
     )
   })
 

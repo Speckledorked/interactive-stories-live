@@ -357,12 +357,52 @@ export function analyzeColumnFlow(
         for (const inner of p.initializer.properties) {
           const innerName = propName(inner)
           if (!innerName || !ts.isPropertyAssignment(inner)) continue
-          if (RELATION_WRITE_KEYS.has(innerName)) walkWrite(target, inner.initializer, sf)
+          if (RELATION_WRITE_KEYS.has(innerName)) walkNestedRelationOp(target, inner.initializer, sf)
           else if (RELATION_WHERE_KEYS.has(innerName)) walkWhere(target, inner.initializer, sf)
           else if (innerName === 'connectOrCreate') walkConnectOrCreate(target, inner.initializer, sf)
         }
       }
     }
+  }
+
+  /**
+   * `create`/`createMany` on a to-many relation are the target's write input
+   * directly. `update`/`updateMany`/`upsert` are NOT: Prisma wraps them as
+   * `{ where?, data }` or `{ where?, update, create }` — passing that wrapper
+   * straight to walkWrite matched none of the target's columns (no field is
+   * literally named "where"/"data"/"update"/"create"), so the write silently
+   * vanished. `createMany` has the same problem via its own `{ data: […],
+   * skipDuplicates? }` shape. Recognized by KEY, not by which verb we came
+   * from, because the wrapper shape is the same regardless of relation
+   * cardinality or Prisma version.
+   */
+  function walkNestedRelationOp(target: string, node: ts.Expression, sf: ts.SourceFile) {
+    if (ts.isArrayLiteralExpression(node)) {
+      for (const el of node.elements) walkNestedRelationOp(target, el, sf)
+      return
+    }
+    if (!ts.isObjectLiteralExpression(node)) {
+      recordOpaque(target, ref(sf, node))
+      return
+    }
+    const keys = new Set<string>()
+    for (const p of node.properties) {
+      const n = propName(p)
+      if (n) keys.add(n)
+    }
+    if (keys.has('data') || keys.has('update') || keys.has('create')) {
+      for (const p of node.properties) {
+        const n = propName(p)
+        if (!n || !ts.isPropertyAssignment(p)) continue
+        if (n === 'where') walkWhere(target, p.initializer, sf)
+        else if (n === 'data' || n === 'update' || n === 'create') walkWrite(target, p.initializer, sf)
+      }
+      return
+    }
+    // No wrapper keys — this literal IS the write payload (to-one `update`,
+    // bare `create`, `set`/`push` relation reconnects that aren't writes at
+    // all and fall through walkWrite's own column/relation matching).
+    walkWrite(target, node, sf)
   }
 
   function walkConnectOrCreate(model: string, node: ts.Expression, sf: ts.SourceFile) {

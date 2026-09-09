@@ -126,19 +126,38 @@ export async function resolveStartingCapabilities(
       id: true,
       name: true,
       domain: true,
-      prerequisites: { select: { prerequisiteCapabilityId: true, prerequisite: { select: { name: true } } } },
+      prerequisites: {
+        select: {
+          prerequisiteCapabilityId: true,
+          prerequisite: { select: { name: true, isSecret: true, isShadow: true } },
+        },
+      },
     },
   })
   const selected = new Set(eligible.map((c) => c.id))
 
   for (const node of eligible) {
     for (const prereq of node.prerequisites) {
-      if (!selected.has(prereq.prerequisiteCapabilityId)) {
+      if (selected.has(prereq.prerequisiteCapabilityId)) continue
+      // Two different reasons a prerequisite can be missing, and they need
+      // two different messages. A player who simply forgot to select it can
+      // fix that by selecting it. A player whose foundation is itself
+      // secret/shadow CANNOT fix it that way — including that id would only
+      // have it silently stripped by the `isSecret`/`isShadow` filter above,
+      // reproducing this exact error forever. Telling them to "include it"
+      // in that case is not just unhelpful, it contradicts the capabilities
+      // route's own header comment ("the server check yields the honest
+      // error either way") — which this branch is what makes actually true.
+      if (prereq.prerequisite.isSecret || prereq.prerequisite.isShadow) {
         throw new StartingLoadoutError(
-          `"${node.name}" builds on "${prereq.prerequisite.name}" — an established character earned ` +
-            `the whole chain, so include it in the starting loadout too.`
+          `"${node.name}" builds on "${prereq.prerequisite.name}", which the fiction hasn't revealed yet — ` +
+            `an established character can't start already knowing a secret. Earn it in play first, then this becomes available.`
         )
       }
+      throw new StartingLoadoutError(
+        `"${node.name}" builds on "${prereq.prerequisite.name}" — an established character earned ` +
+          `the whole chain, so include it in the starting loadout too.`
+      )
     }
   }
 

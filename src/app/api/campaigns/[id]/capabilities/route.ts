@@ -13,8 +13,13 @@
 // client-side as a courtesy; resolveStartingCapabilities re-validates
 // server-side regardless. Ids of secret prerequisites are NOT filtered out
 // of the edge list — a visible node whose prerequisite is secret is simply
-// unpickable until the fiction reveals the chain, and the server check
-// yields the honest error either way.
+// unpickable until the fiction reveals the chain. Found by adversarial
+// audit: an earlier version of that server check gave the SAME "include it
+// in the starting loadout too" message for a missing secret/shadow
+// prerequisite as for an ordinary omitted one, which is advice a player can
+// never act on — the id would just be stripped again by the same
+// isSecret/isShadow filter this route applies. resolveStartingCapabilities
+// now tells the two apart and says "earn it in play" for the secret case.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'

@@ -336,11 +336,21 @@ type CharacterStatBlock = Partial<Record<'cool' | 'hard' | 'hot' | 'sharp' | 'we
 type CharacterRelationshipMap = Record<string, { trust: number; tension: number; respect: number; fear: number }>
 
 // See prisma/schema.prisma's Character.consequences column comment.
+//
+// Entries are ConsequenceRecords, not strings. They were declared as
+// `string[]` for a while after they had already stopped being strings, and
+// because the declaration was wrong rather than merely loose, the compiler
+// could not flag the readers that interpolated an entry directly — three of
+// them shipped rendering "[object Object]" to players. Anything reading these
+// lists should go through activeTexts() in lib/game/consequenceRecords rather
+// than touching entries itself.
+type ConsequenceEntry = { text: string; status: 'active' | 'resolved'; since?: number; resolvedAt?: number }
+
 interface CharacterConsequences {
-  promises?: string[]
-  debts?: string[]
-  enemies?: string[]
-  longTermThreats?: string[]
+  promises?: ConsequenceEntry[]
+  debts?: ConsequenceEntry[]
+  enemies?: ConsequenceEntry[]
+  longTermThreats?: ConsequenceEntry[]
 }
 
 /**

@@ -3,7 +3,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { PBTA_STATS } from '@/lib/pbta-moves'
@@ -149,9 +149,62 @@ export default function EnhancedCreateCharacterForm({
   const track = parseAdvancementTrack(advancementTrackRaw)
   const [startingTierKeyChoice, setStartingTierKeyChoice] = useState<string>('')
   const [startingCapabilityIds, setStartingCapabilityIds] = useState<string[]>([])
+  const [loadoutNote, setLoadoutNote] = useState<string | null>(null)
   const [pickableCapabilities, setPickableCapabilities] = useState<Array<{
     id: string; name: string; domain: string; tier: number; description: string | null; prerequisiteIds: string[]
   }>>([])
+
+  const pickableById = useMemo(
+    () => new Map(pickableCapabilities.map(c => [c.id, c])),
+    [pickableCapabilities]
+  )
+
+  // Nodes whose prerequisite chain leaves the pickable set. The capabilities
+  // route ships prerequisite IDS even when the prerequisite itself is secret
+  // or shadow (deliberately — see that route's header), so a visible node can
+  // rest on a foundation the player cannot pick. Selecting one is a guaranteed
+  // refusal from the server ("earn it in play first"), so it is shown disabled
+  // with that reason instead of being offered as a trap.
+  const unsatisfiable = useMemo(() => {
+    const blocked = new Set<string>()
+    const chainEscapes = (id: string, seen: Set<string>): boolean => {
+      const node = pickableById.get(id)
+      if (!node) return true
+      if (seen.has(id)) return false
+      seen.add(id)
+      return node.prerequisiteIds.some(p => chainEscapes(p, seen))
+    }
+    for (const cap of pickableCapabilities) {
+      if (chainEscapes(cap.id, new Set())) blocked.add(cap.id)
+    }
+    return blocked
+  }, [pickableCapabilities, pickableById])
+
+  // The full selection implied by picking `id` — it and everything it builds
+  // on. Only pickable ids are added: an unpickable prerequisite id used to be
+  // inserted before the lookup that would have rejected it, so it entered the
+  // payload, could not be removed by unchecking (no matching node for the
+  // cleanup pass to find), and guaranteed a 400 until the page was reloaded.
+  const chainFor = (id: string, base: Set<string>) => {
+    const out = new Set(base)
+    const add = (candidate: string) => {
+      if (out.has(candidate)) return
+      const node = pickableById.get(candidate)
+      if (!node) return
+      out.add(candidate)
+      node.prerequisiteIds.forEach(add)
+    }
+    add(id)
+    return out
+  }
+
+  // Capacity is checked against the WHOLE resulting selection, not just the
+  // one box clicked: pulling a chain in can overrun a slot group that had
+  // room for the capstone alone, which the per-checkbox guard never saw.
+  const overflowedGroup = (ids: Set<string>) =>
+    (track?.slotGroups ?? []).find(g =>
+      pickableCapabilities.filter(c => c.domain === g.domain && ids.has(c.id)).length > g.capacity
+    ) ?? null
 
   useEffect(() => {
     // NOT gated on the ladder. "Already mastered" is meaningful in every
@@ -671,6 +724,9 @@ export default function EnhancedCreateCharacterForm({
                         return ` ${group.label}: ${filled}/${group.capacity}.`
                       }).join('')}
                     </p>
+                    {loadoutNote && (
+                      <p className="mb-2 text-xs text-myth-warn">{loadoutNote}</p>
+                    )}
                     <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-myth-border p-2">
                       {pickableCapabilities.map(cap => {
                         const checked = startingCapabilityIds.includes(cap.id)
@@ -684,21 +740,27 @@ export default function EnhancedCreateCharacterForm({
                               type="checkbox"
                               className="mt-0.5"
                               checked={checked}
-                              disabled={!checked && groupFull}
+                              disabled={!checked && (groupFull || unsatisfiable.has(cap.id))}
                               onChange={(e) => {
                                 if (e.target.checked) {
                                   // Pull the prerequisite chain in with it —
                                   // an established character earned the whole
                                   // chain, and the server refuses gaps.
-                                  const withPrereqs = new Set(startingCapabilityIds)
-                                  const add = (id: string) => {
-                                    if (withPrereqs.has(id)) return
-                                    withPrereqs.add(id)
-                                    pickableCapabilities.find(c => c.id === id)?.prerequisiteIds.forEach(add)
+                                  const withPrereqs = chainFor(cap.id, new Set(startingCapabilityIds))
+                                  const over = overflowedGroup(withPrereqs)
+                                  if (over) {
+                                    const needed = pickableCapabilities.filter(
+                                      c => c.domain === over.domain && withPrereqs.has(c.id)
+                                    ).length
+                                    setLoadoutNote(
+                                      `${cap.name} builds on others in ${over.label}, which would need ${needed} — this world allows ${over.capacity}.`
+                                    )
+                                    return
                                   }
-                                  add(cap.id)
+                                  setLoadoutNote(null)
                                   setStartingCapabilityIds([...withPrereqs])
                                 } else {
+                                  setLoadoutNote(null)
                                   // Dropping a foundation drops what stands on it.
                                   const remaining = new Set(startingCapabilityIds.filter(id => id !== cap.id))
                                   let changed = true
@@ -719,6 +781,11 @@ export default function EnhancedCreateCharacterForm({
                             <span>
                               <span className="font-medium">{cap.name}</span>
                               <span className="text-myth-ink-faint"> — {cap.domain}</span>
+                              {!checked && unsatisfiable.has(cap.id) && (
+                                <span className="block text-xs text-myth-ink-faint">
+                                  Builds on something the story hasn&apos;t revealed yet — earn it in play.
+                                </span>
+                              )}
                               {cap.description && (
                                 <span className="block text-xs text-myth-ink-muted">{cap.description}</span>
                               )}

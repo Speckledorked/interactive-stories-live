@@ -8,6 +8,10 @@ import { recordEvent } from '@/lib/analytics/events'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { createCharacter, StartingLoadoutError, type CreateCharacterBody } from '@/lib/game/characterCreation'
 
+/** Request-size ceiling only — the real per-group bound is the world's own
+ *  declared slot capacity, enforced in resolveStartingCapabilities. */
+const MAX_STARTING_CAPABILITIES = 100
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -19,13 +23,61 @@ export async function POST(
     }
 
     const campaignId = params.id
-    const body: CreateCharacterBody = await request.json()
+
+    // Membership FIRST, before anything that touches this campaign.
+    // isWorldSeeding is not a pure read — it self-heals a stale flag and
+    // re-kicks stuck lore jobs (lib/lore/seedingGate.ts), so calling it
+    // ahead of the 403 let any authenticated user mutate seeding state on
+    // a campaign they don't belong to, and told them from the 409-vs-403
+    // whether that campaign existed and was seeding. Every other caller of
+    // the gate already authorizes first (start-scene, regenerate-intro,
+    // campaigns/[id]); this route was the outlier.
+    const membership = await getCampaignMembership(user.userId, campaignId)
+
+    if (!membership) {
+      return NextResponse.json(
+        { error: 'You are not a member of this campaign' },
+        { status: 403 }
+      )
+    }
+
+    let body: CreateCharacterBody
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Malformed request body' }, { status: 400 })
+    }
 
     if (!body.name) {
       return NextResponse.json(
         { error: 'Character name is required' },
         { status: 400 }
       )
+    }
+
+    // The body is client-supplied and only ASSERTED to be CreateCharacterBody.
+    // A non-array startingCapabilityIds reached resolveStartingCapabilities'
+    // .filter() and threw a TypeError, which the catch below turned into a
+    // 500 — a server fault reported for what is purely a bad request.
+    if (body.startingCapabilityIds !== undefined) {
+      if (
+        !Array.isArray(body.startingCapabilityIds) ||
+        body.startingCapabilityIds.some((id) => typeof id !== 'string')
+      ) {
+        return NextResponse.json(
+          { error: 'startingCapabilityIds must be an array of capability ids' },
+          { status: 400 }
+        )
+      }
+      // A ceiling far above any real loadout (slot capacities run to single
+      // digits), purely so an oversized array cannot be turned into a
+      // multi-thousand-parameter `IN` query.
+      if (body.startingCapabilityIds.length > MAX_STARTING_CAPABILITIES) {
+        return NextResponse.json(
+          { error: `A starting loadout cannot exceed ${MAX_STARTING_CAPABILITIES} capabilities.` },
+          { status: 400 }
+        )
+      }
     }
 
     // Play lock: no characters until a creation-time canon import has
@@ -44,15 +96,6 @@ export async function POST(
           { status: 400 }
         )
       }
-    }
-
-    const membership = await getCampaignMembership(user.userId, campaignId)
-
-    if (!membership) {
-      return NextResponse.json(
-        { error: 'You are not a member of this campaign' },
-        { status: 403 }
-      )
     }
 
     const character = await createCharacter(campaignId, user.userId, body)

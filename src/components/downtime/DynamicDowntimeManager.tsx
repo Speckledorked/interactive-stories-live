@@ -227,7 +227,7 @@ export function DynamicDowntimeManager({
         <div>
           <h2 className="font-display text-2xl font-semibold flex items-center gap-2 text-myth-ink">
             <Brain className="w-7 h-7 text-myth-accent" />
-            AI-Powered Downtime
+            Downtime
           </h2>
           <p className="text-myth-ink-muted">
             Describe any downtime activity - MythOS will make it happen!
@@ -288,7 +288,7 @@ export function DynamicDowntimeManager({
                   <div className="rounded-lg border border-myth-border bg-myth-surface-sunken p-4">
                     <h4 className="font-semibold mb-2 flex items-center gap-2 text-myth-ink">
                       <Brain className="w-4 h-4 text-myth-ink-faint" />
-                      AI Interpretation
+                      Interpretation
                     </h4>
                     <div className="space-y-2 text-sm text-myth-ink-muted">
                       <p><strong className="text-myth-ink">Activity:</strong> {createModal.interpretation.summary}</p>
@@ -319,7 +319,7 @@ export function DynamicDowntimeManager({
                     {createModal.isAnalyzing ? (
                       <>
                         <Sparkles className="w-4 h-4 mr-2 animate-spin" />
-                        AI Analyzing...
+                        Interpreting...
                       </>
                     ) : (
                       <>
@@ -423,7 +423,7 @@ export function DynamicDowntimeManager({
         <Card className="p-4">
           <h3 className="font-semibold mb-4 flex items-center gap-2 text-myth-ink">
             <Lightbulb className="w-5 h-5 text-myth-ink-faint" />
-            AI Suggestions for {characterName}
+            Suggestions for {characterName}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {suggestions.map((suggestion, index) => (

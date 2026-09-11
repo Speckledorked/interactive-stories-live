@@ -178,7 +178,7 @@ describe('AI Response Validation (Phase 15)', () => {
       expect(result.level).toBe('emergency')
       if (result.success) {
         expect(result.data.scene_text.length).toBeGreaterThan(50)
-        expect(result.data.scene_text).toContain('AI GM temporarily unavailable')
+        expect(result.data.scene_text).toContain('MythOS is briefly unreachable')
       }
     })
 

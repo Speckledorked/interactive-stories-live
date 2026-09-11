@@ -143,10 +143,10 @@ export default function AITransparencyPanel({
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-display text-lg text-myth-ink flex items-center gap-2">
           <UI_ICONS.reveal className="h-5 w-5 flex-shrink-0" />
-          AI Changes {sceneNumber ? `(Scene ${sceneNumber})` : ''}
+          What Changed {sceneNumber ? `(Scene ${sceneNumber})` : ''}
         </h3>
         {onClose && (
-          <IconButton icon={X} label="Close AI changes" size="sm" onClick={onClose} />
+          <IconButton icon={X} label="Close changes" size="sm" onClick={onClose} />
         )}
       </div>
 

@@ -228,8 +228,8 @@ export function IntegrityPanel({ campaignId, worldMeta }: { campaignId: string; 
         >
           <h3 className="font-medium text-myth-ink">
             {latest.validationDegradation.degraded
-              ? 'AI response validation is degrading'
-              : 'AI response validation'}
+              ? 'Response validation is degrading'
+              : 'Response validation'}
           </h3>
           <p className="mt-1 text-xs text-myth-ink-faint">
             {latest.validationDegradation.degradedCount}/{latest.validationDegradation.sampleSize} of the

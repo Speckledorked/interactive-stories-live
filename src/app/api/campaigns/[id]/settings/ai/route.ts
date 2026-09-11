@@ -42,7 +42,7 @@ export async function PATCH(
   } catch (error) {
     console.error('Update AI settings error:', error)
     return NextResponse.json(
-      { error: 'Failed to update AI settings' },
+      { error: 'Failed to update settings' },
       { status: 500 }
     )
   }

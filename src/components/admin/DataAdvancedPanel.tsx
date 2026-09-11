@@ -250,7 +250,7 @@ export function DataAdvancedPanel({
             <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
               <h3 className="font-medium text-myth-ink">Audit Log</h3>
               <p className="mb-4 mt-1 text-xs text-myth-ink-faint">
-                Every AI-proposed field mutation (accepted, rejected, or repaired), lore citation, and response
+                Every proposed field mutation (accepted, rejected, or repaired), lore citation, and response
                 validation failure the engine has recorded. Leave the scene blank for the most recent entries across
                 all scenes.
               </p>

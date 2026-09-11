@@ -35,7 +35,7 @@ export const ORIENTATION_CARDS: readonly OrientationCard[] = [
     title: 'What this is',
     body: [
       'MythOS runs a story you play through with other people. You describe what your character does, in your own words, and the story continues from there.',
-      'An AI narrates it — but it does not decide whether you succeed. That is settled before a word of the story is written.',
+      'MythOS narrates it — but it does not decide whether you succeed. That is settled before a word of the story is written.',
     ],
     learnMore: 'actions',
   },
@@ -61,7 +61,7 @@ export const ORIENTATION_CARDS: readonly OrientationCard[] = [
     id: 'scenes-cost',
     title: 'Scenes cost real money',
     body: [
-      'MythOS writes with a paid AI model. You are charged the real cost of it when a scene ends, split across the players who took part.',
+      'Writing a scene costs real money, and you are charged what it actually cost when the scene ends, split across the players who took part.',
       'Your balance is on your account. Nothing starts work you cannot cover.',
     ],
     learnMore: 'scene-cost',

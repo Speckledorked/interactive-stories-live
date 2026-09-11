@@ -214,7 +214,7 @@ async function performResolution(
           sceneId,
           sceneNumber: scene.sceneNumber,
           campaignId,
-          message: 'The AI GM is processing your actions. This usually takes 10-30 seconds...'
+          message: 'MythOS is resolving your actions. This usually takes 10-30 seconds...'
         })
         console.log('📡 Broadcasted scene:resolving event via Pusher')
       }

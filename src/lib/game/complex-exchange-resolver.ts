@@ -300,7 +300,7 @@ export class ComplexExchangeResolver {
     }
 
     narrative += '---\n\n'
-    narrative += '**AI GM Instructions:**\n'
+    narrative += '**Game Master Instructions:**\n'
     narrative += '1. Resolve each phase in sequence order\n'
     narrative += '2. Earlier phases may affect outcomes of later phases\n'
     narrative += '3. Within a phase, follow the resolution order already determined above (by roll outcome, not guesswork)\n'

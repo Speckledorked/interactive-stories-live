@@ -579,9 +579,9 @@ export default function AdminPage() {
       if (!response.ok) throw new Error('Failed to save')
       
       setError('')
-      alert('AI settings saved successfully!')
+      alert('Settings saved successfully!')
     } catch (err) {
-      setError('Failed to save AI settings')
+      setError('Failed to save settings')
     } finally {
       setSaving(false)
     }
@@ -1189,7 +1189,7 @@ export default function AdminPage() {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <label className="block text-sm font-medium text-myth-ink-muted">
-                      AI System Prompt
+                      Game Master Instructions
                     </label>
                     <FieldHelp
                       what="Extra instructions layered into every scene MythOS narrates — tone, style, house rules, anything you want its voice to consistently honor."
@@ -1232,7 +1232,7 @@ export default function AdminPage() {
                     Player actions are checked before reaching MythOS. Standard allows ordinary
                     combat and violence — expected content in this kind of game — while still
                     blocking genuinely severe content (sexual content involving minors, self-harm
-                    instructions, credible threats). Strict blocks anything OpenAI&apos;s moderation
+                    instructions, credible threats). Strict blocks anything the moderation filter
                     flags, including plain violence.
                   </p>
                   <Select
@@ -1250,7 +1250,7 @@ export default function AdminPage() {
                   onClick={handleSaveAISettings}
                   disabled={saving}
                 >
-                  {saving ? 'Saving...' : 'Save AI Settings'}
+                  {saving ? 'Saving...' : 'Save Settings'}
                 </Button>
 
                 <div className="mt-8 pt-6 border-t border-myth-border">
@@ -1397,7 +1397,7 @@ export default function AdminPage() {
                         <span>
                           <span className="block text-sm font-medium text-myth-ink">Generate battle maps</span>
                           <span className="block text-xs text-myth-ink-faint mt-1">
-                            Off by default. When on, the first exchange of each new scene makes an extra AI call to
+                            Off by default. When on, the first exchange of each new scene makes an extra call to
                             draw a map of the location — useful for tactical play, and a real cost per scene if your
                             table never opens the map. Older maps are cleaned up automatically as new ones are made.
                           </span>
@@ -1420,7 +1420,7 @@ export default function AdminPage() {
                         <span>
                           <span className="block text-sm font-medium text-myth-ink">Generate scene illustrations</span>
                           <span className="block text-xs text-myth-ink-faint mt-1">
-                            Off by default. When on, the first exchange of each new scene generates one AI
+                            Off by default. When on, the first exchange of each new scene generates one
                             illustration from the resolved narration — a real, recurring cost per scene if your
                             table never looks at the image.
                           </span>

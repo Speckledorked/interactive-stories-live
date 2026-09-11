@@ -350,7 +350,7 @@ export default function SettingsPage() {
               <h2 className="text-2xl font-bold text-myth-ink">Balance & Billing</h2>
             </div>
             <p className="text-sm text-myth-ink-muted mb-4">
-              Your current balance covers AI scene resolution costs. Click your balance below to add funds.
+              Your current balance covers scene costs. Click your balance below to add funds.
             </p>
             <BalanceDisplay userId={user.id} />
           </div>

@@ -4,7 +4,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bot, Drama, Zap } from 'lucide-react'
+import { Sparkles, Drama, Zap } from 'lucide-react'
 
 interface AILoadingStateProps {
   message?: string
@@ -79,7 +79,7 @@ export default function AILoadingState({
         {/* Center icon */}
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-4xl animate-pulse">
-            {(() => { const I = type === 'scene' ? Drama : type === 'resolution' ? Zap : Bot; return <I className="h-6 w-6" /> })()}
+            {(() => { const I = type === 'scene' ? Drama : type === 'resolution' ? Zap : Sparkles; return <I className="h-6 w-6" /> })()}
           </div>
         </div>
 

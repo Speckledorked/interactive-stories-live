@@ -396,7 +396,7 @@ If the request seems impossible, suggest a viable alternative.`
 
 Activity: ${activity.summary}
 Original Player Intent: ${activity.description}
-AI Interpretation: ${JSON.stringify(interpretation)}
+Interpretation: ${JSON.stringify(interpretation)}
 
 Character: ${character?.name || 'Adventurer'}
 Campaign Context: ${JSON.stringify(campaignContext) || 'Standard fantasy'}
@@ -408,7 +408,7 @@ Create an engaging event that:
 2. Feels natural and realistic for day ${day} of ${activity.estimatedDays}
 3. May require player input or be purely narrative
 4. Fits the required outcome category above — the category is fixed, not a suggestion
-5. Respects player agency and the AI's interpretation
+5. Respects player agency and the interpretation above
 
 Return a JSON object:
 {
@@ -811,7 +811,7 @@ Respond in an engaging, narrative style as MythOS. Keep it to 2-3 paragraphs.`
       const prompt = `Generate completion outcomes for this downtime activity:
 
 Original Player Intent: "${playerDescription}"
-AI Interpretation: ${JSON.stringify(interpretation)}
+Interpretation: ${JSON.stringify(interpretation)}
 Activity Duration: ${activity.estimatedDays} days
 Events that occurred: ${activity.events.length}
 

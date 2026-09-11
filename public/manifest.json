@@ -1,7 +1,7 @@
 {
-  "name": "MythOS - AI-Narrated Tabletop RPG",
+  "name": "MythOS - Tabletop RPG, Narrated",
   "short_name": "MythOS",
-  "description": "AI-powered tabletop RPG adventures with dynamic storytelling",
+  "description": "Tabletop RPG adventures in a world that keeps moving",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0c0705",

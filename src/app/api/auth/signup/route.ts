@@ -8,15 +8,9 @@ import { hashPassword } from '@/lib/password'
 import { createToken } from '@/lib/auth'
 import { SignupRequest, AuthResponse, ErrorResponse } from '@/types/api'
 import { recordEvent } from '@/lib/analytics/events'
-import { addFunds } from '@/lib/payment/service'
 import { checkRateLimit, rateLimitExceededResponse, getClientIp, SIGNUP_LIMIT } from '@/lib/rateLimit'
 import { normalizeEmail } from '@/lib/auth/normalizeEmail'
 import { isUniqueConstraintViolation } from '@/lib/game/worldUpdaters/uniqueConstraintGuard'
-
-// One-time welcome credit so a new signup can actually play a scene
-// without funding a balance first — without this, balance defaults to 0
-// and the activation funnel dead-ends at the very first paywall.
-const WELCOME_CREDIT_CENTS = 100
 
 export async function POST(request: NextRequest) {
   try {
@@ -85,20 +79,18 @@ export async function POST(request: NextRequest) {
 
     // Best-effort verification email — signup must not fail because SMTP
     // did. Unverified accounts still work (soft verification); the flag
-    // exists so features can gate on it later.
+    // gates the welcome credit, and nothing else.
+    //
+    // The credit itself is NOT paid here. It is real money on a product with
+    // open signup, and at this point all we know is that an address parses —
+    // which made it free money for any throwaway inbox, behind nothing but an
+    // IP rate limit. It is paid when the address is verified instead; see
+    // lib/payment/welcomeCredit.ts.
     try {
       const { EmailService } = await import('@/lib/notifications/email-service')
       await EmailService.sendVerificationEmail(email, emailVerifyToken)
     } catch (emailError) {
       console.error('Verification email failed (non-critical):', emailError)
-    }
-
-    // Best-effort welcome credit — same reasoning as the email above: a
-    // funding hiccup must not fail signup itself, just leave balance at 0.
-    try {
-      await addFunds(user.id, WELCOME_CREDIT_CENTS, 'Welcome credit — your first scene is on us')
-    } catch (creditError) {
-      console.error('Welcome credit failed (non-critical):', creditError)
     }
 
     await recordEvent('SIGNUP', { userId: user.id })

@@ -1,8 +1,9 @@
 // src/app/api/auth/signup/__tests__/route.test.ts
-// Route-level: signup is the one path that creates a User row and now
-// also grants the welcome credit — exercised here as an integration test
-// so a regression in the credit wiring (or the duplicate-email/validation
-// gates) is caught even though each piece has its own unit coverage.
+// Route-level: signup is the one path that creates a User row. It
+// deliberately does NOT grant the welcome credit — that moved to email
+// verification, because signup is open and an address that merely parses
+// is not a person. Exercised as an integration test so a regression in
+// that boundary (or the duplicate-email/validation gates) is caught.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
@@ -72,7 +73,7 @@ describe('POST /api/auth/signup', () => {
     expect(db.user.create).not.toHaveBeenCalled()
   })
 
-  it('creates the user, grants the welcome credit, and returns a token', async () => {
+  it('creates the user and returns a token', async () => {
     db.user.findUnique.mockResolvedValue(null)
     db.user.create.mockResolvedValue({ id: 'new-user', email: 'new@example.com' })
 
@@ -88,22 +89,23 @@ describe('POST /api/auth/signup', () => {
         data: expect.objectContaining({ email: 'new@example.com', password: 'hashed-password' }),
       })
     )
-    expect(addFunds).toHaveBeenCalledWith(
-      'new-user',
-      100,
-      expect.stringContaining('first scene')
-    )
     expect(recordEvent).toHaveBeenCalledWith('SIGNUP', { userId: 'new-user' })
   })
 
-  it('still succeeds if the welcome credit fails (best-effort, non-blocking)', async () => {
+  it('does NOT pay the welcome credit at signup', async () => {
+    // The credit is real money and signup is open to anyone. Paying it here
+    // meant any address that parses collected a dollar, behind nothing but
+    // an IP rate limit; it is paid at email verification instead, so it
+    // costs an inbox the holder actually controls. Guarding the boundary
+    // here because this is the route an activation-funnel change would
+    // reach for first.
     db.user.findUnique.mockResolvedValue(null)
     db.user.create.mockResolvedValue({ id: 'new-user', email: 'new@example.com' })
-    ;(addFunds as any).mockRejectedValue(new Error('payment service down'))
 
     const response = await POST(makeRequest({ email: 'new@example.com', password: 'hunter2' }))
 
     expect(response.status).toBe(201)
+    expect(addFunds).not.toHaveBeenCalled()
   })
 
   it('is rate limited by IP (#210)', async () => {

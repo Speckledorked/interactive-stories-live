@@ -15,9 +15,13 @@ vi.mock('@/lib/rateLimit', () => ({
   checkRateLimit: vi.fn(),
   getClientIp: vi.fn(() => '127.0.0.1'),
 }))
+vi.mock('@/lib/payment/welcomeCredit', () => ({
+  grantWelcomeCredit: vi.fn().mockResolvedValue({ granted: true }),
+}))
 
 import { prisma } from '@/lib/prisma'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { grantWelcomeCredit } from '@/lib/payment/welcomeCredit'
 import { GET } from '../route'
 
 const db = prisma as any
@@ -36,6 +40,7 @@ function redirectLocation(response: Response): URL {
 beforeEach(() => {
   vi.clearAllMocks()
   ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
+  ;(grantWelcomeCredit as any).mockResolvedValue({ granted: true })
 })
 
 describe('GET /api/auth/verify-email', () => {
@@ -86,5 +91,36 @@ describe('GET /api/auth/verify-email', () => {
 
     expect(location.searchParams.get('verified')).toBe('0')
     expect(db.user.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('pays the welcome credit once the address is verified', async () => {
+    // This is where the credit moved to, and why: an address that merely
+    // parses is not a person, so signup no longer pays it out.
+    db.user.findFirst.mockResolvedValue({ id: 'u1' })
+    db.user.update.mockResolvedValue({ id: 'u1' })
+
+    const response = await GET(req('good-token'))
+
+    expect(redirectLocation(response).searchParams.get('verified')).toBe('1')
+    expect(grantWelcomeCredit).toHaveBeenCalledWith('u1')
+  })
+
+  it('never pays the credit for a token that did not verify anyone', async () => {
+    db.user.findFirst.mockResolvedValue(null)
+    await GET(req('bad-token'))
+    expect(grantWelcomeCredit).not.toHaveBeenCalled()
+  })
+
+  it('still reports success when the credit could not be paid', async () => {
+    // Budget exhausted, or the payment layer is down. The account is
+    // verified either way — a funding problem must not read to the user as
+    // a failed verification.
+    db.user.findFirst.mockResolvedValue({ id: 'u1' })
+    db.user.update.mockResolvedValue({ id: 'u1' })
+    ;(grantWelcomeCredit as any).mockResolvedValue({ granted: false, reason: 'budget-exhausted' })
+
+    const response = await GET(req('good-token'))
+
+    expect(redirectLocation(response).searchParams.get('verified')).toBe('1')
   })
 })

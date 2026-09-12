@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { checkRateLimit, getClientIp, VERIFY_EMAIL_LIMIT } from '@/lib/rateLimit'
+import { grantWelcomeCredit } from '@/lib/payment/welcomeCredit'
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token')
@@ -37,6 +38,14 @@ export async function GET(request: NextRequest) {
       where: { id: user.id },
       data: { emailVerified: true, emailVerifyToken: null },
     })
+
+    // The welcome credit is paid here rather than at signup, so it costs a
+    // real inbox rather than a string with an @ in it. Idempotent by
+    // construction: the token is consumed above, so a replayed link finds no
+    // user and never reaches this line. Never throws — a funding problem must
+    // not turn a successful verification into a failed one.
+    await grantWelcomeCredit(user.id)
+
     loginUrl.searchParams.set('verified', '1')
     return NextResponse.redirect(loginUrl)
   } catch (error) {

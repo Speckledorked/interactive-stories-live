@@ -110,25 +110,34 @@ export function findConsequenceToRemove(
   let fallback: { key: string; index: number; matched: string } | null = null
 
   for (const key of Object.keys(consequences)) {
-    const list = consequences[key]
-    if (!Array.isArray(list)) continue
+    // Search the NORMALIZED list, because the normalized list is what the
+    // caller retires into. Searching the raw array returned an index that
+    // counted entries normalization drops (blank strings, non-records, a
+    // record whose text is empty), so by the time retireAt saw it the list
+    // was shorter and the index pointed somewhere else: either past the end,
+    // where retireAt silently returns the list unchanged while the caller
+    // still logs "✅ resolved consequence" and the threat keeps feeding every
+    // prompt forever — or, with enough entries, at a DIFFERENT consequence,
+    // retiring one the fiction never resolved. Normalizing here makes the
+    // index and the mutation share one representation by construction, so
+    // the two cannot drift apart again.
+    //
+    // This also keeps legacy rows working: normalization promotes plain
+    // strings (everything written before consequences became records) into
+    // records, so a removal reported against an old campaign still matches.
+    const list = normalizeConsequenceList(consequences[key])
 
     for (let index = 0; index < list.length; index++) {
-      const raw = list[index]
-      // Entries are ConsequenceRecords now and legacy strings on anything
-      // written before that; both have to match, or a removal reported
-      // against an old campaign would silently find nothing.
-      const entry = typeof raw === 'string' ? raw : (raw as { text?: unknown })?.text
-      if (typeof entry !== 'string') continue
+      const record = list[index]
       // An already-resolved record is not a candidate: re-reporting a
       // resolution must not rewrite when it ended.
-      if (typeof raw === 'object' && raw !== null && (raw as { status?: string }).status === 'resolved') continue
-      const hay = entry.trim().toLowerCase()
+      if (record.status === 'resolved') continue
+      const hay = record.text.toLowerCase()
 
-      if (hay === needle) return { key, index, matched: entry }
+      if (hay === needle) return { key, index, matched: record.text }
 
-      if (hay.includes(needle) && (!fallback || entry.length < fallback.matched.length)) {
-        fallback = { key, index, matched: entry }
+      if (hay.includes(needle) && (!fallback || record.text.length < fallback.matched.length)) {
+        fallback = { key, index, matched: record.text }
       }
     }
   }

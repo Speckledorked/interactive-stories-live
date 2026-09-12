@@ -68,7 +68,7 @@ export class EmailService {
         text: params.text || this.htmlToText(params.html),
         headers: {
           'X-Notification-ID': params.notificationId || '',
-          'X-Mailer': 'AI-GM-App'
+          'X-Mailer': 'MythOS'
         }
       };
 
@@ -179,7 +179,7 @@ export class EmailService {
         <div style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px;">
             <h1 style="color: #1e40af; margin: 0; font-size: 28px;">🎮 MythOS</h1>
-            <p style="color: #64748b; margin: 10px 0 0 0;">Your AI-powered tabletop RPG experience</p>
+            <p style="color: #64748b; margin: 10px 0 0 0;">A world that keeps moving while you are away</p>
           </div>
 
           <h2 style="color: #1e3a8a;">Welcome, ${userName}!</h2>
@@ -195,7 +195,7 @@ export class EmailService {
               <li>Create your first campaign</li>
               <li>Invite friends to join</li>
               <li>Build your characters</li>
-              <li>Let the AI weave epic tales!</li>
+              <li>Let MythOS weave epic tales!</li>
             </ul>
           </div>
 
@@ -243,8 +243,8 @@ export class EmailService {
           </div>
 
           <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-            Join this AI-powered campaign where epic adventures await! Create your character, 
-            collaborate with other players, and experience stories guided by our intelligent Game Master.
+            Join this campaign where epic adventures await! Create your character, 
+            collaborate with other players, and experience stories guided by MythOS.
           </p>
 
           <div style="text-align: center; margin: 30px 0;">

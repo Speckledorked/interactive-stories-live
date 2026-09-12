@@ -39,7 +39,7 @@ function findDuplicates(
         entityType,
         entityId: entity.id,
         entityName: entity.name,
-        description: `${group.length} entities in this campaign are named "${entity.name}" — the AI write path resolves by name and treats this as ambiguous, so none of them are reachable by name anymore`,
+        description: `${group.length} entities in this campaign are named "${entity.name}" — the write path resolves by name and treats this as ambiguous, so none of them are reachable by name anymore`,
       })
     }
   }

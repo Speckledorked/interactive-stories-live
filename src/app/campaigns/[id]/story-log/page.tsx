@@ -212,7 +212,7 @@ export default function StoryLogPage() {
                 variant="secondary" size="sm" className="disabled:opacity-50"
                 onClick={handleRegenerate}
                 disabled={regenerating}
-                title="Re-summarize existing entries with a fresh AI pass"
+                title="Re-summarize existing entries with a fresh pass"
               >
                 {regenerating ? 'Regenerating…' : 'Regenerate All'}
               </Button>

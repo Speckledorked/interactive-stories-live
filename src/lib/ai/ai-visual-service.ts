@@ -186,13 +186,13 @@ Return a JSON object with:
       await MapService.clearMapContents(previousMapId)
       return await MapService.updateMap(previousMapId, {
         name: analysis.mapName,
-        description: `AI-generated map for: ${analysis.mapName}`
+        description: `Drawn by MythOS for: ${analysis.mapName}`
       })
     } else {
       // Create new map
       const mapData = await MapService.createMap(campaignId, {
         name: analysis.mapName,
-        description: `AI-generated map for: ${analysis.mapName}`,
+        description: `Drawn by MythOS for: ${analysis.mapName}`,
         width: template.width,
         height: template.height,
         gridSize: template.gridSize

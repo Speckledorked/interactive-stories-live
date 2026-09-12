@@ -130,7 +130,7 @@ export default function BalanceDisplay({ userId }: BalanceDisplayProps) {
                   </span>
                 </p>
                 <div className="space-y-1 text-xs text-myth-ink-faint">
-                  <p className="mb-1 font-semibold text-myth-ink-muted">AI Scene Resolution Pricing:</p>
+                  <p className="mb-1 font-semibold text-myth-ink-muted">Scene Pricing:</p>
                   <p>• Solo play (1 player): $0.25 per scene</p>
                   <p>• Small group (2-4 players): $0.50 per scene</p>
                   <p>• Large group (5-6 players): $0.75 per scene</p>

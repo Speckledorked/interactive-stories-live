@@ -17,6 +17,7 @@ import { applyDebtChanges } from '../../debts'
 import { applyStandingChanges } from '../../standing'
 import { applyCapabilityChanges } from '../../capabilities'
 import { resolveOrCreateLocationId } from '../locations'
+import { normalizeConsequenceList, retireAt, activeTexts } from '../../consequenceRecords'
 
 const makeTx = () => ({
   character: { update: vi.fn(async (_args: any) => ({})) },
@@ -1131,7 +1132,39 @@ describe('findConsequenceToRemove (#69)', () => {
 
   it('ignores non-array and non-string members safely', () => {
     const messy = { promises: ['keep me'], notes: 'not an array', enemies: [42, 'real entry'] }
-    expect(findConsequenceToRemove(messy as any, 'real entry')).toMatchObject({ key: 'enemies', index: 1 })
+    // Index 0, not 1: the index addresses the NORMALIZED list, because that
+    // is the list the caller retires into. This assertion used to read
+    // `index: 1` — the raw position, counting the 42 that normalization
+    // drops — which pinned the defect below as though it were the contract.
+    expect(findConsequenceToRemove(messy as any, 'real entry')).toMatchObject({ key: 'enemies', index: 0 })
+  })
+
+  it('returns an index that retireAt can actually apply to the normalized list', () => {
+    // The bug this guards: the finder indexed the raw array while the caller
+    // retired into the normalized one, so every entry normalization dropped
+    // before the match shifted the target. Here the blank string is dropped,
+    // so a raw index of 1 would overrun a one-element list and retireAt would
+    // return it untouched — while the caller still logged "✅ resolved".
+    const consequences = { enemies: ['', 'Hunted by the Ironveil'] }
+    const found = findConsequenceToRemove(consequences as any, 'Hunted by the Ironveil')
+    expect(found).not.toBeNull()
+
+    const normalized = normalizeConsequenceList(consequences.enemies)
+    const retired = retireAt(normalized, found!.index, 12)
+    expect(retired[found!.index].status).toBe('resolved')
+    expect(retired[found!.index].text).toBe('Hunted by the Ironveil')
+    expect(activeTexts(retired)).toEqual([])
+  })
+
+  it('retires the consequence that matched, not a neighbour, when entries are dropped', () => {
+    // With three entries and two dropped, a raw index would land on a
+    // DIFFERENT surviving consequence and retire something the fiction
+    // never resolved — silent corruption rather than a visible no-op.
+    const consequences = { enemies: ['', 'Owes the Guild', null, 'Hunted by the Ironveil'] }
+    const found = findConsequenceToRemove(consequences as any, 'Hunted by the Ironveil')
+    const normalized = normalizeConsequenceList(consequences.enemies)
+    const retired = retireAt(normalized, found!.index, 3)
+    expect(activeTexts(retired)).toEqual(['Owes the Guild'])
   })
 
   it('returns null for an empty needle instead of matching everything', () => {

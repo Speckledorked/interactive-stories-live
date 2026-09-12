@@ -470,7 +470,7 @@ export function PlayerMapViewer({
       {/* Status Indicator */}
       <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 flex flex-col items-end gap-1 sm:flex-row sm:gap-2">
         <Badge variant="neutral">
-          AI Generated
+          Drawn by MythOS
         </Badge>
         <Badge variant="neutral">
           Zoom: {Math.round(viewState.zoom * 100)}%

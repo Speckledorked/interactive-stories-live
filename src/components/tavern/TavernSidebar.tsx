@@ -246,7 +246,7 @@ export function TavernSidebar({
             this rail is the game-master console, and at account level it's
             the product's own line. */}
         <p className="-mt-2 text-[11px] tracking-[0.2em] text-myth-gold">
-          {campaignHome ? 'AI GAME MASTER' : 'THE WORLD REMEMBERS.'}
+          {campaignHome ? 'GAME MASTER' : 'THE WORLD REMEMBERS.'}
         </p>
       </div>
 

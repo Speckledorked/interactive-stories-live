@@ -13,6 +13,7 @@ import type { AIGMRequest } from './client'
 import { delimitPlayerText, PLAYER_TEXT_PROMPT_RULE } from './playerText'
 import { selectPrimaryOutcomeBand, type ActionMechanics } from '@/lib/game/resolution'
 import { parseHarmState, getHarmStatus } from '@/lib/game/harm'
+import { activeTexts } from '@/lib/game/consequenceRecords'
 
 // ---------------------------------------------------------------------------
 // System prompt sections
@@ -49,7 +50,7 @@ ${aiSystemPrompt}
 
 const CRITICAL_INSTRUCTIONS = `<critical_instructions>
 - You MUST respond with valid JSON matching the required schema
-- Never break character or acknowledge you're an AI
+- Never break character. You are MythOS, the game master of this world
 - Stay true to established world facts and character abilities
 - Make consequences matter and feel earned
 - Advance villain plans and background events naturally
@@ -700,7 +701,19 @@ function buildCharactersSection(characters: WorldSummary['characters']): string 
       parts.push(`🔒 Hidden Relationships (use for NPC behavior): ${JSON.stringify(c.relationships)}`)
     }
     if (c.consequences && Object.keys(c.consequences).length > 0) {
-      parts.push(`⚠️ Consequences: ${JSON.stringify(c.consequences)}`)
+      // Only what is still OPEN, and as prose rather than serialized records.
+      // Consequences are retired in place rather than deleted, so dumping the
+      // raw column here sent every threat the character ever resolved — plus
+      // its status/since/resolvedAt bookkeeping — into the prompt forever,
+      // growing without bound across a campaign and contradicting this
+      // section's own promise to list what's currently open.
+      const open = Object.entries(c.consequences as Record<string, unknown>)
+        .map(([field, list]) => [field, activeTexts(list)] as const)
+        .filter(([, texts]) => texts.length > 0)
+        .map(([field, texts]) => `${field}: ${texts.join('; ')}`)
+      if (open.length > 0) {
+        parts.push(`⚠️ Consequences: ${open.join(' | ')}`)
+      }
     }
 
     // Knowledge-relative sheet: what this character KNOWS and CAN DO.

@@ -60,8 +60,8 @@ export class CampaignHealthMonitor {
 
     // Identify issues and recommendations
     if (aiConsistency < 50) {
-      issues.push('Low AI consistency - responses may be inconsistent')
-      recommendations.push('Consider reviewing AI system prompt and campaign settings')
+      issues.push('Low narration consistency - responses may be inconsistent')
+      recommendations.push('Consider reviewing the game master instructions and campaign settings')
     }
 
     if (playerEngagement < 40) {
@@ -72,11 +72,11 @@ export class CampaignHealthMonitor {
 
     if (sceneSuccessRate < 50) {
       issues.push('High scene failure rate - technical issues detected')
-      recommendations.push('Review AI service health and error logs')
+      recommendations.push('Review narration service health and error logs')
     }
 
     if (aiFailureRate > 20) {
-      issues.push('High AI failure rate - service may be unstable')
+      issues.push('High narration failure rate - service may be unstable')
       recommendations.push('Consider temporary pause or manual GM intervention')
     }
 

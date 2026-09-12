@@ -91,6 +91,58 @@ describe('POST', () => {
     expect(createCharacter).not.toHaveBeenCalled()
   })
 
+  it('refuses a non-member BEFORE consulting the seeding gate', async () => {
+    // isWorldSeeding is not a pure read — it self-heals a stale
+    // pendingWorldSeed flag and re-kicks stuck lore jobs. Calling it ahead
+    // of the 403 let any authenticated user mutate seeding state on a
+    // campaign they don't belong to, and the 409-vs-403 told them whether
+    // that campaign existed and was seeding.
+    ;(getCampaignMembership as any).mockResolvedValue(null)
+    ;(isWorldSeeding as any).mockResolvedValue(true)
+    const response = await POST(postRequest({ name: 'Test' }), { params: { id: 'camp1' } })
+    expect(response.status).toBe(403)
+    expect(isWorldSeeding).not.toHaveBeenCalled()
+    expect(createCharacter).not.toHaveBeenCalled()
+  })
+
+  it('400s a non-array startingCapabilityIds instead of 500ing on it', async () => {
+    // The body is only ASSERTED to be CreateCharacterBody. A string here
+    // survived the length check and reached .filter(), throwing a TypeError
+    // that the catch reported as a 500 — a server fault for a bad request.
+    const response = await POST(
+      postRequest({ name: 'Test', startingCapabilityIds: 'not-an-array' }),
+      { params: { id: 'camp1' } }
+    )
+    expect(response.status).toBe(400)
+    expect(createCharacter).not.toHaveBeenCalled()
+  })
+
+  it('400s non-string members of startingCapabilityIds', async () => {
+    const response = await POST(
+      postRequest({ name: 'Test', startingCapabilityIds: ['ok', 42] }),
+      { params: { id: 'camp1' } }
+    )
+    expect(response.status).toBe(400)
+    expect(createCharacter).not.toHaveBeenCalled()
+  })
+
+  it('400s an oversized starting loadout rather than building a huge IN query', async () => {
+    const response = await POST(
+      postRequest({ name: 'Test', startingCapabilityIds: Array.from({ length: 101 }, (_, i) => `c${i}`) }),
+      { params: { id: 'camp1' } }
+    )
+    expect(response.status).toBe(400)
+    expect(createCharacter).not.toHaveBeenCalled()
+  })
+
+  it('accepts a well-formed starting loadout', async () => {
+    await POST(
+      postRequest({ name: 'Test', startingCapabilityIds: ['a', 'b'] }),
+      { params: { id: 'camp1' } }
+    )
+    expect(createCharacter).toHaveBeenCalled()
+  })
+
   it('blocks character creation while the world is still seeding', async () => {
     ;(isWorldSeeding as any).mockResolvedValue(true)
     const response = await POST(postRequest({ name: 'Test' }), { params: { id: 'camp1' } })

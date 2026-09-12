@@ -536,7 +536,7 @@ export default function CampaignLobbyPage() {
                     variant="secondary" size="sm"
                     onClick={handleRegenerateLogs}
                     disabled={regeneratingLogs}
-                    title="Re-summarize existing entries with a fresh AI pass"
+                    title="Re-summarize existing entries with a fresh pass"
                   >
                     {regeneratingLogs ? 'Regenerating…' : 'Regenerate All'}
                   </Button>

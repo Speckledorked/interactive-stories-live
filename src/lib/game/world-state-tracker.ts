@@ -4,6 +4,7 @@
 import { prisma } from '@/lib/prisma'
 import type { WorldStateChange } from '@/components/scene/AITransparencyPanel'
 import { NotificationService } from '@/lib/notifications/notification-service'
+import { activeTexts } from './consequenceRecords'
 import type { AdherenceResult } from './outcomeAdherence'
 import type { MoveVarietyResult } from './moveVariety'
 
@@ -281,25 +282,20 @@ export async function detectWorldStateChanges(
       const beforeCons = (before.consequences as any) || {}
       const afterCons = (character.consequences as any) || {}
 
-      const beforeEnemies = beforeCons.enemies || []
-      const afterEnemies = afterCons.enemies || []
-      if (afterEnemies.length > beforeEnemies.length) {
-        const newEnemies = afterEnemies.slice(beforeEnemies.length)
-        characterChanges.push(`new enemy: ${newEnemies.join(', ')}`)
-      }
-
-      const beforeDebts = beforeCons.debts || []
-      const afterDebts = afterCons.debts || []
-      if (afterDebts.length > beforeDebts.length) {
-        const newDebts = afterDebts.slice(beforeDebts.length)
-        characterChanges.push(`new debt: ${newDebts.join(', ')}`)
-      }
-
-      const beforePromises = beforeCons.promises || []
-      const afterPromises = afterCons.promises || []
-      if (afterPromises.length > beforePromises.length) {
-        const newPromises = afterPromises.slice(beforePromises.length)
-        characterChanges.push(`new promise: ${newPromises.join(', ')}`)
+      // activeTexts on both sides: entries are ConsequenceRecords, so
+      // joining them raw printed "new enemy: [object Object]" in the panel.
+      // Comparing ACTIVE entries also means retiring a threat no longer
+      // reads as a change of the same kind as gaining one.
+      for (const [field, label] of [
+        ['enemies', 'new enemy'],
+        ['debts', 'new debt'],
+        ['promises', 'new promise'],
+      ] as const) {
+        const beforeList = activeTexts(beforeCons[field])
+        const afterList = activeTexts(afterCons[field])
+        if (afterList.length > beforeList.length) {
+          characterChanges.push(`${label}: ${afterList.slice(beforeList.length).join(', ')}`)
+        }
       }
 
       if (characterChanges.length > 0) {

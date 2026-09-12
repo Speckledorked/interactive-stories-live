@@ -437,7 +437,7 @@ function CreateCampaignModal({
                   <div>
                     <p className="text-sm font-semibold text-myth-ink">{selectedTpl.name} template</p>
                     <p className="text-xs text-myth-ink-faint">
-                      Includes {selectedTpl.factionCount} factions, AI system prompt, and world seed
+                      Includes {selectedTpl.factionCount} factions, game master instructions, and world seed
                     </p>
                   </div>
                 </div>

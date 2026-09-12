@@ -34,24 +34,24 @@ export type ValidationResult =
   | { success: false; error: string; rawData?: any }
 
 /**
- * Emergency fallback templates for when AI completely fails
+ * Emergency fallback templates for when scene resolution completely fails
  */
 const EMERGENCY_TEMPLATES = {
   default: `The scene unfolds in unexpected ways. The situation remains tense and uncertain as events develop.
 
-(AI GM temporarily unavailable - scene will be resolved manually or retried)`,
+(MythOS is briefly unreachable — this scene will be resolved when it returns.)`,
 
   combat: `The battle continues with intensity. Both sides exchange blows, but the outcome remains unclear.
 
-(AI GM temporarily unavailable - combat will be resolved when service recovers)`,
+(MythOS is briefly unreachable — this fight will be resolved when it returns.)`,
 
   social: `The conversation takes an interesting turn. The NPCs react to the characters' words and actions, though their true intentions remain hidden.
 
-(AI GM temporarily unavailable - social encounter will be resolved when service recovers)`,
+(MythOS is briefly unreachable — this encounter will be resolved when it returns.)`,
 
   exploration: `The characters continue their exploration, discovering intriguing details about their surroundings. What they find raises more questions than answers.
 
-(AI GM temporarily unavailable - exploration will continue when service recovers)`
+(MythOS is briefly unreachable — this will continue when it returns.)`
 }
 
 /**

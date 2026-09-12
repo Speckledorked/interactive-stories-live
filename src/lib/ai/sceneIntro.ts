@@ -10,6 +10,7 @@ import { AI_MODELS } from './models'
 import { recordAICost, estimateTokenCount } from './cost-tracker'
 import { buildWorldSummaryForAI } from './worldSummary'
 import { truncateWithEllipsis } from '@/lib/format'
+import { activeTexts } from '@/lib/game/consequenceRecords'
 import { loadAbsenceJournal } from '@/lib/game/absenceJournalQuery'
 import { describeJournalEntry } from '@/lib/game/absenceJournal'
 
@@ -220,11 +221,17 @@ export async function generateNewSceneIntro(campaignId: string, characterIds?: s
 
       if (c.consequences) {
         const cons = c.consequences as any
-        if (cons.enemies && cons.enemies.length > 0) {
-          parts.push(`Threat: ${cons.enemies[0]}`) // Just the first enemy
+        // activeTexts, not the raw entry: entries are ConsequenceRecords, so
+        // interpolating one directly rendered "Threat: [object Object]".
+        // It also drops retired threats, which must not be introduced as
+        // though they were still hanging over the character.
+        const enemies = activeTexts(cons.enemies)
+        if (enemies.length > 0) {
+          parts.push(`Threat: ${enemies[0]}`) // Just the first enemy
         }
-        if (cons.debts && cons.debts.length > 0) {
-          parts.push(`Complication: ${cons.debts[0]}`) // Just the first debt
+        const debts = activeTexts(cons.debts)
+        if (debts.length > 0) {
+          parts.push(`Complication: ${debts[0]}`) // Just the first debt
         }
       }
 

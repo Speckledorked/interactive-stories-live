@@ -1697,7 +1697,7 @@ export default function StoryPage() {
                               variant="secondary"
                               onClick={() => handleEndScene(scene.id)}
                               disabled={endingScene}
-                              title="Ends this scene for everyone. The player who ends a scene pays its AI cost."
+                              title="Ends this scene for everyone. The player who ends a scene pays its cost."
                             >
                               {endingScene ? 'Ending...' : 'End Scene'}
                             </Button>
@@ -1813,7 +1813,7 @@ export default function StoryPage() {
                           {startingScene ? 'Generating…' : 'Continue Story Naturally'}
                         </Button>
                         <p className="text-xs text-myth-ink-faint">
-                          AI chooses the next scene based on story flow and character goals
+                          MythOS chooses the next scene based on story flow and character goals
                         </p>
                       </div>
 
@@ -1885,7 +1885,7 @@ export default function StoryPage() {
                             : `Create Scene with ${selectedSceneCharacters.length || 0} ${pluralize(selectedSceneCharacters.length, 'Character')}`}
                         </Button>
                         <p className="text-xs text-myth-ink-faint">
-                          AI will create a scene focused on the selected {pluralize(selectedSceneCharacters.length, 'character')}
+                          MythOS will create a scene focused on the selected {pluralize(selectedSceneCharacters.length, 'character')}
                         </p>
                       </div>
                     </div>
@@ -1994,7 +1994,7 @@ export default function StoryPage() {
               <div className="bg-myth-surface-sunken border border-myth-border rounded-lg p-4 mb-6">
                 <p className="text-xs font-semibold text-myth-ink-muted mb-2">Pricing:</p>
                 <div className="text-xs text-myth-ink-muted space-y-1">
-                  <p>Each scene is billed once, when it ends, for the actual AI cost of everything that happened in it — split evenly across whoever took part. Typically a few cents per player; larger or longer scenes cost more, quiet ones cost less.</p>
+                  <p>Each scene is billed once, when it ends, for the actual cost of everything that happened in it — split evenly across whoever took part. Typically a few cents per player; larger or longer scenes cost more, quiet ones cost less.</p>
                 </div>
               </div>
 

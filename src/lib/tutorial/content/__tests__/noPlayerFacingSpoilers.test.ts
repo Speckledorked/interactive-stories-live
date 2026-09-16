@@ -20,6 +20,7 @@ import { describe, it, expect } from 'vitest'
 import { MECHANICS } from '../mechanics'
 import { ORIENTATION_CARDS } from '../orientation'
 import { WALKTHROUGH } from '../walkthrough'
+import { RELEASE_NOTES } from '@/lib/releases/releaseNotes'
 
 /** Every string a player can actually read, with a label for failures. */
 function playerFacingStrings(): { where: string; text: string }[] {
@@ -40,6 +41,19 @@ function playerFacingStrings(): { where: string; text: string }[] {
   for (const s of WALKTHROUGH) {
     out.push({ where: `walkthrough "${s.id}".title`, text: s.title })
     out.push({ where: `walkthrough "${s.id}".lede`, text: s.lede })
+  }
+
+  // Release notes are player-facing copy and live under the same rules —
+  // an update that explains a change by publishing the number behind it
+  // teaches farming exactly as effectively as a meter would.
+  //
+  // PROSE ONLY. `date` and `version` are deliberately excluded: an ISO date
+  // like "2026-09-12" matches the numeric-range pattern below, so feeding
+  // them in would fail this suite for a reason that reads as nonsense and
+  // teach the next person to weaken the pattern instead.
+  for (const n of RELEASE_NOTES) {
+    out.push({ where: `release "${n.id}".title`, text: n.title })
+    n.body.forEach((p, i) => out.push({ where: `release "${n.id}".body[${i}]`, text: p }))
   }
 
   return out

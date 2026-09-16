@@ -9,6 +9,7 @@ import { OrientationGate } from '@/components/tutorial/OrientationGate'
 import { getAppUrl } from '@/lib/appUrl'
 import { fontDisplay, fontSans, fontMono } from '@/lib/fonts'
 import { THEME_INIT_SCRIPT } from '@/lib/theme'
+import { AUTH_FLAG_INIT_SCRIPT } from '@/lib/authFlag'
 
 export const metadata: Metadata = {
   metadataBase: new URL(getAppUrl()),
@@ -43,13 +44,28 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable}`}>
+    // suppressHydrationWarning because two scripts in <head> deliberately
+    // write attributes onto this element before React hydrates: `data-theme`
+    // and `data-signed-in`. The server cannot know either value — one lives
+    // in localStorage, the other IS localStorage — so the markup diverging
+    // from the DOM here is the design working, not a bug to be reported.
+    // It suppresses one level only, which is exactly this element's own
+    // attributes; children still get the normal mismatch checking.
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${fontDisplay.variable} ${fontSans.variable} ${fontMono.variable}`}
+    >
       <head>
         {/* Must run before first paint so an explicit light/dark choice is
             applied without a flash of the other palette. See
             src/lib/theme.ts for why this is an inline string rather than
             a component effect. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Same reasoning one layer along: the landing page renders both
+            calls to action and CSS picks one, so "is anyone signed in"
+            has to be answered before paint too. See lib/authFlag.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: AUTH_FLAG_INIT_SCRIPT }} />
       </head>
       <body className="min-h-screen bg-myth-canvas text-myth-ink">
         <ErrorHandlerInit />

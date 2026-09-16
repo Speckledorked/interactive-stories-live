@@ -328,3 +328,23 @@ body {
  * target, and the absence of the first and last of those was this app's
  * most widespread UI defect. Controls are components, under
  * src/components/ui/. */
+
+/* The landing page's two calls to action.
+ *
+ * `/` serves a stranger ("Create your account") and a returning player
+ * ("Continue to your campaigns") from one server-rendered document. There
+ * is no server-side auth to branch on — the token is in localStorage — so
+ * BOTH are in the markup and this hides the inapplicable one, driven by an
+ * attribute an inline script sets before first paint (src/lib/authFlag.ts).
+ *
+ * Doing the swap in CSS rather than in React is the whole point: it costs
+ * no hydration round trip, so a signed-in player never sees "Create your
+ * account" appear and then correct itself. Same trick, and same reason, as
+ * the pre-paint theme attribute above.
+ *
+ * `display: none` rather than visibility or opacity — the hidden branch
+ * must not be focusable, announced by a screen reader, or occupy space. */
+[data-signed-in] .cta-when-signed-out,
+html:not([data-signed-in]) .cta-when-signed-in {
+  display: none !important;
+}

@@ -4,13 +4,21 @@
 // /campaigns, signed out to /login — so a stranger who heard about MythOS and
 // typed the domain was handed a password field and no reason to fill it in.
 //
-// It is a server component so the copy is in the HTML for crawlers and link
-// previews; the only client part is the bounce for people who are already
-// signed in (see components/landing/RedirectSignedIn).
+// It now serves three audiences from one document: a stranger who needs the
+// pitch, a returning player for whom this is home, and anyone wanting to know
+// what has changed lately. It stays a server component — the copy belongs in
+// the HTML for crawlers and link previews — and there is no client component
+// at all: the one thing that differs by visitor, which call to action to
+// show, is decided before first paint by an attribute on <html> and a rule in
+// globals.css. See lib/authFlag.ts for why it is done that way round.
+//
+// Signed-in visitors used to be redirected straight to /campaigns, which made
+// the page unreachable for anyone with an account — including its owner, who
+// needed a private window to look at their own homepage.
 
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { RedirectSignedIn } from '@/components/landing/RedirectSignedIn'
+import { latestReleaseNotes } from '@/lib/releases/releaseNotes'
 
 export const metadata: Metadata = {
   title: 'MythOS — the world keeps moving',
@@ -83,8 +91,6 @@ function Ticker() {
 export default function HomePage() {
   return (
     <div className="-mx-4 -my-8">
-      <RedirectSignedIn />
-
       {/* Hero */}
       <section className="px-4 py-20 sm:py-28">
         <div className="mx-auto max-w-3xl text-center">
@@ -99,20 +105,30 @@ export default function HomePage() {
             moving while you are away.
           </p>
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            {/* Both are rendered; CSS shows one, chosen before first paint
+                from an attribute set by lib/authFlag.ts. See globals.css —
+                doing this in React instead would flash the wrong call to
+                action at every returning player. */}
             <Link
               href="/signup"
-              className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-myth-accent px-7 text-base font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover sm:w-auto"
+              className="cta-when-signed-out inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-myth-accent px-7 text-base font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover sm:w-auto"
             >
               Create your account
             </Link>
             <Link
+              href="/campaigns"
+              className="cta-when-signed-in inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-myth-accent px-7 text-base font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover sm:w-auto"
+            >
+              Continue to your campaigns
+            </Link>
+            <Link
               href="/login"
-              className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-myth-border px-7 text-base text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink sm:w-auto"
+              className="cta-when-signed-out inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-myth-border px-7 text-base text-myth-ink-muted transition-colors hover:border-myth-border-strong hover:text-myth-ink sm:w-auto"
             >
               Sign in
             </Link>
           </div>
-          <p className="mt-4 text-sm text-myth-ink-faint">
+          <p className="cta-when-signed-out mt-4 text-sm text-myth-ink-faint">
             Free to start — your first scenes are on us.
           </p>
         </div>
@@ -159,6 +175,34 @@ export default function HomePage() {
             </div>
             <Ticker />
           </div>
+        </div>
+      </section>
+
+      {/* What's new — the third job this page does. Placed after the pitch
+          so a stranger reaches it having been told what any of it means,
+          and before the beta caveats so a returning player finds it without
+          hunting. */}
+      <section className="border-t border-myth-border px-4 py-16">
+        <div className="mx-auto max-w-3xl">
+          <div className="mb-8 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-2xl text-myth-ink">What&rsquo;s new</h2>
+            <Link href="/updates" className="text-sm text-myth-ink-muted underline hover:text-myth-ink">
+              Everything that&rsquo;s changed
+            </Link>
+          </div>
+          <ul className="space-y-7">
+            {latestReleaseNotes(3).map((note) => (
+              <li key={note.id}>
+                <div className="flex flex-wrap items-baseline gap-x-3">
+                  <h3 className="font-display text-lg text-myth-ink">{note.title}</h3>
+                  <span className="text-xs uppercase tracking-wider text-myth-ink-faint">
+                    {note.version}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-myth-ink-muted">{note.body[0]}</p>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 

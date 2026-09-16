@@ -38,6 +38,7 @@ const COPY_GLOBS = [
   'src/app/**/*.tsx',
   'src/components/**/*.tsx',
   'src/lib/tutorial/content/**/*.ts',
+  'src/lib/releases/**/*.ts',
   'src/lib/notifications/email-service.ts',
   'src/lib/ai/validation.ts',
   'src/lib/game/campaign-health.ts',

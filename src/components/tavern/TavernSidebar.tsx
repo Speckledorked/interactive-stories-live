@@ -239,7 +239,13 @@ export function TavernSidebar({
       <div className="flex flex-col items-center gap-3 border-b border-myth-gold/20 px-4 py-5">
         <div className="flex items-center gap-3">
           <span aria-hidden className="text-xs tracking-widest text-myth-gold/50">◈──</span>
-          <h1 className="font-display text-xl tracking-[0.15em] text-myth-gold">MythOS</h1>
+          {/* Links home now that `/` is a real page rather than a redirect.
+              It stays an <h1> for the outline; the anchor is inside it. */}
+          <h1 className="font-display text-xl tracking-[0.15em] text-myth-gold">
+            <Link href="/" className="transition-opacity hover:opacity-80">
+              MythOS
+            </Link>
+          </h1>
           <span aria-hidden className="text-xs tracking-widest text-myth-gold/50">──◈</span>
         </div>
         {/* The tagline is context-dependent on purpose: inside a campaign

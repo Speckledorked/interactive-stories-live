@@ -20,6 +20,7 @@ import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
   Home,
+  Compass,
   Scroll,
   MessageSquare,
   StickyNote,
@@ -94,6 +95,10 @@ export function TavernSidebar({
   }, [campaignId])
 
   const globalLinks: NavLink[] = [
+    // Not labelled "Home": /campaigns below already carries the Home icon
+    // and is home for anyone mid-campaign. This is the front page — the
+    // pitch, and the list of what has changed lately.
+    { href: '/', label: 'MythOS', icon: Compass, isActive: (p) => p === '/' },
     { href: '/campaigns', label: 'All Campaigns', icon: Home, isActive: (p) => p === '/campaigns' },
   ]
 

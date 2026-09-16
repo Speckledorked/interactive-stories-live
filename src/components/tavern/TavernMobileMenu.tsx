@@ -37,6 +37,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import {
   X,
   Home,
+  Compass,
   Swords,
   Landmark,
   Clock,
@@ -138,6 +139,9 @@ function TavernMobileMenuInner({
     : []
 
   const accountLinks: MenuLink[] = [
+    // Same label and icon as the sidebar's entry, deliberately — this file
+    // and TavernSidebar are one navigation vocabulary, not two.
+    { href: '/', label: 'MythOS', icon: Compass, isActive: pathname === '/' },
     { href: '/campaigns', label: 'All Campaigns', icon: Home, isActive: pathname === '/campaigns' },
     { href: '/friends', label: 'Friends', icon: Users, isActive: pathname === '/friends' },
     { href: '/settings', label: 'Settings', icon: SettingsIcon, isActive: pathname === '/settings' },

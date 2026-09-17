@@ -10,7 +10,7 @@
 
 import { useState, useSyncExternalStore, useEffect, useRef, Suspense } from 'react'
 import Link from 'next/link'
-import { Bell, UserCircle, Menu, ArrowLeft } from 'lucide-react'
+import { Bell, UserCircle, Compass, ArrowLeft } from 'lucide-react'
 import { getUser } from '@/lib/clientAuth'
 import { TavernMobileMenu } from './TavernMobileMenu'
 import { useUnreadCount } from '@/hooks/useUnreadCount'
@@ -18,7 +18,6 @@ import {
   closeMobileMenu,
   getMobileMenuOpen,
   getMobileMenuServerSnapshot,
-  openMobileMenu,
   subscribeMobileMenu,
 } from './mobileMenuStore'
 import { TavernSidebar } from './TavernSidebar'
@@ -141,12 +140,17 @@ export function TavernHeader({
             variant="ghost"
             onClick={() => setNotifOpen(true)}
           />
-          <IconButton
-            icon={Menu}
-            label="Menu"
-            variant="ghost"
-            onClick={openMobileMenu}
-          />
+          {/* Was a second Menu button opening the very same drawer as the
+              bottom bar's "More" — two controls, one action, both on screen
+              at once on a phone. It was redundant at every width: below lg:
+              the bar carries More, and at lg:+ the sidebar already lists
+              every destination the drawer holds.
+
+              The slot goes to the one destination that had no button at all.
+              Same icon and vocabulary as the sidebar/drawer entry. */}
+          <Link href="/" className={iconButtonClass} aria-label="MythOS home">
+            <Compass className="w-5 h-5" />
+          </Link>
           <Link href="/settings" className={iconButtonClass} aria-label="Profile">
             <UserCircle className="w-5 h-5" />
           </Link>

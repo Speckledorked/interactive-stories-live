@@ -70,7 +70,25 @@ export async function enablePush(): Promise<PushEnableResult> {
     const permission = await Notification.requestPermission()
     if (permission !== 'granted') return { ok: false, reason: 'denied' }
 
-    const registration = await navigator.serviceWorker.ready
+    // getRegistration(), not `.ready`. `.ready` resolves only once a service
+    // worker is active and NEVER rejects — with nothing registered it simply
+    // hangs, so enabling notifications spun forever with no error and no
+    // feedback. That was the live state: public/sw.js exists but no code in
+    // this repo has ever called serviceWorker.register (checked across the
+    // whole history), so `.ready` had nothing to wait for.
+    //
+    // This makes it fail honestly instead. The remaining work to make push
+    // actually deliver is registering a worker — which has to come with
+    // fixing sw.js's cache-first fetch handler first, since registering it
+    // as written would pin every visitor to the build they first loaded.
+    const registration = await navigator.serviceWorker.getRegistration()
+    if (!registration) {
+      return {
+        ok: false,
+        reason: 'failed',
+        detail: 'Push needs a service worker, and none is registered in this build',
+      }
+    }
 
     // Reuse an existing subscription when there is one: calling subscribe()
     // twice with different keys throws, and re-POSTing repairs a server
@@ -107,8 +125,13 @@ export async function disablePush(): Promise<void> {
   if (!isPushSupported()) return
 
   try {
-    const registration = await navigator.serviceWorker.ready
-    const subscription = await registration.pushManager.getSubscription()
+    // getRegistration(), for the same reason enablePush uses it: `.ready`
+    // hangs rather than rejecting when nothing is registered, and a hang
+    // here would silently defeat this function's whole contract — the
+    // comment above promises the server delete runs even when the local
+    // unsubscribe doesn't, and an await that never settles never reaches it.
+    const registration = await navigator.serviceWorker.getRegistration()
+    const subscription = registration ? await registration.pushManager.getSubscription() : null
     if (!subscription) return
 
     const endpoint = subscription.endpoint

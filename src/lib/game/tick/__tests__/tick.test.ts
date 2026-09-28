@@ -339,20 +339,20 @@ describe('decideDefection (NPC motivation model)', () => {
 
 describe('decideRelationshipTick', () => {
   it('makes rivals of two factions chasing the same finite goal', () => {
-    expect(decideRelationshipTick({ goal: 'EXPAND', stability: 50 }, { goal: 'EXPAND', stability: 50 })).toBe('RIVAL')
-    expect(decideRelationshipTick({ goal: 'ENRICH', stability: 50 }, { goal: 'ENRICH', stability: 50 })).toBe('RIVAL')
+    expect(decideRelationshipTick({ goal: 'EXPAND', stability: 50 }, { goal: 'EXPAND', stability: 50 }).type).toBe('RIVAL')
+    expect(decideRelationshipTick({ goal: 'ENRICH', stability: 50 }, { goal: 'ENRICH', stability: 50 }).type).toBe('RIVAL')
   })
 
   it('makes allies of two stable, inward-looking factions', () => {
-    expect(decideRelationshipTick({ goal: 'CONSOLIDATE', stability: 60 }, { goal: 'DEFEND', stability: 60 })).toBe('ALLY')
+    expect(decideRelationshipTick({ goal: 'CONSOLIDATE', stability: 60 }, { goal: 'DEFEND', stability: 60 }).type).toBe('ALLY')
   })
 
   it('does not ally two inward-looking factions if either is unstable', () => {
-    expect(decideRelationshipTick({ goal: 'CONSOLIDATE', stability: 20 }, { goal: 'DEFEND', stability: 60 })).toBe('NEUTRAL')
+    expect(decideRelationshipTick({ goal: 'CONSOLIDATE', stability: 20 }, { goal: 'DEFEND', stability: 60 }).type).toBe('NEUTRAL')
   })
 
   it('is neutral between factions with unrelated goals', () => {
-    expect(decideRelationshipTick({ goal: 'EXPAND', stability: 50 }, { goal: 'CONSOLIDATE', stability: 50 })).toBe('NEUTRAL')
+    expect(decideRelationshipTick({ goal: 'EXPAND', stability: 50 }, { goal: 'CONSOLIDATE', stability: 50 }).type).toBe('NEUTRAL')
   })
 })
 

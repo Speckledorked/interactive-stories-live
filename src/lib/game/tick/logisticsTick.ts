@@ -42,6 +42,7 @@
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
 import { AdjacencyEdge, nearestLocation } from '../worldGraph'
 import { isSevereWeather } from './weatherTick'
+import { deriveConditionTags } from './locationConditionTick'
 import type { WeatherCondition } from '@prisma/client'
 
 // Small, bounded per-slot gain — same rough scale as other tick deltas
@@ -53,6 +54,20 @@ export interface ExtractionLocation {
   locationId: string
   resourceSlots: string[]
   ownerFactionId: string | null
+  /**
+   * Location.population, or null/undefined when untracked. A tracked zero
+   * (or negative, clamped) means a ghost town: no hands to work the
+   * slots, so no yield. Null/undefined keeps the legacy behavior exactly
+   * (see the null-vs-0 convention in factionTick.ts).
+   */
+  population?: number | null
+  /**
+   * Location.conditionScore, or null/undefined when untracked. Uses the
+   * same closed tag vocabulary as deriveConditionTags: ABANDONED ground
+   * yields nothing, RUINED ground yields half. Null/undefined keeps the
+   * legacy full yield — same null-vs-absent convention as population.
+   */
+  conditionScore?: number | null
 }
 
 export interface SupplyRouteView {
@@ -109,16 +124,28 @@ function hasAnyConnection(
  * Severe weather (see isSevereWeather) at EITHER end breaks the route for
  * the tick — caravans don't cross a blizzard pass. Deterministic and
  * threshold-based, not a random failure roll.
+ *
+ * Exported for warTick.ts: an attacker with no working route to the front
+ * bleeds extra attrition. Same predicate, same semantics — overextension
+ * is punishable because the route graph says so, not because warTick
+ * reimplements it. One deliberate difference: warTick passes
+ * `strictForeignFront`, which disables the sole-location shortcut when the
+ * front isn't the faction's own ground. A lone home location feeds itself
+ * (extraction), but it does not supply an expeditionary army fighting on
+ * foreign soil with no route home.
  */
-function hasWorkingRoute(
+export function hasWorkingRoute(
   locationId: string,
   ownerFactionId: string,
   routes: SupplyRouteView[],
   ownerByLocationId: Map<string, string | null>,
   ownedLocationCount: number,
-  weatherByLocationId: Map<string, { condition: WeatherCondition; severity: number }> = new Map()
+  weatherByLocationId: Map<string, { condition: WeatherCondition; severity: number }> = new Map(),
+  opts?: { strictForeignFront?: boolean }
 ): boolean {
-  if (ownedLocationCount <= 1) return true
+  const foreignFront =
+    opts?.strictForeignFront === true && ownerByLocationId.get(locationId) !== ownerFactionId
+  if (ownedLocationCount <= 1 && !foreignFront) return true
   return routes.some((r) => {
     if (r.isBlockaded) return false
     const otherEnd = otherEndOf(r, locationId)
@@ -143,9 +170,12 @@ function countOwnedLocations(locations: ExtractionLocation[]): Map<string, numbe
 
 /**
  * Pure — no DB access. A location yields its owner a resource gain only
- * when it has at least one resource slot, is actually owned, AND has a
- * working route (see hasWorkingRoute above). `weatherByLocationId` is
- * optional — absent means pre-weather behavior exactly.
+ * when it has at least one resource slot, is actually owned, has a
+ * non-depopulated population, AND has a working route (see
+ * hasWorkingRoute above). `weatherByLocationId` is optional — absent
+ * means pre-weather behavior exactly. `population` absent/null likewise
+ * means pre-population behavior exactly, and `conditionScore`
+ * absent/null likewise means pre-condition behavior exactly.
  */
 export function decideExtraction(
   locations: ExtractionLocation[],
@@ -159,6 +189,24 @@ export function decideExtraction(
   for (const location of locations) {
     if (location.resourceSlots.length === 0) continue
     if (!location.ownerFactionId) continue
+    // Ghost towns extract nothing: a tracked zero (or less) population
+    // means no hands to work the resource slots. Untracked (null/
+    // undefined) keeps the legacy yield — same null-vs-0 convention as
+    // factionTick's population manpower bonus.
+    const population = location.population ?? null
+    if (population !== null && population <= 0) continue
+
+    // Ruined ground is picked-over ground: ABANDONED sites yield nothing
+    // at all, RUINED sites yield half. The tags are derived, not
+    // hardcoded, so "ruined" always means what locationConditionTick
+    // says it means. Untracked condition keeps the legacy full yield.
+    const condition = location.conditionScore ?? null
+    let conditionMultiplier = 1
+    if (condition !== null) {
+      const tags = deriveConditionTags(condition, false)
+      if (tags.includes('ABANDONED')) continue
+      if (tags.includes('RUINED')) conditionMultiplier = 0.5
+    }
 
     const ownedCount = ownedCounts.get(location.ownerFactionId) ?? 0
     if (!hasWorkingRoute(location.locationId, location.ownerFactionId, routes, ownerByLocationId, ownedCount, weatherByLocationId)) continue
@@ -166,7 +214,7 @@ export function decideExtraction(
     decisions.push({
       locationId: location.locationId,
       factionId: location.ownerFactionId,
-      resourceGain: location.resourceSlots.length * RESOURCE_GAIN_PER_SLOT,
+      resourceGain: Math.floor(location.resourceSlots.length * RESOURCE_GAIN_PER_SLOT * conditionMultiplier),
     })
   }
 
@@ -249,7 +297,7 @@ export function decideSupplyRouteCreation(
 export async function tickLogistics(ctx: TickContext): Promise<TickHandlerResult> {
   const locations = await ctx.db.location.findMany({
     where: { campaignId: ctx.campaignId },
-    select: { id: true, name: true, resourceSlots: true, ownerFactionId: true, weather: true, weatherSeverity: true },
+    select: { id: true, name: true, resourceSlots: true, ownerFactionId: true, weather: true, weatherSeverity: true, population: true, conditionScore: true },
   })
   if (locations.length === 0) return { changes: [] }
 
@@ -279,6 +327,8 @@ export async function tickLogistics(ctx: TickContext): Promise<TickHandlerResult
     locationId: l.id,
     resourceSlots: l.resourceSlots,
     ownerFactionId: l.ownerFactionId,
+    population: l.population,
+    conditionScore: l.conditionScore,
   }))
 
   const routeCreations = decideSupplyRouteCreation(extractionLocations, routes, adjacencyRows as AdjacencyEdge[])

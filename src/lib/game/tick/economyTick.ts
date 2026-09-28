@@ -80,6 +80,18 @@ const CASCADE_DECAY_TURNS = 5
 // shockwave from that default is still being felt.
 const LOAN_DEFAULT_COOLDOWN_TURNS = CASCADE_DECAY_TURNS
 
+// A healthy debtor services its obligations instead of sitting on them:
+// one installment per tick against its oldest OUTSTANDING debt. A fixed
+// amount, not a fraction — fractions asymptote and never clear a debt,
+// while a fixed installment amortizes deterministically to PAID.
+const DEBT_REPAYMENT_PER_TICK = 10
+// Defaulting has to cost the DEBTOR something real, or debt is free money
+// and the creditor's wake is the only consequence in the whole system. An
+// influence hit feeds straight back into declaration gating
+// (INFLUENCE_DECLARATION_FLOOR in warTick.ts): a faction that stiffs its
+// creditors can't rally anyone into its next war.
+const DEFAULT_DEBTOR_INFLUENCE_PENALTY = 8
+
 export interface LoanCandidate {
   factionId: string
   resources: number
@@ -125,22 +137,86 @@ export function decideDefaultCascade(defaultedDebtCount: number, roughness: numb
   return -Math.round(magnitude)
 }
 
+export interface RepayableDebt {
+  id: string
+  creditorFactionId: string
+  debtorFactionId: string
+  amount: number
+  turnCreated: number
+}
+
+export interface DebtRepaymentDecision {
+  debtId: string
+  debtorFactionId: string
+  creditorFactionId: string
+  repaid: number
+  newAmount: number
+  settled: boolean
+}
+
+/**
+ * Pure — which debts get a repayment installment this tick. One repayment
+ * per debtor, against its OLDEST outstanding debt (turnCreated, then id —
+ * deterministic, never dependent on query row order). Only healthy debtors
+ * pay: a broke or collapsed debtor's obligations were already routed to
+ * defaulting, and a debtor that can't cover the full installment pays what
+ * it has rather than nothing. Debts already settled or defaulted in this
+ * same pass are the caller's job to exclude.
+ */
+export function planDebtRepayment(
+  debts: RepayableDebt[],
+  debtors: Map<string, { isActive: boolean; resources: number }>
+): DebtRepaymentDecision[] {
+  const oldestByDebtor = new Map<string, RepayableDebt>()
+  for (const debt of debts) {
+    if (debt.amount <= 0) continue
+    const debtor = debtors.get(debt.debtorFactionId)
+    if (!debtor || !debtor.isActive || debtor.resources < BROKE_THRESHOLD) continue
+    const current = oldestByDebtor.get(debt.debtorFactionId)
+    if (
+      !current ||
+      debt.turnCreated < current.turnCreated ||
+      (debt.turnCreated === current.turnCreated && debt.id < current.id)
+    ) {
+      oldestByDebtor.set(debt.debtorFactionId, debt)
+    }
+  }
+
+  const decisions: DebtRepaymentDecision[] = []
+  for (const debt of oldestByDebtor.values()) {
+    const debtor = debtors.get(debt.debtorFactionId)!
+    const repaid = Math.min(DEBT_REPAYMENT_PER_TICK, debt.amount, debtor.resources)
+    if (repaid <= 0) continue
+    decisions.push({
+      debtId: debt.id,
+      debtorFactionId: debt.debtorFactionId,
+      creditorFactionId: debt.creditorFactionId,
+      repaid,
+      newAmount: debt.amount - repaid,
+      settled: debt.amount - repaid === 0,
+    })
+  }
+  // Deterministic emission order — the same input always replays the same
+  // sequence of writes.
+  decisions.sort((a, b) => a.debtId.localeCompare(b.debtId))
+  return decisions
+}
+
 export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> {
   const changes: WorldChange[] = []
 
   // 0. Cancel debt that runs in a circle (#371).
   //
-  // Runs BEFORE defaulting, and the order is the point: netting is the
-  // only way an obligation can leave this system without someone
-  // collapsing. Nothing has ever written FactionDebtStatus.PAID — a debt
-  // sat OUTSTANDING until its debtor went broke, then DEFAULTED and put a
-  // stability shockwave through its creditor. Obligations could only
-  // accumulate. If A owes B, B owes C and C owes A, part of what each
-  // "owes" is owed back around the ring, and cancelling the common
-  // minimum settles real debt for all of them while moving no resources
-  // at all — which is precisely why it can rescue a faction too broke to
-  // pay anyone. Defaulting first would destroy exactly the debts most
-  // worth netting.
+  // Runs BEFORE defaulting, and the order is the point: netting used to
+  // be the only way an obligation could leave this system without
+  // someone collapsing — now healthy debtors also amortize toward PAID
+  // in the repayment step below. Netting still runs first because it
+  // settles real debt while moving no resources at all, which is
+  // precisely why it can rescue a faction too broke to pay anyone:
+  // if A owes B, B owes C and C owes A, part of what each "owes" is
+  // owed back around the ring, and cancelling the common minimum
+  // settles real debt for all of them. Defaulting first would destroy
+  // exactly the debts most worth netting.
   //
   // One fetch serves both this step and the defaulting below — same
   // campaign, same OUTSTANDING status, same `turnCreated < turnNumber`
@@ -148,7 +224,9 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
   // or defaulted inside the same pass).
   const outstandingDebts = await ctx.db.factionDebt.findMany({
     where: { campaignId: ctx.campaignId, status: 'OUTSTANDING', turnCreated: { lt: ctx.turnNumber } },
-    select: { id: true, creditorFactionId: true, debtorFactionId: true, amount: true },
+    // turnCreated is selected (not just filtered on) so repayment below
+    // can order a debtor's obligations oldest-first deterministically.
+    select: { id: true, creditorFactionId: true, debtorFactionId: true, amount: true, turnCreated: true },
   })
 
   const nettings = planCycleNetting(outstandingDebts)
@@ -203,13 +281,20 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
   // default.
   const defaultableDebts = outstandingDebts.filter((d) => !settledByNetting.has(d.id))
 
+  // Hoisted for the repayment step below: which debtors are healthy, and
+  // which debts defaulted in this pass (they must not also be repaid).
+  const debtorById = new Map<string, { id: string; isActive: boolean; resources: number; influence: number }>()
+  const defaultedDebtIds = new Set<string>()
+
   if (defaultableDebts.length > 0) {
     const debtorIds = [...new Set(defaultableDebts.map((d) => d.debtorFactionId))]
     const debtors = await ctx.db.faction.findMany({
       where: { id: { in: debtorIds } },
-      select: { id: true, isActive: true, resources: true },
+      // influence is selected here (not just resources) so the defaulting
+      // debtor's own penalty below doesn't need a second read.
+      select: { id: true, isActive: true, resources: true, influence: true },
     })
-    const debtorById = new Map(debtors.map((d) => [d.id, d]))
+    for (const debtor of debtors) debtorById.set(debtor.id, debtor)
 
     const defaultingDebts = defaultableDebts.filter((debt) => {
       const debtor = debtorById.get(debt.debtorFactionId)
@@ -217,6 +302,7 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
     })
 
     if (defaultingDebts.length > 0) {
+      for (const debt of defaultingDebts) defaultedDebtIds.add(debt.id)
       if (!ctx.dryRun) {
         await ctx.db.factionDebt.updateMany({
           where: { id: { in: defaultingDebts.map((d) => d.id) } },
@@ -282,6 +368,112 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
           wakeSourceType: 'FACTION_DEFAULT',
         })
       }
+
+      // The debtor pays too — in influence, alongside the creditor's
+      // stability wake. A faction that stiffs its creditors finds its
+      // word carries less weight: this feeds warTick's
+      // INFLUENCE_DECLARATION_FLOOR, so a serial defaulter can't rally
+      // anyone into its next war. One penalty per defaulting debtor, not
+      // per debt — the reputational hit is for the act, and the creditor
+      // loop above already scales with debt count.
+      const debtsByDebtor = new Map<string, typeof defaultingDebts>()
+      for (const debt of defaultingDebts) {
+        if (!debtsByDebtor.has(debt.debtorFactionId)) debtsByDebtor.set(debt.debtorFactionId, [])
+        debtsByDebtor.get(debt.debtorFactionId)!.push(debt)
+      }
+      const defaulterNames = await ctx.db.faction.findMany({
+        where: { id: { in: Array.from(debtsByDebtor.keys()) } },
+        select: { id: true, name: true },
+      })
+      const defaulterNameById = new Map(defaulterNames.map((f) => [f.id, f.name]))
+      for (const [debtorId, debts] of debtsByDebtor) {
+        const debtor = debtorById.get(debtorId)
+        if (!debtor || !debtor.isActive) continue
+        const newInfluence = clamp(debtor.influence - DEFAULT_DEBTOR_INFLUENCE_PENALTY, 0, 100)
+        if (!ctx.dryRun) {
+          await ctx.db.faction.update({ where: { id: debtorId }, data: { influence: newInfluence } })
+        }
+        const debtorName = defaulterNameById.get(debtorId) ?? 'a faction'
+        changes.push({
+          entityType: 'FACTION',
+          entityId: debtorId,
+          entityName: debtorName,
+          campaignId: ctx.campaignId,
+          field: 'influence',
+          previousValue: debtor.influence,
+          newValue: newInfluence,
+          reason:
+            debts.length > 1
+              ? `${debtorName} defaults on ${debts.length} debts — its word carries less weight now`
+              : `${debtorName} defaults on its debt — its word carries less weight now`,
+          significant: true,
+          importance: 'NORMAL',
+        })
+      }
+    }
+  }
+
+  // 1b. Healthy debtors service their oldest outstanding debt — a fixed
+  // installment per tick, resources moving from debtor to creditor. Runs
+  // after defaulting (a debt that defaulted this pass no longer exists to
+  // be repaid) and before new-loan origination (a faction that just
+  // cleared its books may legitimately re-qualify for aid). Debts settled
+  // by netting above are excluded the same way the defaulting step
+  // excludes them.
+  const repayableDebts = outstandingDebts.filter(
+    (d) => !settledByNetting.has(d.id) && !defaultedDebtIds.has(d.id)
+  )
+  const repayments = planDebtRepayment(repayableDebts, debtorById)
+  if (repayments.length > 0) {
+    const partyIds = [...new Set(repayments.flatMap((r) => [r.debtorFactionId, r.creditorFactionId]))]
+    const parties = await ctx.db.faction.findMany({
+      where: { id: { in: partyIds } },
+      select: { id: true, name: true, resources: true },
+    })
+    const nameById = new Map(parties.map((f) => [f.id, f.name]))
+    // Working balances, not re-reads: one faction can appear in several
+    // repayments this pass (debtor on one, creditor on another), and each
+    // installment must see the last one's effect.
+    const workingResources = new Map(parties.map((f) => [f.id, f.resources]))
+
+    for (const repayment of repayments) {
+      const debtorBalance = workingResources.get(repayment.debtorFactionId)
+      const creditorBalance = workingResources.get(repayment.creditorFactionId)
+      if (debtorBalance === undefined || creditorBalance === undefined) continue
+      const newDebtorResources = clamp(debtorBalance - repayment.repaid, 0, 100)
+      const newCreditorResources = clamp(creditorBalance + repayment.repaid, 0, 100)
+      workingResources.set(repayment.debtorFactionId, newDebtorResources)
+      workingResources.set(repayment.creditorFactionId, newCreditorResources)
+
+      if (!ctx.dryRun) {
+        await ctx.db.factionDebt.update({
+          where: { id: repayment.debtId },
+          data: repayment.settled
+            ? { amount: 0, status: 'PAID', resolvedAt: new Date(), turnResolved: ctx.turnNumber }
+            : { amount: repayment.newAmount },
+        })
+        await ctx.db.faction.update({ where: { id: repayment.debtorFactionId }, data: { resources: newDebtorResources } })
+        await ctx.db.faction.update({ where: { id: repayment.creditorFactionId }, data: { resources: newCreditorResources } })
+      }
+
+      const debtorName = nameById.get(repayment.debtorFactionId) ?? 'a faction'
+      const creditorName = nameById.get(repayment.creditorFactionId) ?? 'a faction'
+      changes.push({
+        entityType: 'FACTION',
+        entityId: repayment.debtorFactionId,
+        entityName: debtorName,
+        campaignId: ctx.campaignId,
+        field: 'debt',
+        previousValue: repayment.repaid + repayment.newAmount,
+        newValue: repayment.newAmount,
+        reason: repayment.settled
+          ? `${debtorName} repays its debt to ${creditorName} in full`
+          : `${debtorName} repays ${repayment.repaid} toward its debt to ${creditorName}`,
+        // Clearing an obligation outright is worth remembering; an
+        // installment is routine bookkeeping on the way there.
+        significant: repayment.settled,
+        importance: 'NORMAL',
+      })
     }
   }
 

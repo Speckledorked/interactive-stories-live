@@ -14,6 +14,11 @@ vi.mock('@/lib/prisma', () => ({
     activeWake: { count: vi.fn(async () => 0) },
     // Population flight events feed faction stability (last turn's exodus).
     populationFlightEvent: { findMany: vi.fn(async () => []) },
+    // Wars pin rivalries: tickFactionRelationships reads active wars.
+    war: { findMany: vi.fn(async () => []) },
+    // Defaults strain relationships: tickFactionRelationships reads last
+    // turn's DEFAULTED debts.
+    factionDebt: { findMany: vi.fn(async () => []) },
   },
 }))
 
@@ -42,6 +47,9 @@ function makeFaction(id: string, overrides: Record<string, any> = {}) {
     archetype: 'GENERIC',
     leaderCharacterId: null,
     isActive: true,
+    // tickFactions reads the faction's live spawned-clocks (an active
+    // ambition clock holds the goal); fixtures carry an empty list.
+    spawnedClocks: [],
     ...factionTieRows(id, overrides.ties ?? {}),
     ...rest,
   }

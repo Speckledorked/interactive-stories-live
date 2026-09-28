@@ -26,30 +26,81 @@ import { FactionRelationshipEntry, TickContext, TickHandlerResult } from './type
 import { tickPairwiseTies } from './relationshipEngine'
 import { rosterFactionFilter } from './capOrdering'
 import { edgesFromFactionRows } from '../tieGraph'
+import { BeliefVector, parseBeliefVector } from './beliefTick'
 
 export type RelationshipType = 'RIVAL' | 'ALLY' | 'NEUTRAL'
+
+/**
+ * Pure — one tie step toward hostility. A fresh default strains the
+ * debtor-creditor relationship exactly this far: ALLY -> NEUTRAL,
+ * NEUTRAL -> RIVAL, RIVAL stays RIVAL (already at maximum hostility).
+ */
+export function strainOneStep(type: RelationshipType): RelationshipType {
+  if (type === 'ALLY') return 'NEUTRAL'
+  if (type === 'NEUTRAL') return 'RIVAL'
+  return 'RIVAL'
+}
 
 // The entry shape itself lives in types.ts (see the note there about
 // import cycles); re-exported here for existing importers.
 export type { FactionRelationshipEntry }
 
+/**
+ * Why a RIVAL tie was pinned rather than decided from goals — threaded
+ * through the engine's `meta` so the change reason can say so.
+ */
+export type RivalryPin = 'war' | 'belief'
+
+/**
+ * Two factions count as ideological enemies when their belief vectors are
+ * this far apart on ANY single axis (0-100 scale, neutral 50). 40 means one
+ * side sits near an extreme the other rejects — e.g. aggression 90 vs 50 —
+ * not a mild disagreement. Belief drift moves ~4 per event (beliefTick),
+ * so crossing this takes sustained divergence, not one bad turn.
+ */
+export const BELIEF_RIVALRY_DISTANCE = 40
+
+function maxBeliefDistance(a: BeliefVector, b: BeliefVector): number {
+  return Math.max(
+    Math.abs(a.aggression - b.aggression),
+    Math.abs(a.isolationism - b.isolationism),
+    Math.abs(a.mercantilism - b.mercantilism),
+    Math.abs(a.zealotry - b.zealotry)
+  )
+}
+
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideRelationshipTick(
   a: { goal: FactionGoal; stability: number },
-  b: { goal: FactionGoal; stability: number }
-): RelationshipType {
+  b: { goal: FactionGoal; stability: number },
+  opts?: { atWar?: boolean; beliefA?: BeliefVector | null; beliefB?: BeliefVector | null }
+): { type: RelationshipType; pin?: RivalryPin } {
+  // Blood outlasts paperwork: a pair actively shooting at each other stays
+  // RIVAL no matter what the goal labels say this tick. Without the pin, a
+  // war pair whose goals drift goes NEUTRAL mid-war and warTick loses the
+  // RIVAL precondition its declarations and coalitions depend on.
+  if (opts?.atWar) return { type: 'RIVAL', pin: 'war' }
+  // Ideological distance past the threshold is enmity even without
+  // competing goals — beliefs start driving diplomacy instead of just
+  // decorating it. Null (never drifted) skips this check entirely, so only
+  // real divergence counts; the goal/stability rules below stay the legacy
+  // behavior for belief-less pairs.
+  const { beliefA, beliefB } = opts ?? {}
+  if (beliefA && beliefB && maxBeliefDistance(beliefA, beliefB) >= BELIEF_RIVALRY_DISTANCE) {
+    return { type: 'RIVAL', pin: 'belief' }
+  }
   // Two factions chasing the same finite thing (territory, wealth) are
   // natural competitors.
   if (a.goal === b.goal && (a.goal === 'EXPAND' || a.goal === 'ENRICH')) {
-    return 'RIVAL'
+    return { type: 'RIVAL' }
   }
   // Two factions that are both stable and both looking inward aren't
   // stepping on each other's toes — a natural non-aggression pact.
   const bothInward = (a.goal === 'DEFEND' || a.goal === 'CONSOLIDATE') && (b.goal === 'DEFEND' || b.goal === 'CONSOLIDATE')
   if (bothInward && band(a.stability) !== 'LOW' && band(b.stability) !== 'LOW') {
-    return 'ALLY'
+    return { type: 'ALLY' }
   }
-  return 'NEUTRAL'
+  return { type: 'NEUTRAL' }
 }
 
 export async function tickFactionRelationships(ctx: TickContext): Promise<TickHandlerResult> {
@@ -77,6 +128,44 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
     select: { factionAId: true, factionBId: true, type: true, since: true },
   })
 
+  // Wars pin rivalries: any pair with an ESCALATING war between them is
+  // RIVAL this tick regardless of goals (see decideRelationshipTick).
+  // Participants included so coalition joiners pin too, not just the two
+  // declarants. One batched read for the whole pairwise pass.
+  const escalatingWars = await ctx.db.war.findMany({
+    where: { campaignId: ctx.campaignId, status: 'ESCALATING' },
+    select: {
+      attackerFactionId: true,
+      defenderFactionId: true,
+      participants: { select: { factionId: true, side: true } },
+    },
+  })
+  const pairKey = (x: string, y: string) => (x < y ? `${x}|${y}` : `${y}|${x}`)
+  const warPairKeys = new Set<string>()
+  for (const w of escalatingWars) {
+    const attackers = new Set([
+      w.attackerFactionId,
+      ...w.participants.filter((p) => p.side === 'ATTACKER').map((p) => p.factionId),
+    ])
+    const defenders = new Set([
+      w.defenderFactionId,
+      ...w.participants.filter((p) => p.side === 'DEFENDER').map((p) => p.factionId),
+    ])
+    for (const a of attackers) for (const d of defenders) warPairKeys.add(pairKey(a, d))
+  }
+
+  // A default strains the debtor-creditor tie one step toward hostility.
+  // Reads the debts tickEconomy defaulted LAST turn — it runs later in
+  // TICK_HANDLERS, so this turn's defaults don't exist yet. Same one-tick
+  // lag the module doc already describes for goals; keyed on turnResolved
+  // (not "currently DEFAULTED") so each default strains exactly once,
+  // not every tick the debt sits unresolved.
+  const freshDefaults = await ctx.db.factionDebt.findMany({
+    where: { campaignId: ctx.campaignId, status: 'DEFAULTED', turnResolved: ctx.turnNumber - 1 },
+    select: { debtorFactionId: true, creditorFactionId: true },
+  })
+  const defaultedPairKeys = new Set(freshDefaults.map((d) => pairKey(d.debtorFactionId, d.creditorFactionId)))
+
   const { changes, upserts, deletes } = tickPairwiseTies({
     campaignId: ctx.campaignId,
     entityType: 'FACTION',
@@ -86,19 +175,46 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
     // A rival only counts if it still exists as an active faction —
     // nothing else ever expires a stale entry (see the module doc above).
     isValidOtherId: (otherId) => activeFactionIds.has(otherId),
-    decide: (a, b) => ({ type: decideRelationshipTick(a, b), meta: undefined }),
+    decide: (a, b) => {
+      const { type, pin } = decideRelationshipTick(a, b, {
+        atWar: warPairKeys.has(pairKey(a.id, b.id)),
+        beliefA: parseBeliefVector(a.beliefVector),
+        beliefB: parseBeliefVector(b.beliefVector),
+      })
+      // A fresh default strains this pair one step toward hostility —
+      // applied to the decided type so the engine's upsert/delete/change
+      // machinery treats the strained result as the honest decision.
+      if (defaultedPairKeys.has(pairKey(a.id, b.id))) {
+        return { type: strainOneStep(type), meta: pin }
+      }
+      return { type, meta: pin }
+    },
     buildExpireChange: (f, otherId, previous) => ({
       reason: `${f.name}'s ${previous.type === 'RIVAL' ? 'rivalry' : 'alliance'} with ${factionNameById.get(otherId) || 'a defunct faction'} lapses — the other side no longer exists as an independent faction`,
       significant: true,
     }),
-    buildNeutralChange: (a, b, previous) => ({
-      reason: `${a.name} and ${b.name} are no longer ${previous.type === 'RIVAL' ? 'rivals' : 'allies'}`,
-      significant: true,
-    }),
-    buildNewChange: (a, b, freshType) => ({
-      reason: `${a.name} and ${b.name} become ${freshType === 'RIVAL' ? 'rivals' : 'allies'}, both pursuing ${a.goal === b.goal ? a.goal : `${a.goal}/${b.goal}`}`,
-      significant: true,
-    }),
+    buildNeutralChange: (a, b, previous) => {
+      const strained = defaultedPairKeys.has(pairKey(a.id, b.id))
+      return {
+        reason: strained
+          ? `${a.name} and ${b.name} are no longer ${previous.type === 'RIVAL' ? 'rivals' : 'allies'} — a defaulted debt strains the relationship`
+          : `${a.name} and ${b.name} are no longer ${previous.type === 'RIVAL' ? 'rivals' : 'allies'}`,
+        significant: true,
+      }
+    },
+    buildNewChange: (a, b, freshType, meta) => {
+      const strained = defaultedPairKeys.has(pairKey(a.id, b.id))
+      const reason =
+        meta === 'war'
+          ? `${a.name} and ${b.name} are locked as rivals — the war between them pins the enmity regardless of shifting goals`
+          : meta === 'belief'
+            ? `${a.name} and ${b.name} become rivals — their beliefs have drifted too far apart`
+            : `${a.name} and ${b.name} become ${freshType === 'RIVAL' ? 'rivals' : 'allies'}, both pursuing ${a.goal === b.goal ? a.goal : `${a.goal}/${b.goal}`}`
+      return {
+        reason: strained ? `${reason} — strained by a defaulted debt` : reason,
+        significant: true,
+      }
+    },
   })
 
   if (!ctx.dryRun) {

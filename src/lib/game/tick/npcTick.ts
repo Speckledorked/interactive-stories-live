@@ -116,11 +116,23 @@ export interface NpcTickDecision {
  * between them — optional. Omitted (or a home location with no adjacency
  * data at all), decideNpcTick falls back to its exact pre-#108 hash-rotation
  * "work" pick, so a campaign with no backfilled graph yet behaves
- * identically to before. */
+ * identically to before.
+ *
+ * `contestedIds` (also optional) marks locations with an active war on
+ * their doorstep — NPCs avoid picking contested work destinations, and
+ * make slower goal progress while stuck in one. Absent, contested ground
+ * is invisible to the routine, exactly as before. */
 export interface NpcLocationGraph {
   idByName: Map<string, string>
   edges: AdjacencyEdge[]
+  contestedIds?: ReadonlySet<string>
 }
+
+// Working a war zone (or serving a faction that no longer exists as an
+// independent actor) halves goal progress — you can't get much done with
+// armies marching through, or when the institution you served has
+// collapsed out from under you.
+const CONTESTED_PROGRESS_MULTIPLIER = 0.5
 
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideNpcTick(
@@ -131,7 +143,14 @@ export function decideNpcTick(
   // faction's current strategic posture, so "serving Iron Crown" reads
   // differently while that faction is pursuing EXPAND vs. DEFEND — the
   // affiliation isn't just a foreign key, it colors the NPC's own flavor text.
-  faction: { name: string; goal: string } | null = null,
+  //
+  // isActive distinguishes "no faction" (null — truly unaffiliated, never
+  // penalized for faction state) from "affiliated with a collapsed one"
+  // (object with isActive: false — goal progress suffers). Optional and
+  // defaulting to active, so older callers that pass a faction object keep
+  // their exact behavior. The flavor note only names a living faction; a
+  // dead one's posture is stale text.
+  faction: { name: string; goal: string; isActive?: boolean } | null = null,
   locationGraph?: NpcLocationGraph,
   // #402: the in-fiction clock. Time of day comes from here, not from the
   // turn counter — see deriveTimeOfDay.
@@ -144,10 +163,17 @@ export function decideNpcTick(
 
   const goalText = npc.goals?.trim() || 'no clear goal'
   const relationshipNote = npc.relationship?.trim()
-  const factionNote = faction ? ` [${faction.name}, pursuing ${faction.goal}]` : ''
+  const factionNote = faction && faction.isActive !== false ? ` [${faction.name}, pursuing ${faction.goal}]` : ''
   const currentPlan = relationshipNote
     ? `${phase} (${timeOfDay}): ${goalText} — mindful of ${relationshipNote}${factionNote}`
     : `${phase} (${timeOfDay}): ${goalText}${factionNote}`
+
+  const contestedIds = locationGraph?.contestedIds
+  const isContestedName = (name: string): boolean => {
+    if (!contestedIds) return false
+    const id = locationGraph!.idByName.get(name)
+    return id !== undefined && contestedIds.has(id)
+  }
 
   let nextLocation: string | null = null
   const sorted = [...new Set(discoveredLocationNames)].sort()
@@ -164,16 +190,31 @@ export function decideNpcTick(
     if (homeId) {
       const neighborNames = directNeighborsOf(locationGraph!.edges, homeId)
         .map((id) => sorted.find((name) => locationGraph!.idByName.get(name) === id))
-        .filter((name): name is string => !!name && name !== homeName)
+        // Nobody commutes INTO a war zone for their day job when a
+        // quieter neighbor exists — contested neighbors are skipped.
+        .filter((name): name is string => !!name && name !== homeName && !isContestedName(name))
       if (neighborNames.length > 0) {
         const sortedNeighbors = [...new Set(neighborNames)].sort()
         workName = sortedNeighbors[stableHash(`${npc.id}:work`) % sortedNeighbors.length]
       }
     }
     // Fallback: the exact pre-#108 hash-rotation pick, unchanged, used
-    // whenever adjacency data doesn't cover this home location at all.
+    // whenever adjacency data doesn't cover this home location at all —
+    // except that it now also steps over contested ground when the
+    // contested set is known, rather than marching into a war zone out of
+    // habit. When every discovered location is contested (or the set is
+    // absent), the original pick stands: routine beats paralysis.
     if (!workName) {
       workName = sorted[(homeIdx + 1) % sorted.length]
+      if (contestedIds && isContestedName(workName)) {
+        for (let k = 2; k <= sorted.length; k++) {
+          const candidate = sorted[(homeIdx + k) % sorted.length]
+          if (!isContestedName(candidate)) {
+            workName = candidate
+            break
+          }
+        }
+      }
     }
 
     const isActiveHours = timeOfDay === 'morning' || timeOfDay === 'afternoon'
@@ -187,7 +228,14 @@ export function decideNpcTick(
   // one — see goalCompleted handling below) don't accrue progress toward
   // nothing.
   const hasGoal = !!npc.goals?.trim()
-  const rawProgress = hasGoal ? npc.goalProgress + PROGRESS_PER_TICK * PHASE_PROGRESS_WEIGHT[phase] : npc.goalProgress
+  const currentLocationContested = !!npc.currentLocation && isContestedName(npc.currentLocation)
+  // Truly unaffiliated NPCs (faction null) are never touched by the
+  // faction clause — only an NPC whose faction exists but is inactive
+  // works at half speed. isActive is optional and defaults to active, so
+  // callers that pass a faction object without it keep prior behavior.
+  const factionInactive = !!faction && faction.isActive === false
+  const progressMultiplier = currentLocationContested || factionInactive ? CONTESTED_PROGRESS_MULTIPLIER : 1
+  const rawProgress = hasGoal ? npc.goalProgress + PROGRESS_PER_TICK * PHASE_PROGRESS_WEIGHT[phase] * progressMultiplier : npc.goalProgress
   const goalCompleted = rawProgress >= 100
   const newGoalProgress = goalCompleted ? 0 : rawProgress
 
@@ -215,7 +263,9 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
     }),
     ctx.db.location.findMany({
       where: { campaignId: ctx.campaignId, isDiscovered: true },
-      select: { id: true, name: true },
+      // isContested is selected so NPC routines can avoid marching into
+      // war zones for their work commute (see NpcLocationGraph).
+      select: { id: true, name: true, isContested: true },
     }),
     // #108: optional input to decideNpcTick's "work" pick — falls back to
     // the pre-#108 hash rotation when this is empty or doesn't cover a
@@ -233,11 +283,16 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
   // someone, the same as the AI write-back path does for PCs (see
   // #425 — Location stored as free text alongside the FK).
   const locationIdByName = new Map(locations.map((l) => [l.name, l.id]))
-  const locationGraph = { idByName: locationIdByName, edges: adjacencyRows as AdjacencyEdge[] }
+  const contestedIds = new Set(locations.filter((l) => l.isContested).map((l) => l.id))
+  const locationGraph: NpcLocationGraph = { idByName: locationIdByName, edges: adjacencyRows as AdjacencyEdge[], contestedIds }
   const changes: WorldChange[] = []
 
   for (const npc of npcs) {
-    const factionContext = npc.faction?.isActive ? { name: npc.faction.name, goal: npc.faction.goal } : null
+    // Pass the affiliation through even when the faction is inactive —
+    // decideNpcTick needs to tell "no faction" apart from "faction
+    // collapsed" (the latter halves goal progress; the former is
+    // untouched). The flavor note still only names living factions.
+    const factionContext = npc.faction ? { name: npc.faction.name, goal: npc.faction.goal, isActive: npc.faction.isActive } : null
     const decision = decideNpcTick(npc, ctx.turnNumber, discoveredLocationNames, factionContext, locationGraph, ctx.totalElapsedGameHours)
 
     const updateData: { currentPlan: string; currentLocation?: string; locationId?: string; goalProgress: number } = {

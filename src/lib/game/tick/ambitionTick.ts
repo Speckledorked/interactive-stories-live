@@ -150,15 +150,26 @@ export function decideAmbitionTick(faction: {
    * mechanical, not just the faction's balance sheet.
    */
   leaderAmbition?: number
+  /**
+   * Total OUTSTANDING faction-debt this faction owes. Optional: absent
+   * means pre-debt behavior exactly. A faction already in hock doesn't
+   * get to pretend the treasury is full — the debt nets against
+   * resources for the HIGH threshold, so a heavily indebted faction
+   * sits ambitions out until it pays down.
+   */
+  outstandingDebt?: number
 }): AmbitionDecision {
   const shape = AMBITION_SHAPES[faction.goal]
   const flavorOptions = shape ? AMBITION_CATEGORY_OPTIONS[faction.archetype]?.[faction.goal as AmbitionGoal] : undefined
   const leaderWontGamble =
     faction.leaderAmbition !== undefined && faction.leaderAmbition < MEDIUM_BAND_MIN
+  // Debt nets against the treasury for the commitment bar — owing money
+  // is the opposite of being rich enough to gamble.
+  const effectiveResources = faction.resources - (faction.outstandingDebt ?? 0)
   const shouldSpawn =
     !!shape &&
     !!flavorOptions &&
-    faction.resources >= RESOURCES_HIGH_THRESHOLD &&
+    effectiveResources >= RESOURCES_HIGH_THRESHOLD &&
     !faction.hasActiveSpawnedClock &&
     !leaderWontGamble
 
@@ -232,6 +243,24 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
     }
   }
 
+  // Outstanding debt nets against the ambition resource bar — one batched
+  // read for the whole roster, summed per debtor faction.
+  const outstandingDebts = await ctx.db.factionDebt.findMany({
+    where: {
+      campaignId: ctx.campaignId,
+      status: 'OUTSTANDING',
+      debtorFactionId: { in: factions.map((f) => f.id) },
+    },
+    select: { debtorFactionId: true, amount: true },
+  })
+  const outstandingDebtByFaction = new Map<string, number>()
+  for (const debt of outstandingDebts) {
+    outstandingDebtByFaction.set(
+      debt.debtorFactionId,
+      (outstandingDebtByFaction.get(debt.debtorFactionId) ?? 0) + debt.amount
+    )
+  }
+
   const changes: WorldChange[] = []
   const pendingAmbitions: PendingAmbition[] = []
 
@@ -246,6 +275,7 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
       resources: faction.resources,
       hasActiveSpawnedClock,
       leaderAmbition: leaderAmbitionByFaction.get(faction.id),
+      outstandingDebt: outstandingDebtByFaction.get(faction.id) ?? 0,
     })
 
     if (!decision.shouldSpawn) continue

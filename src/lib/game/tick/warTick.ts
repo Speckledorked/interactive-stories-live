@@ -36,13 +36,17 @@
 // tick either, for the same reason.
 
 import type { Prisma } from '@prisma/client'
-import { HIGH_BAND_MIN, MEDIUM_BAND_MIN } from './factionTick'
+import type { FactionGoal } from '@prisma/client'
+import { HIGH_BAND_MIN, MEDIUM_BAND_MIN, band } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId } from './types'
 import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import { decideArcDelta, decideArcResolution } from '../arc'
 import { rosterFactionFilter } from './capOrdering'
 import { isSevereWeather } from './weatherTick'
 import type { WeatherCondition } from '@prisma/client'
+import type { Season } from '../calendar'
+import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
+import { hasWorkingRoute } from './logisticsTick'
 
 // Both sides must be genuinely strong — the same HIGH cutoff the rest of
 // the tick uses, referenced rather than copied so a rebalance can't drift.
@@ -61,6 +65,32 @@ const SEVERE_WEATHER_EXTRA_MILITARY_ATTRITION = 1
 // first tick-handler read of Faction.influence (#218 wrote it; the AI
 // layer was its only reader until now).
 const INFLUENCE_DECLARATION_FLOOR = MEDIUM_BAND_MIN
+// Threat deters: threatLevel runs 1-5 (clamped in ambitionResolution.ts),
+// and at 4-5 the defender is a known terror — conquest/smear ambitions
+// that raise threat now buy real deterrence instead of stat decoration.
+const THREAT_DETERRENCE_LEVEL = 4
+// A crumbling defender (LOW stability) lowers the bar for the attacker:
+// striking a faction that's already falling apart takes less of an army
+// than meeting a solid one in the field.
+const CRUMBLING_DEFENDER_ADVANTAGE = 10
+// A leader whose self-preservation is this high never gambles the faction
+// on a war of choice — the survival instinct that keeps an NPC alive
+// (see migrationTick's FLIGHT_STAY_THRESHOLD) vetoes aggression here.
+const SELF_PRESERVATION_DECLARATION_VETO = 80
+// A battlefield ground to ruin punishes whoever keeps fighting there —
+// scorched earth has a cost. Mirrors migrationTick's DISTRESS_THRESHOLD:
+// below 25/100 a location is distressed, and fighting on distressed ground
+// bleeds both armies. Symmetric, like the weather attrition above.
+const RUINED_BATTLEFIELD_CONDITION = 25
+const RUINED_BATTLEFIELD_EXTRA_MILITARY_ATTRITION = 1
+// An attacker with no working supply route to the front bleeds extra —
+// overextension is punishable. Defender-side only in effect: the defender
+// fights on home ground. See hasWorkingRoute in logisticsTick.ts.
+const NO_SUPPLY_EXTRA_ATTACKER_MILITARY_ATTRITION = 1
+// Winter campaigns bleed both armies — frozen supply lines, exposure,
+// desertion. Same scale as the other environmental attritions: winter is a
+// condition of the world, not a decisive weapon.
+const WINTER_EXTRA_MILITARY_ATTRITION = 1
 
 export interface WarDeclarationDecision {
   shouldDeclare: boolean
@@ -76,6 +106,38 @@ export interface WarDeclarationDecision {
    * influence. Same reporting rationale as exhaustionRemaining.
    */
   influenceHesitation?: boolean
+  /**
+   * Set when the prospective attacker's leader lacks the ambition to
+   * start a war (below the MEDIUM band floor, mirroring the ambition
+   * clock gate). Reported rather than swallowed for the same reason.
+   */
+  dovishLeader?: boolean
+  /**
+   * Set when the prospective attacker has a DEFAULTED debt — a broke
+   * faction can't fund a war of conquest.
+   */
+  defaultedDebt?: boolean
+  /**
+   * Set when the defender's threat level (4-5 on the 1-5 scale) deterred
+   * the attack.
+   */
+  threatDeterrence?: boolean
+  /**
+   * Set when the prospective attacker's goal isn't an offensive one —
+   * only EXPAND and DESTABILIZE_RIVAL factions start wars of conquest.
+   */
+  goalMismatch?: boolean
+  /**
+   * Set when the prospective attacker's own stability is LOW — a faction
+   * coming apart at home doesn't go looking for a fight abroad.
+   */
+  stabilityHesitation?: boolean
+  /**
+   * Set when the prospective attacker's leader is too self-preserving to
+   * risk a war (very high self-preservation) — survival first, conquest
+   * never.
+   */
+  selfPreservationVeto?: boolean
 }
 
 /** Pure decision function — no DB access, safe to unit test directly. */
@@ -164,19 +226,86 @@ export function warExhaustionRemaining(
  * and in the LOW band, the attacker sits the war out — a faction bled dry
  * by lost wars (influence -8 per decisive loss, see the resolution path)
  * can't rally anyone into a new fight.
+ *
+ * `leaderAmbition`, `isDefaulted`, and `threatLevel` follow the same
+ * optional contract: a dovish leader (ambition below the MEDIUM band
+ * floor) won't start a war, a DEFAULTED debtor can't fund one, and a
+ * defender at threat 4-5 deters the attack outright.
+ *
+ * `goal`, `stability`, and `leaderSelfPreservation` extend the same
+ * contract: only EXPAND/DESTABILIZE_RIVAL factions declare offensive
+ * wars, a LOW-stability attacker sits the war out while a LOW-stability
+ * defender lowers the attacker's military bar, and a leader with very
+ * high self-preservation vetoes the declaration outright.
  */
 export function decideWarDeclaration(
-  attacker: { id: string; military: number; influence?: number },
-  defender: { id: string; military: number },
+  attacker: {
+    id: string
+    military: number
+    influence?: number
+    leaderAmbition?: number
+    isDefaulted?: boolean
+    goal?: FactionGoal
+    stability?: number
+    leaderSelfPreservation?: number
+  },
+  defender: { id: string; military: number; threatLevel?: number; stability?: number },
   contestedLocations: Array<{ id: string; ownerFactionId: string | null; isContested: boolean }>,
   history?: { priorWars?: ResolvedWar[]; currentTurn?: number }
 ): WarDeclarationDecision {
-  if (attacker.military < WAR_MILITARY_THRESHOLD || defender.military < WAR_MILITARY_THRESHOLD) {
+  // A crumbling defender is an easier target — the attacker doesn't need
+  // quite as much of an army to roll over a faction that's already
+  // falling apart. The defender's own bar is unchanged: both sides still
+  // have to be real military powers for a war to ignite.
+  const attackerMilitaryBar =
+    defender.stability !== undefined && band(defender.stability) === 'LOW'
+      ? WAR_MILITARY_THRESHOLD - CRUMBLING_DEFENDER_ADVANTAGE
+      : WAR_MILITARY_THRESHOLD
+  if (attacker.military < attackerMilitaryBar || defender.military < WAR_MILITARY_THRESHOLD) {
     return { shouldDeclare: false }
   }
 
   if (attacker.influence !== undefined && attacker.influence < INFLUENCE_DECLARATION_FLOOR) {
     return { shouldDeclare: false, influenceHesitation: true }
+  }
+
+  if (attacker.leaderAmbition !== undefined && attacker.leaderAmbition < MEDIUM_BAND_MIN) {
+    return { shouldDeclare: false, dovishLeader: true }
+  }
+
+  if (attacker.isDefaulted) {
+    return { shouldDeclare: false, defaultedDebt: true }
+  }
+
+  // Wars of conquest are an attacker's game — a faction consolidating at
+  // home or enriching its coffers doesn't declare them, whatever its
+  // army looks like. DEFEND never attacks by definition.
+  if (
+    attacker.goal !== undefined &&
+    attacker.goal !== 'EXPAND' &&
+    attacker.goal !== 'DESTABILIZE_RIVAL'
+  ) {
+    return { shouldDeclare: false, goalMismatch: true }
+  }
+
+  // A faction coming apart at home doesn't go looking for a fight abroad
+  // — LOW stability is a reason to turtle, not to invade.
+  if (attacker.stability !== undefined && band(attacker.stability) === 'LOW') {
+    return { shouldDeclare: false, stabilityHesitation: true }
+  }
+
+  // Self-preservation cuts both ways: the instinct that makes an NPC flee
+  // a dying town (migrationTick) makes a leader refuse to start a war.
+  // Very high only — ordinary caution doesn't veto ambition.
+  if (
+    attacker.leaderSelfPreservation !== undefined &&
+    attacker.leaderSelfPreservation >= SELF_PRESERVATION_DECLARATION_VETO
+  ) {
+    return { shouldDeclare: false, selfPreservationVeto: true }
+  }
+
+  if (defender.threatLevel !== undefined && defender.threatLevel >= THREAT_DETERRENCE_LEVEL) {
+    return { shouldDeclare: false, threatDeterrence: true }
   }
 
   const exhaustion = warExhaustionRemaining(
@@ -227,7 +356,10 @@ export function decideWarProgress(
   attacker: { military: number },
   defender: { military: number },
   turnNumber: number,
-  battleWeather?: { condition: WeatherCondition; severity: number }
+  battleWeather?: { condition: WeatherCondition; severity: number },
+  battlefieldCondition?: number,
+  attackerSupplyCut?: boolean,
+  season?: Season
 ): WarProgressDecision {
   const momentumDelta = decideArcDelta(war.id, turnNumber, { sideAStrength: attacker.military, sideBStrength: defender.military })
 
@@ -239,12 +371,30 @@ export function decideWarProgress(
       ? SEVERE_WEATHER_EXTRA_MILITARY_ATTRITION
       : 0
 
+  // A battlefield ground to ruin punishes whoever keeps fighting there —
+  // scorched earth has a cost. Symmetric, like weather: ruin doesn't take
+  // sides either. Optional, same contract as battleWeather.
+  const ruinAttrition =
+    battlefieldCondition !== undefined && battlefieldCondition < RUINED_BATTLEFIELD_CONDITION
+      ? RUINED_BATTLEFIELD_EXTRA_MILITARY_ATTRITION
+      : 0
+
+  // No working supply route to the front: the attacker bleeds extra.
+  // Attacker-side only — the defender fights on home ground. Optional,
+  // same contract as the other two.
+  const supplyAttrition = attackerSupplyCut ? NO_SUPPLY_EXTRA_ATTACKER_MILITARY_ATTRITION : 0
+
+  // Winter kills indiscriminately — frozen supply lines, exposure, desertion.
+  // Symmetric like weather and ruin: cold doesn't take sides. Optional,
+  // same contract: callers without a season in hand get pre-winter behavior.
+  const winterAttrition = season === 'winter' ? WINTER_EXTRA_MILITARY_ATTRITION : 0
+
   return {
     momentumDelta,
     attackerResourceDelta: -ATTRITION_RESOURCES,
-    attackerMilitaryDelta: -ATTRITION_MILITARY - weatherAttrition,
+    attackerMilitaryDelta: -ATTRITION_MILITARY - weatherAttrition - ruinAttrition - supplyAttrition - winterAttrition,
     defenderResourceDelta: -ATTRITION_RESOURCES,
-    defenderMilitaryDelta: -ATTRITION_MILITARY - weatherAttrition,
+    defenderMilitaryDelta: -ATTRITION_MILITARY - weatherAttrition - ruinAttrition - winterAttrition,
   }
 }
 
@@ -324,6 +474,15 @@ export interface WarJoinCandidate {
   id: string
   name: string
   military: number
+  /**
+   * Optional gates mirroring the declaration gates in
+   * decideWarDeclaration: a joiner with a dovish leader, a DEFAULTED
+   * debt, or LOW influence sits the war out for the same reasons an
+   * attacker would. Absent fields keep the pre-gate behavior exactly.
+   */
+  leaderAmbition?: number
+  isDefaulted?: boolean
+  influence?: number
 }
 
 // Picks at most one ally to join a side this tick — a coalition grows one
@@ -332,7 +491,13 @@ export interface WarJoinCandidate {
 // produces the same pick.
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideWarJoiner(candidates: WarJoinCandidate[]): WarJoinCandidate | null {
-  const eligible = candidates.filter((c) => c.military >= WAR_MILITARY_THRESHOLD)
+  const eligible = candidates.filter(
+    (c) =>
+      c.military >= WAR_MILITARY_THRESHOLD &&
+      (c.leaderAmbition === undefined || c.leaderAmbition >= MEDIUM_BAND_MIN) &&
+      !c.isDefaulted &&
+      (c.influence === undefined || c.influence >= INFLUENCE_DECLARATION_FLOOR)
+  )
   if (eligible.length === 0) return null
   return eligible.sort((a, b) => b.military - a.military || a.id.localeCompare(b.id))[0]
 }
@@ -388,14 +553,39 @@ async function resolveWarProgress(
     .map((w) => w.contestedLocationId)
     .filter((id): id is string => id !== null)
   const contestedWeather = new Map<string, { condition: WeatherCondition; severity: number }>()
+  const contestedCondition = new Map<string, number>()
   if (contestedIds.length > 0) {
     const contestedLocations = await ctx.db.location.findMany({
       where: { id: { in: contestedIds }, campaignId: ctx.campaignId },
-      select: { id: true, weather: true, weatherSeverity: true },
+      select: { id: true, weather: true, weatherSeverity: true, conditionScore: true },
     })
     for (const l of contestedLocations) {
       contestedWeather.set(l.id, { condition: l.weather, severity: l.weatherSeverity })
+      contestedCondition.set(l.id, l.conditionScore)
     }
+  }
+
+  // Supply snapshot for the no-route attrition: tickLogistics runs AFTER
+  // tickWars in the handler order, so the snapshot is built here rather
+  // than reused. Routes, ownership, and weather are all read batched once.
+  const [supplyRoutes, supplyLocations] = await Promise.all([
+    ctx.db.supplyRoute.findMany({
+      where: { campaignId: ctx.campaignId },
+      select: { fromLocationId: true, toLocationId: true, isBlockaded: true },
+    }),
+    ctx.db.location.findMany({
+      where: { campaignId: ctx.campaignId },
+      select: { id: true, ownerFactionId: true, weather: true, weatherSeverity: true },
+    }),
+  ])
+  const supplyOwnerByLocationId = new Map(supplyLocations.map((l) => [l.id, l.ownerFactionId]))
+  const supplyWeatherByLocationId = new Map(
+    supplyLocations.map((l) => [l.id, { condition: l.weather, severity: l.weatherSeverity }])
+  )
+  const supplyOwnedCounts = new Map<string, number>()
+  for (const l of supplyLocations) {
+    if (!l.ownerFactionId) continue
+    supplyOwnedCounts.set(l.ownerFactionId, (supplyOwnedCounts.get(l.ownerFactionId) ?? 0) + 1)
   }
 
   for (const war of activeWars) {
@@ -444,12 +634,35 @@ async function resolveWarProgress(
     const attackerMilitaryTotal = attackerSide.reduce((sum, p) => sum + p.faction.military, 0)
     const defenderMilitaryTotal = defenderSide.reduce((sum, p) => sum + p.faction.military, 0)
 
+    // The attacker needs a working supply route to the front — evaluated
+    // from the attacker's perspective: a route touching the contested
+    // location whose other end the attacker owns. strictForeignFront: a
+    // lone home location does not supply an army fighting on foreign
+    // ground. No route, the attacker bleeds extra; the defender fights on
+    // home ground.
+    const attackerSupplyCut = war.contestedLocationId
+      ? !hasWorkingRoute(
+          war.contestedLocationId,
+          war.attackerFactionId,
+          supplyRoutes,
+          supplyOwnerByLocationId,
+          supplyOwnedCounts.get(war.attackerFactionId) ?? 0,
+          supplyWeatherByLocationId,
+          { strictForeignFront: true }
+        )
+      : false
+
     const progress = decideWarProgress(
       war,
       { military: attackerMilitaryTotal },
       { military: defenderMilitaryTotal },
       ctx.turnNumber,
-      war.contestedLocationId ? contestedWeather.get(war.contestedLocationId) : undefined
+      war.contestedLocationId ? contestedWeather.get(war.contestedLocationId) : undefined,
+      war.contestedLocationId ? contestedCondition.get(war.contestedLocationId) : undefined,
+      attackerSupplyCut,
+      // ctx.season is the calendar's own season (same value
+      // locationConditionTick reads) — winter campaigns bleed both sides.
+      ctx.season
     )
     const newMomentum = clamp(war.momentum + progress.momentumDelta, -100, 100)
 
@@ -613,11 +826,49 @@ async function growWarCoalitions(
 
       const candidateFactions = await ctx.db.faction.findMany({
         where: { id: { in: Array.from(candidateIds) }, campaignId: ctx.campaignId, isActive: true },
-        select: { id: true, name: true, military: true },
+        select: { id: true, name: true, military: true, influence: true },
       })
+      if (candidateFactions.length === 0) continue
 
+      // Joiners honor the same gates declarations do: a dovish leader, a
+      // DEFAULTED debt, or LOW influence keeps a faction out of someone
+      // else's war too. Batched per candidate set, same query shape
+      // declareNewWars uses for the declaration pass.
+      const candidateIdList = candidateFactions.map((f) => f.id)
+      const [candidateLeaderRows, candidateDefaultedDebts] = await Promise.all([
+        ctx.db.nPC.findMany({
+          where: {
+            campaignId: ctx.campaignId,
+            isAlive: true,
+            factionId: { in: candidateIdList },
+            factionRole: 'LEADER',
+          },
+          select: { factionId: true, disposition: true },
+        }),
+        ctx.db.factionDebt.findMany({
+          where: { campaignId: ctx.campaignId, status: 'DEFAULTED', debtorFactionId: { in: candidateIdList } },
+          select: { debtorFactionId: true },
+        }),
+      ])
+      const candidateAmbitionByFaction = new Map<string, number>()
+      for (const row of candidateLeaderRows) {
+        if (!row.factionId || candidateAmbitionByFaction.has(row.factionId)) continue
+        candidateAmbitionByFaction.set(
+          row.factionId,
+          parseDisposition(row.disposition)?.ambition ?? NEUTRAL_DISPOSITION.ambition
+        )
+      }
+      const candidateDefaultedIds = new Set(candidateDefaultedDebts.map((d) => d.debtorFactionId))
+
+      const remainingCandidates: WarJoinCandidate[] = candidateFactions.map((f) => ({
+        id: f.id,
+        name: f.name,
+        military: f.military,
+        influence: f.influence,
+        leaderAmbition: candidateAmbitionByFaction.get(f.id),
+        isDefaulted: candidateDefaultedIds.has(f.id),
+      }))
       let joined = 0
-      const remainingCandidates = [...candidateFactions]
       while (joined < MAX_JOINERS_PER_SIDE_PER_TICK) {
         const joiner = decideWarJoiner(remainingCandidates)
         if (!joiner) break
@@ -682,6 +933,41 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
     select: { attackerFactionId: true, defenderFactionId: true, resolvedTurn: true, outcome: true },
   })
 
+  // The attacker's leader ambition gates declarations — same batched query
+  // shape as ambitionTick. An NPC leader is the row with factionRole
+  // 'LEADER'; a PC-led or leaderless faction has no NPC disposition to
+  // read and keeps the pre-gate behavior (neutral).
+  const leaderRows = await ctx.db.nPC.findMany({
+    where: {
+      campaignId: ctx.campaignId,
+      isAlive: true,
+      factionId: { in: factions.map((f) => f.id) },
+      factionRole: 'LEADER',
+    },
+    select: { factionId: true, disposition: true },
+  })
+  const leaderAmbitionByFaction = new Map<string, number>()
+  const leaderSelfPreservationByFaction = new Map<string, number>()
+  for (const row of leaderRows) {
+    if (!row.factionId || leaderAmbitionByFaction.has(row.factionId)) continue
+    const disposition = parseDisposition(row.disposition)
+    leaderAmbitionByFaction.set(row.factionId, disposition?.ambition ?? NEUTRAL_DISPOSITION.ambition)
+    // The same disposition row already fetched for the ambition gate also
+    // carries self-preservation — one read, two gates.
+    leaderSelfPreservationByFaction.set(
+      row.factionId,
+      disposition?.selfPreservation ?? NEUTRAL_DISPOSITION.selfPreservation
+    )
+  }
+
+  // A DEFAULTED debtor can't fund a war of conquest — one batched read
+  // for the whole declaration pass.
+  const defaultedDebts = await ctx.db.factionDebt.findMany({
+    where: { campaignId: ctx.campaignId, status: 'DEFAULTED', debtorFactionId: { in: factions.map((f) => f.id) } },
+    select: { debtorFactionId: true },
+  })
+  const defaultedFactionIds = new Set(defaultedDebts.map((d) => d.debtorFactionId))
+
   for (const defender of factions) {
     if (factionIdsAtWar.has(defender.id)) continue
 
@@ -691,10 +977,23 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
     const attacker = factions.find((f) => f.id === rivalId)
     if (!attacker) continue
 
-    const decision = decideWarDeclaration(attacker, defender, locations, {
-      priorWars,
-      currentTurn: ctx.turnNumber,
-    })
+    const decision = decideWarDeclaration(
+      {
+        // goal and stability ride along on the spread — the full faction
+        // row already carries them, so the goal and stability gates need
+        // no extra reads.
+        ...attacker,
+        leaderAmbition: leaderAmbitionByFaction.get(attacker.id),
+        leaderSelfPreservation: leaderSelfPreservationByFaction.get(attacker.id),
+        isDefaulted: defaultedFactionIds.has(attacker.id),
+      },
+      defender,
+      locations,
+      {
+        priorWars,
+        currentTurn: ctx.turnNumber,
+      }
+    )
     if (!decision.shouldDeclare) {
       if (decision.exhaustionRemaining) {
         console.log(
@@ -703,6 +1002,30 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
       } else if (decision.influenceHesitation) {
         console.log(
           `  🕊️ ${attacker.name} vs ${defender.name}: influence too low to rally for a new war (${attacker.influence})`
+        )
+      } else if (decision.dovishLeader) {
+        console.log(
+          `  🕊️ ${attacker.name} vs ${defender.name}: leader lacks the ambition to start a war (${leaderAmbitionByFaction.get(attacker.id)})`
+        )
+      } else if (decision.defaultedDebt) {
+        console.log(
+          `  🕊️ ${attacker.name} vs ${defender.name}: defaulted on its debts — cannot fund a war`
+        )
+      } else if (decision.threatDeterrence) {
+        console.log(
+          `  🕊️ ${attacker.name} vs ${defender.name}: deterred by ${defender.name}'s threat level (${defender.threatLevel})`
+        )
+      } else if (decision.goalMismatch) {
+        console.log(
+          `  🕊️ ${attacker.name} vs ${defender.name}: goal is ${attacker.goal} — not an offensive war goal`
+        )
+      } else if (decision.stabilityHesitation) {
+        console.log(
+          `  🕊️ ${attacker.name} vs ${defender.name}: too unstable at home to start a war (${attacker.stability})`
+        )
+      } else if (decision.selfPreservationVeto) {
+        console.log(
+          `  🕊️ ${attacker.name} vs ${defender.name}: leader's self-preservation vetoes a war of choice (${leaderSelfPreservationByFaction.get(attacker.id)})`
         )
       }
       continue

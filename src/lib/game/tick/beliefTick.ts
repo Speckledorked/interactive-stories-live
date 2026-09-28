@@ -69,7 +69,7 @@ export function parseBeliefVector(raw: unknown): BeliefVector | null {
   }
 }
 
-export type BeliefDriftEventKind = 'WAR_WON' | 'WAR_LOST' | 'COLLAPSE_RIPPLE_SURVIVED' | 'AMBITION_SUCCEEDED' | 'AMBITION_FAILED'
+export type BeliefDriftEventKind = 'WAR_WON' | 'WAR_LOST' | 'COLLAPSE_RIPPLE_SURVIVED' | 'AMBITION_SUCCEEDED' | 'AMBITION_FAILED' | 'MOBILIZED'
 
 export interface BeliefDriftEvent {
   kind: BeliefDriftEventKind
@@ -80,6 +80,11 @@ export interface BeliefDriftEvent {
 // range) rather than a swing large enough to flip a faction's disposition
 // from one or two events.
 const DRIFT_AMOUNT = 4
+// A mobilization (declaration or coalition joining) is a smaller,
+// distinct nudge from a won/lost war — fervor stirs, but the outcome
+// hasn't happened yet. Half the standard drift, deliberately not a full
+// event's weight.
+const MOBILIZATION_ZEALOTRY_NUDGE = 2
 
 /**
  * Pure — no DB access. Folds a batch of this faction's own recent events
@@ -113,6 +118,11 @@ export function decideBeliefDrift(current: BeliefVector, recentEvents: BeliefDri
       case 'AMBITION_FAILED':
         next = { ...next, zealotry: clamp(next.zealotry + DRIFT_AMOUNT, 0, 100) }
         break
+      // Going to war stirs fervor before any outcome exists to judge —
+      // the cause feels righteous while the banners are still clean.
+      case 'MOBILIZED':
+        next = { ...next, zealotry: clamp(next.zealotry + MOBILIZATION_ZEALOTRY_NUDGE, 0, 100) }
+        break
     }
   }
   return next
@@ -134,6 +144,11 @@ function classifyWorldEvent(row: { type: string; newValue: string | null; origin
     // an opponent whose side collapsed reads as a win for belief purposes.
     return { kind: 'WAR_WON' }
   }
+  // A declaration or a coalition joining stirs fervor — the war hasn't been
+  // fought yet, so this is mobilization, not victory or defeat.
+  if (row.type === 'faction.warDeclared' || row.type === 'faction.warJoined') {
+    return { kind: 'MOBILIZED' }
+  }
   if (row.type === 'faction.ambitionResolved') {
     return row.newValue === 'succeeded' ? { kind: 'AMBITION_SUCCEEDED' } : { kind: 'AMBITION_FAILED' }
   }
@@ -150,7 +165,7 @@ function classifyWorldEvent(row: { type: string; newValue: string | null; origin
   return null
 }
 
-const RELEVANT_EVENT_TYPES = ['faction.warResolved', 'faction.warEnded', 'faction.ambitionResolved', 'faction.stability']
+const RELEVANT_EVENT_TYPES = ['faction.warResolved', 'faction.warEnded', 'faction.warDeclared', 'faction.warJoined', 'faction.ambitionResolved', 'faction.stability']
 
 /**
  * How far back a faction that has missed several rotations may catch up in

@@ -77,6 +77,7 @@ export type DispositionDriftEventKind =
   | 'FACTION_LOST'
   | 'FACTION_ABANDONED_THEM'
   | 'GOAL_ACHIEVED'
+  | 'HEARD_FACTION_FALL'
 
 export interface DispositionDriftEvent {
   kind: DispositionDriftEventKind
@@ -85,6 +86,10 @@ export interface DispositionDriftEvent {
 // Same scale as beliefTick.ts's DRIFT_AMOUNT — a small, bounded per-event
 // nudge, not a swing large enough to flip a disposition from one event.
 const DRIFT_AMOUNT = 4
+// Hearsay moves at half the direct rate — hearing that some faction fell
+// sows doubt, but it doesn't hit like watching your own faction bleed.
+// Deliberately a 1:2 ratio against DRIFT_AMOUNT, not an independent number.
+const HEARSAY_DRIFT_AMOUNT = 2
 
 /**
  * Pure — no DB access. Folds a batch of this NPC's own recent events
@@ -137,6 +142,13 @@ export function decideDispositionDrift(current: NpcDisposition, recentEvents: Di
       // A personally achieved goal reinforces the drive that pursued it.
       case 'GOAL_ACHIEVED':
         next = { ...next, ambition: clamp(next.ambition + DRIFT_AMOUNT, 0, 100) }
+        break
+      // Hearing (TOLD, not witnessed) that a faction collapsed sows doubt
+      // about institutions in general — a smaller loyalty hit than watching
+      // your own faction lose. Applies to collapses of ANY faction; the
+      // rumor doesn't check affiliation before it spreads.
+      case 'HEARD_FACTION_FALL':
+        next = { ...next, loyalty: clamp(next.loyalty - HEARSAY_DRIFT_AMOUNT, 0, 100) }
         break
     }
   }
@@ -257,7 +269,7 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
   const rosterWindow = { gte: widestFrom, lte: targetTurn }
   const factionIds = [...new Set(npcs.map((n) => n.factionId).filter((id): id is string => !!id))]
 
-  const [allOwnEvents, allFactionEvents] = await Promise.all([
+  const [allOwnEvents, allFactionEvents, allHearsayFalls] = await Promise.all([
     ctx.db.worldEvent.findMany({
       where: {
         campaignId: ctx.campaignId,
@@ -282,6 +294,23 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
           select: { targetId: true, turnNumber: true, type: true, newValue: true, origin: true, wakeSourceType: true },
         })
       : Promise.resolve([] as Array<{ targetId: string; turnNumber: number; type: string; newValue: string | null; origin: string; wakeSourceType: string | null }>),
+    // Rumors re-enter the sim: TOLD rows (see EventWitness) about faction
+    // collapses, batched the same way as the two queries above — one read
+    // for the whole roster, per-NPC windows applied in memory below. Only
+    // living NPCs are in this roster, so stale TOLD rows naming dead NPCs
+    // can never match. The collapse WorldEvent type is
+    // 'faction.collapsed' (factionTick's collapse path); a TOLD row about
+    // any faction's fall counts — the rumor doesn't check affiliation.
+    ctx.db.eventWitness.findMany({
+      where: {
+        campaignId: ctx.campaignId,
+        grade: 'TOLD',
+        npcId: { in: npcs.map((n) => n.id) },
+        turnNumber: rosterWindow,
+        worldEvent: { type: 'faction.collapsed' },
+      },
+      select: { npcId: true, turnNumber: true },
+    }),
   ])
 
   function groupByTarget<T extends { targetId: string }>(rows: T[]): Map<string, T[]> {
@@ -295,6 +324,13 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
   }
   const ownByNpc = groupByTarget(allOwnEvents)
   const factionByFaction = groupByTarget(allFactionEvents)
+  const hearsayByNpc = new Map<string, Array<{ turnNumber: number }>>()
+  for (const row of allHearsayFalls) {
+    if (!row.npcId) continue
+    const bucket = hearsayByNpc.get(row.npcId)
+    if (bucket) bucket.push(row)
+    else hearsayByNpc.set(row.npcId, [row])
+  }
 
   for (const npc of npcs) {
     const fromTurn = fromTurnFor(npc)
@@ -309,6 +345,10 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
     const driftEvents = [
       ...ownEvents.map((row) => classifyOwnEvent({ type: row.type, newValue: row.newValue })),
       ...factionEvents.map((row) => classifyFactionEvent({ type: row.type, newValue: row.newValue, origin: row.origin, wakeSourceType: row.wakeSourceType })),
+      // Each TOLD-about-a-collapse row in this NPC's window is one heard
+      // rumor; the watermark advancing each tick means a rumor is
+      // processed exactly once, like every other event here.
+      ...inWindow(hearsayByNpc.get(npc.id) ?? []).map((): DispositionDriftEvent => ({ kind: 'HEARD_FACTION_FALL' })),
     ].filter((e): e is DispositionDriftEvent => e !== null)
 
     const current = parseDisposition(npc.disposition) ?? NEUTRAL_DISPOSITION

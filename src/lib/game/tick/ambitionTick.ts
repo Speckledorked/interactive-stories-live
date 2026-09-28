@@ -23,10 +23,11 @@
 // that clock resolves.
 
 import type { FactionGoal, FactionArchetype } from '@prisma/client'
-import { HIGH_BAND_MIN } from './factionTick'
+import { HIGH_BAND_MIN, MEDIUM_BAND_MIN } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange, PendingAmbition, clamp, findRivalId, stableHash } from './types'
 import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import { BeliefVector } from './beliefTick'
+import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
 import { rosterFactionFilter } from './capOrdering'
 
 // The same HIGH cutoff the rest of the tick uses, referenced rather than
@@ -141,14 +142,25 @@ export function decideAmbitionTick(faction: {
   archetype: FactionArchetype
   resources: number
   hasActiveSpawnedClock: boolean
+  /**
+   * The NPC leader's ambition disposition (0-100). Optional: undefined
+   * means no NPC leader (PC-led or leaderless) and behaves exactly as
+   * before. A LOW-ambition leader (< MEDIUM_BAND_MIN) never gambles the
+   * treasury on a grand scheme — ambitions are the leader's appetite made
+   * mechanical, not just the faction's balance sheet.
+   */
+  leaderAmbition?: number
 }): AmbitionDecision {
   const shape = AMBITION_SHAPES[faction.goal]
   const flavorOptions = shape ? AMBITION_CATEGORY_OPTIONS[faction.archetype]?.[faction.goal as AmbitionGoal] : undefined
+  const leaderWontGamble =
+    faction.leaderAmbition !== undefined && faction.leaderAmbition < MEDIUM_BAND_MIN
   const shouldSpawn =
     !!shape &&
     !!flavorOptions &&
     faction.resources >= RESOURCES_HIGH_THRESHOLD &&
-    !faction.hasActiveSpawnedClock
+    !faction.hasActiveSpawnedClock &&
+    !leaderWontGamble
 
   if (!shouldSpawn || !shape || !flavorOptions) {
     return { shouldSpawn: false, maxTicks: 0, category: '', fallbackFlavor: '', fallbackName: '', fallbackConsequence: '', resourceCost: 0 }
@@ -198,6 +210,28 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
   })
   const factionIdsAtWar = new Set(warParticipants.map((p) => p.factionId))
 
+  // The leader's ambition gates the commitment — read once for the whole
+  // roster. An NPC leader is the row with factionRole 'LEADER' (see
+  // leadershipTick.ts); a PC-led or leaderless faction has no NPC
+  // disposition to read and keeps the pre-gate behavior (neutral).
+  const leaderRows = await ctx.db.nPC.findMany({
+    where: {
+      campaignId: ctx.campaignId,
+      isAlive: true,
+      factionId: { in: factions.map((f) => f.id) },
+      factionRole: 'LEADER',
+    },
+    select: { factionId: true, disposition: true },
+  })
+  const leaderAmbitionByFaction = new Map<string, number>()
+  for (const row of leaderRows) {
+    if (!row.factionId) continue
+    const ambition = parseDisposition(row.disposition)?.ambition ?? NEUTRAL_DISPOSITION.ambition
+    if (!leaderAmbitionByFaction.has(row.factionId)) {
+      leaderAmbitionByFaction.set(row.factionId, ambition)
+    }
+  }
+
   const changes: WorldChange[] = []
   const pendingAmbitions: PendingAmbition[] = []
 
@@ -211,6 +245,7 @@ export async function tickFactionAmbitions(ctx: TickContext): Promise<TickHandle
       archetype: faction.archetype,
       resources: faction.resources,
       hasActiveSpawnedClock,
+      leaderAmbition: leaderAmbitionByFaction.get(faction.id),
     })
 
     if (!decision.shouldSpawn) continue

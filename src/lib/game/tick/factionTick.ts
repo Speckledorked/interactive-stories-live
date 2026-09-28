@@ -64,18 +64,36 @@ export interface FactionTickDecision {
   military: number
 }
 
+// Population becomes load-bearing here: a faction whose owned locations
+// hold a real populace recruits from it. Opt-in — undefined means the
+// campaign doesn't track population and behavior is unchanged. Zero or
+// below-threshold means no bonus, never a penalty.
+const MANPOWER_POPULATION_THRESHOLD = 100
+const MANPOWER_MILITARY_BONUS = 1
+// Residents fleeing a faction's territory rattle it — one stability per
+// emptied location last turn, capped so a single bad town can't zero a
+// faction in one turn.
+const FLIGHT_STABILITY_HIT_PER_LOCATION = 1
+const MAX_FLIGHT_STABILITY_HIT = 3
+
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideFactionTick(faction: {
   resources: number
   stability: number
   military: number
   goal: FactionGoal
+  /** Total population across the faction's owned locations. Undefined = untracked (legacy behavior). */
+  totalPopulation?: number
 }): FactionTickDecision {
   const delta = GOAL_DELTAS[faction.goal]
+  const manpowerBonus =
+    faction.totalPopulation !== undefined && faction.totalPopulation >= MANPOWER_POPULATION_THRESHOLD
+      ? MANPOWER_MILITARY_BONUS
+      : 0
   return {
     resources: clamp(faction.resources + delta.resources, 0, 100),
     stability: clamp(faction.stability + delta.stability, 0, 100),
-    military: clamp(faction.military + delta.military, 0, 100),
+    military: clamp(faction.military + delta.military + manpowerBonus, 0, 100),
   }
 }
 
@@ -474,6 +492,38 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
   // regardless of `dryRun` (so a preview stays accurate too).
   const appliedDeltaThisTick = new Map<string, { resources: number; military: number }>()
 
+  // Population becomes load-bearing here (manpower) and flight events stop
+  // being write-only (stability hit) — both read once for the whole
+  // roster, not per faction. factionTick runs BEFORE migrationTick, so the
+  // flight rows read are last turn's: the exodus lands politically one turn
+  // after it happens, which is also the honest causal order.
+  const ownedLocations = await ctx.db.location.findMany({
+    where: { campaignId: ctx.campaignId, ownerFactionId: { not: null } },
+    select: { id: true, ownerFactionId: true, population: true },
+  })
+  const populationByFaction = new Map<string, number>()
+  const ownerByLocationId = new Map<string, string>()
+  for (const loc of ownedLocations) {
+    if (!loc.ownerFactionId) continue
+    ownerByLocationId.set(loc.id, loc.ownerFactionId)
+    // Null population = untracked (opt-in, see schema) — the faction gets
+    // no entry and decideFactionTick keeps its legacy behavior. A tracked
+    // zero stays a real zero: no bonus, never a penalty.
+    if (loc.population !== null) {
+      populationByFaction.set(loc.ownerFactionId, (populationByFaction.get(loc.ownerFactionId) ?? 0) + loc.population)
+    }
+  }
+  const lastTurnFlights = await ctx.db.populationFlightEvent.findMany({
+    where: { campaignId: ctx.campaignId, turnNumber: ctx.turnNumber - 1 },
+    select: { fromLocationId: true },
+  })
+  const flightHitsByFaction = new Map<string, number>()
+  for (const flight of lastTurnFlights) {
+    const ownerId = ownerByLocationId.get(flight.fromLocationId)
+    if (!ownerId) continue
+    flightHitsByFaction.set(ownerId, (flightHitsByFaction.get(ownerId) ?? 0) + 1)
+  }
+
   for (const rawFaction of factions) {
     const pendingDelta = appliedDeltaThisTick.get(rawFaction.id)
     const faction = pendingDelta
@@ -484,7 +534,10 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
         }
       : rawFaction
 
-    const next = decideFactionTick(faction)
+    const next = decideFactionTick({
+      ...faction,
+      totalPopulation: populationByFaction.get(faction.id),
+    })
     const relationships = factionTies(faction)
     // #207: previously nothing anywhere counted a faction's currently-
     // unresolved wakes for any purpose — read once per faction here so both
@@ -660,6 +713,17 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     // narrating their decision through scene resolution) last set it to.
     // A rival only counts if it still exists as an active faction — see the
     // activeFactionIds comment above.
+    //
+    // A faction that collapsed above has no stability left to lose — this
+    // is the survivors' path only. Residents fleeing its territory last
+    // turn rattle it: one stability per emptied location, capped.
+    const flightHit =
+      Math.min(flightHitsByFaction.get(faction.id) ?? 0, MAX_FLIGHT_STABILITY_HIT) *
+      FLIGHT_STABILITY_HIT_PER_LOCATION
+    if (flightHit > 0) {
+      next.stability = clamp(next.stability - flightHit, 0, 100)
+    }
+
     const factionHasRival = hasActiveRival(relationships, activeFactionIds)
     const nextGoal = faction.leaderCharacterId
       ? faction.goal
@@ -687,6 +751,24 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     changes.push(
       ...buildFactionChanges(ctx.campaignId, faction, next)
     )
+
+    // The flight hit above folds into next.stability (and surfaces via
+    // buildFactionChanges when it moves a band), but the band log can't
+    // say WHY — this names the cause so the history reads honestly.
+    if (flightHit > 0) {
+      changes.push({
+        entityType: 'FACTION',
+        entityId: faction.id,
+        entityName: faction.name,
+        campaignId: ctx.campaignId,
+        field: 'stability',
+        previousValue: faction.stability,
+        newValue: next.stability,
+        reason: `${faction.name}'s stability wavers as residents flee its territory`,
+        significant: true,
+        importance: 'NORMAL',
+      })
+    }
 
     if (nextGoal !== faction.goal) {
       changes.push({

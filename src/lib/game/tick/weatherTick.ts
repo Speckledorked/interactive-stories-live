@@ -23,6 +23,20 @@ const TRANSITIONS: Record<WeatherCondition, WeatherCondition[]> = {
 
 const SEVERE_CONDITIONS: WeatherCondition[] = ['STORM', 'SNOW']
 
+// Location.weatherSeverity runs 1-5 (see the write at the bottom of this
+// file); severe weather is a battlefield condition at 4+.
+const SEVERE_WEATHER_SEVERITY = 4
+
+/**
+ * Pure — is this weather severe enough to matter mechanically? Shared by
+ * warTick (battlefield attrition), migrationTick (destination choice), and
+ * logisticsTick (supply routes) so all three consumers agree on what
+ * "severe" means instead of each inventing its own threshold.
+ */
+export function isSevereWeather(condition: WeatherCondition, severity: number): boolean {
+  return SEVERE_CONDITIONS.includes(condition) && severity >= SEVERE_WEATHER_SEVERITY
+}
+
 // #263: seasonal pressure's third mechanical knob (the first two,
 // faction resource regen and unattached-clock speed, live in
 // seasonTick.ts). A fixed, closed table, same shape as SEASON_MODIFIERS —

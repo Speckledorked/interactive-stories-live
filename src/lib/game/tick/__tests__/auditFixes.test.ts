@@ -14,6 +14,8 @@ vi.mock('@/lib/prisma', () => ({
     activeWake: { count: vi.fn(async () => 0) },
     // Population flight events feed faction stability (last turn's exodus).
     populationFlightEvent: { findMany: vi.fn(async () => []) },
+    // Wars pin rivalries: tickFactionRelationships reads active wars.
+    war: { findMany: vi.fn(async () => []) },
   },
 }))
 

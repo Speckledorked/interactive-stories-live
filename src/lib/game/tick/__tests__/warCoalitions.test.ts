@@ -6,6 +6,10 @@ vi.mock('@/lib/prisma', () => ({
     faction: { update: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
     location: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
     warParticipant: { create: vi.fn(), createMany: vi.fn() },
+    supplyRoute: { findMany: vi.fn() },
+    // War declarations read NPC leaders (ambition gate) and FactionDebt (defaulted-debt gate).
+    nPC: { findMany: vi.fn(async () => []) },
+    factionDebt: { findMany: vi.fn(async () => []) },
   },
 }))
 
@@ -49,6 +53,10 @@ describe('tickWars coalitions', () => {
     // No new wars declared unless a test explicitly sets these up.
     vi.mocked(prisma.faction.findMany).mockResolvedValue([])
     vi.mocked(prisma.location.findMany).mockResolvedValue([])
+    // No supply routes and no locations unless a test sets them up — with
+    // zero owned locations the attacker counts as self-sufficient per
+    // hasWorkingRoute, so the no-supply attrition stays out of these tests.
+    vi.mocked(prisma.supplyRoute.findMany).mockResolvedValue([])
   })
 
   it('aggregates military across every living participant on a side for momentum', async () => {
@@ -660,7 +668,9 @@ describe('tickWars coalitions', () => {
     const attacker = makeFaction('att-a', { military: 80, ties: { 'def-a': { type: 'RIVAL', since: 1 } } })
     const defender = makeFaction('def-a', { military: 80, ties: { 'att-a': { type: 'RIVAL', since: 1 } } })
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([attacker, defender] as any)
-    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
+    // Persistent (not once): resolveWarProgress reads locations before
+    // declareNewWars does, so a once-mock would be consumed by the wrong call.
+    vi.mocked(prisma.location.findMany).mockResolvedValue([
       { id: 'loc-1', name: 'The Keep', ownerFactionId: 'def-a', isContested: true },
     ] as any)
     vi.mocked(prisma.war.create).mockResolvedValueOnce({ id: 'new-war-1' } as any)
@@ -673,5 +683,40 @@ describe('tickWars coalitions', () => {
         { warId: 'new-war-1', factionId: 'def-a', side: 'DEFENDER', joinedTurn: 2 },
       ],
     })
+  })
+
+  it('does not declare when the would-be attacker\'s NPC leader is dovish (ambition gate wiring)', async () => {
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([]) // no active wars
+
+    const attacker = makeFaction('att-a', { military: 80, ties: { 'def-a': { type: 'RIVAL', since: 1 } } })
+    const defender = makeFaction('def-a', { military: 80, ties: { 'att-a': { type: 'RIVAL', since: 1 } } })
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([attacker, defender] as any)
+    vi.mocked(prisma.location.findMany).mockResolvedValue([
+      { id: 'loc-1', name: 'The Keep', ownerFactionId: 'def-a', isContested: true },
+    ] as any)
+    // Dovish NPC leader for att-a — ambition 10 sits below the 34 gate.
+    vi.mocked(prisma.nPC.findMany).mockResolvedValue([
+      { factionId: 'att-a', disposition: { selfPreservation: 50, loyalty: 50, ambition: 10 } },
+    ] as any)
+
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
+
+    expect(prisma.war.create).not.toHaveBeenCalled()
+  })
+
+  it('does not declare when the would-be attacker is DEFAULTED on its debts (debt gate wiring)', async () => {
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([]) // no active wars
+
+    const attacker = makeFaction('att-a', { military: 80, ties: { 'def-a': { type: 'RIVAL', since: 1 } } })
+    const defender = makeFaction('def-a', { military: 80, ties: { 'att-a': { type: 'RIVAL', since: 1 } } })
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([attacker, defender] as any)
+    vi.mocked(prisma.location.findMany).mockResolvedValue([
+      { id: 'loc-1', name: 'The Keep', ownerFactionId: 'def-a', isContested: true },
+    ] as any)
+    vi.mocked(prisma.factionDebt.findMany).mockResolvedValue([{ debtorFactionId: 'att-a' }] as any)
+
+    await tickWars(baseCtx({ turnNumber: simTurn(2) }))
+
+    expect(prisma.war.create).not.toHaveBeenCalled()
   })
 })

@@ -5,6 +5,7 @@ vi.mock('@/lib/prisma', () => ({
     nPC: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     worldEvent: { findMany: vi.fn() },
     worldMeta: { findUnique: vi.fn(), updateMany: vi.fn() },
+    eventWitness: { findMany: vi.fn(async () => []) },
   },
 }))
 

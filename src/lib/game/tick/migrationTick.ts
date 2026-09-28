@@ -36,6 +36,8 @@
 import { TickContext, TickHandlerResult, WorldChange } from './types'
 import { AdjacencyEdge, shortestPath } from '../worldGraph'
 import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
+import { isSevereWeather } from './weatherTick'
+import type { WeatherCondition } from '@prisma/client'
 
 // RUINED/ABANDONED band boundary — the same bar
 // locationConditionTick.ts's SITE_CONDITION_PENALTY_THRESHOLD (resolution.ts)
@@ -102,7 +104,18 @@ export interface DestinationLocationInput {
   name: string
   conditionScore: number
   population: number | null
+  /** Optional — when absent, no weather penalty applies (keeps the pre-weather behavior exactly). */
+  weather?: WeatherCondition
+  weatherSeverity?: number
 }
+
+// A rumor of doom stays actionable for this many turns after the NPC
+// hears it — long enough to act on, short enough that stale gossip dies.
+const HEARSAY_DOOM_TURNS = 10
+// A single flight of this many people or more is newsworthy —
+// informationTick picks it up as a rumor (significant WorldChange), while
+// smaller flows stay routine background drift.
+const FLIGHT_RUMOR_THRESHOLD = 10
 
 export interface MigratingNpcInput {
   id: string
@@ -115,6 +128,15 @@ export interface MigratingNpcInput {
 
 function selfPreservationOf(npc: MigratingNpcInput): number {
   return npc.selfPreservation ?? NEUTRAL_DISPOSITION.selfPreservation
+}
+
+/** Pure — 1 when the destination is in severe weather, else 0. Used as a
+ * sort penalty so blizzard havens lose ties to clear-weather ones. */
+export function weatherPenalty(destination: DestinationLocationInput): number {
+  return destination.weather !== undefined &&
+    isSevereWeather(destination.weather, destination.weatherSeverity ?? 0)
+    ? 1
+    : 0
 }
 
 /**
@@ -147,12 +169,20 @@ function pickDestination(
  * so it stays correct if ever called with an unfiltered list. `edges`
  * defaults to empty (campaign-wide selection, pre-#108 behavior) for any
  * caller that doesn't have graph data on hand.
+ *
+ * `hearsayDoom` maps npcId -> locationId for NPCs who were TOLD (see
+ * EventWitness) that their current location is doomed. They flee even when
+ * the location's actual score isn't distressed — rumors move people, not
+ * just measurements. Only named NPCs act on hearsay; the background
+ * population drifts on visible decline alone. Empty by default, which
+ * preserves the pre-hearsay behavior exactly.
  */
 export function decideMigration(
   distressedLocations: DistressedLocationInput[],
   candidateDestinations: DestinationLocationInput[],
   npcs: MigratingNpcInput[],
-  edges: AdjacencyEdge[] = []
+  edges: AdjacencyEdge[] = [],
+  hearsayDoom: Map<string, string> = new Map()
 ): { npcMoves: MigrationDecision[]; populationShifts: PopulationShiftDecision[]; populationFlights: PopulationFlightDecision[] } {
   const npcMoves: MigrationDecision[] = []
   const populationFlights: PopulationFlightDecision[] = []
@@ -161,10 +191,17 @@ export function decideMigration(
     return { npcMoves, populationShifts: [], populationFlights: [] }
   }
 
-  // Highest-condition destination wins, deterministically — ties broken by
-  // id so the result never depends on query row order.
+  // Highest-condition destination wins, deterministically — but refugees
+  // don't flee a dying town for a haven in a blizzard: among equal
+  // condition scores, a destination in severe weather sorts after one in
+  // clear weather. Condition stays primary — weather is a tie-break, not
+  // a veto. Ties broken by id so the result never depends on query row
+  // order.
   const sortedDestinations = [...candidateDestinations].sort(
-    (a, b) => b.conditionScore - a.conditionScore || a.id.localeCompare(b.id)
+    (a, b) =>
+      b.conditionScore - a.conditionScore ||
+      weatherPenalty(a) - weatherPenalty(b) ||
+      a.id.localeCompare(b.id)
   )
 
   const nameById = new Map<string, string>()
@@ -221,6 +258,33 @@ export function decideMigration(
     if (loc.population !== null) initialById.set(loc.id, loc.population)
   }
 
+  // Hearsay flight: an NPC who was told their home is doomed flees on the
+  // rumor even when the score says the place is fine. Same gates as
+  // score-driven flight (alive, self-preserving enough, a viable
+  // destination exists) and never double-moves an NPC who already fled a
+  // genuinely distressed location this tick.
+  const distressedIds = new Set(distressedLocations.map((l) => l.id))
+  const movedNpcIds = new Set(npcMoves.map((m) => m.npcId))
+  for (const [npcId, doomedLocationId] of hearsayDoom) {
+    const npc = npcs.find((n) => n.id === npcId)
+    if (!npc || !npc.isAlive) continue
+    if (npc.locationId !== doomedLocationId) continue
+    if (distressedIds.has(doomedLocationId)) continue
+    if (movedNpcIds.has(npcId)) continue
+    if (selfPreservationOf(npc) < FLIGHT_STAY_THRESHOLD) continue
+    const destination = pickDestination(doomedLocationId, sortedDestinations, edges)
+    if (!destination) continue
+    npcMoves.push({
+      npcId: npc.id,
+      npcName: npc.name,
+      fromLocationId: doomedLocationId,
+      fromLocationName: nameById.get(doomedLocationId) ?? doomedLocationId,
+      toLocationId: destination.id,
+      toLocationName: destination.name,
+    })
+    movedNpcIds.add(npcId)
+  }
+
   const populationShifts: PopulationShiftDecision[] = []
   for (const [id, newPopulation] of workingPopulation) {
     const previousPopulation = initialById.get(id)!
@@ -240,11 +304,48 @@ export function decideMigration(
 export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult> {
   const locations = await ctx.db.location.findMany({
     where: { campaignId: ctx.campaignId, isDiscovered: true },
-    select: { id: true, name: true, conditionScore: true, population: true },
+    select: { id: true, name: true, conditionScore: true, population: true, weather: true, weatherSeverity: true },
   })
 
+  // Rumors re-enter the sim: NPCs who were TOLD (EventWitness, grade TOLD)
+  // that their location is doomed flee on the rumor even when the score
+  // says the place is fine. Reads the location-condition WorldEvents the
+  // information bus already propagates — doom means the event's new
+  // condition score sits below DISTRESS_THRESHOLD. Distorted rows count:
+  // the NPC acts on what they believe they heard, not the ground truth.
+  // Dead NPCs are excluded by the isAlive filter on the NPC read below,
+  // even when a stale TOLD row names them.
+  const doomHearsay = await ctx.db.eventWitness.findMany({
+    where: {
+      campaignId: ctx.campaignId,
+      grade: 'TOLD',
+      npcId: { not: null },
+      turnNumber: { gte: ctx.turnNumber - HEARSAY_DOOM_TURNS },
+      worldEvent: { type: 'location_condition.conditionScore' },
+    },
+    select: {
+      npcId: true,
+      worldEvent: { select: { targetId: true, newValue: true } },
+    },
+  })
+  const hearsayDoom = new Map<string, string>()
+  for (const row of doomHearsay) {
+    if (!row.npcId) continue
+    const doomScore = parseInt(row.worldEvent.newValue ?? '', 10)
+    if (Number.isNaN(doomScore) || doomScore >= DISTRESS_THRESHOLD) continue
+    hearsayDoom.set(row.npcId, row.worldEvent.targetId)
+  }
+
   const distressedLocations = locations.filter((l) => l.conditionScore < DISTRESS_THRESHOLD)
-  if (distressedLocations.length === 0) return { changes: [] }
+  const heardLocationIds = new Set(hearsayDoom.values())
+  // NPCs worth reading: residents of distressed locations, plus anyone
+  // camped at a location they've heard is doomed (they may flee on the
+  // rumor even with no distressed location in the campaign at all).
+  const npcLocationIds = new Set([
+    ...distressedLocations.map((l) => l.id),
+    ...heardLocationIds,
+  ])
+  if (npcLocationIds.size === 0) return { changes: [] }
 
   const candidateDestinations = locations.filter((l) => l.conditionScore >= VIABLE_THRESHOLD)
   if (candidateDestinations.length === 0) return { changes: [] }
@@ -254,7 +355,7 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
       where: {
         campaignId: ctx.campaignId,
         isAlive: true,
-        locationId: { in: distressedLocations.map((l) => l.id) },
+        locationId: { in: Array.from(npcLocationIds) },
       },
       select: { id: true, name: true, locationId: true, isAlive: true, importance: true, disposition: true },
     }),
@@ -278,7 +379,8 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
       isAlive: n.isAlive,
       selfPreservation: parseDisposition(n.disposition)?.selfPreservation,
     })),
-    adjacencyRows as AdjacencyEdge[]
+    adjacencyRows as AdjacencyEdge[],
+    hearsayDoom
   )
 
   const changes: WorldChange[] = []
@@ -292,6 +394,10 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
     }
     // Same MAJOR/NORMAL split npcTick.ts already uses for a location move.
     const importance = importanceById.get(move.npcId) ?? 0
+    // A move from a location the NPC heard was doomed (but whose score is
+    // fine) is rumor-driven, not score-driven — say so, so the history
+    // reads honestly about WHY they ran.
+    const rumorDriven = hearsayDoom.get(move.npcId) === move.fromLocationId
     changes.push({
       entityType: 'NPC',
       entityId: move.npcId,
@@ -300,7 +406,9 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
       field: 'currentLocation',
       previousValue: move.fromLocationName,
       newValue: move.toLocationName,
-      reason: `${move.npcName} fled the deteriorating conditions in ${move.fromLocationName} for ${move.toLocationName}`,
+      reason: rumorDriven
+        ? `${move.npcName} fled ${move.fromLocationName} for ${move.toLocationName} on rumors of its coming ruin`
+        : `${move.npcName} fled the deteriorating conditions in ${move.fromLocationName} for ${move.toLocationName}`,
       significant: true,
       importance: importance >= 5 ? 'MAJOR' : 'NORMAL',
     })
@@ -328,6 +436,25 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
       // Routine background drift, same as weatherTick's severity wobbles —
       // not worth a history/RAG entry on its own.
       significant: false,
+      importance: 'NORMAL',
+    })
+  }
+
+  // A large exodus IS newsworthy — a significant change the information
+  // bus picks up as a rumor next turn, so PopulationFlightEvent stops
+  // being write-only. Small flows stay routine drift (see above).
+  for (const flight of populationFlights) {
+    if (flight.count < FLIGHT_RUMOR_THRESHOLD) continue
+    changes.push({
+      entityType: 'LOCATION_POPULATION',
+      entityId: flight.fromLocationId,
+      entityName: flight.fromLocationName,
+      campaignId: ctx.campaignId,
+      field: 'populationFlight',
+      previousValue: flight.fromLocationName,
+      newValue: flight.toLocationName,
+      reason: `${flight.count} residents fled ${flight.fromLocationName} for ${flight.toLocationName} as conditions collapsed`,
+      significant: true,
       importance: 'NORMAL',
     })
   }

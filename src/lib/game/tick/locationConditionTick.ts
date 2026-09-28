@@ -5,6 +5,7 @@
 // tracks that; this handler is what drifts it.
 
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
+import type { Season } from '../calendar'
 
 const WAR_DAMAGE = 8
 const CONTEST_STRAIN = 2
@@ -14,6 +15,21 @@ const PEACETIME_RECOVERY = 1
 // already-thriving location has nothing to recover FROM and just holds;
 // nothing here decays a prosperous place for no reason.
 const BASELINE_CONDITION = 60
+
+/**
+ * The season's nudge on condition drift — small by design (±1, the same
+ * magnitude as PEACETIME_RECOVERY): winter's cold bites exposed places,
+ * spring's thaw aids recovery, summer and autumn are neutral. Kept
+ * separate from seasonTick's resource modifiers (a different knob on a
+ * different entity) and applied in tickLocationCondition below. Undefined
+ * season (ctx.season absent) falls back to 0 — no season, no nudge.
+ */
+export const SEASON_CONDITION_MODIFIER: Record<Season, number> = {
+  spring: 1,
+  summer: 0,
+  autumn: 0,
+  winter: -1,
+}
 
 export interface ConditionDriftDecision {
   nextConditionScore: number
@@ -31,12 +47,8 @@ export interface ConditionDriftExplanation extends ConditionDriftDecision {
  * decideConditionDrift below is a thin wrapper over this; the two can
  * never drift apart because there's only one implementation.
  *
- * seasonModifier is accepted but NOT wired up by tickLocationCondition
- * below — #118's seasonal-pressure decision was deliberately scoped to
- * exactly two knobs (faction resource regen, clock speed), and folding a
- * third in here without a matching decision would silently expand that
- * closed scope. The parameter exists so a future, explicitly-decided
- * integration doesn't need to change this function's signature again.
+ * seasonModifier comes from SEASON_CONDITION_MODIFIER (see above) via
+ * tickLocationCondition — the season's small, closed nudge on drift.
  */
 export function explainConditionDrift(
   location: { conditionScore: number },
@@ -124,7 +136,10 @@ export async function tickLocationCondition(ctx: TickContext): Promise<TickHandl
 
   for (const location of locations) {
     const warPresent = locationIdsAtWar.has(location.id)
-    const decision = decideConditionDrift(location, warPresent, location.isContested)
+    // The season's nudge on drift (winter bites, spring heals) — 0 when
+    // the campaign has no season in hand, so nothing here depends on it.
+    const seasonModifier = ctx.season ? SEASON_CONDITION_MODIFIER[ctx.season] : 0
+    const decision = decideConditionDrift(location, warPresent, location.isContested, seasonModifier)
     if (decision.nextConditionScore === location.conditionScore) continue
 
     if (!ctx.dryRun) {

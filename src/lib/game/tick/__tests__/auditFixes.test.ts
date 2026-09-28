@@ -5,13 +5,15 @@ vi.mock('@/lib/prisma', () => ({
     faction: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
     // #373: faction ties are edge rows now, not a JSON column on Faction.
     factionTie: { findMany: vi.fn(async () => []), upsert: vi.fn(), deleteMany: vi.fn() },
-    nPC: { updateMany: vi.fn(), findMany: vi.fn() },
-    location: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    nPC: { updateMany: vi.fn(), findMany: vi.fn(async () => []) },
+    location: { findMany: vi.fn(async () => []), update: vi.fn(), updateMany: vi.fn() },
     warParticipant: { findMany: vi.fn() },
     // #79: tickFactions reads goal-change history for commitment.
     worldEvent: { findMany: vi.fn(async () => []) },
     // #207: tickFactions reads each faction's unresolved-wake count.
     activeWake: { count: vi.fn(async () => 0) },
+    // Population flight events feed faction stability (last turn's exodus).
+    populationFlightEvent: { findMany: vi.fn(async () => []) },
   },
 }))
 
@@ -279,6 +281,40 @@ describe('tickFactionAmbitions war exclusion (audit fix)', () => {
     })
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([peaceful] as any)
     vi.mocked(prisma.warParticipant.findMany).mockResolvedValueOnce([] as any)
+
+    const result = await tickFactionAmbitions(baseCtx())
+
+    expect((result.pendingAmbitions ?? []).length).toBe(1)
+  })
+
+  it('a low-ambition NPC leader blocks the commitment', async () => {
+    const cautious = makeFaction('cautious', {
+      goal: 'ENRICH',
+      resources: 90, // rich enough that it would otherwise commit
+      spawnedClocks: [],
+    })
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([cautious] as any)
+    vi.mocked(prisma.warParticipant.findMany).mockResolvedValueOnce([] as any)
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([
+      { factionId: 'cautious', disposition: { selfPreservation: 50, loyalty: 50, ambition: 10 } },
+    ] as any)
+
+    const result = await tickFactionAmbitions(baseCtx())
+
+    expect(result.pendingAmbitions ?? []).toHaveLength(0)
+  })
+
+  it('a driven NPC leader lets the commitment through', async () => {
+    const bold = makeFaction('bold', {
+      goal: 'ENRICH',
+      resources: 90,
+      spawnedClocks: [],
+    })
+    vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([bold] as any)
+    vi.mocked(prisma.warParticipant.findMany).mockResolvedValueOnce([] as any)
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([
+      { factionId: 'bold', disposition: { selfPreservation: 50, loyalty: 50, ambition: 90 } },
+    ] as any)
 
     const result = await tickFactionAmbitions(baseCtx())
 

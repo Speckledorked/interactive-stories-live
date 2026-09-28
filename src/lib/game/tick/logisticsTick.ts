@@ -41,6 +41,8 @@
 
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
 import { AdjacencyEdge, nearestLocation } from '../worldGraph'
+import { isSevereWeather } from './weatherTick'
+import type { WeatherCondition } from '@prisma/client'
 
 // Small, bounded per-slot gain — same rough scale as other tick deltas
 // (GOAL_DELTAS's ENRICH is +4/turn; a worked resource slot adds to that,
@@ -103,19 +105,30 @@ function hasAnyConnection(
  * no separate cleanup needed). This is the gate decideExtraction actually
  * uses — hasAnyConnection above is deliberately looser, for deciding
  * whether new infrastructure needs to be built at all.
+ *
+ * Severe weather (see isSevereWeather) at EITHER end breaks the route for
+ * the tick — caravans don't cross a blizzard pass. Deterministic and
+ * threshold-based, not a random failure roll.
  */
 function hasWorkingRoute(
   locationId: string,
   ownerFactionId: string,
   routes: SupplyRouteView[],
   ownerByLocationId: Map<string, string | null>,
-  ownedLocationCount: number
+  ownedLocationCount: number,
+  weatherByLocationId: Map<string, { condition: WeatherCondition; severity: number }> = new Map()
 ): boolean {
   if (ownedLocationCount <= 1) return true
   return routes.some((r) => {
     if (r.isBlockaded) return false
     const otherEnd = otherEndOf(r, locationId)
-    return otherEnd !== null && ownerByLocationId.get(otherEnd) === ownerFactionId
+    if (otherEnd === null || ownerByLocationId.get(otherEnd) !== ownerFactionId) return false
+    // Either end snowed in or storm-lashed: no supplies move this tick.
+    for (const endId of [locationId, otherEnd]) {
+      const weather = weatherByLocationId.get(endId)
+      if (weather && isSevereWeather(weather.condition, weather.severity)) return false
+    }
+    return true
   })
 }
 
@@ -131,9 +144,14 @@ function countOwnedLocations(locations: ExtractionLocation[]): Map<string, numbe
 /**
  * Pure — no DB access. A location yields its owner a resource gain only
  * when it has at least one resource slot, is actually owned, AND has a
- * working route (see hasWorkingRoute above).
+ * working route (see hasWorkingRoute above). `weatherByLocationId` is
+ * optional — absent means pre-weather behavior exactly.
  */
-export function decideExtraction(locations: ExtractionLocation[], routes: SupplyRouteView[]): ExtractionDecision[] {
+export function decideExtraction(
+  locations: ExtractionLocation[],
+  routes: SupplyRouteView[],
+  weatherByLocationId: Map<string, { condition: WeatherCondition; severity: number }> = new Map()
+): ExtractionDecision[] {
   const decisions: ExtractionDecision[] = []
   const ownerByLocationId = new Map(locations.map((l) => [l.locationId, l.ownerFactionId]))
   const ownedCounts = countOwnedLocations(locations)
@@ -143,7 +161,7 @@ export function decideExtraction(locations: ExtractionLocation[], routes: Supply
     if (!location.ownerFactionId) continue
 
     const ownedCount = ownedCounts.get(location.ownerFactionId) ?? 0
-    if (!hasWorkingRoute(location.locationId, location.ownerFactionId, routes, ownerByLocationId, ownedCount)) continue
+    if (!hasWorkingRoute(location.locationId, location.ownerFactionId, routes, ownerByLocationId, ownedCount, weatherByLocationId)) continue
 
     decisions.push({
       locationId: location.locationId,
@@ -231,9 +249,16 @@ export function decideSupplyRouteCreation(
 export async function tickLogistics(ctx: TickContext): Promise<TickHandlerResult> {
   const locations = await ctx.db.location.findMany({
     where: { campaignId: ctx.campaignId },
-    select: { id: true, name: true, resourceSlots: true, ownerFactionId: true },
+    select: { id: true, name: true, resourceSlots: true, ownerFactionId: true, weather: true, weatherSeverity: true },
   })
   if (locations.length === 0) return { changes: [] }
+
+  // weatherTick runs before this handler, so this is this turn's weather —
+  // severe weather at either end of a route breaks it (see
+  // hasWorkingRoute).
+  const weatherByLocationId = new Map(
+    locations.map((l) => [l.id, { condition: l.weather, severity: l.weatherSeverity }])
+  )
 
   const [routes, adjacencyRows] = await Promise.all([
     ctx.db.supplyRoute.findMany({
@@ -297,7 +322,7 @@ export async function tickLogistics(ctx: TickContext): Promise<TickHandlerResult
     route.isBlockaded = shouldBeBlockaded
   }
 
-  const decisions = decideExtraction(extractionLocations, routes)
+  const decisions = decideExtraction(extractionLocations, routes, weatherByLocationId)
   if (decisions.length === 0) return { changes: [] }
 
   const gainByFaction = new Map<string, number>()

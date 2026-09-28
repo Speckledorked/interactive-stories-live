@@ -4,11 +4,13 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     // #79: tickFactions reads goal-change history for commitment.
     worldEvent: { findMany: vi.fn(async () => []) },
-    location: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    location: { findMany: vi.fn(async () => []), update: vi.fn(), updateMany: vi.fn() },
     faction: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
     nPC: { updateMany: vi.fn(), findMany: vi.fn() },
     // #207: tickFactions reads each faction's unresolved-wake count.
     activeWake: { count: vi.fn(async () => 0) },
+    // Population flight events feed faction stability (last turn's exodus).
+    populationFlightEvent: { findMany: vi.fn(async () => []) },
   },
 }))
 

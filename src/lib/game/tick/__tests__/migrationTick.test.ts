@@ -6,6 +6,7 @@ vi.mock('@/lib/prisma', () => ({
     nPC: { findMany: vi.fn(), update: vi.fn() },
     locationAdjacency: { findMany: vi.fn() },
     populationFlightEvent: { createMany: vi.fn() },
+    eventWitness: { findMany: vi.fn(async () => []) },
   },
 }))
 
@@ -390,11 +391,16 @@ describe('tickMigration (DB handler)', () => {
       where: { id: 'capital' },
       data: { population: 510 },
     })
-    const shifts = result.changes.filter((c) => c.entityType === 'LOCATION_POPULATION')
+    const shifts = result.changes.filter((c) => c.entityType === 'LOCATION_POPULATION' && c.field === 'population')
     expect(shifts).toHaveLength(2)
     for (const shift of shifts) {
       expect(shift).toMatchObject({ significant: false, importance: 'NORMAL' })
     }
+    // A flight of 10 meets the rumor threshold — the exodus itself is
+    // newsworthy (significant) on top of the routine net shifts above.
+    const flightNews = result.changes.filter((c) => c.entityType === 'LOCATION_POPULATION' && c.field === 'populationFlight')
+    expect(flightNews).toHaveLength(1)
+    expect(flightNews[0]).toMatchObject({ significant: true, importance: 'NORMAL' })
   })
 
   it('writes nothing in dry-run mode but still reports the changes', async () => {
@@ -466,5 +472,54 @@ describe('tickMigration (DB handler)', () => {
         }),
       })
     )
+  })
+
+  it('an NPC told their fine-looking home is doomed flees on the rumor', async () => {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
+      { id: 'home', name: 'Home', conditionScore: 70, population: null },
+      { id: 'haven', name: 'Haven', conditionScore: 90, population: null },
+    ] as any)
+    // A TOLD EventWitness row about a location-condition event whose new
+    // score (10) sits below the distress threshold.
+    vi.mocked(prisma.eventWitness.findMany).mockResolvedValueOnce([
+      { npcId: 'npc1', worldEvent: { targetId: 'home', newValue: '10' } },
+    ] as any)
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([
+      { id: 'npc1', name: 'Aldric', locationId: 'home', isAlive: true, importance: 3, disposition: { selfPreservation: 80, loyalty: 50, ambition: 50 } },
+    ] as any)
+
+    const result = await tickMigration(baseCtx())
+
+    expect(result.changes).toHaveLength(1)
+    expect(result.changes[0]).toMatchObject({
+      entityType: 'NPC',
+      entityId: 'npc1',
+      field: 'currentLocation',
+      previousValue: 'Home',
+      newValue: 'Haven',
+    })
+    expect(result.changes[0].reason).toContain('on rumors of its coming ruin')
+    expect(prisma.nPC.update).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      data: { locationId: 'haven', currentLocation: 'Haven' },
+    })
+  })
+
+  it('ignores a TOLD doom row for a dead NPC', async () => {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
+      { id: 'home', name: 'Home', conditionScore: 70, population: null },
+      { id: 'haven', name: 'Haven', conditionScore: 90, population: null },
+    ] as any)
+    vi.mocked(prisma.eventWitness.findMany).mockResolvedValueOnce([
+      { npcId: 'ghost', worldEvent: { targetId: 'home', newValue: '10' } },
+    ] as any)
+    // The NPC read only returns the living — the stale row names someone
+    // no longer in the roster, so nothing moves.
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([])
+
+    const result = await tickMigration(baseCtx())
+
+    expect(result.changes).toHaveLength(0)
+    expect(prisma.nPC.update).not.toHaveBeenCalled()
   })
 })

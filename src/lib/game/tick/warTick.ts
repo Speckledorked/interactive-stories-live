@@ -36,11 +36,13 @@
 // tick either, for the same reason.
 
 import type { Prisma } from '@prisma/client'
-import { HIGH_BAND_MIN } from './factionTick'
+import { HIGH_BAND_MIN, MEDIUM_BAND_MIN } from './factionTick'
 import { TickContext, TickHandlerResult, WorldChange, clamp, findRivalId } from './types'
 import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import { decideArcDelta, decideArcResolution } from '../arc'
 import { rosterFactionFilter } from './capOrdering'
+import { isSevereWeather } from './weatherTick'
+import type { WeatherCondition } from '@prisma/client'
 
 // Both sides must be genuinely strong — the same HIGH cutoff the rest of
 // the tick uses, referenced rather than copied so a rebalance can't drift.
@@ -50,6 +52,15 @@ const WAR_MAX_DURATION = 10 // ticks before an inconclusive war is called a stal
 const ATTRITION_RESOURCES = 3
 const ATTRITION_MILITARY = 2
 const MAX_JOINERS_PER_SIDE_PER_TICK = 1 // a war spreads gradually, not all at once
+// Storms kill indiscriminately — both sides bleed extra soldiers when the
+// contested ground is in severe weather (see isSevereWeather in
+// weatherTick.ts). Symmetric by design: weather doesn't take sides.
+const SEVERE_WEATHER_EXTRA_MILITARY_ATTRITION = 1
+// A faction whose influence has been bled dry (LOW band) can't rally for a
+// new war — nobody follows a spent power into another fight. This is the
+// first tick-handler read of Faction.influence (#218 wrote it; the AI
+// layer was its only reader until now).
+const INFLUENCE_DECLARATION_FLOOR = MEDIUM_BAND_MIN
 
 export interface WarDeclarationDecision {
   shouldDeclare: boolean
@@ -60,6 +71,11 @@ export interface WarDeclarationDecision {
    * armies did not fight — otherwise the absence looks like a bug.
    */
   exhaustionRemaining?: number
+  /**
+   * Set when the prospective attacker sat the war out for lack of
+   * influence. Same reporting rationale as exhaustionRemaining.
+   */
+  influenceHesitation?: boolean
 }
 
 /** Pure decision function — no DB access, safe to unit test directly. */
@@ -142,15 +158,25 @@ export function warExhaustionRemaining(
  *
  * Optional so a caller with no history in hand behaves exactly as before,
  * which is also what makes the parameter safe to add.
+ *
+ * `influence` is likewise optional for the same reason: callers that don't
+ * have it pass nothing and get the pre-influence behavior. When present
+ * and in the LOW band, the attacker sits the war out — a faction bled dry
+ * by lost wars (influence -8 per decisive loss, see the resolution path)
+ * can't rally anyone into a new fight.
  */
 export function decideWarDeclaration(
-  attacker: { id: string; military: number },
+  attacker: { id: string; military: number; influence?: number },
   defender: { id: string; military: number },
   contestedLocations: Array<{ id: string; ownerFactionId: string | null; isContested: boolean }>,
   history?: { priorWars?: ResolvedWar[]; currentTurn?: number }
 ): WarDeclarationDecision {
   if (attacker.military < WAR_MILITARY_THRESHOLD || defender.military < WAR_MILITARY_THRESHOLD) {
     return { shouldDeclare: false }
+  }
+
+  if (attacker.influence !== undefined && attacker.influence < INFLUENCE_DECLARATION_FLOOR) {
+    return { shouldDeclare: false, influenceHesitation: true }
   }
 
   const exhaustion = warExhaustionRemaining(
@@ -200,16 +226,25 @@ export function decideWarProgress(
   war: { id: string },
   attacker: { military: number },
   defender: { military: number },
-  turnNumber: number
+  turnNumber: number,
+  battleWeather?: { condition: WeatherCondition; severity: number }
 ): WarProgressDecision {
   const momentumDelta = decideArcDelta(war.id, turnNumber, { sideAStrength: attacker.military, sideBStrength: defender.military })
+
+  // Severe weather at the contested location bleeds both armies — storms
+  // don't take sides. Optional so callers without weather in hand get the
+  // pre-weather behavior exactly.
+  const weatherAttrition =
+    battleWeather && isSevereWeather(battleWeather.condition, battleWeather.severity)
+      ? SEVERE_WEATHER_EXTRA_MILITARY_ATTRITION
+      : 0
 
   return {
     momentumDelta,
     attackerResourceDelta: -ATTRITION_RESOURCES,
-    attackerMilitaryDelta: -ATTRITION_MILITARY,
+    attackerMilitaryDelta: -ATTRITION_MILITARY - weatherAttrition,
     defenderResourceDelta: -ATTRITION_RESOURCES,
-    defenderMilitaryDelta: -ATTRITION_MILITARY,
+    defenderMilitaryDelta: -ATTRITION_MILITARY - weatherAttrition,
   }
 }
 
@@ -346,6 +381,23 @@ async function resolveWarProgress(
   const changes: WorldChange[] = []
   const resolvedWarIds = new Set<string>()
 
+  // The tick orders handlers so weatherTick has already written this turn's
+  // weather onto locations — read the contested grounds' weather once,
+  // batched, so severe weather can bleed the fighting armies (decideWarProgress).
+  const contestedIds = activeWars
+    .map((w) => w.contestedLocationId)
+    .filter((id): id is string => id !== null)
+  const contestedWeather = new Map<string, { condition: WeatherCondition; severity: number }>()
+  if (contestedIds.length > 0) {
+    const contestedLocations = await ctx.db.location.findMany({
+      where: { id: { in: contestedIds }, campaignId: ctx.campaignId },
+      select: { id: true, weather: true, weatherSeverity: true },
+    })
+    for (const l of contestedLocations) {
+      contestedWeather.set(l.id, { condition: l.weather, severity: l.weatherSeverity })
+    }
+  }
+
   for (const war of activeWars) {
     const attackerSide = war.participants.filter((p) => p.side === 'ATTACKER' && p.faction.isActive)
     const defenderSide = war.participants.filter((p) => p.side === 'DEFENDER' && p.faction.isActive)
@@ -392,7 +444,13 @@ async function resolveWarProgress(
     const attackerMilitaryTotal = attackerSide.reduce((sum, p) => sum + p.faction.military, 0)
     const defenderMilitaryTotal = defenderSide.reduce((sum, p) => sum + p.faction.military, 0)
 
-    const progress = decideWarProgress(war, { military: attackerMilitaryTotal }, { military: defenderMilitaryTotal }, ctx.turnNumber)
+    const progress = decideWarProgress(
+      war,
+      { military: attackerMilitaryTotal },
+      { military: defenderMilitaryTotal },
+      ctx.turnNumber,
+      war.contestedLocationId ? contestedWeather.get(war.contestedLocationId) : undefined
+    )
     const newMomentum = clamp(war.momentum + progress.momentumDelta, -100, 100)
 
     // Attrition applies to every living participant on both sides, not just
@@ -641,6 +699,10 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
       if (decision.exhaustionRemaining) {
         console.log(
           `  🕊️ ${attacker.name} vs ${defender.name}: still war-weary for ${decision.exhaustionRemaining} more turn(s)`
+        )
+      } else if (decision.influenceHesitation) {
+        console.log(
+          `  🕊️ ${attacker.name} vs ${defender.name}: influence too low to rally for a new war (${attacker.influence})`
         )
       }
       continue

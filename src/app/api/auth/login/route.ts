@@ -1,12 +1,15 @@
 // force deploy
 // src/app/api/auth/login/route.ts
 // User login endpoint
-// Verifies credentials and returns a JWT token
+// Verifies credentials and sets the httpOnly session cookies (15-minute
+// access JWT + 30-day rotating refresh token). The response body carries
+// the user profile only — never a token.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyPassword } from '@/lib/password'
-import { createToken } from '@/lib/auth'
+import { createAccessToken, setSessionCookies, type TokenPayload } from '@/lib/auth'
+import { mintRefreshToken } from '@/lib/refreshToken'
 import { LoginRequest, AuthResponse, ErrorResponse } from '@/types/api'
 import { checkRateLimit, rateLimitExceededResponse, getClientIp, LOGIN_LIMIT } from '@/lib/rateLimit'
 import { normalizeEmail } from '@/lib/auth/normalizeEmail'
@@ -72,23 +75,27 @@ export async function POST(request: NextRequest) {
       .update({ where: { id: user.id }, data: { lastSeenAt: new Date() } })
       .catch((err) => console.error('lastSeenAt stamp failed (non-critical):', err))
 
-    // Create JWT token
-    const token = createToken({
+    // Mint the session: a short-lived access JWT in an httpOnly cookie,
+    // plus an opaque refresh token in a second httpOnly cookie. The
+    // response body carries the user only — returning either token to
+    // JavaScript would undo the httpOnly protection.
+    const payload: TokenPayload = {
       userId: user.id,
       email: user.email,
       // Stamp the version this session is minted at (#98). Bumping
       // User.tokenVersion invalidates every token carrying an older one.
       tokenVersion: user.tokenVersion,
-    })
+    }
+    const accessToken = createAccessToken(payload)
+    const refresh = await mintRefreshToken(user.id)
 
-    // Return token and user info
-    return NextResponse.json<AuthResponse>({
-      token,
+    const response = NextResponse.json<AuthResponse>({
       user: {
         id: user.id,
         email: user.email
       }
     })
+    return setSessionCookies(response, accessToken, refresh.token)
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json<ErrorResponse>(

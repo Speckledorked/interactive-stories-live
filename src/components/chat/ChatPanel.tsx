@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Message } from '@prisma/client';
 import { getPusherClient, subscribeToCampaignMessages, subscribeToUserWhispers, unsubscribeFromChannel, RealtimeMessage, isPusherConfigured } from '@/lib/realtime/pusher-client';
-import { getToken } from '@/lib/clientAuth';
+import { authenticatedFetch } from '@/lib/clientAuth';
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
@@ -117,12 +117,7 @@ export default function ChatPanel({
       if (sceneId) params.append('sceneId', sceneId);
       params.append('limit', '50');
 
-      const token = getToken();
-      const response = await fetch(`/api/campaigns/${campaignId}/messages?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/messages?${params}`);
 
       if (response.ok) {
         const data = await response.json();
@@ -135,12 +130,7 @@ export default function ChatPanel({
 
   const fetchCampaignMembers = async () => {
     try {
-      const token = getToken();
-      const response = await fetch(`/api/campaigns/${campaignId}/members`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/members`);
 
       if (response.ok) {
         const data = await response.json();
@@ -157,13 +147,8 @@ export default function ChatPanel({
 
   const sendTypingIndicator = async (typing: boolean) => {
     try {
-      const token = getToken();
-      await fetch(`/api/campaigns/${campaignId}/typing`, {
+      await authenticatedFetch(`/api/campaigns/${campaignId}/typing`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify({ isTyping: typing }),
       });
     } catch (error) {
@@ -211,13 +196,8 @@ export default function ChatPanel({
     setLoading(true);
 
     try {
-      const token = getToken();
-      const response = await fetch(`/api/campaigns/${campaignId}/messages`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify({
           content: newMessage.trim(),
           type: messageType,

@@ -5,14 +5,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-vi.mock('@/lib/auth', () => ({ requireAuth: vi.fn() }))
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(),
+  clearSessionCookies: vi.fn((res: unknown) => res),
+}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     user: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
   },
 }))
 
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, clearSessionCookies } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { GET, PATCH, DELETE } from '../route'
 
@@ -230,6 +233,9 @@ describe('DELETE', () => {
     const response = await DELETE(deleteRequest({ confirm: 'DELETE MY ACCOUNT' }))
     expect(response.status).toBe(200)
     expect(db.user.delete).toHaveBeenCalledWith({ where: { id: 'user1' } })
+    // The browser must not keep presenting session cookies for a user
+    // that no longer exists.
+    expect(clearSessionCookies).toHaveBeenCalled()
   })
 
   it('only ever deletes the authenticated user, not an id from the request body', async () => {

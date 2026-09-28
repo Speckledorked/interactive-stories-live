@@ -16,7 +16,10 @@ export interface LoginRequest {
 }
 
 export interface AuthResponse {
-  token: string
+  // No token field: since the httpOnly-cookie migration, login/signup
+  // deliver the session via Set-Cookie headers and the body carries the
+  // user only. Returning a token to JavaScript would undo the httpOnly
+  // protection (see src/lib/auth.ts).
   user: {
     id: string
     email: string

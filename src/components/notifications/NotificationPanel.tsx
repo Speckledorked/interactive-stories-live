@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { getPusherClient } from '@/lib/realtime/pusher-client';
-import { getToken } from '@/lib/clientAuth';
+import { authenticatedFetch } from '@/lib/clientAuth';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs } from '@/components/ui/tabs';
 import { IconButton } from '@/components/ui/icon-button';
@@ -72,12 +72,7 @@ export default function NotificationPanel({
       if (campaignId) params.append('campaignId', campaignId);
       params.append('limit', '50');
 
-      const token = getToken();
-      const response = await fetch(`/api/notifications?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await authenticatedFetch(`/api/notifications?${params}`);
 
       if (response.ok) {
         const data = await response.json();
@@ -131,10 +126,7 @@ export default function NotificationPanel({
   const playNotificationSound = async (notificationType: string) => {
     try {
       if (soundPrefsRef.current === null) {
-        const token = getToken();
-        const res = await fetch('/api/notifications/settings', {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
+        const res = await authenticatedFetch('/api/notifications/settings');
         soundPrefsRef.current = res.ok ? await res.json() : { soundEnabled: false };
       }
       if (!soundPrefsRef.current?.soundEnabled) return;
@@ -155,13 +147,8 @@ export default function NotificationPanel({
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const token = getToken();
-      await fetch(`/api/notifications/${notificationId}`, {
+      await authenticatedFetch(`/api/notifications/${notificationId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify({ action: 'read' }),
       });
 
@@ -181,13 +168,8 @@ export default function NotificationPanel({
 
   const dismissNotification = async (notificationId: string) => {
     try {
-      const token = getToken();
-      await fetch(`/api/notifications/${notificationId}`, {
+      await authenticatedFetch(`/api/notifications/${notificationId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify({ action: 'dismiss' }),
       });
 

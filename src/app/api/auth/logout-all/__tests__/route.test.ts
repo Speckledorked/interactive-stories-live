@@ -7,14 +7,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-vi.mock('@/lib/auth', () => ({ getUser: vi.fn(), revokeAllSessions: vi.fn() }))
+vi.mock('@/lib/auth', () => ({
+  getUser: vi.fn(),
+  revokeAllSessions: vi.fn(),
+  clearSessionCookies: vi.fn((res: unknown) => res),
+}))
 vi.mock('@/lib/rateLimit', () => ({
   SESSION_REVOKE_LIMIT: { bucket: 'session-revoke', limit: 5, windowSeconds: 300 },
   checkRateLimit: vi.fn(),
   rateLimitExceededResponse: vi.fn(),
 }))
 
-import { getUser, revokeAllSessions } from '@/lib/auth'
+import { getUser, revokeAllSessions, clearSessionCookies } from '@/lib/auth'
 import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { POST } from '../route'
 
@@ -55,6 +59,9 @@ describe('POST /api/auth/logout-all', () => {
     expect(response.status).toBe(200)
     expect(revokeAllSessions).toHaveBeenCalledWith('user1')
     expect(body).toEqual(expect.objectContaining({ revoked: true, tokenVersion: 4 }))
+    // The caller's cookies are expired too — the "sign in again" message
+    // is only honest if the browser actually forgets the session.
+    expect(clearSessionCookies).toHaveBeenCalled()
   })
 
   it('returns 500 on an unexpected error', async () => {

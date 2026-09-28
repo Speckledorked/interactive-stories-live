@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { isPushSupported, enablePush, disablePush } from '@/lib/notifications/push-client';
-import { getToken } from '@/lib/clientAuth';
+import { authenticatedFetch } from '@/lib/clientAuth';
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -77,10 +77,7 @@ export default function NotificationSettings() {
     if (!supported) return;
 
     try {
-      const token = getToken();
-      const res = await fetch('/api/notifications/push', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+      const res = await authenticatedFetch('/api/notifications/push');
       if (res.ok) {
         const { configured } = await res.json();
         setPushConfigured(Boolean(configured));
@@ -142,12 +139,7 @@ export default function NotificationSettings() {
 
   const fetchSettings = async () => {
     try {
-      const token = getToken();
-      const response = await fetch('/api/notifications/settings', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await authenticatedFetch('/api/notifications/settings');
 
       if (response.ok) {
         const data = await response.json();
@@ -163,13 +155,8 @@ export default function NotificationSettings() {
   const updateSettings = async (newSettings: Partial<NotificationSettings>) => {
     setSaving(true);
     try {
-      const token = getToken();
-      const response = await fetch('/api/notifications/settings', {
+      const response = await authenticatedFetch('/api/notifications/settings', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify(newSettings),
       });
 

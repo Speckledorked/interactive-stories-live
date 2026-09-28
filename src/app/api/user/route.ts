@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireAuth } from '@/lib/auth'
+import { clearSessionCookies, requireAuth } from '@/lib/auth'
 import { ErrorResponse } from '@/types/api'
 import { handleRouteError } from '@/lib/api/errors'
 import { isTheme } from '@/lib/theme'
@@ -135,12 +135,17 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Delete user and all related data (cascading deletes handled by Prisma)
+    // Delete user and all related data (cascading deletes handled by Prisma,
+    // which also drops their refresh tokens). Clear the session cookies in
+    // the response so the browser isn't left holding credentials for a
+    // user that no longer exists.
     await prisma.user.delete({
       where: { id: tokenUser.userId }
     })
 
-    return NextResponse.json({ success: true, message: 'Account deleted successfully' })
+    const response = NextResponse.json({ success: true, message: 'Account deleted successfully' })
+    clearSessionCookies(response)
+    return response
   } catch (error) {
     return handleRouteError(error, 'Delete user error', 'Internal server error')
   }

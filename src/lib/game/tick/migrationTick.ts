@@ -33,10 +33,11 @@
 // turn — a rostered subset would move some inhabitants of a location and
 // leave others behind in the same emptying settlement.
 
-import { TickContext, TickHandlerResult, WorldChange } from './types'
+import { TickContext, TickHandlerResult, WorldChange, band, findRivalId } from './types'
 import { AdjacencyEdge, shortestPath } from '../worldGraph'
 import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
 import { isSevereWeather } from './weatherTick'
+import { TIE_INCLUDE, factionTies } from '../tieGraph'
 import type { WeatherCondition } from '@prisma/client'
 
 // RUINED/ABANDONED band boundary — the same bar
@@ -97,6 +98,10 @@ export interface DistressedLocationInput {
   name: string
   conditionScore: number
   population: number | null
+  /** Owning faction, when the location has one. Used to look up that
+   * faction's rival — refugees don't flee into their faction's rival's
+   * arms. Absent, no rival filtering applies (pre-#17 behavior exactly). */
+  ownerFactionId?: string | null
 }
 
 export interface DestinationLocationInput {
@@ -107,6 +112,19 @@ export interface DestinationLocationInput {
   /** Optional — when absent, no weather penalty applies (keeps the pre-weather behavior exactly). */
   weather?: WeatherCondition
   weatherSeverity?: number
+  /** Owning faction, when the destination has one. Absent, no
+   * rival-filtering and no owner-health penalty apply. */
+  ownerFactionId?: string | null
+  /**
+   * The owning faction's resources/stability. Refugees read the room: a
+   * destination whose owner is LOW on either counts as less desirable —
+   * a well-kept town owned by a starving, crumbling faction is a haven
+   * with an expiry date. Each LOW band adds one penalty step in the
+   * destination sort (below the location's own condition, above weather).
+   * Absent (or ownerless), no penalty — pre-#11 behavior exactly.
+   */
+  ownerFactionResources?: number | null
+  ownerFactionStability?: number | null
 }
 
 // A rumor of doom stays actionable for this many turns after the NPC
@@ -124,6 +142,10 @@ export interface MigratingNpcInput {
   isAlive: boolean
   /** NPC motivation model — optional, falls back to NEUTRAL_DISPOSITION.selfPreservation (50) when absent. Higher flees sooner; below FLIGHT_STAY_THRESHOLD, an NPC never flees at all. */
   selfPreservation?: number
+  /** Affiliated faction, when the NPC has one. A refugee won't flee to a
+   * destination owned by their own faction's RIVAL. Absent, only the
+   * source location's owner-rival filter applies. */
+  factionId?: string | null
 }
 
 function selfPreservationOf(npc: MigratingNpcInput): number {
@@ -139,6 +161,16 @@ export function weatherPenalty(destination: DestinationLocationInput): number {
     : 0
 }
 
+/** Pure — how many of the owning faction's health signals are LOW (0-2).
+ * A destination with no owner (or no owner health supplied) scores 0, so
+ * the sort below degrades to its exact pre-#11 order. */
+export function ownerDistressPenalty(destination: DestinationLocationInput): number {
+  let penalty = 0
+  if (destination.ownerFactionResources != null && band(destination.ownerFactionResources) === 'LOW') penalty++
+  if (destination.ownerFactionStability != null && band(destination.ownerFactionStability) === 'LOW') penalty++
+  return penalty
+}
+
 /**
  * The highest-condition destination reachable from `locationId` via the
  * real adjacency graph, or — when `edges` is empty or none of the
@@ -146,14 +178,24 @@ export function weatherPenalty(destination: DestinationLocationInput): number {
  * this location yet) — the highest-condition destination campaign-wide,
  * exactly like before #108. `sortedDestinations` is already
  * highest-condition-first, so both branches just take the first match.
+ *
+ * `avoidOwnerFactionId` excludes destinations owned by that faction
+ * (refugees don't flee to their faction's rival) — but exclusion is a
+ * preference, not a veto: when every viable destination is
+ * rival-owned, the best of them still wins. Routine beats paralysis.
  */
 function pickDestination(
   locationId: string,
   sortedDestinations: DestinationLocationInput[],
-  edges: AdjacencyEdge[]
+  edges: AdjacencyEdge[],
+  avoidOwnerFactionId?: string | null
 ): DestinationLocationInput | null {
-  const candidates = sortedDestinations.filter((d) => d.id !== locationId)
+  let candidates = sortedDestinations.filter((d) => d.id !== locationId)
   if (candidates.length === 0) return null
+  if (avoidOwnerFactionId) {
+    const nonRival = candidates.filter((d) => d.ownerFactionId !== avoidOwnerFactionId)
+    if (nonRival.length > 0) candidates = nonRival
+  }
   if (edges.length === 0) return candidates[0]
 
   const reachable = candidates.filter((d) => shortestPath(edges, locationId, d.id) !== null)
@@ -176,13 +218,19 @@ function pickDestination(
  * just measurements. Only named NPCs act on hearsay; the background
  * population drifts on visible decline alone. Empty by default, which
  * preserves the pre-hearsay behavior exactly.
+ *
+ * `rivalByFactionId` maps factionId -> its RIVAL factionId (see
+ * findRivalId). Refugees avoid destinations owned by their faction's
+ * rival — a preference, not a veto (see pickDestination). Empty by
+ * default, which preserves the pre-rival behavior exactly.
  */
 export function decideMigration(
   distressedLocations: DistressedLocationInput[],
   candidateDestinations: DestinationLocationInput[],
   npcs: MigratingNpcInput[],
   edges: AdjacencyEdge[] = [],
-  hearsayDoom: Map<string, string> = new Map()
+  hearsayDoom: Map<string, string> = new Map(),
+  rivalByFactionId: Map<string, string> = new Map()
 ): { npcMoves: MigrationDecision[]; populationShifts: PopulationShiftDecision[]; populationFlights: PopulationFlightDecision[] } {
   const npcMoves: MigrationDecision[] = []
   const populationFlights: PopulationFlightDecision[] = []
@@ -192,14 +240,17 @@ export function decideMigration(
   }
 
   // Highest-condition destination wins, deterministically — but refugees
-  // don't flee a dying town for a haven in a blizzard: among equal
-  // condition scores, a destination in severe weather sorts after one in
-  // clear weather. Condition stays primary — weather is a tie-break, not
-  // a veto. Ties broken by id so the result never depends on query row
-  // order.
+  // read the room: among equal condition scores, a destination whose
+  // owning faction is LOW on resources or stability sorts after one
+  // whose owner is healthy (a haven with an expiry date is a worse
+  // haven), and a destination in severe weather sorts after one in clear
+  // weather. Condition stays primary — owner health and weather are
+  // tie-breaks, not vetoes. Ties broken by id so the result never depends
+  // on query row order.
   const sortedDestinations = [...candidateDestinations].sort(
     (a, b) =>
       b.conditionScore - a.conditionScore ||
+      ownerDistressPenalty(a) - ownerDistressPenalty(b) ||
       weatherPenalty(a) - weatherPenalty(b) ||
       a.id.localeCompare(b.id)
   )
@@ -213,8 +264,20 @@ export function decideMigration(
 
   for (const location of distressedLocations) {
     if (location.conditionScore >= DISTRESS_THRESHOLD) continue
-    const destination = pickDestination(location.id, sortedDestinations, edges)
-    if (!destination) continue
+    // Refugees don't flee to their faction's rival: the source-level
+    // exclusion uses the source location's owner. Each named NPC below
+    // re-checks against their OWN faction's rival when it differs from
+    // the source owner's — a guest's faction is theirs, not the town's.
+    const sourceRival = location.ownerFactionId ? rivalByFactionId.get(location.ownerFactionId) : undefined
+    const sourceDestination = pickDestination(location.id, sortedDestinations, edges, sourceRival)
+    if (!sourceDestination) continue
+    const destinationForNpc = (npc: MigratingNpcInput): DestinationLocationInput | null => {
+      const npcRival = npc.factionId ? rivalByFactionId.get(npc.factionId) : undefined
+      if (npcRival && npcRival !== sourceRival) {
+        return pickDestination(location.id, sortedDestinations, edges, npcRival)
+      }
+      return sourceDestination
+    }
 
     // NPC motivation model: the most self-preserving residents flee first
     // (taking the limited per-tick slots), and anyone below
@@ -225,6 +288,8 @@ export function decideMigration(
       .filter((npc) => npc.isAlive && npc.locationId === location.id && selfPreservationOf(npc) >= FLIGHT_STAY_THRESHOLD)
       .sort((a, b) => selfPreservationOf(b) - selfPreservationOf(a) || a.id.localeCompare(b.id))
     for (const npc of residents.slice(0, MAX_NPC_MIGRATIONS_PER_LOCATION)) {
+      const destination = destinationForNpc(npc)
+      if (!destination) continue
       npcMoves.push({
         npcId: npc.id,
         npcName: npc.name,
@@ -239,15 +304,15 @@ export function decideMigration(
     if (sourcePopulation !== undefined && sourcePopulation > 0) {
       const fleeing = Math.max(1, Math.round(sourcePopulation * POPULATION_FLIGHT_FRACTION))
       workingPopulation.set(location.id, Math.max(0, sourcePopulation - fleeing))
-      const destPopulation = workingPopulation.get(destination.id)
+      const destPopulation = workingPopulation.get(sourceDestination.id)
       if (destPopulation !== undefined) {
-        workingPopulation.set(destination.id, destPopulation + fleeing)
+        workingPopulation.set(sourceDestination.id, destPopulation + fleeing)
       }
       populationFlights.push({
         fromLocationId: location.id,
         fromLocationName: location.name,
-        toLocationId: destination.id,
-        toLocationName: destination.name,
+        toLocationId: sourceDestination.id,
+        toLocationName: sourceDestination.name,
         count: fleeing,
       })
     }
@@ -272,7 +337,10 @@ export function decideMigration(
     if (distressedIds.has(doomedLocationId)) continue
     if (movedNpcIds.has(npcId)) continue
     if (selfPreservationOf(npc) < FLIGHT_STAY_THRESHOLD) continue
-    const destination = pickDestination(doomedLocationId, sortedDestinations, edges)
+    // Hearsay flight is personal — the rumor belongs to the NPC, so the
+    // rival exclusion uses THEIR faction, not a source location owner's.
+    const npcRival = npc.factionId ? rivalByFactionId.get(npc.factionId) : undefined
+    const destination = pickDestination(doomedLocationId, sortedDestinations, edges, npcRival)
     if (!destination) continue
     npcMoves.push({
       npcId: npc.id,
@@ -304,8 +372,22 @@ export function decideMigration(
 export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult> {
   const locations = await ctx.db.location.findMany({
     where: { campaignId: ctx.campaignId, isDiscovered: true },
-    select: { id: true, name: true, conditionScore: true, population: true, weather: true, weatherSeverity: true },
+    select: { id: true, name: true, conditionScore: true, population: true, weather: true, weatherSeverity: true, ownerFactionId: true },
   })
+
+  // Owner health (for destination desirability) and rival ties (so
+  // refugees don't flee to their faction's rival) — one batched read,
+  // using the same TIE_INCLUDE + findRivalId pairing factionTick.ts uses.
+  const factions = await ctx.db.faction.findMany({
+    where: { campaignId: ctx.campaignId },
+    include: TIE_INCLUDE,
+  })
+  const ownerHealthByFactionId = new Map(factions.map((f) => [f.id, { resources: f.resources, stability: f.stability }]))
+  const rivalByFactionId = new Map<string, string>()
+  for (const faction of factions) {
+    const rivalId = findRivalId(factionTies(faction))
+    if (rivalId) rivalByFactionId.set(faction.id, rivalId)
+  }
 
   // Rumors re-enter the sim: NPCs who were TOLD (EventWitness, grade TOLD)
   // that their location is doomed flee on the rumor even when the score
@@ -336,7 +418,9 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
     hearsayDoom.set(row.npcId, row.worldEvent.targetId)
   }
 
-  const distressedLocations = locations.filter((l) => l.conditionScore < DISTRESS_THRESHOLD)
+  const distressedLocations: DistressedLocationInput[] = locations
+    .filter((l) => l.conditionScore < DISTRESS_THRESHOLD)
+    .map((l) => ({ id: l.id, name: l.name, conditionScore: l.conditionScore, population: l.population, ownerFactionId: l.ownerFactionId }))
   const heardLocationIds = new Set(hearsayDoom.values())
   // NPCs worth reading: residents of distressed locations, plus anyone
   // camped at a location they've heard is doomed (they may flee on the
@@ -347,7 +431,22 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
   ])
   if (npcLocationIds.size === 0) return { changes: [] }
 
-  const candidateDestinations = locations.filter((l) => l.conditionScore >= VIABLE_THRESHOLD)
+  const candidateDestinations: DestinationLocationInput[] = locations
+    .filter((l) => l.conditionScore >= VIABLE_THRESHOLD)
+    .map((l) => {
+      const health = l.ownerFactionId ? ownerHealthByFactionId.get(l.ownerFactionId) : undefined
+      return {
+        id: l.id,
+        name: l.name,
+        conditionScore: l.conditionScore,
+        population: l.population,
+        weather: l.weather ?? undefined,
+        weatherSeverity: l.weatherSeverity ?? undefined,
+        ownerFactionId: l.ownerFactionId,
+        ownerFactionResources: health?.resources ?? null,
+        ownerFactionStability: health?.stability ?? null,
+      }
+    })
   if (candidateDestinations.length === 0) return { changes: [] }
 
   const [npcs, adjacencyRows] = await Promise.all([
@@ -357,7 +456,7 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
         isAlive: true,
         locationId: { in: Array.from(npcLocationIds) },
       },
-      select: { id: true, name: true, locationId: true, isAlive: true, importance: true, disposition: true },
+      select: { id: true, name: true, locationId: true, isAlive: true, importance: true, disposition: true, factionId: true },
     }),
     // #108: optional input to pickDestination — falls back to the
     // pre-#108 campaign-wide highest-condition pick when this is empty or
@@ -378,9 +477,11 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
       locationId: n.locationId,
       isAlive: n.isAlive,
       selfPreservation: parseDisposition(n.disposition)?.selfPreservation,
+      factionId: n.factionId,
     })),
     adjacencyRows as AdjacencyEdge[],
-    hearsayDoom
+    hearsayDoom,
+    rivalByFactionId
   )
 
   const changes: WorldChange[] = []

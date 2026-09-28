@@ -21,7 +21,7 @@
 // Faction.beliefVector already draws (confirmed: neither beliefVector nor
 // this file's axis names appear in scenePrompt.ts/worldSummary.ts).
 
-import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
+import { TickContext, TickHandlerResult, WorldChange, clamp, band } from './types'
 import { MAJOR_IMPORTANCE_THRESHOLD } from './npcTick'
 import { rosterNpcFilter } from './capOrdering'
 // #419: `import type`, not a value import.
@@ -78,6 +78,10 @@ export type DispositionDriftEventKind =
   | 'FACTION_ABANDONED_THEM'
   | 'GOAL_ACHIEVED'
   | 'HEARD_FACTION_FALL'
+  | 'FACTION_MOBILIZED'
+  | 'AMBITION_SUCCEEDED'
+  | 'AMBITION_FAILED'
+  | 'TREASURY_COLLAPSED'
 
 export interface DispositionDriftEvent {
   kind: DispositionDriftEventKind
@@ -150,6 +154,27 @@ export function decideDispositionDrift(current: NpcDisposition, recentEvents: Di
       case 'HEARD_FACTION_FALL':
         next = { ...next, loyalty: clamp(next.loyalty - HEARSAY_DRIFT_AMOUNT, 0, 100) }
         break
+      // Your faction going to war sharpens the survival instinct — the
+      // mobilization every warDeclared/warJoined event marks. Not a
+      // loyalty change: people can be both loyal and suddenly very aware
+      // they might die.
+      case 'FACTION_MOBILIZED':
+        next = { ...next, selfPreservation: clamp(next.selfPreservation + DRIFT_AMOUNT, 0, 100) }
+        break
+      // Your faction's grand project paying off breeds pride in it;
+      // watching it fail erodes faith in the leadership that gambled.
+      case 'AMBITION_SUCCEEDED':
+        next = { ...next, loyalty: clamp(next.loyalty + DRIFT_AMOUNT, 0, 100) }
+        break
+      case 'AMBITION_FAILED':
+        next = { ...next, loyalty: clamp(next.loyalty - DRIFT_AMOUNT, 0, 100) }
+        break
+      // The treasury visibly running dry reads as mismanagement to the
+      // members left holding the bag — a loyalty hit, but only on the
+      // band transition INTO low, not on every wobble of the balance.
+      case 'TREASURY_COLLAPSED':
+        next = { ...next, loyalty: clamp(next.loyalty - DRIFT_AMOUNT, 0, 100) }
+        break
     }
   }
   return next
@@ -181,7 +206,13 @@ function classifyOwnEvent(row: { type: string; newValue: string | null }): Dispo
 }
 
 /** This NPC's affiliated faction's WorldEvent rows, classified — same shape as beliefTick.ts's classifyWorldEvent. */
-function classifyFactionEvent(row: { type: string; newValue: string | null; origin: string; wakeSourceType: string | null }): DispositionDriftEvent | null {
+function classifyFactionEvent(row: {
+  type: string
+  newValue: string | null
+  previousValue?: string | null
+  origin: string
+  wakeSourceType: string | null
+}): DispositionDriftEvent | null {
   if (row.type === 'faction.warResolved') {
     if (row.newValue === 'attacker') return { kind: 'FACTION_WON' }
     if (row.newValue === 'defender') return { kind: 'FACTION_LOST' }
@@ -190,6 +221,27 @@ function classifyFactionEvent(row: { type: string; newValue: string | null; orig
   if (row.type === 'faction.warEnded') {
     // Only ever logged for the surviving side (see warTick.ts).
     return { kind: 'FACTION_WON' }
+  }
+  // A declaration or a coalition joining is a mobilization whether or not
+  // this faction fired the first shot — the warJoined row is logged
+  // against the joiner, the warDeclared row against the attacker.
+  if (row.type === 'faction.warDeclared' || row.type === 'faction.warJoined') {
+    return { kind: 'FACTION_MOBILIZED' }
+  }
+  // The faction's grand project resolving moves loyalty with the outcome
+  // — success breeds pride, failure erodes faith in the leadership.
+  if (row.type === 'faction.ambitionResolved') {
+    return row.newValue === 'succeeded' ? { kind: 'AMBITION_SUCCEEDED' } : { kind: 'AMBITION_FAILED' }
+  }
+  // Only the band transition INTO low counts: a treasury that was already
+  // low staying low is old news, and every routine fluctuation isn't.
+  if (row.type === 'faction.resources') {
+    const prev = Number(row.previousValue)
+    const next = Number(row.newValue)
+    if (Number.isFinite(prev) && Number.isFinite(next) && band(prev) !== 'LOW' && band(next) === 'LOW') {
+      return { kind: 'TREASURY_COLLAPSED' }
+    }
+    return null
   }
   // #310: origin: 'wake' alone doesn't distinguish genuine institutional-
   // memory loss (a member's death, or the faction's own collapse) from an
@@ -207,7 +259,15 @@ function classifyFactionEvent(row: { type: string; newValue: string | null; orig
 export const MAX_DISPOSITION_CATCHUP_TURNS = 30
 
 const RELEVANT_OWN_EVENT_TYPES = ['npc.consequence', 'npc.goalCompleted']
-const RELEVANT_FACTION_EVENT_TYPES = ['faction.warResolved', 'faction.warEnded', 'faction.stability']
+const RELEVANT_FACTION_EVENT_TYPES = [
+  'faction.warResolved',
+  'faction.warEnded',
+  'faction.warDeclared',
+  'faction.warJoined',
+  'faction.ambitionResolved',
+  'faction.resources',
+  'faction.stability',
+]
 
 export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerResult> {
   // #276: idle-cron ticking can invoke this handler with the SAME
@@ -291,9 +351,12 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
             targetId: { in: factionIds },
             type: { in: RELEVANT_FACTION_EVENT_TYPES },
           },
-          select: { targetId: true, turnNumber: true, type: true, newValue: true, origin: true, wakeSourceType: true },
+          // previousValue is selected (not just newValue) so the treasury
+          // collapse classifier can react to band transitions INTO low
+          // rather than every resource fluctuation.
+          select: { targetId: true, turnNumber: true, type: true, newValue: true, previousValue: true, origin: true, wakeSourceType: true },
         })
-      : Promise.resolve([] as Array<{ targetId: string; turnNumber: number; type: string; newValue: string | null; origin: string; wakeSourceType: string | null }>),
+      : Promise.resolve([] as Array<{ targetId: string; turnNumber: number; type: string; newValue: string | null; previousValue: string | null; origin: string; wakeSourceType: string | null }>),
     // Rumors re-enter the sim: TOLD rows (see EventWitness) about faction
     // collapses, batched the same way as the two queries above — one read
     // for the whole roster, per-NPC windows applied in memory below. Only
@@ -344,7 +407,7 @@ export async function tickNpcDisposition(ctx: TickContext): Promise<TickHandlerR
 
     const driftEvents = [
       ...ownEvents.map((row) => classifyOwnEvent({ type: row.type, newValue: row.newValue })),
-      ...factionEvents.map((row) => classifyFactionEvent({ type: row.type, newValue: row.newValue, origin: row.origin, wakeSourceType: row.wakeSourceType })),
+      ...factionEvents.map((row) => classifyFactionEvent({ type: row.type, newValue: row.newValue, previousValue: row.previousValue, origin: row.origin, wakeSourceType: row.wakeSourceType })),
       // Each TOLD-about-a-collapse row in this NPC's window is one heard
       // rumor; the watermark advancing each tick means a rumor is
       // processed exactly once, like every other event here.

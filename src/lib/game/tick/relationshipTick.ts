@@ -30,6 +30,17 @@ import { BeliefVector, parseBeliefVector } from './beliefTick'
 
 export type RelationshipType = 'RIVAL' | 'ALLY' | 'NEUTRAL'
 
+/**
+ * Pure — one tie step toward hostility. A fresh default strains the
+ * debtor-creditor relationship exactly this far: ALLY -> NEUTRAL,
+ * NEUTRAL -> RIVAL, RIVAL stays RIVAL (already at maximum hostility).
+ */
+export function strainOneStep(type: RelationshipType): RelationshipType {
+  if (type === 'ALLY') return 'NEUTRAL'
+  if (type === 'NEUTRAL') return 'RIVAL'
+  return 'RIVAL'
+}
+
 // The entry shape itself lives in types.ts (see the note there about
 // import cycles); re-exported here for existing importers.
 export type { FactionRelationshipEntry }
@@ -143,6 +154,18 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
     for (const a of attackers) for (const d of defenders) warPairKeys.add(pairKey(a, d))
   }
 
+  // A default strains the debtor-creditor tie one step toward hostility.
+  // Reads the debts tickEconomy defaulted LAST turn — it runs later in
+  // TICK_HANDLERS, so this turn's defaults don't exist yet. Same one-tick
+  // lag the module doc already describes for goals; keyed on turnResolved
+  // (not "currently DEFAULTED") so each default strains exactly once,
+  // not every tick the debt sits unresolved.
+  const freshDefaults = await ctx.db.factionDebt.findMany({
+    where: { campaignId: ctx.campaignId, status: 'DEFAULTED', turnResolved: ctx.turnNumber - 1 },
+    select: { debtorFactionId: true, creditorFactionId: true },
+  })
+  const defaultedPairKeys = new Set(freshDefaults.map((d) => pairKey(d.debtorFactionId, d.creditorFactionId)))
+
   const { changes, upserts, deletes } = tickPairwiseTies({
     campaignId: ctx.campaignId,
     entityType: 'FACTION',
@@ -158,24 +181,39 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
         beliefA: parseBeliefVector(a.beliefVector),
         beliefB: parseBeliefVector(b.beliefVector),
       })
+      // A fresh default strains this pair one step toward hostility —
+      // applied to the decided type so the engine's upsert/delete/change
+      // machinery treats the strained result as the honest decision.
+      if (defaultedPairKeys.has(pairKey(a.id, b.id))) {
+        return { type: strainOneStep(type), meta: pin }
+      }
       return { type, meta: pin }
     },
     buildExpireChange: (f, otherId, previous) => ({
       reason: `${f.name}'s ${previous.type === 'RIVAL' ? 'rivalry' : 'alliance'} with ${factionNameById.get(otherId) || 'a defunct faction'} lapses — the other side no longer exists as an independent faction`,
       significant: true,
     }),
-    buildNeutralChange: (a, b, previous) => ({
-      reason: `${a.name} and ${b.name} are no longer ${previous.type === 'RIVAL' ? 'rivals' : 'allies'}`,
-      significant: true,
-    }),
+    buildNeutralChange: (a, b, previous) => {
+      const strained = defaultedPairKeys.has(pairKey(a.id, b.id))
+      return {
+        reason: strained
+          ? `${a.name} and ${b.name} are no longer ${previous.type === 'RIVAL' ? 'rivals' : 'allies'} — a defaulted debt strains the relationship`
+          : `${a.name} and ${b.name} are no longer ${previous.type === 'RIVAL' ? 'rivals' : 'allies'}`,
+        significant: true,
+      }
+    },
     buildNewChange: (a, b, freshType, meta) => {
+      const strained = defaultedPairKeys.has(pairKey(a.id, b.id))
       const reason =
         meta === 'war'
           ? `${a.name} and ${b.name} are locked as rivals — the war between them pins the enmity regardless of shifting goals`
           : meta === 'belief'
             ? `${a.name} and ${b.name} become rivals — their beliefs have drifted too far apart`
             : `${a.name} and ${b.name} become ${freshType === 'RIVAL' ? 'rivals' : 'allies'}, both pursuing ${a.goal === b.goal ? a.goal : `${a.goal}/${b.goal}`}`
-      return { reason, significant: true }
+      return {
+        reason: strained ? `${reason} — strained by a defaulted debt` : reason,
+        significant: true,
+      }
     },
   })
 

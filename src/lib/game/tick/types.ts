@@ -365,3 +365,24 @@ export function stableHash(input: string): number {
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
+
+export type Band = 'LOW' | 'MEDIUM' | 'HIGH'
+
+// The band cutoffs, exported so systems that gate on "genuinely HIGH"
+// (war declaration/joining in warTick.ts, ambition resourcing in
+// ambitionTick.ts) reference the same numbers instead of hardcoding
+// copies that silently drift if the banding is ever rebalanced. Defined
+// here (not in factionTick.ts) so modules factionTick itself imports —
+// e.g. npcDispositionTick.ts — can share the banding without an import
+// cycle; factionTick.ts re-exports them so every existing importer keeps
+// working unchanged.
+export const MEDIUM_BAND_MIN = 34
+export const HIGH_BAND_MIN = 67
+
+// Exported — relationshipTick.ts shares this exact banding so "stable" means
+// the same thing everywhere in the tick.
+export function band(value: number): Band {
+  if (value < MEDIUM_BAND_MIN) return 'LOW'
+  if (value < HIGH_BAND_MIN) return 'MEDIUM'
+  return 'HIGH'
+}

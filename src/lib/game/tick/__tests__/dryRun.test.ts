@@ -11,6 +11,9 @@ vi.mock('@/lib/prisma', () => ({
     activeWake: { count: vi.fn(async () => 0) },
     // Population flight events feed faction stability (last turn's exodus).
     populationFlightEvent: { findMany: vi.fn(async () => []) },
+    // tickFactions batches escalating wars for the war-losing collapse
+    // pressure and the at-war goal override.
+    war: { findMany: vi.fn(async () => []) },
   },
 }))
 
@@ -98,6 +101,7 @@ describe('tickFactions dry run', () => {
       relationships: {},
       leaderCharacterId: null,
       isActive: true,
+      spawnedClocks: [],
     }
     // tickFactions queries factions twice: the capped main list, then an
     // uncapped id-only list for the stale-rival guard.

@@ -42,6 +42,7 @@
 import { TickContext, TickHandlerResult, WorldChange, clamp } from './types'
 import { AdjacencyEdge, nearestLocation } from '../worldGraph'
 import { isSevereWeather } from './weatherTick'
+import { deriveConditionTags } from './locationConditionTick'
 import type { WeatherCondition } from '@prisma/client'
 
 // Small, bounded per-slot gain — same rough scale as other tick deltas
@@ -60,6 +61,13 @@ export interface ExtractionLocation {
    * (see the null-vs-0 convention in factionTick.ts).
    */
   population?: number | null
+  /**
+   * Location.conditionScore, or null/undefined when untracked. Uses the
+   * same closed tag vocabulary as deriveConditionTags: ABANDONED ground
+   * yields nothing, RUINED ground yields half. Null/undefined keeps the
+   * legacy full yield — same null-vs-absent convention as population.
+   */
+  conditionScore?: number | null
 }
 
 export interface SupplyRouteView {
@@ -166,7 +174,8 @@ function countOwnedLocations(locations: ExtractionLocation[]): Map<string, numbe
  * non-depopulated population, AND has a working route (see
  * hasWorkingRoute above). `weatherByLocationId` is optional — absent
  * means pre-weather behavior exactly. `population` absent/null likewise
- * means pre-population behavior exactly.
+ * means pre-population behavior exactly, and `conditionScore`
+ * absent/null likewise means pre-condition behavior exactly.
  */
 export function decideExtraction(
   locations: ExtractionLocation[],
@@ -187,13 +196,25 @@ export function decideExtraction(
     const population = location.population ?? null
     if (population !== null && population <= 0) continue
 
+    // Ruined ground is picked-over ground: ABANDONED sites yield nothing
+    // at all, RUINED sites yield half. The tags are derived, not
+    // hardcoded, so "ruined" always means what locationConditionTick
+    // says it means. Untracked condition keeps the legacy full yield.
+    const condition = location.conditionScore ?? null
+    let conditionMultiplier = 1
+    if (condition !== null) {
+      const tags = deriveConditionTags(condition, false)
+      if (tags.includes('ABANDONED')) continue
+      if (tags.includes('RUINED')) conditionMultiplier = 0.5
+    }
+
     const ownedCount = ownedCounts.get(location.ownerFactionId) ?? 0
     if (!hasWorkingRoute(location.locationId, location.ownerFactionId, routes, ownerByLocationId, ownedCount, weatherByLocationId)) continue
 
     decisions.push({
       locationId: location.locationId,
       factionId: location.ownerFactionId,
-      resourceGain: location.resourceSlots.length * RESOURCE_GAIN_PER_SLOT,
+      resourceGain: Math.floor(location.resourceSlots.length * RESOURCE_GAIN_PER_SLOT * conditionMultiplier),
     })
   }
 
@@ -276,7 +297,7 @@ export function decideSupplyRouteCreation(
 export async function tickLogistics(ctx: TickContext): Promise<TickHandlerResult> {
   const locations = await ctx.db.location.findMany({
     where: { campaignId: ctx.campaignId },
-    select: { id: true, name: true, resourceSlots: true, ownerFactionId: true, weather: true, weatherSeverity: true, population: true },
+    select: { id: true, name: true, resourceSlots: true, ownerFactionId: true, weather: true, weatherSeverity: true, population: true, conditionScore: true },
   })
   if (locations.length === 0) return { changes: [] }
 
@@ -307,6 +328,7 @@ export async function tickLogistics(ctx: TickContext): Promise<TickHandlerResult
     resourceSlots: l.resourceSlots,
     ownerFactionId: l.ownerFactionId,
     population: l.population,
+    conditionScore: l.conditionScore,
   }))
 
   const routeCreations = decideSupplyRouteCreation(extractionLocations, routes, adjacencyRows as AdjacencyEdge[])

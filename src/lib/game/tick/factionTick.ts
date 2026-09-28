@@ -41,22 +41,14 @@ const GOAL_DELTAS: Record<FactionGoal, FactionDelta> = {
   CONSOLIDATE: { resources: 1, stability: 2, military: 0 },
 }
 
-export type Band = 'LOW' | 'MEDIUM' | 'HIGH'
+import { band } from './types'
 
-// The band cutoffs, exported so systems that gate on "genuinely HIGH"
-// (war declaration/joining in warTick.ts, ambition resourcing in
-// ambitionTick.ts) reference the same numbers instead of hardcoding
-// copies that silently drift if the banding is ever rebalanced.
-export const MEDIUM_BAND_MIN = 34
-export const HIGH_BAND_MIN = 67
-
-// Exported — relationshipTick.ts shares this exact banding so "stable" means
-// the same thing everywhere in the tick.
-export function band(value: number): Band {
-  if (value < MEDIUM_BAND_MIN) return 'LOW'
-  if (value < HIGH_BAND_MIN) return 'MEDIUM'
-  return 'HIGH'
-}
+// The band cutoffs live in ./types.ts (imported from there) so modules
+// factionTick itself imports can share the banding without an import
+// cycle — re-exported here so every existing `from './factionTick'`
+// importer keeps working unchanged.
+export { MEDIUM_BAND_MIN, HIGH_BAND_MIN, band } from './types'
+export type { Band } from './types'
 
 export interface FactionTickDecision {
   resources: number
@@ -186,6 +178,25 @@ export function explainFactionGoalReassessment(faction: {
    * see tick/wakeTick.ts. Undefined/0 is untouched by the check below,
    * identical to pre-#207 behavior. */
   activeWakeCount?: number
+  /**
+   * Whether this faction is currently a participant in an ESCALATING war.
+   * A faction with armies in the field holds the line rather than
+   * starting grand projects — checked before the goal-commitment lock,
+   * same tier as the wake-crisis branch: being at war is a real, ongoing
+   * crisis that should always be able to redirect a faction immediately.
+   * Undefined/false keeps the pre-war behavior exactly.
+   */
+  atWar?: boolean
+  /**
+   * Whether the faction has a live spawned ambition clock (see
+   * ambitionTick.ts). A faction mid-project holds its goal until the
+   * project resolves — reassessing halfway would strand the ambition.
+   * Checked after the crisis branches (a faction genuinely coming apart
+   * still redirects) but before the commitment lock and every other
+   * redirect: the clock IS the commitment. Undefined/false keeps the
+   * pre-clock behavior exactly.
+   */
+  hasActiveAmbitionClock?: boolean
 }): FactionGoalExplanation {
   const stabilityBand = band(faction.stability)
   const resourcesBand = band(faction.resources)
@@ -211,6 +222,26 @@ export function explainFactionGoalReassessment(faction: {
   if (Number(faction.activeWakeCount) >= WAKE_CRISIS_THRESHOLD) {
     reasoning.push(`Carrying ${faction.activeWakeCount} unresolved wake(s) (${WAKE_CRISIS_THRESHOLD}+ — still reeling from recent losses) — internal recovery takes priority over any ambition.`)
     return { goal: 'DEFEND', reasoning }
+  }
+
+  // A faction with armies in the field doesn't launch grand projects — it
+  // holds the line. Same tier as the wake-crisis branch above: checked
+  // before the commitment lock, so a faction that went to war can pivot
+  // immediately instead of waiting out an old EXPAND commitment while its
+  // territory burns.
+  if (faction.atWar) {
+    reasoning.push('At war — holding the line takes priority over any ambition.')
+    return { goal: 'DEFEND', reasoning }
+  }
+
+  // A live ambition clock holds the goal until the project resolves — the
+  // faction already spent treasury committing to a grand undertaking, and
+  // reassessing mid-project would strand it. After the crisis branches
+  // (genuine collapse still redirects), before everything else: the
+  // clock is the commitment, not a suggestion.
+  if (faction.hasActiveAmbitionClock) {
+    reasoning.push('A faction ambition is still in progress — holding the current goal until it resolves rather than reassessing mid-project.')
+    return { goal: faction.goal, reasoning }
   }
 
   // Otherwise, hold the current course until it has been given a fair run.
@@ -289,6 +320,13 @@ const ROUGHNESS_RATE_FLOOR = 0.5
 // doesn't need this to do anything (clamp keeps it at 1), and a merely
 // borderline collapse gets pushed meaningfully rougher rather than barely.
 const WAKE_CRISIS_ROUGHNESS_BUMP = 0.25
+// Losing a war makes a collapse messier: a faction going down while its
+// armies are being beaten in the field scatters more of what's left. The
+// bump scales with losing pressure (0-1), so a faction that's winning its
+// wars gets no bump at all and one being routed gets the full quarter —
+// same scale as the wake-crisis bump, deliberately, since a collapse
+// mid-rout is the same tier of chaos as a collapse mid-crisis.
+const WAR_MOMENTUM_ROUGHNESS_BUMP = 0.25
 
 export interface FactionCollapseDecision {
   collapses: boolean
@@ -310,6 +348,19 @@ function computeCollapseRoughness(stability: number): number {
   return clamp((COLLAPSE_STABILITY_THRESHOLD - effectiveStability) / COLLAPSE_STABILITY_THRESHOLD, 0, 1)
 }
 
+/**
+ * Pure — 0-1 losing pressure for one war participant. War.momentum is
+ * positive for attacker advantage and negative for defender advantage, so
+ * an attacker's losing pressure is the negative momentum and a defender's
+ * is the positive — normalized by the 100-point momentum scale. A faction
+ * that's winning (or in a stalemate) exerts zero pressure on its own
+ * collapse; only losing bleeds inward.
+ */
+export function decideWarLosingPressure(momentum: number, side: string): number {
+  const losing = side === 'ATTACKER' ? Math.max(0, -momentum) : Math.max(0, momentum)
+  return clamp(losing / 100, 0, 1)
+}
+
 // A faction that bottoms out doesn't just sit at LOW forever — past a
 // deeper crisis point it stops existing as an independent actor. If it has
 // a rival on record, that rival absorbs a slice of what's left; otherwise
@@ -326,14 +377,22 @@ export function decideFactionCollapse(faction: {
    * being independently smooth. Undefined/0 is untouched, identical to
    * pre-#207 behavior. */
   activeWakeCount?: number
+  /**
+   * 0-1 losing pressure from this faction's active wars (see
+   * decideWarLosingPressure) — the worst across all its participations.
+   * A faction collapsing while its armies are being beaten in the field
+   * goes down messier. Undefined/0 is untouched, identical to the
+   * pre-war-momentum behavior.
+   */
+  warLosingPressure?: number
 }): FactionCollapseDecision {
   if (faction.stability > COLLAPSE_STABILITY_THRESHOLD) {
     return { collapses: false, transferResources: 0, transferMilitary: 0, roughness: 0 }
   }
   const baseRoughness = computeCollapseRoughness(faction.stability)
-  const roughness = Number(faction.activeWakeCount) >= WAKE_CRISIS_THRESHOLD
-    ? clamp(baseRoughness + WAKE_CRISIS_ROUGHNESS_BUMP, 0, 1)
-    : baseRoughness
+  const wakeBump = Number(faction.activeWakeCount) >= WAKE_CRISIS_THRESHOLD ? WAKE_CRISIS_ROUGHNESS_BUMP : 0
+  const warBump = clamp(Number(faction.warLosingPressure ?? 0), 0, 1) * WAR_MOMENTUM_ROUGHNESS_BUMP
+  const roughness = clamp(baseRoughness + wakeBump + warBump, 0, 1)
   const effectiveRate = ABSORPTION_TRANSFER_RATE * (1 - roughness * (1 - ROUGHNESS_RATE_FLOOR))
   return {
     collapses: true,
@@ -425,7 +484,13 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     where: { campaignId: ctx.campaignId, isActive: true, ...rosterFactionFilter(ctx) },
     // #373: ties are edge rows now, pulled from both directions — see
     // tieGraph.ts's TIE_INCLUDE for why both sides are always included.
-    include: TIE_INCLUDE,
+    include: {
+      ...TIE_INCLUDE,
+      // The live ambition clock (see ambitionTick.ts) holds the goal
+      // until the project resolves — read here so reassessment below can
+      // see it. Same active definition ambitionTick itself uses.
+      spawnedClocks: { select: { currentTicks: true, maxTicks: true } },
+    },
   })
 
   // #79: how long each faction has held its current goal, read back from
@@ -524,6 +589,31 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     flightHitsByFaction.set(ownerId, (flightHitsByFaction.get(ownerId) ?? 0) + 1)
   }
 
+  // War participation feeds two decisions below: a faction losing its wars
+  // collapses rougher (decideFactionCollapse), and a faction at war at all
+  // prefers DEFEND over starting grand projects
+  // (explainFactionGoalReassessment). One batched read of every ESCALATING
+  // war's participants — momentum is positive for attacker advantage,
+  // negative for defender advantage, so each side's losing pressure is the
+  // momentum running against it (see decideWarLosingPressure). tickWars
+  // runs AFTER tickFactions, so this is last turn's momentum — the honest
+  // causal order, same one-tick lag the flight rows above already accept.
+  const factionIdsAtWar = new Set<string>()
+  const warLosingPressureByFaction = new Map<string, number>()
+  const activeWars = await ctx.db.war.findMany({
+    where: { campaignId: ctx.campaignId, status: 'ESCALATING' },
+    select: { momentum: true, participants: { select: { factionId: true, side: true } } },
+  })
+  for (const war of activeWars) {
+    for (const p of war.participants) {
+      factionIdsAtWar.add(p.factionId)
+      const pressure = decideWarLosingPressure(war.momentum, p.side)
+      if (pressure > (warLosingPressureByFaction.get(p.factionId) ?? 0)) {
+        warLosingPressureByFaction.set(p.factionId, pressure)
+      }
+    }
+  }
+
   for (const rawFaction of factions) {
     const pendingDelta = appliedDeltaThisTick.get(rawFaction.id)
     const faction = pendingDelta
@@ -546,7 +636,7 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     const activeWakeCount = await ctx.db.activeWake.count({
       where: { affectedFactionId: faction.id, resolvedAt: null },
     })
-    const collapse = decideFactionCollapse({ ...next, activeWakeCount })
+    const collapse = decideFactionCollapse({ ...next, activeWakeCount, warLosingPressure: warLosingPressureByFaction.get(faction.id) })
 
     if (collapse.collapses) {
       // #103: recorded before anything else so tickWake (later in this same
@@ -734,6 +824,8 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
           turnsOnCurrentGoal: turnsOnGoalByFaction.get(faction.id),
           beliefVector: parseBeliefVector(faction.beliefVector),
           activeWakeCount,
+          atWar: factionIdsAtWar.has(faction.id),
+          hasActiveAmbitionClock: faction.spawnedClocks.some((c) => c.currentTicks < c.maxTicks),
         })
 
     if (!ctx.dryRun) {

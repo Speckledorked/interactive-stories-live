@@ -7,6 +7,8 @@ vi.mock('@/lib/prisma', () => ({
     locationAdjacency: { findMany: vi.fn() },
     populationFlightEvent: { createMany: vi.fn() },
     eventWitness: { findMany: vi.fn(async () => []) },
+    // Owner health and rival ties feed destination scoring.
+    faction: { findMany: vi.fn(async () => []) },
   },
 }))
 

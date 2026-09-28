@@ -130,14 +130,42 @@ export async function tickWake(ctx: TickContext): Promise<TickHandlerResult> {
   })
   for (const wake of activeWakes) {
     const step = decideWakeDecayStep(wake)
-    if (!ctx.dryRun) {
-      const faction = await ctx.db.faction.findUnique({ where: { id: wake.affectedFactionId }, select: { stability: true } })
-      if (faction) {
+    // The faction read and the recovery change sit outside the dryRun
+    // guard: a dry run reports what WOULD change, like every other
+    // handler — only the writes are skipped. Interim decay steps stay
+    // silent in both modes; exactly one recovery change is ever emitted,
+    // on the final step.
+    const faction = await ctx.db.faction.findUnique({ where: { id: wake.affectedFactionId }, select: { name: true, stability: true } })
+    if (faction) {
+      const newStability = clamp(faction.stability + step.restoreAmount, 0, 100)
+      if (!ctx.dryRun) {
         await ctx.db.faction.update({
           where: { id: wake.affectedFactionId },
-          data: { stability: clamp(faction.stability + step.restoreAmount, 0, 100) },
+          data: { stability: newStability },
         })
       }
+      // Wake resolution emits exactly one recovery stability change:
+      // the interim decay ticks stay silent, so the history reads
+      // "they steadied" once, at the moment the grief actually lifts —
+      // not a per-turn drip. origin: 'wake' matches the creation-side
+      // changes above, so consumers can pair shock with recovery.
+      if (step.resolved) {
+        changes.push({
+          entityType: 'FACTION',
+          entityId: wake.affectedFactionId,
+          entityName: faction.name,
+          campaignId: ctx.campaignId,
+          field: 'stability',
+          previousValue: faction.stability,
+          newValue: newStability,
+          reason: `${faction.name} steadies as the wake of ${wake.sourceEntityName} fades`,
+          significant: false,
+          importance: 'NORMAL',
+          origin: 'wake',
+        })
+      }
+    }
+    if (!ctx.dryRun) {
       await ctx.db.activeWake.update({
         where: { id: wake.id },
         data: { currentTicks: step.nextCurrentTicks, resolvedAt: step.resolved ? new Date() : null },

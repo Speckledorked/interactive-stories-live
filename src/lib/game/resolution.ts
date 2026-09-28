@@ -1,4 +1,4 @@
-import { openaiFetch } from '@/lib/ai/openaiCompat'
+import { CLASSIFICATION_PROVIDERS } from '@/lib/ai/classification'
 import { ActionClassificationResponseSchema, ActionClassificationSchema } from '@/lib/ai/schema'
 import { delimitPlayerText, PLAYER_TEXT_PROMPT_RULE } from '@/lib/ai/playerText'
 // src/lib/game/resolution.ts
@@ -43,7 +43,6 @@ import {
   parseZone,
   DEFAULT_ZONE,
 } from './zones'
-import { AI_MODELS } from '@/lib/ai/models'
 import { recordAICost, estimateTokenCount } from '@/lib/ai/cost-tracker'
 
 // ---------------------------------------------------------------------------
@@ -762,11 +761,14 @@ export function parseClassifications(
  * wrong place.
  */
 export type MechanicsUnavailableReason =
-  /** OPENAI_API_KEY absent — configuration, not a fault. */
+  /** No classification provider configured (neither OPENAI_API_KEY nor
+   * the ANTHROPIC_API_KEY + ANTHROPIC_CLASSIFICATION_MODEL pair) —
+   * configuration, not a fault. */
   | 'no-api-key'
-  /** The call itself failed: non-ok HTTP, network, or a thrown error. */
+  /** Every configured provider failed at the call itself: non-ok HTTP,
+   * network, or a thrown error. */
   | 'api-error'
-  /** The call SUCCEEDED and was billed; nothing it returned survived validation. */
+  /** A provider's call SUCCEEDED and was billed; nothing it returned survived validation. */
   | 'unusable-output'
 
 interface ClassificationAttempt {
@@ -785,8 +787,18 @@ async function classifyActions(
   campaignId: string,
   sceneId: string
 ): Promise<ClassificationAttempt> {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return { classifications: [], failure: 'no-api-key', droppedFields: [] }
+  // Provider fallback (see lib/ai/classification.ts): OpenAI first,
+  // Anthropic second. A provider that is not configured is skipped, not
+  // failed — 'no-api-key' means none of them were configured. A provider
+  // whose CALL fails is also skipped, and the next one tried. Only a
+  // provider whose call SUCCEEDS ends the chain: valid classifications
+  // return, and unusable output returns 'unusable-output' without trying
+  // the next provider (the call was billed; retrying a different model
+  // on the same prompt is a billing decision, not a reliability one).
+  const providers = CLASSIFICATION_PROVIDERS.filter((p) => p.isConfigured())
+  if (providers.length === 0) {
+    return { classifications: [], failure: 'no-api-key', droppedFields: [] }
+  }
 
   const actionLines = actions
     .map((a, i) => {
@@ -833,64 +845,48 @@ Rules:
 Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fire", "stat_key": "cool", "capability_key": "Swordplay", "faction_name": null, "npc_name": null, "accepts_bargain": false, "matched_signature_id": null, "engagement": "melee", "moves_to_zone": null}]}`
 
   const startTime = Date.now()
-  try {
-    const response = await openaiFetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: AI_MODELS.EFFICIENT,
-        messages: [
-          { role: 'system', content: 'You classify RPG actions to game moves. JSON only.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0,
-        max_tokens: 500,
-        response_format: { type: 'json_object' },
-      }),
-    })
-    if (!response.ok) {
-      console.error('Action classification API error:', response.status)
-      return { classifications: [], failure: 'api-error', droppedFields: [] }
+  for (const provider of providers) {
+    try {
+      const result = await provider.classify(prompt)
+      // Every scene-resolution turn makes this call — it needs to be in
+      // the metered billing total (resolutionBilling.ts) just as much as
+      // the narration call, or the classifier's real cost silently falls
+      // outside what players are charged for. Billed under the model that
+      // actually answered, which is the fallback's model when OpenAI was
+      // down (cost-tracker prices unknown models at its fallback rate).
+      await recordAICost({
+        campaignId,
+        sceneId,
+        model: result.model,
+        requestType: 'action_classification',
+        inputTokens: result.usage.promptTokens || estimateTokenCount(prompt),
+        outputTokens: result.usage.completionTokens || estimateTokenCount(result.content),
+        responseTimeMs: Date.now() - startTime,
+        success: true,
+      }).catch(console.error)
+      const droppedFields: string[] = []
+      const classifications = parseClassifications(
+        JSON.parse(result.content),
+        actions.length,
+        { factionNames, npcNames },
+        (d) => droppedFields.push(d.field)
+      )
+      // The call worked. If nothing survived, that is the MODEL's answer being
+      // unusable, not the API being down — and the two want different messages.
+      // No fallback: this provider was reached and billed.
+      return {
+        classifications,
+        failure: classifications.length === 0 ? 'unusable-output' : null,
+        droppedFields,
+      }
+    } catch (error) {
+      // Transport/API failure (or a response envelope that was not JSON):
+      // try the next provider. Fail open only after all of them fail.
+      console.error(`Action classification failed on ${provider.name} (trying next provider):`, error)
     }
-    const data = await response.json()
-    const content = data.choices[0].message.content
-    const usage = data.usage || {}
-    // Every scene-resolution turn makes this call — it needs to be in the
-    // metered billing total (resolutionBilling.ts) just as much as the
-    // narration call, or the classifier's real cost silently falls outside
-    // what players are charged for.
-    await recordAICost({
-      campaignId,
-      sceneId,
-      model: AI_MODELS.EFFICIENT,
-      requestType: 'action_classification',
-      inputTokens: usage.prompt_tokens || estimateTokenCount(prompt),
-      outputTokens: usage.completion_tokens || estimateTokenCount(content),
-      responseTimeMs: Date.now() - startTime,
-      success: true,
-    }).catch(console.error)
-    const droppedFields: string[] = []
-    const classifications = parseClassifications(
-      JSON.parse(content),
-      actions.length,
-      { factionNames, npcNames },
-      (d) => droppedFields.push(d.field)
-    )
-    // The call worked. If nothing survived, that is the MODEL's answer being
-    // unusable, not the API being down — and the two want different messages.
-    return {
-      classifications,
-      failure: classifications.length === 0 ? 'unusable-output' : null,
-      droppedFields,
-    }
-  } catch (error) {
-    // Fail open: unclassified actions resolve freeform, as they always did.
-    console.error('Action classification failed (failing open):', error)
-    return { classifications: [], failure: 'api-error', droppedFields: [] }
   }
+  console.error('Action classification failed on all providers (failing open)')
+  return { classifications: [], failure: 'api-error', droppedFields: [] }
 }
 
 // ---------------------------------------------------------------------------
@@ -904,7 +900,8 @@ Return JSON: {"classifications": [{"action_index": 0, "move_name": "Act Under Fi
  */
 // #200: resolveActionMechanics used to fail open to a bare `[]` on every
 // path — a scene with no pending actions, a scene whose classifier call
-// failed (missing OPENAI_API_KEY, an OpenAI outage, a malformed response),
+// failed (no classification provider configured, an OpenAI outage with no
+// Anthropic fallback configured, a malformed response),
 // and a genuine DB error all produced the exact same empty array, with no
 // way for the caller to tell "nothing needed rolling" apart from "the dice
 // engine silently didn't run." For a product whose entire mechanical

@@ -24,13 +24,12 @@ vi.mock('next/navigation', () => ({
 }))
 
 vi.mock('@/lib/clientAuth', () => ({
-  authenticatedFetch: vi.fn(),
+  // TavernHeader's bell reads the unread count; a failed fetch is the
+  // "no count" path the hook handles by rendering no badge.
+  authenticatedFetch: vi.fn().mockResolvedValue({ ok: false }),
   isAuthenticated: () => true,
   getUser: () => ({ id: 'u1', email: 'u1@example.com' }),
   getLastCampaignId: () => null,
-  // TavernHeader's bell reads the unread count, which needs a token.
-  // Null is the "no token" path the hook handles by rendering no badge.
-  getToken: () => null,
   logout: () => {},
 }))
 

@@ -17,7 +17,15 @@ vi.mock('@/lib/password', () => ({
   hashPassword: vi.fn().mockResolvedValue('hashed-password'),
 }))
 vi.mock('@/lib/auth', () => ({
-  createToken: vi.fn().mockReturnValue('fake-jwt-token'),
+  createAccessToken: vi.fn().mockReturnValue('fake-access-jwt'),
+  setSessionCookies: vi.fn((response: unknown) => response),
+}))
+vi.mock('@/lib/refreshToken', () => ({
+  mintRefreshToken: vi.fn().mockResolvedValue({
+    token: 'fake-refresh-token',
+    userId: 'new-user',
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  }),
 }))
 vi.mock('@/lib/analytics/events', () => ({
   recordEvent: vi.fn().mockResolvedValue(undefined),
@@ -39,6 +47,8 @@ import { prisma } from '@/lib/prisma'
 import { addFunds } from '@/lib/payment/service'
 import { recordEvent } from '@/lib/analytics/events'
 import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
+import { createAccessToken, setSessionCookies } from '@/lib/auth'
+import { mintRefreshToken } from '@/lib/refreshToken'
 import { POST } from '../route'
 
 const db = prisma as any
@@ -73,7 +83,11 @@ describe('POST /api/auth/signup', () => {
     expect(db.user.create).not.toHaveBeenCalled()
   })
 
-  it('creates the user and returns a token', async () => {
+  it('creates the user and sets session cookies, returning no token to JS', async () => {
+    // The httpOnly migration: the session must arrive as cookies, never
+    // as a body field JavaScript can read. A `token` in this body would
+    // undo the whole point, so its absence is asserted, not just the
+    // cookies' presence.
     db.user.findUnique.mockResolvedValue(null)
     db.user.create.mockResolvedValue({ id: 'new-user', email: 'new@example.com' })
 
@@ -81,9 +95,18 @@ describe('POST /api/auth/signup', () => {
 
     expect(response.status).toBe(201)
     const json = await response.json()
-    expect(json.token).toBe('fake-jwt-token')
+    expect(json.token).toBeUndefined()
     expect(json.user).toEqual({ id: 'new-user', email: 'new@example.com' })
 
+    expect(createAccessToken).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'new-user', email: 'new@example.com' })
+    )
+    expect(mintRefreshToken).toHaveBeenCalledWith('new-user')
+    expect(setSessionCookies).toHaveBeenCalledWith(
+      expect.anything(),
+      'fake-access-jwt',
+      'fake-refresh-token'
+    )
     expect(db.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ email: 'new@example.com', password: 'hashed-password' }),

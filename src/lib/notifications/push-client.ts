@@ -9,7 +9,7 @@
 // permission → subscribe through the service worker → POST the resulting
 // subscription so the server has an endpoint to send to.
 
-import { getToken } from '@/lib/clientAuth'
+import { authenticatedFetch } from '@/lib/clientAuth'
 
 /** Whether this browser can do Web Push at all (Safari &lt;16, most in-app browsers). */
 export function isPushSupported(): boolean {
@@ -39,10 +39,6 @@ function urlBase64ToUint8Array(base64String: string): BufferSource {
   return view
 }
 
-function authHeaders(): HeadersInit {
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` }
-}
-
 export type PushEnableResult =
   | { ok: true }
   | { ok: false; reason: 'unsupported' | 'unconfigured' | 'denied' | 'failed'; detail?: string }
@@ -61,7 +57,7 @@ export async function enablePush(): Promise<PushEnableResult> {
   if (!isPushSupported()) return { ok: false, reason: 'unsupported' }
 
   try {
-    const keyRes = await fetch('/api/notifications/push', { headers: authHeaders() })
+    const keyRes = await authenticatedFetch('/api/notifications/push')
     if (!keyRes.ok) return { ok: false, reason: 'failed', detail: 'Could not reach the server' }
 
     const { configured, publicKey } = await keyRes.json()
@@ -84,9 +80,8 @@ export async function enablePush(): Promise<PushEnableResult> {
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       }))
 
-    const saveRes = await fetch('/api/notifications/push', {
+    const saveRes = await authenticatedFetch('/api/notifications/push', {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify(subscription.toJSON()),
     })
     if (!saveRes.ok) return { ok: false, reason: 'failed', detail: 'Could not save the subscription' }
@@ -114,9 +109,8 @@ export async function disablePush(): Promise<void> {
     const endpoint = subscription.endpoint
     await subscription.unsubscribe().catch(() => { /* fall through to the server delete */ })
 
-    await fetch('/api/notifications/push', {
+    await authenticatedFetch('/api/notifications/push', {
       method: 'DELETE',
-      headers: authHeaders(),
       body: JSON.stringify({ endpoint }),
     })
   } catch {

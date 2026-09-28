@@ -3,8 +3,8 @@
 // Tokens are used to verify user identity without checking the database every time
 
 import jwt from 'jsonwebtoken'
-import { NextRequest } from 'next/server'
-import { headers } from 'next/headers'
+import { NextRequest, NextResponse } from 'next/server'
+import { cookies, headers } from 'next/headers'
 
 // Secret hygiene: a hardcoded fallback in production means anyone who has
 // read this file can mint valid tokens. Production without JWT_SECRET now
@@ -50,6 +50,89 @@ export function createToken(payload: TokenPayload): string {
   return jwt.sign(payload, getJwtSecret(), {
     expiresIn: '30d', // Token expires in 30 days
   })
+}
+
+// ---------------------------------------------------------------------------
+// HttpOnly cookie sessions
+// ---------------------------------------------------------------------------
+//
+// The 30-day token above used to live in localStorage, readable by any
+// script on the page: one XSS anywhere meant full account theft with a
+// month-long window. Sessions now work in two halves:
+//
+// - Access token: a JWT like before, but short-lived (15 minutes) and
+//   delivered in an httpOnly cookie the client JavaScript can never read.
+//   The server reads it from the cookie on every request.
+// - Refresh token: an opaque 256-bit random value (see
+//   src/lib/refreshToken.ts) in a second httpOnly cookie, single-use and
+//   rotated on every redemption, with reuse detection.
+//
+// Lifetimes are constants, not env vars, on purpose: they are security
+// policy, and policy that silently changes with a deploy-time typo is
+// worse than policy that needs a code change to move.
+
+/** Cookie carrying the short-lived access JWT. httpOnly: JS never sees it. */
+export const ACCESS_TOKEN_COOKIE = 'ai_gm_at'
+/** Cookie carrying the opaque refresh token. Path-scoped to /api/auth so
+ * it is only ever sent to the auth endpoints, never to gameplay routes. */
+export const REFRESH_TOKEN_COOKIE = 'ai_gm_rt'
+
+/** Access token lifetime: 15 minutes. Short enough that a stolen cookie is
+ * a small window; long enough that normal play rarely hits a refresh. */
+export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60
+/** Refresh token lifetime: 30 days, matching the old localStorage
+ * session's "signed in for a month" behavior. */
+export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
+
+/**
+ * Mint the short-lived access JWT. Same payload shape as createToken —
+ * including tokenVersion, so "log out everywhere" keeps working — with a
+ * 15-minute expiry instead of 30 days.
+ */
+export function createAccessToken(payload: TokenPayload): string {
+  return jwt.sign(payload, getJwtSecret(), {
+    expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+  })
+}
+
+function cookieFlags(maxAgeSeconds: number, path: string) {
+  // Secure only in production: local dev is http://localhost, and a
+  // Secure cookie over plain HTTP is silently dropped — which would make
+  // every login on localhost look broken for a reason nowhere in the
+  // code. SameSite=Lax is enough for the CSRF shape here (top-level
+  // navigations only; the app makes no cross-site authenticated calls).
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    path,
+    maxAge: maxAgeSeconds,
+  }
+}
+
+/**
+ * Attach both session cookies to a login/signup/refresh response.
+ * The response body must NOT also carry the tokens — handing them to
+ * JavaScript would undo the httpOnly protection.
+ */
+export function setSessionCookies(
+  response: NextResponse,
+  accessToken: string,
+  refreshToken: string
+): NextResponse {
+  response.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, cookieFlags(ACCESS_TOKEN_TTL_SECONDS, '/'))
+  response.cookies.set(REFRESH_TOKEN_COOKIE, refreshToken, cookieFlags(REFRESH_TOKEN_TTL_SECONDS, '/api/auth'))
+  return response
+}
+
+/**
+ * Expire both session cookies. Path must match setSessionCookies or the
+ * browser treats these as different cookies and the originals survive.
+ */
+export function clearSessionCookies(response: NextResponse): NextResponse {
+  response.cookies.set(ACCESS_TOKEN_COOKIE, '', { ...cookieFlags(0, '/'), maxAge: 0 })
+  response.cookies.set(REFRESH_TOKEN_COOKIE, '', { ...cookieFlags(0, '/api/auth'), maxAge: 0 })
+  return response
 }
 
 /**
@@ -144,23 +227,48 @@ export async function isTokenRevoked(payload: TokenPayload | null): Promise<bool
  *
  * The endpoint behind "log out everywhere", and what a password reset
  * should call — a reset that leaves stolen sessions alive is not a reset.
+ *
+ * Bumps User.tokenVersion (kills every access JWT, including the one
+ * making this request) AND deletes every refresh-token row, so a stolen
+ * refresh cookie cannot mint a fresh access token after the fact.
+ * Deleting without the bump would leave live access tokens; bumping
+ * without the delete would leave refresh redemption alive. Both halves
+ * are the session.
  */
 export async function revokeAllSessions(userId: string): Promise<number> {
   const { prisma } = await import('@/lib/prisma')
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: { tokenVersion: { increment: 1 } },
-    select: { tokenVersion: true },
-  })
+  const [user] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { tokenVersion: { increment: 1 } },
+      select: { tokenVersion: true },
+    }),
+    prisma.refreshToken.deleteMany({ where: { userId } }),
+  ])
   return user.tokenVersion
 }
 
 /**
- * Extract user info from the Authorization header
- * @param request - Next.js request object
- * @returns User info or null if not authenticated
+ * Extract user info from the request's session cookie, falling back to
+ * the Authorization header.
+ *
+ * The cookie is primary: since the httpOnly migration the client never
+ * holds a token to send. The header fallback exists for the migration
+ * tail — sessions minted before this shipped still carry a 30-day Bearer
+ * token in some browser's localStorage until it expires or the user
+ * re-logs. It accepts nothing new: no code path mints a long-lived
+ * client-visible token anymore.
  */
 export function getUserFromRequest(request: NextRequest): TokenPayload | null {
+  const cookieToken = request.cookies.get(ACCESS_TOKEN_COOKIE)?.value
+  if (cookieToken) {
+    const fromCookie = verifyToken(cookieToken)
+    if (fromCookie) return fromCookie
+    // A present-but-invalid cookie is not evidence of anything except an
+    // expired session; fall through to the header before giving up so a
+    // request carrying both (migration tail) still authenticates.
+  }
+
   const authHeader = request.headers.get('authorization')
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -197,16 +305,19 @@ export async function getUser(request?: NextRequest): Promise<TokenPayload | nul
     return (await isTokenRevoked(user)) ? null : user
   }
 
-  // Fallback: read from Next.js request headers in server components/actions
+  // Fallback: server components/actions have no NextRequest, but the
+  // browser still sends the httpOnly access cookie — read it via
+  // next/headers, mirroring getUserFromRequest's cookie-first order and
+  // its Bearer fallback for the migration tail.
   try {
-    const authHeader = headers().get('authorization')
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return null
+    const cookieToken = cookies().get(ACCESS_TOKEN_COOKIE)?.value
+    let user = cookieToken ? verifyToken(cookieToken) : null
+    if (!user) {
+      const authHeader = headers().get('authorization')
+      if (authHeader?.startsWith('Bearer ')) {
+        user = verifyToken(authHeader.substring(7))
+      }
     }
-
-    const token = authHeader.substring(7)
-    const user = verifyToken(token)
     return (await isTokenRevoked(user)) ? null : user
   } catch {
     return null

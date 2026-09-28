@@ -17,12 +17,20 @@ import { NextRequest } from 'next/server'
 
 const findUnique = vi.fn()
 const update = vi.fn()
+const rtDeleteMany = vi.fn()
 vi.mock('@/lib/prisma', () => ({
-  prisma: { user: { findUnique: (...a: unknown[]) => findUnique(...a), update: (...a: unknown[]) => update(...a) } },
+  prisma: {
+    user: { findUnique: (...a: unknown[]) => findUnique(...a), update: (...a: unknown[]) => update(...a) },
+    refreshToken: { deleteMany: (...a: unknown[]) => rtDeleteMany(...a) },
+    // revokeAllSessions runs user.update + refreshToken.deleteMany inside
+    // one $transaction and reads the version back off the first result.
+    $transaction: (ops: unknown[]) => Promise.resolve(ops.map(() => ({ tokenVersion: 1 }))),
+  },
 }))
 
 import {
   createToken,
+  createAccessToken,
   verifyToken,
   getUserFromRequest,
   requireAuth,
@@ -30,7 +38,14 @@ import {
   verifyAuth,
   isTokenRevoked,
   revokeAllSessions,
+  setSessionCookies,
+  clearSessionCookies,
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  ACCESS_TOKEN_TTL_SECONDS,
 } from '../auth'
+import { NextResponse } from 'next/server'
+import jwt from 'jsonwebtoken'
 
 const withToken = (token: string) =>
   new NextRequest('http://localhost/api/anything', {
@@ -172,6 +187,14 @@ describe('revokeAllSessions', () => {
     expect(data.tokenVersion).toEqual({ increment: 1 })
     expect(typeof data.tokenVersion).not.toBe('number')
   })
+
+  it('also deletes every refresh-token row for the user', async () => {
+    // Bumping the version kills access JWTs; without the delete, a
+    // stolen refresh cookie could still mint a fresh access token after
+    // "log out everywhere". Both halves are the session.
+    await revokeAllSessions('u1')
+    expect(rtDeleteMany).toHaveBeenCalledWith({ where: { userId: 'u1' } })
+  })
 })
 
 describe('the request-level helpers all apply revocation', () => {
@@ -206,5 +229,118 @@ describe('the request-level helpers all apply revocation', () => {
 
   it('requireAuth still throws for no token at all', async () => {
     await expect(requireAuth(new NextRequest('http://localhost/x'))).rejects.toThrow('Unauthorized')
+  })
+})
+
+describe('createAccessToken', () => {
+  it('mints a 15-minute token, not a 30-day one', () => {
+    const token = createAccessToken({ userId: 'u1', email: 'a@example.com', tokenVersion: 2 })
+    const decoded = jwt.decode(token) as { iat: number; exp: number }
+    // The whole point of the access/refresh split: a stolen access
+    // cookie is a 15-minute window, not a month.
+    expect(ACCESS_TOKEN_TTL_SECONDS).toBe(15 * 60)
+    expect(decoded.exp - decoded.iat).toBe(15 * 60)
+  })
+
+  it('carries the same payload shape, including tokenVersion', () => {
+    const token = createAccessToken({ userId: 'u1', email: 'a@example.com', tokenVersion: 2 })
+    expect(verifyToken(token)).toMatchObject({ userId: 'u1', email: 'a@example.com', tokenVersion: 2 })
+  })
+})
+
+describe('getUserFromRequest with httpOnly cookies', () => {
+  // NOTE: a `cookie` init header is not parsed by constructed
+  // NextRequests in this environment; cookies.set() is.
+  const withCookie = (value: string) => {
+    const req = new NextRequest('http://localhost/api/anything')
+    req.cookies.set(ACCESS_TOKEN_COOKIE, value)
+    return req
+  }
+
+  it('reads the access cookie first', () => {
+    const token = createAccessToken({ userId: 'u1', email: 'a@example.com' })
+    expect(getUserFromRequest(withCookie(token))?.userId).toBe('u1')
+  })
+
+  it('prefers the cookie over the Bearer header when both are present', () => {
+    const cookieToken = createAccessToken({ userId: 'cookie-user', email: 'c@example.com' })
+    const headerToken = createToken({ userId: 'header-user', email: 'h@example.com' })
+    const req = new NextRequest('http://localhost/api/anything', {
+      headers: { authorization: `Bearer ${headerToken}` },
+    })
+    req.cookies.set(ACCESS_TOKEN_COOKIE, cookieToken)
+    expect(getUserFromRequest(req)?.userId).toBe('cookie-user')
+  })
+
+  it('falls back to the Bearer header for migration-tail sessions', () => {
+    // Sessions minted before the httpOnly migration still carry a 30-day
+    // Bearer token in some browser's localStorage until it expires or the
+    // user re-logs. The fallback accepts nothing new: no code path mints
+    // a long-lived client-visible token anymore.
+    const token = createToken({ userId: 'u1', email: 'a@example.com' })
+    expect(getUserFromRequest(withToken(token))?.userId).toBe('u1')
+  })
+
+  it('falls back to the header when the cookie is present but invalid', () => {
+    // An expired access cookie plus a live legacy header (a request
+    // carrying both during the migration) still authenticates.
+    const headerToken = createToken({ userId: 'u1', email: 'a@example.com' })
+    const req = new NextRequest('http://localhost/api/anything', {
+      headers: { authorization: `Bearer ${headerToken}` },
+    })
+    req.cookies.set(ACCESS_TOKEN_COOKIE, 'expired-or-tampered')
+    expect(getUserFromRequest(req)?.userId).toBe('u1')
+  })
+
+  it('returns null when neither cookie nor header authenticates', () => {
+    expect(getUserFromRequest(withCookie('garbage'))).toBeNull()
+    expect(getUserFromRequest(new NextRequest('http://localhost/x'))).toBeNull()
+  })
+})
+
+describe('setSessionCookies / clearSessionCookies', () => {
+  it('sets both cookies httpOnly, SameSite=Lax, with the right paths', () => {
+    const res = setSessionCookies(NextResponse.json({}), 'access-jwt', 'refresh-opaque')
+
+    const access = res.cookies.get(ACCESS_TOKEN_COOKIE)
+    expect(access?.value).toBe('access-jwt')
+    expect(access?.httpOnly).toBe(true)
+    expect(access?.sameSite).toBe('lax')
+    expect(access?.path).toBe('/')
+
+    const refresh = res.cookies.get(REFRESH_TOKEN_COOKIE)
+    expect(refresh?.value).toBe('refresh-opaque')
+    expect(refresh?.httpOnly).toBe(true)
+    expect(refresh?.sameSite).toBe('lax')
+    // Path-scoped so the refresh credential is only ever sent to the
+    // auth endpoints, never to gameplay routes.
+    expect(refresh?.path).toBe('/api/auth')
+  })
+
+  it('does not mark Secure outside production', () => {
+    // A Secure cookie over plain HTTP is silently dropped, which would
+    // make every localhost login look broken for no visible reason.
+    expect(process.env.NODE_ENV).not.toBe('production')
+    const res = setSessionCookies(NextResponse.json({}), 'a', 'r')
+    expect(res.cookies.get(ACCESS_TOKEN_COOKIE)?.secure).toBe(false)
+    expect(res.cookies.get(REFRESH_TOKEN_COOKIE)?.secure).toBe(false)
+  })
+
+  it('gives the access cookie a 15-minute maxAge and the refresh cookie 30 days', () => {
+    const res = setSessionCookies(NextResponse.json({}), 'a', 'r')
+    expect(res.cookies.get(ACCESS_TOKEN_COOKIE)?.maxAge).toBe(15 * 60)
+    expect(res.cookies.get(REFRESH_TOKEN_COOKIE)?.maxAge).toBe(30 * 24 * 60 * 60)
+  })
+
+  it('clearSessionCookies expires both cookies on their original paths', () => {
+    // The clearing Set-Cookie must repeat the path or the browser treats
+    // it as a different cookie and the original survives.
+    const res = clearSessionCookies(NextResponse.json({}))
+    const access = res.cookies.get(ACCESS_TOKEN_COOKIE)
+    const refresh = res.cookies.get(REFRESH_TOKEN_COOKIE)
+    expect(access?.maxAge).toBe(0)
+    expect(access?.path).toBe('/')
+    expect(refresh?.maxAge).toBe(0)
+    expect(refresh?.path).toBe('/api/auth')
   })
 })

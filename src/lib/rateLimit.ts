@@ -59,6 +59,13 @@ export const PASSWORD_RESET_REQUEST_LIMIT = { bucket: 'password-reset-request', 
 export const RESET_PASSWORD_LIMIT = { bucket: 'reset-password', limit: 10, windowSeconds: 3600 } as const
 export const VERIFY_EMAIL_LIMIT = { bucket: 'verify-email', limit: 10, windowSeconds: 3600 } as const
 export const BALANCE_CHECKOUT_LIMIT = { bucket: 'balance-checkout', limit: 10, windowSeconds: 3600 } as const
+// Session refresh: keyed by IP like the rest of the pre-auth surface. The
+// refresh token itself is 256 bits of randomness, so this is not brute-
+// force protection in any meaningful sense — it is abuse protection
+// against a client (or script) churning rotations. Generous on purpose:
+// a whole household behind one NAT each refreshing every 15 minutes is
+// still nowhere near 30 hits in 5 minutes.
+export const REFRESH_LIMIT = { bucket: 'refresh', limit: 30, windowSeconds: 300 } as const
 
 // #316: friend search returns full emails/names for up to 10 matching
 // users per call with a 2-char minimum query — exactly the shape a script

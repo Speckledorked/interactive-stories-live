@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { PlayerNote } from '@prisma/client';
-import { getToken } from '@/lib/clientAuth';
+import { authenticatedFetch } from '@/lib/clientAuth';
 import { subscribeToCampaignMessages, RealtimeNoteUpdate } from '@/lib/realtime/pusher-client';
 import { truncateWithEllipsis } from '@/lib/format';
 import { Button } from '@/components/ui/button'
@@ -97,12 +97,7 @@ export default function NotesPanel({
       if (filter.entityType) params.append('entityType', filter.entityType);
       if (filter.entityType && formData.entityId) params.append('entityId', formData.entityId);
 
-      const token = getToken();
-      const response = await fetch(`/api/campaigns/${campaignId}/notes?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/notes?${params}`);
 
       if (response.ok) {
         const data = await response.json();
@@ -155,7 +150,6 @@ export default function NotesPanel({
     setLoading(true);
     
     try {
-      const token = getToken();
       const payload = {
         title: formData.title.trim(),
         content: formData.content.trim(),
@@ -171,12 +165,8 @@ export default function NotesPanel({
       
       const method = editingNote ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify(payload),
       });
 
@@ -206,12 +196,8 @@ export default function NotesPanel({
     }
 
     try {
-      const token = getToken();
-      const response = await fetch(`/api/campaigns/${campaignId}/notes/${noteId}`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/notes/${noteId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
       });
 
       if (response.ok) {

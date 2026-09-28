@@ -17,7 +17,7 @@
 
 import { useEffect, useState } from 'react'
 import { getPusherClient } from '@/lib/realtime/pusher-client'
-import { getToken, getUser } from '@/lib/clientAuth'
+import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
 
 export function useUnreadCount(): number {
   const [count, setCount] = useState(0)
@@ -28,11 +28,10 @@ export function useUnreadCount(): number {
 
     let cancelled = false
 
-    const token = getToken()
-    if (token) {
-      fetch('/api/notifications?status=UNREAD&limit=100', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+    // The access cookie travels on its own; authenticatedFetch retries
+    // once after a refresh on 401.
+    if (isAuthenticated()) {
+      authenticatedFetch('/api/notifications?status=UNREAD&limit=100')
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (cancelled || !data?.notifications) return

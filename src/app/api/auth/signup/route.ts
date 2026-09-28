@@ -5,7 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { hashPassword } from '@/lib/password'
-import { createToken } from '@/lib/auth'
+import { createAccessToken, setSessionCookies, type TokenPayload } from '@/lib/auth'
+import { mintRefreshToken } from '@/lib/refreshToken'
 import { SignupRequest, AuthResponse, ErrorResponse } from '@/types/api'
 import { recordEvent } from '@/lib/analytics/events'
 import { checkRateLimit, rateLimitExceededResponse, getClientIp, SIGNUP_LIMIT } from '@/lib/rateLimit'
@@ -95,19 +96,22 @@ export async function POST(request: NextRequest) {
 
     await recordEvent('SIGNUP', { userId: user.id })
 
-    // Create JWT token
-    const token = createToken({
+    // Mint the session: a short-lived access JWT in an httpOnly cookie,
+    // plus an opaque refresh token in a second httpOnly cookie. The
+    // response body carries the user only — returning either token to
+    // JavaScript would undo the httpOnly protection.
+    const payload: TokenPayload = {
       userId: user.id,
       email: user.email,
       // Stamp the version this session is minted at (#98). Bumping
       // User.tokenVersion invalidates every token carrying an older one.
       tokenVersion: user.tokenVersion,
-    })
+    }
+    const accessToken = createAccessToken(payload)
+    const refresh = await mintRefreshToken(user.id)
 
-    // Return token and user info
-    return NextResponse.json<AuthResponse>(
+    const response = NextResponse.json<AuthResponse>(
       {
-        token,
         user: {
           id: user.id,
           email: user.email
@@ -115,6 +119,7 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     )
+    return setSessionCookies(response, accessToken, refresh.token)
   } catch (error) {
     console.error('Signup error:', error)
     return NextResponse.json<ErrorResponse>(

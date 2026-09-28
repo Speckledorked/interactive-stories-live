@@ -15,11 +15,11 @@ vi.mock('next/navigation', () => ({
 }))
 
 vi.mock('@/lib/clientAuth', () => ({
-  authenticatedFetch: vi.fn(),
+  // The hook only needs a failed fetch: no badge renders, no Pusher.
+  authenticatedFetch: vi.fn().mockResolvedValue({ ok: false }),
   isAuthenticated: () => true,
   getUser: () => ({ id: 'u1', email: 'u1@example.com' }),
   getLastCampaignId: () => null,
-  getToken: () => null,
   logout: () => {},
 }))
 

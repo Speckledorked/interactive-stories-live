@@ -11,7 +11,14 @@ vi.mock('@/lib/prisma', () => ({
   prisma: { user: { findUnique: vi.fn(), update: vi.fn() } },
 }))
 vi.mock('@/lib/password', () => ({ verifyPassword: vi.fn() }))
-vi.mock('@/lib/auth', () => ({ createToken: vi.fn() }))
+// The login route mints the session through createAccessToken +
+// mintRefreshToken and attaches both as httpOnly cookies; the mock
+// keeps the token values observable and the cookie helper a passthrough.
+vi.mock('@/lib/auth', () => ({
+  createAccessToken: vi.fn(),
+  setSessionCookies: vi.fn((res: unknown) => res),
+}))
+vi.mock('@/lib/refreshToken', () => ({ mintRefreshToken: vi.fn() }))
 vi.mock('@/lib/rateLimit', () => ({
   LOGIN_LIMIT: { bucket: 'login', limit: 10, windowSeconds: 300 },
   checkRateLimit: vi.fn(),
@@ -21,7 +28,8 @@ vi.mock('@/lib/rateLimit', () => ({
 
 import { prisma } from '@/lib/prisma'
 import { verifyPassword } from '@/lib/password'
-import { createToken } from '@/lib/auth'
+import { createAccessToken, setSessionCookies } from '@/lib/auth'
+import { mintRefreshToken } from '@/lib/refreshToken'
 import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { POST } from '../route'
 
@@ -37,7 +45,8 @@ function loginRequest(body: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  ;(createToken as any).mockReturnValue('fake-jwt-token')
+  ;(createAccessToken as any).mockReturnValue('fake-access-jwt')
+  ;(mintRefreshToken as any).mockResolvedValue({ token: 'fake-refresh-opaque' })
   ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
   // The lastSeenAt stamp — fire-and-forget, must never fail a login.
   db.user.update.mockResolvedValue({})
@@ -83,10 +92,10 @@ describe('POST /api/auth/login', () => {
     const body = await response.json()
     expect(response.status).toBe(401)
     expect(body.error).toBe('Invalid email or password')
-    expect(createToken).not.toHaveBeenCalled()
+    expect(createAccessToken).not.toHaveBeenCalled()
   })
 
-  it('issues a token stamped with the account\'s current tokenVersion', async () => {
+  it('issues a short-lived access cookie and a refresh token, stamped with the account\'s current tokenVersion', async () => {
     db.user.findUnique.mockResolvedValue({ id: 'u1', email: 'a@b.com', password: 'hashed', tokenVersion: 3 })
     ;(verifyPassword as any).mockResolvedValue(true)
 
@@ -94,9 +103,17 @@ describe('POST /api/auth/login', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body.token).toBe('fake-jwt-token')
+    // The session travels as httpOnly cookies — the body carries the user
+    // and nothing credential-shaped.
+    expect(body.token).toBeUndefined()
     expect(body.user).toEqual({ id: 'u1', email: 'a@b.com' })
-    expect(createToken).toHaveBeenCalledWith({ userId: 'u1', email: 'a@b.com', tokenVersion: 3 })
+    expect(createAccessToken).toHaveBeenCalledWith({ userId: 'u1', email: 'a@b.com', tokenVersion: 3 })
+    expect(mintRefreshToken).toHaveBeenCalledWith('u1')
+    expect(setSessionCookies).toHaveBeenCalledWith(
+      expect.anything(),
+      'fake-access-jwt',
+      'fake-refresh-opaque'
+    )
   })
 
   it('returns 500 with a generic message on an unexpected error, never the raw error text', async () => {

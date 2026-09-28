@@ -277,8 +277,38 @@ model User {
   notificationSettings UserNotificationSettings? @relation("UserNotificationSettings")
   pushSubscriptions    PushSubscription[]        @relation("UserPushSubscriptions")
 
+  // HttpOnly session cookies (see src/lib/auth.ts): the refresh half of
+  // the session lives here as a hash, so a database read is the only way
+  // to redeem one. Cascade-delete keeps a deleted account from leaving
+  // orphaned refresh rows that would 401 forever against a missing user.
+  refreshTokens RefreshToken[]
+
   @@index([emailVerifyToken])
   @@index([resetToken])
+}
+
+// Opaque refresh tokens backing the httpOnly session cookies.
+//
+// The access token is a short-lived JWT (15 min) the client never sees —
+// it travels in an httpOnly cookie, so XSS cannot exfiltrate it. The
+// refresh token is a 256-bit random value whose SHA-256 hash is stored
+// here; the plaintext exists only in the httpOnly cookie. Rotation is
+// single-use: redeeming a refresh token revokes it and mints a successor.
+// Presenting an already-revoked token is treated as theft — every session
+// for that user is revoked (see revokeRefreshToken reuse handling in
+// src/lib/refreshToken.ts).
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  // Set when this token was consumed by a rotation. Rows stay briefly so
+  // a replayed (stolen) token is distinguishable from an unknown one.
+  revokedAt DateTime?
+
+  @@index([userId])
 }
 
 model CampaignMembership {

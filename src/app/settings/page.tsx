@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { authenticatedFetch, isAuthenticated, getUser, getLastCampaignId, updateStoredUser } from '@/lib/clientAuth'
+import { authenticatedFetch, clearAuth, isAuthenticated, getUser, getLastCampaignId, updateStoredUser } from '@/lib/clientAuth'
 import NotificationSettings from '@/components/settings/NotificationSettings'
 import { ThemeSetting } from '@/components/settings/ThemeSetting'
 import BalanceDisplay from '@/components/BalanceDisplay'
@@ -118,10 +118,10 @@ export default function SettingsPage() {
         setRevokeMessage({ ok: false, text: data.error || 'Could not sign out everywhere. Please try again.' })
         return
       }
-      // The request's own token is now invalid too — that is the point.
+      // The request's own session is now revoked too — that is the point.
       // Send them to sign in again rather than leaving the page in a state
       // where every subsequent call 401s.
-      localStorage.clear()
+      clearAuth()
       router.push('/login?signedOutEverywhere=1')
     } catch {
       setRevokeMessage({ ok: false, text: 'Could not sign out everywhere. Please try again.' })
@@ -202,9 +202,9 @@ export default function SettingsPage() {
 
       if (response.ok) {
         setDeleteMessage({ ok: true, text: 'Account deleted. Redirecting...' })
-        // Clear auth and redirect to home
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
+        // Clear local state; the API response already expired the session
+        // cookies server-side.
+        clearAuth()
         setTimeout(() => {
           router.push('/')
         }, 1500)
@@ -413,12 +413,14 @@ export default function SettingsPage() {
         )}
 
         {/* #415: "Sign out everywhere" — the user-facing half of session
-            revocation. Tokens are stateless JWTs with a 30-day life, so
-            this is the only answer to "I think my token leaked" and to
-            "does changing my password end sessions someone else already
-            has?" (it doesn't, on its own). Sits above the Danger Zone
-            rather than inside it: this is a recovery action, not a
-            destructive one. */}
+            revocation. Sessions are httpOnly cookies now: a 15-minute
+            access cookie plus a 30-day rotating refresh token stored
+            hashed server-side. Revoking here deletes every refresh token
+            for the user, so this remains the answer to "I think my
+            session leaked" and to "does changing my password end sessions
+            someone else already has?" (it doesn't, on its own). Sits
+            above the Danger Zone rather than inside it: this is a
+            recovery action, not a destructive one. */}
         {activeTab === 'privacy' && (
           <div className="mb-6 rounded-lg border border-myth-border bg-myth-surface-raised p-6">
             <h3 className="text-xl font-bold text-myth-ink mb-2">Sign out everywhere</h3>

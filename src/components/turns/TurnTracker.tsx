@@ -14,7 +14,7 @@
 
 import { useState, useEffect } from 'react';
 import { getPusherClient } from '@/lib/realtime/pusher-client';
-import { getToken } from '@/lib/clientAuth';
+import { authenticatedFetch } from '@/lib/clientAuth';
 import { Button } from '@/components/ui/button';
 import { Check, Hourglass, Pause } from 'lucide-react'
 
@@ -79,14 +79,10 @@ export default function TurnTracker({
 
   const fetchTurnInfo = async () => {
     try {
-      const token = getToken();
-      const response = await fetch(
-        `/api/campaigns/${campaignId}/turns?sceneId=${sceneId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        }
+      // The access cookie authenticates on its own; authenticatedFetch
+      // retries once after a refresh on 401.
+      const response = await authenticatedFetch(
+        `/api/campaigns/${campaignId}/turns?sceneId=${sceneId}`
       );
 
       if (response.ok) {
@@ -137,13 +133,8 @@ export default function TurnTracker({
 
   const advanceTurn = async () => {
     try {
-      const token = getToken();
-      const response = await fetch(`/api/campaigns/${campaignId}/turns`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/turns`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify({
           action: 'advance',
           sceneId
@@ -170,13 +161,8 @@ export default function TurnTracker({
     }
 
     try {
-      const token = getToken();
-      const response = await fetch(`/api/campaigns/${campaignId}/turns`, {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/turns`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify({
           action: 'skip',
           sceneId

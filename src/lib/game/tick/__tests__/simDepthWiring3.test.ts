@@ -285,13 +285,13 @@ describe('sim-depth wiring batch 3', () => {
       ] as any)
       // Order-independent dispatch: the handler issues several
       // faction.findMany calls with different select shapes.
-      vi.mocked(prisma.faction.findMany).mockImplementation(async (args: any) => {
+      vi.mocked(prisma.faction.findMany).mockImplementation((async (args: any) => {
         const select = args?.select ?? {}
         if (select.influence !== undefined)
           return [{ id: 'debtor1', isActive: true, resources: 10, influence: 40 }] as any
         if (args?.where?.resources !== undefined) return [] as any
         return [{ id: 'debtor1', name: 'Broke Guild' }] as any
-      })
+      }) as any)
       vi.mocked(prisma.faction.findUnique).mockResolvedValue({
         id: 'creditor1', name: 'Ashcrown', stability: 50, isActive: true,
       } as any)
@@ -316,14 +316,14 @@ describe('sim-depth wiring batch 3', () => {
     const graph = (contestedIds: string[]) => ({
       idByName: new Map([['home', 'home'], ['mill', 'mill'], ['forge', 'forge']]),
       contestedIds: new Set(contestedIds),
-      edges: [] as Array<{ a: string; b: string }>,
+      edges: [] as Array<{ locationAId: string; locationBId: string; distance: number }>,
     })
 
     it('skips a contested work destination when a quieter neighbor exists', () => {
       const g = {
         idByName: new Map([['home', 'home'], ['mill', 'mill']]),
         contestedIds: new Set(['mill']),
-        edges: [{ a: 'home', b: 'mill' }],
+        edges: [{ locationAId: 'home', locationBId: 'mill', distance: 1 }],
       }
       const decision = decideNpcTick(npc, 10, ['home', 'mill'], null, g, 9)
       // morning (9h) is active hours — work would be 'mill', but it is

@@ -102,14 +102,14 @@ describe('tickEconomy (DB handler)', () => {
    * - broke: the broke-faction scan (filters on resources)
    */
   function mockFactionQueries(handlers: { debtors?: any[]; names?: any[]; resources?: any[]; broke?: any[] }) {
-    vi.mocked(prisma.faction.findMany).mockImplementation(async (args: any) => {
+    vi.mocked(prisma.faction.findMany).mockImplementation((async (args: any) => {
       const select = args?.select ?? {}
       const where = args?.where ?? {}
       if (select.influence !== undefined) return (handlers.debtors ?? []) as any
       if (where.resources !== undefined) return (handlers.broke ?? []) as any
       if (select.resources !== undefined) return (handlers.resources ?? []) as any
       return (handlers.names ?? []) as any
-    })
+    }) as any)
   }
 
   it('does nothing when there are no outstanding debts and no broke factions', async () => {

@@ -820,6 +820,7 @@ export const OPAQUE_SHADOW: readonly string[] = [
   'LoreImportJob.alertedStuckAt',
   'NPC.currentPlan',
   'NPC.disposition',
+  'PopulationFlightEvent.fromLocationId',
   'Quest.givenByFactionId',
   'Quest.givenByNpcId',
   'Quest.resolvedAt',

@@ -7,7 +7,7 @@
 // Vercel invokes this route with `Authorization: Bearer $CRON_SECRET`.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { pruneCampaignHistory } from '@/lib/game/retention'
+import { pruneCampaignHistory, pruneGlobalTables } from '@/lib/game/retention'
 import { sweepWorldTurnsForAllCampaigns } from '@/lib/game/worldTurnSweep'
 import { sweepGloballyStuckResolutionJobs } from '@/lib/game/resolutionQueue'
 import { TurnTracker } from '@/lib/notifications/turn-tracker'
@@ -129,5 +129,21 @@ export async function GET(request: NextRequest) {
     console.log(`🧹 Cron: pruned ${prunedRows} row(s) of aged history`)
   }
 
-  return NextResponse.json({ ...result, prunedRows })
+  // #501: the per-campaign pass above only reaches campaigns that TICKED,
+  // so a dormant campaign is pruned never — and a user who stopped playing
+  // accumulates notifications forever, because no campaign of theirs is
+  // ticking to carry the pass. These tables are not campaign-scoped
+  // anyway, so they get one pass per sweep regardless of what ticked.
+  let globalPrunedRows = 0
+  try {
+    const global = await pruneGlobalTables()
+    globalPrunedRows = global.notificationsDeleted + global.analyticsEventsDeleted
+    if (globalPrunedRows > 0) {
+      console.log(`🧹 Cron: pruned ${globalPrunedRows} platform-wide row(s)`)
+    }
+  } catch (err) {
+    await nonFatal('global-retention-pass', err)
+  }
+
+  return NextResponse.json({ ...result, prunedRows, globalPrunedRows })
 }

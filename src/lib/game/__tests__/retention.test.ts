@@ -23,11 +23,13 @@ const db = vi.hoisted(() => ({
   aICostEntry: { deleteMany: vi.fn() },
   campaignMemory: { deleteMany: vi.fn() },
   memoryCreationFailure: { deleteMany: vi.fn() },
+  notification: { findMany: vi.fn(), deleteMany: vi.fn() },
+  analyticsEvent: { findMany: vi.fn(), deleteMany: vi.fn() },
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: db }))
 
-import { pruneCampaignHistory, EVENT_RETENTION_TURNS } from '../retention'
+import { pruneCampaignHistory, pruneGlobalTables, EVENT_RETENTION_TURNS, READ_NOTIFICATION_RETENTION_MS } from '../retention'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -148,5 +150,71 @@ describe('the last write-only table is bounded (#445)', () => {
 
     const failureCutoff = db.memoryCreationFailure.deleteMany.mock.calls[0][0].where.createdAt.lt
     expect(Date.now() - failureCutoff.getTime()).toBeGreaterThan(30 * 24 * 60 * 60 * 1000)
+  })
+})
+
+// #501: six tables were named as having no delete path. Two of them
+// genuinely needed one; four are decisions rather than omissions, and are
+// written down in the module rather than left as a gap for the next audit
+// to re-find.
+//
+// The other half of #501 matters as much: per-campaign retention only runs
+// for campaigns that TICKED, so a dormant campaign is pruned never — and a
+// user who stopped playing accumulates notifications forever, because no
+// campaign of theirs is ticking to carry the pass. These tables are not
+// campaign-scoped, so they get their own.
+describe('pruneGlobalTables (#501)', () => {
+  beforeEach(() => {
+    db.notification.findMany.mockResolvedValue([])
+    db.notification.deleteMany.mockResolvedValue({ count: 0 })
+    db.analyticsEvent.findMany.mockResolvedValue([])
+    db.analyticsEvent.deleteMany.mockResolvedValue({ count: 0 })
+  })
+
+  it('only ever selects notifications the person is finished with', async () => {
+    await pruneGlobalTables()
+    const where = db.notification.findMany.mock.calls[0][0].where
+    // An UNREAD notification is still doing its job however old it is.
+    // Deleting one silently withdraws a message nobody ever saw.
+    expect(where.status).toEqual({ in: ['READ', 'DISMISSED'] })
+    expect(where.createdAt.lt.getTime()).toBeLessThanOrEqual(Date.now() - READ_NOTIFICATION_RETENTION_MS + 1000)
+  })
+
+  it('bounds each delete, so a backlog cannot take the sweep down with it', async () => {
+    await pruneGlobalTables()
+    expect(db.notification.findMany.mock.calls[0][0].take).toBeGreaterThan(0)
+    expect(db.analyticsEvent.findMany.mock.calls[0][0].take).toBeGreaterThan(0)
+    // Oldest first, so repeated runs make progress rather than re-reading
+    // the same page.
+    expect(db.notification.findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'asc' })
+  })
+
+  it('issues no delete when there is nothing to delete', async () => {
+    const result = await pruneGlobalTables()
+    expect(db.notification.deleteMany).not.toHaveBeenCalled()
+    expect(db.analyticsEvent.deleteMany).not.toHaveBeenCalled()
+    expect(result).toEqual({ notificationsDeleted: 0, analyticsEventsDeleted: 0 })
+  })
+
+  it('reports what it deleted', async () => {
+    db.notification.findMany.mockResolvedValue([{ id: 'n1' }, { id: 'n2' }])
+    db.notification.deleteMany.mockResolvedValue({ count: 2 })
+    db.analyticsEvent.findMany.mockResolvedValue([{ id: 'a1' }])
+    db.analyticsEvent.deleteMany.mockResolvedValue({ count: 1 })
+
+    const result = await pruneGlobalTables()
+
+    expect(result).toEqual({ notificationsDeleted: 2, analyticsEventsDeleted: 1 })
+    expect(db.notification.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['n1', 'n2'] } } })
+  })
+
+  it('touches none of the four tables that are kept on purpose', async () => {
+    // Transaction most of all: deleting it is not a retention policy, it
+    // is destroying financial records, and /privacy commits to keeping
+    // them. CampaignLog, Message and PlayerAction are the durable record.
+    await pruneGlobalTables()
+    for (const table of ['transaction', 'campaignLog', 'message', 'playerAction']) {
+      expect((db as any)[table], `pruneGlobalTables must not reach for ${table}`).toBeUndefined()
+    }
   })
 })

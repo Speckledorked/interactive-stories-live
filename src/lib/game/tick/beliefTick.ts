@@ -133,7 +133,7 @@ function beliefVectorsEqual(a: BeliefVector, b: BeliefVector): boolean {
 }
 
 /** The one WorldEvent type/newValue/origin shape this handler reacts to, mapped to a BeliefDriftEvent — or null if it's not one of ours (stalemate, an unrelated field, etc). */
-function classifyWorldEvent(row: { type: string; newValue: string | null; origin: string; wakeSourceType: string | null }): BeliefDriftEvent | null {
+export function classifyWorldEvent(row: { type: string; newValue: string | null; origin: string; wakeSourceType: string | null }): BeliefDriftEvent | null {
   if (row.type === 'faction.warResolved') {
     if (row.newValue === 'attacker') return { kind: 'WAR_WON' }
     if (row.newValue === 'defender') return { kind: 'WAR_LOST' }

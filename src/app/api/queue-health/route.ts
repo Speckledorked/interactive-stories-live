@@ -2,9 +2,17 @@
 // Resolution-queue diagnostics, sibling of /api/ai-health: shows the
 // recent ResolutionJob rows for a campaign so "my action won't resolve"
 // is answerable from a phone browser. Anonymous but rate-limited;
-// campaign ids are unguessable cuids and the payload contains only job
-// bookkeeping (status, attempts, truncated error text) — no story
-// content, no user data.
+// the payload contains only job bookkeeping (status, attempts, truncated
+// error text) — no story content, no user data.
+//
+// Members only (#509's defect class). This route is for a player debugging
+// their own stuck action from a phone, so it checks campaign MEMBERSHIP
+// rather than platform admin — gating it to the operator would delete the
+// use case. What it does not do any more is take an unguessable id as
+// authorisation: the id travels in the app's own URL bar, gets pasted into
+// chat and bug reports, and most of all this handler WRITES —
+// recoverStaleJobs re-kicks jobs — so "unguessable" was standing in for a
+// permission check on a mutating endpoint.
 //
 // Usage: /api/queue-health?campaign=<campaign id from the app's URL>
 
@@ -12,12 +20,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { checkRateLimit } from '@/lib/rateLimit'
 import { recoverStaleJobs } from '@/lib/game/resolutionQueue'
+import { getUser } from '@/lib/auth'
+import { getCampaignMembership } from '@/lib/db/campaignAccess'
 
 export const maxDuration = 30
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const rateLimit = await checkRateLimit('anonymous', 'queue-health', 6, 60)
+  const user = await getUser(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Per-user, not the literal string 'anonymous'. The old key gave the
+  // whole internet ONE shared bucket, so any caller could hold it at its
+  // ceiling and deny the diagnostic to everyone else.
+  const rateLimit = await checkRateLimit(user.userId, 'queue-health', 6, 60)
   if (!rateLimit.allowed) {
     return NextResponse.json({ error: 'Too many checks — try again in a minute.' }, { status: 429 })
   }
@@ -27,6 +45,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       error: 'Add ?campaign=<id> — copy the id from the app URL: /campaigns/<id>/story',
     }, { status: 400 })
+  }
+
+  // Before the sweep below, which is a write.
+  const membership = await getCampaignMembership(user.userId, campaignId)
+  if (!membership) {
+    return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
   }
 
   // Visiting this page IS the retry loop: sweep stale jobs first so a

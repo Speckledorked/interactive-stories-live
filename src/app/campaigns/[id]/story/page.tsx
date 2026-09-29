@@ -1075,7 +1075,7 @@ export default function StoryPage() {
     <TavernPage>
       <TavernHeader
         backHref={`/campaigns/${campaignId}`}
-        title={campaign?.campaign?.name || 'Story'}
+        title={campaign?.campaign?.title || 'Story'}
         campaignId={campaignId}
         isAdmin={isAdmin}
         subrow={

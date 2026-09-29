@@ -440,7 +440,18 @@ export async function buildSceneResolutionRequest(
       type: m.memoryType,
       importance: m.importance,
       emotional_tone: m.emotionalTone,
-      relevance: Math.round(m.similarity * 100) + '%',
+      // #482: `similarity` is `number | null`, and #390 deliberately keeps
+      // unscored (null-similarity) rows past the quality filter — a memory
+      // recalled by an entity join rather than by embedding has nothing to
+      // report. `null * 100` is 0, so every one of those arrived in the
+      // prompt labelled "0%": not scored, rendered as scored worst. The
+      // model reads this summary, so the misreport was an instruction to
+      // discount exactly the rows that were included on purpose.
+      //
+      // Same reasoning as memoryRetrieval.ts's own note on the old
+      // hardcoded 1.0 — a field whose value means something else is worse
+      // than an absent one — so an unscored row says so in words.
+      relevance: m.similarity === null ? 'unscored' : Math.round(m.similarity * 100) + '%',
     })),
     relevant_lore: relevantLore.map(l => ({
       title: l.title,

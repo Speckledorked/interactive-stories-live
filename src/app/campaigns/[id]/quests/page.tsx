@@ -28,7 +28,10 @@ interface Quest {
 
 interface Campaign {
   id: string
-  name: string
+  // `title`, not `name` — the Prisma model has no `name` column. A local
+  // shape that invented one type-checked cleanly and rendered the `||`
+  // fallback forever, so the header read "Campaign" on every campaign.
+  title: string
 }
 
 const STATUS_GROUPS: { status: QuestStatus; label: string }[] = [
@@ -131,7 +134,7 @@ export default function QuestsPage() {
 
       <main className={`max-w-4xl mx-auto px-4 ${HEADER_OFFSET} pb-28`}>
         <p className="mb-6 text-sm text-myth-ink-faint">
-          {campaign?.name || 'Campaign'} — {activeCount} active {activeCount === 1 ? 'quest' : 'quests'}
+          {campaign?.title || 'Campaign'} — {activeCount} active {activeCount === 1 ? 'quest' : 'quests'}
         </p>
 
         {quests.length === 0 ? (

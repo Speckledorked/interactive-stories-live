@@ -5,15 +5,28 @@
 // no email sent). Never echoes secrets, only presence booleans and the
 // provider's error text.
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { getUser } from '@/lib/auth'
+import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
 
 export const maxDuration = 30
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const rateLimit = await checkRateLimit('anonymous', 'email-health', 4, 60)
+// Platform-admin only — same reasoning as its siblings (#509): it reports
+// which mail secrets are set and what the provider said, which is a
+// deployment-configuration readout, not public information.
+export async function GET(request: NextRequest) {
+  const user = await getUser(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  if (!isPlatformAdminEmail(user.email)) {
+    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  }
+
+  const rateLimit = await checkRateLimit(user.userId, 'email-health', 4, 60)
   if (!rateLimit.allowed) {
     return NextResponse.json({ error: 'Too many health checks — try again in a minute.' }, { status: 429 })
   }

@@ -201,7 +201,7 @@ export default function CharacterPage() {
       />
 
       <main className={`max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-28`}>
-        <p className="mb-4 text-sm text-myth-ink-faint">{campaign?.campaign?.name}</p>
+        <p className="mb-4 text-sm text-myth-ink-faint">{campaign?.campaign?.title}</p>
 
         {/* Character Sheet (Downtime is one of its tabs) */}
         <CharacterSheetDisplay

@@ -11,7 +11,6 @@ import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from 
 import EnhancedCreateCharacterForm from "@/components/forms/EnhancedCreateCharacterForm"
 import ChatPanel from '@/components/chat/ChatPanel'
 import NotesPanel from '@/components/notes/NotesPanel'
-import NotificationPanel from '@/components/notifications/NotificationPanel'
 import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
 import InviteModal from '@/components/campaigns/InviteModal'
 import { Home, Scroll, MessageSquare, StickyNote, Map as MapIcon } from 'lucide-react'
@@ -68,7 +67,6 @@ export default function CampaignLobbyPage() {
     setActiveTabState(tab)
     router.replace(`/campaigns/${campaignId}${tab === 'overview' ? '' : `?tab=${tab}`}`, { scroll: false })
   }
-  const [showNotifications, setShowNotifications] = useState(false)
   const [deletingCharacterId, setDeletingCharacterId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [maps, setMaps] = useState<any[]>([])
@@ -871,15 +869,14 @@ export default function CampaignLobbyPage() {
 
       <TavernNav campaignId={campaignId} />
 
-      {/* Notification Panel - Phase 8/9 Communication */}
-      {data && (
-        <NotificationPanel
-          userId={getUser()?.id || ''}
-          campaignId={campaignId}
-          isOpen={showNotifications}
-          onClose={() => setShowNotifications(false)}
-        />
-      )}
+      {/* #496: a second NotificationPanel used to be mounted here with its
+          own `showNotifications` state that nothing ever set true. It could
+          not be opened from anywhere, but being mounted it still ran its
+          effects — a Pusher subscription and a notifications fetch on every
+          lobby visit, for a panel no one could see.
+
+          The reachable one lives in TavernHeader (the bell), which this page
+          already renders, so this was a duplicate as well as a dead one. */}
 
       {/* Character Creation Modal */}
       {showCreateCharacter && (

@@ -1,15 +1,28 @@
 // src/app/api/ai-health/route.ts
-// AI pipeline diagnostics: answers "why am I getting generic fallbacks?"
-// from a browser. Makes one tiny real completion call per configured
-// model — using the same parameter shape and compat wrapper as the app's
-// actual calls — and returns exactly what OpenAI said. Anonymous but
-// tightly rate-limited (it spends real, if tiny, API money) and it never
-// echoes the API key, only the provider's error text.
+// Pipeline diagnostics: answers "why am I getting generic fallbacks?"
+// Makes one tiny real completion call per configured model — using the
+// same parameter shape and compat wrapper as the app's actual calls — and
+// returns exactly what the provider said. It never echoes the API key,
+// only the provider's error text.
+//
+// Platform-admin only (#509). This used to be anonymous, with a rate limit
+// standing in for a gate, and the two are not the same thing: the limit was
+// keyed on the literal string 'anonymous', so it was one shared bucket for
+// the entire internet rather than per-caller. Anyone who knew the path could
+// hold it at its ceiling indefinitely, spending money on every hit and
+// denying the operator the diagnostic at the same time. It also published
+// the provider's raw error text and the deployment's whole model roster to
+// unauthenticated callers.
+//
+// The rate limit stays, now keyed per admin, because the cheap-but-not-free
+// call is still worth bounding against a stuck dashboard tab.
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { AI_MODELS } from '@/lib/ai/models'
 import { openaiFetch } from '@/lib/ai/openaiCompat'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { getUser } from '@/lib/auth'
+import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -23,8 +36,16 @@ interface ModelCheck {
   reply?: string
 }
 
-export async function GET() {
-  const rateLimit = await checkRateLimit('anonymous', 'ai-health', 4, 60)
+export async function GET(request: NextRequest) {
+  const user = await getUser(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  if (!isPlatformAdminEmail(user.email)) {
+    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  }
+
+  const rateLimit = await checkRateLimit(user.userId, 'ai-health', 4, 60)
   if (!rateLimit.allowed) {
     return NextResponse.json({ error: 'Too many health checks — try again in a minute.' }, { status: 429 })
   }
